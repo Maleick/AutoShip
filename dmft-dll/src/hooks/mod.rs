@@ -20,11 +20,11 @@ pub fn install_all() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Removes all hooks. Called during DLL shutdown.
+///
+/// Note: movement, casting, and targeting are function-call APIs (not
+/// detour hooks) so they have no install/remove lifecycle.
 pub fn remove_all() {
     tracing::info!("Removing all hooks...");
     game_loop::remove();
-    // movement::remove();
-    // casting::remove();
-    // targeting::remove();
     tracing::info!("All hooks removed");
 }
