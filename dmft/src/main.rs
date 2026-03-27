@@ -2,6 +2,7 @@
 
 mod config;
 mod eq;
+mod inject;
 mod process;
 mod tui;
 
