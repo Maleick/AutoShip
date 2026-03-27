@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod client;
+mod combat;
 mod config;
 mod credentials;
 mod eq;

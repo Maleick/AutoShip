@@ -85,4 +85,11 @@ fn on_game_tick() {
     // TODO: Read game state from EQ memory (local player, target, spawns)
     // TODO: Publish state to shared memory via IPC
     // TODO: Check for and execute pending commands from the orchestrator
+
+    // Combat FSM tick — runs after nav, before IPC publish.
+    // Uncomment when we have a real game state snapshot:
+    //
+    //   if let Some(ref player) = game_state.local_player {
+    //       crate::combat::tick(player, game_state.target.as_ref(), &game_state.nearby_spawns);
+    //   }
 }

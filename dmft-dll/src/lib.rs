@@ -2,6 +2,7 @@
 //! This cdylib is loaded into eqgame.exe via CreateRemoteThread + LoadLibrary.
 //! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
 
+mod combat;
 mod hooks;
 mod ipc;
 mod eq;
