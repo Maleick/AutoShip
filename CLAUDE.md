@@ -61,8 +61,39 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 The project follows a milestone-based plan:
 
 - **M1** (complete): External memory reading + TUI dashboard
-- **M2** (next): DLL injection into eqgame.exe + internal function hooking (Rust cdylib)
-- **M3**: Navigation mesh access + autonomous pathfinding
-- **M4**: Multi-client orchestration, group coordination, buff rotations
+- **M2** (complete): DLL injection into eqgame.exe + internal function hooking (Rust cdylib), IPC (shared memory + named pipes), self-healing monitor, multi-client session manager
+- **M2.5** (complete): Login automation — credential store (SQLite + AES-GCM + Argon2), process spawner, login state machine, launch coordinator with stagger, post-login sequencer, CPU affinity manager, hot-updatable offset database
+- **M3** (complete): Navigation — waypoint-based pathfinding, Navigator FSM, movement humanization, stuck detection with escalating recovery, waypoint recorder, camp positioning, zone router
+- **M4** (complete): Combat automation — ClassStrategy trait with per-class implementations (warrior/cleric/enchanter/generic DPS), HolyShit conditional ability system, GCD tracker, mana governor, puller FSM, aggro detection, combat coordinator
+- **M5** (next): Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics
+- **M6**: LLM Character AI — API integration (Gemini/Claude), in-game chat responses
+- **M7**: Learning/RL — behavioral cloning, RL fine-tuning, auto-research loops
+- **M8**: Economy — vendor automation, EC tunnel trading, Bazaar, price tracking
 
-The control approach uses DLL injection (like MacroQuest) rather than PostMessage — this enables calling internal EQ functions directly, accessing the navigation mesh for pathfinding, and writing to game memory. The MQ2 reference source (`mq2-reference/`) is used both for struct offsets and as architectural reference for hooking patterns. Group definitions in the config are scaffolding for M4.
+The control approach uses DLL injection (like MacroQuest) rather than PostMessage — this enables calling internal EQ functions directly, accessing the navigation mesh for pathfinding, and writing to game memory. The MQ2 reference source (`mq2-reference/`) is used both for struct offsets and as architectural reference for hooking patterns.
+
+### New module structure (M2.5-M4)
+
+- **`dmft-common/src/`** — Shared types across all crates
+  - `nav.rs`: Waypoint, NavStatus, CampSpot, IndexedQueue<T>, Xorshift32 PRNG, KNUTH_HASH
+  - `combat.rs`: CombatStatus, CombatRole, ClassStrategy types, HolyShit conditions, SpellEntry
+  - `login.rs`: LoginPhase, LoginError, AccountInfo
+  - `offset_db.rs`: Hot-updatable offset database (JSON load/save)
+  - `ipc.rs`: Command/Response enums for all IPC (nav + combat + login)
+- **`dmft-dll/src/nav/`** — DLL-side navigation engine
+  - `state.rs`: Navigator FSM, `mod.rs`: global singleton + tick integration
+  - `stuck.rs`: StuckDetector, `humanize.rs`: MovementPersonality, `waypoint.rs`: WaypointQueue
+- **`dmft-dll/src/combat/`** — DLL-side combat engine
+  - `state.rs`: Combatant FSM, `strategy.rs`: ClassStrategy trait + CombatContext
+  - `classes/`: warrior, cleric, enchanter, generic_dps implementations
+  - `holyshit.rs`: conditional ability evaluator, `gcd.rs`: GCD tracker, `mana.rs`: ManaGovernor
+  - `puller.rs`: pull cycle FSM, `aggro.rs`: heading-based aggro detection
+- **`dmft/src/nav/`** — Orchestrator-side navigation
+  - `recorder.rs`: WaypointRecorder + RDP simplification, `camp.rs`: CampManager, `router.rs`: zone routing
+- **`dmft/src/combat/`** — Orchestrator-side combat coordination
+  - `coordinator.rs`: assist target broadcasting, CC assignment, `spell_db.rs`: static spell data
+- **`dmft/src/launcher/`** — Login automation
+  - `login_sm.rs`: per-client login FSM, `coordinator.rs`: staggered launch orchestration
+  - `spawner.rs`: CreateProcessW wrapper, `post_login.rs`: group→buff→camp sequencer
+- **`dmft/src/credentials/`** — Encrypted credential store
+  - `crypto.rs`: Argon2id + AES-256-GCM, `store.rs`: SQLite backend, `prompt.rs`: master password
