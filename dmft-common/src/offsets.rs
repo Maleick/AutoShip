@@ -33,6 +33,70 @@ pub const PINST_CDISPLAY: u64 = 0x140E8E450;
 /// Pointer to CEverQuest
 pub const PINST_CEVERQUEST: u64 = 0x140F11758;
 
+// ─── EQ Internal Function Addresses ───
+// These are preferred-base addresses for EQ's internal functions.
+// Used for calling game functions directly from the injected DLL.
+// Source: macroquest/eqlib live branch, client date 20260310
+// Calling convention: x64 MSVC (this in RCX for member functions)
+
+/// CharacterZoneClient::CastSpell — cast a spell by gem ID
+/// Signature: unsigned char CastSpell(unsigned char gemid, int spellid, ...)
+pub const CAST_SPELL: u64 = 0x1400D9F20;
+
+/// PcZoneClient::DoCombatAbility — use a combat ability
+/// Signature: bool DoCombatAbility(int spellID, bool allowLowerRank)
+pub const DO_COMBAT_ABILITY: u64 = 0x1402ED490;
+
+/// CharacterZoneClient::UseSkill — use a skill on a target
+/// Signature: void UseSkill(unsigned char skill, PlayerZoneClient* Target, bool bAuto)
+pub const USE_SKILL: u64 = 0x1401052A0;
+
+/// CharacterZoneClient::CanUseItem — check if an item is usable
+pub const CAN_USE_ITEM: u64 = 0x1400EDDB0;
+
+/// PlayerZoneClient::DoAttack — perform a melee attack
+/// Signature: bool DoAttack(BYTE slot, BYTE skill, PlayerZoneClient* Target, ...)
+pub const DO_ATTACK: u64 = 0x14031B890;
+
+/// __ExecuteCmd — execute any EQ command by command ID (most versatile)
+/// Can do: follow, stopcast, face, sit, stand, attack, etc.
+pub const EXECUTE_CMD: u64 = 0x1402235B0;
+
+/// CEverQuest::InterpretCmd — interpret a slash command string
+/// Signature: void InterpretCmd(PlayerClient*, const char*)
+pub const INTERPRET_CMD: u64 = 0x140283FB0;
+
+/// CEverQuest::ClickedPlayer — click-target a player
+pub const CLICKED_PLAYER: u64 = 0x1402724F0;
+
+/// CEverQuest::IssuePetCommand — issue a pet command
+/// Signature: void IssuePetCommand(ePetCommandType, int TargetID, bool bQuiet, ...)
+pub const ISSUE_PET_COMMAND: u64 = 0x1402856A0;
+
+/// PcClient::GetConLevel — get consider level of target
+pub const GET_CON_LEVEL: u64 = 0x1402E3C10;
+
+/// PlayerClient::GetPcClient — get PcClient from PlayerClient
+pub const GET_PC_CLIENT: u64 = 0x140307970;
+
+/// __ProcessGameEvents — game event processing (hook point for game loop)
+pub const PROCESS_GAME_EVENTS: u64 = 0x14028E0F0;
+
+/// CDisplay::RealRender_World — render loop (alternative hook point)
+pub const REAL_RENDER_WORLD: u64 = 0x1401A4320;
+
+/// __FixHeading — normalize heading value
+pub const FIX_HEADING: u64 = 0x140661520;
+
+/// __get_bearing — calculate bearing between two points
+pub const GET_BEARING: u64 = 0x140258850;
+
+/// FreeTargetTracker::CastSpell — ground-targeted spell casting
+pub const FREE_TARGET_CAST_SPELL: u64 = 0x1402B5740;
+
+/// PlayerZoneClient::ChangeHeight — change character height
+pub const CHANGE_HEIGHT: u64 = 0x14031AB80;
+
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
 /// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would underflow).
