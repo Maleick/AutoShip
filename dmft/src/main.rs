@@ -34,11 +34,11 @@ fn main() -> Result<()> {
 /// TUI mode — the default. Shows ShowEQ-inspired live dashboard.
 fn run_tui_mode() -> Result<()> {
     let mut app = tui::app::App::new();
+    let config = load_config()?;
 
     // Try to attach to an EQ process before launching TUI
     #[cfg(windows)]
     {
-        let config = load_config()?;
         if let Ok(pids) = process::memory::find_processes_by_name(&config.process_name) {
             if let Some(&pid) = pids.first() {
                 if let Ok(proc) = process::memory::ProcessHandle::open(pid) {
@@ -61,7 +61,6 @@ fn run_tui_mode() -> Result<()> {
     }
 
     // Initialize Soul Engine if enabled
-    let config = load_config()?;
     if config.soul.enabled {
         let db_path = Path::new(SOUL_DB_PATH);
         if let Some(parent) = db_path.parent() {

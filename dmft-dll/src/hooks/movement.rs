@@ -15,8 +15,7 @@ pub fn calc_heading(from: &Waypoint, to: &Waypoint) -> f32 {
     let rad = (-dx).atan2(dy);
     let deg = rad.to_degrees();
     // Convert -180..180 to 0..512
-    let eq_heading = (deg * 512.0 / 360.0 + 512.0) % 512.0;
-    eq_heading
+    (deg * 512.0 / 360.0 + 512.0) % 512.0
 }
 
 /// Movement controller state -- holds a pointer to the local player's

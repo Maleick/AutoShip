@@ -58,45 +58,45 @@ impl LaunchCoordinator {
         }
 
         // 2-3. Launch next client if allowed
-        if self.should_launch_next() {
-            if let Some((client_id, account)) = self.launch_queue.pop_front() {
-                let eq_path = Path::new(&self.config.eq_path);
-                match spawner::spawn_eq_client(
-                    eq_path,
-                    &account.account_name,
-                    &self.server_config.name,
-                    &self.config.launch_args,
-                ) {
-                    Ok(spawned) => {
-                        let mut sm = LoginStateMachine::new(client_id, account);
-                        sm.advance(LoginEvent::ProcessStarted { pid: spawned.pid });
-                        self.active_logins.push(sm);
-                        self.last_launch = Some(Instant::now());
-                        self.next_stagger = compute_stagger_between(
-                            self.config.stagger_min_secs,
-                            self.config.stagger_max_secs,
-                        );
-                        events.push(CoordinatorEvent::ClientLaunched {
-                            client_id,
-                            pid: spawned.pid,
+        if self.should_launch_next()
+            && let Some((client_id, account)) = self.launch_queue.pop_front()
+        {
+            let eq_path = Path::new(&self.config.eq_path);
+            match spawner::spawn_eq_client(
+                eq_path,
+                &account.account_name,
+                &self.server_config.name,
+                &self.config.launch_args,
+            ) {
+                Ok(spawned) => {
+                    let mut sm = LoginStateMachine::new(client_id, account);
+                    sm.advance(LoginEvent::ProcessStarted { pid: spawned.pid });
+                    self.active_logins.push(sm);
+                    self.last_launch = Some(Instant::now());
+                    self.next_stagger = compute_stagger_between(
+                        self.config.stagger_min_secs,
+                        self.config.stagger_max_secs,
+                    );
+                    events.push(CoordinatorEvent::ClientLaunched {
+                        client_id,
+                        pid: spawned.pid,
+                    });
+                }
+                Err(err) => {
+                    tracing::error!(client_id, %err, "Failed to spawn EQ client");
+                    let error = LoginError::Timeout {
+                        phase: format!("spawn failed: {err}"),
+                    };
+                    if self.detect_mass_failure(client_id) {
+                        self.paused = true;
+                        events.push(CoordinatorEvent::AllPaused {
+                            reason: "Mass failure threshold reached during spawn".to_string(),
                         });
                     }
-                    Err(err) => {
-                        tracing::error!(client_id, %err, "Failed to spawn EQ client");
-                        let error = LoginError::Timeout {
-                            phase: format!("spawn failed: {err}"),
-                        };
-                        if self.detect_mass_failure(client_id) {
-                            self.paused = true;
-                            events.push(CoordinatorEvent::AllPaused {
-                                reason: "Mass failure threshold reached during spawn".to_string(),
-                            });
-                        }
-                        events.push(CoordinatorEvent::ClientFailed {
-                            client_id,
-                            error,
-                        });
-                    }
+                    events.push(CoordinatorEvent::ClientFailed {
+                        client_id,
+                        error,
+                    });
                 }
             }
         }
@@ -219,10 +219,8 @@ impl LaunchCoordinator {
         }
 
         // Check stagger timing
-        if let Some(last) = self.last_launch {
-            if last.elapsed() < self.next_stagger {
-                return false;
-            }
+        if let Some(last) = self.last_launch && last.elapsed() < self.next_stagger {
+            return false;
         }
 
         true

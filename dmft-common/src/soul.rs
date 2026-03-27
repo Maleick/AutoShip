@@ -39,8 +39,9 @@ impl Default for PersonalityTraits {
 }
 
 /// Current mood of a character. Affects combat style, social behavior, idle choices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MoodState {
+    #[default]
     Neutral,
     Happy,
     Angry,
@@ -51,12 +52,6 @@ pub enum MoodState {
     Focused,
     Playful,
     Exhausted,
-}
-
-impl Default for MoodState {
-    fn default() -> Self {
-        Self::Neutral
-    }
 }
 
 /// Types of idle behavior a character can perform when not in combat or traveling.

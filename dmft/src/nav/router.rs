@@ -66,7 +66,7 @@ pub fn generate_zone_staggers(
     let range = max_secs - min_secs;
     let mut result = HashMap::new();
 
-    for (_i, &id) in client_ids.iter().enumerate() {
+    for &id in client_ids {
         // Deterministic but varied delay per character.
         let hash = id.wrapping_mul(dmft_common::nav::KNUTH_HASH).wrapping_add(seed);
         let delay = min_secs + (hash % (range + 1));

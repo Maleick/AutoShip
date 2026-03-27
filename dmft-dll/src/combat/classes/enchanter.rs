@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use super::super::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{ClassStrategy, CombatContext};
 
 /// Enchanter strategy: crowd control, mezzes off-targets, nukes when only one enemy.
 pub struct EnchanterStrategy {

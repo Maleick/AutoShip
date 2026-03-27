@@ -80,12 +80,9 @@ impl IdleScheduler {
         self.ticks_idle += 1;
 
         // If we have an active behavior, tick it down
-        if let Some(ref mut active) = self.current {
-            if active.ticks_remaining > 0 {
-                active.ticks_remaining -= 1;
-                return IdleTransition::Continue;
-            }
-            // Behavior expired — fall through to pick a new one
+        if let Some(ref mut active) = self.current && active.ticks_remaining > 0 {
+            active.ticks_remaining -= 1;
+            return IdleTransition::Continue;
         }
 
         // Pick a new behavior

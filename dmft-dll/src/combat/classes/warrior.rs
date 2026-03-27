@@ -2,7 +2,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 use dmft_common::nav::Waypoint;
 use dmft_common::types::SpawnData;
 
-use super::super::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{ClassStrategy, CombatContext};
 
 /// Warrior strategy: main tank, selects nearest enemy, uses taunt/aggro abilities.
 pub struct WarriorStrategy {

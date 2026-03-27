@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use super::super::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{ClassStrategy, CombatContext};
 
 /// Cleric strategy: healer, targets lowest HP group member, prioritizes heals by urgency.
 pub struct ClericStrategy {

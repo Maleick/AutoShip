@@ -1,9 +1,9 @@
 use dmft_common::nav::Xorshift32;
 use dmft_common::soul::{
-    IdleBehaviorType, MoodState, PersonalityTraits, SoulAction, SoulEvent, SayChannel,
+    MoodState, PersonalityTraits, SoulAction, SoulEvent, SayChannel,
 };
 
-use crate::soul::config::{EdginessLevel, SoulConfig};
+use crate::soul::config::EdginessLevel;
 
 /// Snapshot of a character's current soul state, passed to engine methods.
 pub struct SoulContext<'a> {
@@ -182,99 +182,6 @@ impl PersonalityEngine {
         }
     }
 
-    /// Derive idle behavior weights from personality traits + mood.
-    /// Returns (behavior, weight) pairs — caller picks based on weighted random.
-    pub fn idle_weights(&self, ctx: &SoulContext<'_>) -> Vec<(IdleBehaviorType, f32)> {
-        let t = ctx.traits;
-        let mood = ctx.mood;
-
-        let mut weights = vec![
-            (IdleBehaviorType::Sit, 1.0 - t.extraversion * 0.5),
-            (IdleBehaviorType::Wander, t.wanderlust * 0.8 + t.extraversion * 0.2),
-            (IdleBehaviorType::Emote, t.extraversion * 0.6 + t.mischief * 0.4),
-            (IdleBehaviorType::Fish, t.conscientiousness * 0.7 * (1.0 - t.battle_hunger * 0.5)),
-            (IdleBehaviorType::Craft, t.conscientiousness * 0.5 + t.openness * 0.3),
-            (IdleBehaviorType::VendorBrowse, t.greed * 0.8),
-            (IdleBehaviorType::LoreChatter, t.openness * 0.5 + t.piety * 0.3),
-            (IdleBehaviorType::BioBrk, 0.1 + t.conscientiousness * 0.1),
-            (
-                IdleBehaviorType::LogOffToSleep,
-                if mood == MoodState::Exhausted { 0.8 } else { 0.02 },
-            ),
-            (IdleBehaviorType::RandomJump, t.mischief * 0.6),
-            (IdleBehaviorType::Inspect, t.openness * 0.4 + t.extraversion * 0.3),
-        ];
-
-        // Mood modifiers
-        match mood {
-            MoodState::Bored => {
-                adjust_weight(&mut weights, &IdleBehaviorType::Wander, 1.5);
-                adjust_weight(&mut weights, &IdleBehaviorType::RandomJump, 2.0);
-                adjust_weight(&mut weights, &IdleBehaviorType::Fish, 1.3);
-            }
-            MoodState::Happy | MoodState::Playful => {
-                adjust_weight(&mut weights, &IdleBehaviorType::Emote, 1.8);
-                adjust_weight(&mut weights, &IdleBehaviorType::LoreChatter, 1.5);
-            }
-            MoodState::Anxious => {
-                adjust_weight(&mut weights, &IdleBehaviorType::Sit, 1.5);
-                adjust_weight(&mut weights, &IdleBehaviorType::Wander, 0.3);
-            }
-            MoodState::Melancholy => {
-                adjust_weight(&mut weights, &IdleBehaviorType::Sit, 2.0);
-                adjust_weight(&mut weights, &IdleBehaviorType::Fish, 1.5);
-                adjust_weight(&mut weights, &IdleBehaviorType::Emote, 0.5);
-            }
-            MoodState::Focused => {
-                adjust_weight(&mut weights, &IdleBehaviorType::Sit, 1.5);
-                adjust_weight(&mut weights, &IdleBehaviorType::Wander, 0.2);
-                adjust_weight(&mut weights, &IdleBehaviorType::RandomJump, 0.1);
-            }
-            MoodState::Exhausted => {
-                adjust_weight(&mut weights, &IdleBehaviorType::Sit, 3.0);
-                adjust_weight(&mut weights, &IdleBehaviorType::LogOffToSleep, 3.0);
-                adjust_weight(&mut weights, &IdleBehaviorType::Wander, 0.1);
-            }
-            _ => {}
-        }
-
-        weights
-    }
-
-    /// Pick an idle behavior using weighted random selection.
-    pub fn pick_idle(&mut self, ctx: &SoulContext<'_>) -> IdleBehaviorType {
-        let weights = self.idle_weights(ctx);
-        let total: f32 = weights.iter().map(|(_, w)| w).sum();
-        let mut roll = self.rng.next_f32() * total;
-        for (behavior, weight) in &weights {
-            roll -= weight;
-            if roll <= 0.0 {
-                return behavior.clone();
-            }
-        }
-        IdleBehaviorType::Sit
-    }
-
-    /// Calculate chat interval in seconds based on personality.
-    /// More extraverted/playful characters chat more often.
-    pub fn chat_interval_secs(&mut self, config: &SoulConfig, traits: &PersonalityTraits) -> u64 {
-        let chattiness = traits.extraversion * 0.5 + traits.mischief * 0.3 + traits.openness * 0.2;
-        let range = config.max_chat_interval_secs - config.min_chat_interval_secs;
-        // Higher chattiness → shorter interval
-        let interval = config.max_chat_interval_secs as f32 - (chattiness * range as f32);
-        // Add jitter
-        let jitter = (self.rng.next_f32() * 0.3 - 0.15) * interval;
-        (interval + jitter).max(config.min_chat_interval_secs as f32) as u64
-    }
-}
-
-fn adjust_weight(weights: &mut [(IdleBehaviorType, f32)], target: &IdleBehaviorType, multiplier: f32) {
-    for (behavior, weight) in weights.iter_mut() {
-        if behavior == target {
-            *weight *= multiplier;
-            return;
-        }
-    }
 }
 
 // ─── Emote tables ───

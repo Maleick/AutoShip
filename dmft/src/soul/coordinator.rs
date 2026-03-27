@@ -121,7 +121,7 @@ impl SoulCoordinator {
                 traits: &soul.traits,
                 mood: soul.mood,
                 edginess: soul.edginess,
-                zone: &zone,
+                zone,
                 level: state
                     .local_player
                     .as_ref()
@@ -168,7 +168,7 @@ impl SoulCoordinator {
             }
 
             // Periodic memory decay (every ~60 ticks = 5 minutes at 5s tick)
-            if self.tick_count % 60 == 0 {
+            if self.tick_count.is_multiple_of(60) {
                 let _ = self.memory.decay_tick(client_id, 0.995);
                 let _ = self.memory.prune_low_importance(client_id, 0.05);
             }
@@ -316,6 +316,6 @@ fn is_in_combat(state: &GameState) -> bool {
 }
 
 /// Extract zone name from game state (placeholder until zone tracking is added).
-fn zone_from_state(_state: &GameState) -> String {
-    "unknown".to_string()
+fn zone_from_state(_state: &GameState) -> &'static str {
+    "unknown"
 }

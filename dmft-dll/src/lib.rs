@@ -1,6 +1,7 @@
 //! DMFT injected DLL payload.
 //! This cdylib is loaded into eqgame.exe via CreateRemoteThread + LoadLibrary.
 //! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
+#![allow(dead_code)]
 
 mod combat;
 mod hooks;

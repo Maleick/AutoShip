@@ -29,38 +29,14 @@ impl HolyShitEvaluator {
     fn eval_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         match expr {
             ConditionExpr::Always => true,
-            ConditionExpr::HpBelow(threshold) => {
-                let hp_pct = if ctx.player.hp_max > 0 {
-                    (ctx.player.hp_current as f32 / ctx.player.hp_max as f32) * 100.0
-                } else {
-                    100.0
-                };
-                hp_pct < *threshold
+            ConditionExpr::HpBelow(threshold) => ctx.player.hp_pct() < *threshold,
+            ConditionExpr::ManaBelow(threshold) => ctx.player.mana_pct() < *threshold,
+            ConditionExpr::TargetHpAbove(threshold) => {
+                ctx.target.is_some_and(|t| t.hp_pct() > *threshold)
             }
-            ConditionExpr::ManaBelow(threshold) => {
-                let mana_pct = if ctx.player.mana_max > 0 {
-                    (ctx.player.mana_current as f32 / ctx.player.mana_max as f32) * 100.0
-                } else {
-                    100.0
-                };
-                mana_pct < *threshold
+            ConditionExpr::TargetHpBelow(threshold) => {
+                ctx.target.is_some_and(|t| t.hp_pct() < *threshold)
             }
-            ConditionExpr::TargetHpAbove(threshold) => ctx.target.map_or(false, |t| {
-                let pct = if t.hp_max > 0 {
-                    (t.hp_current as f32 / t.hp_max as f32) * 100.0
-                } else {
-                    0.0
-                };
-                pct > *threshold
-            }),
-            ConditionExpr::TargetHpBelow(threshold) => ctx.target.map_or(false, |t| {
-                let pct = if t.hp_max > 0 {
-                    (t.hp_current as f32 / t.hp_max as f32) * 100.0
-                } else {
-                    0.0
-                };
-                pct < *threshold
-            }),
             ConditionExpr::AggroOnMe => {
                 // Simplified: check if target is facing us (uses aggro module)
                 // For now, approximate as "target exists and is NPC"

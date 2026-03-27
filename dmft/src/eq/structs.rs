@@ -134,7 +134,7 @@ impl SpawnInfo {
         if self.hp_max > 0 {
             (self.hp_current as f64 / self.hp_max as f64) * 100.0
         } else {
-            0.0
+            100.0
         }
     }
 
@@ -142,7 +142,7 @@ impl SpawnInfo {
         if self.mana_max > 0 {
             (self.mana_current as f64 / self.mana_max as f64) * 100.0
         } else {
-            0.0
+            100.0
         }
     }
 

@@ -27,19 +27,19 @@ impl CombatCoordinator {
         let mut commands = Vec::new();
 
         // 1. Find MA's target (main tank's current target)
-        if let Some(new_assist) = self.decide_assist_target(states) {
-            if self.assist_target != Some(new_assist) {
-                self.assist_target = Some(new_assist);
-                // Broadcast assist target to all DPS
-                for (&cid, _state) in states {
-                    if Some(cid) != self.main_tank_id {
-                        commands.push((
-                            cid,
-                            Command::CombatSetAssistTarget {
-                                spawn_id: new_assist,
-                            },
-                        ));
-                    }
+        if let Some(new_assist) = self.decide_assist_target(states)
+            && self.assist_target != Some(new_assist)
+        {
+            self.assist_target = Some(new_assist);
+            // Broadcast assist target to all DPS
+            for &cid in states.keys() {
+                if Some(cid) != self.main_tank_id {
+                    commands.push((
+                        cid,
+                        Command::CombatSetAssistTarget {
+                            spawn_id: new_assist,
+                        },
+                    ));
                 }
             }
         }

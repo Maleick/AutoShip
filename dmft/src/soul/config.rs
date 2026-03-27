@@ -2,21 +2,16 @@ use dmft_common::soul::{PersonalityTraits, SocialTag, SpeechStyle};
 use serde::Deserialize;
 
 /// How "edgy" a character's personality and speech can be.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EdginessLevel {
     /// Family-friendly, no swearing or dark humor
     Mild,
     /// Classic EQ vibes — light trash talk, mild insults
+    #[default]
     Moderate,
     /// Full classic MMO banter — sarcasm, profanity, dark humor
     Spicy,
-}
-
-impl Default for EdginessLevel {
-    fn default() -> Self {
-        Self::Moderate
-    }
 }
 
 /// Seed data for a pre-defined relationship between two characters.

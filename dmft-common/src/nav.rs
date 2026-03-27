@@ -87,6 +87,12 @@ pub struct IndexedQueue<T> {
     index: usize,
 }
 
+impl<T> Default for IndexedQueue<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> IndexedQueue<T> {
     /// Create an empty queue.
     pub fn new() -> Self {
@@ -97,10 +103,8 @@ impl<T> IndexedQueue<T> {
     }
 
     /// Load new items, resetting the cursor to the start.
-    /// Reuses existing allocation when capacity is sufficient.
     pub fn set_items(&mut self, items: Vec<T>) {
-        self.items.clear();
-        self.items.extend(items);
+        self.items = items;
         self.index = 0;
     }
 

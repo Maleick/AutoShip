@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatConfig, CombatRole, SpellEntry};
 
-use super::super::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{ClassStrategy, CombatContext};
 
 /// Generic DPS strategy: works for any DPS class (melee or ranged).
 /// Assists main assist, uses highest priority spell that mana allows.
@@ -14,7 +14,7 @@ impl GenericDpsStrategy {
     pub fn new(class_id: u8, config: &CombatConfig) -> Self {
         Self {
             class_id,
-            role: config.role.clone(),
+            role: config.role,
             aoe_threshold: config.aoe_threshold,
         }
     }
@@ -31,13 +31,7 @@ impl ClassStrategy for GenericDpsStrategy {
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
-        // Calculate current mana percentage.
-        let mana_pct = if ctx.player.mana_max > 0 {
-            (ctx.player.mana_current as f32 / ctx.player.mana_max as f32) * 100.0
-        } else {
-            // Melee class with no mana pool — always eligible.
-            100.0
-        };
+        let mana_pct = ctx.player.mana_pct();
 
         // Highest priority spell from config where mana is sufficient.
         ctx.config
@@ -61,6 +55,6 @@ impl ClassStrategy for GenericDpsStrategy {
     }
 
     fn role(&self) -> CombatRole {
-        self.role.clone()
+        self.role
     }
 }

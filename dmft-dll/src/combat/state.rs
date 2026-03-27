@@ -127,17 +127,13 @@ impl Combatant {
                 // Wait for an explicit engage command — do nothing.
             }
 
-            CombatState::Engaging { target_id: _ } => {
+            CombatState::Engaging { .. } => {
                 if !self.gcd.is_ready() {
                     return;
                 }
 
                 // Check mana governor
-                let mana_pct = if player.mana_max > 0 {
-                    (player.mana_current as f32 / player.mana_max as f32) * 100.0
-                } else {
-                    100.0 // melee classes have no mana
-                };
+                let mana_pct = player.mana_pct();
 
                 if !self.mana_governor.can_cast(mana_pct) {
                     tracing::debug!(mana_pct, "Mana too low, transitioning to Recovering");
@@ -188,11 +184,7 @@ impl Combatant {
             }
 
             CombatState::Recovering => {
-                let mana_pct = if player.mana_max > 0 {
-                    (player.mana_current as f32 / player.mana_max as f32) * 100.0
-                } else {
-                    100.0
-                };
+                let mana_pct = player.mana_pct();
 
                 // Recover until we're above the floor
                 if !self.mana_governor.should_med(mana_pct, false) {
