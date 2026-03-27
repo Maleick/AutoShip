@@ -8,3 +8,4 @@ pub mod offset_db;
 pub mod protocol;
 pub mod nav;
 pub mod combat;
+pub mod soul;

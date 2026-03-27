@@ -10,11 +10,15 @@ mod ipc;
 mod launcher;
 mod nav;
 mod process;
+mod soul;
 mod tui;
 
 use anyhow::{Context, Result};
 use std::path::Path;
 use tracing::{info, warn, error};
+
+/// Default path for the soul memory database.
+const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -54,6 +58,24 @@ fn run_tui_mode() -> Result<()> {
     #[cfg(not(windows))]
     {
         app.status_message = String::from("DEMO MODE — macOS build (no EQ process)");
+    }
+
+    // Initialize Soul Engine if enabled
+    let config = load_config()?;
+    if config.soul.enabled {
+        let db_path = Path::new(SOUL_DB_PATH);
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        match soul::coordinator::SoulCoordinator::new(config.soul, db_path) {
+            Ok(coordinator) => {
+                info!("Soul Engine initialized");
+                app.soul_coordinator = Some(coordinator);
+            }
+            Err(e) => {
+                warn!("Soul Engine failed to initialize: {}", e);
+            }
+        }
     }
 
     tui::run::run_tui(app)

@@ -1,4 +1,5 @@
 use crate::eq::structs::SpawnInfo;
+use crate::soul::coordinator::SoulCoordinator;
 
 /// Which panel is currently focused for keyboard input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +36,10 @@ pub struct App {
     // EQ connection info
     pub eq_base: u64,
     pub attached_pid: Option<u32>,
+
+    // Soul Engine
+    pub soul_coordinator: Option<SoulCoordinator>,
+    pub soul_tick_counter: u64,
 }
 
 impl App {
@@ -61,6 +66,9 @@ impl App {
 
             eq_base: 0,
             attached_pid: None,
+
+            soul_coordinator: None,
+            soul_tick_counter: 0,
         }
     }
 

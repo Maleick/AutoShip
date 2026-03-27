@@ -3,11 +3,15 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScree
 use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use super::app::App;
 use super::event::handle_events;
 use super::ui::draw;
+
+/// Soul Engine tick interval (5 seconds).
+const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Initialize crossterm, run the TUI loop, and clean up on exit.
 pub fn run_tui(mut app: App) -> Result<()> {
@@ -31,6 +35,7 @@ pub fn run_tui(mut app: App) -> Result<()> {
 fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> Result<()> {
     let refresh_interval = Duration::from_millis(app.refresh_rate_ms);
     let mut last_refresh = Instant::now();
+    let mut last_soul_tick = Instant::now();
 
     while app.running {
         // Draw the UI
@@ -45,6 +50,12 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App
             refresh_eq_data(app);
             app.tick_count += 1;
             last_refresh = Instant::now();
+        }
+
+        // Soul Engine tick (every 5 seconds)
+        if last_soul_tick.elapsed() >= SOUL_TICK_INTERVAL {
+            tick_soul_engine(app);
+            last_soul_tick = Instant::now();
         }
     }
 
@@ -171,4 +182,29 @@ fn load_demo_data(app: &mut App) {
             spawn_id: i as u32 + 1,
         })
         .collect();
+}
+
+/// Tick the Soul Engine coordinator (if enabled).
+/// Generates soul commands (idle behaviors, chat, emotes) for all registered characters.
+fn tick_soul_engine(app: &mut App) {
+    let coordinator = match app.soul_coordinator.as_mut() {
+        Some(c) => c,
+        None => return,
+    };
+
+    // Build game states from current app data
+    // In the full orchestrator, this comes from shared memory per client.
+    // For now, use an empty map (no clients registered yet = no commands generated).
+    let states: HashMap<dmft_common::types::ClientId, dmft_common::types::GameState> =
+        HashMap::new();
+
+    let commands = coordinator.tick(&states);
+
+    if !commands.is_empty() {
+        tracing::debug!(count = commands.len(), "Soul Engine generated commands");
+        // TODO: dispatch commands to clients via IPC pipe
+        // For now, commands are generated but not sent (no live clients in TUI demo mode)
+    }
+
+    app.soul_tick_counter += 1;
 }

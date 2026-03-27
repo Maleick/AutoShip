@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::Path;
 
+use crate::soul::config::SoulConfig;
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     /// Name of the EQ process to attach to (default: "eqgame.exe")
@@ -27,6 +29,10 @@ pub struct AppConfig {
     /// Retry / backoff configuration
     #[serde(default)]
     pub retry: RetryConfig,
+
+    /// Soul Engine configuration
+    #[serde(default)]
+    pub soul: SoulConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -133,6 +139,7 @@ impl AppConfig {
             launch: LaunchConfig::default(),
             server: ServerConfig::default(),
             retry: RetryConfig::default(),
+            soul: SoulConfig::default(),
         }
     }
 }

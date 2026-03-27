@@ -35,6 +35,17 @@ pub enum Command {
     CombatSetAssistTarget { spawn_id: u32 },
     CombatForceAbility { ability_id: u32 },
     CombatEmergencyHeal { target_id: u32 },
+    // Soul Engine
+    /// Send a chat message in-game.
+    Say {
+        channel: crate::soul::SayChannel,
+        message: String,
+        target: Option<String>,
+    },
+    /// Perform an emote animation.
+    Emote { emote: String },
+    /// Execute a soul action (idle behavior, etc.).
+    SoulAction { action: crate::soul::SoulAction },
     // System
     Ping,
     Eject,
