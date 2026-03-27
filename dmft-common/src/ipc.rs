@@ -84,3 +84,6 @@ pub const SHARED_MEMORY_SIZE: usize = 64 * 1024;
 
 /// Named pipe prefix for per-client IPC channels
 pub const PIPE_NAME_PREFIX: &str = r"\\.\pipe\dmft_";
+
+/// Shared memory name prefix for per-client game state regions
+pub const SHARED_MEMORY_NAME_PREFIX: &str = "dmft_state_";

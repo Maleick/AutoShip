@@ -34,7 +34,7 @@ pub fn tick() {
 pub fn status() -> NavStatus {
     NAVIGATOR
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .map(|n| n.status())
         .unwrap_or(NavStatus::Idle)
