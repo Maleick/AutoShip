@@ -507,7 +507,6 @@ mod tests {
 
     #[test]
     fn speech_style_catchphrase_applied() {
-        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
         let mut request = make_request_with_situation(Situation::IdleChatter);
         request.speech_style = SpeechStyle {
             vocabulary_level: 0.5,
