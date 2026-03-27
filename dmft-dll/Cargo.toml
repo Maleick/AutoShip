@@ -11,6 +11,8 @@ dmft-common = { path = "../dmft-common" }
 bincode = { version = "2", features = ["serde"] }
 thiserror = "2"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing-appender = "0.2"
 anyhow = "1"
 
 [target.'cfg(windows)'.dependencies]

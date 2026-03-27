@@ -16,11 +16,30 @@ mod tui;
 use anyhow::{Context, Result};
 use std::path::Path;
 use tracing::{info, warn, error};
+use tracing_subscriber::{fmt, EnvFilter};
+use tracing_appender::rolling;
 
 /// Default path for the soul memory database.
 const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
 fn main() -> Result<()> {
+    // Set up file logging — must be done before anything else.
+    let log_dir = std::env::current_dir().unwrap_or_default().join("logs");
+    std::fs::create_dir_all(&log_dir).ok();
+    let file_appender = rolling::daily(&log_dir, "dmft.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    fmt()
+        .with_env_filter(filter)
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .init();
+
+    tracing::info!("DMFT orchestrator starting");
+
     let args: Vec<String> = std::env::args().collect();
     let dump_mode = args.iter().any(|a| a == "--dump");
 
@@ -82,12 +101,7 @@ fn run_tui_mode() -> Result<()> {
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.
 fn run_dump_mode() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_level(true)
-        .init();
-
-    info!("Frostreaver v{} — EQ Memory Reader", env!("CARGO_PKG_VERSION"));
+    info!("Frostreaver v{} — EQ Memory Reader (dump mode)", env!("CARGO_PKG_VERSION"));
 
     let config = load_config()?;
 

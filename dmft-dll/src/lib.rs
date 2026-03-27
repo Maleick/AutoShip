@@ -104,14 +104,28 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
 /// Initialize tracing with file output. Falls back silently if setup fails —
 /// better to run without logs than crash EQ.
 fn init_tracing() {
-    // tracing_subscriber is not a dependency, so we use a minimal approach:
-    // just ensure the global default subscriber is set. If nothing is configured,
-    // tracing macros become no-ops, which is acceptable for the DLL.
-    //
-    // When tracing_subscriber is added as a dependency, replace this with:
-    //   let filter = EnvFilter::try_from_default_env()
-    //       .unwrap_or_else(|_| EnvFilter::new("info"));
-    //   fmt().with_env_filter(filter).with_ansi(false).init();
+    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_appender::rolling;
+
+    let log_dir = std::env::temp_dir().join("dmft");
+    std::fs::create_dir_all(&log_dir).ok();
+    let file_appender = rolling::daily(&log_dir, "dmft-dll.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // Leak the guard so it lives for the DLL's lifetime — there is no clean
+    // drop point for a cdylib that outlives its init thread.
+    std::mem::forget(_guard);
+
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    fmt()
+        .with_env_filter(filter)
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .init();
+
+    tracing::info!("DMFT DLL tracing initialized");
 }
 
 /// Resolve the base address of eqgame.exe in the current process.
