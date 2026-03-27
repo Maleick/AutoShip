@@ -1,0 +1,69 @@
+
+ ╔══════════════════════════════════════════════════════════════════════════════════╗
+ ║  EQ Memory Debugger                                                            ║
+ ║  ⚡ FROSTREAVER │ PID:12345 Base:0x140000000 │ Gandalf (Enchanter) Lv60 │ T:1247║
+ ╚══════════════════════════════════════════════════════════════════════════════════╝
+ ┌─ Local Player (green border) ──────┐┌─ Spawn List (247 in zone) ──────────────────┐
+ │                                    ││                                              │
+ │  Name:  Gandalf                    ││  ID    Name                  Lv  Class  Dist │
+ │  Class: Enchanter    Level: 60     ││  ──── ────────────────────── ──  ─────  ──── │
+ │  HP:    ████████████████░░░░  85%  ││  1042 a goblin warrior      55  WAR    23m   │
+ │  Mana:  ████████████░░░░░░░░  62%  ││  1043 a dark elf priest     57  CLR    31m   │
+ │  End:   ██████████████████░░  92%  ││ >1044 Thorin                60  WAR     5m < │
+ │  Pos:   125.3, -340.1, 12.0       ││  1045 a goblin scout        53  ROG    42m   │
+ │                                    ││  1046 a goblin king         60  WAR    55m   │
+ ├─ Current Target (red border) ──────┤│  1047 a goblin shaman       54  SHM    48m   │
+ │                                    ││  1048 Legolas                60  RNG    12m   │
+ │  Name:  a goblin warrior           ││  1049 a goblin warlord      58  WAR    61m   │
+ │  Type:  NPC           Level: 55    ││  1050 a fire beetle         10  WAR    70m   │
+ │  HP:    █████░░░░░░░░░░░░░░░  23%  ││  1051 a goblin guard        52  WAR    35m   │
+ │  Pos:   130.1, -335.2, 12.0       ││  1052 Gimli                 60  WAR     8m   │
+ │  ID:    1042                       ││  1053 a goblin mystic       56  ENC    44m   │
+ │                                    ││  1054 a goblin captain      59  WAR    38m   │
+ ├─ Hex Dump ─────────────────────────┤│  1055 a goblin sentry       51  WAR    66m   │
+ │                                    ││                                              │
+ │  0000: 47 61 6E 64 61 6C 66 00   ││  Filter: [All Types]  Sort: [Distance]       │
+ │  0008: 00 00 00 00 45 6E 63 68   ││                                              │
+ │  0010: 61 6E 74 65 72 00 00 00   ││  PC: 3  NPC: 212  Corpse: 32                 │
+ │  0018: 3C 00 55 01 A8 61 00 00   ││                                              │
+ │                                    ││                                              │
+ └────────────────────────────────────┘└──────────────────────────────────────────────┘
+ ╔══════════════════════════════════════════════════════════════════════════════════╗
+ ║  ↑↓ Navigate │ Tab: Switch Panel │ F: Filter │ /: Search │ Q: Quit │ Demo Mode ║
+ ╚══════════════════════════════════════════════════════════════════════════════════╝
+
+ LAYOUT:
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │                        HEADER (3 rows)                              │
+ │          Process info, character name, tick counter                  │
+ ├────────────────────────────┬─────────────────────────────────────────┤
+ │   LEFT COLUMN (40%)       │      RIGHT COLUMN (60%)                 │
+ │                            │                                         │
+ │  ┌──────────────────────┐ │  ┌───────────────────────────────────┐  │
+ │  │  Player Panel (8h)   │ │  │                                   │  │
+ │  │  Name, Class, Level  │ │  │         Spawn List Table          │  │
+ │  │  HP/Mana/End bars    │ │  │                                   │  │
+ │  │  XYZ coordinates     │ │  │    ID | Name | Lv | Class | Dist  │  │
+ │  │  Green border        │ │  │    ── | ──── | ── | ───── | ──── │  │
+ │  ├──────────────────────┤ │  │    Scrollable, filterable          │  │
+ │  │  Target Panel (8h)   │ │  │    Arrow keys to navigate          │  │
+ │  │  Same as player      │ │  │    Highlighted row = selected      │  │
+ │  │  Red border           │ │  │                                   │  │
+ │  │  "No target" if none │ │  │    Shows PC/NPC/Corpse counts      │  │
+ │  ├──────────────────────┤ │  │                                   │  │
+ │  │  Hex Dump (flex)     │ │  │    60% of screen width             │  │
+ │  │  Raw memory bytes    │ │  │                                   │  │
+ │  │  For offset debugging│ │  │                                   │  │
+ │  └──────────────────────┘ │  └───────────────────────────────────┘  │
+ ├────────────────────────────┴─────────────────────────────────────────┤
+ │                       STATUS BAR (3 rows)                            │
+ │              Keybindings, mode indicator, filters                    │
+ └──────────────────────────────────────────────────────────────────────┘
+
+ COLORS:
+   Header:       Cyan title, Yellow PID, Green character name
+   Player Panel: Green border, HP bar (green>75%, yellow>25%, red<25%)
+   Target Panel: Red border, same HP coloring
+   Spawn List:   White text, cyan header, highlighted row
+   Hex Dump:     Gray text on dark background
+   Status Bar:   Gray text with keybinding hints

@@ -64,10 +64,12 @@ pub mod player_base {
     pub const NAME: usize = 0x0b4;
     /// char[64] — displayed name (e.g., "Priest of Discord")
     pub const DISPLAYED_NAME: usize = 0x0f4;
-    /// float — current speed (actual, includes modifiers)
+    /// float — SpeedX (lateral speed component)
     pub const SPEED_CURRENT: usize = 0x084;
-    /// float — movement speed
-    pub const SPEED_RUN: usize = 0x088;
+    /// float — SpeedZ (vertical speed component)
+    pub const SPEED_Z: usize = 0x088;
+    /// float — SpeedRun (actual movement speed, includes modifiers)
+    pub const SPEED_RUN: usize = 0x08c;
     /// float — speed heading (direction of movement)
     pub const SPEED_HEADING: usize = 0x09c;
     /// uint8_t — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
