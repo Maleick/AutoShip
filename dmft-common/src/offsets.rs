@@ -172,3 +172,36 @@ pub mod spawn_manager {
     /// The TList itself contains m_pFirstNode at offset 0x00
     pub const PLAYER_LIST: usize = 0x0010;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rebase_normal_case() {
+        let actual_base: u64 = 0x7FF600000000;
+        let result = rebase(PINST_LOCAL_PLAYER, actual_base);
+        let expected_offset = PINST_LOCAL_PLAYER - EQ_PREFERRED_BASE;
+        assert_eq!(result, Some((actual_base + expected_offset) as usize));
+    }
+
+    #[test]
+    fn rebase_underflow_returns_none() {
+        // An address below the preferred base should return None
+        let result = rebase(0x100, 0x7FF600000000);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn rebase_same_base_returns_original_offset() {
+        let result = rebase(PINST_LOCAL_PLAYER, EQ_PREFERRED_BASE);
+        assert_eq!(result, Some(PINST_LOCAL_PLAYER as usize));
+    }
+
+    #[test]
+    fn rebase_preferred_base_itself_returns_actual_base() {
+        let actual_base: u64 = 0x7FF600000000;
+        let result = rebase(EQ_PREFERRED_BASE, actual_base);
+        assert_eq!(result, Some(actual_base as usize));
+    }
+}

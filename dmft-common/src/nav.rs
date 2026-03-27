@@ -164,3 +164,107 @@ pub struct CampDefinition {
     pub zone: String,
     pub spots: Vec<CampSpot>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xorshift32_from_client_id_zero_guards_against_zero_seed() {
+        let mut rng = Xorshift32::from_client_id(0);
+        // 0 * KNUTH_HASH wraps to 0, but the guard forces seed = 1
+        let val = rng.next_u32();
+        assert_ne!(val, 0, "zero-seed guard should prevent all-zeros output");
+    }
+
+    #[test]
+    fn xorshift32_produces_different_values_each_call() {
+        let mut rng = Xorshift32::from_client_id(1);
+        let a = rng.next_u32();
+        let b = rng.next_u32();
+        let c = rng.next_u32();
+        assert_ne!(a, b);
+        assert_ne!(b, c);
+    }
+
+    #[test]
+    fn xorshift32_next_f32_in_unit_range() {
+        let mut rng = Xorshift32::from_client_id(42);
+        for _ in 0..1000 {
+            let v = rng.next_f32();
+            assert!(v >= 0.0, "next_f32 returned {v}, expected >= 0.0");
+            assert!(v < 1.0, "next_f32 returned {v}, expected < 1.0");
+        }
+    }
+
+    #[test]
+    fn indexed_queue_empty_by_default() {
+        let q: IndexedQueue<i32> = IndexedQueue::default();
+        assert!(q.is_empty());
+        assert_eq!(q.len(), 0);
+        assert!(q.current().is_none());
+    }
+
+    #[test]
+    fn indexed_queue_set_items_and_traverse() {
+        let mut q = IndexedQueue::new();
+        q.set_items(vec![10, 20, 30]);
+
+        assert_eq!(q.len(), 3);
+        assert!(!q.is_empty());
+        assert_eq!(q.current(), Some(&10));
+        assert_eq!(q.index(), 0);
+
+        assert!(q.advance());
+        assert_eq!(q.current(), Some(&20));
+
+        assert!(q.advance());
+        assert_eq!(q.current(), Some(&30));
+
+        // Cannot advance past the last item
+        assert!(!q.advance());
+        assert_eq!(q.current(), Some(&30));
+    }
+
+    #[test]
+    fn indexed_queue_clear_resets_state() {
+        let mut q = IndexedQueue::new();
+        q.set_items(vec![1, 2, 3]);
+        q.advance();
+        q.clear();
+
+        assert!(q.is_empty());
+        assert_eq!(q.len(), 0);
+        assert_eq!(q.index(), 0);
+        assert!(q.current().is_none());
+    }
+
+    #[test]
+    fn indexed_queue_set_items_resets_index() {
+        let mut q = IndexedQueue::new();
+        q.set_items(vec![1, 2, 3]);
+        q.advance();
+        q.advance();
+        assert_eq!(q.index(), 2);
+
+        q.set_items(vec![100, 200]);
+        assert_eq!(q.index(), 0);
+        assert_eq!(q.current(), Some(&100));
+    }
+
+    #[test]
+    fn waypoint_distance_2d() {
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(3.0, 4.0, 99.0);
+        let dist = a.distance_2d(&b);
+        assert!((dist - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn waypoint_distance_3d() {
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(1.0, 2.0, 2.0);
+        let dist = a.distance_3d(&b);
+        assert!((dist - 3.0).abs() < 1e-5);
+    }
+}

@@ -95,3 +95,70 @@ impl OffsetDatabase {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_compiled_offsets_has_expected_globals() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_global("pinstLocalPlayer").is_some());
+        assert!(db.get_global("pinstTarget").is_some());
+        assert!(db.get_global("nonexistent").is_none());
+    }
+
+    #[test]
+    fn rebase_normal_case() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let actual_base: u64 = 0x7FF600000000;
+        let addr = db.get_global("pinstLocalPlayer").unwrap();
+        let result = db.rebase(addr, actual_base);
+        let expected_offset = addr - db.eq_preferred_base;
+        assert_eq!(result, Some((actual_base + expected_offset) as usize));
+    }
+
+    #[test]
+    fn rebase_underflow_returns_none() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let result = db.rebase(0x100, 0x7FF600000000);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn json_serialization_roundtrip() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let json = serde_json::to_string(&db).expect("serialize failed");
+        let restored: OffsetDatabase =
+            serde_json::from_str(&json).expect("deserialize failed");
+
+        assert_eq!(restored.client_date, db.client_date);
+        assert_eq!(restored.eq_preferred_base, db.eq_preferred_base);
+        assert_eq!(
+            restored.get_global("pinstLocalPlayer"),
+            db.get_global("pinstLocalPlayer")
+        );
+        assert_eq!(
+            restored.get_player_base_offset("x"),
+            db.get_player_base_offset("x")
+        );
+        assert_eq!(
+            restored.get_player_zone_offset("hpMax"),
+            db.get_player_zone_offset("hpMax")
+        );
+    }
+
+    #[test]
+    fn field_offset_lookups() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert_eq!(
+            db.get_player_base_offset("next"),
+            Some(crate::offsets::player_base::NEXT)
+        );
+        assert_eq!(
+            db.get_player_zone_offset("level"),
+            Some(crate::offsets::player_zone::LEVEL)
+        );
+        assert!(db.get_player_base_offset("nonexistent").is_none());
+    }
+}

@@ -179,3 +179,71 @@ pub enum SoulAction {
     /// Stop current idle behavior and return to normal
     StopIdle,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mood_state_default_is_neutral() {
+        assert_eq!(MoodState::default(), MoodState::Neutral);
+    }
+
+    #[test]
+    fn mood_state_all_variants() {
+        let variants = [
+            MoodState::Neutral,
+            MoodState::Happy,
+            MoodState::Angry,
+            MoodState::Anxious,
+            MoodState::Bored,
+            MoodState::Excited,
+            MoodState::Melancholy,
+            MoodState::Focused,
+            MoodState::Playful,
+            MoodState::Exhausted,
+        ];
+        // Verify they are all distinct
+        for (i, a) in variants.iter().enumerate() {
+            for (j, b) in variants.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn personality_traits_default_all_half() {
+        let traits = PersonalityTraits::default();
+        assert!((traits.openness - 0.5).abs() < f32::EPSILON);
+        assert!((traits.conscientiousness - 0.5).abs() < f32::EPSILON);
+        assert!((traits.extraversion - 0.5).abs() < f32::EPSILON);
+        assert!((traits.agreeableness - 0.5).abs() < f32::EPSILON);
+        assert!((traits.neuroticism - 0.5).abs() < f32::EPSILON);
+        assert!((traits.battle_hunger - 0.5).abs() < f32::EPSILON);
+        assert!((traits.loyalty - 0.5).abs() < f32::EPSILON);
+        assert!((traits.mischief - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn speech_style_default() {
+        let style = SpeechStyle::default();
+        assert!((style.vocabulary_level - 0.5).abs() < f32::EPSILON);
+        assert!((style.typing_speed - 1.0).abs() < f32::EPSILON);
+        assert!(style.catchphrases.is_empty());
+        assert!(style.adopted_slang.is_empty());
+    }
+
+    #[test]
+    fn social_tag_equality() {
+        assert_eq!(SocialTag::Friend, SocialTag::Friend);
+        assert_ne!(SocialTag::Friend, SocialTag::Rival);
+    }
+
+    #[test]
+    fn say_channel_equality() {
+        assert_eq!(SayChannel::Say, SayChannel::Say);
+        assert_ne!(SayChannel::Say, SayChannel::Group);
+    }
+}

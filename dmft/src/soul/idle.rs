@@ -282,3 +282,227 @@ fn adjust(weights: &mut [PrioritizedBehavior], target: &IdleBehaviorType, multip
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits};
+    use crate::soul::config::{EdginessLevel, SoulConfig};
+    use crate::soul::llm::fallback::TraitDrivenResponder;
+    use crate::soul::personality::SoulContext;
+
+    fn default_config() -> SoulConfig {
+        SoulConfig::default()
+    }
+
+    fn make_ctx<'a>(
+        traits: &'a PersonalityTraits,
+        mood: MoodState,
+        in_combat: bool,
+    ) -> SoulContext<'a> {
+        SoulContext {
+            character_name: "TestChar",
+            traits,
+            mood,
+            edginess: EdginessLevel::Moderate,
+            zone: "freportn",
+            level: 50,
+            in_combat,
+            group_members: &[],
+        }
+    }
+
+    #[test]
+    fn new_scheduler_has_no_active_behavior() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        assert!(scheduler.current_behavior().is_none());
+    }
+
+    #[test]
+    fn tick_selects_behavior_when_none_active() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+
+        let transition = scheduler.tick(&ctx, &mut responder);
+        match transition {
+            IdleTransition::Start(active) => {
+                assert!(active.ticks_remaining > 0);
+            }
+            IdleTransition::LogOff { .. } => {
+                // LogOffToSleep is valid but rare
+            }
+            other => panic!("Expected Start or LogOff, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn tick_in_combat_returns_stop() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Neutral, true);
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+
+        let transition = scheduler.tick(&ctx, &mut responder);
+        assert!(matches!(transition, IdleTransition::Stop));
+    }
+
+    #[test]
+    fn active_behavior_decrements_ticks_remaining() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+
+        // First tick: start a behavior
+        let first = scheduler.tick(&ctx, &mut responder);
+        let initial_ticks = match &first {
+            IdleTransition::Start(active) => active.ticks_remaining,
+            IdleTransition::LogOff { .. } => return, // skip if LogOff was selected
+            other => panic!("Expected Start, got {:?}", other),
+        };
+
+        if initial_ticks > 0 {
+            // Second tick: should continue and decrement
+            let second = scheduler.tick(&ctx, &mut responder);
+            assert!(matches!(second, IdleTransition::Continue));
+
+            let remaining = scheduler.current_behavior().unwrap().ticks_remaining;
+            assert_eq!(remaining, initial_ticks - 1);
+        }
+    }
+
+    #[test]
+    fn interrupt_clears_current_behavior() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+
+        // Start a behavior
+        scheduler.tick(&ctx, &mut responder);
+        // Interrupt it
+        scheduler.interrupt();
+        assert!(scheduler.current_behavior().is_none());
+    }
+
+    #[test]
+    fn exhausted_mood_heavily_weights_sit_and_logoff() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Exhausted, false);
+
+        let weights = scheduler.compute_weights(&ctx);
+
+        let sit_weight = weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Sit)
+            .unwrap()
+            .weight;
+        let logoff_weight = weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::LogOffToSleep)
+            .unwrap()
+            .weight;
+        let wander_weight = weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+
+        // Exhausted should heavily favor sitting/sleeping over wandering
+        assert!(sit_weight > wander_weight);
+        assert!(logoff_weight > wander_weight);
+    }
+
+    #[test]
+    fn bored_mood_boosts_wander_and_random_jump() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits {
+            wanderlust: 0.5,
+            mischief: 0.5,
+            ..Default::default()
+        };
+        let neutral_ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let bored_ctx = make_ctx(&traits, MoodState::Bored, false);
+
+        let neutral_weights = scheduler.compute_weights(&neutral_ctx);
+        let bored_weights = scheduler.compute_weights(&bored_ctx);
+
+        let neutral_wander = neutral_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        let bored_wander = bored_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+
+        assert!(bored_wander > neutral_wander);
+    }
+
+    #[test]
+    fn wanderlust_trait_increases_wander_weight() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+
+        let low_wanderlust = PersonalityTraits {
+            wanderlust: 0.1,
+            ..Default::default()
+        };
+        let high_wanderlust = PersonalityTraits {
+            wanderlust: 0.9,
+            ..Default::default()
+        };
+
+        let low_ctx = make_ctx(&low_wanderlust, MoodState::Neutral, false);
+        let high_ctx = make_ctx(&high_wanderlust, MoodState::Neutral, false);
+
+        let low_weights = scheduler.compute_weights(&low_ctx);
+        let high_weights = scheduler.compute_weights(&high_ctx);
+
+        let low_wander = low_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        let high_wander = high_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+
+        assert!(high_wander > low_wander);
+    }
+
+    #[test]
+    fn weighted_select_always_returns_valid_behavior() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(42, &config);
+
+        let weights = vec![
+            PrioritizedBehavior { behavior: IdleBehaviorType::Sit, weight: 1.0 },
+            PrioritizedBehavior { behavior: IdleBehaviorType::Wander, weight: 1.0 },
+            PrioritizedBehavior { behavior: IdleBehaviorType::Emote, weight: 1.0 },
+        ];
+
+        for _ in 0..20 {
+            let selected = scheduler.weighted_select(&weights);
+            assert!(
+                selected == IdleBehaviorType::Sit
+                    || selected == IdleBehaviorType::Wander
+                    || selected == IdleBehaviorType::Emote
+            );
+        }
+    }
+}

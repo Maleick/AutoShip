@@ -122,3 +122,142 @@ fn point_line_distance_2d(point: &Waypoint, line_start: &Waypoint, line_end: &Wa
     let cross = (point.x - line_start.x) * dy - (point.y - line_start.y) * dx;
     cross.abs() / len_sq.sqrt()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recorder_starts_not_recording() {
+        let rec = WaypointRecorder::new();
+        assert!(!rec.is_recording());
+        assert_eq!(rec.waypoint_count(), 0);
+    }
+
+    #[test]
+    fn recorder_start_enables_recording() {
+        let mut rec = WaypointRecorder::new();
+        rec.start();
+        assert!(rec.is_recording());
+    }
+
+    #[test]
+    fn record_position_before_start_is_ignored() {
+        let mut rec = WaypointRecorder::new();
+        rec.record_position(100.0, 200.0, 0.0);
+        assert_eq!(rec.waypoint_count(), 0);
+    }
+
+    #[test]
+    fn record_position_captures_first_point() {
+        let mut rec = WaypointRecorder::new();
+        rec.start();
+        rec.record_position(100.0, 200.0, 0.0);
+        assert_eq!(rec.waypoint_count(), 1);
+    }
+
+    #[test]
+    fn record_position_skips_nearby_points() {
+        let mut rec = WaypointRecorder::new();
+        rec.start();
+        rec.record_position(100.0, 200.0, 0.0);
+        // Move less than MIN_WAYPOINT_DISTANCE (10.0)
+        rec.record_position(105.0, 200.0, 0.0);
+        assert_eq!(rec.waypoint_count(), 1, "nearby point should be skipped");
+    }
+
+    #[test]
+    fn record_position_captures_distant_points() {
+        let mut rec = WaypointRecorder::new();
+        rec.start();
+        rec.record_position(100.0, 200.0, 0.0);
+        // Move more than MIN_WAYPOINT_DISTANCE
+        rec.record_position(200.0, 200.0, 0.0);
+        assert_eq!(rec.waypoint_count(), 2);
+    }
+
+    #[test]
+    fn stop_returns_recorded_waypoints_and_clears() {
+        let mut rec = WaypointRecorder::new();
+        rec.start();
+        rec.record_position(0.0, 0.0, 0.0);
+        rec.record_position(100.0, 0.0, 0.0);
+        rec.record_position(200.0, 0.0, 0.0);
+
+        let waypoints = rec.stop();
+        assert_eq!(waypoints.len(), 3);
+        assert!(!rec.is_recording());
+        assert_eq!(rec.waypoint_count(), 0);
+    }
+
+    #[test]
+    fn simplify_path_two_or_fewer_points_unchanged() {
+        let empty: Vec<Waypoint> = vec![];
+        assert_eq!(simplify_path(&empty, 1.0).len(), 0);
+
+        let one = vec![Waypoint::new(0.0, 0.0, 0.0)];
+        assert_eq!(simplify_path(&one, 1.0).len(), 1);
+
+        let two = vec![Waypoint::new(0.0, 0.0, 0.0), Waypoint::new(100.0, 0.0, 0.0)];
+        assert_eq!(simplify_path(&two, 1.0).len(), 2);
+    }
+
+    #[test]
+    fn simplify_path_collinear_points_reduced() {
+        // Points along a straight line should be reduced to just endpoints
+        let points: Vec<Waypoint> = (0..10)
+            .map(|i| Waypoint::new(i as f32 * 10.0, 0.0, 0.0))
+            .collect();
+        let simplified = simplify_path(&points, 1.0);
+        assert_eq!(simplified.len(), 2, "collinear points should reduce to 2 endpoints");
+        assert!((simplified[0].x - 0.0).abs() < f32::EPSILON);
+        assert!((simplified[1].x - 90.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn simplify_path_preserves_deviation() {
+        // L-shaped path: should keep the corner point
+        let points = vec![
+            Waypoint::new(0.0, 0.0, 0.0),
+            Waypoint::new(100.0, 0.0, 0.0),
+            Waypoint::new(100.0, 100.0, 0.0),
+        ];
+        let simplified = simplify_path(&points, 1.0);
+        assert_eq!(simplified.len(), 3, "corner point should be preserved");
+    }
+
+    #[test]
+    fn simplify_path_large_epsilon_keeps_only_endpoints() {
+        let points = vec![
+            Waypoint::new(0.0, 0.0, 0.0),
+            Waypoint::new(50.0, 10.0, 0.0),
+            Waypoint::new(100.0, 0.0, 0.0),
+        ];
+        // With a large enough epsilon, the middle point is within tolerance
+        let simplified = simplify_path(&points, 100.0);
+        assert_eq!(simplified.len(), 2);
+    }
+
+    #[test]
+    fn simplify_path_reduces_point_count() {
+        // Zig-zag path with some collinear segments
+        let mut points = Vec::new();
+        for i in 0..20 {
+            let x = i as f32 * 10.0;
+            let y = if i % 5 == 0 { 50.0 } else { 0.0 };
+            points.push(Waypoint::new(x, y, 0.0));
+        }
+        let simplified = simplify_path(&points, 5.0);
+        assert!(
+            simplified.len() < points.len(),
+            "simplified ({}) should have fewer points than original ({})",
+            simplified.len(),
+            points.len()
+        );
+        // First and last should be preserved
+        assert!((simplified[0].x - points[0].x).abs() < f32::EPSILON);
+        assert!(
+            (simplified.last().unwrap().x - points.last().unwrap().x).abs() < f32::EPSILON
+        );
+    }
+}

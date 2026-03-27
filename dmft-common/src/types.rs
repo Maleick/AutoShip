@@ -65,3 +65,72 @@ pub enum HookStatus {
     Error(String),
     Ejecting,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_spawn(hp_current: i64, hp_max: i64, mana_current: i32, mana_max: i32) -> SpawnData {
+        SpawnData {
+            spawn_id: 1,
+            name: "TestSpawn".to_string(),
+            displayed_name: "Test Spawn".to_string(),
+            spawn_type: 0,
+            level: 60,
+            class_id: 1,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current,
+            hp_max,
+            mana_current,
+            mana_max,
+            endurance_current: 100,
+            endurance_max: 100,
+        }
+    }
+
+    #[test]
+    fn hp_pct_returns_100_when_hp_max_is_zero() {
+        let spawn = make_spawn(0, 0, 0, 0);
+        assert!((spawn.hp_pct() - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn hp_pct_returns_correct_percentage() {
+        let spawn = make_spawn(750, 1000, 0, 0);
+        assert!((spawn.hp_pct() - 75.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn hp_pct_full_health() {
+        let spawn = make_spawn(5000, 5000, 0, 0);
+        assert!((spawn.hp_pct() - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mana_pct_returns_100_when_mana_max_is_zero() {
+        let spawn = make_spawn(100, 100, 0, 0);
+        assert!((spawn.mana_pct() - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mana_pct_returns_correct_percentage() {
+        let spawn = make_spawn(100, 100, 200, 800);
+        assert!((spawn.mana_pct() - 25.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mana_pct_full_mana() {
+        let spawn = make_spawn(100, 100, 3000, 3000);
+        assert!((spawn.mana_pct() - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn hp_pct_negative_hp_max_returns_100() {
+        // hp_max <= 0 should fall through to the 100.0 default
+        let spawn = make_spawn(50, -10, 0, 0);
+        assert!((spawn.hp_pct() - 100.0).abs() < f32::EPSILON);
+    }
+}

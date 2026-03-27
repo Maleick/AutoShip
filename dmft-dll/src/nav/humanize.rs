@@ -49,3 +49,96 @@ impl MovementPersonality {
         (self.rng.next_f32() * max_ticks as f32) as u32
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_client_id_creates_personality() {
+        let p = MovementPersonality::from_client_id(1);
+        assert!(p.speed_factor > 0.0);
+        assert!(p.heading_wobble > 0.0);
+        assert!(p.detour_chance >= 0.0);
+    }
+
+    #[test]
+    fn different_client_ids_produce_different_personalities() {
+        let a = MovementPersonality::from_client_id(1);
+        let b = MovementPersonality::from_client_id(2);
+        let differs = (a.speed_factor - b.speed_factor).abs() > f32::EPSILON
+            || (a.heading_wobble - b.heading_wobble).abs() > f32::EPSILON
+            || (a.detour_chance - b.detour_chance).abs() > f32::EPSILON;
+        assert!(differs, "Different client IDs should produce different values");
+    }
+
+    #[test]
+    fn speed_factor_in_expected_range() {
+        for id in 0..50 {
+            let p = MovementPersonality::from_client_id(id);
+            assert!(
+                p.speed_factor >= 0.93 && p.speed_factor <= 1.07,
+                "speed_factor {} out of range for client_id {id}",
+                p.speed_factor
+            );
+        }
+    }
+
+    #[test]
+    fn heading_wobble_in_expected_range() {
+        for id in 0..50 {
+            let p = MovementPersonality::from_client_id(id);
+            assert!(
+                p.heading_wobble >= 1.0 && p.heading_wobble <= 4.0,
+                "heading_wobble {} out of range for client_id {id}",
+                p.heading_wobble
+            );
+        }
+    }
+
+    #[test]
+    fn detour_chance_in_expected_range() {
+        for id in 0..50 {
+            let p = MovementPersonality::from_client_id(id);
+            assert!(
+                p.detour_chance >= 0.0 && p.detour_chance <= 0.08,
+                "detour_chance {} out of range for client_id {id}",
+                p.detour_chance
+            );
+        }
+    }
+
+    #[test]
+    fn wobble_heading_stays_in_eq_range() {
+        let mut p = MovementPersonality::from_client_id(10);
+        for _ in 0..100 {
+            let result = p.wobble_heading(256.0);
+            assert!(
+                result >= 0.0 && result < 512.0,
+                "wobbled heading {result} out of EQ range 0..512"
+            );
+        }
+    }
+
+    #[test]
+    fn wobble_heading_varies() {
+        let mut p = MovementPersonality::from_client_id(10);
+        let a = p.wobble_heading(256.0);
+        let b = p.wobble_heading(256.0);
+        // With any non-zero wobble, consecutive calls should sometimes differ
+        // (they could theoretically be equal, but with a good RNG it's unlikely)
+        let c = p.wobble_heading(256.0);
+        let all_same = (a - b).abs() < f32::EPSILON
+            && (b - c).abs() < f32::EPSILON;
+        assert!(!all_same, "wobble should produce varying values");
+    }
+
+    #[test]
+    fn stagger_ticks_in_range() {
+        let mut p = MovementPersonality::from_client_id(5);
+        for _ in 0..100 {
+            let ticks = p.stagger_ticks(20);
+            assert!(ticks < 20, "stagger_ticks {ticks} should be < 20");
+        }
+    }
+}

@@ -34,3 +34,75 @@ impl CombatPersonality {
         base + noise
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_client_id_creates_different_personalities() {
+        let a = CombatPersonality::from_client_id(1);
+        let b = CombatPersonality::from_client_id(2);
+        // At least one field should differ between different client IDs
+        let differs = a.assist_jitter_ticks != b.assist_jitter_ticks
+            || a.cast_start_delay_ticks != b.cast_start_delay_ticks
+            || (a.med_sit_threshold - b.med_sit_threshold).abs() > f32::EPSILON;
+        assert!(differs, "Different client IDs should produce different personalities");
+    }
+
+    #[test]
+    fn from_client_id_is_deterministic() {
+        let a = CombatPersonality::from_client_id(42);
+        let b = CombatPersonality::from_client_id(42);
+        assert_eq!(a.assist_jitter_ticks, b.assist_jitter_ticks);
+        assert_eq!(a.cast_start_delay_ticks, b.cast_start_delay_ticks);
+        assert!((a.med_sit_threshold - b.med_sit_threshold).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn next_cast_delay_in_range() {
+        let mut personality = CombatPersonality::from_client_id(7);
+        for _ in 0..100 {
+            let delay = personality.next_cast_delay();
+            assert!(
+                delay <= personality.cast_start_delay_ticks,
+                "cast delay {delay} should be <= max {}",
+                personality.cast_start_delay_ticks
+            );
+        }
+    }
+
+    #[test]
+    fn next_assist_delay_in_range() {
+        let mut personality = CombatPersonality::from_client_id(13);
+        for _ in 0..100 {
+            let delay = personality.next_assist_delay();
+            assert!(
+                delay <= personality.assist_jitter_ticks,
+                "assist delay {delay} should be <= max {}",
+                personality.assist_jitter_ticks
+            );
+        }
+    }
+
+    #[test]
+    fn med_sit_threshold_in_expected_range() {
+        for id in 0..50 {
+            let p = CombatPersonality::from_client_id(id);
+            assert!(
+                p.med_sit_threshold >= 0.20 && p.med_sit_threshold <= 0.35,
+                "med_sit_threshold {} out of range for client_id {id}",
+                p.med_sit_threshold
+            );
+        }
+    }
+
+    #[test]
+    fn jitter_threshold_stays_near_base() {
+        let mut personality = CombatPersonality::from_client_id(99);
+        for _ in 0..100 {
+            let val = personality.jitter_threshold(50.0, 5.0);
+            assert!(val >= 45.0 && val <= 55.0, "jittered value {val} out of range");
+        }
+    }
+}

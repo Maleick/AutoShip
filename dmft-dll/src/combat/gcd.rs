@@ -35,3 +35,63 @@ impl GcdTracker {
         self.remaining_ticks
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_gcd_creates_tracker() {
+        let tracker = GcdTracker::default_gcd();
+        assert_eq!(tracker.remaining(), 0);
+    }
+
+    #[test]
+    fn is_ready_initially() {
+        let tracker = GcdTracker::default_gcd();
+        assert!(tracker.is_ready());
+    }
+
+    #[test]
+    fn consume_makes_not_ready() {
+        let mut tracker = GcdTracker::default_gcd();
+        tracker.consume();
+        assert!(!tracker.is_ready());
+        assert_eq!(tracker.remaining(), 30);
+    }
+
+    #[test]
+    fn tick_decrements_remaining() {
+        let mut tracker = GcdTracker::new(5);
+        tracker.consume();
+        assert_eq!(tracker.remaining(), 5);
+
+        tracker.tick();
+        assert_eq!(tracker.remaining(), 4);
+        assert!(!tracker.is_ready());
+
+        for _ in 0..4 {
+            tracker.tick();
+        }
+        assert_eq!(tracker.remaining(), 0);
+        assert!(tracker.is_ready());
+    }
+
+    #[test]
+    fn tick_does_not_underflow_at_zero() {
+        let mut tracker = GcdTracker::default_gcd();
+        tracker.tick();
+        assert_eq!(tracker.remaining(), 0);
+        assert!(tracker.is_ready());
+    }
+
+    #[test]
+    fn remaining_returns_correct_value_after_partial_ticks() {
+        let mut tracker = GcdTracker::new(10);
+        tracker.consume();
+        for _ in 0..3 {
+            tracker.tick();
+        }
+        assert_eq!(tracker.remaining(), 7);
+    }
+}

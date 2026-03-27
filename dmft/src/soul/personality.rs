@@ -261,6 +261,336 @@ fn emotes_for_mood(mood: MoodState) -> &'static [&'static str] {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::soul::{MoodState, PersonalityTraits, SoulAction, SoulEvent};
+
+    fn high_neuroticism_traits() -> PersonalityTraits {
+        PersonalityTraits {
+            neuroticism: 0.9,
+            ..Default::default()
+        }
+    }
+
+    fn battle_hungry_traits() -> PersonalityTraits {
+        PersonalityTraits {
+            battle_hunger: 0.9,
+            neuroticism: 0.2,
+            ..Default::default()
+        }
+    }
+
+    fn extraverted_traits() -> PersonalityTraits {
+        PersonalityTraits {
+            extraversion: 0.9,
+            ..Default::default()
+        }
+    }
+
+    fn introverted_traits() -> PersonalityTraits {
+        PersonalityTraits {
+            extraversion: 0.2,
+            ..Default::default()
+        }
+    }
+
+    fn greedy_traits() -> PersonalityTraits {
+        PersonalityTraits {
+            greed: 0.9,
+            ..Default::default()
+        }
+    }
+
+    fn make_ctx<'a>(
+        traits: &'a PersonalityTraits,
+        mood: MoodState,
+        edginess: EdginessLevel,
+    ) -> SoulContext<'a> {
+        SoulContext {
+            character_name: "TestChar",
+            traits,
+            mood,
+            edginess,
+            zone: "freportn",
+            level: 50,
+            in_combat: false,
+            group_members: &[],
+        }
+    }
+
+    #[test]
+    fn new_creates_engine() {
+        let _engine = PersonalityEngine::new(1);
+    }
+
+    #[test]
+    fn death_event_anxious_for_neurotic() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = high_neuroticism_traits();
+        let event = SoulEvent::Death {
+            zone: "guk".into(),
+            killer: Some("a ghoul".into()),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Anxious);
+    }
+
+    #[test]
+    fn death_event_angry_for_battle_hungry() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = battle_hungry_traits();
+        let event = SoulEvent::Death {
+            zone: "guk".into(),
+            killer: None,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Angry);
+    }
+
+    #[test]
+    fn death_event_melancholy_for_default_traits() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            neuroticism: 0.3,
+            battle_hunger: 0.3,
+            ..Default::default()
+        };
+        let event = SoulEvent::Death {
+            zone: "guk".into(),
+            killer: None,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Melancholy);
+    }
+
+    #[test]
+    fn kill_event_excited_for_battle_hungry() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = battle_hungry_traits();
+        let event = SoulEvent::Kill {
+            target: "a gnoll".into(),
+            zone: "blackburrow".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Excited);
+    }
+
+    #[test]
+    fn kill_event_focused_for_conscientious() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            conscientiousness: 0.9,
+            battle_hunger: 0.3,
+            ..Default::default()
+        };
+        let event = SoulEvent::Kill {
+            target: "a gnoll".into(),
+            zone: "blackburrow".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Focused);
+    }
+
+    #[test]
+    fn loot_event_happy_for_greedy() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = greedy_traits();
+        let event = SoulEvent::Loot {
+            item: "Fungi Tunic".into(),
+            zone: "sebilis".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Happy);
+    }
+
+    #[test]
+    fn player_chat_positive_sentiment_extraverted() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = extraverted_traits();
+        let event = SoulEvent::PlayerChat {
+            player_name: "Dave".into(),
+            sentiment: 0.8,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Excited);
+    }
+
+    #[test]
+    fn player_chat_negative_sentiment_disagreeable() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            agreeableness: 0.2,
+            ..Default::default()
+        };
+        let event = SoulEvent::PlayerChat {
+            player_name: "Troll".into(),
+            sentiment: -0.5,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Angry);
+    }
+
+    #[test]
+    fn zone_enter_excited_for_wanderlust() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            wanderlust: 0.9,
+            ..Default::default()
+        };
+        let event = SoulEvent::ZoneEnter {
+            zone: "everfrost".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Excited);
+    }
+
+    #[test]
+    fn level_up_always_positive() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+        let event = SoulEvent::LevelUp { new_level: 50 };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert!(mood == MoodState::Excited || mood == MoodState::Happy);
+    }
+
+    #[test]
+    fn group_wipe_anxious_for_neurotic() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = high_neuroticism_traits();
+        let event = SoulEvent::GroupWipe {
+            zone: "sebilis".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Anxious);
+    }
+
+    #[test]
+    fn mood_shift_returns_target_mood() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+        let event = SoulEvent::MoodShift {
+            from: MoodState::Neutral,
+            to: MoodState::Playful,
+            reason: "test".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Playful);
+    }
+
+    #[test]
+    fn relationship_change_large_positive_happy() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+        let event = SoulEvent::RelationshipChange {
+            character: "Ally".into(),
+            delta: 100.0,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Happy);
+    }
+
+    #[test]
+    fn generate_emote_returns_non_empty_emote() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Happy, EdginessLevel::Moderate);
+        let action = engine.generate_emote(&ctx);
+        match action {
+            SoulAction::Emote { emote } => assert!(!emote.is_empty()),
+            _ => panic!("Expected SoulAction::Emote"),
+        }
+    }
+
+    #[test]
+    fn generate_emote_different_moods_produce_different_tables() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+
+        let happy_ctx = make_ctx(&traits, MoodState::Happy, EdginessLevel::Moderate);
+        let angry_ctx = make_ctx(&traits, MoodState::Angry, EdginessLevel::Moderate);
+
+        // Collect several emotes from each mood to check table differentiation
+        let happy_emotes: Vec<String> = (0..5)
+            .map(|_| match engine.generate_emote(&happy_ctx) {
+                SoulAction::Emote { emote } => emote,
+                _ => panic!("Expected emote"),
+            })
+            .collect();
+        let angry_emotes: Vec<String> = (0..5)
+            .map(|_| match engine.generate_emote(&angry_ctx) {
+                SoulAction::Emote { emote } => emote,
+                _ => panic!("Expected emote"),
+            })
+            .collect();
+
+        // The emote tables for Happy and Angry are completely different,
+        // so at least some outputs should differ
+        assert_ne!(happy_emotes, angry_emotes);
+    }
+
+    #[test]
+    fn generate_chat_returns_non_empty_message() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Neutral, EdginessLevel::Moderate);
+        let action = engine.generate_chat(&ctx);
+        match action {
+            SoulAction::Say { message, .. } => assert!(!message.is_empty()),
+            _ => panic!("Expected SoulAction::Say"),
+        }
+    }
+
+    #[test]
+    fn generate_chat_extraverted_uses_say_channel() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = extraverted_traits();
+        let ctx = make_ctx(&traits, MoodState::Neutral, EdginessLevel::Moderate);
+        let action = engine.generate_chat(&ctx);
+        match action {
+            SoulAction::Say { channel, .. } => assert_eq!(channel, SayChannel::Say),
+            _ => panic!("Expected SoulAction::Say"),
+        }
+    }
+
+    #[test]
+    fn generate_chat_introverted_uses_group_channel() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = introverted_traits();
+        let ctx = make_ctx(&traits, MoodState::Neutral, EdginessLevel::Moderate);
+        let action = engine.generate_chat(&ctx);
+        match action {
+            SoulAction::Say { channel, .. } => assert_eq!(channel, SayChannel::Group),
+            _ => panic!("Expected SoulAction::Say"),
+        }
+    }
+
+    #[test]
+    fn different_edginess_produces_different_phrases() {
+        let mut engine = PersonalityEngine::new(100);
+        let traits = PersonalityTraits::default();
+
+        let mild_ctx = make_ctx(&traits, MoodState::Angry, EdginessLevel::Mild);
+        let spicy_ctx = make_ctx(&traits, MoodState::Angry, EdginessLevel::Spicy);
+
+        // Collect phrases to compare tables
+        let mild_phrases: Vec<String> = (0..10)
+            .map(|_| match engine.generate_chat(&mild_ctx) {
+                SoulAction::Say { message, .. } => message,
+                _ => panic!("Expected Say"),
+            })
+            .collect();
+        let spicy_phrases: Vec<String> = (0..10)
+            .map(|_| match engine.generate_chat(&spicy_ctx) {
+                SoulAction::Say { message, .. } => message,
+                _ => panic!("Expected Say"),
+            })
+            .collect();
+
+        assert_ne!(mild_phrases, spicy_phrases);
+    }
+}
+
 // ─── Phrase tables ───
 
 fn phrases_for_mood(mood: MoodState, edginess: EdginessLevel) -> &'static [&'static str] {

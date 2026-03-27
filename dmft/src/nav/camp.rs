@@ -116,3 +116,120 @@ pub fn create_standard_camp(
         spots,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_camp(num_dps: usize) -> CampDefinition {
+        create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), 128.0, num_dps)
+    }
+
+    #[test]
+    fn camp_manager_starts_inactive() {
+        let mgr = CampManager::new();
+        assert!(!mgr.is_active());
+    }
+
+    #[test]
+    fn set_camp_activates_and_assigns_spots() {
+        let mut mgr = CampManager::new();
+        let camp = make_camp(2);
+
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        role_map.insert(2, "healer".to_string());
+        role_map.insert(3, "dps1".to_string());
+        role_map.insert(4, "dps2".to_string());
+
+        let assignments = mgr.set_camp(camp, &role_map);
+        assert!(mgr.is_active());
+        assert_eq!(assignments.len(), 4);
+    }
+
+    #[test]
+    fn set_camp_skips_unmatched_roles() {
+        let mut mgr = CampManager::new();
+        let camp = make_camp(1); // has tank, healer, dps1
+
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        role_map.insert(2, "nonexistent_role".to_string());
+
+        let assignments = mgr.set_camp(camp, &role_map);
+        // Only "tank" matches, "nonexistent_role" has no spot
+        assert_eq!(assignments.len(), 1);
+        assert_eq!(assignments[0].0, 1);
+    }
+
+    #[test]
+    fn get_spot_returns_correct_spot() {
+        let mut mgr = CampManager::new();
+        let camp = make_camp(1);
+
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        mgr.set_camp(camp, &role_map);
+
+        let spot = mgr.get_spot(1);
+        assert!(spot.is_some());
+        assert_eq!(spot.unwrap().role, "tank");
+    }
+
+    #[test]
+    fn get_spot_returns_none_for_unassigned_client() {
+        let mut mgr = CampManager::new();
+        let camp = make_camp(1);
+        let role_map = HashMap::new();
+        mgr.set_camp(camp, &role_map);
+
+        assert!(mgr.get_spot(99).is_none());
+    }
+
+    #[test]
+    fn get_spot_returns_none_when_no_camp_active() {
+        let mgr = CampManager::new();
+        assert!(mgr.get_spot(1).is_none());
+    }
+
+    #[test]
+    fn clear_deactivates_camp() {
+        let mut mgr = CampManager::new();
+        let camp = make_camp(1);
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        mgr.set_camp(camp, &role_map);
+        assert!(mgr.is_active());
+
+        mgr.clear();
+        assert!(!mgr.is_active());
+        assert!(mgr.get_spot(1).is_none());
+    }
+
+    #[test]
+    fn create_standard_camp_has_correct_spot_count() {
+        let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), 0.0, 4);
+        // 1 tank + 1 healer + 4 dps = 6
+        assert_eq!(camp.spots.len(), 6);
+        assert_eq!(camp.spots[0].role, "tank");
+        assert_eq!(camp.spots[1].role, "healer");
+        assert_eq!(camp.spots[2].role, "dps1");
+        assert_eq!(camp.spots[3].role, "dps2");
+        assert_eq!(camp.spots[4].role, "dps3");
+        assert_eq!(camp.spots[5].role, "dps4");
+    }
+
+    #[test]
+    fn create_standard_camp_zero_dps() {
+        let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), 0.0, 0);
+        // 1 tank + 1 healer = 2
+        assert_eq!(camp.spots.len(), 2);
+    }
+
+    #[test]
+    fn create_standard_camp_name_and_zone() {
+        let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), 0.0, 0);
+        assert_eq!(camp.name, "standard");
+        assert_eq!(camp.zone, "");
+    }
+}

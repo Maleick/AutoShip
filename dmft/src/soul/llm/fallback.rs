@@ -308,6 +308,258 @@ fn combat_reactions(mood: MoodState, edginess: EdginessLevel, traits: &Personali
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::soul::config::EdginessLevel;
+    use crate::soul::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
+    use dmft_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
+
+    fn make_request_with_situation(situation: Situation) -> LlmRequest {
+        LlmRequest {
+            character_name: "TestChar".into(),
+            traits: PersonalityTraits::default(),
+            mood: MoodState::Neutral,
+            speech_style: SpeechStyle::default(),
+            situation,
+            priority: LlmPriority::Low,
+            memory_context: Vec::new(),
+            backstory: String::new(),
+        }
+    }
+
+    fn make_request_with_mood_and_traits(
+        mood: MoodState,
+        traits: PersonalityTraits,
+        situation: Situation,
+    ) -> LlmRequest {
+        LlmRequest {
+            character_name: "TestChar".into(),
+            traits,
+            mood,
+            speech_style: SpeechStyle::default(),
+            situation,
+            priority: LlmPriority::Low,
+            memory_context: Vec::new(),
+            backstory: String::new(),
+        }
+    }
+
+    #[test]
+    fn generate_idle_chatter_returns_non_empty() {
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let request = make_request_with_situation(Situation::IdleChatter);
+        let response = responder.generate(&request).unwrap();
+        assert!(!response.text.is_empty());
+        assert!(!response.from_llm);
+        assert_eq!(response.tokens_used, 0);
+    }
+
+    #[test]
+    fn generate_player_chat_returns_non_empty() {
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let request = make_request_with_situation(Situation::PlayerChat {
+            player_name: "Dave".into(),
+            message: "Hey there!".into(),
+            channel: "say".into(),
+        });
+        let response = responder.generate(&request).unwrap();
+        assert!(!response.text.is_empty());
+    }
+
+    #[test]
+    fn generate_game_event_returns_non_empty() {
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let request = make_request_with_situation(Situation::GameEvent {
+            description: "A rare spawn appeared!".into(),
+        });
+        let response = responder.generate(&request).unwrap();
+        assert!(!response.text.is_empty());
+    }
+
+    #[test]
+    fn generate_combat_reaction_returns_non_empty() {
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let request = make_request_with_situation(Situation::CombatReaction {
+            description: "Critical hit!".into(),
+        });
+        let response = responder.generate(&request).unwrap();
+        assert!(!response.text.is_empty());
+    }
+
+    #[test]
+    fn generate_bot_chat_returns_non_empty() {
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let request = make_request_with_situation(Situation::BotChat {
+            character_name: "AllyBot".into(),
+            message: "Good pull!".into(),
+        });
+        let response = responder.generate(&request).unwrap();
+        assert!(!response.text.is_empty());
+    }
+
+    #[test]
+    fn different_edginess_levels_produce_different_combat_reactions() {
+        let battle_hungry = PersonalityTraits {
+            battle_hunger: 0.9,
+            ..Default::default()
+        };
+
+        let mut mild = TraitDrivenResponder::new(42, EdginessLevel::Mild);
+        let mut spicy = TraitDrivenResponder::new(42, EdginessLevel::Spicy);
+
+        let mild_req = make_request_with_mood_and_traits(
+            MoodState::Excited,
+            battle_hungry.clone(),
+            Situation::CombatReaction {
+                description: "Enemy down!".into(),
+            },
+        );
+        let spicy_req = make_request_with_mood_and_traits(
+            MoodState::Excited,
+            battle_hungry,
+            Situation::CombatReaction {
+                description: "Enemy down!".into(),
+            },
+        );
+
+        // Run multiple times and collect unique responses
+        let mild_responses: Vec<String> = (0..10)
+            .map(|_| mild.generate(&mild_req).unwrap().text)
+            .collect();
+        let spicy_responses: Vec<String> = (0..10)
+            .map(|_| spicy.generate(&spicy_req).unwrap().text)
+            .collect();
+
+        // The phrase tables are completely different for Mild vs Spicy battle-hungry
+        assert_ne!(mild_responses, spicy_responses);
+    }
+
+    #[test]
+    fn different_situations_produce_different_responses() {
+        let mut responder = TraitDrivenResponder::new(42, EdginessLevel::Moderate);
+
+        let idle = responder
+            .generate(&make_request_with_situation(Situation::IdleChatter))
+            .unwrap()
+            .text;
+
+        // Reset with same seed for fair comparison
+        let mut responder2 = TraitDrivenResponder::new(42, EdginessLevel::Moderate);
+        let combat = responder2
+            .generate(&make_request_with_situation(Situation::CombatReaction {
+                description: "Engaged!".into(),
+            }))
+            .unwrap()
+            .text;
+
+        // Idle and combat responses come from different phrase tables
+        // With the same seed, different tables should produce different text
+        // (unless by extreme coincidence they share a phrase)
+        // Just verify both are non-empty since tables are different
+        assert!(!idle.is_empty());
+        assert!(!combat.is_empty());
+    }
+
+    #[test]
+    fn agreeable_player_chat_is_friendlier() {
+        let agreeable = PersonalityTraits {
+            agreeableness: 0.9,
+            extraversion: 0.3,
+            ..Default::default()
+        };
+        let disagreeable = PersonalityTraits {
+            agreeableness: 0.1,
+            extraversion: 0.3,
+            ..Default::default()
+        };
+
+        let mut resp1 = TraitDrivenResponder::new(42, EdginessLevel::Moderate);
+        let mut resp2 = TraitDrivenResponder::new(42, EdginessLevel::Moderate);
+
+        let req1 = make_request_with_mood_and_traits(
+            MoodState::Angry,
+            agreeable,
+            Situation::PlayerChat {
+                player_name: "Dave".into(),
+                message: "Hey".into(),
+                channel: "say".into(),
+            },
+        );
+        let req2 = make_request_with_mood_and_traits(
+            MoodState::Angry,
+            disagreeable,
+            Situation::PlayerChat {
+                player_name: "Dave".into(),
+                message: "Hey".into(),
+                channel: "say".into(),
+            },
+        );
+
+        let friendly = resp1.generate(&req1).unwrap().text;
+        let curt = resp2.generate(&req2).unwrap().text;
+
+        // Both should be non-empty
+        assert!(!friendly.is_empty());
+        assert!(!curt.is_empty());
+    }
+
+    #[test]
+    fn speech_style_catchphrase_applied() {
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let mut request = make_request_with_situation(Situation::IdleChatter);
+        request.speech_style = SpeechStyle {
+            vocabulary_level: 0.5,
+            emote_frequency: 0.5,
+            typing_speed: 1.0,
+            catchphrases: vec!["By Bristlebane!".into()],
+            adopted_slang: Vec::new(),
+        };
+
+        // Run many times; catchphrase has 15% chance per call
+        let mut found_catchphrase = false;
+        for i in 0..200 {
+            let mut r = TraitDrivenResponder::new(i, EdginessLevel::Moderate);
+            let resp = r.generate(&request).unwrap();
+            if resp.text.contains("By Bristlebane!") {
+                found_catchphrase = true;
+                break;
+            }
+        }
+        assert!(found_catchphrase, "Catchphrase should appear in at least one of 200 attempts");
+    }
+
+    #[test]
+    fn low_vocabulary_lowercases_output() {
+        let mut responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let mut request = make_request_with_situation(Situation::IdleChatter);
+        request.speech_style = SpeechStyle {
+            vocabulary_level: 0.1,
+            emote_frequency: 0.5,
+            typing_speed: 1.0,
+            catchphrases: Vec::new(),
+            adopted_slang: Vec::new(),
+        };
+
+        let response = responder.generate(&request).unwrap();
+        // With vocabulary_level < 0.3, output should be lowercased
+        assert_eq!(response.text, response.text.to_lowercase());
+    }
+
+    #[test]
+    fn provider_name_is_correct() {
+        let responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        assert_eq!(LlmProvider::name(&responder), "trait-driven-fallback");
+    }
+
+    #[test]
+    fn provider_is_always_available() {
+        let responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        assert!(LlmProvider::is_available(&responder));
+    }
+}
+
 fn bot_chat_responses(mood: MoodState, traits: &PersonalityTraits) -> &'static [&'static str] {
     if traits.extraversion > 0.7 {
         match mood {

@@ -96,3 +96,102 @@ impl Default for SoulConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_edginess_is_moderate() {
+        assert_eq!(EdginessLevel::default(), EdginessLevel::Moderate);
+    }
+
+    #[test]
+    fn edginess_levels_are_distinct() {
+        assert_ne!(EdginessLevel::Mild, EdginessLevel::Moderate);
+        assert_ne!(EdginessLevel::Moderate, EdginessLevel::Spicy);
+        assert_ne!(EdginessLevel::Mild, EdginessLevel::Spicy);
+    }
+
+    #[test]
+    fn soul_config_default_values() {
+        let config = SoulConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.edginess, EdginessLevel::Moderate);
+        assert_eq!(config.idle_tick_secs, 30);
+        assert_eq!(config.min_chat_interval_secs, 60);
+        assert_eq!(config.max_chat_interval_secs, 300);
+        assert!(config.inter_character_chat);
+        assert!(config.player_chat_enabled);
+        assert!(config.character.is_empty());
+        assert!(config.relationship.is_empty());
+    }
+
+    #[test]
+    fn soul_config_deserializes_from_toml() {
+        let toml_str = r#"
+            enabled = true
+            edginess = "spicy"
+            idle_tick_secs = 10
+            min_chat_interval_secs = 30
+            max_chat_interval_secs = 120
+            inter_character_chat = false
+            player_chat_enabled = false
+        "#;
+
+        let config: SoulConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.edginess, EdginessLevel::Spicy);
+        assert_eq!(config.idle_tick_secs, 10);
+        assert!(!config.inter_character_chat);
+    }
+
+    #[test]
+    fn character_soul_config_deserializes() {
+        let toml_str = r#"
+            name = "Grimjaw"
+            backstory = "A grizzled dwarf warrior."
+            edginess = "spicy"
+            quirks = ["always complains about food"]
+
+            [traits]
+            openness = 0.5
+            conscientiousness = 0.3
+            extraversion = 0.5
+            agreeableness = 0.5
+            neuroticism = 0.5
+            battle_hunger = 0.9
+            piety = 0.5
+            greed = 0.5
+            wanderlust = 0.5
+            loyalty = 0.5
+            mischief = 0.5
+
+            [speech]
+            vocabulary_level = 0.3
+        "#;
+
+        let config: CharacterSoulConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.name, "Grimjaw");
+        assert_eq!(config.edginess, Some(EdginessLevel::Spicy));
+        assert!((config.traits.battle_hunger - 0.9).abs() < 0.01);
+        assert!((config.traits.conscientiousness - 0.3).abs() < 0.01);
+        assert!(!config.quirks.is_empty());
+    }
+
+    #[test]
+    fn relationship_seed_default_trust() {
+        let toml_str = r#"
+            from = "Alice"
+            to = "Bob"
+            faction = 200
+        "#;
+
+        let seed: RelationshipSeed = toml::from_str(toml_str).unwrap();
+        assert_eq!(seed.from, "Alice");
+        assert_eq!(seed.to, "Bob");
+        assert_eq!(seed.faction, 200);
+        assert!((seed.trust - 0.5).abs() < 0.01);
+        assert!(seed.tags.is_empty());
+    }
+}

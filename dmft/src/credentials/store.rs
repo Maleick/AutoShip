@@ -108,3 +108,93 @@ impl CredentialStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn test_master_key() -> Zeroizing<[u8; 32]> {
+        let salt = crypto::generate_salt();
+        crypto::derive_key("test_master_password", &salt).unwrap()
+    }
+
+    fn open_memory_store() -> CredentialStore {
+        let path = PathBuf::from(":memory:");
+        CredentialStore::open(&path, test_master_key()).unwrap()
+    }
+
+    #[test]
+    fn open_in_memory_succeeds() {
+        let store = open_memory_store();
+        let accounts = store.list_accounts().unwrap();
+        assert!(accounts.is_empty());
+    }
+
+    #[test]
+    fn open_with_temp_file_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("creds.db");
+        let store = CredentialStore::open(&db_path, test_master_key()).unwrap();
+        let accounts = store.list_accounts().unwrap();
+        assert!(accounts.is_empty());
+    }
+
+    #[test]
+    fn add_then_get_password_roundtrip() {
+        let store = open_memory_store();
+        store.add_account("warrior_acct", "hunter2").unwrap();
+
+        let password = store.get_password("warrior_acct").unwrap();
+        assert_eq!(&*password, "hunter2");
+    }
+
+    #[test]
+    fn add_multiple_accounts_and_list() {
+        let store = open_memory_store();
+        store.add_account("alpha", "pass_a").unwrap();
+        store.add_account("bravo", "pass_b").unwrap();
+        store.add_account("charlie", "pass_c").unwrap();
+
+        let mut accounts = store.list_accounts().unwrap();
+        accounts.sort();
+        assert_eq!(accounts, vec!["alpha", "bravo", "charlie"]);
+    }
+
+    #[test]
+    fn add_account_upserts_on_duplicate() {
+        let store = open_memory_store();
+        store.add_account("warrior_acct", "old_password").unwrap();
+        store.add_account("warrior_acct", "new_password").unwrap();
+
+        let password = store.get_password("warrior_acct").unwrap();
+        assert_eq!(&*password, "new_password");
+
+        let accounts = store.list_accounts().unwrap();
+        assert_eq!(accounts.len(), 1);
+    }
+
+    #[test]
+    fn remove_account_removes_it() {
+        let store = open_memory_store();
+        store.add_account("to_remove", "pass").unwrap();
+        store.remove_account("to_remove").unwrap();
+
+        let accounts = store.list_accounts().unwrap();
+        assert!(accounts.is_empty());
+    }
+
+    #[test]
+    fn remove_nonexistent_account_fails() {
+        let store = open_memory_store();
+        let result = store.remove_account("does_not_exist");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_password_nonexistent_account_fails() {
+        let store = open_memory_store();
+        let result = store.get_password("no_such_account");
+        assert!(result.is_err());
+    }
+}

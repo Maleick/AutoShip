@@ -245,3 +245,233 @@ fn tag_label(tag: &SocialTag) -> &'static str {
         SocialTag::Crush => "crush",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::soul::SocialTag;
+
+    #[test]
+    fn new_graph_is_empty() {
+        let graph = SocialGraph::new();
+        assert!(graph.get("Alice", "Bob").is_none());
+    }
+
+    #[test]
+    fn get_or_create_creates_default() {
+        let mut graph = SocialGraph::new();
+        let rel = graph.get_or_create("Alice", "Bob");
+        assert_eq!(rel.faction_score, 0);
+        assert!((rel.trust - 0.5).abs() < 0.01);
+        assert!(rel.tags.is_empty());
+    }
+
+    #[test]
+    fn get_returns_existing_relationship() {
+        let mut graph = SocialGraph::new();
+        graph.get_or_create("Alice", "Bob").faction_score = 200;
+
+        let rel = graph.get("Alice", "Bob").unwrap();
+        assert_eq!(rel.faction_score, 200);
+    }
+
+    #[test]
+    fn get_returns_none_for_unknown_pair() {
+        let graph = SocialGraph::new();
+        assert!(graph.get("Alice", "Bob").is_none());
+    }
+
+    #[test]
+    fn directed_graph_a_to_b_differs_from_b_to_a() {
+        let mut graph = SocialGraph::new();
+        graph.get_or_create("Alice", "Bob").faction_score = 500;
+        graph.get_or_create("Bob", "Alice").faction_score = -200;
+
+        assert_eq!(graph.get("Alice", "Bob").unwrap().faction_score, 500);
+        assert_eq!(graph.get("Bob", "Alice").unwrap().faction_score, -200);
+    }
+
+    #[test]
+    fn adjust_faction_clamps_to_bounds() {
+        let mut rel = Relationship::default();
+        rel.adjust_faction(2000);
+        assert_eq!(rel.faction_score, 1000);
+
+        rel.adjust_faction(-3000);
+        assert_eq!(rel.faction_score, -1000);
+    }
+
+    #[test]
+    fn adjust_trust_clamps_to_bounds() {
+        let mut rel = Relationship::default();
+        rel.adjust_trust(2.0);
+        assert!((rel.trust - 1.0).abs() < 0.01);
+
+        rel.adjust_trust(-3.0);
+        assert!(rel.trust.abs() < 0.01);
+    }
+
+    #[test]
+    fn apply_event_updates_both_directions() {
+        let mut graph = SocialGraph::new();
+        graph.apply_event("Alice", "Bob", &SocialEvent::Saved);
+
+        let ab = graph.get("Alice", "Bob").unwrap();
+        assert_eq!(ab.faction_score, 75);
+        assert!((ab.trust - 0.6).abs() < 0.01);
+
+        let ba = graph.get("Bob", "Alice").unwrap();
+        assert_eq!(ba.faction_score, 50); // 75 * 2/3 = 50
+        assert!((ba.trust - 0.56).abs() < 0.01); // 0.5 + 0.10 * 0.6 = 0.56
+    }
+
+    #[test]
+    fn apply_event_ninja_loot_decreases_faction() {
+        let mut graph = SocialGraph::new();
+        graph.apply_event(
+            "Alice",
+            "Bob",
+            &SocialEvent::NinjaLoot {
+                item: "FBSS".into(),
+            },
+        );
+
+        let ab = graph.get("Alice", "Bob").unwrap();
+        assert!(ab.faction_score < 0);
+        assert!(ab.trust < 0.5);
+    }
+
+    #[test]
+    fn standing_labels() {
+        let mut rel = Relationship::default();
+
+        rel.faction_score = 800;
+        assert_eq!(rel.standing(), "ally");
+
+        rel.faction_score = 500;
+        assert_eq!(rel.standing(), "warmly");
+
+        rel.faction_score = 50;
+        assert_eq!(rel.standing(), "indifferent");
+
+        rel.faction_score = -50;
+        assert_eq!(rel.standing(), "apprehensive");
+
+        rel.faction_score = -500;
+        assert_eq!(rel.standing(), "threatening");
+
+        rel.faction_score = -900;
+        assert_eq!(rel.standing(), "scowling");
+    }
+
+    #[test]
+    fn tags_can_be_added() {
+        let mut graph = SocialGraph::new();
+        let rel = graph.get_or_create("Alice", "Bob");
+        rel.tags.push(SocialTag::Friend);
+        rel.tags.push(SocialTag::Mentor);
+
+        let loaded = graph.get("Alice", "Bob").unwrap();
+        assert!(loaded.tags.contains(&SocialTag::Friend));
+        assert!(loaded.tags.contains(&SocialTag::Mentor));
+    }
+
+    #[test]
+    fn from_seeds_initializes_graph() {
+        let seeds = vec![RelationshipSeed {
+            from: "Alice".into(),
+            to: "Bob".into(),
+            faction: 300,
+            tags: vec![SocialTag::Friend],
+            trust: 0.8,
+        }];
+
+        let graph = SocialGraph::from_seeds(&seeds);
+        let rel = graph.get("Alice", "Bob").unwrap();
+        assert_eq!(rel.faction_score, 300);
+        assert!((rel.trust - 0.8).abs() < 0.01);
+        assert!(rel.tags.contains(&SocialTag::Friend));
+        assert_eq!(rel.communication_style, "banter");
+    }
+
+    #[test]
+    fn should_defer_with_mentor_tag() {
+        let seeds = vec![RelationshipSeed {
+            from: "Newbie".into(),
+            to: "Veteran".into(),
+            faction: 100,
+            tags: vec![SocialTag::Mentor],
+            trust: 0.5,
+        }];
+        let graph = SocialGraph::from_seeds(&seeds);
+        assert!(graph.should_defer("Newbie", "Veteran"));
+    }
+
+    #[test]
+    fn should_defer_false_for_strangers() {
+        let graph = SocialGraph::new();
+        assert!(!graph.should_defer("Alice", "Bob"));
+    }
+
+    #[test]
+    fn most_likely_to_gossip_about_returns_strongest_opinion() {
+        let mut graph = SocialGraph::new();
+        graph.get_or_create("Alice", "Bob").faction_score = 100;
+        graph.get_or_create("Alice", "Carol").faction_score = -800;
+        graph.get_or_create("Alice", "Dave").faction_score = 50;
+
+        let target = graph.most_likely_to_gossip_about("Alice").unwrap();
+        assert_eq!(target, "Carol"); // highest absolute faction
+    }
+
+    #[test]
+    fn relationships_for_lists_all_edges() {
+        let mut graph = SocialGraph::new();
+        graph.get_or_create("Alice", "Bob");
+        graph.get_or_create("Alice", "Carol");
+        graph.get_or_create("Bob", "Alice");
+
+        let rels = graph.relationships_for("Alice");
+        assert_eq!(rels.len(), 2);
+    }
+
+    #[test]
+    fn infer_communication_style_from_tags() {
+        assert_eq!(
+            infer_communication_style(&[SocialTag::Sibling]),
+            "casual"
+        );
+        assert_eq!(
+            infer_communication_style(&[SocialTag::Rival]),
+            "terse"
+        );
+        assert_eq!(
+            infer_communication_style(&[SocialTag::Mentor]),
+            "respectful"
+        );
+        assert_eq!(
+            infer_communication_style(&[SocialTag::Friend]),
+            "banter"
+        );
+        assert_eq!(infer_communication_style(&[]), "neutral");
+    }
+
+    #[test]
+    fn build_relationship_summary_with_relationship() {
+        let mut graph = SocialGraph::new();
+        let rel = graph.get_or_create("Alice", "Bob");
+        rel.faction_score = 500;
+        rel.tags.push(SocialTag::Friend);
+
+        let summary = graph.build_relationship_summary("Alice", "Bob");
+        assert!(summary.contains("warmly"));
+        assert!(summary.contains("friend"));
+    }
+
+    #[test]
+    fn build_relationship_summary_without_relationship() {
+        let graph = SocialGraph::new();
+        let summary = graph.build_relationship_summary("Alice", "Bob");
+        assert!(summary.contains("no opinion"));
+    }
+}

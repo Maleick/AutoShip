@@ -105,3 +105,122 @@ impl PostLoginSequencer {
         self.started_at.elapsed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::nav::Waypoint;
+
+    fn test_game_state() -> GameState {
+        GameState {
+            client_id: 1,
+            local_player: None,
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: dmft_common::nav::NavStatus::Idle,
+            combat_status: dmft_common::combat::CombatStatus::Idle,
+        }
+    }
+
+    #[test]
+    fn initial_phase_is_not_started() {
+        let seq = PostLoginSequencer::new(1, 1, vec![]);
+        assert!(matches!(seq.phase(), PostLoginPhase::NotStarted));
+        assert!(!seq.is_ready());
+    }
+
+    #[test]
+    fn not_started_generates_join_group_command() {
+        let seq = PostLoginSequencer::new(1, 42, vec![]);
+        let state = test_game_state();
+        let cmd = seq.next_command(&state);
+        match cmd {
+            Some(Command::JoinGroup { group_id }) => assert_eq!(group_id, 42),
+            other => panic!("expected JoinGroup, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn advance_group_joined_transitions_to_buffing() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        seq.advance(PostLoginEvent::GroupJoined);
+        assert!(matches!(seq.phase(), PostLoginPhase::Buffing));
+    }
+
+    #[test]
+    fn buffing_with_no_waypoints_generates_report_ready() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        seq.advance(PostLoginEvent::GroupJoined);
+        let state = test_game_state();
+        let cmd = seq.next_command(&state);
+        assert!(matches!(cmd, Some(Command::ReportReady)));
+    }
+
+    #[test]
+    fn buffing_with_waypoints_generates_navigate_to() {
+        let waypoints = vec![Waypoint::new(100.0, 200.0, 0.0)];
+        let mut seq = PostLoginSequencer::new(1, 1, waypoints);
+        seq.advance(PostLoginEvent::GroupJoined);
+        let state = test_game_state();
+        let cmd = seq.next_command(&state);
+        assert!(matches!(cmd, Some(Command::NavigateTo { .. })));
+    }
+
+    #[test]
+    fn buffs_applied_without_waypoints_goes_to_ready() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        seq.advance(PostLoginEvent::GroupJoined);
+        seq.advance(PostLoginEvent::BuffsApplied);
+        assert!(matches!(seq.phase(), PostLoginPhase::Ready));
+        assert!(seq.is_ready());
+    }
+
+    #[test]
+    fn buffs_applied_with_waypoints_goes_to_navigating() {
+        let waypoints = vec![Waypoint::new(100.0, 200.0, 0.0)];
+        let mut seq = PostLoginSequencer::new(1, 1, waypoints);
+        seq.advance(PostLoginEvent::GroupJoined);
+        seq.advance(PostLoginEvent::BuffsApplied);
+        assert!(matches!(seq.phase(), PostLoginPhase::NavigatingToCamp));
+        assert!(!seq.is_ready());
+    }
+
+    #[test]
+    fn camp_reached_transitions_to_ready() {
+        let waypoints = vec![Waypoint::new(100.0, 200.0, 0.0)];
+        let mut seq = PostLoginSequencer::new(1, 1, waypoints);
+        seq.advance(PostLoginEvent::GroupJoined);
+        seq.advance(PostLoginEvent::BuffsApplied);
+        seq.advance(PostLoginEvent::CampReached);
+        assert!(matches!(seq.phase(), PostLoginPhase::Ready));
+        assert!(seq.is_ready());
+    }
+
+    #[test]
+    fn navigating_phase_generates_no_command() {
+        let waypoints = vec![Waypoint::new(100.0, 200.0, 0.0)];
+        let mut seq = PostLoginSequencer::new(1, 1, waypoints);
+        seq.advance(PostLoginEvent::GroupJoined);
+        seq.advance(PostLoginEvent::BuffsApplied);
+        let state = test_game_state();
+        let cmd = seq.next_command(&state);
+        assert!(cmd.is_none(), "nav system handles movement autonomously");
+    }
+
+    #[test]
+    fn ready_phase_generates_no_command() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        seq.advance(PostLoginEvent::GroupJoined);
+        seq.advance(PostLoginEvent::BuffsApplied);
+        let state = test_game_state();
+        let cmd = seq.next_command(&state);
+        assert!(cmd.is_none());
+    }
+
+    #[test]
+    fn client_id_accessor_returns_correct_id() {
+        let seq = PostLoginSequencer::new(42, 1, vec![]);
+        assert_eq!(seq.client_id(), 42);
+    }
+}

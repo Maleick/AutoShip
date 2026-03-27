@@ -210,3 +210,194 @@ impl LoginStateMachine {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_account() -> AccountInfo {
+        AccountInfo {
+            account_name: "test_acct".to_string(),
+            character_name: "Frostreaver".to_string(),
+            class_name: "Warrior".to_string(),
+            level: 60,
+            group_id: 1,
+            server_name: "TestServer".to_string(),
+        }
+    }
+
+    fn new_sm() -> LoginStateMachine {
+        LoginStateMachine::new(1, test_account())
+    }
+
+    #[test]
+    fn initial_state_is_not_started() {
+        let sm = new_sm();
+        assert!(matches!(sm.phase, LoginPhase::NotStarted));
+        assert_eq!(sm.attempts, 0);
+        assert!(!sm.is_terminal());
+    }
+
+    #[test]
+    fn process_started_transitions_to_launching() {
+        let mut sm = new_sm();
+        let action = sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        assert!(matches!(sm.phase, LoginPhase::ProcessLaunching));
+        assert!(matches!(action, LoginAction::None));
+    }
+
+    #[test]
+    fn login_screen_detected_transitions_and_sends_credentials() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        let action = sm.advance(LoginEvent::LoginScreenDetected);
+        assert!(matches!(sm.phase, LoginPhase::AtLoginScreen));
+        assert!(matches!(action, LoginAction::SendCredentials));
+    }
+
+    #[test]
+    fn full_happy_path_reaches_ready() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        sm.advance(LoginEvent::LoginScreenDetected);
+        sm.advance(LoginEvent::CredentialsSent);
+        assert!(matches!(sm.phase, LoginPhase::EnteringCredentials));
+
+        sm.advance(LoginEvent::ServerSelected);
+        assert!(matches!(sm.phase, LoginPhase::ServerSelecting));
+
+        sm.advance(LoginEvent::CharacterSelected);
+        assert!(matches!(sm.phase, LoginPhase::CharacterSelecting));
+
+        let action = sm.advance(LoginEvent::ZoneInComplete);
+        assert!(matches!(sm.phase, LoginPhase::InWorld));
+        assert!(matches!(action, LoginAction::BeginPostLogin));
+
+        let action = sm.advance(LoginEvent::PlayerDataConfirmed {
+            name: "Frostreaver".to_string(),
+            class_name: "Warrior".to_string(),
+        });
+        assert!(matches!(sm.phase, LoginPhase::Ready));
+        assert!(matches!(action, LoginAction::None));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn wrong_password_aborts_immediately() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::WrongPassword,
+        });
+        assert!(matches!(sm.phase, LoginPhase::Failed { .. }));
+        assert!(matches!(action, LoginAction::Abort { .. }));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn account_locked_aborts_immediately() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::AccountLocked,
+        });
+        assert!(matches!(sm.phase, LoginPhase::Failed { .. }));
+        assert!(matches!(action, LoginAction::Abort { .. }));
+    }
+
+    #[test]
+    fn server_full_retries_then_aborts() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+
+        // First two retries should produce Retry actions
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::ServerFull,
+        });
+        assert!(matches!(action, LoginAction::Retry { .. }));
+        assert_eq!(sm.attempts, 1);
+
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::ServerFull,
+        });
+        assert!(matches!(action, LoginAction::Retry { .. }));
+        assert_eq!(sm.attempts, 2);
+
+        // Third attempt (MAX_ATTEMPTS=3) should abort
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::ServerFull,
+        });
+        assert!(matches!(action, LoginAction::Abort { .. }));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn mass_failure_triggers_pause_all() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::MassFailure,
+        });
+        assert!(matches!(action, LoginAction::PauseAll));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn player_data_mismatch_aborts() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        sm.advance(LoginEvent::LoginScreenDetected);
+        sm.advance(LoginEvent::CredentialsSent);
+        sm.advance(LoginEvent::ServerSelected);
+        sm.advance(LoginEvent::CharacterSelected);
+        sm.advance(LoginEvent::ZoneInComplete);
+
+        let action = sm.advance(LoginEvent::PlayerDataConfirmed {
+            name: "WrongCharacter".to_string(),
+            class_name: "Warrior".to_string(),
+        });
+        assert!(matches!(sm.phase, LoginPhase::Failed { .. }));
+        assert!(matches!(action, LoginAction::Abort { .. }));
+    }
+
+    #[test]
+    fn tick_returns_none_when_not_started() {
+        let mut sm = new_sm();
+        assert!(sm.tick().is_none());
+    }
+
+    #[test]
+    fn tick_returns_none_when_terminal() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::WrongPassword,
+        });
+        assert!(sm.is_terminal());
+        assert!(sm.tick().is_none());
+    }
+
+    #[test]
+    fn dll_reported_in_world_triggers_post_login() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        let action = sm.advance(LoginEvent::DllReported {
+            phase: LoginPhase::InWorld,
+        });
+        assert!(matches!(sm.phase, LoginPhase::InWorld));
+        assert!(matches!(action, LoginAction::BeginPostLogin));
+    }
+
+    #[test]
+    fn credentials_sent_produces_select_server_with_correct_name() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        sm.advance(LoginEvent::LoginScreenDetected);
+        let action = sm.advance(LoginEvent::CredentialsSent);
+        match action {
+            LoginAction::SelectServer { name } => {
+                assert_eq!(name, "TestServer");
+            }
+            other => panic!("expected SelectServer, got {:?}", std::mem::discriminant(&other)),
+        }
+    }
+}

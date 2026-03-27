@@ -174,3 +174,170 @@ impl LlmRequestQueue {
         self.budget.remaining(now_secs)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::soul::llm::{LlmPriority, LlmRequest, Situation};
+    use crate::soul::llm::fallback::TraitDrivenResponder;
+    use crate::soul::config::EdginessLevel;
+    use dmft_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
+
+    fn make_request(name: &str, priority: LlmPriority) -> LlmRequest {
+        LlmRequest {
+            character_name: name.into(),
+            traits: PersonalityTraits::default(),
+            mood: MoodState::Neutral,
+            speech_style: SpeechStyle::default(),
+            situation: Situation::IdleChatter,
+            priority,
+            memory_context: Vec::new(),
+            backstory: String::new(),
+        }
+    }
+
+    // ─── TokenBudget tests ───
+
+    #[test]
+    fn token_budget_can_afford_within_limit() {
+        let budget = TokenBudget::new(1000);
+        assert!(budget.can_afford(500, 100));
+        assert!(budget.can_afford(1000, 100));
+        assert!(!budget.can_afford(1001, 100));
+    }
+
+    #[test]
+    fn token_budget_consume_reduces_remaining() {
+        let mut budget = TokenBudget::new(1000);
+        budget.consume(400, 100);
+        assert_eq!(budget.remaining(100), 600);
+        assert!(budget.can_afford(600, 100));
+        assert!(!budget.can_afford(601, 100));
+    }
+
+    #[test]
+    fn token_budget_window_expiry_resets() {
+        let mut budget = TokenBudget::new(1000);
+        budget.consume(900, 100);
+        assert_eq!(budget.remaining(100), 100);
+
+        // After an hour, the window resets
+        let after_hour = 100 + 3600;
+        assert_eq!(budget.remaining(after_hour), 1000);
+        assert!(budget.can_afford(1000, after_hour));
+    }
+
+    #[test]
+    fn token_budget_consume_after_expiry_starts_new_window() {
+        let mut budget = TokenBudget::new(1000);
+        budget.consume(800, 100);
+
+        // Consume after window expiry
+        budget.consume(200, 100 + 3600);
+        assert_eq!(budget.remaining(100 + 3600), 800);
+    }
+
+    #[test]
+    fn token_budget_remaining_with_no_consumption() {
+        let budget = TokenBudget::new(5000);
+        assert_eq!(budget.remaining(0), 5000);
+    }
+
+    // ─── LlmRequestQueue tests ───
+
+    #[test]
+    fn enqueue_and_pop_returns_request() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("Alice", LlmPriority::Medium));
+
+        let req = queue.pop_next(0).unwrap();
+        assert_eq!(req.character_name, "Alice");
+    }
+
+    #[test]
+    fn pop_next_returns_none_when_empty() {
+        let mut queue = LlmRequestQueue::new(10000);
+        assert!(queue.pop_next(0).is_none());
+    }
+
+    #[test]
+    fn pop_next_returns_highest_priority_first() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("Low", LlmPriority::Low));
+        queue.enqueue(make_request("High", LlmPriority::High));
+        queue.enqueue(make_request("Medium", LlmPriority::Medium));
+
+        let first = queue.pop_next(0).unwrap();
+        assert_eq!(first.character_name, "High");
+
+        let second = queue.pop_next(0).unwrap();
+        assert_eq!(second.character_name, "Medium");
+
+        let third = queue.pop_next(0).unwrap();
+        assert_eq!(third.character_name, "Low");
+    }
+
+    #[test]
+    fn same_priority_fifo_order() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("First", LlmPriority::Medium));
+        queue.enqueue(make_request("Second", LlmPriority::Medium));
+        queue.enqueue(make_request("Third", LlmPriority::Medium));
+
+        let first = queue.pop_next(0).unwrap();
+        assert_eq!(first.character_name, "First");
+
+        let second = queue.pop_next(0).unwrap();
+        assert_eq!(second.character_name, "Second");
+
+        let third = queue.pop_next(0).unwrap();
+        assert_eq!(third.character_name, "Third");
+    }
+
+    #[test]
+    fn pending_count_tracks_queue_size() {
+        let mut queue = LlmRequestQueue::new(10000);
+        assert_eq!(queue.pending_count(), 0);
+
+        queue.enqueue(make_request("A", LlmPriority::Low));
+        queue.enqueue(make_request("B", LlmPriority::High));
+        assert_eq!(queue.pending_count(), 2);
+
+        queue.pop_next(0);
+        assert_eq!(queue.pending_count(), 1);
+    }
+
+    #[test]
+    fn process_next_with_fallback_provider() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("Alice", LlmPriority::Medium));
+
+        let mut provider = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let result = queue.process_next(&mut provider, 0).unwrap().unwrap();
+
+        assert_eq!(result.0.character_name, "Alice");
+        assert!(!result.1.text.is_empty());
+        assert!(!result.1.from_llm);
+        assert_eq!(result.1.tokens_used, 0);
+    }
+
+    #[test]
+    fn process_all_drains_queue() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("A", LlmPriority::Low));
+        queue.enqueue(make_request("B", LlmPriority::Medium));
+        queue.enqueue(make_request("C", LlmPriority::High));
+
+        let mut provider = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let results = queue.process_all(&mut provider, 0);
+
+        assert_eq!(results.len(), 3);
+        assert_eq!(queue.pending_count(), 0);
+    }
+
+    #[test]
+    fn budget_remaining_reflects_queue_state() {
+        let queue = LlmRequestQueue::new(5000);
+        assert_eq!(queue.budget_remaining(0), 5000);
+    }
+}

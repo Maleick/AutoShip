@@ -124,3 +124,126 @@ impl StuckDetector {
         self.recovery_attempt = 0;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn not_stuck_when_position_changes() {
+        let mut detector = StuckDetector::new();
+        for i in 0..100 {
+            let pos = Waypoint::new(i as f32 * 5.0, 0.0, 0.0);
+            assert!(!detector.check(&pos), "should not be stuck when moving");
+        }
+    }
+
+    #[test]
+    fn stuck_when_position_static_for_threshold_ticks() {
+        let mut detector = StuckDetector::new();
+        let pos = Waypoint::new(100.0, 100.0, 0.0);
+
+        // First check sets last_position
+        detector.check(&pos);
+
+        // Need STUCK_TICK_THRESHOLD consecutive low-movement ticks
+        let mut stuck = false;
+        for _ in 0..STUCK_TICK_THRESHOLD {
+            stuck = detector.check(&pos);
+        }
+        assert!(stuck, "should be stuck after {STUCK_TICK_THRESHOLD} stationary ticks");
+    }
+
+    #[test]
+    fn not_stuck_before_threshold() {
+        let mut detector = StuckDetector::new();
+        let pos = Waypoint::new(50.0, 50.0, 0.0);
+
+        detector.check(&pos);
+        for _ in 0..(STUCK_TICK_THRESHOLD - 2) {
+            assert!(!detector.check(&pos));
+        }
+    }
+
+    #[test]
+    fn movement_resets_stuck_counter() {
+        let mut detector = StuckDetector::new();
+        let pos = Waypoint::new(10.0, 10.0, 0.0);
+
+        // Build up some stationary ticks
+        detector.check(&pos);
+        for _ in 0..20 {
+            detector.check(&pos);
+        }
+
+        // Move significantly
+        let moved_pos = Waypoint::new(100.0, 100.0, 0.0);
+        detector.check(&moved_pos);
+
+        // Now sit still again -- should need the full threshold again
+        for _ in 0..(STUCK_TICK_THRESHOLD - 1) {
+            assert!(!detector.check(&moved_pos));
+        }
+    }
+
+    #[test]
+    fn recovery_attempts_escalate() {
+        let mut detector = StuckDetector::new();
+        let controller = MovementController::new(0);
+
+        assert_eq!(detector.recovery_attempt(), 0);
+
+        assert!(detector.recover(&controller));
+        assert_eq!(detector.recovery_attempt(), 1);
+
+        assert!(detector.recover(&controller));
+        assert_eq!(detector.recovery_attempt(), 2);
+
+        assert!(detector.recover(&controller));
+        assert_eq!(detector.recovery_attempt(), 3);
+    }
+
+    #[test]
+    fn max_recovery_attempts_returns_false() {
+        let mut detector = StuckDetector::new();
+        let controller = MovementController::new(0);
+
+        for _ in 0..MAX_RECOVERY_ATTEMPTS {
+            detector.recover(&controller);
+        }
+        // Next attempt should fail (give up)
+        assert!(!detector.recover(&controller));
+    }
+
+    #[test]
+    fn reset_clears_all_state() {
+        let mut detector = StuckDetector::new();
+        let controller = MovementController::new(0);
+        let pos = Waypoint::new(50.0, 50.0, 0.0);
+
+        // Build up state
+        detector.check(&pos);
+        for _ in 0..10 {
+            detector.check(&pos);
+        }
+        detector.recover(&controller);
+
+        detector.reset();
+        assert_eq!(detector.recovery_attempt(), 0);
+    }
+
+    #[test]
+    fn movement_clears_recovery_state() {
+        let mut detector = StuckDetector::new();
+        let controller = MovementController::new(0);
+
+        detector.recover(&controller);
+        detector.recover(&controller);
+        assert_eq!(detector.recovery_attempt(), 2);
+
+        // Simulate movement (distance > MIN_MOVEMENT from last_position at origin)
+        let far = Waypoint::new(100.0, 100.0, 0.0);
+        detector.check(&far);
+        assert_eq!(detector.recovery_attempt(), 0);
+    }
+}

@@ -491,3 +491,317 @@ fn event_zone(event: &SoulEvent) -> Option<String> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::soul::{MoodState, SoulEvent};
+    use rusqlite::Connection;
+
+    fn open_memory_store() -> MemoryStore {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        MemoryStore { conn }
+    }
+
+    fn kill_event(target: &str, zone: &str) -> SoulEvent {
+        SoulEvent::Kill {
+            target: target.into(),
+            zone: zone.into(),
+        }
+    }
+
+    fn loot_event(item: &str, zone: &str) -> SoulEvent {
+        SoulEvent::Loot {
+            item: item.into(),
+            zone: zone.into(),
+        }
+    }
+
+    #[test]
+    fn record_returns_positive_id() {
+        let store = open_memory_store();
+        let event = kill_event("a gnoll", "blackburrow");
+        let id = store.record(1, &event, MoodState::Excited, 1.0).unwrap();
+        assert!(id > 0);
+    }
+
+    #[test]
+    fn record_multiple_returns_sequential_ids() {
+        let store = open_memory_store();
+        let id1 = store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        let id2 = store
+            .record(1, &kill_event("bear", "everfrost"), MoodState::Happy, 1.0)
+            .unwrap();
+        assert!(id2 > id1);
+    }
+
+    #[test]
+    fn recall_recent_returns_memories_in_order() {
+        let store = open_memory_store();
+        let id1 = store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        let id2 = store
+            .record(1, &kill_event("bear", "everfrost"), MoodState::Excited, 2.0)
+            .unwrap();
+        let id3 = store
+            .record(1, &kill_event("orc", "crushbone"), MoodState::Angry, 3.0)
+            .unwrap();
+
+        let memories = store.recall_recent(1, 10).unwrap();
+        assert_eq!(memories.len(), 3);
+        // All three records should be present
+        let ids: Vec<i64> = memories.iter().map(|m| m.id).collect();
+        assert!(ids.contains(&id1));
+        assert!(ids.contains(&id2));
+        assert!(ids.contains(&id3));
+    }
+
+    #[test]
+    fn recall_recent_respects_limit() {
+        let store = open_memory_store();
+        for i in 0..10 {
+            store
+                .record(
+                    1,
+                    &kill_event(&format!("mob_{}", i), "zone"),
+                    MoodState::Neutral,
+                    1.0,
+                )
+                .unwrap();
+        }
+        let memories = store.recall_recent(1, 3).unwrap();
+        assert_eq!(memories.len(), 3);
+    }
+
+    #[test]
+    fn recall_recent_filters_by_character() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        store
+            .record(2, &kill_event("bear", "everfrost"), MoodState::Happy, 1.0)
+            .unwrap();
+
+        let char1_memories = store.recall_recent(1, 10).unwrap();
+        let char2_memories = store.recall_recent(2, 10).unwrap();
+        assert_eq!(char1_memories.len(), 1);
+        assert_eq!(char2_memories.len(), 1);
+        assert_eq!(char1_memories[0].event_type, "kill");
+    }
+
+    #[test]
+    fn recall_about_filters_by_subject() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "blackburrow"), MoodState::Neutral, 1.0)
+            .unwrap();
+        store
+            .record(1, &kill_event("orc", "crushbone"), MoodState::Angry, 1.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "blackburrow"), MoodState::Happy, 1.0)
+            .unwrap();
+
+        // Search by zone name
+        let results = store.recall_about(1, "blackburrow", 10).unwrap();
+        assert_eq!(results.len(), 2);
+
+        // Search by target name
+        let results = store.recall_about(1, "orc", 10).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn recall_about_triggers_rehearsal() {
+        let store = open_memory_store();
+        let id = store
+            .record(1, &kill_event("gnoll", "blackburrow"), MoodState::Neutral, 1.0)
+            .unwrap();
+
+        // Recall about "gnoll" should boost importance by 0.1
+        let _ = store.recall_about(1, "gnoll", 10).unwrap();
+
+        // Read back and check importance increased
+        let memories = store.recall_recent(1, 10).unwrap();
+        let memory = memories.iter().find(|m| m.id == id).unwrap();
+        assert!(
+            memory.importance > 1.0,
+            "Expected importance > 1.0 after rehearsal, got {}",
+            memory.importance
+        );
+    }
+
+    #[test]
+    fn rehearse_increments_importance() {
+        let store = open_memory_store();
+        let id = store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 2.0)
+            .unwrap();
+
+        store.rehearse(id, 0.5).unwrap();
+
+        let memories = store.recall_recent(1, 10).unwrap();
+        let memory = memories.iter().find(|m| m.id == id).unwrap();
+        assert!(
+            (memory.importance - 2.5).abs() < 0.01,
+            "Expected importance ~2.5, got {}",
+            memory.importance
+        );
+    }
+
+    #[test]
+    fn rehearse_caps_at_ten() {
+        let store = open_memory_store();
+        let id = store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 9.8)
+            .unwrap();
+
+        store.rehearse(id, 1.0).unwrap();
+
+        let memories = store.recall_recent(1, 10).unwrap();
+        let memory = memories.iter().find(|m| m.id == id).unwrap();
+        assert!(
+            (memory.importance - 10.0).abs() < 0.01,
+            "Expected importance capped at 10.0, got {}",
+            memory.importance
+        );
+    }
+
+    #[test]
+    fn decay_tick_reduces_importance() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 5.0)
+            .unwrap();
+
+        let rows = store.decay_tick(1, 0.5).unwrap();
+        assert_eq!(rows, 1);
+
+        let memories = store.recall_recent(1, 10).unwrap();
+        assert!(
+            (memories[0].importance - 2.5).abs() < 0.01,
+            "Expected importance ~2.5 after 0.5 decay, got {}",
+            memories[0].importance
+        );
+    }
+
+    #[test]
+    fn prune_low_importance_marks_decayed() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 0.05)
+            .unwrap();
+        store
+            .record(1, &kill_event("bear", "everfrost"), MoodState::Happy, 5.0)
+            .unwrap();
+
+        let pruned = store.prune_low_importance(1, 0.1).unwrap();
+        assert_eq!(pruned, 1);
+
+        // recall_recent skips decayed memories
+        let memories = store.recall_recent(1, 10).unwrap();
+        assert_eq!(memories.len(), 1);
+        assert_eq!(memories[0].event_type, "kill");
+    }
+
+    #[test]
+    fn record_and_recall_conversations() {
+        let store = open_memory_store();
+        store
+            .record_conversation(1, "Dave", true, "say", "Hey there!", Some(0.8))
+            .unwrap();
+        store
+            .record_conversation(1, "TestBot", false, "group", "On my way.", None)
+            .unwrap();
+
+        let convos = store.recall_conversations(1, 10).unwrap();
+        assert_eq!(convos.len(), 2);
+        assert!(convos[0].is_player || convos[1].is_player);
+    }
+
+    #[test]
+    fn speech_patterns_default_when_absent() {
+        let store = open_memory_store();
+        let style = store.get_speech_patterns(99).unwrap();
+        assert!((style.vocabulary_level - 0.5).abs() < 0.01);
+        assert!(style.catchphrases.is_empty());
+    }
+
+    #[test]
+    fn update_and_get_speech_patterns() {
+        let store = open_memory_store();
+        let style = SpeechStyle {
+            vocabulary_level: 0.8,
+            emote_frequency: 0.3,
+            typing_speed: 1.5,
+            catchphrases: vec!["Hail!".into()],
+            adopted_slang: vec!["kek".into()],
+        };
+        store.update_speech_patterns(1, &style).unwrap();
+
+        let loaded = store.get_speech_patterns(1).unwrap();
+        assert!((loaded.vocabulary_level - 0.8).abs() < 0.01);
+        assert_eq!(loaded.catchphrases, vec!["Hail!"]);
+        assert_eq!(loaded.adopted_slang, vec!["kek"]);
+    }
+
+    #[test]
+    fn memory_row_event_deserializes() {
+        let store = open_memory_store();
+        let original = kill_event("a_gnoll", "blackburrow");
+        store
+            .record(1, &original, MoodState::Neutral, 1.0)
+            .unwrap();
+
+        let memories = store.recall_recent(1, 1).unwrap();
+        let deserialized = memories[0].event().unwrap();
+        match deserialized {
+            SoulEvent::Kill { target, zone } => {
+                assert_eq!(target, "a_gnoll");
+                assert_eq!(zone, "blackburrow");
+            }
+            _ => panic!("Expected SoulEvent::Kill"),
+        }
+    }
+
+    #[test]
+    fn event_type_labels_are_correct() {
+        assert_eq!(
+            event_type_label(&SoulEvent::Death {
+                zone: "".into(),
+                killer: None
+            }),
+            "death"
+        );
+        assert_eq!(
+            event_type_label(&SoulEvent::LevelUp { new_level: 1 }),
+            "level_up"
+        );
+        assert_eq!(
+            event_type_label(&SoulEvent::GroupWipe {
+                zone: "".into()
+            }),
+            "group_wipe"
+        );
+    }
+
+    #[test]
+    fn event_zone_extracts_zone_from_applicable_events() {
+        let death = SoulEvent::Death {
+            zone: "guk".into(),
+            killer: None,
+        };
+        assert_eq!(event_zone(&death), Some("guk".into()));
+
+        let chat = SoulEvent::PlayerChat {
+            player_name: "Dave".into(),
+            sentiment: 0.5,
+        };
+        assert_eq!(event_zone(&chat), None);
+    }
+}

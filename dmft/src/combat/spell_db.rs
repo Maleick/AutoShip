@@ -100,3 +100,63 @@ static SPELLS: &[SpellInfo] = &[
         is_aoe: false,
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_known_spell_returns_some() {
+        let spell = get(201);
+        assert!(spell.is_some());
+        let spell = spell.unwrap();
+        assert_eq!(spell.name, "Complete Heal");
+        assert_eq!(spell.mana_cost, 400);
+        assert_eq!(spell.cast_time_ms, 10000);
+        assert!(!spell.is_aoe);
+    }
+
+    #[test]
+    fn get_unknown_spell_returns_none() {
+        assert!(get(9999).is_none());
+        assert!(get(0).is_none());
+    }
+
+    #[test]
+    fn mesmerize_is_not_aoe() {
+        let spell = get(301).unwrap();
+        assert_eq!(spell.name, "Mesmerize");
+        assert!(!spell.is_aoe);
+    }
+
+    #[test]
+    fn color_flux_is_aoe() {
+        let spell = get(302).unwrap();
+        assert_eq!(spell.name, "Color Flux");
+        assert!(spell.is_aoe);
+    }
+
+    #[test]
+    fn all_spells_have_positive_range() {
+        for spell in SPELLS {
+            assert!(
+                spell.range > 0.0,
+                "Spell {} should have positive range",
+                spell.name
+            );
+        }
+    }
+
+    #[test]
+    fn all_spell_ids_are_unique() {
+        for (i, a) in SPELLS.iter().enumerate() {
+            for b in SPELLS.iter().skip(i + 1) {
+                assert_ne!(
+                    a.spell_id, b.spell_id,
+                    "Duplicate spell_id {} for {} and {}",
+                    a.spell_id, a.name, b.name
+                );
+            }
+        }
+    }
+}

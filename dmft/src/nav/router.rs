@@ -150,3 +150,124 @@ pub fn plan_group_travel(
     let router = GroupRouter::new();
     router.plan_travel(client_ids, class_map, from_zone, to_zone)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_zone_staggers_returns_correct_count() {
+        let ids = vec![1, 2, 3, 4, 5];
+        let staggers = generate_zone_staggers(&ids, 5, 60, 42);
+        assert_eq!(staggers.len(), 5);
+        for &id in &ids {
+            assert!(staggers.contains_key(&id));
+        }
+    }
+
+    #[test]
+    fn generate_zone_staggers_values_in_range() {
+        let ids: Vec<u32> = (1..=20).collect();
+        let staggers = generate_zone_staggers(&ids, 5, 60, 99);
+        for (&_id, &delay) in &staggers {
+            assert!(
+                delay >= 5 && delay <= 60,
+                "stagger delay {delay} not in [5, 60]"
+            );
+        }
+    }
+
+    #[test]
+    fn generate_zone_staggers_min_equals_max() {
+        let ids = vec![1, 2, 3];
+        let staggers = generate_zone_staggers(&ids, 10, 10, 1);
+        for &delay in staggers.values() {
+            assert_eq!(delay, 10);
+        }
+    }
+
+    #[test]
+    fn generate_zone_staggers_max_less_than_min_uses_min() {
+        // The function does max_secs.max(min_secs), so max is clamped up to min
+        let ids = vec![1, 2, 3];
+        let staggers = generate_zone_staggers(&ids, 30, 10, 1);
+        for &delay in staggers.values() {
+            assert_eq!(delay, 30, "when max < min, all delays should equal min");
+        }
+    }
+
+    #[test]
+    fn generate_zone_staggers_empty_ids() {
+        let staggers = generate_zone_staggers(&[], 5, 60, 42);
+        assert!(staggers.is_empty());
+    }
+
+    #[test]
+    fn generate_zone_staggers_deterministic_for_same_seed() {
+        let ids = vec![1, 2, 3, 4, 5];
+        let a = generate_zone_staggers(&ids, 5, 60, 42);
+        let b = generate_zone_staggers(&ids, 5, 60, 42);
+        assert_eq!(a, b, "same seed should produce same staggers");
+    }
+
+    #[test]
+    fn group_router_new_has_no_porters() {
+        let router = GroupRouter::new();
+        assert!(!router.has_porters());
+    }
+
+    #[test]
+    fn group_router_set_porters_and_has_porters() {
+        let mut router = GroupRouter::new();
+        router.set_porters(vec![10, 20]);
+        assert!(router.has_porters());
+    }
+
+    #[test]
+    fn group_router_set_empty_porters_clears() {
+        let mut router = GroupRouter::new();
+        router.set_porters(vec![10]);
+        assert!(router.has_porters());
+        router.set_porters(vec![]);
+        assert!(!router.has_porters());
+    }
+
+    #[test]
+    fn travel_plan_traversal() {
+        let steps = vec![
+            TravelStep::StaggerWait {
+                min_secs: 5,
+                max_secs: 5,
+            },
+            TravelStep::ZoneTo {
+                zone_name: "gfay".to_string(),
+                zone_line_pos: Waypoint::new(0.0, 0.0, 0.0),
+            },
+        ];
+        let mut plan = TravelPlan::new(1, steps);
+        assert!(!plan.is_complete());
+        assert!(plan.current().is_some());
+
+        assert!(plan.advance());
+        assert!(plan.current().is_some());
+
+        assert!(!plan.advance()); // at last element, cannot advance further
+        // After advancing past last, TravelPlan considers it complete
+        // But IndexedQueue::advance returns false and stays at last index
+        // is_complete checks index >= len, which is not true when stuck at last
+        // Let's verify the actual behavior
+        assert!(!plan.is_complete(), "IndexedQueue stays at last index");
+    }
+
+    #[test]
+    fn plan_group_travel_returns_plan_per_client() {
+        let ids = vec![1, 2, 3];
+        let class_map: HashMap<u32, u8> = ids.iter().map(|&id| (id, 1u8)).collect();
+        let plans = plan_group_travel(&ids, &class_map, "ecommons", "gfay");
+        assert_eq!(plans.len(), 3);
+        for plan in &plans {
+            assert!(!plan.is_complete());
+            assert!(plan.current().is_some());
+        }
+    }
+}
