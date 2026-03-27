@@ -63,6 +63,7 @@ pub fn generate_zone_staggers(
     max_secs: u32,
     seed: u32,
 ) -> HashMap<ClientId, u32> {
+    let max_secs = max_secs.max(min_secs);
     let range = max_secs - min_secs;
     let mut result = HashMap::new();
 

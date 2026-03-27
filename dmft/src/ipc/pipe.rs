@@ -64,7 +64,8 @@ impl CommandPipe {
         {
             use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile};
 
-            let data = protocol::encode(cmd);
+            let data = protocol::encode(cmd)
+                .map_err(|e| anyhow::anyhow!("failed to encode command: {e}"))?;
             let mut written: u32 = 0;
             unsafe {
                 WriteFile(self.handle, Some(&data), Some(&mut written), None)?;
@@ -98,7 +99,8 @@ impl CommandPipe {
         {
             use windows::Win32::Storage::FileSystem::WriteFile;
 
-            let data = protocol::encode(cmd);
+            let data = protocol::encode(cmd)
+                .map_err(|e| anyhow::anyhow!("failed to encode command: {e}"))?;
             let mut written: u32 = 0;
             unsafe {
                 WriteFile(self.handle, Some(&data), Some(&mut written), None)?;

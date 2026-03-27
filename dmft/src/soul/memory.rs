@@ -148,12 +148,13 @@ impl MemoryStore {
         subject: &str,
         limit: usize,
     ) -> Result<Vec<MemoryRow>> {
-        let pattern = format!("%{}%", subject);
+        let escaped = subject.replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("%{}%", escaped);
         let mut stmt = self.conn.prepare(
             "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
              FROM memories
              WHERE character_id = ?1 AND decayed = 0
-               AND (event_json LIKE ?2 OR zone LIKE ?2)
+               AND (event_json LIKE ?2 ESCAPE '\\' OR zone LIKE ?2 ESCAPE '\\')
              ORDER BY importance DESC, created_at DESC
              LIMIT ?3",
         )?;

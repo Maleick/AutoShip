@@ -10,7 +10,7 @@ use super::config::{CharacterSoulConfig, EdginessLevel, SoulConfig};
 use super::idle::{IdleScheduler, IdleTransition};
 use super::llm::fallback::TraitDrivenResponder;
 use super::llm::priority_queue::LlmRequestQueue;
-use super::llm::{LlmPriority, LlmRequest, Situation};
+use super::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
 use super::memory::MemoryStore;
 use super::personality::{PersonalityEngine, SoulContext};
 use super::social::SocialGraph;
@@ -180,17 +180,23 @@ impl SoulCoordinator {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        // Use the first soul's responder as the provider for the queue
-        // In Phase 2, this will be a real LLM provider
-        if let Some(soul) = self.souls.values_mut().next() {
-            let results = self.llm_queue.process_all(&mut soul.responder, now_secs);
-            for (request, response) in results {
-                // Find the client_id for this character
-                if let Some((&cid, _)) = self
-                    .souls
-                    .iter()
-                    .find(|(_, s)| s.name == request.character_name)
-                {
+        // Drain all ready requests, then process each with the matching soul's responder
+        // In Phase 2, this will use a real LLM provider instead of per-soul fallback responders
+        let pending: Vec<_> = {
+            let mut results = Vec::new();
+            while let Some(prioritized) = self.llm_queue.pop_next(now_secs) {
+                results.push(prioritized);
+            }
+            results
+        };
+
+        for request in pending {
+            if let Some((&cid, soul)) = self
+                .souls
+                .iter_mut()
+                .find(|(_, s)| s.name == request.character_name)
+            {
+                if let Ok(response) = soul.responder.generate(&request) {
                     commands.push((
                         cid,
                         Command::Say {
@@ -233,6 +239,9 @@ impl SoulCoordinator {
             None,
         );
 
+        // Capture mood before event processing for accurate memory recording
+        let mood_before = soul.mood;
+
         // Process mood change from player interaction
         let event = SoulEvent::PlayerChat {
             player_name: player_name.to_string(),
@@ -242,8 +251,8 @@ impl SoulCoordinator {
             .personality
             .process_event(soul.mood, &event, &soul.traits);
 
-        // Record memory
-        let _ = self.memory.record(client_id, &event, soul.mood, 2.0);
+        // Record memory with the mood as it was before the event changed it
+        let _ = self.memory.record(client_id, &event, mood_before, 2.0);
 
         // Queue an LLM response (high priority for real players)
         let request = LlmRequest {
@@ -271,6 +280,9 @@ impl SoulCoordinator {
             None => return,
         };
 
+        // Capture mood before event processing for accurate memory recording
+        let mood_before = soul.mood;
+
         // Update mood
         soul.mood = soul
             .personality
@@ -287,8 +299,8 @@ impl SoulCoordinator {
             _ => 1.0,
         };
 
-        // Record memory
-        let _ = self.memory.record(client_id, &event, soul.mood, importance);
+        // Record memory with the mood as it was before the event changed it
+        let _ = self.memory.record(client_id, &event, mood_before, importance);
     }
 
     /// Get the current mood for a character.

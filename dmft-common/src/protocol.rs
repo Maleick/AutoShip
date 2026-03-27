@@ -7,14 +7,17 @@ pub const MAX_MESSAGE_SIZE: u32 = 65536;
 /// Encode a message as a length-prefixed bincode frame.
 ///
 /// Layout: `[len: u32 LE][payload: bincode bytes]`
-pub fn encode<T: Serialize>(msg: &T) -> Vec<u8> {
-    let payload =
-        bincode::serde::encode_to_vec(msg, bincode::config::standard()).unwrap();
+///
+/// Returns an error if serialization fails. This is preferred over panicking
+/// because inside the injected DLL, a panic unwinds through EQ's stack frames
+/// and causes undefined behavior.
+pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    let payload = bincode::serde::encode_to_vec(msg, bincode::config::standard())?;
     let len = (payload.len() as u32).to_le_bytes();
     let mut buf = Vec::with_capacity(4 + payload.len());
     buf.extend_from_slice(&len);
     buf.extend_from_slice(&payload);
-    buf
+    Ok(buf)
 }
 
 /// Decode a length-prefixed bincode frame from `data`.

@@ -83,7 +83,7 @@ impl StuckDetector {
     pub fn recover(&mut self, controller: &MovementController) -> bool {
         self.recovery_attempt += 1;
 
-        if self.recovery_attempt > MAX_RECOVERY_ATTEMPTS {
+        if self.recovery_attempt >= MAX_RECOVERY_ATTEMPTS {
             tracing::error!(
                 attempts = self.recovery_attempt - 1,
                 "Max recovery attempts reached, giving up"

@@ -103,17 +103,21 @@ impl SharedStateWriter {
             }
 
             let base = self.ptr;
+            let seq = unsafe { &*(base as *const AtomicU64) };
 
-            // Write payload first (before updating sequence)
+            // Mark write-in-progress: increment sequence to make it odd
+            self.sequence += 1;
+            seq.store(self.sequence, Ordering::Release);
+
+            // Write payload
             let len_bytes = (payload.len() as u32).to_le_bytes();
             unsafe {
                 std::ptr::copy_nonoverlapping(len_bytes.as_ptr(), base.add(8), 4);
                 std::ptr::copy_nonoverlapping(payload.as_ptr(), base.add(12), payload.len());
             }
 
-            // Update sequence number atomically (acts as release fence)
+            // Mark write-complete: increment sequence to make it even
             self.sequence += 1;
-            let seq = unsafe { &*(base as *const AtomicU64) };
             seq.store(self.sequence, Ordering::Release);
 
             Ok(())

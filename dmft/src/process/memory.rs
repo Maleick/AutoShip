@@ -104,8 +104,7 @@ impl ProcessHandle {
         }
 
         let end = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
-        String::from_utf8(buffer[..end].to_vec())
-            .context("Invalid UTF-8 in process string")
+        Ok(String::from_utf8_lossy(&buffer[..end]).into_owned())
     }
 }
 

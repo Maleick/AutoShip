@@ -88,14 +88,17 @@ impl SharedStateReader {
             use std::sync::atomic::{AtomicU64, Ordering};
 
             let base = self._ptr;
-            // Read sequence number atomically
             let seq = unsafe { &*(base as *const AtomicU64) };
-            let seq_val = seq.load(Ordering::Acquire);
-            if seq_val == 0 {
+
+            // 1. Load sequence number with Acquire ordering
+            let seq_before = seq.load(Ordering::Acquire);
+
+            // 2. Sequence 0 means no data yet; odd means write in progress — retry
+            if seq_before == 0 || seq_before % 2 != 0 {
                 return None;
             }
 
-            // Read payload length
+            // 3. Read payload length
             let len_bytes: [u8; 4] = unsafe {
                 std::ptr::read(base.add(8) as *const [u8; 4])
             };
@@ -105,13 +108,21 @@ impl SharedStateReader {
                 return None;
             }
 
-            // Read payload
-            let payload = unsafe {
-                std::slice::from_raw_parts(base.add(12), payload_len)
-            };
+            // 4. Copy payload into a local buffer to avoid referencing shared memory during decode
+            let mut payload_copy = vec![0u8; payload_len];
+            unsafe {
+                std::ptr::copy_nonoverlapping(base.add(12), payload_copy.as_mut_ptr(), payload_len);
+            }
 
+            // 5. Re-check sequence number — if it changed, data may be torn
+            let seq_after = seq.load(Ordering::Acquire);
+            if seq_after != seq_before {
+                return None;
+            }
+
+            // 6. Decode only if both sequence reads match and are even
             let (state, _): (GameState, _) = bincode::serde::decode_from_slice(
-                payload,
+                &payload_copy,
                 bincode::config::standard(),
             )
             .ok()?;

@@ -37,9 +37,9 @@ impl OffsetDatabase {
         self.player_zone.get(name).copied()
     }
 
-    pub fn rebase(&self, preferred_addr: u64, actual_base: u64) -> usize {
-        let offset = preferred_addr - self.eq_preferred_base;
-        (actual_base + offset) as usize
+    pub fn rebase(&self, preferred_addr: u64, actual_base: u64) -> Option<usize> {
+        let offset = preferred_addr.checked_sub(self.eq_preferred_base)?;
+        Some((actual_base + offset) as usize)
     }
 
     /// Create from the current compile-time constants in offsets.rs

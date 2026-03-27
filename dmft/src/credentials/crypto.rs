@@ -8,7 +8,7 @@ use rand::RngCore;
 use zeroize::Zeroizing;
 
 fn argon2_instance() -> Result<Argon2<'static>> {
-    let params = Params::new(65536, 3, 1, Some(32))
+    let params = Params::new(65536, 3, 4, Some(32))
         .map_err(|e| anyhow::anyhow!("invalid argon2 params: {}", e))?;
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
@@ -58,9 +58,9 @@ pub fn decrypt(ciphertext: &[u8], key: &[u8; 32], nonce: &[u8]) -> Result<Vec<u8
         .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))
 }
 
-/// Generate a random 16-byte salt.
-pub fn generate_salt() -> [u8; 16] {
-    let mut salt = [0u8; 16];
+/// Generate a random 32-byte salt.
+pub fn generate_salt() -> [u8; 32] {
+    let mut salt = [0u8; 32];
     OsRng.fill_bytes(&mut salt);
     salt
 }

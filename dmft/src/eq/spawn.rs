@@ -55,7 +55,8 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
 
 /// Read the local player's spawn info.
 pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo> {
-    let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base);
+    let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)
+        .context("rebase underflow for pinstLocalPlayer")?;
     let player_addr = proc.read_ptr(player_ptr_addr)
         .context("Failed to read pinstLocalPlayer pointer")?;
 
@@ -69,7 +70,8 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
 
 /// Read the current target's spawn info, if any.
 pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInfo>> {
-    let target_ptr_addr = offsets::rebase(offsets::PINST_TARGET, eq_base);
+    let target_ptr_addr = offsets::rebase(offsets::PINST_TARGET, eq_base)
+        .context("rebase underflow for pinstTarget")?;
     let target_addr = proc.read_ptr(target_ptr_addr)
         .context("Failed to read pinstTarget pointer")?;
 
@@ -85,7 +87,8 @@ pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInf
 /// Iterate all spawns in the spawn manager's linked list.
 /// Returns up to `max_count` spawns to prevent infinite loops on corrupt data.
 pub fn read_all_spawns(proc: &ProcessHandle, eq_base: u64, max_count: usize) -> Result<Vec<SpawnInfo>> {
-    let mgr_ptr_addr = offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base);
+    let mgr_ptr_addr = offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base)
+        .context("rebase underflow for pinstSpawnManager")?;
     let mgr_addr = proc.read_ptr(mgr_ptr_addr)
         .context("Failed to read pinstSpawnManager pointer")?;
 

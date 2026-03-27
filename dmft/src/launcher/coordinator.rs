@@ -167,9 +167,10 @@ impl LaunchCoordinator {
             let action = sm.advance(event);
             match action {
                 LoginAction::Retry { after: _ } => {
-                    // Find and remove this SM, re-enqueue
+                    // Find and remove this SM, re-enqueue with reset attempts
                     if let Some(idx) = self.active_logins.iter().position(|s| s.client_id == client_id) {
-                        let sm = self.active_logins.remove(idx);
+                        let mut sm = self.active_logins.remove(idx);
+                        sm.attempts = 0;
                         self.launch_queue.push_front((sm.client_id, sm.account_info));
                     }
                 }

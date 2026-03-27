@@ -11,7 +11,7 @@ use super::gcd::GcdTracker;
 use super::holyshit::HolyShitEvaluator;
 use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
-use super::strategy::{build_strategy, ClassStrategy, CombatContext};
+use super::strategy::{build_strategy, ClassStrategy, CombatContext, GroupMemberState};
 
 /// Internal FSM states — not exposed outside this module.
 /// The public-facing status uses `CombatStatus` from dmft-common.
@@ -32,6 +32,10 @@ pub struct Combatant {
     mana_governor: ManaGovernor,
     holyshit: HolyShitEvaluator,
     assist_target: Option<u32>,
+    /// Group member snapshots, populated by the orchestrator via IPC.
+    /// Required for healer strategies (cleric, druid, shaman) to select
+    /// heal targets. Empty until the orchestrator sends group state updates.
+    group_members: Vec<GroupMemberState>,
     tick_count: u32,
     config: CombatConfig,
 }
@@ -60,6 +64,7 @@ impl Combatant {
             mana_governor,
             holyshit,
             assist_target: None,
+            group_members: Vec::new(),
             tick_count: 0,
             config,
         }
@@ -80,7 +85,7 @@ impl Combatant {
             player,
             target,
             nearby_enemies: nearby,
-            group_members: &[], // TODO: populated from orchestrator group state
+            group_members: &self.group_members,
             config: &self.config,
             tick: self.tick_count,
             in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
@@ -121,6 +126,12 @@ impl Combatant {
             }
         }
 
+        // Decrement cast ticks before the state check so the transition fires
+        // on the correct tick (when ticks_remaining reaches 0).
+        if let CombatState::Casting { ticks_remaining, .. } = &mut self.state {
+            *ticks_remaining = ticks_remaining.saturating_sub(1);
+        }
+
         // --- Normal state machine ---
         match &self.state {
             CombatState::Idle => {
@@ -159,12 +170,10 @@ impl Combatant {
                 // If strategy returns None, stay in Engaging and try next tick.
             }
 
-            CombatState::Casting { spell_slot: _, ticks_remaining } => {
-                if *ticks_remaining <= 1 {
+            CombatState::Casting { ticks_remaining, .. } => {
+                if *ticks_remaining == 0 {
                     tracing::trace!("Cast complete, transitioning to OnGcd");
                     self.state = CombatState::OnGcd;
-                } else {
-                    // Decrement happens via mutable reborrow below
                 }
             }
 
@@ -194,12 +203,6 @@ impl Combatant {
             }
         }
 
-        // Decrement cast ticks (must be done mutably after the match)
-        if let CombatState::Casting { ticks_remaining, .. } = &mut self.state {
-            if *ticks_remaining > 0 {
-                *ticks_remaining -= 1;
-            }
-        }
     }
 
     /// Return the public-facing combat status for IPC reporting.
@@ -243,5 +246,12 @@ impl Combatant {
         tracing::info!("Disengaging from combat");
         self.assist_target = None;
         self.state = CombatState::Idle;
+    }
+
+    /// Update group member snapshots (called when the orchestrator sends group state).
+    /// Required for healer strategies to function — without this, healers have no
+    /// targets to evaluate.
+    pub fn set_group_members(&mut self, members: Vec<GroupMemberState>) {
+        self.group_members = members;
     }
 }

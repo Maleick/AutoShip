@@ -98,10 +98,9 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
         unsafe {
             let wait_result = WaitForSingleObject(thread, 10000); // 10s timeout
             if wait_result != WAIT_OBJECT_0 {
-                tracing::warn!("DLL load thread did not complete within timeout");
                 // Don't free remote_buf — safer to leak than crash the target
                 CloseHandle(thread)?;
-                return Ok(());
+                anyhow::bail!("DLL injection timed out — LoadLibrary did not complete within the timeout period");
             }
             CloseHandle(thread)?;
         }

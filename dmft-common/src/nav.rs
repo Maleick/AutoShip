@@ -15,7 +15,9 @@ impl Xorshift32 {
     }
 
     pub fn from_client_id(client_id: u32) -> Self {
-        Self::new(client_id.wrapping_mul(KNUTH_HASH))
+        let seed = client_id.wrapping_mul(KNUTH_HASH);
+        // Xorshift with seed 0 is a fixed point — every call returns 0 forever.
+        Self::new(if seed == 0 { 1 } else { seed })
     }
 
     pub fn next_u32(&mut self) -> u32 {

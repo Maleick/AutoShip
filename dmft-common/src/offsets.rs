@@ -34,9 +34,11 @@ pub const PINST_CDISPLAY: u64 = 0x140E8E450;
 pub const PINST_CEVERQUEST: u64 = 0x140F11758;
 
 /// Convert a preferred-base offset to an actual address given the runtime base.
-pub fn rebase(preferred_addr: u64, actual_base: u64) -> usize {
-    let offset = preferred_addr - EQ_PREFERRED_BASE;
-    (actual_base + offset) as usize
+///
+/// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would underflow).
+pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
+    let offset = preferred_addr.checked_sub(EQ_PREFERRED_BASE)?;
+    Some((actual_base + offset) as usize)
 }
 
 // ─── PlayerClient (SPAWNINFO) field offsets ───

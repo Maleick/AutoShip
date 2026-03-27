@@ -158,6 +158,12 @@ impl LlmRequestQueue {
         results
     }
 
+    /// Pop the next highest-priority request without processing it.
+    /// Returns None if the queue is empty.
+    pub fn pop_next(&mut self, _now_secs: u64) -> Option<LlmRequest> {
+        self.queue.pop().map(|p| p.request)
+    }
+
     /// Number of pending requests.
     pub fn pending_count(&self) -> usize {
         self.queue.len()
