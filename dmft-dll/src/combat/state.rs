@@ -32,6 +32,10 @@ pub struct Combatant {
     mana_governor: ManaGovernor,
     holyshit: HolyShitEvaluator,
     assist_target: Option<u32>,
+    /// Set when a HolyShit Flee action fires. The orchestrator checks this
+    /// via `status()` (which returns `CombatStatus::Fleeing`) to know it
+    /// should send a flee waypoint to the navigator.
+    flee_requested: bool,
     /// Group member snapshots, populated by the orchestrator via IPC.
     /// Required for healer strategies (cleric, druid, shaman) to select
     /// heal targets. Empty until the orchestrator sends group state updates.
@@ -64,6 +68,7 @@ impl Combatant {
             mana_governor,
             holyshit,
             assist_target: None,
+            flee_requested: false,
             group_members: Vec::new(),
             tick_count: 0,
             config,
@@ -118,9 +123,10 @@ impl Combatant {
                     return;
                 }
                 HolyShitAction::Flee => {
-                    tracing::warn!("HolyShit: FLEE triggered");
+                    tracing::warn!("HolyShit: FLEE — disengaging and requesting flee movement");
+                    self.assist_target = None;
+                    self.flee_requested = true;
                     self.state = CombatState::Idle;
-                    // TODO: issue movement command to run away
                     return;
                 }
             }
@@ -207,6 +213,10 @@ impl Combatant {
 
     /// Return the public-facing combat status for IPC reporting.
     pub fn status(&self) -> CombatStatus {
+        if self.flee_requested {
+            return CombatStatus::Fleeing;
+        }
+
         match &self.state {
             CombatState::Idle => CombatStatus::Idle,
             CombatState::Engaging { target_id } => CombatStatus::Engaging {
@@ -253,5 +263,15 @@ impl Combatant {
     /// targets to evaluate.
     pub fn set_group_members(&mut self, members: Vec<GroupMemberState>) {
         self.group_members = members;
+    }
+
+    /// Whether a HolyShit Flee was triggered and not yet acknowledged.
+    pub fn flee_requested(&self) -> bool {
+        self.flee_requested
+    }
+
+    /// Clear the flee flag after the orchestrator has dispatched a flee waypoint.
+    pub fn clear_flee_requested(&mut self) {
+        self.flee_requested = false;
     }
 }

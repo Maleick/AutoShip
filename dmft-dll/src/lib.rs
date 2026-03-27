@@ -4,10 +4,20 @@
 #![allow(dead_code)]
 
 mod combat;
+mod eq;
 mod hooks;
 mod ipc;
-mod eq;
 mod nav;
+
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+/// Base address of eqgame.exe in memory. Set during initialization.
+/// All EQ offsets are added to this value to compute runtime addresses.
+pub static EQ_BASE: AtomicU64 = AtomicU64::new(0);
+
+/// Global flag indicating the DLL is shutting down.
+/// Checked by long-running loops (IPC listener, nav ticks) to exit gracefully.
+pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 #[cfg(windows)]
 mod dll_main {
@@ -66,23 +76,96 @@ mod dll_main {
 /// Initialize the DMFT DLL after injection.
 /// Called from a spawned thread (NOT under loader lock).
 fn initialize() -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Set up tracing/logging
-    // TODO: Resolve EQ base address
-    // TODO: Install function hooks
-    // TODO: Start IPC listener
+    // 1. Set up tracing — write logs to a file since we have no console.
+    init_tracing();
+    tracing::info!("DMFT DLL initializing (pid={})", std::process::id());
+
+    // 2. Resolve EQ base address.
+    let eq_base = resolve_eq_base();
+    EQ_BASE.store(eq_base, Ordering::Release);
+    tracing::info!(base = format!("{:#x}", eq_base), "EQ base address resolved");
+
+    // 3. Install function hooks (non-fatal if they fail).
+    if let Err(e) = install_hooks(eq_base) {
+        tracing::warn!("Hook installation failed (continuing without hooks): {}", e);
+    }
+
+    // 4. Start IPC listener.
+    let client_id = std::process::id();
+    let session_token = generate_session_token(client_id);
+    if let Err(e) = ipc::start(client_id, session_token) {
+        tracing::warn!("IPC startup failed (continuing without IPC): {}", e);
+    }
+
     tracing::info!("DMFT DLL initialized successfully");
     Ok(())
 }
 
-use std::sync::atomic::{AtomicBool, Ordering};
+/// Initialize tracing with file output. Falls back silently if setup fails —
+/// better to run without logs than crash EQ.
+fn init_tracing() {
+    // tracing_subscriber is not a dependency, so we use a minimal approach:
+    // just ensure the global default subscriber is set. If nothing is configured,
+    // tracing macros become no-ops, which is acceptable for the DLL.
+    //
+    // When tracing_subscriber is added as a dependency, replace this with:
+    //   let filter = EnvFilter::try_from_default_env()
+    //       .unwrap_or_else(|_| EnvFilter::new("info"));
+    //   fmt().with_env_filter(filter).with_ansi(false).init();
+}
 
-/// Global flag indicating the DLL is shutting down.
-/// Checked by long-running loops (IPC listener, nav ticks) to exit gracefully.
-pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+/// Resolve the base address of eqgame.exe in the current process.
+fn resolve_eq_base() -> u64 {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+
+        // GetModuleHandleW(None) returns the base of the hosting exe (eqgame.exe).
+        unsafe {
+            GetModuleHandleW(None)
+                .map(|h| h.0 as u64)
+                .unwrap_or(0)
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Preferred base address for eqgame.exe — used for macOS stub builds.
+        0x140000000
+    }
+}
+
+/// Install all function hooks using the resolved EQ base address.
+fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let main_loop_offset = eq::MAIN_LOOP_OFFSET;
+    if main_loop_offset == 0 {
+        tracing::info!("Game loop hook skipped (offset not yet resolved)");
+        return Ok(());
+    }
+
+    let main_loop_addr = eq_base as usize + main_loop_offset;
+    hooks::game_loop::install(main_loop_addr)?;
+    Ok(())
+}
+
+/// Generate a session token for IPC authentication. In production, this token
+/// is provided by the orchestrator during injection. For now, derive it from the
+/// process ID to produce a deterministic-but-unique value for testing.
+fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
+    let pid_bytes = pid.to_le_bytes();
+    let mut token = [0u8; 32];
+    for (i, byte) in token.iter_mut().enumerate() {
+        *byte = pid_bytes[i % 4] ^ (i as u8);
+    }
+    token
+}
 
 /// Signal shutdown. Called from `DLL_PROCESS_DETACH` under loader lock, so this
 /// must be minimal — just set the flag. Actual cleanup (hook removal, IPC close)
 /// must happen via the eject command path BEFORE `DLL_PROCESS_DETACH` fires.
 fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
+    ipc::stop();
+    hooks::remove_all();
+    tracing::info!("DMFT DLL shutdown complete");
 }

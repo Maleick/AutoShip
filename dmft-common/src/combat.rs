@@ -8,6 +8,7 @@ pub enum CombatStatus {
     OnGcd,
     Pulling { target_id: u32 },
     Recovering,
+    Fleeing,
     Dead,
 }
 

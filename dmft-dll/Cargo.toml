@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 [dependencies]
 dmft-common = { path = "../dmft-common" }
 bincode = { version = "2", features = ["serde"] }
+thiserror = "2"
 tracing = "0.1"
 anyhow = "1"
 

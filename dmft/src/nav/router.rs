@@ -77,29 +77,76 @@ pub fn generate_zone_staggers(
     result
 }
 
-/// Determines travel method based on group composition.
-/// Port-first: if druids/wizards available, use ports for long-distance travel.
+/// Coordinates group travel planning, including porter awareness.
+///
+/// Porter classes (Druid = 6, Wizard = 12) can teleport the group for
+/// long-distance travel. When porters are registered and the route spans
+/// multiple zones, the planner should prefer ports over walking.
+pub struct GroupRouter {
+    /// Client IDs of characters that can cast port/teleport spells.
+    porters: Vec<ClientId>,
+}
+
+impl GroupRouter {
+    pub fn new() -> Self {
+        Self {
+            porters: Vec::new(),
+        }
+    }
+
+    /// Register characters that can port the group.
+    /// Typically Druids (class 6) and Wizards (class 12).
+    pub fn set_porters(&mut self, porter_ids: Vec<ClientId>) {
+        tracing::info!(count = porter_ids.len(), "Registered porters for routing");
+        self.porters = porter_ids;
+    }
+
+    /// Whether any porters are available for long-distance travel.
+    pub fn has_porters(&self) -> bool {
+        !self.porters.is_empty()
+    }
+
+    /// Plan travel for a group of characters.
+    ///
+    /// When porters are available and the route is long-distance (multiple zone
+    /// transitions), the planner would prefer PortTo steps over walking. For now,
+    /// port-based routing is a future enhancement — all travel uses staggered
+    /// zone transitions.
+    pub fn plan_travel(
+        &self,
+        client_ids: &[ClientId],
+        _class_map: &HashMap<ClientId, u8>,
+        _from_zone: &str,
+        _to_zone: &str,
+    ) -> Vec<TravelPlan> {
+        // Future: when from_zone and to_zone are far apart (3+ zone transitions)
+        // and self.has_porters(), generate PortTo steps using the nearest porter
+        // instead of walking the full route.
+        let staggers = generate_zone_staggers(client_ids, 5, 60, 42);
+
+        client_ids
+            .iter()
+            .map(|&id| {
+                let delay = staggers.get(&id).copied().unwrap_or(5);
+                TravelPlan::new(
+                    id,
+                    vec![TravelStep::StaggerWait {
+                        min_secs: delay,
+                        max_secs: delay,
+                    }],
+                )
+            })
+            .collect()
+    }
+}
+
+/// Convenience wrapper that creates a one-shot travel plan without porter awareness.
 pub fn plan_group_travel(
     client_ids: &[ClientId],
-    _class_map: &HashMap<ClientId, u8>,
-    _from_zone: &str,
-    _to_zone: &str,
+    class_map: &HashMap<ClientId, u8>,
+    from_zone: &str,
+    to_zone: &str,
 ) -> Vec<TravelPlan> {
-    // TODO: use porters when port coordination is implemented
-    // Porter classes: EqClass::Druid (6), EqClass::Wizard (12)
-    let staggers = generate_zone_staggers(client_ids, 5, 60, 42);
-
-    client_ids
-        .iter()
-        .map(|&id| {
-            let delay = staggers.get(&id).copied().unwrap_or(5);
-            TravelPlan::new(
-                id,
-                vec![TravelStep::StaggerWait {
-                    min_secs: delay,
-                    max_secs: delay,
-                }],
-            )
-        })
-        .collect()
+    let router = GroupRouter::new();
+    router.plan_travel(client_ids, class_map, from_zone, to_zone)
 }
