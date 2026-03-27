@@ -165,5 +165,5 @@ fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
 #[cfg(not(windows))]
 fn get_module_base(_proc: &process::memory::ProcessHandle) -> Result<u64> {
     warn!("Using preferred base address (non-Windows stub)");
-    Ok(eq::offsets::EQ_PREFERRED_BASE)
+    Ok(dmft_common::offsets::EQ_PREFERRED_BASE)
 }

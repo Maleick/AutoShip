@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use crate::process::memory::ProcessHandle;
-use super::offsets::{self, player_base, player_zone, spawn_manager};
+use dmft_common::offsets::{self, player_base, player_zone, spawn_manager};
 use super::structs::{SpawnInfo, SpawnType, EqClass};
 
 /// Read a single spawn's data from the process at the given PlayerClient address.

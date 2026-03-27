@@ -27,17 +27,16 @@ impl ClientManager {
         let pids = crate::process::memory::find_processes_by_name(&self.eq_process_name)?;
         let mut new_clients = Vec::new();
 
-        let existing_pids: Vec<u32> = self.sessions.values().map(|s| s.pid).collect();
-
         for pid in pids {
-            if !existing_pids.contains(&pid) {
-                let id = self.next_client_id;
-                self.next_client_id += 1;
-                let session = EqSession::new(id, pid);
-                tracing::info!(client_id = id, pid, "Discovered new EQ process");
-                self.sessions.insert(id, session);
-                new_clients.push(id);
+            if self.sessions.values().any(|s| s.pid == pid) {
+                continue;
             }
+            let id = self.next_client_id;
+            self.next_client_id += 1;
+            let session = EqSession::new(id, pid);
+            tracing::info!(client_id = id, pid, "Discovered new EQ process");
+            self.sessions.insert(id, session);
+            new_clients.push(id);
         }
 
         Ok(new_clients)

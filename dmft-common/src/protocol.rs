@@ -7,7 +7,10 @@ pub fn encode<T: Serialize>(msg: &T) -> Vec<u8> {
     let payload =
         bincode::serde::encode_to_vec(msg, bincode::config::standard()).unwrap();
     let len = (payload.len() as u32).to_le_bytes();
-    [len.as_slice(), &payload].concat()
+    let mut buf = Vec::with_capacity(4 + payload.len());
+    buf.extend_from_slice(&len);
+    buf.extend_from_slice(&payload);
+    buf
 }
 
 /// Decode a length-prefixed bincode frame from `data`.
