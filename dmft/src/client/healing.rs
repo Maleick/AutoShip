@@ -1,7 +1,6 @@
 //! Self-healing: monitors EQ client health and auto-recovers from crashes.
 
 use dmft_common::types::ClientId;
-use anyhow::Result;
 use std::time::{Duration, Instant};
 
 /// Health status of a monitored EQ client.
@@ -131,16 +130,4 @@ fn is_process_running(_pid: u32) -> bool {
     false // stub — EQ only runs on Windows
 }
 
-/// Launch an EQ client process.
-#[cfg(windows)]
-pub fn launch_eq_client(eq_path: &std::path::Path) -> Result<u32> {
-    // TODO: Implement CreateProcessW to launch eqgame.exe
-    tracing::info!(path = %eq_path.display(), "Launching EQ client (not yet implemented)");
-    anyhow::bail!("EQ client launch not yet implemented")
-}
-
-#[cfg(not(windows))]
-pub fn launch_eq_client(eq_path: &std::path::Path) -> Result<u32> {
-    tracing::warn!(path = %eq_path.display(), "Cannot launch EQ client on this platform");
-    anyhow::bail!("EQ client launch not available on this platform")
-}
+// Process launching has moved to crate::launcher::spawner::spawn_eq_client

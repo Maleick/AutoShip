@@ -23,6 +23,18 @@ pub enum Command {
     SetCamp { spot: crate::nav::CampSpot },
     /// Stop navigating, stay where you are.
     StopNavigation,
+    // Login automation
+    LoginPhaseQuery,
+    // Post-login
+    JoinGroup { group_id: u32 },
+    ApplyBuffs,
+    ReportReady,
+    // Combat
+    CombatEngage { target_id: u32 },
+    CombatDisengage,
+    CombatSetAssistTarget { spawn_id: u32 },
+    CombatForceAbility { ability_id: u32 },
+    CombatEmergencyHeal { target_id: u32 },
     // System
     Ping,
     Eject,
@@ -50,6 +62,15 @@ pub enum Response {
     /// for low-latency notification without polling shared memory.
     NavUpdate {
         status: crate::nav::NavStatus,
+    },
+    LoginPhaseUpdate {
+        phase: crate::login::LoginPhase,
+    },
+    PostLoginComplete {
+        client_id: crate::types::ClientId,
+    },
+    CombatUpdate {
+        status: crate::combat::CombatStatus,
     },
 }
 

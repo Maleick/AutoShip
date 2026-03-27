@@ -10,6 +10,7 @@ pub struct GameState {
     pub nearby_spawns: Vec<SpawnData>,
     pub timestamp_ms: u64,
     pub nav_status: crate::nav::NavStatus,
+    pub combat_status: crate::combat::CombatStatus,
 }
 
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)

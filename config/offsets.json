@@ -1,0 +1,44 @@
+{
+  "client_date": "20260310",
+  "eq_preferred_base": 5368709120,
+  "globals": {
+    "pinstLocalPlayer": 5381186432,
+    "pinstControlledPlayer": 5381186608,
+    "pinstTarget": 5381186600,
+    "pinstSpawnManager": 5381713296,
+    "pinstLocalPC": 5381196200,
+    "pinstSpellManager": 5381719792,
+    "pinstCDisplay": 5381186640,
+    "pinstCEverQuest": 5381732184
+  },
+  "player_base": {
+    "next": 8,
+    "prev": 0,
+    "y": 116,
+    "x": 120,
+    "z": 124,
+    "heading": 144,
+    "speedCurrent": 132,
+    "speedRun": 136,
+    "speedHeading": 156,
+    "name": 180,
+    "displayedName": 244,
+    "standState": 308,
+    "type": 309,
+    "spawnId": 360,
+    "lastName": 72
+  },
+  "player_zone": {
+    "hpMax": 824,
+    "hpCurrent": 928,
+    "manaMax": 940,
+    "manaCurrent": 1020,
+    "level": 1007,
+    "charClass": 1056,
+    "enduranceCurrent": 1272,
+    "enduranceMax": 1336
+  },
+  "spawn_manager": {
+    "playerList": 16
+  }
+}

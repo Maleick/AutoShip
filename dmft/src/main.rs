@@ -2,9 +2,11 @@
 
 mod client;
 mod config;
+mod credentials;
 mod eq;
 mod inject;
 mod ipc;
+mod launcher;
 mod nav;
 mod process;
 mod tui;
