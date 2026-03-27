@@ -16,6 +16,13 @@ pub enum Command {
     // Utility
     Sit,
     Stand,
+    // Navigation
+    /// Follow a sequence of waypoints.
+    NavigateTo { waypoints: Vec<crate::nav::Waypoint> },
+    /// Move to a camp spot and face heading.
+    SetCamp { spot: crate::nav::CampSpot },
+    /// Stop navigating, stay where you are.
+    StopNavigation,
     // System
     Ping,
     Eject,
@@ -35,6 +42,14 @@ pub enum Response {
     },
     Error {
         message: String,
+    },
+    /// Navigation status push notification from the DLL's nav state machine.
+    /// Note: NavStatus is also available in `GameState.nav_status` (shared memory).
+    /// `GameState.nav_status` is authoritative — it is updated every tick.
+    /// `NavUpdate` is sent only on state transitions (Idle→Moving, Moving→Arrived, etc.)
+    /// for low-latency notification without polling shared memory.
+    NavUpdate {
+        status: crate::nav::NavStatus,
     },
 }
 

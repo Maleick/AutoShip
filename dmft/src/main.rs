@@ -5,6 +5,7 @@ mod config;
 mod eq;
 mod inject;
 mod ipc;
+mod nav;
 mod process;
 mod tui;
 

@@ -68,6 +68,20 @@ pub use inner::{install, remove};
 /// Called every game tick after the original MainLoop runs.
 /// This is our main entry point for per-tick logic.
 fn on_game_tick() {
+    // Run navigation state machine.
+    crate::nav::tick();
+
+    // When a command arrives from IPC, dispatch navigation commands:
+    //   match cmd {
+    //       Command::NavigateTo { waypoints } =>
+    //           crate::nav::handle_command(crate::nav::NavCommand::Navigate(waypoints)),
+    //       Command::SetCamp { spot } =>
+    //           crate::nav::handle_command(crate::nav::NavCommand::SetCamp(spot)),
+    //       Command::StopNavigation =>
+    //           crate::nav::handle_command(crate::nav::NavCommand::Stop),
+    //       _ => { /* other command handling */ }
+    //   }
+
     // TODO: Read game state from EQ memory (local player, target, spawns)
     // TODO: Publish state to shared memory via IPC
     // TODO: Check for and execute pending commands from the orchestrator

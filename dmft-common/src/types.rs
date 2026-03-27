@@ -9,6 +9,7 @@ pub struct GameState {
     pub target: Option<SpawnData>,
     pub nearby_spawns: Vec<SpawnData>,
     pub timestamp_ms: u64,
+    pub nav_status: crate::nav::NavStatus,
 }
 
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)
@@ -28,7 +29,10 @@ pub struct SpawnData {
     pub hp_max: i64,
     pub mana_current: i32,
     pub mana_max: i32,
+    /// Signed because EQ can drain endurance below zero internally.
     pub endurance_current: i32,
+    /// Unsigned in the EQ struct (PlayerZoneClient). Do not compare directly
+    /// with endurance_current without casting — signedness differs intentionally.
     pub endurance_max: u32,
 }
 

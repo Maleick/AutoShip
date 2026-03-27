@@ -1,44 +1,101 @@
 //! Movement control -- provides functions to move the player character.
-//! Uses EQ's internal movement functions called from our game loop hook.
-//!
-//! This is a function-call API rather than a detour hook -- we invoke
-//! EQ movement primitives instead of intercepting them.
+//! Writes directly to PlayerClient struct fields in EQ memory.
+//! The game engine reads these values each tick to process movement.
 
-/// Move the character toward a target position.
-/// Called from `on_game_tick()` when a MoveTo command is pending.
-pub fn move_to(x: f32, y: f32, z: f32) {
-    // TODO: Calculate heading to target
-    // TODO: Set movement state (forward/backward/strafe)
-    // TODO: Handle arrival detection (within threshold distance)
-    tracing::trace!(x, y, z, "MoveTo command (not yet implemented)");
+use dmft_common::nav::Waypoint;
+
+/// Arrival threshold in game units (close enough to "be there").
+pub const ARRIVAL_DISTANCE: f32 = 15.0;
+
+/// Calculate heading from current position to target (EQ heading: 0-512, 0=north, increases CW).
+pub fn calc_heading(from: &Waypoint, to: &Waypoint) -> f32 {
+    let dx = to.x - from.x;
+    let dy = to.y - from.y;
+    // EQ uses atan2(-dx, dy) mapped to 0..512
+    let rad = (-dx).atan2(dy);
+    let deg = rad.to_degrees();
+    // Convert -180..180 to 0..512
+    let eq_heading = (deg * 512.0 / 360.0 + 512.0) % 512.0;
+    eq_heading
 }
 
-/// Stop all movement.
-pub fn stop() {
-    // TODO: Clear movement state
-    tracing::trace!("Stop movement (not yet implemented)");
+/// Movement controller state -- holds a pointer to the local player's
+/// PlayerClient struct for direct memory writes.
+///
+/// On non-Windows, all write operations are no-ops logged via tracing.
+pub struct MovementController {
+    /// Base address of the local PlayerClient struct.
+    player_base: usize,
 }
 
-/// Face a specific heading (in EQ degrees).
-pub fn face_heading(heading: f32) {
-    // TODO: Set character heading via memory write
-    tracing::trace!(heading, "Face heading (not yet implemented)");
-}
+impl MovementController {
+    /// Create a new controller targeting the given PlayerClient address.
+    pub fn new(player_base: usize) -> Self {
+        Self { player_base }
+    }
 
-/// Face a target position.
-pub fn face_position(target_x: f32, target_y: f32, current_x: f32, current_y: f32) {
-    let dx = target_x - current_x;
-    let dy = target_y - current_y;
-    let heading = dy.atan2(dx).to_degrees();
-    face_heading(heading);
-}
+    /// Update the player base address (e.g., after zoning).
+    pub fn set_player_base(&mut self, addr: usize) {
+        self.player_base = addr;
+    }
 
-/// Calculate distance between two 3D points.
-pub fn distance_3d(x1: f32, y1: f32, z1: f32, x2: f32, y2: f32, z2: f32) -> f32 {
-    ((x2 - x1).powi(2) + (y2 - y1).powi(2) + (z2 - z1).powi(2)).sqrt()
-}
+    /// Write heading to face a target position.
+    pub fn face_toward(&self, target: &Waypoint, current: &Waypoint) {
+        let heading = calc_heading(current, target);
+        self.write_heading(heading);
+    }
 
-/// Calculate 2D distance (ignoring Z/height).
-pub fn distance_2d(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
-    ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt()
+    /// Write heading value directly.
+    pub fn write_heading(&self, heading: f32) {
+        #[cfg(windows)]
+        unsafe {
+            let addr = self.player_base + dmft_common::offsets::player_base::HEADING;
+            std::ptr::write(addr as *mut f32, heading);
+        }
+        #[cfg(not(windows))]
+        tracing::trace!(heading, "write_heading (stub)");
+    }
+
+    /// Write speed heading (direction of actual movement).
+    pub fn write_speed_heading(&self, heading: f32) {
+        #[cfg(windows)]
+        unsafe {
+            let addr = self.player_base + dmft_common::offsets::player_base::SPEED_HEADING;
+            std::ptr::write(addr as *mut f32, heading);
+        }
+        #[cfg(not(windows))]
+        tracing::trace!(heading, "write_speed_heading (stub)");
+    }
+
+    /// Read current position from the PlayerClient struct.
+    pub fn read_position(&self) -> Waypoint {
+        #[cfg(windows)]
+        unsafe {
+            let base = self.player_base;
+            let y = std::ptr::read((base + dmft_common::offsets::player_base::Y) as *const f32);
+            let x = std::ptr::read((base + dmft_common::offsets::player_base::X) as *const f32);
+            let z = std::ptr::read((base + dmft_common::offsets::player_base::Z) as *const f32);
+            Waypoint::new(x, y, z)
+        }
+        #[cfg(not(windows))]
+        {
+            tracing::trace!("read_position (stub)");
+            Waypoint::new(0.0, 0.0, 0.0)
+        }
+    }
+
+    /// Read current heading.
+    pub fn read_heading(&self) -> f32 {
+        #[cfg(windows)]
+        unsafe {
+            std::ptr::read(
+                (self.player_base + dmft_common::offsets::player_base::HEADING) as *const f32,
+            )
+        }
+        #[cfg(not(windows))]
+        {
+            tracing::trace!("read_heading (stub)");
+            0.0
+        }
+    }
 }

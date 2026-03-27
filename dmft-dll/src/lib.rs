@@ -5,6 +5,7 @@
 mod hooks;
 mod ipc;
 mod eq;
+mod nav;
 
 #[cfg(windows)]
 mod dll_main {

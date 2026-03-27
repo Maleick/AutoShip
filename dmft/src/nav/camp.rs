@@ -1,0 +1,118 @@
+//! Camp position management — assign characters to role-based spots.
+
+use dmft_common::nav::{CampDefinition, CampSpot, Waypoint};
+use dmft_common::types::ClientId;
+use std::collections::HashMap;
+
+/// Manages camp assignments for a group.
+pub struct CampManager {
+    /// Current camp definition (if any).
+    active_camp: Option<CampDefinition>,
+    /// client_id -> assigned role.
+    assignments: HashMap<ClientId, String>,
+}
+
+impl CampManager {
+    pub fn new() -> Self {
+        Self {
+            active_camp: None,
+            assignments: HashMap::new(),
+        }
+    }
+
+    /// Set the active camp and assign characters to spots based on their roles.
+    /// `role_map` maps client_id to their role string (e.g., "tank", "healer1").
+    pub fn set_camp(
+        &mut self,
+        camp: CampDefinition,
+        role_map: &HashMap<ClientId, String>,
+    ) -> Vec<(ClientId, CampSpot)> {
+        let mut result = Vec::new();
+
+        for (client_id, role) in role_map {
+            if let Some(spot) = camp.spots.iter().find(|s| s.role == *role) {
+                self.assignments.insert(*client_id, role.clone());
+                result.push((*client_id, spot.clone()));
+            } else {
+                tracing::warn!(client_id, role = %role, "No camp spot defined for role");
+            }
+        }
+
+        self.active_camp = Some(camp);
+        result
+    }
+
+    /// Get the camp spot for a specific client.
+    pub fn get_spot(&self, client_id: ClientId) -> Option<&CampSpot> {
+        let role = self.assignments.get(&client_id)?;
+        self.active_camp.as_ref()?.spots.iter().find(|s| s.role == *role)
+    }
+
+    /// Clear the active camp.
+    pub fn clear(&mut self) {
+        self.active_camp = None;
+        self.assignments.clear();
+    }
+
+    /// Whether a camp is active.
+    pub fn is_active(&self) -> bool {
+        self.active_camp.is_some()
+    }
+}
+
+/// Helper: create a basic group camp with standard EQ positioning.
+/// Tank in front, healer behind, DPS spread in a semicircle.
+pub fn create_standard_camp(
+    center: Waypoint,
+    pull_heading: f32,
+    num_dps: usize,
+) -> CampDefinition {
+    let mut spots = Vec::new();
+
+    // Tank: 20 units in the pull direction.
+    let pull_rad = pull_heading * std::f32::consts::PI * 2.0 / 512.0;
+    spots.push(CampSpot {
+        position: Waypoint::new(
+            center.x + 20.0 * pull_rad.sin(),
+            center.y + 20.0 * pull_rad.cos(),
+            center.z,
+        ),
+        heading: pull_heading,
+        role: "tank".to_string(),
+    });
+
+    // Healer: 15 units behind center (opposite pull direction).
+    let back_heading = (pull_heading + 256.0) % 512.0;
+    let back_rad = back_heading * std::f32::consts::PI * 2.0 / 512.0;
+    spots.push(CampSpot {
+        position: Waypoint::new(
+            center.x + 15.0 * back_rad.sin(),
+            center.y + 15.0 * back_rad.cos(),
+            center.z,
+        ),
+        heading: pull_heading,
+        role: "healer".to_string(),
+    });
+
+    // DPS: spread in a semicircle behind center.
+    for i in 0..num_dps {
+        let angle_offset = (i as f32 / num_dps as f32 - 0.5) * 128.0; // +/- 45 degrees
+        let dps_heading = (back_heading + angle_offset + 512.0) % 512.0;
+        let dps_rad = dps_heading * std::f32::consts::PI * 2.0 / 512.0;
+        spots.push(CampSpot {
+            position: Waypoint::new(
+                center.x + 18.0 * dps_rad.sin(),
+                center.y + 18.0 * dps_rad.cos(),
+                center.z,
+            ),
+            heading: pull_heading,
+            role: format!("dps{}", i + 1),
+        });
+    }
+
+    CampDefinition {
+        name: "standard".to_string(),
+        zone: String::new(),
+        spots,
+    }
+}

@@ -62,6 +62,14 @@ pub mod player_base {
     pub const NAME: usize = 0x0b4;
     /// char[64] — displayed name (e.g., "Priest of Discord")
     pub const DISPLAYED_NAME: usize = 0x0f4;
+    /// float — current speed (actual, includes modifiers)
+    pub const SPEED_CURRENT: usize = 0x084;
+    /// float — movement speed
+    pub const SPEED_RUN: usize = 0x088;
+    /// float — speed heading (direction of movement)
+    pub const SPEED_HEADING: usize = 0x09c;
+    /// uint8_t — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
+    pub const STANDSTATE: usize = 0x134;
     /// uint8_t — spawn type (PC=0, NPC=1, Corpse=2, etc.)
     pub const TYPE: usize = 0x135;
     /// uint32_t — unique spawn ID
