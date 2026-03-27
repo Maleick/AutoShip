@@ -1,0 +1,19 @@
+# MQ2 reference clone (not part of our project)
+mq2-reference/
+
+# Rust build artifacts
+target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+
+# Added by cargo
+
+/target
