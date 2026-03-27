@@ -159,6 +159,11 @@ dependencies = [
 [[package]]
 name = "dmft-dll"
 version = "0.1.0"
+dependencies = [
+ "dmft-common",
+ "tracing",
+ "windows",
+]
 
 [[package]]
 name = "either"
