@@ -81,6 +81,10 @@ impl CommandListener {
             let (cmd, _) = protocol::decode::<Command>(&buf[..bytes_read as usize])
                 .ok_or_else(|| anyhow::anyhow!("Failed to decode command for client {}", self.client_id))?;
 
+            if !validate_command(&cmd) {
+                anyhow::bail!("Command validation failed for client {}", self.client_id);
+            }
+
             Ok(cmd)
         }
 

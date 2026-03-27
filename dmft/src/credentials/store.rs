@@ -44,7 +44,7 @@ impl CredentialStore {
     /// Add or update an account's encrypted password.
     pub fn add_account(&self, account_name: &str, password: &str) -> Result<()> {
         let salt = crypto::generate_salt();
-        let account_key = crypto::derive_key_from_master(&self.master_key, &salt);
+        let account_key = crypto::derive_key_from_master(&self.master_key, &salt)?;
         let (ciphertext, nonce) = crypto::encrypt(password.as_bytes(), &account_key)?;
 
         self.conn.execute(
@@ -69,7 +69,7 @@ impl CredentialStore {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         ).with_context(|| format!("Account '{}' not found", account_name))?;
 
-        let account_key = crypto::derive_key_from_master(&self.master_key, &salt);
+        let account_key = crypto::derive_key_from_master(&self.master_key, &salt)?;
         let plaintext = crypto::decrypt(&password_enc, &account_key, &nonce)
             .context("Failed to decrypt password")?;
 

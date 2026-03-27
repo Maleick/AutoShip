@@ -7,12 +7,15 @@ use argon2::{Argon2, Algorithm, Version, Params};
 use rand::RngCore;
 use zeroize::Zeroizing;
 
-/// Derive a 32-byte encryption key from a master password and salt using Argon2id.
-pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
+fn argon2_instance() -> Result<Argon2<'static>> {
     let params = Params::new(65536, 3, 1, Some(32))
         .map_err(|e| anyhow::anyhow!("invalid argon2 params: {}", e))?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
+}
 
+/// Derive a 32-byte encryption key from a master password and salt using Argon2id.
+pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
+    let argon2 = argon2_instance()?;
     let mut key = Zeroizing::new([0u8; 32]);
     argon2
         .hash_password_into(master_password.as_bytes(), salt, &mut *key)
@@ -21,15 +24,13 @@ pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 3
 }
 
 /// Derive a per-account encryption key from the master key and a per-account salt using Argon2id.
-pub fn derive_key_from_master(master_key: &[u8; 32], salt: &[u8]) -> [u8; 32] {
-    let params = Params::new(65536, 3, 1, Some(32)).expect("valid argon2 params");
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-
-    let mut key = [0u8; 32];
+pub fn derive_key_from_master(master_key: &[u8; 32], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
+    let argon2 = argon2_instance()?;
+    let mut key = Zeroizing::new([0u8; 32]);
     argon2
-        .hash_password_into(master_key, salt, &mut key)
-        .expect("argon2 per-account key derivation failed");
-    key
+        .hash_password_into(master_key, salt, &mut *key)
+        .map_err(|e| anyhow::anyhow!("argon2 per-account key derivation failed: {}", e))?;
+    Ok(key)
 }
 
 /// Encrypt plaintext using AES-256-GCM. Returns (ciphertext, nonce).

@@ -18,8 +18,8 @@ target/
 
 /target
 
-# Credential databases
+# Credential databases (runtime data, not source code)
 *.db
 *.sqlite
 *.sqlite3
-credentials*
+credentials.db*
