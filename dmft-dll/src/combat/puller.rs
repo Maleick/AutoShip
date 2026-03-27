@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dmft_common::combat::PullMethod;
 use super::strategy::CombatContext;
 
@@ -20,7 +22,7 @@ pub struct Puller {
     method: PullMethod,
     pull_range: f32,
     camp_range: f32,
-    recently_pulled: Vec<u32>,
+    recently_pulled: HashSet<u32>,
 }
 
 impl Puller {
@@ -30,7 +32,7 @@ impl Puller {
             method,
             pull_range: 200.0,
             camp_range: 100.0,
-            recently_pulled: Vec::new(),
+            recently_pulled: HashSet::new(),
         }
     }
 
@@ -45,24 +47,16 @@ impl Puller {
     /// Select the next pull target: closest unengaged NPC within pull range
     /// that hasn't been pulled recently.
     pub fn next_target(&self, ctx: &CombatContext) -> Option<u32> {
-        let player_pos = dmft_common::nav::Waypoint::new(
-            ctx.player.x, ctx.player.y, ctx.player.z,
-        );
-
+        let player_pos = dmft_common::nav::Waypoint::new(ctx.player.x, ctx.player.y, ctx.player.z);
         ctx.nearby_enemies.iter()
             .filter(|npc| !self.recently_pulled.contains(&npc.spawn_id))
-            .filter(|npc| {
-                let npc_pos = dmft_common::nav::Waypoint::new(npc.x, npc.y, npc.z);
-                player_pos.distance_2d(&npc_pos) < self.pull_range
+            .map(|npc| {
+                let dist = player_pos.distance_2d(&dmft_common::nav::Waypoint::new(npc.x, npc.y, npc.z));
+                (npc.spawn_id, dist)
             })
-            .min_by(|a, b| {
-                let pos_a = dmft_common::nav::Waypoint::new(a.x, a.y, a.z);
-                let pos_b = dmft_common::nav::Waypoint::new(b.x, b.y, b.z);
-                let dist_a = player_pos.distance_2d(&pos_a);
-                let dist_b = player_pos.distance_2d(&pos_b);
-                dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|npc| npc.spawn_id)
+            .filter(|(_, dist)| *dist < self.pull_range)
+            .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(id, _)| id)
     }
 
     /// Advance the puller state machine one tick.
@@ -76,7 +70,7 @@ impl Puller {
                 let tid = *target_id;
                 // After 60 ticks (~3 sec), assume pull landed or failed
                 if elapsed > 60 {
-                    self.recently_pulled.push(tid);
+                    self.recently_pulled.insert(tid);
                     self.state = PullerState::Returning;
                     tracing::debug!(target_id = tid, "Pull complete, returning");
                 }

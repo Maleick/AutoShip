@@ -1,4 +1,5 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
+use dmft_common::nav::Waypoint;
 use dmft_common::types::SpawnData;
 
 use super::super::strategy::{ClassStrategy, CombatContext};
@@ -15,9 +16,10 @@ impl WarriorStrategy {
 
     /// Find the nearest NPC from the nearby enemies list based on distance to player.
     fn nearest_enemy<'a>(&self, player: &SpawnData, enemies: &'a [SpawnData]) -> Option<&'a SpawnData> {
+        let player_pos = Waypoint::new(player.x, player.y, player.z);
         enemies.iter().min_by(|a, b| {
-            let dist_a = distance_sq(player, a);
-            let dist_b = distance_sq(player, b);
+            let dist_a = player_pos.distance_2d(&Waypoint::new(a.x, a.y, a.z));
+            let dist_b = player_pos.distance_2d(&Waypoint::new(b.x, b.y, b.z));
             dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
         })
     }
@@ -67,11 +69,4 @@ impl ClassStrategy for WarriorStrategy {
     fn role(&self) -> CombatRole {
         CombatRole::MainTank
     }
-}
-
-fn distance_sq(a: &SpawnData, b: &SpawnData) -> f32 {
-    let dx = a.x - b.x;
-    let dy = a.y - b.y;
-    let dz = a.z - b.z;
-    dx * dx + dy * dy + dz * dz
 }

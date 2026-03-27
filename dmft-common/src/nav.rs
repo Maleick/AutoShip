@@ -4,6 +4,32 @@ use serde::{Deserialize, Serialize};
 /// Knuth multiplicative hash constant for deterministic per-client randomness.
 pub const KNUTH_HASH: u32 = 2654435761;
 
+/// Simple xorshift32 PRNG for deterministic per-client randomness.
+pub struct Xorshift32 {
+    state: u32,
+}
+
+impl Xorshift32 {
+    pub fn new(seed: u32) -> Self {
+        Self { state: seed }
+    }
+
+    pub fn from_client_id(client_id: u32) -> Self {
+        Self::new(client_id.wrapping_mul(KNUTH_HASH))
+    }
+
+    pub fn next_u32(&mut self) -> u32 {
+        self.state ^= self.state << 13;
+        self.state ^= self.state >> 17;
+        self.state ^= self.state << 5;
+        self.state
+    }
+
+    pub fn next_f32(&mut self) -> f32 {
+        (self.next_u32() as f32) / (u32::MAX as f32)
+    }
+}
+
 /// A single point in 3D space with optional metadata.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Waypoint {

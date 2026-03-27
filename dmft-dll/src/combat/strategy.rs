@@ -20,7 +20,6 @@ pub struct CombatContext<'a> {
 #[derive(Debug, Clone)]
 pub struct GroupMemberState {
     pub spawn_id: u32,
-    pub name: String,
     pub hp_pct: f32,
     pub mana_pct: f32,
     pub class_id: u8,
@@ -63,41 +62,5 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
         2 => Box::new(ClericStrategy::new(class_id)),
         14 => Box::new(EnchanterStrategy::new(class_id)),
         _ => Box::new(GenericDpsStrategy::new(class_id, config)),
-    }
-}
-
-struct PlaceholderStrategy {
-    class_id: u8,
-    role: CombatRole,
-    aoe_threshold: u8,
-}
-
-impl ClassStrategy for PlaceholderStrategy {
-    fn class_id(&self) -> u8 {
-        self.class_id
-    }
-
-    fn select_spell(&self, _ctx: &CombatContext) -> Option<SpellEntry> {
-        None
-    }
-
-    fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        ctx.target.map(|t| t.spawn_id)
-    }
-
-    fn should_assist(&self, _ctx: &CombatContext) -> bool {
-        true
-    }
-
-    fn on_engage(&mut self, _ctx: &CombatContext) {}
-
-    fn on_kill(&mut self, _ctx: &CombatContext) {}
-
-    fn aoe_threshold(&self) -> u8 {
-        self.aoe_threshold
-    }
-
-    fn role(&self) -> CombatRole {
-        self.role.clone()
     }
 }

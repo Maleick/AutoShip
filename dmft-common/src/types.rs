@@ -37,6 +37,24 @@ pub struct SpawnData {
     pub endurance_max: u32,
 }
 
+impl SpawnData {
+    pub fn hp_pct(&self) -> f32 {
+        if self.hp_max > 0 {
+            (self.hp_current as f32 / self.hp_max as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+
+    pub fn mana_pct(&self) -> f32 {
+        if self.mana_max > 0 {
+            (self.mana_current as f32 / self.mana_max as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+}
+
 /// Status of the in-process hook inside an EQ client
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum HookStatus {

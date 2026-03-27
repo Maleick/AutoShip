@@ -20,7 +20,7 @@ pub fn has_aggro_on_me(
 
 /// Check if snap aggro is needed (tank role, new mob without aggro).
 pub fn is_snap_aggro_needed(
-    my_spawn_id: u32,
+    _my_spawn_id: u32, // reserved for future aggro list lookup
     is_main_tank: bool,
     target_heading: f32,
     target_pos: &Waypoint,

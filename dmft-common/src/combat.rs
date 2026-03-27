@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CombatStatus {
     Idle,
     Engaging { target_id: u32 },
@@ -11,7 +11,7 @@ pub enum CombatStatus {
     Dead,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CombatRole {
     MainTank,
     OffTank,
@@ -23,14 +23,14 @@ pub enum CombatRole {
     Support,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum PullMethod {
     SpellPull { spell_slot: u8 },
     BowPull,
     ProximityPull,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum AssistMode {
     AssistTrain,
     SplitDps,
