@@ -1,34 +1,98 @@
-# Frostreaver
+# Frostreaver (DMFT)
 
-External process memory reader and multibox controller for EverQuest, built in Rust.
+External process memory reader, DLL injector, and multibox controller for EverQuest, built in Rust.
 
-Frostreaver reads live game state (spawns, HP/mana/position, targets) directly from EQ client memory and displays it in a terminal-based dashboard. Designed to manage up to 36 characters across a TLP multibox setup.
+Frostreaver reads live game state from EQ client memory, injects a DLL for direct control (movement, casting, targeting), and orchestrates up to 36 characters across a TLP multibox setup — complete with AI-driven character personalities.
 
 ## Features
 
-- **Live memory reading** — attaches to `eqgame.exe` processes via Windows API (`ReadProcessMemory`) to extract player, target, and spawn data in real-time
-- **Terminal UI dashboard** — ratatui-based interface with spawn list, player/target panels, hex memory viewer, and filtering
-- **Cross-platform development** — builds and runs on macOS with demo data stubs; full functionality on Windows
-- **Spawn linked list traversal** — walks EQ's internal `TList<PlayerClient*>` to enumerate all entities in a zone
-- **Configurable groups** — TOML-based group/toon definitions for organizing a multibox roster
+- **Live memory reading** — attaches to `eqgame.exe` via `ReadProcessMemory` to extract player, target, and spawn data in real-time
+- **Terminal UI dashboard** — ratatui-based interface with spawn list, player/target panels, hex viewer, and filtering
+- **DLL injection** — Rust `cdylib` injected into each EQ client for internal function hooking and memory writes
+- **IPC** — shared memory (game state) + named pipes (commands) between orchestrator and injected DLLs
+- **Navigation** — waypoint-based pathfinding with humanized movement, stuck detection, and camp positioning
+- **Combat automation** — class-specific strategies (warrior/cleric/enchanter/DPS), HolyShit emergency system, GCD tracking, mana governance
+- **Soul Engine** — AI personality system with Big Five + EQ-themed traits, persistent memory, social graph, idle behaviors
+- **Login automation** — encrypted credential store (AES-256-GCM + Argon2id), staggered launch, post-login sequencing
+- **Cross-platform dev** — builds on macOS with demo data stubs; full functionality on Windows
 
-## Requirements
+## Architecture
 
-- **Rust** (edition 2024)
-- **Windows** for live EQ memory reading (macOS/Linux supported for development with demo data)
+```
+DMFT Workspace (3 crates)
+├── dmft/           — Orchestrator: TUI, process reading, launch coordination, combat/nav coordination
+├── dmft-dll/       — Injected DLL: hooks, combat FSM, navigator FSM, IPC listener
+└── dmft-common/    — Shared types: IPC messages, offsets, combat/nav/soul types
+```
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────┐
+│  dmft.exe (Orchestrator)                        │
+│  ├── TUI Dashboard (ratatui)                    │
+│  ├── Process Discovery (find eqgame.exe)        │
+│  ├── Memory Reading (ReadProcessMemory)         │
+│  ├── DLL Injection (CreateRemoteThread)         │
+│  ├── Combat Coordinator (assist targets, CC)    │
+│  ├── Nav Router (zone routing, camp management) │
+│  ├── Soul Coordinator (personalities, memory)   │
+│  └── Launch Coordinator (login, credentials)    │
+│            │ IPC (shared mem + pipes)            │
+│            ▼                                     │
+│  ┌─────────────────────────────────┐ x36 clients│
+│  │  dmft_dll.dll (per EQ client)   │            │
+│  │  ├── Game Loop Hook             │            │
+│  │  ├── Movement Controller        │            │
+│  │  ├── Targeting Controller       │            │
+│  │  ├── Casting Controller         │            │
+│  │  ├── Combatant FSM              │            │
+│  │  ├── Navigator FSM              │            │
+│  │  └── IPC Publisher/Listener     │            │
+│  └─────────────────────────────────┘            │
+└─────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
+### Development (macOS — demo mode)
+
 ```bash
-# Build
-cargo build
-
-# Run TUI dashboard (demo mode on macOS, live on Windows)
-cargo run
-
-# One-shot CLI dump of player/spawn data
-cargo run -- --dump
+cargo build              # Debug build
+cargo run                # TUI with demo data
+cargo run -- --dump      # One-shot CLI dump
+cargo clippy             # Lint
+cargo fmt --check        # Check formatting
 ```
+
+### Windows Setup (for testing with EQ)
+
+```powershell
+# Open PowerShell as Admin
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+git clone https://github.com/Maleick/DMFT.git
+cd DMFT
+.\scripts\setup-windows.ps1    # Installs Rust, VS Build Tools, builds everything
+.\scripts\test-windows.ps1     # Runs automated tests
+```
+
+### Log Files
+
+- **Orchestrator:** `./logs/dmft.log` (daily rolling)
+- **DLL:** `%TEMP%/dmft/dmft-dll.log` (daily rolling)
+- Set `RUST_LOG=debug` for verbose output
+
+## TUI Keybindings
+
+| Key                | Action                               |
+| ------------------ | ------------------------------------ |
+| `q` / `Ctrl+C`     | Quit                                 |
+| `Tab`              | Switch panel (spawn list / hex dump) |
+| `j` / `k` / arrows | Navigate spawn list                  |
+| `Enter`            | Inspect selected spawn's raw memory  |
+| `/`                | Filter spawns                        |
+| `Esc`              | Clear filter                         |
+| `PgUp` / `PgDn`    | Page through spawn list              |
 
 ## Configuration
 
@@ -48,108 +112,43 @@ class = "WAR"
 role = "main_tank"
 ```
 
-## TUI Keybindings
+### EQ Client Optimization
 
-| Key                | Action                               |
-| ------------------ | ------------------------------------ |
-| `q` / `Ctrl+C`     | Quit                                 |
-| `Tab`              | Switch panel (spawn list / hex dump) |
-| `j` / `k` / arrows | Navigate spawn list                  |
-| `Enter`            | Inspect selected spawn's raw memory  |
-| `/`                | Filter spawns                        |
-| `Esc`              | Clear filter                         |
-| `PgUp` / `PgDn`    | Page through spawn list              |
+For multiboxing, apply `config/eqclient_multibox.ini` to each background client's `eqclient.ini`. Key savings:
 
-## Architecture
+| Setting                     | Impact                                  |
+| --------------------------- | --------------------------------------- |
+| `Sound=FALSE`               | ~30-50MB RAM per client                 |
+| `AllLuclinPcModelsOff=TRUE` | ~100-200MB RAM per client               |
+| `MaxBGFPS=10`               | ~60-80% GPU reduction when backgrounded |
+| All particles = 0           | ~5-15% CPU in group/raid content        |
+| `640x480` windowed          | ~50-80MB VRAM per client                |
 
-```
-src/
-  main.rs          — Entry point, two modes: TUI (default) and dump (--dump)
-  config.rs        — TOML config loading (process name, groups, toons)
-  eq/
-    offsets.rs     — Memory addresses & struct field offsets from MQ2/eqlib headers
-    structs.rs     — SpawnInfo, EqClass, SpawnType data types
-    spawn.rs       — Spawn reading: local player, target, linked list traversal
-  process/
-    memory.rs      — ProcessHandle: open, read, pointer chasing, string reads
-    window.rs      — Window enumeration by title (for future input dispatch)
-  tui/
-    app.rs         — Application state, filtering, navigation
-    ui.rs          — Panel rendering (header, player, target, hex dump, spawn list)
-    run.rs         — Event loop, terminal setup, data refresh, demo data
-    event.rs       — Keyboard input handling
-```
-
-### How Memory Reading Works
-
-EQ stores game entities in a linked list managed by `PlayerManagerClient`. Frostreaver:
-
-1. Finds `eqgame.exe` by process name and opens it with `PROCESS_VM_READ`
-2. Locates the module base address via `EnumProcessModulesEx`
-3. Rebases known pointer addresses from MQ2 headers (preferred base `0x140000000`) to the actual runtime base
-4. Reads global pointers (`pinstLocalPlayer`, `pinstTarget`, `pinstSpawnManager`)
-5. Walks the spawn linked list, reading individual fields (name, HP, class, position, etc.) at their struct offsets
-
-Offsets are derived from the [MacroQuest](https://github.com/macroquest/macroquest) source headers (`eqgame.h`, `PlayerClient.h`).
-
-### Control Architecture (M2+)
-
-Frostreaver uses **DLL injection** to control EQ clients — a Rust-built DLL (`cdylib`) is injected into each `eqgame.exe` process, providing:
-
-- **Internal function hooking** — call EQ's own movement, casting, and targeting functions directly
-- **Memory writes** — modify game state, not just read it
-- **Navigation mesh access** — use EQ's built-in pathfinding for autonomous movement
-- **IPC with orchestrator** — the injected DLL communicates with the main Frostreaver process, which coordinates actions across all 30 clients
-
-This mirrors MacroQuest's approach but implemented from scratch in Rust for learning purposes.
-
-## EQ Client Optimization (Multiboxing)
-
-For 30+ clients on a single machine, background clients must be configured for minimal resource usage. Apply these settings in each background client's `eqclient.ini`:
-
-```ini
-[Defaults]
-StickerFigures=1          # Stick figure models — massive RAM reduction
-ClipPlane=0.5             # Minimum draw distance
-SpellEffects=0            # No spell particles
-ShowNPCNames=FALSE        # Reduce UI overhead
-
-[Display]
-Width=640                 # Minimum resolution
-Height=480
-BackgroundFPS=0.0001      # Freeze rendering when not focused
-ClientCore=-1             # Let OS handle CPU scheduling (don't pin to a core)
-
-[Sound]
-SoundEnabled=0            # Disable all sound
-BGSoundEnabled=0          # No background audio
-MusicEnabled=0
-```
-
-### Windows System Tweaks
-
-| Setting          | Value                                                                       | Why                                |
-| ---------------- | --------------------------------------------------------------------------- | ---------------------------------- |
-| Desktop Heap     | `SharedSection=1024,32768,2048` in registry                                 | Prevents crashes above ~20 windows |
-| iGPU VRAM (BIOS) | Pre-allocated: 512MB–1GB, Max shared: 8GB                                   | Frees RAM for EQ clients           |
-| Pagefile         | 8–16 GB on NVMe (or System Managed)                                         | Required even with 64GB RAM        |
-| CPU Affinity     | [Process Lasso](https://bitsum.com/) — reserve cores 0–1 for OS/Frostreaver | Stable scheduling for 30 clients   |
-
-Registry path for desktop heap: `HKLM\System\CurrentControlSet\Control\Session Manager\SubSystems\Windows`
-
-### Expected Resource Usage (30 clients)
-
-| Mode                               | RAM per Client | Total (30) | GPU VRAM       |
-| ---------------------------------- | -------------- | ---------- | -------------- |
-| Optimized (stick figures, 640x480) | ~300–500 MB    | ~9–15 GB   | ~4–6 GB shared |
-| Default settings                   | ~1.0–1.5 GB    | ~30–45 GB  | ~8–12 GB       |
+**Set eqclient.ini to read-only** after configuring to prevent EQ from reverting settings.
 
 ## Roadmap
 
 - [x] **M1** — External memory reading + TUI dashboard
-- [ ] **M2** — DLL injection into eqgame.exe + internal function hooking (Rust cdylib)
-- [ ] **M3** — Navigation mesh access + autonomous pathfinding
-- [ ] **M4** — Multi-client orchestration, group coordination, automated assist trains, buff rotations
+- [x] **M2** — DLL injection + internal function hooking + IPC + self-healing monitor
+- [x] **M2.5** — Login automation + encrypted credential store + launch coordinator
+- [x] **M3** — Navigation — waypoint pathfinding, humanized movement, stuck detection, camp positioning
+- [x] **M4** — Combat automation — class strategies, HolyShit system, puller FSM, combat coordinator
+- [x] **M5** — Soul Engine — personality traits, persistent memory, social graph, idle behavior (Phase 1)
+- [ ] **M6** — LLM Character AI — scheduled Claude optimization of character behaviors
+- [ ] **M7** — Learning — Claude-as-optimizer with telemetry feedback loops
+- [ ] **M8** — Economy — vendor automation, EC tunnel trading, Bazaar
+
+## Offsets
+
+Memory addresses are derived from [MacroQuest eqlib](https://github.com/macroquest/eqlib) (`live` branch). Current client date: **March 10, 2026**.
+
+Offsets change with every EQ patch. The hot-updatable offset database (`dmft-common/src/offset_db.rs`) supports JSON-based offset loading without recompilation.
+
+## Requirements
+
+- **Rust** (edition 2024, stable MSVC toolchain on Windows)
+- **Windows** for live EQ interaction (macOS/Linux for development only)
+- **Visual Studio Build Tools** (C++ workload) for MSVC linker
 
 ## License
 
