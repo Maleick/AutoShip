@@ -92,6 +92,47 @@ EQ stores game entities in a linked list managed by `PlayerManagerClient`. Frost
 
 Offsets are derived from the [MacroQuest](https://github.com/macroquest/macroquest) source headers (`eqgame.h`, `PlayerClient.h`).
 
+## EQ Client Optimization (Multiboxing)
+
+For 30+ clients on a single machine, background clients must be configured for minimal resource usage. Apply these settings in each background client's `eqclient.ini`:
+
+```ini
+[Defaults]
+StickerFigures=1          # Stick figure models — massive RAM reduction
+ClipPlane=0.5             # Minimum draw distance
+SpellEffects=0            # No spell particles
+ShowNPCNames=FALSE        # Reduce UI overhead
+
+[Display]
+Width=640                 # Minimum resolution
+Height=480
+BackgroundFPS=0.0001      # Freeze rendering when not focused
+ClientCore=-1             # Let OS handle CPU scheduling (don't pin to a core)
+
+[Sound]
+SoundEnabled=0            # Disable all sound
+BGSoundEnabled=0          # No background audio
+MusicEnabled=0
+```
+
+### Windows System Tweaks
+
+| Setting          | Value                                                                       | Why                                |
+| ---------------- | --------------------------------------------------------------------------- | ---------------------------------- |
+| Desktop Heap     | `SharedSection=1024,32768,2048` in registry                                 | Prevents crashes above ~20 windows |
+| iGPU VRAM (BIOS) | Pre-allocated: 512MB–1GB, Max shared: 8GB                                   | Frees RAM for EQ clients           |
+| Pagefile         | 8–16 GB on NVMe (or System Managed)                                         | Required even with 64GB RAM        |
+| CPU Affinity     | [Process Lasso](https://bitsum.com/) — reserve cores 0–1 for OS/Frostreaver | Stable scheduling for 30 clients   |
+
+Registry path for desktop heap: `HKLM\System\CurrentControlSet\Control\Session Manager\SubSystems\Windows`
+
+### Expected Resource Usage (30 clients)
+
+| Mode                               | RAM per Client | Total (30) | GPU VRAM       |
+| ---------------------------------- | -------------- | ---------- | -------------- |
+| Optimized (stick figures, 640x480) | ~300–500 MB    | ~9–15 GB   | ~4–6 GB shared |
+| Default settings                   | ~1.0–1.5 GB    | ~30–45 GB  | ~8–12 GB       |
+
 ## Roadmap
 
 - [x] **M1** — Memory reading + TUI dashboard
