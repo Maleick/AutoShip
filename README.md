@@ -92,6 +92,17 @@ EQ stores game entities in a linked list managed by `PlayerManagerClient`. Frost
 
 Offsets are derived from the [MacroQuest](https://github.com/macroquest/macroquest) source headers (`eqgame.h`, `PlayerClient.h`).
 
+### Control Architecture (M2+)
+
+Frostreaver uses **DLL injection** to control EQ clients — a Rust-built DLL (`cdylib`) is injected into each `eqgame.exe` process, providing:
+
+- **Internal function hooking** — call EQ's own movement, casting, and targeting functions directly
+- **Memory writes** — modify game state, not just read it
+- **Navigation mesh access** — use EQ's built-in pathfinding for autonomous movement
+- **IPC with orchestrator** — the injected DLL communicates with the main Frostreaver process, which coordinates actions across all 30 clients
+
+This mirrors MacroQuest's approach but implemented from scratch in Rust for learning purposes.
+
 ## EQ Client Optimization (Multiboxing)
 
 For 30+ clients on a single machine, background clients must be configured for minimal resource usage. Apply these settings in each background client's `eqclient.ini`:
@@ -135,9 +146,10 @@ Registry path for desktop heap: `HKLM\System\CurrentControlSet\Control\Session M
 
 ## Roadmap
 
-- [x] **M1** — Memory reading + TUI dashboard
-- [ ] **M2** — Input dispatch (PostMessage keystroke sending to EQ windows) + multi-client manager
-- [ ] **M3+** — Group coordination, automated assist trains, buff rotations
+- [x] **M1** — External memory reading + TUI dashboard
+- [ ] **M2** — DLL injection into eqgame.exe + internal function hooking (Rust cdylib)
+- [ ] **M3** — Navigation mesh access + autonomous pathfinding
+- [ ] **M4** — Multi-client orchestration, group coordination, automated assist trains, buff rotations
 
 ## License
 

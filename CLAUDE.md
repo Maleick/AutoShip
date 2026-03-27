@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Frostreaver** is a Rust-based external memory reader for EverQuest (targeting a 36-box multibox setup on the Frostreaver TLP server). It reads EQ client process memory via Windows APIs to extract live game state (spawns, player HP/mana/position, target info) and displays it in a terminal UI.
+**Frostreaver** is a Rust-based EverQuest multibox controller (targeting a 36-box setup on a TLP server). It has two components: an external process that reads game state via `ReadProcessMemory` and displays it in a TUI dashboard, and an injected DLL (`cdylib`) that hooks internal EQ functions for direct control (movement, casting, navigation).
 
 ## Build Commands
 
@@ -34,7 +34,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 
 - **`src/process/`** — OS-level process interaction
   - `memory.rs`: `ProcessHandle` (open, read, read_ptr, chase_ptr, read_string), `find_processes_by_name`
-  - `window.rs`: `find_windows_by_title` — window enumeration for future input dispatch (M2)
+  - `window.rs`: `find_windows_by_title` — window enumeration for client discovery
 - **`src/eq/`** — EverQuest-specific data layer
   - `offsets.rs`: Memory addresses and struct field offsets from MQ2/eqlib headers. All addresses are preferred-base (`0x140000000`) and must be rebased at runtime via `rebase()`
   - `structs.rs`: `SpawnInfo`, `EqClass`, `SpawnType` — high-level data types (not repr(C); built by reading individual fields)
@@ -58,4 +58,11 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 
 ### Milestone context
 
-The project follows a milestone-based plan. M1 (memory reading + TUI) is largely complete. M2 (input dispatch / window sending) is next. Group definitions in the config are scaffolding for later milestones.
+The project follows a milestone-based plan:
+
+- **M1** (complete): External memory reading + TUI dashboard
+- **M2** (next): DLL injection into eqgame.exe + internal function hooking (Rust cdylib)
+- **M3**: Navigation mesh access + autonomous pathfinding
+- **M4**: Multi-client orchestration, group coordination, buff rotations
+
+The control approach uses DLL injection (like MacroQuest) rather than PostMessage — this enables calling internal EQ functions directly, accessing the navigation mesh for pathfinding, and writing to game memory. The MQ2 reference source (`mq2-reference/`) is used both for struct offsets and as architectural reference for hooking patterns. Group definitions in the config are scaffolding for M4.
