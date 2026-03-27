@@ -34,6 +34,11 @@ impl MovementController {
         Self { player_base }
     }
 
+    /// Check if the player base pointer is likely valid (non-null).
+    pub fn is_valid(&self) -> bool {
+        self.player_base != 0
+    }
+
     /// Update the player base address (e.g., after zoning).
     pub fn set_player_base(&mut self, addr: usize) {
         self.player_base = addr;
@@ -49,6 +54,9 @@ impl MovementController {
     pub fn write_heading(&self, heading: f32) {
         #[cfg(windows)]
         unsafe {
+            if self.player_base == 0 {
+                return;
+            }
             let addr = self.player_base + dmft_common::offsets::player_base::HEADING;
             std::ptr::write(addr as *mut f32, heading);
         }
@@ -60,6 +68,9 @@ impl MovementController {
     pub fn write_speed_heading(&self, heading: f32) {
         #[cfg(windows)]
         unsafe {
+            if self.player_base == 0 {
+                return;
+            }
             let addr = self.player_base + dmft_common::offsets::player_base::SPEED_HEADING;
             std::ptr::write(addr as *mut f32, heading);
         }
@@ -71,6 +82,9 @@ impl MovementController {
     pub fn read_position(&self) -> Waypoint {
         #[cfg(windows)]
         unsafe {
+            if self.player_base == 0 {
+                return Waypoint::new(0.0, 0.0, 0.0);
+            }
             let base = self.player_base;
             let y = std::ptr::read((base + dmft_common::offsets::player_base::Y) as *const f32);
             let x = std::ptr::read((base + dmft_common::offsets::player_base::X) as *const f32);
@@ -88,6 +102,9 @@ impl MovementController {
     pub fn read_heading(&self) -> f32 {
         #[cfg(windows)]
         unsafe {
+            if self.player_base == 0 {
+                return 0.0;
+            }
             std::ptr::read(
                 (self.player_base + dmft_common::offsets::player_base::HEADING) as *const f32,
             )

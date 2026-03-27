@@ -18,8 +18,9 @@ pub struct SharedStateReader {
     _size: usize,
 }
 
-// SAFETY: The shared memory region is only accessed via atomic sequence numbers
-// and is effectively a single-writer (DLL), single-reader (orchestrator) channel.
+// SAFETY: SharedStateReader is only accessed from the orchestrator's poll thread (single reader).
+// The sequence number uses AtomicU64 with Acquire ordering as a read fence.
+// The writer side uses Release ordering to ensure the complete payload is visible.
 #[cfg(windows)]
 unsafe impl Send for SharedStateReader {}
 #[cfg(windows)]
@@ -43,6 +44,7 @@ impl SharedStateReader {
                 .encode_utf16()
                 .collect();
 
+            // TODO(security-H2): Open with FILE_MAP_READ only for the reader side.
             let handle = unsafe {
                 CreateFileMappingW(
                     INVALID_HANDLE_VALUE,

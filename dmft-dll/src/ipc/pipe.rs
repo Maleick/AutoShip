@@ -31,6 +31,9 @@ impl CommandListener {
 
             let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
 
+            // TODO(security-H1): Add restrictive security descriptor to limit pipe access
+            // to the current process SID. Implement session token handshake — orchestrator
+            // must present the token written to shared memory at injection time.
             let handle = unsafe {
                 CreateNamedPipeA(
                     PCSTR(pipe_name.as_ptr()),
@@ -107,6 +110,16 @@ impl CommandListener {
             let _ = (self.client_id, response);
             Ok(())
         }
+    }
+}
+
+/// Validate that command parameters are within acceptable bounds.
+pub fn validate_command(cmd: &Command) -> bool {
+    match cmd {
+        Command::CastSpell { spell_slot, .. } => *spell_slot <= 13,
+        Command::MoveTo { x, y, z } => x.is_finite() && y.is_finite() && z.is_finite(),
+        Command::NavigateTo { waypoints } => waypoints.len() <= 1000,
+        _ => true,
     }
 }
 

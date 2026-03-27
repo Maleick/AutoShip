@@ -27,13 +27,6 @@ pub fn cleanup_dll(path: &Path) {
 
 /// Generate a random name that blends in with system DLLs.
 fn generate_random_dll_name() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-
     let prefixes = [
         "msvc", "dx", "d3d", "win", "sys", "rt", "api", "cfg", "net", "sec",
     ];
@@ -41,9 +34,11 @@ fn generate_random_dll_name() -> String {
         "rt", "cfg", "hlp", "svc", "ext", "lib", "mod", "core", "base", "util",
     ];
 
-    let prefix = prefixes[(seed % prefixes.len() as u128) as usize];
-    let suffix = suffixes[((seed / 7) % suffixes.len() as u128) as usize];
-    let num = (seed % 9999) as u32;
+    let r1: u32 = rand::random::<u32>();
+    let r2: u32 = rand::random::<u32>();
+    let prefix = prefixes[(r1 as usize) % prefixes.len()];
+    let suffix = suffixes[(r2 as usize) % suffixes.len()];
+    let num: u32 = rand::random::<u32>() % 10000;
 
     format!("{}_{}{}.dll", prefix, suffix, num)
 }

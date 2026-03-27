@@ -2,13 +2,14 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use rusqlite::Connection;
+use zeroize::Zeroizing;
 
 use super::crypto;
 
 /// Encrypted credential store backed by SQLite.
 pub struct CredentialStore {
     conn: Connection,
-    master_key: [u8; 32],
+    master_key: Zeroizing<[u8; 32]>,
 }
 
 const SCHEMA: &str = "
@@ -30,7 +31,7 @@ CREATE TABLE IF NOT EXISTS meta (
 
 impl CredentialStore {
     /// Open (or create) the credential store at the given path.
-    pub fn open(path: &Path, master_key: [u8; 32]) -> Result<Self> {
+    pub fn open(path: &Path, master_key: Zeroizing<[u8; 32]>) -> Result<Self> {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open credential store at {}", path.display()))?;
 
@@ -43,7 +44,8 @@ impl CredentialStore {
     /// Add or update an account's encrypted password.
     pub fn add_account(&self, account_name: &str, password: &str) -> Result<()> {
         let salt = crypto::generate_salt();
-        let (ciphertext, nonce) = crypto::encrypt(password.as_bytes(), &self.master_key);
+        let account_key = crypto::derive_key_from_master(&self.master_key, &salt);
+        let (ciphertext, nonce) = crypto::encrypt(password.as_bytes(), &account_key)?;
 
         self.conn.execute(
             "INSERT INTO accounts (account_name, password_enc, nonce, salt, updated_at)
@@ -60,17 +62,20 @@ impl CredentialStore {
     }
 
     /// Retrieve and decrypt the password for a given account.
-    pub fn get_password(&self, account_name: &str) -> Result<String> {
-        let (password_enc, nonce): (Vec<u8>, Vec<u8>) = self.conn.query_row(
-            "SELECT password_enc, nonce FROM accounts WHERE account_name = ?1",
+    pub fn get_password(&self, account_name: &str) -> Result<Zeroizing<String>> {
+        let (password_enc, nonce, salt): (Vec<u8>, Vec<u8>, Vec<u8>) = self.conn.query_row(
+            "SELECT password_enc, nonce, salt FROM accounts WHERE account_name = ?1",
             rusqlite::params![account_name],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         ).with_context(|| format!("Account '{}' not found", account_name))?;
 
-        let plaintext = crypto::decrypt(&password_enc, &self.master_key, &nonce)
+        let account_key = crypto::derive_key_from_master(&self.master_key, &salt);
+        let plaintext = crypto::decrypt(&password_enc, &account_key, &nonce)
             .context("Failed to decrypt password")?;
 
-        String::from_utf8(plaintext).context("Decrypted password is not valid UTF-8")
+        let plaintext_str = String::from_utf8(plaintext)
+            .context("Decrypted password is not valid UTF-8")?;
+        Ok(Zeroizing::new(plaintext_str))
     }
 
     /// List all stored account names.

@@ -1,5 +1,9 @@
 use serde::{Serialize, de::DeserializeOwned};
 
+/// Maximum allowed message size (64 KB). Frames larger than this are rejected
+/// during decode to prevent memory exhaustion from malformed or malicious input.
+pub const MAX_MESSAGE_SIZE: u32 = 65536;
+
 /// Encode a message as a length-prefixed bincode frame.
 ///
 /// Layout: `[len: u32 LE][payload: bincode bytes]`
@@ -21,7 +25,11 @@ pub fn decode<T: DeserializeOwned>(data: &[u8]) -> Option<(T, usize)> {
     if data.len() < 4 {
         return None;
     }
-    let len = u32::from_le_bytes(data[..4].try_into().ok()?) as usize;
+    let len_u32 = u32::from_le_bytes(data[..4].try_into().ok()?);
+    if len_u32 > MAX_MESSAGE_SIZE {
+        return None;
+    }
+    let len = len_u32 as usize;
     if data.len() < 4 + len {
         return None;
     }

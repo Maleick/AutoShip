@@ -17,7 +17,9 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
         MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx,
     };
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, PROCESS_ALL_ACCESS,
+        CreateRemoteThread, OpenProcess, WaitForSingleObject, WAIT_OBJECT_0,
+        PROCESS_CREATE_THREAD, PROCESS_VM_OPERATION, PROCESS_VM_WRITE, PROCESS_VM_READ,
+        PROCESS_QUERY_INFORMATION,
     };
     use windows::core::w;
 
@@ -31,7 +33,7 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     let dll_path_bytes = dll_path_wide.len() * 2; // UTF-16 byte count
 
     // Open target process
-    let process = unsafe { OpenProcess(PROCESS_ALL_ACCESS, false, pid) }
+    let process = unsafe { OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid) }
         .context("Failed to open target process")?;
 
     let result = (|| -> Result<()> {
@@ -94,7 +96,13 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
 
         // Wait for the remote thread to complete
         unsafe {
-            windows::Win32::System::Threading::WaitForSingleObject(thread, 10000); // 10s timeout
+            let wait_result = WaitForSingleObject(thread, 10000); // 10s timeout
+            if wait_result != WAIT_OBJECT_0 {
+                tracing::warn!("DLL load thread did not complete within timeout");
+                // Don't free remote_buf — safer to leak than crash the target
+                CloseHandle(thread)?;
+                return Ok(());
+            }
             CloseHandle(thread)?;
         }
 

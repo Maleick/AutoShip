@@ -35,6 +35,10 @@ pub fn spawn_eq_client(
     si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
     let mut pi = PROCESS_INFORMATION::default();
 
+    // ACCEPTED RISK (security-H3): Account name is visible in process command line
+    // via Task Manager. This is required by EQ's patchme launcher (/login: flag).
+    // Mitigation: do not log the full command line. Consider PEB scrubbing
+    // post-launch in a future security hardening pass.
     unsafe {
         CreateProcessW(
             None,
@@ -54,7 +58,7 @@ pub fn spawn_eq_client(
         let pid = pi.dwProcessId;
         let _ = CloseHandle(pi.hProcess);
 
-        tracing::info!(pid, account, server, "Launched EQ client");
+        tracing::info!(pid, account = "[redacted]", server, "Launched EQ client");
         Ok(SpawnedProcess { pid })
     }
 }
@@ -62,13 +66,13 @@ pub fn spawn_eq_client(
 #[cfg(not(windows))]
 pub fn spawn_eq_client(
     eq_path: &Path,
-    account: &str,
+    _account: &str,
     server: &str,
     _extra_args: &[String],
 ) -> Result<SpawnedProcess> {
     tracing::warn!(
         path = %eq_path.display(),
-        account,
+        account = "[redacted]",
         server,
         "spawn_eq_client not available on this platform (stub)"
     );

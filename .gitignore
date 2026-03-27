@@ -17,3 +17,9 @@ target/
 # Added by cargo
 
 /target
+
+# Credential databases
+*.db
+*.sqlite
+*.sqlite3
+credentials*

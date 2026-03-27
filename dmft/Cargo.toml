@@ -19,6 +19,7 @@ aes-gcm = "0.10"
 argon2 = "0.5"
 rpassword = "7"
 rand = "0.8"
+zeroize = { version = "1", features = ["alloc"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.54", features = [

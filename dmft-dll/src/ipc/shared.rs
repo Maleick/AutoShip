@@ -19,6 +19,9 @@ pub struct SharedStateWriter {
     sequence: u64,
 }
 
+// SAFETY: SharedStateWriter is only accessed from the game loop thread (single writer).
+// The sequence number uses AtomicU64 with Release ordering as a write fence.
+// The reader side uses Acquire ordering to observe the complete payload.
 #[cfg(windows)]
 unsafe impl Send for SharedStateWriter {}
 #[cfg(windows)]
@@ -42,6 +45,9 @@ impl SharedStateWriter {
                 .encode_utf16()
                 .collect();
 
+            // TODO(security-H2): Use restrictive DACL on shared memory. Randomize the
+            // memory name instead of using predictable sequential IDs. Add HMAC integrity
+            // check on shared memory contents.
             let handle = unsafe {
                 CreateFileMappingW(
                     INVALID_HANDLE_VALUE,

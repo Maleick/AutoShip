@@ -74,6 +74,11 @@ pub enum Response {
     },
 }
 
+/// Random session token generated at injection time for IPC authentication.
+/// The orchestrator writes this to shared memory; the DLL reads it and
+/// validates it on every pipe connection.
+pub type SessionToken = [u8; 32];
+
 /// Size of shared memory region allocated per client (64 KB)
 pub const SHARED_MEMORY_SIZE: usize = 64 * 1024;
 
