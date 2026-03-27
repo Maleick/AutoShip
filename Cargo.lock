@@ -139,7 +139,9 @@ name = "dmft"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "crossterm",
+ "dmft-common",
  "ratatui",
  "serde",
  "toml",
@@ -160,6 +162,8 @@ dependencies = [
 name = "dmft-dll"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "bincode",
  "dmft-common",
  "tracing",
  "windows",

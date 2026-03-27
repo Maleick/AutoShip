@@ -1,0 +1,127 @@
+//! Named pipe CLIENT (orchestrator side).
+//!
+//! Connects to a named pipe created by the injected DLL and sends commands,
+//! optionally waiting for a response. On non-Windows platforms this is a
+//! compile-only stub.
+
+use dmft_common::ipc::{Command, Response};
+#[cfg(windows)]
+use dmft_common::ipc::PIPE_NAME_PREFIX;
+use dmft_common::types::ClientId;
+#[cfg(windows)]
+use dmft_common::protocol;
+use anyhow::Result;
+
+/// Sends commands to an injected DLL via named pipe.
+pub struct CommandPipe {
+    client_id: ClientId,
+    #[cfg(windows)]
+    handle: windows::Win32::Foundation::HANDLE,
+}
+
+impl CommandPipe {
+    /// Connect to the named pipe for a specific client.
+    ///
+    /// Pipe name: `\\.\pipe\dmft_cmd_{client_id}`
+    pub fn connect(client_id: ClientId) -> Result<Self> {
+        #[cfg(windows)]
+        {
+            use windows::core::PCSTR;
+            use windows::Win32::Storage::FileSystem::{
+                CreateFileA, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING,
+            };
+            use windows::Win32::Foundation::GENERIC_READ;
+
+            let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
+
+            let handle = unsafe {
+                CreateFileA(
+                    PCSTR(pipe_name.as_ptr()),
+                    (GENERIC_READ.0 | windows::Win32::Foundation::GENERIC_WRITE.0).into(),
+                    windows::Win32::Storage::FileSystem::FILE_SHARE_NONE,
+                    None,
+                    OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL,
+                    None,
+                )
+            }?;
+
+            Ok(Self {
+                client_id,
+                handle,
+            })
+        }
+
+        #[cfg(not(windows))]
+        {
+            Ok(Self { client_id })
+        }
+    }
+
+    /// Send a command and wait for response.
+    pub fn send(&self, cmd: &Command) -> Result<Response> {
+        #[cfg(windows)]
+        {
+            use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile};
+
+            let data = protocol::encode(cmd);
+            let mut written: u32 = 0;
+            unsafe {
+                WriteFile(self.handle, Some(&data), Some(&mut written), None)?;
+            }
+
+            // Read response
+            let mut buf = vec![0u8; 4096];
+            let mut bytes_read: u32 = 0;
+            unsafe {
+                ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)?;
+            }
+
+            let (response, _) = protocol::decode::<Response>(&buf[..bytes_read as usize])
+                .ok_or_else(|| anyhow::anyhow!("Failed to decode response from client {}", self.client_id))?;
+
+            Ok(response)
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = (self.client_id, cmd);
+            Ok(Response::Error {
+                message: "Not implemented (non-Windows stub)".into(),
+            })
+        }
+    }
+
+    /// Send a command without waiting for response (fire-and-forget).
+    pub fn send_async(&self, cmd: &Command) -> Result<()> {
+        #[cfg(windows)]
+        {
+            use windows::Win32::Storage::FileSystem::WriteFile;
+
+            let data = protocol::encode(cmd);
+            let mut written: u32 = 0;
+            unsafe {
+                WriteFile(self.handle, Some(&data), Some(&mut written), None)?;
+            }
+            Ok(())
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = (self.client_id, cmd);
+            Ok(())
+        }
+    }
+}
+
+impl Drop for CommandPipe {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        {
+            use windows::Win32::Foundation::CloseHandle;
+            unsafe {
+                let _ = CloseHandle(self.handle);
+            }
+        }
+    }
+}

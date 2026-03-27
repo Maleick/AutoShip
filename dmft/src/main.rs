@@ -3,6 +3,7 @@
 mod config;
 mod eq;
 mod inject;
+mod ipc;
 mod process;
 mod tui;
 

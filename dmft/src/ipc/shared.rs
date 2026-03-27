@@ -1,0 +1,144 @@
+//! Shared memory READER (orchestrator side).
+//!
+//! Reads game state published by the injected DLL via a named shared memory
+//! region. On Windows this uses CreateFileMappingW / MapViewOfFile; on other
+//! platforms it returns an empty stub so the project compiles.
+
+use dmft_common::types::{ClientId, GameState};
+use anyhow::Result;
+
+/// Reads game state from shared memory for a specific client.
+pub struct SharedStateReader {
+    client_id: ClientId,
+    #[cfg(windows)]
+    _handle: windows::Win32::Foundation::HANDLE,
+    #[cfg(windows)]
+    _ptr: *mut u8,
+    #[cfg(windows)]
+    _size: usize,
+}
+
+// SAFETY: The shared memory region is only accessed via atomic sequence numbers
+// and is effectively a single-writer (DLL), single-reader (orchestrator) channel.
+#[cfg(windows)]
+unsafe impl Send for SharedStateReader {}
+#[cfg(windows)]
+unsafe impl Sync for SharedStateReader {}
+
+impl SharedStateReader {
+    /// Open (or create) the named shared memory region for `client_id`.
+    ///
+    /// Memory name: `dmft_state_{client_id}`
+    pub fn new(client_id: ClientId) -> Result<Self> {
+        #[cfg(windows)]
+        {
+            use dmft_common::ipc::SHARED_MEMORY_SIZE;
+            use windows::core::PCWSTR;
+            use windows::Win32::System::Memory::{
+                CreateFileMappingW, MapViewOfFile, FILE_MAP_READ, PAGE_READWRITE,
+            };
+            use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
+
+            let name: Vec<u16> = format!("dmft_state_{}\0", client_id)
+                .encode_utf16()
+                .collect();
+
+            let handle = unsafe {
+                CreateFileMappingW(
+                    INVALID_HANDLE_VALUE,
+                    None,
+                    PAGE_READWRITE,
+                    0,
+                    SHARED_MEMORY_SIZE as u32,
+                    PCWSTR(name.as_ptr()),
+                )
+            }?;
+
+            let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_READ, 0, 0, SHARED_MEMORY_SIZE) };
+            if ptr.Value.is_null() {
+                anyhow::bail!("MapViewOfFile returned null for client {}", client_id);
+            }
+
+            Ok(Self {
+                client_id,
+                _handle: handle,
+                _ptr: ptr.Value as *mut u8,
+                _size: SHARED_MEMORY_SIZE,
+            })
+        }
+
+        #[cfg(not(windows))]
+        {
+            Ok(Self { client_id })
+        }
+    }
+
+    /// Read the latest game state. Returns `None` if no data is available yet.
+    ///
+    /// The shared memory layout is:
+    /// ```text
+    /// [sequence: u64 LE][payload_len: u32 LE][payload: bincode bytes]
+    /// ```
+    /// A zero sequence number means the DLL hasn't written yet.
+    pub fn read(&self) -> Option<GameState> {
+        #[cfg(windows)]
+        {
+            use std::sync::atomic::{AtomicU64, Ordering};
+
+            let base = self._ptr;
+            // Read sequence number atomically
+            let seq = unsafe { &*(base as *const AtomicU64) };
+            let seq_val = seq.load(Ordering::Acquire);
+            if seq_val == 0 {
+                return None;
+            }
+
+            // Read payload length
+            let len_bytes: [u8; 4] = unsafe {
+                std::ptr::read(base.add(8) as *const [u8; 4])
+            };
+            let payload_len = u32::from_le_bytes(len_bytes) as usize;
+
+            if payload_len == 0 || payload_len > self._size - 12 {
+                return None;
+            }
+
+            // Read payload
+            let payload = unsafe {
+                std::slice::from_raw_parts(base.add(12), payload_len)
+            };
+
+            let (state, _): (GameState, _) = bincode::serde::decode_from_slice(
+                payload,
+                bincode::config::standard(),
+            )
+            .ok()?;
+
+            Some(state)
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = self.client_id;
+            None
+        }
+    }
+}
+
+impl Drop for SharedStateReader {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        {
+            use windows::Win32::System::Memory::UnmapViewOfFile;
+            use windows::Win32::Foundation::CloseHandle;
+
+            unsafe {
+                let view = windows::Win32::System::Memory::MEMORY_MAPPED_VIEW_ADDRESS {
+                    Value: self._ptr as *mut _,
+                };
+                let _ = UnmapViewOfFile(view);
+                let _ = CloseHandle(self._handle);
+            }
+        }
+    }
+}

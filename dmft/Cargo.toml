@@ -5,6 +5,8 @@ edition = "2024"
 description = "External process memory reader for EverQuest (Frostreaver TLP 36-box)"
 
 [dependencies]
+dmft-common = { path = "../dmft-common" }
+bincode = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 tracing = "0.1"
@@ -22,4 +24,6 @@ windows = { version = "0.54", features = [
     "Win32_System_ProcessStatus",
     "Win32_System_Memory",
     "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
+    "Win32_Storage_FileSystem",
 ] }
