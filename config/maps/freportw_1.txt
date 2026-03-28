@@ -1,0 +1,10 @@
+# West Freeport - Labels (Layer 1)
+P -250, 200, 0, 0, 127, 0, 2, Theater_of_the_Tranquil
+P 200, -400, 0, 0, 127, 0, 2, Hogcaller's_Inn
+P 225, 150, 0, 0, 127, 0, 2, Coalition_of_Tradefolk
+P -250, -400, 0, 128, 128, 128, 2, Militia_House
+P 0, 400, 0, 255, 0, 0, 3, To_North_Freeport
+P 0, -600, 0, 255, 0, 0, 3, To_East_Commonlands
+P -100, -50, 0, 0, 127, 0, 1, Merchant_Yilia
+P 150, -150, 0, 0, 127, 0, 1, Merchant_Gord
+P -200, -200, 0, 255, 210, 0, 2, Banker_Narehl

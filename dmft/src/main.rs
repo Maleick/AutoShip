@@ -42,8 +42,11 @@ fn main() -> Result<()> {
 
     let args: Vec<String> = std::env::args().collect();
     let dump_mode = args.iter().any(|a| a == "--dump");
+    let inject_mode = args.iter().any(|a| a == "--inject" || a == "inject");
 
-    if dump_mode {
+    if inject_mode {
+        run_inject_mode()
+    } else if dump_mode {
         run_dump_mode()
     } else {
         run_tui_mode()
@@ -104,6 +107,79 @@ fn run_tui_mode() -> Result<()> {
     }
 
     tui::run::run_tui(app)
+}
+
+/// Inject mode (--inject) — find eqgame.exe processes and inject dmft_dll.dll into each.
+fn run_inject_mode() -> Result<()> {
+    info!("DMFT inject mode — finding EQ processes...");
+
+    let config = load_config()?;
+    let pids = process::memory::find_processes_by_name(&config.process_name)?;
+
+    if pids.is_empty() {
+        println!("No {} processes found. Launch EQ first.", config.process_name);
+        return Ok(());
+    }
+
+    println!("Found {} EQ process(es): {:?}", pids.len(), pids);
+
+    // Locate the DLL — check release first, then debug
+    let project_dir = std::env::current_dir().unwrap_or_default();
+    let dll_candidates = [
+        project_dir.join("target/release/dmft_dll.dll"),
+        project_dir.join("target/debug/dmft_dll.dll"),
+    ];
+
+    let source_dll = dll_candidates
+        .iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| anyhow::anyhow!(
+            "Cannot find dmft_dll.dll. Run `cargo build --release` first."
+        ))?;
+
+    println!("Using DLL: {}", source_dll.display());
+
+    // Stage the DLL (copies with randomized name)
+    let staged_dll = inject::dll_prep::prepare_dll(source_dll)?;
+    println!("Staged DLL: {}", staged_dll.display());
+
+    let mut success = 0u32;
+    let mut failed = 0u32;
+
+    for &pid in &pids {
+        print!("Injecting into PID {}... ", pid);
+        match inject::loader::inject_dll(pid, &staged_dll) {
+            Ok(()) => {
+                println!("OK");
+                info!(pid, "Injection succeeded");
+                success += 1;
+            }
+            Err(e) => {
+                println!("FAILED: {:#}", e);
+                error!(pid, error = %e, "Injection failed");
+                failed += 1;
+            }
+        }
+    }
+
+    println!();
+    println!("Results: {} succeeded, {} failed", success, failed);
+    println!();
+    println!("Log locations:");
+    println!("  Orchestrator: logs/dmft.log");
+    #[cfg(windows)]
+    {
+        let temp = std::env::temp_dir();
+        println!("  DLL (injected): {}\\dmft\\dmft-dll.log", temp.display());
+    }
+    #[cfg(not(windows))]
+    {
+        println!("  DLL (injected): $TMPDIR/dmft/dmft-dll.log");
+    }
+    println!();
+    println!("Run scripts\\verify_injection.bat to check injection status.");
+
+    Ok(())
 }
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.

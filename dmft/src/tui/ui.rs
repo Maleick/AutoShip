@@ -467,85 +467,162 @@ fn draw_map_screen(frame: &mut Frame, area: Rect, app: &App) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(60), // Map scatter
-            Constraint::Percentage(40), // Spawn position list
+            Constraint::Percentage(70), // Map view
+            Constraint::Percentage(30), // Spawn position list
         ])
         .split(area);
 
-    draw_map_scatter(frame, cols[0], app);
+    draw_map_view(frame, cols[0], app);
     draw_map_spawn_list(frame, cols[1], app);
 }
 
-fn draw_map_scatter(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_map_view(frame: &mut Frame, area: Rect, app: &App) {
+    let zone_label = app
+        .active_client()
+        .map(|c| c.zone_name.as_str())
+        .unwrap_or("Unknown");
+    let map_info = app
+        .zone_map
+        .as_ref()
+        .map(|m| format!(" Map: {} ({} lines, {} labels) ", zone_label, m.lines.len(), m.points.len()))
+        .unwrap_or_else(|| format!(" Map: {} (no map data) ", zone_label));
+
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Zone Map (coordinate scatter) ")
+        .title(map_info)
         .border_style(Style::default().fg(Color::Cyan));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let spawns = &app.spawns;
-    if spawns.is_empty() {
-        let paragraph = Paragraph::new("No spawns to display")
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(paragraph, inner);
+    let w = inner.width as usize;
+    let h = inner.height as usize;
+    if w == 0 || h == 0 {
         return;
     }
 
-    // Find bounding box
-    let (mut min_x, mut max_x, mut min_y, mut max_y) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
-    for s in spawns {
-        if s.x < min_x { min_x = s.x; }
-        if s.x > max_x { max_x = s.x; }
-        if s.y < min_y { min_y = s.y; }
-        if s.y > max_y { max_y = s.y; }
-    }
-
-    let range_x = (max_x - min_x).max(1.0);
-    let range_y = (max_y - min_y).max(1.0);
-    let width = inner.width as f32;
-    let height = inner.height as f32;
-
-    // Build a character grid
-    let w = inner.width as usize;
-    let h = inner.height as usize;
-    // Each cell: (char, color)
+    // Each cell: (char, Color)
     let mut grid: Vec<Vec<(char, Color)>> = vec![vec![(' ', Color::DarkGray); w]; h];
 
-    for spawn in spawns {
-        let sx = ((spawn.x - min_x) / range_x * (width - 1.0)) as usize;
-        let sy = ((spawn.y - min_y) / range_y * (height - 1.0)) as usize;
-        let sx = sx.min(w.saturating_sub(1));
-        let sy = sy.min(h.saturating_sub(1));
-
-        let (ch, color) = match spawn.spawn_type {
-            SpawnType::Player => ('@', Color::Green),
-            SpawnType::Npc => {
-                if !spawn.displayed_name.starts_with("a ")
-                    && !spawn.displayed_name.starts_with("an ")
-                {
-                    ('!', Color::Yellow) // Named NPC
-                } else {
-                    ('*', Color::White)
-                }
-            }
-            SpawnType::Corpse => ('.', Color::DarkGray),
-            SpawnType::Unknown(_) => ('?', Color::Red),
+    // Determine center and scale from zone map or spawn data
+    let (center_x, center_y, scale_x, scale_y) = if let Some(map) = &app.zone_map {
+        // Center on player if available, otherwise center on map bounds
+        let (cx, cy) = if let Some(player) = &app.local_player {
+            // Map coords: (-locY, -locX)
+            (-player.y, -player.x)
+        } else {
+            (map.bounds.center_x(), map.bounds.center_y())
         };
 
-        grid[sy][sx] = (ch, color);
+        // Scale to fit the map with some margin, using the larger dimension
+        let map_w = map.bounds.width();
+        let map_h = map.bounds.height();
+        // Use uniform scale based on the dimension that needs more room
+        let sx = (w as f32 - 2.0) / map_w;
+        let sy = (h as f32 - 2.0) / map_h;
+        let uniform_scale = sx.min(sy);
+        (cx, cy, uniform_scale, uniform_scale)
+    } else {
+        // Fallback: use spawn bounding box (old behavior)
+        let spawns = &app.spawns;
+        if spawns.is_empty() {
+            let paragraph = Paragraph::new("No map or spawn data")
+                .style(Style::default().fg(Color::DarkGray));
+            frame.render_widget(paragraph, inner);
+            return;
+        }
+        let (mut min_x, mut max_x, mut min_y, mut max_y) =
+            (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+        for s in spawns {
+            let mx = -s.y;
+            let my = -s.x;
+            if mx < min_x { min_x = mx; }
+            if mx > max_x { max_x = mx; }
+            if my < min_y { min_y = my; }
+            if my > max_y { max_y = my; }
+        }
+        let range_x = (max_x - min_x).max(1.0);
+        let range_y = (max_y - min_y).max(1.0);
+        let cx = (min_x + max_x) / 2.0;
+        let cy = (min_y + max_y) / 2.0;
+        let sx = (w as f32 - 2.0) / range_x;
+        let sy = (h as f32 - 2.0) / range_y;
+        let uniform = sx.min(sy);
+        (cx, cy, uniform, uniform)
+    };
+
+    // Helper: convert map coords to grid (col, row)
+    let to_grid = |mx: f32, my: f32| -> (i32, i32) {
+        let col = ((mx - center_x) * scale_x + w as f32 / 2.0) as i32;
+        let row = ((my - center_y) * scale_y + h as f32 / 2.0) as i32;
+        (col, row)
+    };
+
+    // Rasterize zone map lines using Bresenham's
+    if let Some(map) = &app.zone_map {
+        for ml in &map.lines {
+            let (c1, r1) = to_grid(ml.x1, ml.y1);
+            let (c2, r2) = to_grid(ml.x2, ml.y2);
+            let color = map_rgb_to_color(ml.r, ml.g, ml.b);
+            bresenham_line(c1, r1, c2, r2, w, h, &mut grid, color);
+        }
+
+        // Render point labels (just the first character as a marker)
+        for mp in &map.points {
+            let (col, row) = to_grid(mp.x, mp.y);
+            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+                let color = map_rgb_to_color(mp.r, mp.g, mp.b);
+                // Place a label marker and try to render abbreviated text
+                let label_char = if mp.label.is_empty() { '*' } else { mp.label.chars().next().unwrap_or('*') };
+                grid[row as usize][col as usize] = (label_char, color);
+
+                // Render up to 12 chars of label text after the marker
+                let label_text: String = mp.label.chars().take(12).collect();
+                for (i, ch) in label_text.chars().enumerate() {
+                    let lc = col as usize + 1 + i;
+                    if lc < w && grid[row as usize][lc].0 == ' ' {
+                        grid[row as usize][lc] = (ch, color);
+                    }
+                }
+            }
+        }
     }
 
-    // Mark local player with a special character
+    // Overlay spawns
+    for spawn in &app.spawns {
+        let mx = -spawn.y; // map X = -locY
+        let my = -spawn.x; // map Y = -locX
+        let (col, row) = to_grid(mx, my);
+        if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+            let (ch, color) = match spawn.spawn_type {
+                SpawnType::Player => ('@', Color::Green),
+                SpawnType::Npc => {
+                    if !spawn.displayed_name.starts_with("a ")
+                        && !spawn.displayed_name.starts_with("an ")
+                    {
+                        ('!', Color::Yellow)
+                    } else {
+                        ('*', Color::White)
+                    }
+                }
+                SpawnType::Corpse => ('.', Color::DarkGray),
+                SpawnType::Unknown(_) => ('?', Color::Red),
+            };
+            grid[row as usize][col as usize] = (ch, color);
+        }
+    }
+
+    // Mark local player on top
     if let Some(player) = &app.local_player {
-        let sx = ((player.x - min_x) / range_x * (width - 1.0)) as usize;
-        let sy = ((player.y - min_y) / range_y * (height - 1.0)) as usize;
-        let sx = sx.min(w.saturating_sub(1));
-        let sy = sy.min(h.saturating_sub(1));
-        grid[sy][sx] = ('+', Color::Cyan);
+        let mx = -player.y;
+        let my = -player.x;
+        let (col, row) = to_grid(mx, my);
+        if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+            grid[row as usize][col as usize] = ('+', Color::LightCyan);
+        }
     }
 
+    // Render grid to terminal
     let lines: Vec<Line<'_>> = grid
         .into_iter()
         .map(|row| {
@@ -559,6 +636,83 @@ fn draw_map_scatter(frame: &mut Frame, area: Rect, app: &App) {
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, inner);
+}
+
+/// Map RGB from map file to a ratatui Color.
+fn map_rgb_to_color(r: u8, g: u8, b: u8) -> Color {
+    // Use true color for non-black colors; black lines become dark gray for visibility
+    if r == 0 && g == 0 && b == 0 {
+        Color::DarkGray
+    } else {
+        Color::Rgb(r, g, b)
+    }
+}
+
+/// Bresenham's line algorithm — rasterize a line onto the character grid.
+fn bresenham_line(
+    x0: i32, y0: i32, x1: i32, y1: i32,
+    w: usize, h: usize,
+    grid: &mut [Vec<(char, Color)>],
+    color: Color,
+) {
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
+    let sx: i32 = if x0 < x1 { 1 } else { -1 };
+    let sy: i32 = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    let mut cx = x0;
+    let mut cy = y0;
+
+    // Safety limit to prevent runaway loops on huge off-screen lines
+    let max_steps = (dx.unsigned_abs() + dy.unsigned_abs() + 1).min(10_000) as usize;
+
+    for _ in 0..max_steps {
+        // Plot if in bounds and cell is empty (don't overwrite spawns)
+        if cx >= 0 && cx < w as i32 && cy >= 0 && cy < h as i32 {
+            let ux = cx as usize;
+            let uy = cy as usize;
+            if grid[uy][ux].0 == ' ' {
+                // Pick a line character based on slope direction
+                let ch = line_char(x0, y0, x1, y1);
+                grid[uy][ux] = (ch, color);
+            }
+        }
+
+        if cx == x1 && cy == y1 {
+            break;
+        }
+
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            cx += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            cy += sy;
+        }
+    }
+}
+
+/// Choose a line-drawing character based on the line's overall direction.
+fn line_char(x0: i32, y0: i32, x1: i32, y1: i32) -> char {
+    let dx = (x1 - x0).abs();
+    let dy = (y1 - y0).abs();
+    if dx == 0 && dy == 0 {
+        '·'
+    } else if dy == 0 {
+        '─'
+    } else if dx == 0 {
+        '│'
+    } else if dx > dy * 2 {
+        '─'
+    } else if dy > dx * 2 {
+        '│'
+    } else {
+        // Diagonal — pick / or \ based on slope direction
+        let slope_positive = (x1 - x0).signum() != (y1 - y0).signum();
+        if slope_positive { '/' } else { '\\' }
+    }
 }
 
 fn draw_map_spawn_list(frame: &mut Frame, area: Rect, app: &App) {

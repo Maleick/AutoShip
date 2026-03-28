@@ -1,0 +1,8 @@
+# Permafrost Caverns - Labels (Layer 1)
+P 0, -350, 0, 255, 0, 0, 3, Zone_In
+P 0, 0, 0, 128, 128, 128, 2, Main_Hall
+P 0, 650, 0, 128, 0, 0, 2, Lady_Vox_(Named)
+P 700, 0, 0, 128, 128, 128, 2, East_Room
+P -600, 0, 0, 128, 128, 128, 2, West_Room
+P 450, 0, 0, 70, 130, 180, 1, Ice_Bridge
+P -200, -100, 0, 0, 127, 0, 1, Merchant_Theron

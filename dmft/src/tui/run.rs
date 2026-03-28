@@ -477,6 +477,24 @@ fn load_demo_data(app: &mut App) {
 
     // Sync selected client to legacy fields
     app.sync_from_selected_client();
+
+    // Load zone map for the first client's zone
+    if !app.clients.is_empty() {
+        let zone = zone_to_short_name(&app.clients[0].zone_name);
+        app.load_zone_map(&zone);
+    }
+}
+
+/// Convert a zone display name to its short name for map file lookup.
+/// In a full implementation this would use an EQ zone table; for now, simple lowercase mapping.
+fn zone_to_short_name(zone_name: &str) -> String {
+    match zone_name.to_lowercase().as_str() {
+        "permafrost" | "permafrost caverns" | "permafrost keep" => "permafrost".to_string(),
+        "east commonlands" | "eastern commonlands" => "ecommons".to_string(),
+        "west freeport" | "west freeport gates" => "freportw".to_string(),
+        "eastern wastes" => "eastwastes".to_string(),
+        _ => zone_name.to_lowercase().replace(' ', ""),
+    }
 }
 
 /// Tick the Soul Engine coordinator (if enabled).

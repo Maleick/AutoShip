@@ -1,0 +1,10 @@
+# East Commonlands - Labels (Layer 1)
+P 0, 0, 0, 255, 0, 0, 3, EC_Tunnel
+P -450, 0, 0, 128, 128, 128, 2, Guard_Tower
+P -1700, 1700, 0, 128, 255, 0, 2, Druid_Ring
+P 3000, 0, 0, 255, 0, 0, 3, To_West_Freeport
+P -3000, 0, 0, 255, 0, 0, 3, To_Nektulos_Forest
+P 1550, 0, 0, 70, 130, 180, 2, River
+P 500, -1500, 0, 128, 0, 0, 2, Broon_(Named)
+P -1000, -800, 0, 128, 0, 0, 2, Bonecracker_(Named)
+P 100, 0, 0, 0, 127, 0, 1, Merchant_Rashinda

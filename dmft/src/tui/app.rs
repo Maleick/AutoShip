@@ -1,3 +1,4 @@
+use crate::eq::map_parser::ZoneMap;
 use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::soul::coordinator::SoulCoordinator;
 
@@ -143,6 +144,10 @@ pub struct App {
     pub soul_coordinator: Option<SoulCoordinator>,
     pub soul_tick_counter: u64,
 
+    // Zone map data
+    pub zone_map: Option<ZoneMap>,
+    pub map_dir: std::path::PathBuf,
+
     // Privacy mode — hides own character names and server for screenshots
     pub privacy_mode: bool,
 }
@@ -182,6 +187,9 @@ impl App {
 
             soul_coordinator: None,
             soul_tick_counter: 0,
+
+            zone_map: None,
+            map_dir: std::path::PathBuf::from("config/maps"),
 
             privacy_mode: false,
         }
@@ -354,5 +362,28 @@ impl App {
             ActivePanel::SpawnList => ActivePanel::HexDump,
             ActivePanel::HexDump => ActivePanel::SpawnList,
         };
+    }
+
+    /// Load the zone map for the given zone short name from the map directory.
+    pub fn load_zone_map(&mut self, zone_short_name: &str) {
+        match crate::eq::map_parser::load_zone_map(&self.map_dir, zone_short_name) {
+            Ok(map) if !map.lines.is_empty() => {
+                tracing::info!(
+                    zone = zone_short_name,
+                    lines = map.lines.len(),
+                    points = map.points.len(),
+                    "Loaded zone map"
+                );
+                self.zone_map = Some(map);
+            }
+            Ok(_) => {
+                tracing::debug!(zone = zone_short_name, "No map data found for zone");
+                self.zone_map = None;
+            }
+            Err(e) => {
+                tracing::warn!(zone = zone_short_name, error = %e, "Failed to load zone map");
+                self.zone_map = None;
+            }
+        }
     }
 }
