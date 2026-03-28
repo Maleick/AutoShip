@@ -36,7 +36,9 @@ impl CommandListener {
         {
             use windows::core::PCSTR;
             use windows::Win32::System::Pipes::CreateNamedPipeA;
-            use windows::Win32::System::Pipes::{PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE, PIPE_READMODE_BYTE, PIPE_WAIT};
+            use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
+            use windows::Win32::System::Pipes::{PIPE_TYPE_BYTE, PIPE_READMODE_BYTE, PIPE_WAIT};
+            const PIPE_ACCESS_DUPLEX: FILE_FLAGS_AND_ATTRIBUTES = FILE_FLAGS_AND_ATTRIBUTES(0x00000003);
 
             let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
 
