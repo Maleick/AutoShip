@@ -854,9 +854,22 @@ fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .height(1);
 
+    // Compute visible window: scroll so selected row stays on screen.
+    // Available height = area height - 2 (borders) - 1 (header row).
+    let visible_rows = area.height.saturating_sub(3) as usize;
+    let scroll_offset = if visible_rows == 0 {
+        0
+    } else if app.spawn_selected >= visible_rows {
+        app.spawn_selected - visible_rows + 1
+    } else {
+        0
+    };
+
     let rows: Vec<Row> = filtered
         .iter()
         .enumerate()
+        .skip(scroll_offset)
+        .take(visible_rows)
         .map(|(i, spawn)| {
             let is_selected = i == app.spawn_selected;
             let style = if is_selected {

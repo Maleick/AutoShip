@@ -193,11 +193,18 @@ fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
 }
 
 /// Signal shutdown. Called from `DLL_PROCESS_DETACH` under loader lock, so this
-/// must be minimal — just set the flag. Actual cleanup (hook removal, IPC close)
-/// must happen via the eject command path BEFORE `DLL_PROCESS_DETACH` fires.
+/// must be minimal — just set the flag. Heavy cleanup (hook removal, IPC close)
+/// is done by `graceful_shutdown()` via the eject command path BEFORE
+/// `DLL_PROCESS_DETACH` fires. Do NOT do I/O or acquire locks here.
 fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
-    ipc::stop();
+}
+
+/// Full cleanup — call from the eject command handler, NOT from DLL_PROCESS_DETACH.
+/// This runs outside the loader lock so it's safe to do I/O, remove hooks, etc.
+fn graceful_shutdown() {
+    SHUTTING_DOWN.store(true, Ordering::SeqCst);
     hooks::remove_all();
-    tracing::info!("DMFT DLL shutdown complete");
+    ipc::stop();
+    tracing::info!("DMFT DLL graceful shutdown complete");
 }
