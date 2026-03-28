@@ -16,8 +16,9 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     use windows::Win32::System::Memory::{
         MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx,
     };
+    use windows::Win32::Foundation::WAIT_EVENT;
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, WaitForSingleObject, WAIT_EVENT,
+        CreateRemoteThread, OpenProcess, WaitForSingleObject,
         PROCESS_CREATE_THREAD, PROCESS_VM_OPERATION, PROCESS_VM_WRITE, PROCESS_VM_READ,
         PROCESS_QUERY_INFORMATION,
     };
