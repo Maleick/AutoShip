@@ -915,7 +915,7 @@ fn spawn_row_style(spawn: &SpawnInfo) -> Style {
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let privacy_indicator = if app.privacy_mode { " [PRIVATE]" } else { "" };
     let keybinds = format!(
-        " 1-4:Screen | q:Quit | Tab:Panel | [/]:Client | j/k:Nav | Enter:Inspect | Esc:Clear | /:Search | f:Filter({}) | p:Privacy{}",
+        " 1-4:Screen | q:Quit | Tab:Panel | [/]:Client | Arrows:Nav | Enter:Inspect | Esc:Clear | /:Search | f:Filter({}) | p:Privacy{}",
         app.spawn_type_filter.label(),
         privacy_indicator
     );
