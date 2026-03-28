@@ -1,9 +1,11 @@
 use anyhow::Result;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
-use std::io;
 use std::collections::HashMap;
+use std::io;
 use std::time::{Duration, Instant};
 
 use super::app::App;
@@ -12,6 +14,9 @@ use super::ui::draw;
 
 /// Soul Engine tick interval (5 seconds).
 const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How often to scan for new EQ processes (10 seconds).
+const PROCESS_SCAN_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Initialize crossterm, run the TUI loop, and clean up on exit.
 pub fn run_tui(mut app: App) -> Result<()> {
@@ -36,6 +41,7 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App
     let refresh_interval = Duration::from_millis(app.refresh_rate_ms);
     let mut last_refresh = Instant::now();
     let mut last_soul_tick = Instant::now();
+    let mut last_process_scan = Instant::now();
 
     while app.running {
         // Draw the UI
@@ -44,6 +50,12 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App
         // Handle keyboard events (with a short poll timeout so we stay responsive)
         let poll_timeout = Duration::from_millis(50);
         handle_events(app, poll_timeout)?;
+
+        // Periodic scan for new/lost EQ processes
+        if last_process_scan.elapsed() >= PROCESS_SCAN_INTERVAL {
+            scan_for_clients(app);
+            last_process_scan = Instant::now();
+        }
 
         // Periodic data refresh from EQ process
         if last_refresh.elapsed() >= refresh_interval {
@@ -62,6 +74,101 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App
     Ok(())
 }
 
+/// Scan for EQ processes and update the client list.
+fn scan_for_clients(app: &mut App) {
+    #[cfg(windows)]
+    {
+        scan_for_clients_live(app);
+    }
+
+    #[cfg(not(windows))]
+    {
+        // On macOS/Linux, demo clients are loaded in load_demo_data
+        let _ = app;
+    }
+}
+
+/// Live process scanning — only compiles on Windows.
+#[cfg(windows)]
+fn scan_for_clients_live(app: &mut App) {
+    use super::app::ClientState;
+    use crate::process::memory::{find_processes_by_name, ProcessHandle};
+
+    let pids = match find_processes_by_name("eqgame.exe") {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    // Track which PIDs we already have
+    let existing_pids: std::collections::HashSet<u32> = app.clients.iter().map(|c| c.pid).collect();
+
+    // Remove clients whose process has gone away
+    app.clients.retain(|c| pids.contains(&c.pid));
+
+    // Add newly discovered processes
+    for &pid in &pids {
+        if existing_pids.contains(&pid) {
+            continue;
+        }
+
+        if let Ok(proc) = ProcessHandle::open(pid) {
+            if let Ok(base) = crate::get_module_base(&proc) {
+                let mut client = ClientState::new(pid, base);
+
+                // Try to extract zone name from window title
+                if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
+                    for w in &windows {
+                        if w.pid == pid {
+                            client.zone_name = parse_zone_from_title(&w.title);
+                            break;
+                        }
+                    }
+                }
+
+                tracing::info!(
+                    pid,
+                    base = format!("{:#x}", base),
+                    "Attached to new EQ client"
+                );
+                app.clients.push(client);
+            }
+        }
+    }
+
+    // Adjust selected_client if it's now out of bounds
+    if app.selected_client >= app.clients.len() && !app.clients.is_empty() {
+        app.selected_client = 0;
+    }
+
+    // Update status
+    let count = app.clients.len();
+    if count > 0 {
+        app.status_message = format!(
+            "{} EQ client{} attached",
+            count,
+            if count == 1 { "" } else { "s" }
+        );
+    } else {
+        app.status_message = String::from("No EQ process found — scanning...");
+    }
+
+    // Sync legacy fields
+    app.sync_from_selected_client();
+}
+
+/// Parse zone name from EQ window title: "EverQuest - [Character] - [Zone]"
+#[cfg(windows)]
+fn parse_zone_from_title(title: &str) -> String {
+    // EQ window titles look like "EverQuest" or "EverQuest - Frostreaver"
+    // or "EverQuest - Frostreaver - Greater Faydark"
+    let parts: Vec<&str> = title.splitn(4, " - ").collect();
+    if parts.len() >= 3 {
+        parts[2].trim().to_string()
+    } else {
+        String::from("Unknown")
+    }
+}
+
 /// Refresh live EQ data. On non-Windows or when not attached, loads demo data.
 fn refresh_eq_data(app: &mut App) {
     #[cfg(windows)]
@@ -72,116 +179,304 @@ fn refresh_eq_data(app: &mut App) {
     #[cfg(not(windows))]
     {
         // On macOS/Linux, load demo data so the TUI is testable
-        if app.spawns.is_empty() {
+        if app.clients.is_empty() {
             load_demo_data(app);
         }
     }
 }
 
 /// Live EQ memory refresh — only compiles on Windows.
+/// Refreshes ALL attached clients.
 #[cfg(windows)]
 fn refresh_eq_data_live(app: &mut App) {
     use crate::eq;
     use crate::process::memory::ProcessHandle;
 
-    let pid = match app.attached_pid {
-        Some(pid) => pid,
-        None => return,
-    };
+    for client in app.clients.iter_mut() {
+        let proc = match ProcessHandle::open(client.pid) {
+            Ok(p) => p,
+            Err(e) => {
+                client.client_status = format!("Lost connection: {}", e);
+                continue;
+            }
+        };
 
-    let proc = match ProcessHandle::open(pid) {
-        Ok(p) => p,
-        Err(e) => {
-            app.status_message = format!("Lost connection: {}", e);
-            app.attached_pid = None;
-            return;
+        // Read local player
+        match eq::spawn::read_local_player(&proc, client.eq_base) {
+            Ok(player) => client.local_player = Some(player),
+            Err(e) => client.client_status = format!("Player read error: {}", e),
         }
-    };
 
-    // Read local player
-    match eq::spawn::read_local_player(&proc, app.eq_base) {
-        Ok(player) => app.local_player = Some(player),
-        Err(e) => app.status_message = format!("Player read error: {}", e),
+        // Read target
+        match eq::spawn::read_target(&proc, client.eq_base) {
+            Ok(target) => client.target = target,
+            Err(e) => client.client_status = format!("Target read error: {}", e),
+        }
+
+        // Read spawn list
+        match eq::spawn::read_all_spawns(&proc, client.eq_base, 200) {
+            Ok(spawns) => client.spawns = spawns,
+            Err(e) => client.client_status = format!("Spawn read error: {}", e),
+        }
+
+        // Refresh zone name from window title
+        if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
+            for w in &windows {
+                if w.pid == client.pid {
+                    client.zone_name = parse_zone_from_title(&w.title);
+                    break;
+                }
+            }
+        }
     }
 
-    // Read target
-    match eq::spawn::read_target(&proc, app.eq_base) {
-        Ok(target) => app.target = target,
-        Err(e) => app.status_message = format!("Target read error: {}", e),
-    }
-
-    // Read spawn list
-    match eq::spawn::read_all_spawns(&proc, app.eq_base, 200) {
-        Ok(spawns) => app.spawns = spawns,
-        Err(e) => app.status_message = format!("Spawn read error: {}", e),
-    }
+    // Sync selected client data to legacy fields
+    app.sync_from_selected_client();
 }
 
 /// Demo data for testing the TUI on macOS without a live EQ process.
 #[cfg(not(windows))]
 fn load_demo_data(app: &mut App) {
-    use crate::eq::structs::{SpawnInfo, SpawnType};
+    use super::app::ClientState;
+    use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
 
     app.status_message = String::from("DEMO MODE — no EQ process");
 
-    app.local_player = Some(SpawnInfo {
-        name: String::from("Frostreaver"),
-        displayed_name: String::from("Frostreaver"),
-        lastname: String::new(),
-        level: 60,
-        class_id: 1,
-        class: Some(crate::eq::structs::EqClass::Warrior),
-        spawn_type: SpawnType::Player,
-        hp_current: 8500,
-        hp_max: 10000,
-        mana_current: 0,
-        mana_max: 0,
-        endurance_current: 150,
-        endurance_max: 200,
-        x: 1234.5,
-        y: -567.8,
-        z: 12.0,
-        heading: 128.0,
-        spawn_id: 1,
-    });
-
-    let demo_spawns = vec![
-        ("Frostreaver", 60, 1, SpawnType::Player, 8500, 10000),
-        ("Iceweaver", 60, 14, SpawnType::Player, 3200, 4000),
-        ("Coldchain", 60, 2, SpawnType::Player, 5500, 6000),
-        ("a frost giant", 55, 0, SpawnType::Npc, 12000, 15000),
-        ("a snow griffin", 52, 0, SpawnType::Npc, 8000, 8000),
-        ("Lady Vox", 60, 0, SpawnType::Npc, 250000, 320000),
-        ("a frost giant's corpse", 55, 0, SpawnType::Corpse, 0, 15000),
-        ("Trader Mikhail", 45, 0, SpawnType::Npc, 5000, 5000),
-        ("a dire wolf", 48, 0, SpawnType::Npc, 6000, 7200),
-        ("Velketor", 60, 0, SpawnType::Npc, 180000, 200000),
+    // Create multiple demo clients to showcase multi-client TUI
+    let demo_clients = vec![
+        (
+            "Frostreaver",
+            1,
+            "WAR",
+            60,
+            8500,
+            10000,
+            0,
+            0,
+            StandState::Standing,
+            "Permafrost",
+        ),
+        (
+            "Iceweaver",
+            14,
+            "ENC",
+            60,
+            3200,
+            4000,
+            3800,
+            4000,
+            StandState::Standing,
+            "Permafrost",
+        ),
+        (
+            "Coldchain",
+            2,
+            "CLR",
+            60,
+            5500,
+            6000,
+            3500,
+            4500,
+            StandState::Sitting,
+            "Permafrost",
+        ),
+        (
+            "Glacialmend",
+            10,
+            "SHM",
+            58,
+            4800,
+            5200,
+            2800,
+            3600,
+            StandState::Standing,
+            "Eastern Wastes",
+        ),
+        (
+            "Frostbolt",
+            12,
+            "WIZ",
+            59,
+            3000,
+            3800,
+            4000,
+            5000,
+            StandState::Standing,
+            "Eastern Wastes",
+        ),
+        (
+            "Tundrastalker",
+            4,
+            "RNG",
+            57,
+            5000,
+            5800,
+            2000,
+            2500,
+            StandState::Ducking,
+            "Eastern Wastes",
+        ),
     ];
 
-    app.spawns = demo_spawns
-        .into_iter()
-        .enumerate()
-        .map(|(i, (name, level, class, stype, hp, hp_max))| SpawnInfo {
+    for (i, (name, class_id, _class_str, level, hp, hp_max, mana, mana_max, stand, zone)) in
+        demo_clients.iter().enumerate()
+    {
+        let mut client = ClientState::new(1000 + i as u32, 0x140000000);
+        client.zone_name = zone.to_string();
+        client.local_player = Some(SpawnInfo {
             name: name.to_string(),
             displayed_name: name.to_string(),
             lastname: String::new(),
-            level,
-            class_id: class,
-            class: crate::eq::structs::EqClass::from_id(class),
-            spawn_type: stype,
-            hp_current: hp,
-            hp_max,
-            mana_current: if class > 0 { 3000 } else { 0 },
-            mana_max: if class > 0 { 4000 } else { 0 },
+            level: *level,
+            class_id: *class_id,
+            class: crate::eq::structs::EqClass::from_id(*class_id),
+            stand_state: *stand,
+            spawn_type: SpawnType::Player,
+            hp_current: *hp,
+            hp_max: *hp_max,
+            mana_current: *mana,
+            mana_max: *mana_max,
             endurance_current: 150,
             endurance_max: 200,
-            x: 1234.5 + (i as f32 * 10.0),
-            y: -567.8 + (i as f32 * 5.0),
+            x: 1234.5 + (i as f32 * 100.0),
+            y: -567.8 + (i as f32 * 50.0),
             z: 12.0,
-            heading: 0.0,
+            heading: 128.0,
             spawn_id: i as u32 + 1,
-        })
+        });
+        client.client_status = format!("Demo client: {}", name);
+        app.clients.push(client);
+    }
+
+    // Build spawns for first client (Frostreaver in Permafrost)
+    let demo_spawns = vec![
+        (
+            "Frostreaver",
+            60,
+            1,
+            SpawnType::Player,
+            8500,
+            10000,
+            StandState::Standing,
+        ),
+        (
+            "Iceweaver",
+            60,
+            14,
+            SpawnType::Player,
+            3200,
+            4000,
+            StandState::Standing,
+        ),
+        (
+            "Coldchain",
+            60,
+            2,
+            SpawnType::Player,
+            5500,
+            6000,
+            StandState::Sitting,
+        ),
+        (
+            "a frost giant",
+            55,
+            0,
+            SpawnType::Npc,
+            12000,
+            15000,
+            StandState::Standing,
+        ),
+        (
+            "a snow griffin",
+            52,
+            0,
+            SpawnType::Npc,
+            8000,
+            8000,
+            StandState::Standing,
+        ),
+        (
+            "Lady Vox",
+            60,
+            0,
+            SpawnType::Npc,
+            250000,
+            320000,
+            StandState::Standing,
+        ),
+        (
+            "a frost giant's corpse",
+            55,
+            0,
+            SpawnType::Corpse,
+            0,
+            15000,
+            StandState::Dead,
+        ),
+        (
+            "Trader Mikhail",
+            45,
+            0,
+            SpawnType::Npc,
+            5000,
+            5000,
+            StandState::Standing,
+        ),
+        (
+            "a dire wolf",
+            48,
+            0,
+            SpawnType::Npc,
+            6000,
+            7200,
+            StandState::Standing,
+        ),
+        (
+            "Velketor",
+            60,
+            0,
+            SpawnType::Npc,
+            180000,
+            200000,
+            StandState::Standing,
+        ),
+    ];
+
+    let spawns: Vec<SpawnInfo> = demo_spawns
+        .into_iter()
+        .enumerate()
+        .map(
+            |(i, (name, level, class, stype, hp, hp_max, stand))| SpawnInfo {
+                name: name.to_string(),
+                displayed_name: name.to_string(),
+                lastname: String::new(),
+                level,
+                class_id: class,
+                class: crate::eq::structs::EqClass::from_id(class),
+                stand_state: stand,
+                spawn_type: stype,
+                hp_current: hp,
+                hp_max,
+                mana_current: if class > 0 { 3000 } else { 0 },
+                mana_max: if class > 0 { 4000 } else { 0 },
+                endurance_current: 150,
+                endurance_max: 200,
+                x: 1234.5 + (i as f32 * 10.0),
+                y: -567.8 + (i as f32 * 5.0),
+                z: 12.0,
+                heading: 0.0,
+                spawn_id: i as u32 + 1,
+            },
+        )
         .collect();
+
+    // Assign spawns to the first client
+    if !app.clients.is_empty() {
+        app.clients[0].spawns = spawns;
+    }
+
+    // Sync selected client to legacy fields
+    app.sync_from_selected_client();
 }
 
 /// Tick the Soul Engine coordinator (if enabled).

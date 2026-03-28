@@ -1,12 +1,12 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
+    Frame,
 };
 
-use super::app::{App, ActivePanel};
+use super::app::{ActivePanel, App};
 use crate::eq::structs::{SpawnInfo, SpawnType};
 
 /// Main render function — draws all panels.
@@ -15,7 +15,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header bar
+            Constraint::Length(3), // Header bar
             Constraint::Min(10),   // Body
             Constraint::Length(3), // Status bar
         ])
@@ -27,58 +27,88 @@ pub fn draw(frame: &mut Frame, app: &App) {
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
-    let pid_str = app.attached_pid
-        .map(|p| format!("PID:{}", p))
-        .unwrap_or_else(|| "Not attached".into());
-
-    let base_str = if app.eq_base != 0 {
-        format!("Base:{:#x}", app.eq_base)
+    let client_count = app.clients.len();
+    let client_str = if client_count > 0 {
+        format!("{}x EQ", client_count)
     } else {
-        String::new()
+        "Not attached".into()
     };
 
-    let player_str = app.local_player.as_ref()
-        .map(|p| format!("{} ({}) Lv{}", p.displayed_name, p.class_str(), p.level))
-        .unwrap_or_else(|| "No character".into());
+    let selected_str = if let Some(client) = app.active_client() {
+        let player_name = client
+            .local_player
+            .as_ref()
+            .map(|p| p.displayed_name.as_str())
+            .unwrap_or("???");
+        format!(
+            "[{}/{}] {}",
+            app.selected_client + 1,
+            client_count,
+            player_name
+        )
+    } else {
+        String::from("No client selected")
+    };
 
-    let tick_str = format!(" │ Tick:{} ", app.tick_count);
+    let server_str = format!(" {} ", app.server_name);
+    let tick_str = format!(" Tick:{} ", app.tick_count);
 
     let header = Paragraph::new(Line::from(vec![
-        Span::styled(" FROSTREAVER ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::raw("│ "),
-        Span::styled(&pid_str, Style::default().fg(Color::Yellow)),
-        Span::raw(" "),
-        Span::styled(&base_str, Style::default().fg(Color::DarkGray)),
-        Span::raw(" │ "),
-        Span::styled(&player_str, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-        Span::raw(&tick_str),
+        Span::styled(
+            " FROSTREAVER ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("| "),
+        Span::styled(
+            &client_str,
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" | "),
+        Span::styled(
+            &selected_str,
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" | "),
+        Span::styled(&server_str, Style::default().fg(Color::Magenta)),
+        Span::raw("|"),
+        Span::styled(&tick_str, Style::default().fg(Color::DarkGray)),
     ]))
-    .block(Block::default().borders(Borders::ALL).title(" EQ Memory Debugger "));
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" EQ Multibox Controller "),
+    );
 
     frame.render_widget(header, area);
 }
 
 fn draw_body(frame: &mut Frame, area: Rect, app: &App) {
-    // Body: left side (player + target + hex), right side (spawn list)
+    // Body: left side (character summary + hex), right side (spawn list)
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(40), // Left: player info + hex
+            Constraint::Percentage(40), // Left: character panels
             Constraint::Percentage(60), // Right: spawn list
         ])
         .split(area);
 
-    // Left column: player, target, hex dump
+    // Left column: character summary, target, hex dump
     let left = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8),  // Player info
-            Constraint::Length(8),  // Target info
-            Constraint::Min(5),    // Hex dump
+            Constraint::Min(8),    // Character summary (multi-client)
+            Constraint::Length(8), // Target info (selected client)
+            Constraint::Length(8), // Hex dump
         ])
         .split(cols[0]);
 
-    draw_player_panel(frame, left[0], app);
+    draw_character_summary(frame, left[0], app);
     draw_target_panel(frame, left[1], app);
     draw_hex_panel(frame, left[2], app);
 
@@ -86,18 +116,150 @@ fn draw_body(frame: &mut Frame, area: Rect, app: &App) {
     draw_spawn_list(frame, cols[1], app);
 }
 
-fn draw_player_panel(frame: &mut Frame, area: Rect, app: &App) {
-    draw_spawn_panel(frame, area, &app.local_player, " Local Player ", Color::Green, "Not logged in");
+/// Draw the multi-client character summary panel with Tamagotchi sprites.
+fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" Characters ({}) ", app.clients.len()))
+        .border_style(Style::default().fg(Color::Green));
+
+    if app.clients.is_empty() {
+        let paragraph = Paragraph::new("No characters connected")
+            .block(block)
+            .style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Each character gets 2 lines: name/class/level/hp + sprite + zone
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    for (i, client) in app.clients.iter().enumerate() {
+        let is_selected = i == app.selected_client;
+        let marker = if is_selected { ">" } else { " " };
+
+        if let Some(player) = &client.local_player {
+            let hp_pct = player.hp_pct();
+            let hp_color = hp_color(hp_pct);
+            let mana_pct = player.mana_pct();
+
+            let sprite_label = player.stand_state.label();
+            let sprite_color = match player.stand_state {
+                crate::eq::structs::StandState::Dead => Color::Red,
+                crate::eq::structs::StandState::Sitting => Color::Yellow,
+                crate::eq::structs::StandState::Feigned => Color::Magenta,
+                crate::eq::structs::StandState::Frozen => Color::Blue,
+                _ => Color::Green,
+            };
+
+            let name_style = if is_selected {
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+            } else {
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD)
+            };
+
+            // Line 1: marker name class level | HP% | zone
+            lines.push(Line::from(vec![
+                Span::styled(
+                    marker,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!("{:<14}", player.displayed_name), name_style),
+                Span::styled(
+                    format!("{:>3} ", player.class_str()),
+                    Style::default().fg(Color::Cyan),
+                ),
+                Span::styled(
+                    format!("{:>2} ", player.level),
+                    Style::default().fg(Color::White),
+                ),
+                Span::styled(
+                    format!("HP:{:>3.0}% ", hp_pct),
+                    Style::default().fg(hp_color),
+                ),
+                if player.mana_max > 0 {
+                    Span::styled(
+                        format!("MP:{:>3.0}% ", mana_pct),
+                        Style::default().fg(Color::Blue),
+                    )
+                } else {
+                    Span::raw("       ")
+                },
+                Span::styled(
+                    format!("[{}]", sprite_label),
+                    Style::default().fg(sprite_color),
+                ),
+                Span::raw(" "),
+                Span::styled(&client.zone_name, Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(marker, Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!("PID {} — not logged in", client.pid),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]));
+        }
+    }
+
+    // Add a blank line then the selected character's sprite art
+    if let Some(client) = app.active_client() {
+        if let Some(player) = &client.local_player {
+            lines.push(Line::from(""));
+            let sprite_color = match player.stand_state {
+                crate::eq::structs::StandState::Dead => Color::Red,
+                crate::eq::structs::StandState::Sitting => Color::Yellow,
+                crate::eq::structs::StandState::Feigned => Color::Magenta,
+                _ => Color::Green,
+            };
+
+            // Render sprite lines
+            for sprite_line in player.stand_state.sprite().lines() {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(sprite_line, Style::default().fg(sprite_color)),
+                    Span::raw(format!(
+                        "  {} ({}) Lv{} — {}",
+                        player.displayed_name,
+                        player.class_str(),
+                        player.level,
+                        client.zone_name,
+                    )),
+                ]));
+            }
+        }
+    }
+
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+    frame.render_widget(paragraph, inner);
 }
 
 fn draw_target_panel(frame: &mut Frame, area: Rect, app: &App) {
-    draw_spawn_panel(frame, area, &app.target, " Current Target ", Color::Red, "No target");
+    let target = app.active_client().and_then(|c| c.target.as_ref());
+    draw_spawn_panel(
+        frame,
+        area,
+        target,
+        " Current Target ",
+        Color::Red,
+        "No target",
+    );
 }
 
 fn draw_spawn_panel(
     frame: &mut Frame,
     area: Rect,
-    spawn: &Option<SpawnInfo>,
+    spawn: Option<&SpawnInfo>,
     title: &str,
     border_color: Color,
     empty_msg: &str,
@@ -121,29 +283,27 @@ fn draw_spawn_panel(
 
 fn spawn_info_lines(spawn: &SpawnInfo) -> Vec<Line<'_>> {
     let hp_pct = spawn.hp_pct();
-    let hp_color = if hp_pct > 75.0 {
-        Color::Green
-    } else if hp_pct > 25.0 {
-        Color::Yellow
-    } else {
-        Color::Red
-    };
+    let hp_col = hp_color(hp_pct);
 
     vec![
         Line::from(vec![
-            Span::styled(&spawn.displayed_name, Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                &spawn.displayed_name,
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
             Span::styled(
                 format!("{} Lv{}", spawn.class_str(), spawn.level),
                 Style::default().fg(Color::Cyan),
             ),
             Span::raw(format!("  [{}]", spawn.spawn_type)),
+            Span::raw(format!("  {}", spawn.stand_state)),
         ]),
         Line::from(vec![
             Span::raw("HP: "),
             Span::styled(
                 format!("{}/{} ({:.0}%)", spawn.hp_current, spawn.hp_max, hp_pct),
-                Style::default().fg(hp_color),
+                Style::default().fg(hp_col),
             ),
         ]),
         Line::from(vec![
@@ -152,7 +312,10 @@ fn spawn_info_lines(spawn: &SpawnInfo) -> Vec<Line<'_>> {
                 format!("{}/{}", spawn.mana_current, spawn.mana_max),
                 Style::default().fg(Color::Blue),
             ),
-            Span::raw(format!("  End: {}/{}", spawn.endurance_current, spawn.endurance_max)),
+            Span::raw(format!(
+                "  End: {}/{}",
+                spawn.endurance_current, spawn.endurance_max
+            )),
         ]),
         Line::from(vec![
             Span::raw("Pos: "),
@@ -162,15 +325,30 @@ fn spawn_info_lines(spawn: &SpawnInfo) -> Vec<Line<'_>> {
             ),
             Span::raw(format!("  Hdg: {:.1}", spawn.heading)),
         ]),
-        Line::from(vec![
-            Span::raw(format!("ID: {}  Name: {}", spawn.spawn_id, spawn.name)),
-        ]),
+        Line::from(vec![Span::raw(format!(
+            "ID: {}  Name: {}",
+            spawn.spawn_id, spawn.name
+        ))]),
     ]
+}
+
+fn hp_color(hp_pct: f64) -> Color {
+    if hp_pct > 75.0 {
+        Color::Green
+    } else if hp_pct > 25.0 {
+        Color::Yellow
+    } else {
+        Color::Red
+    }
 }
 
 fn draw_hex_panel(frame: &mut Frame, area: Rect, app: &App) {
     let is_active = app.active_panel == ActivePanel::HexDump;
-    let border_color = if is_active { Color::Yellow } else { Color::DarkGray };
+    let border_color = if is_active {
+        Color::Yellow
+    } else {
+        Color::DarkGray
+    };
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -199,20 +377,29 @@ fn draw_hex_panel(frame: &mut Frame, area: Rect, app: &App) {
         let end = (offset + 16).min(app.hex_data.len());
         let chunk = &app.hex_data[offset..end];
 
-        let hex_str: String = chunk
-            .iter()
-            .map(|b| format!("{:02x} ", b))
-            .collect();
+        let hex_str: String = chunk.iter().map(|b| format!("{:02x} ", b)).collect();
 
         let ascii_str: String = chunk
             .iter()
-            .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+            .map(|&b| {
+                if b.is_ascii_graphic() || b == b' ' {
+                    b as char
+                } else {
+                    '.'
+                }
+            })
             .collect();
 
         lines.push(Line::from(vec![
-            Span::styled(format!("{:08x}", addr), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{:08x}", addr),
+                Style::default().fg(Color::DarkGray),
+            ),
             Span::raw("  "),
-            Span::styled(format!("{:<48}", hex_str), Style::default().fg(Color::White)),
+            Span::styled(
+                format!("{:<48}", hex_str),
+                Style::default().fg(Color::White),
+            ),
             Span::raw(" "),
             Span::styled(ascii_str, Style::default().fg(Color::Yellow)),
         ]));
@@ -224,13 +411,30 @@ fn draw_hex_panel(frame: &mut Frame, area: Rect, app: &App) {
 
 fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
     let is_active = app.active_panel == ActivePanel::SpawnList;
-    let border_color = if is_active { Color::Cyan } else { Color::DarkGray };
+    let border_color = if is_active {
+        Color::Cyan
+    } else {
+        Color::DarkGray
+    };
 
     let filtered = app.filtered_spawns();
+
+    // Show which client's spawns we're viewing
+    let client_label = app
+        .active_client()
+        .and_then(|c| c.local_player.as_ref())
+        .map(|p| p.displayed_name.as_str())
+        .unwrap_or("???");
+
     let title = if app.spawn_filter.is_empty() {
-        format!(" Spawn List ({}) ", filtered.len())
+        format!(" Spawns: {} ({}) ", client_label, filtered.len())
     } else {
-        format!(" Spawn List ({}) filter: \"{}\" ", filtered.len(), app.spawn_filter)
+        format!(
+            " Spawns: {} ({}) filter: \"{}\" ",
+            client_label,
+            filtered.len(),
+            app.spawn_filter
+        )
     };
 
     let header = Row::new(vec![
@@ -240,7 +444,8 @@ fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
         Cell::from("Lv").style(Style::default().add_modifier(Modifier::BOLD)),
         Cell::from("HP%").style(Style::default().add_modifier(Modifier::BOLD)),
         Cell::from("ID").style(Style::default().add_modifier(Modifier::BOLD)),
-    ]).height(1);
+    ])
+    .height(1);
 
     let rows: Vec<Row> = filtered
         .iter()
@@ -248,7 +453,9 @@ fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
         .map(|(i, spawn)| {
             let is_selected = i == app.spawn_selected;
             let style = if is_selected {
-                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 spawn_row_style(spawn)
             };
@@ -268,12 +475,12 @@ fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
     let table = Table::new(
         rows,
         [
-            Constraint::Length(7),  // Type
+            Constraint::Length(7), // Type
             Constraint::Min(20),   // Name
-            Constraint::Length(4),  // Class
-            Constraint::Length(4),  // Level
-            Constraint::Length(6),  // HP%
-            Constraint::Length(8),  // ID
+            Constraint::Length(4), // Class
+            Constraint::Length(4), // Level
+            Constraint::Length(6), // HP%
+            Constraint::Length(8), // ID
         ],
     )
     .header(header)
@@ -298,11 +505,12 @@ fn spawn_row_style(spawn: &SpawnInfo) -> Style {
 }
 
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
-    let keybinds = " q:Quit | Tab:Switch Panel | j/k:Navigate | Enter:Inspect | Esc:Clear Filter | /:Filter ";
+    let keybinds =
+        " q:Quit | Tab:Panel | [/]:Client | j/k:Nav | Enter:Inspect | Esc:Clear | /:Filter ";
 
     let status = Paragraph::new(Line::from(vec![
         Span::styled(&app.status_message, Style::default().fg(Color::Yellow)),
-        Span::raw("  │  "),
+        Span::raw("  |  "),
         Span::styled(keybinds, Style::default().fg(Color::DarkGray)),
     ]))
     .block(Block::default().borders(Borders::ALL));

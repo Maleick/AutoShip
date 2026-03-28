@@ -55,22 +55,29 @@ fn run_tui_mode() -> Result<()> {
     let mut app = tui::app::App::new();
     let config = load_config()?;
 
-    // Try to attach to an EQ process before launching TUI
+    // Set server name from config
+    app.server_name = config.server.name.clone();
+
+    // Try to attach to ALL EQ processes before launching TUI
     #[cfg(windows)]
     {
         if let Ok(pids) = process::memory::find_processes_by_name(&config.process_name) {
-            if let Some(&pid) = pids.first() {
+            for &pid in &pids {
                 if let Ok(proc) = process::memory::ProcessHandle::open(pid) {
                     if let Ok(base) = get_module_base(&proc) {
-                        app.attached_pid = Some(pid);
-                        app.eq_base = base;
-                        app.status_message = format!("Attached to PID {} (base {:#x})", pid, base);
+                        let client = tui::app::ClientState::new(pid, base);
+                        info!(pid, base = format!("{:#x}", base), "Attached to EQ client");
+                        app.clients.push(client);
                     }
                 }
             }
         }
-        if app.attached_pid.is_none() {
-            app.status_message = String::from("No EQ process found — waiting...");
+        let count = app.clients.len();
+        if count > 0 {
+            app.status_message = format!("{} EQ client{} attached", count, if count == 1 { "" } else { "s" });
+            app.sync_from_selected_client();
+        } else {
+            app.status_message = String::from("No EQ process found — scanning...");
         }
     }
 
@@ -422,7 +429,7 @@ fn load_config() -> Result<config::AppConfig> {
 
 /// Get the base address of eqgame.exe module in the target process.
 #[cfg(windows)]
-fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
+pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
     use windows::Win32::System::ProcessStatus::{EnumProcessModulesEx, LIST_MODULES_ALL};
     use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
     use windows::Win32::Foundation::CloseHandle;
@@ -451,7 +458,7 @@ fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
 }
 
 #[cfg(not(windows))]
-fn get_module_base(_proc: &process::memory::ProcessHandle) -> Result<u64> {
+pub fn get_module_base(_proc: &process::memory::ProcessHandle) -> Result<u64> {
     warn!("Using preferred base address (non-Windows stub)");
     Ok(dmft_common::offsets::EQ_PREFERRED_BASE)
 }

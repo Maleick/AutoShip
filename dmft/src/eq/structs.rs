@@ -105,6 +105,67 @@ impl fmt::Display for SpawnType {
     }
 }
 
+/// Standing state values from STANDSTATE offset (0x134).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StandState {
+    Standing,
+    Frozen,
+    Looting,
+    Sitting,
+    Ducking,
+    Feigned,
+    Dead,
+    Unknown(u8),
+}
+
+impl StandState {
+    pub fn from_id(id: u8) -> Self {
+        match id {
+            0 => Self::Standing,
+            1 => Self::Frozen,
+            2 => Self::Looting,
+            3 => Self::Sitting,
+            4 => Self::Ducking,
+            110 => Self::Feigned,
+            111 => Self::Dead,
+            other => Self::Unknown(other),
+        }
+    }
+
+    /// Small ASCII sprite representing the character's current state.
+    pub fn sprite(&self) -> &'static str {
+        match self {
+            Self::Standing => " O \n/|\\\n/ \\",
+            Self::Frozen => " O \n/|\\\n | ",
+            Self::Looting => " O \n/|\\\n\\ /",
+            Self::Sitting => " O \n/|\\\n--'",
+            Self::Ducking => " O \n/| \n/ \\",
+            Self::Feigned => "____\n-O- \n----",
+            Self::Dead => " X \n/|\\\n/ \\",
+            Self::Unknown(_) => " ? \n | \n/ \\",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Standing => "Stand",
+            Self::Frozen => "Frozen",
+            Self::Looting => "Loot",
+            Self::Sitting => "Sit",
+            Self::Ducking => "Duck",
+            Self::Feigned => "FD",
+            Self::Dead => "DEAD",
+            Self::Unknown(_) => "???",
+        }
+    }
+}
+
+impl fmt::Display for StandState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.label())
+    }
+}
+
 /// Extracted spawn data — not a repr(C) struct, but a high-level view
 /// built by reading individual fields at their offsets.
 #[derive(Debug, Clone)]
@@ -117,6 +178,7 @@ pub struct SpawnInfo {
     pub level: u8,
     pub class_id: u8,
     pub class: Option<EqClass>,
+    pub stand_state: StandState,
     pub x: f32,
     pub y: f32,
     pub z: f32,
@@ -147,10 +209,11 @@ impl SpawnInfo {
     }
 
     pub fn class_str(&self) -> String {
-        self.class.as_ref().map_or(
-            format!("?c{}?", self.class_id),
-            |c| c.short_name().to_string()
-        )
+        self.class
+            .as_ref()
+            .map_or(format!("?c{}?", self.class_id), |c| {
+                c.short_name().to_string()
+            })
     }
 }
 

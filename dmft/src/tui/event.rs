@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use std::time::Duration;
 
-use super::app::{App, ActivePanel};
+use super::app::{ActivePanel, App};
 
 /// Poll for keyboard events and update app state.
 /// Returns true if an event was handled.
@@ -20,6 +20,15 @@ pub fn handle_events(app: &mut App, timeout: Duration) -> Result<bool> {
             }
             (KeyCode::Tab, _) => {
                 app.toggle_panel();
+                return Ok(true);
+            }
+            // Client switching: ] = next client, [ = previous client
+            (KeyCode::Char(']'), _) => {
+                app.next_client();
+                return Ok(true);
+            }
+            (KeyCode::Char('['), _) => {
+                app.prev_client();
                 return Ok(true);
             }
             (KeyCode::Char('/'), _) if app.active_panel == ActivePanel::SpawnList => {
