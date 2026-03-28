@@ -166,6 +166,14 @@ pub mod player_zone {
     pub const ENDURANCE_MAX: usize = 0x0538;
 }
 
+/// Offsets within ActorClient (embedded in PlayerZoneClient at 0x0FC0)
+pub mod actor_client {
+    /// int32_t — race ID (from ActorBase at offset 0x14)
+    pub const RACE: usize = 0x0FD4;
+    /// int32_t — race override (illusions, etc.)
+    pub const RACE_OVERRIDE: usize = 0x0FD8;
+}
+
 /// Offsets within SpawnManager (PlayerManagerBase)
 pub mod spawn_manager {
     /// TList<PlayerClient*> — start of the player linked list

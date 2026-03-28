@@ -106,16 +106,38 @@ pub fn read_all_spawns(proc: &ProcessHandle, eq_base: u64, max_count: usize) -> 
 
     while current != 0 && spawns.len() < max_count {
         match read_spawn(proc, current) {
-            Ok(spawn) => spawns.push(spawn),
+            Ok(spawn) => {
+                tracing::trace!(addr = format!("{:#x}", current), name = %spawn.name, "Read spawn OK");
+                spawns.push(spawn);
+            }
             Err(e) => {
-                tracing::warn!(addr = current, error = %e, "Failed to read spawn, stopping iteration");
+                tracing::warn!(addr = format!("{:#x}", current), error = %e, "Failed to read spawn, stopping iteration");
                 break;
             }
         }
 
         // Follow m_pNext at offset 0x08 (TListNode.m_pNext)
-        current = proc.read_ptr(current + player_base::NEXT)
-            .unwrap_or(0);
+        let next_addr = current + player_base::NEXT;
+        match proc.read_ptr(next_addr) {
+            Ok(next) => {
+                tracing::trace!(
+                    current_addr = format!("{:#x}", current),
+                    next_ptr_addr = format!("{:#x}", next_addr),
+                    next_value = format!("{:#x}", next),
+                    "NEXT pointer"
+                );
+                current = next;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    addr = format!("{:#x}", next_addr),
+                    error = %e,
+                    spawn_count = spawns.len(),
+                    "Failed to read NEXT pointer, stopping iteration"
+                );
+                break;
+            }
+        }
     }
 
     Ok(spawns)

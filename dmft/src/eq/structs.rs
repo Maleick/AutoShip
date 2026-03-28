@@ -146,8 +146,11 @@ impl SpawnInfo {
         }
     }
 
-    pub fn class_str(&self) -> &str {
-        self.class.as_ref().map_or("???", |c| c.short_name())
+    pub fn class_str(&self) -> String {
+        self.class.as_ref().map_or(
+            format!("?c{}?", self.class_id),
+            |c| c.short_name().to_string()
+        )
     }
 }
 
