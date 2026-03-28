@@ -134,6 +134,9 @@ fn run_dump_mode() -> Result<()> {
         Err(e) => error!("Failed to read local player: {:#}", e),
     }
 
+    // Diagnostic hex dump of SpawnManager and spawn list structure
+    dump_spawn_list_diagnostic(&proc, eq_base);
+
     // Read current target
     info!("═══════════════════════════════════════");
     info!("CURRENT TARGET");
@@ -160,6 +163,252 @@ fn run_dump_mode() -> Result<()> {
 
     info!("Done.");
     Ok(())
+}
+
+/// Format a byte buffer as a hex dump with offset labels.
+fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
+    let mut lines = Vec::new();
+    for (i, chunk) in bytes.chunks(16).enumerate() {
+        let offset = i * 16;
+        let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+        let ascii: String = chunk.iter().map(|&b| {
+            if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' }
+        }).collect();
+        let hex_str = if hex.len() < 16 {
+            let mut s = hex.join(" ");
+            for _ in hex.len()..16 { s.push_str("   "); }
+            s
+        } else {
+            hex.join(" ")
+        };
+        lines.push(format!("  {:#010x} (+{:#04x}): {}  |{}|",
+            base_addr + offset, offset, hex_str, ascii));
+    }
+    lines.join("\n")
+}
+
+/// Diagnostic hex dump of SpawnManager, the TList, and the first spawn node.
+/// Helps debug why the NEXT pointer reads as 0x0 after the first spawn.
+#[allow(unused_variables)]
+fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u64) {
+    use dmft_common::offsets::{self, spawn_manager};
+
+    info!("===================================================");
+    info!("SPAWN LIST DIAGNOSTIC HEX DUMP");
+    info!("===================================================");
+
+    // Step 1: Read SpawnManager pointer
+    let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base) {
+        Some(addr) => addr,
+        None => { error!("Failed to rebase pinstSpawnManager"); return; }
+    };
+    let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
+        Ok(addr) => addr,
+        Err(e) => { error!("Failed to read pinstSpawnManager: {:#}", e); return; }
+    };
+    info!("pinstSpawnManager ptr at {:#x} -> SpawnManager at {:#x}", mgr_ptr_addr, mgr_addr);
+
+    if mgr_addr == 0 {
+        error!("SpawnManager is null -- not in a zone?");
+        return;
+    }
+
+    // Step 2: Dump first 64 bytes of SpawnManager to find all list pointers
+    info!("--- SpawnManager first 64 bytes ---");
+    match proc.read_bytes(mgr_addr, 64) {
+        Ok(bytes) => {
+            info!("\n{}", format_hex_dump(mgr_addr, &bytes));
+            // Interpret as 8 sequential u64 values
+            for i in 0..8 {
+                let off = i * 8;
+                if off + 8 <= bytes.len() {
+                    let val = u64::from_le_bytes(bytes[off..off + 8].try_into().unwrap());
+                    let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                    info!("  SpawnManager+{:#04x}: {:#018x} {}",
+                        off, val,
+                        if looks_like_ptr { "<-- looks like a pointer" } else { "" });
+                }
+            }
+        }
+        Err(e) => error!("Failed to read SpawnManager bytes: {:#}", e),
+    }
+
+    // Step 3: Read the TList at SpawnManager+PLAYER_LIST (0x10)
+    let list_addr = mgr_addr + spawn_manager::PLAYER_LIST;
+    info!("--- TList at SpawnManager+{:#x} = {:#x} ---",
+        spawn_manager::PLAYER_LIST, list_addr);
+    match proc.read_bytes(list_addr, 16) {
+        Ok(bytes) => {
+            info!("\n{}", format_hex_dump(list_addr, &bytes));
+            if bytes.len() >= 16 {
+                let first_node = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
+                let last_node = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+                info!("  TList.m_pFirstNode: {:#x}", first_node);
+                info!("  TList.m_pLastNode:  {:#x}", last_node);
+            }
+        }
+        Err(e) => error!("Failed to read TList bytes: {:#}", e),
+    }
+
+    // Step 4: Read the first node pointer from TList
+    let first_node = match proc.read_ptr(list_addr) {
+        Ok(addr) => addr,
+        Err(e) => { error!("Failed to read first node: {:#}", e); return; }
+    };
+
+    if first_node == 0 {
+        error!("First node is null -- spawn list empty?");
+        return;
+    }
+
+    info!("First spawn node at: {:#x}", first_node);
+
+    // Step 5: Dump first 64 bytes of the first spawn (covers TListNode + vtable area)
+    info!("--- First spawn: first 64 bytes (TListNode region + beyond) ---");
+    match proc.read_bytes(first_node, 64) {
+        Ok(bytes) => {
+            info!("\n{}", format_hex_dump(first_node, &bytes));
+            for &(off, label) in &[
+                (0usize, "m_pPrev / PREV"),
+                (8, "m_pNext / NEXT"),
+                (16, "m_pList"),
+                (24, "+0x18 unknown"),
+            ] {
+                if off + 8 <= bytes.len() {
+                    let val = u64::from_le_bytes(bytes[off..off + 8].try_into().unwrap());
+                    let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                    info!("  +{:#04x} ({}): {:#018x} {}",
+                        off, label, val,
+                        if looks_like_ptr { "<-- valid pointer" }
+                        else if val == 0 { "<-- NULL" }
+                        else { "" });
+                }
+            }
+        }
+        Err(e) => error!("Failed to read first spawn bytes: {:#}", e),
+    }
+
+    // Step 6: Verify this IS a PlayerClient by reading the name at known offset
+    match proc.read_string(
+        first_node + dmft_common::offsets::player_base::NAME, 64,
+    ) {
+        Ok(name) => info!("  Name at +{:#x}: \"{}\"",
+            dmft_common::offsets::player_base::NAME, name),
+        Err(e) => error!("  Failed to read name: {:#}", e),
+    }
+
+    // Step 7: Probe offsets +0x00 through +0x38 for valid pointers to other spawns
+    info!("--- Probing offsets +0x00..+0x38 on first spawn for valid pointers ---");
+    for offset in [0x00usize, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38] {
+        match proc.read_ptr(first_node + offset) {
+            Ok(val) => {
+                let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                if looks_like_ptr {
+                    // Try reading a name to confirm it points to another PlayerClient
+                    let name_check = proc
+                        .read_string(val + dmft_common::offsets::player_base::NAME, 64)
+                        .ok()
+                        .filter(|n| {
+                            !n.is_empty()
+                                && n.chars().all(|c| c.is_ascii_graphic() || c == ' ')
+                        })
+                        .map(|n| format!(" -> name=\"{}\"", n))
+                        .unwrap_or_default();
+                    info!("  +{:#04x}: {:#018x} <-- VALID PTR{}", offset, val, name_check);
+                } else if val == 0 {
+                    info!("  +{:#04x}: NULL", offset);
+                } else {
+                    info!("  +{:#04x}: {:#018x}", offset, val);
+                }
+            }
+            Err(e) => info!("  +{:#04x}: read failed: {:#}", offset, e),
+        }
+    }
+
+    // Step 8: If +0x08 is null, try alternative list heads in SpawnManager
+    if let Ok(next_at_08) = proc.read_ptr(first_node + 0x08) {
+        if next_at_08 == 0 {
+            info!("--- NEXT at +0x08 is NULL. Checking alternative SpawnManager members ---");
+
+            // Try SpawnManager+0x00 (might be a different list or vtable)
+            match proc.read_ptr(mgr_addr) {
+                Ok(alt) if alt != 0 && alt != first_node => {
+                    info!("SpawnManager+0x00 -> {:#x} (DIFFERENT from PLAYER_LIST head!)", alt);
+                    match proc.read_bytes(alt, 32) {
+                        Ok(bytes) => info!("\n{}", format_hex_dump(alt, &bytes)),
+                        Err(e) => error!("  Failed to read: {:#}", e),
+                    }
+                    match proc.read_string(
+                        alt + dmft_common::offsets::player_base::NAME, 64,
+                    ) {
+                        Ok(name) => info!("  Name: \"{}\"", name),
+                        Err(_) => info!("  (name unreadable)"),
+                    }
+                }
+                Ok(alt) if alt == first_node => {
+                    info!("SpawnManager+0x00 -> same node as PLAYER_LIST ({:#x})", alt);
+                }
+                Ok(_) => info!("SpawnManager+0x00 -> NULL"),
+                Err(e) => error!("Failed to read SpawnManager+0x00: {:#}", e),
+            }
+
+            // Try SpawnManager+0x08
+            match proc.read_ptr(mgr_addr + 0x08) {
+                Ok(alt) if alt != 0 => {
+                    info!("SpawnManager+0x08 -> {:#x}", alt);
+                    match proc.read_string(
+                        alt + dmft_common::offsets::player_base::NAME, 64,
+                    ) {
+                        Ok(name) => info!("  Name: \"{}\"", name),
+                        Err(_) => info!("  (name unreadable)"),
+                    }
+                }
+                _ => info!("SpawnManager+0x08 -> NULL or unreadable"),
+            }
+        }
+    }
+
+    info!("===================================================");
+}
+
+/// Helper: read and log a hex dump of `count` bytes starting at `base_addr + start_offset`.
+#[allow(dead_code)]
+fn dump_hex_region(
+    proc: &process::memory::ProcessHandle,
+    base_addr: usize,
+    start_offset: usize,
+    count: usize,
+    label: &str,
+) {
+    info!("--- {} ---", label);
+    match proc.read_bytes(base_addr + start_offset, count) {
+        Ok(bytes) => {
+            for chunk_start in (0..bytes.len()).step_by(16) {
+                let chunk_end = (chunk_start + 16).min(bytes.len());
+                let chunk = &bytes[chunk_start..chunk_end];
+                let offset = start_offset + chunk_start;
+
+                let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                let ascii: String = chunk
+                    .iter()
+                    .map(|&b| if (0x20..=0x7e).contains(&b) { b as char } else { '.' })
+                    .collect();
+
+                let hex_str = if hex.len() < 16 {
+                    let mut s = hex.join(" ");
+                    for _ in hex.len()..16 {
+                        s.push_str("   ");
+                    }
+                    s
+                } else {
+                    hex.join(" ")
+                };
+
+                info!("  {:#06x}: {}  |{}|", offset, hex_str, ascii);
+            }
+        }
+        Err(e) => error!("  Failed to read {} bytes at base+{:#x}: {:#}", count, start_offset, e),
+    }
 }
 
 fn load_config() -> Result<config::AppConfig> {

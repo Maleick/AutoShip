@@ -83,6 +83,36 @@ impl ProcessHandle {
         Ok(addr)
     }
 
+    /// Read N bytes from the process at the given address.
+    /// Useful for diagnostic hex dumps when debugging offset issues.
+    #[cfg(windows)]
+    pub fn read_bytes(&self, address: usize, count: usize) -> Result<Vec<u8>> {
+        use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+
+        let mut buffer = vec![0u8; count];
+        let mut bytes_read: usize = 0;
+        unsafe {
+            ReadProcessMemory(
+                self.handle,
+                address as *const _,
+                buffer.as_mut_ptr() as *mut _,
+                count,
+                Some(&mut bytes_read),
+            )
+        }.context(format!("ReadProcessMemory (bytes) failed at {:#x}", address))?;
+        buffer.truncate(bytes_read);
+        Ok(buffer)
+    }
+
+    /// Read N bytes — non-Windows stub.
+    #[cfg(not(windows))]
+    pub fn read_bytes(&self, address: usize, count: usize) -> Result<Vec<u8>> {
+        bail!(
+            "Cannot read process memory on non-Windows platform (pid={}, addr={:#x}, count={})",
+            self.pid, address, count
+        )
+    }
+
     /// Read a null-terminated string from the process at the given address.
     #[allow(unused_variables, unused_mut)]
     pub fn read_string(&self, address: usize, max_len: usize) -> Result<String> {
