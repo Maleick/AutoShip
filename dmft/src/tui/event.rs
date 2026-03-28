@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use std::time::Duration;
 
 use super::app::{ActivePanel, ActiveScreen, App};
@@ -12,6 +12,12 @@ pub fn handle_events(app: &mut App, timeout: Duration) -> Result<bool> {
     }
 
     if let Event::Key(key) = event::read()? {
+        // Only handle key press events, not repeat or release.
+        // This prevents toggles (like privacy mode) from bouncing.
+        if key.kind != KeyEventKind::Press {
+            return Ok(false);
+        }
+
         // When in search mode, capture text input
         if app.search_mode {
             match key.code {

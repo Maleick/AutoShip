@@ -159,6 +159,9 @@ pub mod player_zone {
     pub const LEVEL: usize = 0x03ef;
     /// uint8_t — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
     /// Source: PlayerZoneClient offset 0x0574 in PlayerClient.h
+    /// TODO: 0x0574 reads 110 (FD) when character is sitting on March 10, 2026 build.
+    /// Needs hex dump calibration scan on frostreaver to find correct offset.
+    /// Old offset 0x0134 always read 0 (Standing). Neither is correct.
     pub const STANDSTATE: usize = 0x0574;
     /// int32_t — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
