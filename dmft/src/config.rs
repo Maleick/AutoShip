@@ -87,7 +87,7 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            name: "Frostreaver".to_string(),
+            name: "Firiona Vie".to_string(),
             status_url: None,
             status_check_timeout_secs: 10,
         }
