@@ -160,7 +160,8 @@ pub mod player_zone {
     /// uint8_t — character level
     pub const LEVEL: usize = 0x03ef;
     /// uint8_t — character class ID
-    pub const CHAR_CLASS: usize = 0x0420;
+    /// Note: was 0x0420 in MQ2 headers, probing found correct value at 0x041c
+    pub const CHAR_CLASS: usize = 0x041c;
     /// int32_t — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
     /// uint32_t — maximum endurance
