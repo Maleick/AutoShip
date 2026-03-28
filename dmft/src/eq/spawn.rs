@@ -23,7 +23,18 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
     let heading = proc.read::<f32>(addr + player_base::HEADING).unwrap_or(0.0);
 
     let level = proc.read::<u8>(addr + player_zone::LEVEL).unwrap_or(0);
+    // Read class as both u8 and try nearby offsets for diagnostics
     let class_id = proc.read::<u8>(addr + player_zone::CHAR_CLASS).unwrap_or(0);
+    // If class_id looks wrong, scan nearby for the right value
+    if tracing::enabled!(tracing::Level::TRACE) {
+        for delta in [-4i32, -3, -2, -1, 0, 1, 2, 3, 4] {
+            let probe_offset = (player_zone::CHAR_CLASS as i32 + delta) as usize;
+            let val = proc.read::<u8>(addr + probe_offset).unwrap_or(255);
+            if val > 0 && val <= 16 {
+                tracing::trace!(offset = format!("+{:#x}", probe_offset), value = val, "Possible class_id");
+            }
+        }
+    }
     let hp_current = proc.read::<i64>(addr + player_zone::HP_CURRENT).unwrap_or(0);
     let hp_max = proc.read::<i64>(addr + player_zone::HP_MAX).unwrap_or(0);
     let mana_current = proc.read::<i32>(addr + player_zone::MANA_CURRENT).unwrap_or(0);
