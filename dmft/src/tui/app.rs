@@ -1,11 +1,76 @@
-use crate::eq::structs::SpawnInfo;
+use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::soul::coordinator::SoulCoordinator;
+
+/// Which screen is currently displayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActiveScreen {
+    Dashboard,
+    Spawns,
+    Character,
+    Map,
+}
+
+impl ActiveScreen {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Dashboard => "Dashboard",
+            Self::Spawns => "Spawns",
+            Self::Character => "Character",
+            Self::Map => "Map",
+        }
+    }
+
+    pub fn key(&self) -> char {
+        match self {
+            Self::Dashboard => '1',
+            Self::Spawns => '2',
+            Self::Character => '3',
+            Self::Map => '4',
+        }
+    }
+
+    pub const ALL: [ActiveScreen; 4] = [
+        Self::Dashboard,
+        Self::Spawns,
+        Self::Character,
+        Self::Map,
+    ];
+}
 
 /// Which panel is currently focused for keyboard input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivePanel {
     SpawnList,
     HexDump,
+}
+
+/// Spawn type filter for the spawn list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpawnFilter {
+    All,
+    Pc,
+    Npc,
+    Named,
+}
+
+impl SpawnFilter {
+    pub fn next(self) -> Self {
+        match self {
+            Self::All => Self::Pc,
+            Self::Pc => Self::Npc,
+            Self::Npc => Self::Named,
+            Self::Named => Self::All,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Pc => "PC",
+            Self::Npc => "NPC",
+            Self::Named => "Named",
+        }
+    }
 }
 
 /// Per-client state for each attached EQ process.
@@ -38,6 +103,7 @@ impl ClientState {
 /// Application state for the TUI debugger.
 pub struct App {
     pub running: bool,
+    pub active_screen: ActiveScreen,
     pub active_panel: ActivePanel,
 
     // Multi-client state
@@ -58,6 +124,8 @@ pub struct App {
     pub spawn_scroll: usize,
     pub spawn_selected: usize,
     pub spawn_filter: String,
+    pub spawn_type_filter: SpawnFilter,
+    pub search_mode: bool,
 
     // Hex dump state
     pub hex_address: usize,
@@ -74,12 +142,16 @@ pub struct App {
     // Soul Engine
     pub soul_coordinator: Option<SoulCoordinator>,
     pub soul_tick_counter: u64,
+
+    // Privacy mode — hides own character names and server for screenshots
+    pub privacy_mode: bool,
 }
 
 impl App {
     pub fn new() -> Self {
         Self {
             running: true,
+            active_screen: ActiveScreen::Dashboard,
             active_panel: ActivePanel::SpawnList,
 
             clients: Vec::new(),
@@ -96,6 +168,8 @@ impl App {
             spawn_scroll: 0,
             spawn_selected: 0,
             spawn_filter: String::new(),
+            spawn_type_filter: SpawnFilter::All,
+            search_mode: false,
 
             hex_address: 0,
             hex_data: Vec::new(),
@@ -108,6 +182,8 @@ impl App {
 
             soul_coordinator: None,
             soul_tick_counter: 0,
+
+            privacy_mode: false,
         }
     }
 
@@ -156,19 +232,38 @@ impl App {
     }
 
     pub fn filtered_spawns(&self) -> Vec<&SpawnInfo> {
-        if self.spawn_filter.is_empty() {
-            self.spawns.iter().collect()
-        } else {
-            let filter = self.spawn_filter.to_lowercase();
-            self.spawns
-                .iter()
-                .filter(|s| {
-                    s.displayed_name.to_lowercase().contains(&filter)
-                        || s.class_str().to_lowercase().contains(&filter)
-                        || s.spawn_type.to_string().to_lowercase().contains(&filter)
-                })
-                .collect()
-        }
+        self.spawns
+            .iter()
+            .filter(|s| {
+                // Type filter
+                match self.spawn_type_filter {
+                    SpawnFilter::All => true,
+                    SpawnFilter::Pc => s.spawn_type == SpawnType::Player,
+                    SpawnFilter::Npc => s.spawn_type == SpawnType::Npc,
+                    SpawnFilter::Named => {
+                        s.spawn_type == SpawnType::Npc
+                            && !s.displayed_name.starts_with("a ")
+                            && !s.displayed_name.starts_with("an ")
+                    }
+                }
+            })
+            .filter(|s| {
+                // Text search filter
+                if self.spawn_filter.is_empty() {
+                    return true;
+                }
+                let filter = self.spawn_filter.to_lowercase();
+                s.displayed_name.to_lowercase().contains(&filter)
+                    || s.class_str().to_lowercase().contains(&filter)
+                    || s.spawn_type.to_string().to_lowercase().contains(&filter)
+            })
+            .collect()
+    }
+
+    pub fn cycle_spawn_filter(&mut self) {
+        self.spawn_type_filter = self.spawn_type_filter.next();
+        self.spawn_selected = 0;
+        self.status_message = format!("Filter: {}", self.spawn_type_filter.label());
     }
 
     pub fn spawn_list_down(&mut self) {
@@ -216,7 +311,42 @@ impl App {
 
     pub fn clear_filter(&mut self) {
         self.spawn_filter.clear();
+        self.search_mode = false;
         self.spawn_selected = 0;
+    }
+
+    pub fn toggle_privacy(&mut self) {
+        self.privacy_mode = !self.privacy_mode;
+        self.status_message = if self.privacy_mode {
+            String::from("Privacy mode ON — names and server hidden")
+        } else {
+            String::from("Privacy mode OFF")
+        };
+    }
+
+    /// Redact a name if it belongs to one of our connected characters.
+    /// Returns the original name if privacy mode is off or it's not ours.
+    pub fn redact_name<'a>(&self, name: &'a str) -> std::borrow::Cow<'a, str> {
+        if !self.privacy_mode {
+            return std::borrow::Cow::Borrowed(name);
+        }
+        for (i, client) in self.clients.iter().enumerate() {
+            if let Some(player) = &client.local_player {
+                if player.displayed_name == name || player.name == name {
+                    return std::borrow::Cow::Owned(format!("Toon-{:02}", i + 1));
+                }
+            }
+        }
+        std::borrow::Cow::Borrowed(name)
+    }
+
+    /// Returns the server name, redacted if privacy mode is on.
+    pub fn display_server(&self) -> &str {
+        if self.privacy_mode {
+            "[Hidden Server]"
+        } else {
+            &self.server_name
+        }
     }
 
     pub fn toggle_panel(&mut self) {

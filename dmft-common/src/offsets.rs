@@ -137,8 +137,6 @@ pub mod player_base {
     pub const SPEED_RUN: usize = 0x08c;
     /// float — speed heading (direction of movement)
     pub const SPEED_HEADING: usize = 0x09c;
-    /// uint8_t — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
-    pub const STANDSTATE: usize = 0x134;
     /// uint8_t — spawn type (PC=0, NPC=1, Corpse=2, etc.)
     pub const TYPE: usize = 0x135;
     /// uint32_t — unique spawn ID
@@ -153,16 +151,15 @@ pub mod player_zone {
     pub const HP_MAX: usize = 0x0338;
     /// int64_t — current HP
     pub const HP_CURRENT: usize = 0x03a0;
-    /// int32_t — maximum mana
+    /// int32_t — maximum mana (only valid for local player; other spawns have garbage)
     pub const MANA_MAX: usize = 0x03ac;
-    /// int32_t — current mana
+    /// int32_t — current mana (only valid for local player; other spawns have garbage)
     pub const MANA_CURRENT: usize = 0x03fc;
     /// uint8_t — character level
     pub const LEVEL: usize = 0x03ef;
-    /// uint8_t — character class ID
-    /// TODO: offset 0x0420 from MQ2 headers reads wrong values on live (0 for PAL, 240 for NPCs)
-    /// Needs proper hex dump scan to find correct offset for this build
-    pub const CHAR_CLASS: usize = 0x0420;
+    /// uint8_t — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
+    /// Source: PlayerZoneClient offset 0x0574 in PlayerClient.h
+    pub const STANDSTATE: usize = 0x0574;
     /// int32_t — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
     /// uint32_t — maximum endurance
@@ -175,6 +172,10 @@ pub mod actor_client {
     pub const RACE: usize = 0x0FD4;
     /// int32_t — race override (illusions, etc.)
     pub const RACE_OVERRIDE: usize = 0x0FD8;
+    /// int32_t — character class ID (from ActorBase at offset 0x1C)
+    /// Source: ActorClient at 0x0FC0 + ActorBase.Class at 0x1C = 0x0FDC
+    /// Read as u8 for EqClass::from_id() compatibility (valid range 1-16)
+    pub const CHAR_CLASS: usize = 0x0FDC;
 }
 
 /// Offsets within SpawnManager (PlayerManagerBase)

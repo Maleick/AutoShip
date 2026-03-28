@@ -1,7 +1,7 @@
 use super::structs::{EqClass, SpawnInfo, SpawnType, StandState};
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
-use dmft_common::offsets::{self, player_base, player_zone, spawn_manager};
+use dmft_common::offsets::{self, actor_client, player_base, player_zone, spawn_manager};
 
 /// Read a single spawn's data from the process at the given PlayerClient address.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
@@ -24,23 +24,9 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
     let heading = proc.read::<f32>(addr + player_base::HEADING).unwrap_or(0.0);
 
     let level = proc.read::<u8>(addr + player_zone::LEVEL).unwrap_or(0);
-    // Read class as both u8 and try nearby offsets for diagnostics
-    let class_id = proc.read::<u8>(addr + player_zone::CHAR_CLASS).unwrap_or(0);
-    // If class_id looks wrong, scan nearby for the right value
-    if tracing::enabled!(tracing::Level::TRACE) {
-        for delta in [-4i32, -3, -2, -1, 0, 1, 2, 3, 4] {
-            let probe_offset = (player_zone::CHAR_CLASS as i32 + delta) as usize;
-            let val = proc.read::<u8>(addr + probe_offset).unwrap_or(255);
-            if val > 0 && val <= 16 {
-                tracing::trace!(
-                    offset = format!("+{:#x}", probe_offset),
-                    value = val,
-                    "Possible class_id"
-                );
-            }
-        }
-    }
-    let stand_state_id = proc.read::<u8>(addr + player_base::STANDSTATE).unwrap_or(0);
+    // Class is in ActorClient (mActorClient at 0x0FC0 + ActorBase.Class at 0x1C)
+    let class_id = proc.read::<u8>(addr + actor_client::CHAR_CLASS).unwrap_or(0);
+    let stand_state_id = proc.read::<u8>(addr + player_zone::STANDSTATE).unwrap_or(0);
     let hp_current = proc
         .read::<i64>(addr + player_zone::HP_CURRENT)
         .unwrap_or(0);
@@ -173,4 +159,20 @@ pub fn read_all_spawns(
     }
 
     Ok(spawns)
+}
+
+/// Read a range of raw bytes from a spawn's memory for offset calibration.
+///
+/// Given a spawn address and an offset range, reads `len` bytes starting at
+/// `spawn_addr + start_offset`. Returns the bytes as a `Vec<u8>`.
+/// Useful for hex-dumping around suspected offsets in the TUI.
+pub fn read_spawn_bytes(
+    proc: &ProcessHandle,
+    spawn_addr: usize,
+    start_offset: usize,
+    len: usize,
+) -> Result<Vec<u8>> {
+    let addr = spawn_addr + start_offset;
+    proc.read_bytes(addr, len)
+        .with_context(|| format!("Failed to read {} bytes at spawn+{:#x}", len, start_offset))
 }

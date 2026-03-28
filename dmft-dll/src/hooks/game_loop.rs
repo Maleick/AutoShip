@@ -65,22 +65,28 @@ mod inner {
 
 pub use inner::{install, remove};
 
+/// Track whether this window is in the foreground for render skipping.
+/// When false, we can tell EQ to skip 3D rendering (near-zero GPU for
+/// background clients). Game logic still runs at full speed.
+static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
+
+/// Track tick count for throttling background checks.
+static TICK_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 /// Called every game tick after the original MainLoop runs.
 /// This is our main entry point for per-tick logic.
 fn on_game_tick() {
+    let tick = TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    // Check foreground status every 30 ticks (~1 second) to minimize overhead.
+    if tick % 30 == 0 {
+        update_foreground_status();
+    }
+
     // Run navigation state machine.
     crate::nav::tick();
-
-    // When a command arrives from IPC, dispatch navigation commands:
-    //   match cmd {
-    //       Command::NavigateTo { waypoints } =>
-    //           crate::nav::handle_command(crate::nav::NavCommand::Navigate(waypoints)),
-    //       Command::SetCamp { spot } =>
-    //           crate::nav::handle_command(crate::nav::NavCommand::SetCamp(spot)),
-    //       Command::StopNavigation =>
-    //           crate::nav::handle_command(crate::nav::NavCommand::Stop),
-    //       _ => { /* other command handling */ }
-    //   }
 
     // TODO: Read game state from EQ memory (local player, target, spawns)
     // TODO: Publish state to shared memory via IPC
@@ -92,4 +98,40 @@ fn on_game_tick() {
     //   if let Some(ref player) = game_state.local_player {
     //       crate::combat::tick(player, game_state.target.as_ref(), &game_state.nearby_spawns);
     //   }
+}
+
+/// Check if our window is the foreground window. Used for render skipping —
+/// background clients skip 3D rendering to save GPU/CPU.
+fn update_foreground_status() {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        use windows::Win32::Foundation::HWND;
+
+        let fg: HWND = unsafe { GetForegroundWindow() };
+        let our_pid = std::process::id();
+
+        let mut fg_pid: u32 = 0;
+        unsafe {
+            windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+                fg,
+                Some(&mut fg_pid),
+            );
+        }
+
+        let is_fg = fg_pid == our_pid;
+        WINDOW_IS_FOREGROUND.store(is_fg, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Always foreground on non-Windows (dev builds).
+    }
+}
+
+/// Returns true if this client's window is currently in the foreground.
+/// The render hook can use this to skip CDisplay::RealRender_World for
+/// background clients, saving near-zero GPU usage across 35 bot clients.
+pub fn is_foreground() -> bool {
+    WINDOW_IS_FOREGROUND.load(std::sync::atomic::Ordering::Relaxed)
 }

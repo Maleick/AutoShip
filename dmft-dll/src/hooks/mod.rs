@@ -6,16 +6,18 @@ pub mod movement;
 pub mod targeting;
 
 /// Installs all hooks. Called during DLL initialization.
+///
+/// Note: The game loop hook is installed separately in `lib.rs::install_hooks()`
+/// using the resolved EQ base address + `MAIN_LOOP_OFFSET`. This function
+/// handles any additional hooks (casting, targeting, etc.) once they are ready.
 pub fn install_all() -> Result<(), Box<dyn std::error::Error>> {
-    tracing::info!("Installing hooks...");
+    tracing::info!("Installing additional hooks...");
 
-    // TODO: Resolve actual function addresses from EQ base + offsets.
-    // For now, skip installation since we don't have real addresses.
-    // Example once addresses are known:
-    //   let base = get_module_base("eqgame.exe")?;
-    //   game_loop::install(base + eq::MAIN_LOOP_OFFSET)?;
+    // Game loop hook is installed via lib.rs::install_hooks() with the resolved base.
+    // Additional hooks (casting, targeting, movement) are function-call APIs,
+    // not detours — they don't need install/remove lifecycle.
 
-    tracing::info!("Hook installation skipped (addresses not yet resolved)");
+    tracing::info!("Additional hook setup complete");
     Ok(())
 }
 

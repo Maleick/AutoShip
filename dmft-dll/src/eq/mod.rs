@@ -2,9 +2,10 @@
 //! These are offsets from the eqgame.exe base address.
 //! Derived from MQ2 source headers.
 
-/// CEverQuest::MainLoop offset from base.
-/// TODO: Extract actual offset from mq2-reference headers.
-pub const MAIN_LOOP_OFFSET: usize = 0x0; // placeholder
+/// CEverQuest::MainLoop offset from EQ base.
+/// Derived from dmft_common::offsets::PROCESS_GAME_EVENTS (0x14028E0F0)
+/// minus preferred base (0x140000000).
+pub const MAIN_LOOP_OFFSET: usize = 0x28E0F0;
 
 /// Movement processing function offset.
 pub const MOVE_PLAYER_OFFSET: usize = 0x0; // placeholder

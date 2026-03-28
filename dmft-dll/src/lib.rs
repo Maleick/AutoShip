@@ -151,13 +151,31 @@ fn resolve_eq_base() -> u64 {
 
 /// Install all function hooks using the resolved EQ base address.
 fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
+    // Primary: use the offset constant derived from PROCESS_GAME_EVENTS.
     let main_loop_offset = eq::MAIN_LOOP_OFFSET;
     if main_loop_offset == 0 {
-        tracing::info!("Game loop hook skipped (offset not yet resolved)");
+        tracing::warn!("Game loop hook SKIPPED — MAIN_LOOP_OFFSET is still 0x0!");
         return Ok(());
     }
 
     let main_loop_addr = eq_base as usize + main_loop_offset;
+
+    // Cross-check against dmft_common offsets via rebase.
+    if let Some(expected) = dmft_common::offsets::rebase(
+        dmft_common::offsets::PROCESS_GAME_EVENTS,
+        eq_base,
+    ) {
+        if main_loop_addr != expected {
+            tracing::warn!(
+                computed = format!("{:#x}", main_loop_addr),
+                expected = format!("{:#x}", expected),
+                "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets rebase"
+            );
+            hooks::game_loop::install(expected)?;
+            return Ok(());
+        }
+    }
+
     hooks::game_loop::install(main_loop_addr)?;
     Ok(())
 }

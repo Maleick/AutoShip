@@ -105,7 +105,7 @@ impl fmt::Display for SpawnType {
     }
 }
 
-/// Standing state values from STANDSTATE offset (0x134).
+/// Standing state values from STANDSTATE offset (0x0574 in PlayerZoneClient).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StandState {
     Standing,
