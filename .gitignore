@@ -23,3 +23,14 @@ target/
 *.sqlite
 *.sqlite3
 credentials.db*
+
+# Markdown files (except README) — handoff docs may contain credentials
+*.md
+!README.md
+!CLAUDE.md
+
+# Playwright MCP
+.playwright-mcp/
+
+# Account credentials
+accounts.csv

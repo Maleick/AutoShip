@@ -112,9 +112,10 @@ pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
 /// Offsets within PlayerBase (base class of PlayerClient)
 pub mod player_base {
     /// PlayerClient* — next spawn in linked list (from TListNode)
-    pub const NEXT: usize = 0x08;
+    /// Note: vtable pointer at 0x00 pushes TListNode fields down by 8
+    pub const NEXT: usize = 0x10;
     /// PlayerClient* — previous spawn in linked list (from TListNode)
-    pub const PREV: usize = 0x00;
+    pub const PREV: usize = 0x08;
 
     /// float — Y position
     pub const Y: usize = 0x074;
