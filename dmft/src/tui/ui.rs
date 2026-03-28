@@ -51,16 +51,14 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let server_str = format!(" {} ", app.server_name);
-    let tick_str = format!(" Tick:{} ", app.tick_count);
+    let _tick_str = format!(" Tick:{} ", app.tick_count);
+
+    // Get zone from active client
+    let zone_str = app.active_client()
+        .map(|c| if c.zone_name.is_empty() { "Unknown Zone".to_string() } else { c.zone_name.clone() })
+        .unwrap_or_else(|| "No Zone".to_string());
 
     let header = Paragraph::new(Line::from(vec![
-        Span::styled(
-            " FROSTREAVER ",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("| "),
         Span::styled(
             &client_str,
             Style::default()
@@ -76,8 +74,11 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
         ),
         Span::raw(" | "),
         Span::styled(&server_str, Style::default().fg(Color::Magenta)),
-        Span::raw("|"),
-        Span::styled(&tick_str, Style::default().fg(Color::DarkGray)),
+        Span::raw("| "),
+        Span::styled(
+            format!(" {} ", zone_str),
+            Style::default().fg(Color::White),
+        ),
     ]))
     .block(
         Block::default()
@@ -506,7 +507,7 @@ fn spawn_row_style(spawn: &SpawnInfo) -> Style {
 
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let keybinds =
-        " q:Quit | Tab:Panel | [/]:Client | j/k:Nav | Enter:Inspect | Esc:Clear | /:Filter ";
+        " q:Quit | Tab:Panel | [/]:Client | j/k:Nav | Enter:Inspect | Esc:Clear | /:Search | f:Filter(All>PC>NPC) ";
 
     let status = Paragraph::new(Line::from(vec![
         Span::styled(&app.status_message, Style::default().fg(Color::Yellow)),
