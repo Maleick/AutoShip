@@ -160,8 +160,9 @@ pub mod player_zone {
     /// uint8_t — character level
     pub const LEVEL: usize = 0x03ef;
     /// uint8_t — character class ID
-    /// Note: was 0x0420 in MQ2 headers, probing found correct value at 0x041c
-    pub const CHAR_CLASS: usize = 0x041c;
+    /// TODO: offset 0x0420 from MQ2 headers reads wrong values on live (0 for PAL, 240 for NPCs)
+    /// Needs proper hex dump scan to find correct offset for this build
+    pub const CHAR_CLASS: usize = 0x0420;
     /// int32_t — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
     /// uint32_t — maximum endurance
