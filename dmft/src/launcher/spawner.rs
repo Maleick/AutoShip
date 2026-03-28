@@ -16,7 +16,7 @@ pub fn spawn_eq_client(
     use windows::Win32::System::Threading::*;
     use windows::Win32::Foundation::*;
     use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
+    use std::os::windows::ffi::OsStrExt;
 
     let cmd = format!(
         "\"{}\" patchme /login:{} /server:{}{}",

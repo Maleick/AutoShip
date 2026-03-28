@@ -22,23 +22,25 @@ pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
     let results: Mutex<Vec<WindowHandle>> = Mutex::new(Vec::new());
 
     unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        let data = &*(lparam.0 as *const (String, *const Mutex<Vec<WindowHandle>>));
-        let substring = &data.0;
-        let results = &*data.1;
+        unsafe {
+            let data = &*(lparam.0 as *const (String, *const Mutex<Vec<WindowHandle>>));
+            let substring = &data.0;
+            let results = &*data.1;
 
-        let mut buf = [0u16; 512];
-        let len = GetWindowTextW(hwnd, &mut buf);
-        if len > 0 {
-            let title = String::from_utf16_lossy(&buf[..len as usize]);
-            if title.to_lowercase().contains(substring) {
-                let mut pid: u32 = 0;
-                GetWindowThreadProcessId(hwnd, Some(&mut pid));
-                if let Ok(mut r) = results.lock() {
-                    r.push(WindowHandle { hwnd, title, pid });
+            let mut buf = [0u16; 512];
+            let len = GetWindowTextW(hwnd, &mut buf);
+            if len > 0 {
+                let title = String::from_utf16_lossy(&buf[..len as usize]);
+                if title.to_lowercase().contains(substring) {
+                    let mut pid: u32 = 0;
+                    GetWindowThreadProcessId(hwnd, Some(&mut pid));
+                    if let Ok(mut r) = results.lock() {
+                        r.push(WindowHandle { hwnd, title, pid });
+                    }
                 }
             }
+            BOOL(1) // continue enumeration
         }
-        BOOL(1) // continue enumeration
     }
 
     let data = (substring_lower, &results as *const _);
