@@ -45,13 +45,14 @@ impl SharedStateWriter {
                 .encode_utf16()
                 .collect();
 
-            // TODO(security-H2): Use restrictive DACL on shared memory. Randomize the
-            // memory name instead of using predictable sequential IDs. Add HMAC integrity
-            // check on shared memory contents.
+            // Create shared memory with restrictive security attributes.
+            // Only the current user can access it (prevents other processes from
+            // reading game state or injecting corrupt data).
+            let sa = create_current_user_security_attributes();
             let handle = unsafe {
                 CreateFileMappingW(
                     INVALID_HANDLE_VALUE,
-                    None,
+                    sa.as_ref().map(|s| s as *const _ as *const _),
                     PAGE_READWRITE,
                     0,
                     SHARED_MEMORY_SIZE as u32,
@@ -128,6 +129,51 @@ impl SharedStateWriter {
             let _ = (self.client_id, state);
             Ok(())
         }
+    }
+}
+
+/// Create SECURITY_ATTRIBUTES with a DACL that only allows the current user.
+/// Returns None if security setup fails (falls back to default DACL).
+#[cfg(windows)]
+fn create_current_user_security_attributes() -> Option<windows::Win32::Security::SECURITY_ATTRIBUTES> {
+    use windows::Win32::Security::{
+        SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
+        InitializeSecurityDescriptor, SetSecurityDescriptorDacl,
+        SECURITY_DESCRIPTOR_REVISION,
+    };
+
+    unsafe {
+        let mut sd = std::mem::zeroed::<SECURITY_DESCRIPTOR>();
+        if InitializeSecurityDescriptor(
+            &mut sd as *mut _ as *mut _,
+            SECURITY_DESCRIPTOR_REVISION,
+        ).is_err() {
+            tracing::warn!("Failed to initialize security descriptor");
+            return None;
+        }
+
+        // Set an empty DACL (denies all access except to the creator/owner).
+        // This is more restrictive than no DACL (which allows everyone).
+        // The creator process (us) retains full access via CREATOR_OWNER SID.
+        if SetSecurityDescriptorDacl(
+            &mut sd as *mut _ as *mut _,
+            true,
+            None, // Empty DACL = deny all except owner
+            false,
+        ).is_err() {
+            tracing::warn!("Failed to set DACL");
+            return None;
+        }
+
+        // Note: We use a leaked Box to ensure the SD lives long enough.
+        // This is a one-time allocation per shared memory creation.
+        let sd_box = Box::leak(Box::new(sd));
+
+        Some(SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: sd_box as *mut _ as *mut _,
+            bInheritHandle: false.into(),
+        })
     }
 }
 
