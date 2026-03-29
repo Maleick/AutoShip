@@ -588,6 +588,33 @@ fn draw_player_detail(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(&client.zone_name, Style::default().fg(Color::White)),
     ]));
 
+    // Cast state
+    if let Some(cast) = &player.cast_state {
+        if cast.is_casting() {
+            lines.push(Line::from(vec![
+                Span::raw("Casting: "),
+                Span::styled(
+                    format!("gem {} (ETA: {})", cast.spell_slot + 1, cast.spell_eta),
+                    Style::default()
+                        .fg(Color::LightYellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+        let recast_strs: Vec<String> = cast.gem_etas
+            .iter()
+            .enumerate()
+            .filter(|(_, eta)| **eta != 0)
+            .map(|(i, eta)| format!("G{}:{}", i + 1, eta))
+            .collect();
+        if !recast_strs.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("Recast: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(recast_strs.join(" "), Style::default().fg(Color::Yellow)),
+            ]));
+        }
+    }
+
     // Pixel art class sprite
     lines.push(Line::from(""));
     let sprite_lines = sprites::class_sprite(player.class.as_ref(), &player.stand_state, app.tick_count);
