@@ -58,24 +58,22 @@ pub fn apply_working_set_limit(pid: u32, max_working_set_mb: u32) -> Result<()> 
     use windows::Win32::Foundation::*;
 
     const MIN_WORKING_SET_MB: u32 = 128;
-    // QUOTA_LIMITS_HARDWS_MAX_ENABLE (0x4) — enforce hard max, page beyond limit
-    const QUOTA_LIMITS_HARDWS_MAX_ENABLE: u32 = 0x00000004;
 
     let min_bytes = (MIN_WORKING_SET_MB as usize) * 1024 * 1024;
     let max_bytes = (max_working_set_mb as usize) * 1024 * 1024;
 
     unsafe {
         let handle = OpenProcess(
-            PROCESS_SET_INFORMATION | PROCESS_SET_QUOTA,
+            PROCESS_SET_INFORMATION,
             false,
             pid,
         )?;
 
-        let result = SetProcessWorkingSetSizeEx(
+        // Use SetProcessWorkingSetSize (non-Ex version available in windows 0.54)
+        let result = SetProcessWorkingSetSize(
             handle,
             min_bytes,
             max_bytes,
-            QUOTA_LIMITS_HARDWS_MAX_ENABLE,
         );
 
         let _ = CloseHandle(handle);

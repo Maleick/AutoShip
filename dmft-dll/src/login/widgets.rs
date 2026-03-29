@@ -157,22 +157,24 @@ pub fn simulate_enter_key(eqmain_base: u64) -> bool {
     #[cfg(windows)]
     {
         use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_KEYDOWN, WM_KEYUP};
-        use windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN;
         use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
+
+        // VK_RETURN = 0x0D
+        const VK_RETURN: usize = 0x0D;
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
             tracing::warn!("Cannot simulate Enter — EQ HWND not resolved");
             return false;
         };
 
-        let hwnd = HWND(hwnd_val as *mut _);
+        let hwnd = HWND(hwnd_val as isize);
 
         unsafe {
             // lParam for WM_KEYDOWN: repeat count=1, scan code for Enter (0x1C), extended=0
             let lparam_down = LPARAM(0x001C_0001);
             let lparam_up = LPARAM(0xC01C_0001_u32 as i32 as isize); // transition + previous state bits set
-            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN.0 as usize), lparam_down);
-            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN.0 as usize), lparam_up);
+            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN), lparam_down);
+            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN), lparam_up);
         }
 
         tracing::debug!(hwnd = format!("{:#x}", hwnd_val), "Simulated Enter key on EQ window");
