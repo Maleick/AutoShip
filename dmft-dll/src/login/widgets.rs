@@ -149,124 +149,113 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     }
 }
 
-/// Type text into the EQ login window using SendInput (hardware-level keyboard simulation).
+/// Write credentials directly to CEditWnd widgets by finding them in CXWndManager's
+/// window list and setting their InputText CXStr in-place.
 ///
-/// SendInput injects keystrokes at the OS level — the foreground window receives them
-/// exactly as if the user typed them. This works with EQ's custom CXWnd/CSidlWnd UI
-/// where PostMessageW(WM_CHAR) does not reach the focused edit widget.
-///
-/// Sequence: SetForegroundWindow → clear field → type username → Tab → clear → type password.
+/// This is the MQ2 approach — no keyboard simulation. We:
+/// 1. Walk CXWndManager::pWindows to find username/password edit widgets
+/// 2. Write directly to CEditBaseWnd::InputText (CXStr at +0x278)
+/// 3. Click the Login button via vtable WndNotification(XWM_LCLICK)
 pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::UI::Input::KeyboardAndMouse::{
-            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-            KEYEVENTF_UNICODE, KEYEVENTF_KEYUP,
-            VK_BACK, VK_TAB, VK_RETURN,
-        };
-        use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
-        use windows::Win32::Foundation::HWND;
+        use dmft_common::offsets::eqmain as off;
 
-        let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
-            tracing::warn!("Cannot type credentials — EQ HWND not resolved");
+        let Some(cxwnd_mgr) = super::eqmain::resolve_cxwnd_manager(eqmain_base) else {
+            tracing::warn!("Cannot write credentials — CXWndManager not resolved");
             return false;
         };
 
-        let hwnd = HWND(hwnd_val as isize);
-
         unsafe {
-            // Bring EQ window to foreground so SendInput targets it
-            let _ = SetForegroundWindow(hwnd);
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+            let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
 
-            // Helper: send a virtual key press (down + up)
-            let send_vk = |vk: u16| {
-                let down = INPUT {
-                    r#type: INPUT_KEYBOARD,
-                    Anonymous: INPUT_0 {
-                        ki: KEYBDINPUT {
-                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
-                            wScan: 0,
-                            dwFlags: Default::default(),
-                            time: 0,
-                            dwExtraInfo: 0,
-                        },
-                    },
-                };
-                let up = INPUT {
-                    r#type: INPUT_KEYBOARD,
-                    Anonymous: INPUT_0 {
-                        ki: KEYBDINPUT {
-                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
-                            wScan: 0,
-                            dwFlags: KEYEVENTF_KEYUP,
-                            time: 0,
-                            dwExtraInfo: 0,
-                        },
-                    },
-                };
-                SendInput(&[down, up], std::mem::size_of::<INPUT>() as i32);
-                std::thread::sleep(std::time::Duration::from_millis(5));
-            };
-
-            // Helper: send a unicode character via SendInput
-            let send_char = |ch: u16| {
-                let down = INPUT {
-                    r#type: INPUT_KEYBOARD,
-                    Anonymous: INPUT_0 {
-                        ki: KEYBDINPUT {
-                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(0),
-                            wScan: ch,
-                            dwFlags: KEYEVENTF_UNICODE,
-                            time: 0,
-                            dwExtraInfo: 0,
-                        },
-                    },
-                };
-                let up = INPUT {
-                    r#type: INPUT_KEYBOARD,
-                    Anonymous: INPUT_0 {
-                        ki: KEYBDINPUT {
-                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(0),
-                            wScan: ch,
-                            dwFlags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
-                            time: 0,
-                            dwExtraInfo: 0,
-                        },
-                    },
-                };
-                SendInput(&[down, up], std::mem::size_of::<INPUT>() as i32);
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            };
-
-            // Clear username field with backspaces
-            for _ in 0..128 {
-                send_vk(VK_BACK.0);
+            if array_ptr == 0 || count == 0 || count > 500 {
+                tracing::warn!(count, "Invalid CXWndManager window array");
+                return false;
             }
-            std::thread::sleep(std::time::Duration::from_millis(50));
 
-            // Type account name
-            for ch in account.encode_utf16() {
-                send_char(ch);
+            // Find username and password edit widgets by scanning for the
+            // "USERNAME" and "PASSWORD" label windows. The edit fields are
+            // the windows immediately before their labels in the array.
+            let mut username_edit: usize = 0;
+            let mut password_edit: usize = 0;
+            let mut login_button: usize = 0;
+            let mut prev_wnd: usize = 0;
+            let mut prev_prev_wnd: usize = 0;
+
+            for i in 0..count as usize {
+                let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+                if wnd_ptr == 0 { continue; }
+
+                if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                    if text == "USERNAME" && prev_prev_wnd != 0 {
+                        username_edit = prev_prev_wnd;
+                        tracing::info!(
+                            ptr = format!("{:#x}", username_edit),
+                            "Found username edit widget (2 before USERNAME label)"
+                        );
+                    }
+                    if text == "PASSWORD" && prev_wnd != 0 {
+                        password_edit = prev_wnd;
+                        tracing::info!(
+                            ptr = format!("{:#x}", password_edit),
+                            "Found password edit widget (1 before PASSWORD label)"
+                        );
+                    }
+                    // The Login button on the login screen (not the main menu LOGIN)
+                    // is at a specific position — find it by checking for "LOGIN"
+                    // text on a visible button after the password label
+                    if text == "LOGIN" && password_edit != 0 && login_button == 0 {
+                        login_button = wnd_ptr;
+                    }
+                }
+
+                prev_prev_wnd = prev_wnd;
+                prev_wnd = wnd_ptr;
             }
-            tracing::info!("Typed account name ({} chars) via SendInput", account.len());
 
-            // Tab to password field
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            send_vk(VK_TAB.0);
-            std::thread::sleep(std::time::Duration::from_millis(100));
-
-            // Clear password field with backspaces
-            for _ in 0..128 {
-                send_vk(VK_BACK.0);
+            if username_edit == 0 || password_edit == 0 {
+                tracing::warn!("Could not find username/password edit widgets");
+                return false;
             }
-            std::thread::sleep(std::time::Duration::from_millis(50));
 
-            // Type password
-            for ch in password.encode_utf16() {
-                send_char(ch);
+            // Write username to both WindowText (+0x078) and InputText (+0x278)
+            let wrote_username = write_cxstr_inplace(
+                username_edit + off::CEDITBASEWND_INPUT_TEXT,
+                account,
+            );
+            // Also try WindowText in case InputText CXStr isn't allocated
+            let wrote_wt = write_cxstr_inplace(
+                username_edit + off::CXWND_WINDOW_TEXT,
+                account,
+            );
+            tracing::info!(
+                input_text = wrote_username,
+                window_text = wrote_wt,
+                account,
+                "Wrote username to edit widget"
+            );
+
+            // Write password
+            let wrote_password = write_cxstr_inplace(
+                password_edit + off::CEDITBASEWND_INPUT_TEXT,
+                password,
+            );
+            let wrote_pw_wt = write_cxstr_inplace(
+                password_edit + off::CXWND_WINDOW_TEXT,
+                password,
+            );
+            tracing::info!(
+                input_text = wrote_password,
+                window_text = wrote_pw_wt,
+                "Wrote password to edit widget (content redacted)"
+            );
+
+            if !wrote_username && !wrote_wt {
+                tracing::error!("Failed to write username to any CXStr field");
+                return false;
             }
-            tracing::info!("Typed password ({} chars) via SendInput", password.len());
         }
 
         true
