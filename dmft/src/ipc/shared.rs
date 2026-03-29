@@ -27,7 +27,11 @@ unsafe impl Send for SharedStateReader {}
 unsafe impl Sync for SharedStateReader {}
 
 impl SharedStateReader {
-    /// Open (or create) the named shared memory region for `client_id`.
+    /// Open an existing named shared memory region for `client_id`.
+    ///
+    /// The DLL (writer) creates the region; this opens it **read-only**.
+    /// Returns an error if the DLL has not yet created the mapping — callers
+    /// should retry on the next poll cycle.
     ///
     /// Memory name: `dmft_state_{client_id}`
     pub fn new(client_id: ClientId) -> Result<Self> {
@@ -36,22 +40,21 @@ impl SharedStateReader {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
             use windows::core::PCWSTR;
             use windows::Win32::System::Memory::{
-                CreateFileMappingW, MapViewOfFile, FILE_MAP_READ, PAGE_READWRITE,
+                OpenFileMappingW, MapViewOfFile, FILE_MAP_READ,
             };
-            use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
 
             let name: Vec<u16> = format!("dmft_state_{}\0", client_id)
                 .encode_utf16()
                 .collect();
 
-            // TODO(security-H2): Open with FILE_MAP_READ only for the reader side.
+            // Open the mapping created by the DLL with read-only access.
+            // OpenFileMappingW (not CreateFileMappingW) ensures the orchestrator
+            // can never accidentally write to shared memory; PAGE_READWRITE is
+            // not needed or requested here.
             let handle = unsafe {
-                CreateFileMappingW(
-                    INVALID_HANDLE_VALUE,
-                    None,
-                    PAGE_READWRITE,
-                    0,
-                    SHARED_MEMORY_SIZE as u32,
+                OpenFileMappingW(
+                    FILE_MAP_READ.0,
+                    false,
                     PCWSTR(name.as_ptr()),
                 )
             }?;

@@ -1,3 +1,11 @@
 [workspace]
 members = ["dmft", "dmft-dll", "dmft-common"]
 resolver = "2"
+
+# panic = "abort" in the release profile:
+#   - For dmft-dll (cdylib): critical — unwinding across FFI into eqgame.exe's
+#     C++ stack frames is undefined behaviour.  abort avoids that entirely.
+#   - For dmft (orchestrator): produces a smaller, deterministic binary; panics
+#     terminate the process either way, so no information is lost.
+[profile.release]
+panic = "abort"
