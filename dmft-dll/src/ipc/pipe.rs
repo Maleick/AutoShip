@@ -53,7 +53,7 @@ impl CommandListener {
                     4096, // out buffer
                     4096, // in buffer
                     0,    // default timeout
-                    security_attrs.as_ref(),
+                    security_attrs.as_ref().map(|sa| sa as *const _),
                 )
             }?;
 
