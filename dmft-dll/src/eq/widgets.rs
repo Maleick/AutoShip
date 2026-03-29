@@ -301,7 +301,8 @@ pub unsafe fn clone_cstrrep(donor_rep: usize) -> Option<usize> {
     let donor_alloc = *((donor_rep + off::CSTRREP_ALLOC) as *const u32) as usize;
     let total_size = off::CSTRREP_DATA + donor_alloc.max(128);
 
-    let heap = GetProcessHeap().ok()?;
+    let heap = GetProcessHeap();
+    if heap.is_invalid() { return None; }
     let new_rep = HeapAlloc(heap, HEAP_ZERO_MEMORY, total_size);
     if new_rep.is_null() {
         tracing::error!("HeapAlloc failed for CStrRep clone");
@@ -346,13 +347,11 @@ pub unsafe fn alloc_cstrrep(text: &str) -> Option<usize> {
     let alloc_size = text_len + 64; // extra room
     let total_size = off::CSTRREP_DATA + alloc_size;
 
-    let heap = match GetProcessHeap() {
-        Ok(h) => h,
-        Err(_) => {
-            tracing::error!("GetProcessHeap failed");
-            return None;
-        }
-    };
+    let heap = GetProcessHeap();
+    if heap.is_invalid() {
+        tracing::error!("GetProcessHeap returned invalid handle");
+        return None;
+    }
     let rep = HeapAlloc(heap, HEAP_ZERO_MEMORY, total_size);
     if rep.is_null() {
         tracing::error!("HeapAlloc failed for CStrRep");
