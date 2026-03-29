@@ -839,6 +839,14 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
                 spawn_id,
             });
         }
+        Command::LootCorpse => {
+            tracing::info!("LootCorpse received");
+            crate::combat::loot::loot_nearest_corpse();
+        }
+        Command::LootAll => {
+            tracing::info!("LootAll received");
+            crate::combat::loot::loot_all_items();
+        }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();

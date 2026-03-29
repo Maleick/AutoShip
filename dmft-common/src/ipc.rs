@@ -47,6 +47,10 @@ pub enum Command {
     CombatSetAssistTarget { spawn_id: u32 },
     CombatForceAbility { ability_id: u32 },
     CombatEmergencyHeal { target_id: u32 },
+    /// Loot the nearest corpse.
+    LootCorpse,
+    /// Loot all items from the currently open loot window.
+    LootAll,
     // Soul Engine
     /// Send a chat message in-game.
     Say {

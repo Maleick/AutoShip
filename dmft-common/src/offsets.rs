@@ -90,6 +90,12 @@ pub const GET_CON_LEVEL: u64 = 0x1402E3C10;
 /// PlayerClient::GetPcClient — get PcClient from PlayerClient
 pub const GET_PC_CLIENT: u64 = 0x140307970;
 
+/// __do_loot — main loot function (opens loot window on targeted corpse)
+pub const DO_LOOT: u64 = 0x14022C0D0;
+
+/// pinstActiveCorpse — pointer to the active corpse (current loot target)
+pub const PINST_ACTIVE_CORPSE: u64 = 0x140E8E390;
+
 /// __ProcessGameEvents — game event processing (hook point for game loop)
 pub const PROCESS_GAME_EVENTS: u64 = 0x14028E0F0;
 

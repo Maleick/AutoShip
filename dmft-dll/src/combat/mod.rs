@@ -3,6 +3,7 @@ pub mod classes;
 pub mod gcd;
 pub mod holyshit;
 pub mod humanize;
+pub mod loot;
 pub mod mana;
 pub mod positioning;
 pub mod skill_cooldowns;
