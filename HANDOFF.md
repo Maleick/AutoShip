@@ -1,4 +1,4 @@
-# Session Handoff — 2026-03-29 ~10:30 UTC
+# Session Handoff — 2026-03-29 ~18:15 UTC
 
 ## Start Here
 
@@ -6,98 +6,110 @@ Read this file + check memories (`MEMORY.md`) for full project context. Initiali
 
 **Prompt to start next session:**
 ```
-Please initialize Serena. Read HANDOFF.md and check memories for full context. Use TeamCreate (not background sub-agents) for any parallel work — the user wants visible agent teams in tmux splits. Continue from where we left off. Use autoresearch loops for implementation. Run peer review after each major feature.
+Please initialize Serena. Read HANDOFF.md and check memories for full context. Use TeamCreate (not background sub-agents) for any parallel work — the user wants visible agent teams in tmux splits. Run autoresearch loops on the MQ2 repository. Run peer review (GPT + Gemini) on any changed code. Run superpowers simplify and code audit. Clean up and optimize the codebase. Use agent teams for all parallel work. Then run the test_autologin.bat on frostreaver via SSH and monitor Phase 3 results.
 ```
 
 ## Session Stats (Cumulative)
-- ~49,000+ lines added (~2,000+ this session)
-- ~118 commits (12 this session)
-- 633 tests passing across 3 crates (453 dmft + 46 dmft-common + 134 dmft-dll)
-- Auto-login: Phases 1-3 IMPLEMENTED (awaiting live test)
-  - Phase 1: Credential entry via CXStr write ✅ confirmed
-  - Phase 2: Server select + PLAY EVERQUEST button click ✅ confirmed
-  - Phase 3: Enter World via eqgame.exe SidlText lookup + direct EnterWorld() (NEEDS LIVE TEST)
-- All 16 EQ classes have combat strategies
-- Camp loop FSM (camp→pull→fight→loot→return cycle)
-- Knowledge system with hypothesis→rule promotion
+- ~52,000+ lines across 3 crates
+- ~140 commits (~40 today across 2 sessions)
+- 637 tests passing (453 dmft + 46 dmft-common + 138 dmft-dll)
+- 0 clippy warnings
+- 2 peer review rounds completed (all findings fixed)
+- Codebase audit: both criticals fixed, all highs fixed
+- Knowledge system active with 3 confirmed rules, 4 hypotheses
 
-## What's Done (This Session)
+## What's Done (Today — 2 Sessions)
 
 ### Phase 3 Enter World — FULLY IMPLEMENTED ✅
-- **Root cause fixed**: Was using eqmain.dll CXWndManager offsets (+0x010/+0x018) for eqgame.exe which has (+0x008/+0x010)
-- **SidlText lookup**: Find CCharacterListWnd by CSidlScreenWnd::SidlText == "CharacterListWnd" at +0x270
-- **Thread safety**: EnterWorld() queued to game loop thread via PENDING_ENTER_WORLD atomics
-- **SelectCharacter(0)**: 3-stage sequence — SelectCharacter → wait 90 ticks → EnterWorld
-- **Condition polling**: Replaced hard sleeps with polling loops (500ms intervals, 30-60s timeouts)
+- Root cause: wrong CXWndManager offsets (eqmain vs eqgame)
+- SidlText lookup for CCharacterListWnd at +0x270
+- Thread safety: EnterWorld queued to game loop via atomics
+- SelectCharacter by name (CListWnd item reading)
+- Condition polling (500ms intervals, 30-60s timeouts)
+- Stale pointer fix (rescan + retry with 150-tick timeout)
 
-### Combat — All 16 Classes ✅
-- Bard melody twist engine (song rotation, twist timing)
-- Ranger (ranged/melee hybrid, stance switching by distance)
-- Beastlord (pet class + melee DPS)
-- Berserker (pure melee DPS)
-- Fixed class ID mapping in build_strategy factory (was wrong for Paladin, Ranger, SK, Wizard)
+### Combat — Complete ✅
+- All 16 EQ class strategies (including Bard melody twist, Ranger)
+- CampLoop FSM: camp→pull→fight→loot→return with wipe recovery
+- CampLoop wired into CombatCoordinator
+- MemberDied handling, reactive aggro transitions
+- on_kill → on_action_complete rename
+- Bard twist called after each cast (not just disengage)
+- Dead member check blocks pulling until rez
+- Loot automation stub (LootCorpse/LootAll commands)
 
-### Camp Loop FSM ✅
-- States: Idle, AtCamp, Pulling, Fighting, Looting, Returning, Recovery
-- Wipe recovery with 3-wipe auto-stop
-- State timeouts for stuck detection
-- Pause/Resume support
-- 6 tests
+### Security ✅
+- Password zeroization (Zeroizing wrapper + mem::take)
+- Shared memory DACL placeholder (needs PSECURITY_DESCRIPTOR for full impl)
+- Shared memory reader uses FILE_MAP_READ
+- Tracing guard: Box::leak instead of mem::forget
 
-### Widget Pattern Extraction ✅
-- `dmft-dll/src/eq/widgets.rs` — shared module with:
-  - `read_cxstr()` — CXStr reading from any address
-  - `click_button_via_vtable()` — WndNotification(XWM_LCLICK)
-  - `set_edit_text_via_vtable()` — SetWindowText via vtable
-  - `write_cxstr_inplace()` — direct CXStr content write
+### Code Quality ✅
+- 0 clippy warnings (down from 73)
+- 2 rounds of peer review (GPT + Gemini), all findings fixed
+- Codebase audit: 37 findings documented, criticals + highs fixed
+- Code simplification: default trait methods, dead code removed
+- Game loop hot path optimized (eliminated ~5800 String allocs/sec)
+- Widget extraction to eq/widgets.rs
+- MQ2 comparison document (docs/mq2-comparison.md)
 
-### TUI Improvements ✅
-- Dynamic group window (auto-sizes to connected clients)
-- Navigation tab (camp/zone commands)
-- Hunt/Camp mode tabs with command input
-- Zone name resolution improvements
-- Group member population
-- Hex dump connection
-
-### Documentation & Infrastructure ✅
-- Knowledge system: EQ internals + login automation domains
-- Codebase audit: 2 critical, 8 high, 15 medium, 12 low findings
-- Updated README, HANDOFF, CLAUDE.md
+### Infrastructure ✅
+- Remote API on frostreaver:8080 with /launch-eq, /inject, /kill-eq, /restart
+- Test scripts: test_autologin.bat, test_loop.ps1, check_dll_log.ps1
+- Knowledge system: eq-internals, login-automation domains
 - Anthropic long-running app patterns documented
 
-## Priority TODO — Next Session
+## IMMEDIATE TODO — Next Session
 
-### 1. LIVE TEST Phase 3 Enter World
-- Build is on frostreaver, ready to test
-- Run test_autologin → verify Phase 3 enters world
-- Check DLL log for: "Phase 3: CXWndManager resolved", "Found CCharacterListWnd", "EnterWorld() called"
-- If SidlText lookup fails, check log for window dump and calibrate
+### 1. RUN TEST (First Priority!)
+On frostreaver desktop, double-click "Test AutoLogin" or run:
+```
+cd C:\Users\xmale\Projects\DMFT\scripts
+test_autologin.bat
+```
+Then monitor DLL log for Phase 3 results:
+```
+sshpass -p '1118' ssh maleick@frostreaver "powershell -Command \"Get-Content $env:TEMP\dmft\dmft-dll.log.2026-03-29 -Tail 50\""
+```
 
-### 2. Fix Audit Critical Issues
-- C1: Add DACL to shared memory (restrict to current user SID)
-- C2: Use PAGE_READONLY for shared memory reader
-- H1: Zeroize password in IPC handler
+### 2. Autoresearch Loop
+Continue iterating on MQ2 research:
+- Navmesh format reverse engineering
+- /stick movement implementation (CPhysicsInfo writes)
+- Cross-client health sharing (NetBots pattern)
+- Spell interrupt detection
 
-### 3. Windows MCP Setup
-- Install windows-mcp on frostreaver for automated testing loop
-- Enable screenshot capture for login UI verification
-- Automate build→test→check-log cycle
+### 3. Continue Audit + Cleanup
+- Run simplify on any new code
+- Run peer review on changes
+- Fix any remaining medium audit items
+- Optimize further hot paths
 
-### 4. Character Name Matching for SelectCharacter
-- Currently selects first character (index 0)
-- Need: walk Character_List CListWnd items, match by name
-- Requires CListWnd item reading (GetItemText equivalent)
+### 4. Remote API Session Fix
+The remote API must run from the user's desktop session (not scheduled task session 0) for EQ to be visible. Current workaround: user starts API manually from desktop.
 
-### 5. More Combat Features
-- Wire CampLoop into CombatCoordinator
-- Puller FSM integration with CampLoop
-- Loot automation (auto-loot corpses)
+## Key Technical Discoveries
 
-### 6. MQ2 Feature Research (Autoresearch Loop)
-- Navmesh integration (MQ2Nav format, pathfinding)
-- Stick/follow (MQ2MoveUtils patterns)
-- Robust casting framework (MQ2Cast patterns)
-- NetBots/NetHeal for cross-client state sharing
+### Confirmed Working (Login Chain)
+| Method | Status |
+|--------|--------|
+| CXStr direct write to InputText +0x278 | ✅ WORKS |
+| HeapAlloc CStrRep clone for password | ✅ WORKS |
+| WndNotification(XWM_LCLICK) via vtable | ✅ WORKS |
+| CXWndManager enumeration | ✅ WORKS |
+| SidlText window lookup at +0x270 | NEEDS LIVE TEST |
+| SelectCharacter by CListWnd name match | NEEDS LIVE TEST |
+| EnterWorld direct function call | NEEDS LIVE TEST |
+
+### Remote API Endpoints
+```
+GET  /status       — EQ process status + DLL log
+POST /launch-eq    — Start EQ with /login flag
+POST /inject       — Inject DLL into running EQ
+POST /kill-eq      — Kill all EQ processes
+POST /restart      — Git pull + restart API
+GET  /dll-log      — DLL log tail
+```
 
 ## Key File Paths
 
@@ -105,6 +117,8 @@ Please initialize Serena. Read HANDOFF.md and check memories for full context. U
 - DMFT: `C:\Users\xmale\Projects\DMFT`
 - EQ: `C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest`
 - DLL logs: `C:\Users\xmale\AppData\Local\Temp\dmft\dmft-dll.log.YYYY-MM-DD`
+- Test: `C:\Users\xmale\Projects\DMFT\scripts\test_autologin.bat`
+- API: `C:\Users\xmale\Projects\DMFT\scripts\remote_api.ps1`
 - SSH: `sshpass -p '1118' ssh maleick@frostreaver`
 
 ### Mac (dev)
