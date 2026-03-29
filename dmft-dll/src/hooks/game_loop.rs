@@ -169,7 +169,9 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
 }
 
 /// Call EQ's InterpretCmd to execute a slash command string.
-/// Signature: void CEverQuest::InterpretCmd(PlayerClient* pChar, const char* szCmd)
+/// CEverQuest::InterpretCmd is a member function:
+///   void CEverQuest::InterpretCmd(PlayerClient* pChar, const char* szCmd)
+/// On x64 Windows: this=RCX (CEverQuest*), pChar=RDX, szCmd=R8.
 fn execute_slash_command(command: &str) {
     #[cfg(windows)]
     {
@@ -179,13 +181,30 @@ fn execute_slash_command(command: &str) {
             return;
         }
 
-        // Get the local player pointer (CharSpawn / pLocalPlayer).
-        let char_spawn_addr = dmft_common::offsets::rebase(
+        // Get the CEverQuest instance pointer (this).
+        let Some(eq_inst_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::PINST_CEVERQUEST,
+            eq_base,
+        ) else {
+            tracing::error!("Failed to rebase PINST_CEVERQUEST");
+            return;
+        };
+
+        let eq_inst: *mut core::ffi::c_void = unsafe {
+            *(eq_inst_addr as *const *mut core::ffi::c_void)
+        };
+
+        if eq_inst.is_null() {
+            tracing::error!("CEverQuest instance pointer is null");
+            return;
+        }
+
+        // Get the local player pointer (pChar).
+        let Some(char_spawn_addr) = dmft_common::offsets::rebase(
             dmft_common::offsets::PINST_LOCAL_PLAYER,
             eq_base,
-        );
-        let Some(char_spawn_addr) = char_spawn_addr else {
-            tracing::error!("Failed to rebase CHAR_SPAWN");
+        ) else {
+            tracing::error!("Failed to rebase PINST_LOCAL_PLAYER");
             return;
         };
 
@@ -216,19 +235,25 @@ fn execute_slash_command(command: &str) {
             }
         };
 
-        // Call InterpretCmd(PlayerClient*, const char*)
-        type InterpretCmdFn = unsafe extern "C" fn(*mut core::ffi::c_void, *const i8);
+        // CEverQuest::InterpretCmd(this, PlayerClient*, const char*)
+        // x64 Windows: this=RCX, pChar=RDX, szCmd=R8
+        type InterpretCmdFn = unsafe extern "C" fn(
+            *mut core::ffi::c_void, // this (CEverQuest*)
+            *mut core::ffi::c_void, // pChar (PlayerClient*)
+            *const i8,              // szCmd
+        );
         let interpret_cmd: InterpretCmdFn = unsafe { std::mem::transmute(interpret_addr) };
 
         tracing::info!(
             addr = format!("{:#x}", interpret_addr),
+            eq_inst = format!("{:?}", eq_inst),
             player = format!("{:?}", player_ptr),
             cmd = command,
             "Calling InterpretCmd"
         );
 
         unsafe {
-            interpret_cmd(player_ptr, cmd_cstring.as_ptr());
+            interpret_cmd(eq_inst, player_ptr, cmd_cstring.as_ptr());
         }
 
         tracing::info!(cmd = command, "Slash command executed");
