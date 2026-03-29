@@ -83,6 +83,8 @@ pub struct ClientState {
     pub target: Option<SpawnInfo>,
     pub spawns: Vec<SpawnInfo>,
     pub zone_name: String,
+    /// Character name parsed from the DLL-renamed window title.
+    pub character_name: String,
     /// Group membership info for this client.
     pub group_info: Option<GroupInfo>,
     /// Status message specific to this client.
@@ -98,6 +100,7 @@ impl ClientState {
             target: None,
             spawns: Vec::new(),
             zone_name: String::from("Unknown"),
+            character_name: String::new(),
             group_info: None,
             client_status: format!("Attached to PID {}", pid),
         }
@@ -153,6 +156,12 @@ pub struct App {
 
     // Privacy mode — hides own character names and server for screenshots
     pub privacy_mode: bool,
+
+    // Command bar state (: mode)
+    pub command_mode: bool,
+    pub command_buffer: String,
+    pub command_history: Vec<String>,
+    pub command_history_idx: Option<usize>,
 }
 
 impl App {
@@ -195,6 +204,11 @@ impl App {
             map_dir: std::path::PathBuf::from("config/maps"),
 
             privacy_mode: false,
+
+            command_mode: false,
+            command_buffer: String::new(),
+            command_history: Vec::new(),
+            command_history_idx: None,
         }
     }
 
@@ -389,4 +403,91 @@ impl App {
             }
         }
     }
+
+    /// Execute the current command buffer content.
+    pub fn execute_command(&mut self) {
+        let input = self.command_buffer.trim().to_string();
+        if input.is_empty() {
+            return;
+        }
+
+        // Save to history
+        self.command_history.push(input.clone());
+
+        let parts: Vec<&str> = input.splitn(2, ' ').collect();
+        match parts[0] {
+            "status" => {
+                let client_count = self.clients.len();
+                self.status_message = format!("{} client(s) connected", client_count);
+            }
+            "inject" => {
+                self.status_message = String::from("Inject requested (not yet wired)");
+            }
+            "all" => {
+                if let Some(slash_cmd) = parts.get(1) {
+                    let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                    let mut ok = 0usize;
+                    let mut fail = 0usize;
+                    for pid in &pids {
+                        match send_slash_command(*pid, slash_cmd) {
+                            Ok(()) => ok += 1,
+                            Err(_) => fail += 1,
+                        }
+                    }
+                    self.status_message = format!(
+                        "all {} → sent to {}, failed {}",
+                        slash_cmd, ok, fail
+                    );
+                } else {
+                    self.status_message = String::from("Usage: all <slash command>");
+                }
+            }
+            _ => {
+                // Try to parse first token as PID
+                if let Ok(pid) = parts[0].parse::<u32>() {
+                    if let Some(slash_cmd) = parts.get(1) {
+                        match send_slash_command(pid, slash_cmd) {
+                            Ok(()) => {
+                                self.status_message =
+                                    format!("{} → {}", pid, slash_cmd);
+                            }
+                            Err(e) => {
+                                self.status_message =
+                                    format!("Error sending to {}: {}", pid, e);
+                            }
+                        }
+                    } else {
+                        self.status_message =
+                            format!("Usage: {} <slash command>", pid);
+                    }
+                } else {
+                    self.status_message = format!("Unknown command: {}", input);
+                }
+            }
+        }
+    }
+}
+
+/// Generate a PID-derived session token for IPC auth.
+fn generate_session_token(pid: u32) -> [u8; 32] {
+    let pid_bytes = pid.to_le_bytes();
+    let mut token = [0u8; 32];
+    for (i, byte) in token.iter_mut().enumerate() {
+        *byte = pid_bytes[i % 4] ^ (i as u8);
+    }
+    token
+}
+
+/// Send a slash command to a specific PID via named pipe.
+fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
+    use crate::ipc::pipe::CommandPipe;
+    use dmft_common::ipc::Command;
+
+    let pipe = CommandPipe::connect(pid)?;
+    let token = generate_session_token(pid);
+    pipe.send_raw_token(&token)?;
+    pipe.send_async(&Command::SlashCommand {
+        command: command.to_string(),
+    })?;
+    Ok(())
 }

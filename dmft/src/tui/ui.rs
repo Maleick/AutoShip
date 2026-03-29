@@ -1080,9 +1080,19 @@ fn spawn_row_style(spawn: &SpawnInfo) -> Style {
 }
 
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
+    if app.command_mode {
+        let cmd_line = format!(": {}_", app.command_buffer);
+        let status = Paragraph::new(Line::from(vec![
+            Span::styled(cmd_line, Style::default().fg(Color::Cyan)),
+        ]))
+        .block(Block::default().borders(Borders::ALL));
+        frame.render_widget(status, area);
+        return;
+    }
+
     let privacy_indicator = if app.privacy_mode { " [PRIVATE]" } else { "" };
     let keybinds = format!(
-        " 1-4:Screen | q:Quit | Tab:Panel | [/]:Client | Arrows:Nav | Enter:Inspect | Esc:Clear | /:Search | f:Filter({}) | p:Privacy{}",
+        " 1-4:Screen | q:Quit | Tab:Panel | [/]:Client | Arrows:Nav | Enter:Inspect | Esc:Clear | /:Search | f:Filter({}) | p:Privacy{} | :Cmd",
         app.spawn_type_filter.label(),
         privacy_indicator
     );

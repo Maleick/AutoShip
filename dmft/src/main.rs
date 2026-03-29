@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+mod camp;
 mod client;
 mod combat;
 mod config;

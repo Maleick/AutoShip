@@ -197,6 +197,7 @@ pub struct SpawnInfo {
     pub mana_max: i32,
     pub endurance_current: i32,
     pub endurance_max: u32,
+    pub is_gm: bool,
 }
 
 impl SpawnInfo {

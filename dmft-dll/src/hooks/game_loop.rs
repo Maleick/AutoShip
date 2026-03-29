@@ -75,6 +75,70 @@ static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
 static TICK_COUNT: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 
+// ─── Command Jitter Queue ───
+// Commands are not executed immediately — they sit in a pending queue
+// with a random delay of 1-10 ticks to avoid frame-perfect timing patterns.
+
+use std::sync::Mutex;
+
+struct PendingCommand {
+    command: dmft_common::ipc::Command,
+    execute_at_tick: u64,
+}
+
+static PENDING_COMMANDS: Mutex<Vec<PendingCommand>> = Mutex::new(Vec::new());
+static JITTER_RNG: Mutex<Option<dmft_common::nav::Xorshift32>> = Mutex::new(None);
+
+/// Initialize the jitter RNG with a seed derived from the process ID.
+pub fn init_jitter_rng() {
+    let seed = std::process::id();
+    if let Ok(mut rng) = JITTER_RNG.lock() {
+        *rng = Some(dmft_common::nav::Xorshift32::from_client_id(seed));
+    }
+}
+
+/// Enqueue a command with a random delay of 1-10 ticks.
+fn enqueue_command(cmd: dmft_common::ipc::Command, current_tick: u64) {
+    let delay = if let Ok(mut rng) = JITTER_RNG.lock() {
+        if let Some(ref mut r) = *rng {
+            (r.next_u32() % 10) as u64 + 1 // 1-10 ticks
+        } else {
+            5 // fallback: middle of range
+        }
+    } else {
+        5
+    };
+
+    if let Ok(mut queue) = PENDING_COMMANDS.lock() {
+        queue.push(PendingCommand {
+            command: cmd,
+            execute_at_tick: current_tick + delay,
+        });
+    }
+}
+
+/// Drain and execute any commands whose scheduled tick has arrived.
+fn process_pending_commands(current_tick: u64) {
+    let ready: Vec<dmft_common::ipc::Command> = if let Ok(mut queue) = PENDING_COMMANDS.lock() {
+        let mut ready = Vec::new();
+        queue.retain(|pending| {
+            if current_tick >= pending.execute_at_tick {
+                ready.push(pending.command.clone());
+                false
+            } else {
+                true
+            }
+        });
+        ready
+    } else {
+        return;
+    };
+
+    for cmd in ready {
+        dispatch_command(cmd);
+    }
+}
+
 /// Called every game tick after the original MainLoop runs.
 /// This is our main entry point for per-tick logic.
 fn on_game_tick() {
@@ -85,10 +149,18 @@ fn on_game_tick() {
         update_foreground_status();
     }
 
-    // Drain and dispatch IPC commands from the orchestrator.
-    for cmd in crate::ipc::poll_commands() {
-        dispatch_command(cmd);
+    // Rename window every 100 ticks (~3 seconds) to "EQ - CharName (ZoneName)".
+    if tick % 100 == 5 {
+        update_window_title();
     }
+
+    // Enqueue IPC commands with jitter delay for anti-detection.
+    for cmd in crate::ipc::poll_commands() {
+        enqueue_command(cmd, tick);
+    }
+
+    // Execute commands whose scheduled tick has arrived.
+    process_pending_commands(tick);
 
     // Run navigation state machine.
     crate::nav::tick();
@@ -135,6 +207,112 @@ fn update_foreground_status() {
 /// background clients, saving near-zero GPU usage across 35 bot clients.
 pub fn is_foreground() -> bool {
     WINDOW_IS_FOREGROUND.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Read character name + zone name from EQ memory and set the window title
+/// to "EQ - CharName (ZoneName)" so the orchestrator can identify clients by PID.
+fn update_window_title() {
+    #[cfg(windows)]
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            return;
+        }
+
+        // Read local player name from PlayerClient->Name (char[64] at offset 0xb4).
+        let char_name = match read_char_name(eq_base) {
+            Some(n) if !n.is_empty() => n,
+            _ => return, // Not logged in yet — skip.
+        };
+
+        // Read zone short name from zoneHeader struct.
+        let zone_name = read_zone_short_name(eq_base).unwrap_or_default();
+
+        // Build title: "EQ - CharName (ZoneName)" or "EQ - CharName" if no zone.
+        let title = if zone_name.is_empty() {
+            format!("EQ - {}\0", char_name)
+        } else {
+            format!("EQ - {} ({})\0", char_name, zone_name)
+        };
+
+        // Find our window by enumerating windows for this PID.
+        let our_pid = std::process::id();
+        set_window_title_for_pid(our_pid, &title);
+    }
+
+    #[cfg(not(windows))]
+    {
+        // No-op on non-Windows.
+    }
+}
+
+/// Read the local player's Name field (char[64]) directly from EQ memory.
+#[cfg(windows)]
+fn read_char_name(eq_base: u64) -> Option<String> {
+    use dmft_common::offsets::{self, player_base};
+
+    let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)?;
+    let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
+    if player_ptr == 0 {
+        return None;
+    }
+
+    let name_addr = player_ptr + player_base::NAME;
+    let name_bytes = unsafe { std::slice::from_raw_parts(name_addr as *const u8, 64) };
+    let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(64);
+    String::from_utf8(name_bytes[..len].to_vec()).ok()
+}
+
+/// Read the zone short name (char[128]) from instEQZoneInfo.
+#[cfg(windows)]
+fn read_zone_short_name(eq_base: u64) -> Option<String> {
+    use dmft_common::offsets::zone_info;
+
+    let zone_addr = offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)?;
+    let short_name_addr = zone_addr + zone_info::SHORT_NAME;
+    let name_bytes = unsafe { std::slice::from_raw_parts(short_name_addr as *const u8, 128) };
+    let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(128);
+    if len == 0 {
+        return None;
+    }
+    String::from_utf8(name_bytes[..len].to_vec()).ok()
+}
+
+/// Set the window title for all top-level windows belonging to the given PID.
+#[cfg(windows)]
+fn set_window_title_for_pid(pid: u32, title: &str) {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, SetWindowTextA,
+    };
+    use windows::core::PCSTR;
+
+    // We use a simple callback that captures our PID + title via LPARAM.
+    struct CallbackData {
+        pid: u32,
+        title_ptr: *const u8,
+    }
+
+    unsafe extern "system" fn enum_cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        unsafe {
+            let data = &*(lparam.0 as *const CallbackData);
+            let mut wnd_pid: u32 = 0;
+            GetWindowThreadProcessId(hwnd, Some(&mut wnd_pid));
+
+            if wnd_pid == data.pid && IsWindowVisible(hwnd).as_bool() {
+                let _ = SetWindowTextA(hwnd, PCSTR(data.title_ptr));
+            }
+            BOOL(1) // continue
+        }
+    }
+
+    let data = CallbackData {
+        pid,
+        title_ptr: title.as_ptr(),
+    };
+    unsafe {
+        let _ = EnumWindows(Some(enum_cb), LPARAM(&data as *const _ as isize));
+    }
 }
 
 /// Dispatch a single IPC command received from the orchestrator.

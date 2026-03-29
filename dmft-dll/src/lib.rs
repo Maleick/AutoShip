@@ -90,7 +90,10 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Hook installation failed (continuing without hooks): {}", e);
     }
 
-    // 4. Start IPC listener.
+    // 4. Initialize command jitter RNG for anti-detection.
+    hooks::game_loop::init_jitter_rng();
+
+    // 5. Start IPC listener.
     let client_id = std::process::id();
     let session_token = generate_session_token(client_id);
     if let Err(e) = ipc::start(client_id, session_token) {

@@ -18,6 +18,57 @@ pub fn handle_events(app: &mut App, timeout: Duration) -> Result<bool> {
             return Ok(false);
         }
 
+        // Command mode (: prefix) — checked first
+        if app.command_mode {
+            match key.code {
+                KeyCode::Esc => {
+                    app.command_mode = false;
+                    app.command_buffer.clear();
+                    return Ok(true);
+                }
+                KeyCode::Enter => {
+                    app.command_mode = false;
+                    app.command_history_idx = None;
+                    app.execute_command();
+                    app.command_buffer.clear();
+                    return Ok(true);
+                }
+                KeyCode::Backspace => {
+                    app.command_buffer.pop();
+                    return Ok(true);
+                }
+                KeyCode::Up => {
+                    if !app.command_history.is_empty() {
+                        let idx = match app.command_history_idx {
+                            Some(i) => i.saturating_sub(1),
+                            None => app.command_history.len() - 1,
+                        };
+                        app.command_history_idx = Some(idx);
+                        app.command_buffer = app.command_history[idx].clone();
+                    }
+                    return Ok(true);
+                }
+                KeyCode::Down => {
+                    if let Some(idx) = app.command_history_idx {
+                        if idx + 1 < app.command_history.len() {
+                            let next = idx + 1;
+                            app.command_history_idx = Some(next);
+                            app.command_buffer = app.command_history[next].clone();
+                        } else {
+                            app.command_history_idx = None;
+                            app.command_buffer.clear();
+                        }
+                    }
+                    return Ok(true);
+                }
+                KeyCode::Char(c) => {
+                    app.command_buffer.push(c);
+                    return Ok(true);
+                }
+                _ => return Ok(false),
+            }
+        }
+
         // When in search mode, capture text input
         if app.search_mode {
             match key.code {
@@ -81,6 +132,12 @@ pub fn handle_events(app: &mut App, timeout: Duration) -> Result<bool> {
             }
             (KeyCode::Char('p'), _) => {
                 app.toggle_privacy();
+                return Ok(true);
+            }
+            (KeyCode::Char(':'), _) => {
+                app.command_mode = true;
+                app.command_buffer.clear();
+                app.command_history_idx = None;
                 return Ok(true);
             }
             (KeyCode::Char('/'), _) => {

@@ -163,6 +163,10 @@ pub mod player_zone {
     /// Needs hex dump calibration scan on frostreaver to find correct offset.
     /// Old offset 0x0134 always read 0 (Standing). Neither is correct.
     pub const STANDSTATE: usize = 0x0574;
+    /// char — GM flag (nonzero = GM). Source: PlayerClient.h offset 0x03ec
+    pub const GM: usize = 0x03ec;
+    /// uint8_t — GM rank. Source: PlayerClient.h offset 0x0368
+    pub const GM_RANK: usize = 0x0368;
     /// int32_t — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
     /// uint32_t — maximum endurance
@@ -215,6 +219,20 @@ pub mod group {
     /// CXStr is a single pointer to CStrRep (m_data at offset 0x00)
     /// CStrRep.utf8 string data starts at offset 0x18
     pub const CXSTR_REP_UTF8: usize = 0x18;
+}
+
+/// Zone info offsets (zoneHeader / ZONEINFO struct)
+/// Source: mq2-reference/src/eqlib/include/eqlib/game/EverQuest.h (zoneHeader)
+pub mod zone_info {
+    /// Address of the zoneHeader struct (instEQZoneInfo).
+    /// This is NOT a pointer — it's the struct itself at this address.
+    pub const INST_EQ_ZONE_INFO: u64 = 0x140E95CD4;
+
+    /// char[128] — zone short name (e.g., "qey2hh1")
+    pub const SHORT_NAME: usize = 0x000;
+
+    /// char[128] — zone long name (e.g., "Queynos Hills")
+    pub const LONG_NAME: usize = 0x080;
 }
 
 /// Offsets within SpawnManager (PlayerManagerBase)

@@ -42,6 +42,8 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         .read::<u32>(addr + player_zone::ENDURANCE_MAX)
         .unwrap_or(0);
 
+    let gm_flag = proc.read::<u8>(addr + player_zone::GM).unwrap_or(0);
+
     Ok(SpawnInfo {
         name,
         displayed_name,
@@ -62,6 +64,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         mana_max,
         endurance_current,
         endurance_max,
+        is_gm: gm_flag != 0,
     })
 }
 

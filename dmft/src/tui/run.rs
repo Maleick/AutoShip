@@ -119,7 +119,11 @@ fn scan_for_clients_live(app: &mut App) {
                 if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
                     for w in &windows {
                         if w.pid == pid {
-                            client.zone_name = parse_zone_from_title(&w.title);
+                            let (char_name, zone) = parse_title_fields(&w.title);
+                            if !char_name.is_empty() {
+                                client.character_name = char_name;
+                            }
+                            client.zone_name = if zone.is_empty() { String::from("Unknown") } else { zone };
                             break;
                         }
                     }
@@ -156,17 +160,39 @@ fn scan_for_clients_live(app: &mut App) {
     app.sync_from_selected_client();
 }
 
-/// Parse zone name from EQ window title: "EverQuest - [Character] - [Zone]"
+/// Parse character name and zone name from the DLL-renamed window title.
+/// Format: "EQ - CharName (ZoneName)" or "EQ - CharName"
+/// Falls back to the old EQ format: "EverQuest - Character - Zone"
 #[cfg(windows)]
-fn parse_zone_from_title(title: &str) -> String {
-    // EQ window titles look like "EverQuest" or "EverQuest - Frostreaver"
-    // or "EverQuest - Frostreaver - Greater Faydark"
+fn parse_title_fields(title: &str) -> (String, String) {
+    // New DLL format: "EQ - CharName (ZoneName)"
+    if title.starts_with("EQ - ") {
+        let rest = &title[5..]; // after "EQ - "
+        if let Some(paren_start) = rest.rfind('(') {
+            let char_name = rest[..paren_start].trim().to_string();
+            let zone = rest[paren_start + 1..]
+                .trim_end_matches(')')
+                .trim()
+                .to_string();
+            return (char_name, zone);
+        }
+        // No parentheses — just char name, no zone yet
+        return (rest.trim().to_string(), String::new());
+    }
+
+    // Old EQ format: "EverQuest - Character - Zone"
     let parts: Vec<&str> = title.splitn(4, " - ").collect();
-    if parts.len() >= 3 {
+    let char_name = if parts.len() >= 2 {
+        parts[1].trim().to_string()
+    } else {
+        String::new()
+    };
+    let zone = if parts.len() >= 3 {
         parts[2].trim().to_string()
     } else {
         String::from("Unknown")
-    }
+    };
+    (char_name, zone)
 }
 
 /// Refresh live EQ data. On non-Windows or when not attached, loads demo data.
@@ -223,7 +249,11 @@ fn refresh_eq_data_live(app: &mut App) {
         if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
             for w in &windows {
                 if w.pid == client.pid {
-                    client.zone_name = parse_zone_from_title(&w.title);
+                    let (char_name, zone) = parse_title_fields(&w.title);
+                            if !char_name.is_empty() {
+                                client.character_name = char_name;
+                            }
+                            client.zone_name = if zone.is_empty() { String::from("Unknown") } else { zone };
                     break;
                 }
             }
@@ -343,6 +373,7 @@ fn load_demo_data(app: &mut App) {
             z: 12.0,
             heading: 128.0,
             spawn_id: i as u32 + 1,
+            is_gm: false,
         });
         client.client_status = format!("Demo client: {}", name);
         app.clients.push(client);
@@ -466,6 +497,7 @@ fn load_demo_data(app: &mut App) {
                 z: 12.0,
                 heading: 0.0,
                 spawn_id: i as u32 + 1,
+                is_gm: false,
             },
         )
         .collect();
