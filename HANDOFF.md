@@ -150,3 +150,26 @@ Extract into shared library (user requested):
 
 ### Mac (dev)
 - DMFT: `/Users/maleick/Projects/DMFT`
+
+## Windows MCP for Testing Loop
+
+**https://github.com/CursorTouch/Windows-MCP** — MCP server that bridges AI agents to Windows OS. Supports UI automation, screenshots, PowerShell execution, and application control.
+
+**Why this matters:** Enables a fully automated test loop from Claude Code:
+- Take screenshots to verify EQ UI state
+- Run PowerShell commands (build, trigger, check logs)
+- Click UI elements if needed
+- All via MCP protocol over SSE/HTTP transport
+
+**Setup on frostreaver:**
+1. Install Python 3.13+ and UV on frostreaver
+2. `pip install windows-mcp` or clone repo
+3. Run with SSE transport: `python -m windows_mcp --transport sse --port 8080`
+4. Connect from Claude Code as an MCP server via HTTP
+
+**Alternative:** Fork and create a minimal version focused on:
+- PowerShell command execution (already have via SSH)
+- Screenshot capture (new — would help verify login UI state)
+- Process management (kill EQ, check if running)
+
+If the full MCP can't be connected remotely from Claude Code, a lightweight fork with just SSH-tunneled screenshot + command execution would work.
