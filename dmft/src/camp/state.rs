@@ -123,10 +123,16 @@ pub struct CampLoop {
     pub loot_cycle: Option<LootCycle>,
     /// Corpses from recent kills, tracked for looting.
     pub pending_corpses: Vec<CorpseEntry>,
+    /// Tracks death/recovery state for rez coordination.
+    pub recovery: RecoveryTracker,
+    /// Spell gem number used for resurrection (e.g., 5 for cleric rez in gem 5).
+    pub rez_gem: u8,
 }
 
 impl CampLoop {
     pub fn new(config: CampConfig, members: Vec<CampMember>) -> Self {
+        let recovery_members: Vec<(u32, String)> =
+            members.iter().map(|m| (m.pid, m.name.clone())).collect();
         Self {
             config,
             state: CampState::Idle,
@@ -139,6 +145,8 @@ impl CampLoop {
             loot_config: LootConfig::default(),
             loot_cycle: None,
             pending_corpses: Vec::new(),
+            recovery: RecoveryTracker::new(&recovery_members),
+            rez_gem: 5,
         }
     }
 
@@ -222,6 +230,44 @@ impl CampLoop {
             for member in &self.members {
                 commands.push((member.pid, "/autoinventory".into()));
             }
+        }
+
+        // --- Recovery check: detect deaths and issue rez commands ---
+        if let Some(snap) = snapshot {
+            if !snap.member_hp.is_empty() {
+                self.recovery.update_hp(&snap.member_hp, self.tick);
+            }
+        }
+
+        if self.recovery.recovery_in_progress() {
+            // Build role map for rez prioritization
+            let role_map: Vec<(u32, &str)> = self
+                .members
+                .iter()
+                .map(|m| {
+                    let role_str = match m.role {
+                        Role::Healer => "Healer",
+                        Role::Tank => "Tank",
+                        Role::CC => "CC",
+                        Role::Puller => "Puller",
+                        Role::DPS => "DPS",
+                        Role::Bard => "Bard",
+                    };
+                    (m.pid, role_str)
+                })
+                .collect();
+
+            let cleric_pid = self.find_by_role(&Role::Healer).map(|m| m.pid);
+            let rez_cmds = death_commands_with_roles(
+                &mut self.recovery.members,
+                cleric_pid,
+                self.rez_gem,
+                &role_map,
+            );
+            commands.extend(rez_cmds);
+
+            // Don't pull or advance the main loop while recovering
+            return commands;
         }
 
         // Process pending events first (charm breaks, adds, etc.)

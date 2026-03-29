@@ -1609,7 +1609,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
     use ratatui::widgets::Clear;
 
     let popup_width = 46u16;
-    let popup_height = 26u16;
+    let popup_height = 34u16;
     let x = area.x + area.width.saturating_sub(popup_width) / 2;
     let y = area.y + area.height.saturating_sub(popup_height) / 2;
     let popup_area = Rect::new(x, y, popup_width.min(area.width), popup_height.min(area.height));
@@ -1638,6 +1638,13 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(vec![Span::styled(" camp <sub> ", Style::default().fg(Color::Yellow)), Span::raw("start|stop|list|add|rm")]),
         Line::from(vec![Span::styled(" track <n>  ", Style::default().fg(Color::Yellow)), Span::raw("Track spawn")]),
         Line::from(vec![Span::styled(" untrack <n>", Style::default().fg(Color::Yellow)), Span::raw("Untrack spawn")]),
+        Line::from(vec![Span::styled(" ma <name>  ", Style::default().fg(Color::Yellow)), Span::raw("Set Main Assist")]),
+        Line::from(vec![Span::styled(" mt <name>  ", Style::default().fg(Color::Yellow)), Span::raw("Set Main Tank")]),
+        Line::from(vec![Span::styled(" engage     ", Style::default().fg(Color::Yellow)), Span::raw("Start combat")]),
+        Line::from(vec![Span::styled(" disengage  ", Style::default().fg(Color::Yellow)), Span::raw("Stop combat")]),
+        Line::from(vec![Span::styled(" invite <n> ", Style::default().fg(Color::Yellow)), Span::raw("Group invite")]),
+        Line::from(vec![Span::styled(" accept     ", Style::default().fg(Color::Yellow)), Span::raw("Accept invite")]),
+        Line::from(vec![Span::styled(" heal cancel", Style::default().fg(Color::Yellow)), Span::raw("Toggle heal-cancel")]),
         Line::from(vec![Span::styled(" help       ", Style::default().fg(Color::Yellow)), Span::raw("This help")]),
         Line::from(""),
         Line::from(Span::styled(" Press ? or Esc to close", Style::default().fg(Color::DarkGray))),

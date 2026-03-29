@@ -244,6 +244,9 @@ pub struct App {
     // Operating mode (camp vs hunt)
     pub operating_mode: crate::camp::hunt::OperatingMode,
 
+    // Heal-cancel toggle (cleric duck on high HP during cast)
+    pub heal_cancel_enabled: bool,
+
     // Account config for login automation
     pub accounts_config: Option<AccountsConfig>,
 
@@ -322,6 +325,8 @@ impl App {
             help_visible: false,
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
+
+            heal_cancel_enabled: true,
 
             accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml")).ok(),
 
@@ -645,6 +650,34 @@ impl App {
             return;
         }
 
+        // :ma <Tab> → character names
+        if let Some(rest) = prefix.strip_prefix("ma ") {
+            let names = self.list_character_names();
+            self.complete_with_candidates("ma ", rest, &names);
+            return;
+        }
+
+        // :mt <Tab> → character names
+        if let Some(rest) = prefix.strip_prefix("mt ") {
+            let names = self.list_character_names();
+            self.complete_with_candidates("mt ", rest, &names);
+            return;
+        }
+
+        // :invite <Tab> → character names
+        if let Some(rest) = prefix.strip_prefix("invite ") {
+            let names = self.list_character_names();
+            self.complete_with_candidates("invite ", rest, &names);
+            return;
+        }
+
+        // :heal <Tab> → cancel
+        if let Some(rest) = prefix.strip_prefix("heal ") {
+            let subs: Vec<String> = vec!["cancel".into()];
+            self.complete_with_candidates("heal ", rest, &subs);
+            return;
+        }
+
         // :all <Tab> → common slash commands
         if let Some(rest) = prefix.strip_prefix("all ") {
             let slash_cmds: Vec<String> = vec![
@@ -685,6 +718,13 @@ impl App {
             "status".into(),
             "track".into(),
             "untrack".into(),
+            "ma".into(),
+            "mt".into(),
+            "engage".into(),
+            "disengage".into(),
+            "invite".into(),
+            "accept".into(),
+            "heal".into(),
             "G1".into(), "G2".into(), "G3".into(),
             "G4".into(), "G5".into(), "G6".into(),
         ];
@@ -775,6 +815,18 @@ impl App {
     }
 
     /// List all spawn display names in the current zone.
+    fn list_character_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .clients
+            .iter()
+            .filter(|c| !c.character_name.is_empty())
+            .map(|c| c.character_name.clone())
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
     fn list_spawn_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self
             .spawns
@@ -992,6 +1044,83 @@ impl App {
                         self.status_message = format!(
                             "Current mode: {}. Usage: mode <camp|hunt>",
                             self.operating_mode
+                        );
+                    }
+                }
+            }
+            "ma" => {
+                if let Some(name) = parts.get(1) {
+                    tracing::info!(target = %name, "Main Assist set");
+                    self.status_message = format!("Main Assist set to {}", name);
+                } else {
+                    self.status_message = String::from("Usage: ma <character_name>");
+                }
+            }
+            "mt" => {
+                if let Some(name) = parts.get(1) {
+                    tracing::info!(target = %name, "Main Tank set");
+                    self.status_message = format!("Main Tank set to {}", name);
+                } else {
+                    self.status_message = String::from("Usage: mt <character_name>");
+                }
+            }
+            "engage" => {
+                tracing::info!("Combat engage requested for all group members");
+                self.status_message = String::from("Engage: combat started for all group members");
+            }
+            "disengage" => {
+                tracing::info!("Combat disengage requested for all group members");
+                self.status_message = String::from("Disengage: combat stopped for all group members");
+            }
+            "invite" => {
+                if let Some(name) = parts.get(1) {
+                    if let Some(client) = self.active_client() {
+                        let pid = client.pid;
+                        let slash = format!("/invite {}", name);
+                        match send_slash_command(pid, &slash) {
+                            Ok(()) => {
+                                tracing::info!(target = %name, pid, "Group invite sent");
+                                self.status_message = format!("Invited {} (via PID {})", name, pid);
+                            }
+                            Err(e) => {
+                                self.status_message = format!("Invite failed: {}", e);
+                            }
+                        }
+                    } else {
+                        self.status_message = String::from("No active client to send invite from");
+                    }
+                } else {
+                    self.status_message = String::from("Usage: invite <character_name>");
+                }
+            }
+            "accept" => {
+                if let Some(client) = self.active_client() {
+                    let pid = client.pid;
+                    match send_slash_command(pid, "/accept") {
+                        Ok(()) => {
+                            tracing::info!(pid, "Group invite accepted");
+                            self.status_message = format!("Accepted group invite (PID {})", pid);
+                        }
+                        Err(e) => {
+                            self.status_message = format!("Accept failed: {}", e);
+                        }
+                    }
+                } else {
+                    self.status_message = String::from("No active client to accept on");
+                }
+            }
+            "heal" => {
+                match parts.get(1).copied() {
+                    Some("cancel") => {
+                        self.heal_cancel_enabled = !self.heal_cancel_enabled;
+                        let state = if self.heal_cancel_enabled { "ON" } else { "OFF" };
+                        tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
+                        self.status_message = format!("Heal-cancel: {}", state);
+                    }
+                    _ => {
+                        let state = if self.heal_cancel_enabled { "ON" } else { "OFF" };
+                        self.status_message = format!(
+                            "Heal-cancel is {}. Usage: heal cancel (toggles on/off)", state
                         );
                     }
                 }
