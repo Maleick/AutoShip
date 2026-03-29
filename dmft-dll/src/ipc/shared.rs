@@ -45,14 +45,12 @@ impl SharedStateWriter {
                 .encode_utf16()
                 .collect();
 
-            // Create shared memory with restrictive security attributes.
-            // Only the current user can access it (prevents other processes from
-            // reading game state or injecting corrupt data).
-            let sa = create_current_user_security_attributes();
+            // TODO(security-C1): Add restrictive DACL to shared memory.
+            // Currently uses default DACL. See create_current_user_security_attributes().
             let handle = unsafe {
                 CreateFileMappingW(
                     INVALID_HANDLE_VALUE,
-                    sa.as_ref().map(|s| s as *const _ as *const _),
+                    None,
                     PAGE_READWRITE,
                     0,
                     SHARED_MEMORY_SIZE as u32,
