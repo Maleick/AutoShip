@@ -206,37 +206,66 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 /// Uses vtable WndNotification clicks — no foreground focus needed (scales to 36 clients).
 /// Called inline from IPC thread since the game loop doesn't run during login.
 fn login_chain_phase2(_server_name: String, _character_name: String) {
-    // Phase 2: Wait for server select, then click PLAY EVERQUEST!
-    tracing::info!("Login chain phase 2: waiting 8s for server select...");
-    std::thread::sleep(std::time::Duration::from_secs(8));
+    // Phase 2: Poll for PLAY EVERQUEST button (replaces hard 8s sleep).
+    // Polls every 500ms for up to 30s.
+    tracing::info!("Login chain phase 2: polling for server select...");
+    let mut play_btn_found = false;
+    for attempt in 0..60 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
-    let eqmain_base = crate::login::eqmain::find_eqmain();
-    if eqmain_base == 0 {
-        tracing::error!("Login chain: eqmain.dll not found after login");
-        return;
-    }
+        let eqmain_base = crate::login::eqmain::find_eqmain();
+        if eqmain_base == 0 {
+            if attempt > 10 {
+                tracing::warn!("Phase 2: eqmain.dll not found after {} attempts", attempt);
+            }
+            continue;
+        }
 
-    if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
-        tracing::info!(ptr = format!("{:#x}", play_btn), "Phase 2: Clicking PLAY EVERQUEST!");
-        unsafe { crate::eq::widgets::click_button_via_vtable(play_btn); }
-        tracing::info!("Phase 2 complete: PLAY EVERQUEST clicked");
-    } else {
-        tracing::warn!("Phase 2: PLAY EVERQUEST button not found — trying Enter fallback");
-        if let Some(eqm) = Some(eqmain_base).filter(|b| *b != 0) {
-            crate::login::widgets::simulate_enter_key(eqm);
+        if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
+            tracing::info!(
+                ptr = format!("{:#x}", play_btn),
+                attempt,
+                "Phase 2: Found PLAY EVERQUEST! button"
+            );
+            unsafe { crate::eq::widgets::click_button_via_vtable(play_btn); }
+            tracing::info!("Phase 2 complete: PLAY EVERQUEST clicked");
+            play_btn_found = true;
+            break;
         }
     }
 
-    // Phase 3: Wait for character select, then enter world.
-    // At character select, eqmain.dll is unloaded and eqgame.exe is active.
-    // Our game loop hook IS running, so we can use InterpretCmd.
-    tracing::info!("Login chain phase 3: waiting 10s for character select...");
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    if !play_btn_found {
+        tracing::warn!("Phase 2: PLAY EVERQUEST button not found after 30s — trying Enter fallback");
+        let eqmain_base = crate::login::eqmain::find_eqmain();
+        if eqmain_base != 0 {
+            crate::login::widgets::simulate_enter_key(eqmain_base);
+        }
+    }
+
+    // Phase 3: Poll for eqmain.dll unload (character select ready).
+    // eqmain.dll unloads when transitioning from server select to character select.
+    // Polls every 500ms for up to 60s.
+    tracing::info!("Login chain phase 3: polling for character select...");
+    let mut char_select_ready = false;
+    for attempt in 0..120 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let eqmain_check = crate::login::eqmain::find_eqmain();
+        if eqmain_check == 0 {
+            tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
+            char_select_ready = true;
+            // Wait a bit more for UI to settle
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            break;
+        }
+    }
+
+    if !char_select_ready {
+        tracing::warn!("Phase 3: Timed out waiting for character select after 60s");
+    }
 
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
         // eqmain.dll unloaded — we're at character select (eqgame.exe).
-        tracing::info!("Phase 3: eqmain.dll unloaded — at character select");
         phase3_enter_world();
         return;
     }
