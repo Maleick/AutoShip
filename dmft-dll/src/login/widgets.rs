@@ -149,17 +149,23 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     }
 }
 
-/// Type text into the focused EQ window control by sending WM_CHAR for each character.
-/// This works because the password field is focused on the login screen.
-/// Tab key switches between username and password fields.
+/// Type text into the EQ login window using SendInput (hardware-level keyboard simulation).
+///
+/// SendInput injects keystrokes at the OS level — the foreground window receives them
+/// exactly as if the user typed them. This works with EQ's custom CXWnd/CSidlWnd UI
+/// where PostMessageW(WM_CHAR) does not reach the focused edit widget.
+///
+/// Sequence: SetForegroundWindow → clear field → type username → Tab → clear → type password.
 pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CHAR, WM_KEYDOWN, WM_KEYUP};
-        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
-
-        const VK_TAB: usize = 0x09;
-        const VK_BACK: usize = 0x08;
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+            KEYEVENTF_UNICODE, KEYEVENTF_KEYUP,
+            VK_BACK, VK_TAB, VK_RETURN,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+        use windows::Win32::Foundation::HWND;
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
             tracing::warn!("Cannot type credentials — EQ HWND not resolved");
@@ -169,41 +175,98 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
         let hwnd = HWND(hwnd_val as isize);
 
         unsafe {
-            // Clear any existing text in username field with backspaces.
-            // EQLOGIN_FIELD_MAX is 0x7F (127), so send enough to clear the full buffer.
+            // Bring EQ window to foreground so SendInput targets it
+            let _ = SetForegroundWindow(hwnd);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+
+            // Helper: send a virtual key press (down + up)
+            let send_vk = |vk: u16| {
+                let down = INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: INPUT_0 {
+                        ki: KEYBDINPUT {
+                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
+                            wScan: 0,
+                            dwFlags: Default::default(),
+                            time: 0,
+                            dwExtraInfo: 0,
+                        },
+                    },
+                };
+                let up = INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: INPUT_0 {
+                        ki: KEYBDINPUT {
+                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
+                            wScan: 0,
+                            dwFlags: KEYEVENTF_KEYUP,
+                            time: 0,
+                            dwExtraInfo: 0,
+                        },
+                    },
+                };
+                SendInput(&[down, up], std::mem::size_of::<INPUT>() as i32);
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            };
+
+            // Helper: send a unicode character via SendInput
+            let send_char = |ch: u16| {
+                let down = INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: INPUT_0 {
+                        ki: KEYBDINPUT {
+                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(0),
+                            wScan: ch,
+                            dwFlags: KEYEVENTF_UNICODE,
+                            time: 0,
+                            dwExtraInfo: 0,
+                        },
+                    },
+                };
+                let up = INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: INPUT_0 {
+                        ki: KEYBDINPUT {
+                            wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(0),
+                            wScan: ch,
+                            dwFlags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
+                            time: 0,
+                            dwExtraInfo: 0,
+                        },
+                    },
+                };
+                SendInput(&[down, up], std::mem::size_of::<INPUT>() as i32);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            };
+
+            // Clear username field with backspaces
             for _ in 0..128 {
-                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(VK_BACK), LPARAM(0));
+                send_vk(VK_BACK.0);
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
 
-            // Type account name character by character
-            for ch in account.chars() {
-                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(ch as usize), LPARAM(0));
-                std::thread::sleep(std::time::Duration::from_millis(10));
+            // Type account name
+            for ch in account.encode_utf16() {
+                send_char(ch);
             }
-
-            tracing::info!("Typed account name ({} chars)", account.len());
+            tracing::info!("Typed account name ({} chars) via SendInput", account.len());
 
             // Tab to password field
             std::thread::sleep(std::time::Duration::from_millis(100));
-            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_TAB), LPARAM(0x000F_0001));
-            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_TAB), LPARAM(0xC00F_0001_u32 as i32 as isize));
-
+            send_vk(VK_TAB.0);
             std::thread::sleep(std::time::Duration::from_millis(100));
 
-            // Clear any existing text in password field with backspaces.
+            // Clear password field with backspaces
             for _ in 0..128 {
-                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(VK_BACK), LPARAM(0));
+                send_vk(VK_BACK.0);
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
 
-            // Type password character by character
-            for ch in password.chars() {
-                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(ch as usize), LPARAM(0));
-                std::thread::sleep(std::time::Duration::from_millis(10));
+            // Type password
+            for ch in password.encode_utf16() {
+                send_char(ch);
             }
-
-            tracing::info!("Typed password ({} chars)", password.len());
+            tracing::info!("Typed password ({} chars) via SendInput", password.len());
         }
 
         true
@@ -217,34 +280,49 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 }
 
 /// Simulate pressing Enter on the EQ window to submit login credentials.
-///
-/// After writing credentials to EQLogin's char arrays, we send WM_KEYDOWN + WM_KEYUP
-/// with VK_RETURN to the EQ window to trigger the login submission.
+/// Uses SendInput for hardware-level key simulation (matches type_credentials_to_window).
 pub fn simulate_enter_key(eqmain_base: u64) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_KEYDOWN, WM_KEYUP};
-        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
-
-        // VK_RETURN = 0x0D
-        const VK_RETURN: usize = 0x0D;
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+            KEYEVENTF_KEYUP, VK_RETURN,
+        };
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
             tracing::warn!("Cannot simulate Enter — EQ HWND not resolved");
             return false;
         };
 
-        let hwnd = HWND(hwnd_val as isize);
-
         unsafe {
-            // lParam for WM_KEYDOWN: repeat count=1, scan code for Enter (0x1C), extended=0
-            let lparam_down = LPARAM(0x001C_0001);
-            let lparam_up = LPARAM(0xC01C_0001_u32 as i32 as isize); // transition + previous state bits set
-            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN), lparam_down);
-            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN), lparam_up);
+            let down = INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_RETURN,
+                        wScan: 0x1C,
+                        dwFlags: Default::default(),
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            };
+            let up = INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_RETURN,
+                        wScan: 0x1C,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            };
+            SendInput(&[down, up], std::mem::size_of::<INPUT>() as i32);
         }
 
-        tracing::debug!(hwnd = format!("{:#x}", hwnd_val), "Simulated Enter key on EQ window");
+        tracing::debug!(hwnd = format!("{:#x}", hwnd_val), "Simulated Enter key via SendInput");
         true
     }
 
