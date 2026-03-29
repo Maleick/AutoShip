@@ -28,6 +28,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         ActiveScreen::Spawns => draw_spawns_screen(frame, outer[1], app),
         ActiveScreen::Character => draw_character_screen(frame, outer[1], app),
         ActiveScreen::Map => draw_map_screen(frame, outer[1], app),
+        ActiveScreen::Groups => draw_groups_screen(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -1077,6 +1078,169 @@ fn spawn_row_style(spawn: &SpawnInfo) -> Style {
         SpawnType::Corpse => Style::default().fg(Color::DarkGray),
         SpawnType::Unknown(_) => Style::default().fg(Color::Red),
     }
+}
+
+// ─── Screen 5: Groups ──────────────────────────────────────────────
+
+fn draw_groups_screen(frame: &mut Frame, area: Rect, app: &App) {
+    // 2 rows × 3 columns
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    let top_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+        ])
+        .split(rows[0]);
+
+    let bot_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+        ])
+        .split(rows[1]);
+
+    let panels = [
+        top_cols[0], top_cols[1], top_cols[2],
+        bot_cols[0], bot_cols[1], bot_cols[2],
+    ];
+
+    for (i, group) in app.groups.iter().enumerate() {
+        if i >= 6 {
+            break;
+        }
+        draw_group_panel(frame, panels[i], app, group);
+    }
+}
+
+/// Extract account number from a character name or window title.
+/// Looks for trailing digits (e.g., "frostreaver05" → 5).
+fn extract_account_number(name: &str) -> Option<u8> {
+    let digits: String = name.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let digits: String = digits.chars().rev().collect();
+    digits.parse().ok()
+}
+
+/// Get clients belonging to a group based on account number range.
+fn clients_in_group<'a>(app: &'a App, group: &super::app::GroupDef) -> Vec<&'a super::app::ClientState> {
+    let (lo, hi) = group.account_range;
+    app.clients
+        .iter()
+        .filter(|c| {
+            // Try character_name first, then player displayed_name
+            let name = if !c.character_name.is_empty() {
+                &c.character_name
+            } else if let Some(p) = &c.local_player {
+                &p.displayed_name
+            } else {
+                return false;
+            };
+            if let Some(num) = extract_account_number(name) {
+                num >= lo && num <= hi
+            } else {
+                false
+            }
+        })
+        .collect()
+}
+
+fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app::GroupDef) {
+    let members = clients_in_group(app, group);
+    let online_count = members.len();
+    let (lo, hi) = group.account_range;
+    let total_slots = (hi - lo + 1) as usize;
+
+    let border_color = if online_count == total_slots {
+        Color::Green
+    } else if online_count > 0 {
+        Color::Yellow
+    } else {
+        Color::DarkGray
+    };
+
+    let title = format!(" G{} {} ({}/{}) ", group.id, group.name, online_count, total_slots);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .border_style(Style::default().fg(border_color));
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    // Build a map of account_num → client for quick lookup
+    let mut slot_map: std::collections::HashMap<u8, &super::app::ClientState> =
+        std::collections::HashMap::new();
+    for client in &members {
+        let name = if !client.character_name.is_empty() {
+            &client.character_name
+        } else if let Some(p) = &client.local_player {
+            &p.displayed_name
+        } else {
+            continue;
+        };
+        if let Some(num) = extract_account_number(name) {
+            slot_map.insert(num, client);
+        }
+    }
+
+    for acct_num in lo..=hi {
+        if let Some(client) = slot_map.get(&acct_num) {
+            if let Some(player) = &client.local_player {
+                let hp_pct = player.hp_pct();
+                let display_name = app.redact_name(&player.displayed_name).into_owned();
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("{:<12}", display_name),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(
+                        format!("{:<4}", player.class_str()),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    Span::styled(
+                        format!("{:>3} ", player.level),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(
+                        format!("{:>3.0}%", hp_pct),
+                        Style::default().fg(hp_color(hp_pct)),
+                    ),
+                ]));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    format!("  PID {} (loading...)", client.pid),
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
+        } else {
+            lines.push(Line::from(Span::styled(
+                format!("  #{:02} --- offline ---", acct_num),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+    }
+
+    // Group status line
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  Status: Idle",
+        Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+    )));
+
+    let paragraph = Paragraph::new(lines);
+    frame.render_widget(paragraph, inner);
 }
 
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {

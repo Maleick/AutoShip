@@ -12,6 +12,7 @@ pub enum ActiveScreen {
     Spawns,
     Character,
     Map,
+    Groups,
 }
 
 impl ActiveScreen {
@@ -21,6 +22,7 @@ impl ActiveScreen {
             Self::Spawns => "Spawns",
             Self::Character => "Character",
             Self::Map => "Map",
+            Self::Groups => "Groups",
         }
     }
 
@@ -30,14 +32,16 @@ impl ActiveScreen {
             Self::Spawns => '2',
             Self::Character => '3',
             Self::Map => '4',
+            Self::Groups => '5',
         }
     }
 
-    pub const ALL: [ActiveScreen; 4] = [
+    pub const ALL: [ActiveScreen; 5] = [
         Self::Dashboard,
         Self::Spawns,
         Self::Character,
         Self::Map,
+        Self::Groups,
     ];
 }
 
@@ -75,6 +79,15 @@ impl SpawnFilter {
             Self::Named => "Named",
         }
     }
+}
+
+/// Definition for a logical group of accounts.
+#[derive(Debug, Clone)]
+pub struct GroupDef {
+    pub id: u8,
+    pub name: String,
+    pub account_range: (u8, u8),
+    pub default_camp: String,
 }
 
 /// Per-client state for each attached EQ process.
@@ -119,6 +132,9 @@ pub struct App {
     // Multi-client state
     pub clients: Vec<ClientState>,
     pub selected_client: usize,
+
+    // Group definitions (6 groups of 6 accounts each)
+    pub groups: Vec<GroupDef>,
 
     // Server name from config
     pub server_name: String,
@@ -176,6 +192,14 @@ impl App {
 
             clients: Vec::new(),
             selected_client: 0,
+            groups: vec![
+                GroupDef { id: 1, name: "Alpha".into(), account_range: (1, 6), default_camp: "Camp A".into() },
+                GroupDef { id: 2, name: "Bravo".into(), account_range: (7, 12), default_camp: "Camp B".into() },
+                GroupDef { id: 3, name: "Charlie".into(), account_range: (13, 18), default_camp: "Camp C".into() },
+                GroupDef { id: 4, name: "Delta".into(), account_range: (19, 24), default_camp: "Camp D".into() },
+                GroupDef { id: 5, name: "Echo".into(), account_range: (25, 30), default_camp: "Camp E".into() },
+                GroupDef { id: 6, name: "Foxtrot".into(), account_range: (31, 36), default_camp: "Camp F".into() },
+            ],
 
             server_name: String::from("Firiona Vie"),
 
