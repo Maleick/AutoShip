@@ -1,6 +1,7 @@
 use dmft_common::combat::{CombatConfig, CombatRole, SpellEntry};
 use dmft_common::types::SpawnData;
 
+use super::classes::bard::BardStrategy;
 use super::classes::cleric::ClericStrategy;
 use super::classes::druid::DruidStrategy;
 use super::classes::enchanter::EnchanterStrategy;
@@ -9,6 +10,7 @@ use super::classes::magician::MagicianStrategy;
 use super::classes::monk::MonkStrategy;
 use super::classes::necromancer::NecromancerStrategy;
 use super::classes::paladin::PaladinStrategy;
+use super::classes::ranger::RangerStrategy;
 use super::classes::rogue::RogueStrategy;
 use super::classes::shadow_knight::ShadowKnightStrategy;
 use super::classes::shaman::ShamanStrategy;
@@ -69,14 +71,16 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
     match class_id {
         1 => Box::new(WarriorStrategy::new(class_id)),       // Warrior
         2 => Box::new(ClericStrategy::new(class_id)),        // Cleric
-        3 => Box::new(ShadowKnightStrategy::new(class_id)), // Shadow Knight
-        4 => Box::new(PaladinStrategy::new(class_id)),       // Paladin
-        5 => Box::new(WizardStrategy::new(class_id)),        // Wizard
+        3 => Box::new(PaladinStrategy::new(class_id)),       // Paladin
+        4 => Box::new(RangerStrategy::new(class_id)),        // Ranger
+        5 => Box::new(ShadowKnightStrategy::new(class_id)), // Shadow Knight
         6 => Box::new(DruidStrategy::new(class_id)),         // Druid
         7 => Box::new(MonkStrategy::new(class_id)),          // Monk
+        8 => Box::new(BardStrategy::new(class_id)),          // Bard
         9 => Box::new(RogueStrategy::new(class_id)),         // Rogue
         10 => Box::new(ShamanStrategy::new(class_id)),       // Shaman
         11 => Box::new(NecromancerStrategy::new(class_id)),  // Necromancer
+        12 => Box::new(WizardStrategy::new(class_id)),       // Wizard
         13 => Box::new(MagicianStrategy::new(class_id)),     // Magician
         14 => Box::new(EnchanterStrategy::new(class_id)),    // Enchanter
         _ => Box::new(GenericDpsStrategy::new(class_id, config)),

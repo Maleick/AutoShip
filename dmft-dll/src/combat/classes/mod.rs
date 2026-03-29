@@ -1,4 +1,4 @@
-pub mod warrior;
+pub mod bard;
 pub mod cleric;
 pub mod druid;
 pub mod enchanter;
@@ -7,7 +7,9 @@ pub mod magician;
 pub mod monk;
 pub mod necromancer;
 pub mod paladin;
+pub mod ranger;
 pub mod rogue;
 pub mod shaman;
 pub mod shadow_knight;
+pub mod warrior;
 pub mod wizard;
