@@ -36,8 +36,7 @@ impl SharedStateReader {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
             use windows::core::PCWSTR;
             use windows::Win32::System::Memory::{
-                CreateFileMappingW, MapViewOfFile,
-                FILE_MAP_READ, PAGE_READWRITE,
+                CreateFileMappingW, MapViewOfFile, FILE_MAP_READ, PAGE_READWRITE,
             };
             use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
 
@@ -45,10 +44,7 @@ impl SharedStateReader {
                 .encode_utf16()
                 .collect();
 
-            // Create/open the shared memory. Uses PAGE_READWRITE for creation but
-            // maps with FILE_MAP_READ only (least privilege for reader).
-            // TODO(security-C2): Use OpenFileMappingW with read-only access when
-            // the PSECURITY_DESCRIPTOR type wrapping is sorted for windows 0.54.
+            // TODO(security-H2): Open with FILE_MAP_READ only for the reader side.
             let handle = unsafe {
                 CreateFileMappingW(
                     INVALID_HANDLE_VALUE,
