@@ -74,7 +74,7 @@ impl ClassStrategy for ShadowKnightStrategy {
         }
     }
 
-    fn on_kill(&mut self, _ctx: &CombatContext) {
+    fn on_action_complete(&mut self, _ctx: &CombatContext) {
         crate::eq::toggle_auto_attack(false);
     }
 

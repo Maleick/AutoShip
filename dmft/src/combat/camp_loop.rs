@@ -24,6 +24,8 @@ pub struct CampLoop {
     state_timeout: Duration,
     /// Number of consecutive wipes.
     wipe_count: u32,
+    /// Number of dead group members (reset on return to camp or recovery).
+    dead_count: u32,
 }
 
 /// Camp loop states.
@@ -82,6 +84,7 @@ impl CampLoop {
             camp_delay: Duration::from_secs(5),
             state_timeout: Duration::from_secs(120),
             wipe_count: 0,
+            dead_count: 0,
         }
     }
 
@@ -151,8 +154,44 @@ impl CampLoop {
 
             // Returning → AtCamp (everyone back)
             (CampState::Returning, CampEvent::ReturnedToCamp) => {
+                if self.dead_count > 0 {
+                    tracing::warn!(
+                        dead = self.dead_count,
+                        "Camp loop: returned to camp with dead members — need rez before pulling"
+                    );
+                }
+                self.dead_count = 0;
                 tracing::info!("Camp loop: returned to camp, medding");
                 self.transition(CampState::AtCamp);
+            }
+
+            // Puller died during pull → abort to AtCamp (prepare for incoming)
+            (CampState::Pulling, CampEvent::MemberDied { client_id }) => {
+                if Some(client_id) == self.puller_id {
+                    tracing::warn!("Camp loop: PULLER DIED during pull — aborting to camp");
+                    self.transition(CampState::AtCamp);
+                } else {
+                    tracing::info!(
+                        client_id,
+                        "Camp loop: group member died during pull — continuing"
+                    );
+                }
+            }
+
+            // Member died during combat → track but continue fighting
+            (CampState::Fighting, CampEvent::MemberDied { client_id }) => {
+                tracing::warn!(client_id, "Camp loop: member died during combat");
+                self.dead_count += 1;
+            }
+
+            // Reactive combat: aggro while resting/looting/returning
+            (CampState::AtCamp | CampState::Looting | CampState::Returning,
+             CampEvent::CombatStarted) => {
+                tracing::warn!(
+                    state = ?self.state,
+                    "Camp loop: unexpected aggro — transitioning to fighting!"
+                );
+                self.transition(CampState::Fighting);
             }
 
             // Any combat state → Recovery (wipe)

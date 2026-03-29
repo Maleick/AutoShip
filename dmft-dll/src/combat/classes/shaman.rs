@@ -109,7 +109,7 @@ impl ClassStrategy for ShamanStrategy {
         }
     }
 
-    fn on_kill(&mut self, _ctx: &CombatContext) {
+    fn on_action_complete(&mut self, _ctx: &CombatContext) {
         self.target_slowed = false;
         self.last_target_id = 0;
     }

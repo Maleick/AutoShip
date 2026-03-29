@@ -347,7 +347,7 @@ impl Combatant {
             tick: self.tick_count,
             in_combat: false,
         };
-        self.strategy.on_kill(&ctx);
+        self.strategy.on_action_complete(&ctx);
 
         crate::eq::toggle_auto_attack(false);
         self.assist_target = None;

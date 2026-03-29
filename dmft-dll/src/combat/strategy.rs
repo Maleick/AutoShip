@@ -59,7 +59,9 @@ pub trait ClassStrategy: Send {
     fn on_engage(&mut self, ctx: &CombatContext);
 
     /// Called when a mob dies.
-    fn on_kill(&mut self, ctx: &CombatContext);
+    /// Called after an action completes (spell cast, ability use, song twist).
+    /// Use this to advance internal state (e.g., bard twist index).
+    fn on_action_complete(&mut self, ctx: &CombatContext);
 
     /// Minimum enemy count before switching to AoE rotation.
     fn aoe_threshold(&self) -> u8;

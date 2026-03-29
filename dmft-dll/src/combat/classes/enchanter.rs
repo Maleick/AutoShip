@@ -57,7 +57,7 @@ impl ClassStrategy for EnchanterStrategy {
 
     fn on_engage(&mut self, _ctx: &CombatContext) {}
 
-    fn on_kill(&mut self, _ctx: &CombatContext) {}
+    fn on_action_complete(&mut self, _ctx: &CombatContext) {}
 
     fn aoe_threshold(&self) -> u8 {
         // Never AoE, use single-target CC instead.

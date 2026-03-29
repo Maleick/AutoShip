@@ -96,7 +96,7 @@ impl ClassStrategy for BardStrategy {
         }
     }
 
-    fn on_kill(&mut self, ctx: &CombatContext) {
+    fn on_action_complete(&mut self, ctx: &CombatContext) {
         // Advance twist index after each spell cast (called per tick).
         // The actual twist advance happens here to keep select_spell pure.
         self.twist_index = (self.twist_index + 1) % ctx.config.spells.len().max(1);
@@ -156,7 +156,7 @@ mod tests {
         assert_eq!(spell.unwrap().spell_id, 100); // First song
 
         // Advance twist
-        bard.on_kill(&ctx);
+        bard.on_action_complete(&ctx);
 
         // Second twist at tick 181 (90 ticks after on_kill set last_twist_tick to 91)
         let ctx = CombatContext { tick: 182, ..ctx };
