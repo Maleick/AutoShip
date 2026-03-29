@@ -1313,6 +1313,11 @@ fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let filtered = app.filtered_spawns();
 
+    let player_level: Option<u8> = app
+        .active_client()
+        .and_then(|c| c.local_player.as_ref())
+        .map(|p| p.level);
+
     let client_label = app
         .active_client()
         .and_then(|c| c.local_player.as_ref())
@@ -1380,7 +1385,7 @@ fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
                     .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD)
             } else {
-                spawn_row_style(spawn)
+                spawn_row_style(spawn, player_level)
             };
 
             let row_name = app.redact_name(&spawn.displayed_name);
@@ -1419,11 +1424,30 @@ fn draw_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(table, area);
 }
 
-fn spawn_row_style(spawn: &SpawnInfo) -> Style {
+/// EQ con color — level delta from player perspective.
+/// delta = mob_level - player_level
+pub fn con_color(player_level: u8, mob_level: u8) -> Color {
+    let delta = mob_level as i16 - player_level as i16;
+    match delta {
+        d if d >= 4 => Color::Red,
+        1..=3       => Color::Yellow,
+        0           => Color::White,
+        -3..=-1     => Color::LightCyan,
+        -6..=-4     => Color::Blue,
+        _           => Color::Green,
+    }
+}
+
+fn spawn_row_style(spawn: &SpawnInfo, player_level: Option<u8>) -> Style {
     match spawn.spawn_type {
         SpawnType::Player => Style::default().fg(Color::Green),
-        SpawnType::Npc => Style::default().fg(Color::White),
-        SpawnType::Corpse => Style::default().fg(Color::DarkGray),
+        SpawnType::Npc => {
+            let color = player_level
+                .map(|pl| con_color(pl, spawn.level))
+                .unwrap_or(Color::White);
+            Style::default().fg(color)
+        }
+        SpawnType::Corpse    => Style::default().fg(Color::DarkGray),
         SpawnType::Unknown(_) => Style::default().fg(Color::Red),
     }
 }
@@ -1932,4 +1956,44 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     .block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(status, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn con_color_red_when_much_higher() {
+        assert_eq!(con_color(30, 34), Color::Red);
+        assert_eq!(con_color(30, 40), Color::Red);
+    }
+
+    #[test]
+    fn con_color_yellow_when_slightly_higher() {
+        assert_eq!(con_color(30, 31), Color::Yellow);
+        assert_eq!(con_color(30, 33), Color::Yellow);
+    }
+
+    #[test]
+    fn con_color_white_when_same() {
+        assert_eq!(con_color(30, 30), Color::White);
+    }
+
+    #[test]
+    fn con_color_lightcyan_when_slightly_lower() {
+        assert_eq!(con_color(30, 29), Color::LightCyan);
+        assert_eq!(con_color(30, 27), Color::LightCyan);
+    }
+
+    #[test]
+    fn con_color_blue_when_lower() {
+        assert_eq!(con_color(30, 26), Color::Blue);
+        assert_eq!(con_color(30, 24), Color::Blue);
+    }
+
+    #[test]
+    fn con_color_green_when_trivial() {
+        assert_eq!(con_color(30, 23), Color::Green);
+        assert_eq!(con_color(30, 1), Color::Green);
+    }
 }
