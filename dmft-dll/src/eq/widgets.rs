@@ -505,6 +505,99 @@ pub unsafe fn xml_index(_wnd_ptr: usize) -> i32 {
     -1
 }
 
+// ─── CListWnd Item Reading ───
+
+/// Find a child window by SidlText (eqgame.exe offsets).
+///
+/// Walks the CXWnd child TList (FirstNode/Next) and compares each child's
+/// SidlText (CSidlScreenWnd +0x270) against `sidl_name` (case-insensitive).
+///
+/// # Safety
+/// `parent_wnd` must be a valid CXWnd pointer in eqgame.exe context.
+#[cfg(windows)]
+pub unsafe fn find_child_by_sidl_text(parent_wnd: usize, sidl_name: &str) -> Option<usize> {
+    use dmft_common::offsets::eqmain as off;
+    use dmft_common::offsets::eqgame as eqg;
+
+    let mut child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
+    let mut count = 0u32;
+
+    while child != 0 && count < MAX_CHILD_WALK {
+        count += 1;
+
+        if let Some(sidl_text) = read_cxstr(child + eqg::CSIDL_SCREEN_WND_SIDL_TEXT) {
+            if sidl_text.eq_ignore_ascii_case(sidl_name) {
+                return Some(child);
+            }
+        }
+
+        child = *((child + off::CXWND_NEXT) as *const usize);
+    }
+    None
+}
+
+#[cfg(not(windows))]
+pub unsafe fn find_child_by_sidl_text(_parent_wnd: usize, _sidl_name: &str) -> Option<usize> {
+    None
+}
+
+/// Read text from a CListWnd cell at (row, column).
+///
+/// Walks the CListWnd's ItemsArray → SListWndLine → SListWndCell → Text (CXStr).
+/// Returns `None` if the row/column is out of bounds or the text is empty/corrupt.
+///
+/// # Safety
+/// `list_wnd` must be a valid CListWnd pointer.
+#[cfg(windows)]
+pub unsafe fn read_list_item_text(list_wnd: usize, row: usize, col: usize) -> Option<String> {
+    use dmft_common::offsets::eqgame as eqg;
+
+    let row_count = *((list_wnd + eqg::CLISTWND_ITEMS_COUNT) as *const i32);
+    if row_count <= 0 || row >= row_count as usize {
+        return None;
+    }
+
+    let row_array = *((list_wnd + eqg::CLISTWND_ITEMS_ARRAY) as *const usize);
+    if row_array == 0 {
+        return None;
+    }
+
+    let row_ptr = row_array + row * eqg::SLISTWNDLINE_SIZE;
+
+    let cell_count = *((row_ptr + eqg::SLISTWNDLINE_CELLS_COUNT) as *const i32);
+    if cell_count <= 0 || col >= cell_count as usize {
+        return None;
+    }
+
+    let cell_array = *((row_ptr + eqg::SLISTWNDLINE_CELLS_ARRAY) as *const usize);
+    if cell_array == 0 {
+        return None;
+    }
+
+    let cell_ptr = cell_array + col * eqg::SLISTWNDCELL_SIZE;
+    read_cxstr(cell_ptr + eqg::SLISTWNDCELL_TEXT)
+}
+
+#[cfg(not(windows))]
+pub unsafe fn read_list_item_text(_list_wnd: usize, _row: usize, _col: usize) -> Option<String> {
+    None
+}
+
+/// Count the number of rows in a CListWnd.
+///
+/// # Safety
+/// `list_wnd` must be a valid CListWnd pointer.
+#[cfg(windows)]
+pub unsafe fn list_row_count(list_wnd: usize) -> usize {
+    let count = *((list_wnd + dmft_common::offsets::eqgame::CLISTWND_ITEMS_COUNT) as *const i32);
+    if count < 0 { 0 } else { count as usize }
+}
+
+#[cfg(not(windows))]
+pub unsafe fn list_row_count(_list_wnd: usize) -> usize {
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,5 +655,20 @@ mod tests {
     #[test]
     fn xml_index_returns_negative_on_non_windows() {
         assert_eq!(unsafe { xml_index(0) }, -1);
+    }
+
+    #[test]
+    fn find_child_by_sidl_text_returns_none_on_non_windows() {
+        assert!(unsafe { find_child_by_sidl_text(0, "Character_List") }.is_none());
+    }
+
+    #[test]
+    fn read_list_item_text_returns_none_on_non_windows() {
+        assert!(unsafe { read_list_item_text(0, 0, 2) }.is_none());
+    }
+
+    #[test]
+    fn list_row_count_returns_zero_on_non_windows() {
+        assert_eq!(unsafe { list_row_count(0) }, 0);
     }
 }

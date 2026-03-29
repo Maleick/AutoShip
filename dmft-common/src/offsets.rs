@@ -255,6 +255,26 @@ pub mod eqgame {
     /// CSidlScreenWnd::SidlText (CXStr at +0x270) — the SIDL window name
     /// Used to find windows like "CharacterListWnd" by name
     pub const CSIDL_SCREEN_WND_SIDL_TEXT: usize = 0x270;
+
+    // ─── CListWnd offsets (for character list reading) ───
+    // Source: mq2-reference UI.h — CListWnd inherits CSidlScreenWnd
+
+    /// CListWnd::ItemsArray (ArrayClass<SListWndLine>) — row count (int at +0x270)
+    pub const CLISTWND_ITEMS_COUNT: usize = 0x270;
+    /// CListWnd::ItemsArray.m_array — pointer to SListWndLine array (at +0x278)
+    pub const CLISTWND_ITEMS_ARRAY: usize = 0x278;
+
+    /// sizeof(SListWndLine) — each row in the list
+    pub const SLISTWNDLINE_SIZE: usize = 0x138;
+    /// SListWndLine::Cells.m_length (ArrayClass<SListWndCell> at +0x00)
+    pub const SLISTWNDLINE_CELLS_COUNT: usize = 0x000;
+    /// SListWndLine::Cells.m_array (pointer at +0x08)
+    pub const SLISTWNDLINE_CELLS_ARRAY: usize = 0x008;
+
+    /// sizeof(SListWndCell)
+    pub const SLISTWNDCELL_SIZE: usize = 0x28;
+    /// SListWndCell::Text (CXStr at +0x08)
+    pub const SLISTWNDCELL_TEXT: usize = 0x08;
 }
 
 // ─── Character select offsets (eqgame.exe) ───
