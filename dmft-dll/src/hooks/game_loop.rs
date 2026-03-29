@@ -80,10 +80,26 @@ static TICK_COUNT: std::sync::atomic::AtomicU64 =
 static PENDING_BUTTON_CLICK: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Pending EnterWorld call — set by IPC thread, executed on game loop thread.
+/// Contains the CCharacterListWnd* address, or 0 if none pending.
+static PENDING_ENTER_WORLD_WND: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+/// The rebased EnterWorld function address, paired with PENDING_ENTER_WORLD_WND.
+static PENDING_ENTER_WORLD_FN: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 /// Set a button widget address to be clicked on the next game loop tick.
 /// Called from the IPC thread after writing credentials.
 pub fn queue_button_click(button_wnd: usize) {
     PENDING_BUTTON_CLICK.store(button_wnd, std::sync::atomic::Ordering::Release);
+}
+
+/// Queue an EnterWorld() call to be executed on the game loop thread.
+/// Called from the IPC thread during Phase 3 of login chain.
+pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize) {
+    // Store fn first, then wnd — reader checks wnd first via swap
+    PENDING_ENTER_WORLD_FN.store(enter_world_fn, std::sync::atomic::Ordering::Release);
+    PENDING_ENTER_WORLD_WND.store(char_list_wnd, std::sync::atomic::Ordering::Release);
 }
 
 // ─── Command Jitter Queue ───
@@ -213,7 +229,26 @@ fn on_game_tick() {
             "Clicking login button on game loop thread"
         );
         unsafe {
-            crate::login::widgets::click_button_via_vtable(button_addr);
+            crate::eq::widgets::click_button_via_vtable(button_addr);
+        }
+    }
+
+    // Check for pending EnterWorld call (queued from IPC thread during Phase 3).
+    let enter_wnd = PENDING_ENTER_WORLD_WND.swap(0, std::sync::atomic::Ordering::AcqRel);
+    if enter_wnd != 0 {
+        let enter_fn = PENDING_ENTER_WORLD_FN.swap(0, std::sync::atomic::Ordering::AcqRel);
+        if enter_fn != 0 {
+            tracing::info!(
+                wnd = format!("{:#x}", enter_wnd),
+                func = format!("{:#x}", enter_fn),
+                "Phase 3: Calling EnterWorld() on game loop thread"
+            );
+            unsafe {
+                type EnterWorldFn = unsafe extern "C" fn(this: usize);
+                let func: EnterWorldFn = std::mem::transmute(enter_fn);
+                func(enter_wnd);
+            }
+            tracing::info!("Phase 3: EnterWorld() called on game loop thread — success!");
         }
     }
 

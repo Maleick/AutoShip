@@ -218,7 +218,7 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
 
     if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
         tracing::info!(ptr = format!("{:#x}", play_btn), "Phase 2: Clicking PLAY EVERQUEST!");
-        unsafe { crate::login::widgets::click_button_via_vtable(play_btn); }
+        unsafe { crate::eq::widgets::click_button_via_vtable(play_btn); }
         tracing::info!("Phase 2 complete: PLAY EVERQUEST clicked");
     } else {
         tracing::warn!("Phase 2: PLAY EVERQUEST button not found — trying Enter fallback");
@@ -251,7 +251,7 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
                 text = candidate,
                 "Phase 3: Clicking enter world button (eqmain still loaded)"
             );
-            unsafe { crate::login::widgets::click_button_via_vtable(btn); }
+            unsafe { crate::eq::widgets::click_button_via_vtable(btn); }
             found = true;
             break;
         }
@@ -318,7 +318,7 @@ fn phase3_enter_world() {
             if wnd_ptr == 0 { continue; }
 
             // Read SidlText (CSidlScreenWnd::SidlText at +0x270)
-            if let Some(sidl_text) = crate::login::widgets::read_cxstr_pub(
+            if let Some(sidl_text) = crate::eq::widgets::read_cxstr(
                 wnd_ptr + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
             ) {
                 if logged < 30 && !sidl_text.is_empty() {
@@ -343,7 +343,7 @@ fn phase3_enter_world() {
 
             // Also check WindowText for calibration logging
             if logged < 30 {
-                if let Some(wnd_text) = crate::login::widgets::read_cxstr_pub(
+                if let Some(wnd_text) = crate::eq::widgets::read_cxstr(
                     wnd_ptr + dmft_common::offsets::eqmain::CXWND_WINDOW_TEXT,
                 ) {
                     if !wnd_text.is_empty() {
@@ -377,15 +377,14 @@ fn phase3_enter_world() {
         tracing::info!(
             char_list_wnd = format!("{:#x}", char_list_wnd),
             enter_world = format!("{:#x}", enter_world_addr),
-            "Phase 3: Calling CCharacterListWnd::EnterWorld()"
+            "Phase 3: Queuing EnterWorld() to game loop thread"
         );
 
-        // x64 calling convention: RCX = this (pCharacterListWnd)
-        type EnterWorldFn = unsafe extern "C" fn(this: usize);
-        let enter_world: EnterWorldFn = std::mem::transmute(enter_world_addr);
-        enter_world(char_list_wnd);
+        // Queue to game loop thread — UI/game-state mutation must happen on main thread.
+        // The game loop hook picks this up on the next tick via PENDING_ENTER_WORLD.
+        crate::hooks::game_loop::queue_enter_world(char_list_wnd, enter_world_addr);
 
-        tracing::info!("Phase 3 complete: EnterWorld() called!");
+        tracing::info!("Phase 3: EnterWorld() queued — will execute on next game tick");
     }
 }
 
@@ -408,7 +407,7 @@ fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
             let wnd_ptr = *((array_ptr + i * 8) as *const usize);
             if wnd_ptr == 0 { continue; }
 
-            if let Some(text) = crate::login::widgets::read_cxstr_pub(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+            if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
                 if text == target_text {
                     return Some(wnd_ptr);
                 }
