@@ -379,6 +379,10 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         "-".into()
     };
+    let xp_15min = {
+        let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
+        if rate > 0.01 { format!("{:.0}/hr", rate) } else { "-".into() }
+    };
 
     // Total plat (convert sub-currencies)
     let total_plat_equiv = db.total_plat as f64
@@ -411,7 +415,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::raw("XP: "),
             Span::styled(
-                format!("{} ({}/hr)", db.total_xp_events, xp_per_hour),
+                format!("{} ({}/hr  15m:{})", db.total_xp_events, xp_per_hour, xp_15min),
                 Style::default().fg(Color::Green),
             ),
         ]),

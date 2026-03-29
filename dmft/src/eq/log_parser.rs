@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::time::Instant;
 
 /// EQ chat channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,6 +179,8 @@ pub struct LootDatabase {
     pub total_xp_events: u64,
     /// Total deaths
     pub deaths: u32,
+    /// Timestamps of XP events for sliding-window rate calculation.
+    xp_event_times: VecDeque<Instant>,
 }
 
 impl LootDatabase {
@@ -202,6 +205,7 @@ impl LootDatabase {
             }
             LogEvent::Experience { .. } => {
                 self.total_xp_events += 1;
+                self.xp_event_times.push_back(Instant::now());
             }
             LogEvent::Death { .. } => {
                 self.deaths += 1;
@@ -219,6 +223,14 @@ impl LootDatabase {
         } else {
             None
         }
+    }
+
+    /// XP events per hour within the last `window` duration.
+    pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
+        let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
+        let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;
+        let window_hours = window.as_secs_f64() / 3600.0;
+        if window_hours > 0.0 { count / window_hours } else { 0.0 }
     }
 }
 
@@ -330,6 +342,23 @@ mod tests {
                 zone: "West Freeport".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn test_xp_rate_windowed_empty() {
+        let db = LootDatabase::new();
+        let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
+        assert_eq!(rate, 0.0);
+    }
+
+    #[test]
+    fn test_xp_rate_windowed_counts_recent() {
+        let mut db = LootDatabase::new();
+        db.process_line("You gain experience!");
+        db.process_line("You gain experience!");
+        // 2 events just now in a 15-min window → rate > 0
+        let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
+        assert!(rate > 0.0);
     }
 
     #[test]
