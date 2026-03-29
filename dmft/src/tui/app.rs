@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::theme::{Theme, ThemeKind};
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
 use crate::config::AccountsConfig;
@@ -269,6 +270,10 @@ pub struct App {
     // Navigation state
     pub nav_selected: usize,
     pub nav_statuses: HashMap<u32, NavClientStatus>,
+
+    // Theme
+    pub theme_kind: ThemeKind,
+    pub theme: Theme,
 }
 
 /// Navigation status for a single client.
@@ -355,7 +360,16 @@ impl App {
 
             nav_selected: 0,
             nav_statuses: HashMap::new(),
+
+            theme_kind: ThemeKind::DarkModern,
+            theme: ThemeKind::DarkModern.build(),
         }
+    }
+
+    /// Cycle to the next theme.
+    pub fn cycle_theme(&mut self) {
+        self.theme_kind = self.theme_kind.next();
+        self.theme = self.theme_kind.build();
     }
 
     /// Build default group definitions. If accounts config exists, derives groups
