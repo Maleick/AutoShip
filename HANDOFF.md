@@ -5,10 +5,13 @@
 Read this file + check memories (`MEMORY.md`) for full project context.
 
 ## Session Stats (Cumulative)
-- ~35,000+ lines added (~2,000+ this session)
-- ~60 commits (15+ this session)
-- 552 tests passing across 3 crates
+- ~37,000+ lines added (~4,000+ this session)
+- ~75 commits (30+ this session)
+- 589 tests passing across 3 crates (was 552)
 - Auto-login: full chain working (login → server select → in-world)
+- 11 class strategies (was 4): Warrior, Cleric, Druid, Wizard, Monk, Rogue, Shaman, Necro, Mage, SK, Enchanter
+- Combat FFI: CastSpell, UseSkill, DoCombatAbility, ExecuteCmd, ToggleAutoAttack all wired up
+- Utility fixes: auto-accept rez, cursor watchdog, /destroy junk, rez priority by role, auto-group commands
 
 ## Auto-Login Breakthrough (This Session)
 
