@@ -210,9 +210,11 @@ fn build_restrictive_security_attributes() -> Option<windows::Win32::Security::S
     use windows::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorA;
     use windows::core::PCSTR;
 
-    // SDDL: Owner = current user, DACL grants GENERIC_ALL only to CREATOR OWNER.
-    // "D:(A;;GA;;;CO)" — Allow / GENERIC_ALL / CREATOR_OWNER
-    let sddl = b"D:(A;;GA;;;CO)\0";
+    // SDDL: DACL grants GENERIC_ALL to Authenticated Users.
+    // CO (CREATOR_OWNER) is too restrictive — blocks the orchestrator process
+    // even when running as the same user. AU (Authenticated Users) is safe for
+    // local named pipes since they're not network-accessible by default.
+    let sddl = b"D:(A;;GA;;;AU)\0";
     let mut sd_ptr: windows::Win32::Security::PSECURITY_DESCRIPTOR =
         windows::Win32::Security::PSECURITY_DESCRIPTOR(std::ptr::null_mut());
 
