@@ -321,33 +321,6 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
     }
 }
 
-/// Click a button widget by calling WndNotification(XWM_LCLICK) through the vtable.
-/// This is the MQ2 approach — works with EQ's custom UI engine (DirectInput).
-/// MUST be called from EQ's main thread (game loop), not from the IPC thread.
-#[cfg(windows)]
-pub unsafe fn click_button_via_vtable(button_wnd: usize) {
-    use dmft_common::offsets::eqmain as off;
-
-    let vtable = *(button_wnd as *const usize);
-    if vtable == 0 {
-        tracing::warn!("Button vtable is null");
-        return;
-    }
-
-    // WndNotification is at vtable offset 0x110 (eqmain.dll layout)
-    let wnd_notification_ptr = *((vtable + off::CXWND_VTABLE_WND_NOTIFICATION) as *const usize);
-    if wnd_notification_ptr == 0 {
-        tracing::warn!("WndNotification function pointer is null");
-        return;
-    }
-
-    // Signature: int __thiscall WndNotification(CXWnd* this, CXWnd* sender, uint32_t message, void* data)
-    // In x64, __thiscall uses rcx=this, rdx=sender, r8=message, r9=data
-    type WndNotificationFn = unsafe extern "C" fn(usize, usize, u32, usize) -> i32;
-    let func: WndNotificationFn = std::mem::transmute(wnd_notification_ptr);
-    func(button_wnd, button_wnd, off::XWM_LCLICK, 0);
-}
-
 /// Simulate pressing Enter on the EQ window to submit login credentials.
 /// Uses SendInput for hardware-level key simulation.
 pub fn simulate_enter_key(eqmain_base: u64) -> bool {
