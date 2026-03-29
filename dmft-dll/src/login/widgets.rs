@@ -448,7 +448,7 @@ pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
             return false;
         };
 
-        let hwnd = HWND(hwnd_val as *mut _);
+        let hwnd = HWND(hwnd_val as isize);
         const WM_CHAR: u32 = 0x0102;
         const WM_KEYDOWN: u32 = 0x0100;
         const WM_KEYUP: u32 = 0x0101;
