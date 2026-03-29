@@ -327,16 +327,27 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 return false;
             }
 
-            // Write username to both WindowText (+0x078) and InputText (+0x278)
-            let wrote_username = write_cxstr_inplace(
-                username_edit + off::CEDITBASEWND_INPUT_TEXT,
-                account,
-            );
-            // Also try WindowText in case InputText CXStr isn't allocated
-            let wrote_wt = write_cxstr_inplace(
-                username_edit + off::CXWND_WINDOW_TEXT,
-                account,
-            );
+            // Find a valid CStrRep donor from ANY field on the username widget.
+            // The /login: flag inconsistently populates InputText vs WindowText.
+            let un_input_addr = username_edit + off::CEDITBASEWND_INPUT_TEXT;
+            let un_wt_addr = username_edit + off::CXWND_WINDOW_TEXT;
+            let donor_rep = {
+                let it = *(un_input_addr as *const usize);
+                let wt = *(un_wt_addr as *const usize);
+                if it != 0 { it } else { wt }
+            };
+
+            // If username InputText is null, allocate a CStrRep for it
+            if *(un_input_addr as *const usize) == 0 && donor_rep != 0 {
+                if let Some(new_rep) = clone_cstrrep_for_password(donor_rep) {
+                    *(un_input_addr as *mut usize) = new_rep;
+                    tracing::info!("Allocated CStrRep for username InputText");
+                }
+            }
+
+            // Write username to both InputText (+0x278) and WindowText (+0x078)
+            let wrote_username = write_cxstr_inplace(un_input_addr as usize, account);
+            let wrote_wt = write_cxstr_inplace(un_wt_addr as usize, account);
             tracing::info!(
                 input_text = wrote_username,
                 window_text = wrote_wt,
@@ -344,22 +355,17 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 "Wrote username to edit widget"
             );
 
-            // Write password — the password CEditWnd may have null CXStr (never typed in).
-            // If null, clone the username's CStrRep structure using EQ's process heap
-            // so EQ can safely manage it (HeapAlloc matches EQ's deallocation path).
+            // Write password — CEditWnd may have null CXStr (never typed in).
+            // Clone from the donor CStrRep (username's InputText or WindowText).
             let pw_input_addr = password_edit + off::CEDITBASEWND_INPUT_TEXT;
             let pw_wt_addr = password_edit + off::CXWND_WINDOW_TEXT;
 
             let pw_rep = *(pw_input_addr as *const usize);
-            if pw_rep == 0 {
-                let un_rep = *((username_edit + off::CEDITBASEWND_INPUT_TEXT) as *const usize);
-                if un_rep != 0 {
-                    // Clone the CStrRep using the process default heap (same heap EQ uses)
-                    if let Some(new_rep) = clone_cstrrep_for_password(un_rep) {
-                        *(pw_input_addr as *mut usize) = new_rep;
-                        *(pw_wt_addr as *mut usize) = new_rep;
-                        tracing::info!("Cloned CStrRep for password via process heap");
-                    }
+            if pw_rep == 0 && donor_rep != 0 {
+                if let Some(new_rep) = clone_cstrrep_for_password(donor_rep) {
+                    *(pw_input_addr as *mut usize) = new_rep;
+                    *(pw_wt_addr as *mut usize) = new_rep;
+                    tracing::info!("Cloned CStrRep for password via process heap");
                 }
             }
 
