@@ -217,11 +217,13 @@ impl LoginFsm {
             return;
         };
 
-        let account = creds.account_name.clone();
-        let password = creds.password.clone();
+        // Borrow credentials directly — avoid cloning password to prevent
+        // unzeroized copies lingering on the heap.
+        let account = creds.account_name.as_str();
+        let password = creds.password.as_str();
 
         // Write credentials directly to EQLogin's char arrays (bypasses CXStr/SIDL)
-        if !widgets::write_login_credentials(self.eqmain_base, &account, &password) {
+        if !widgets::write_login_credentials(self.eqmain_base, account, password) {
             tracing::warn!("Failed to write credentials to EQLogin");
             return;
         }
@@ -396,10 +398,7 @@ impl LoginFsm {
     }
 
     fn phase_if_changed(&self, prev: &LoginPhase) -> Option<LoginPhase> {
-        // Use Debug format for comparison since LoginPhase doesn't impl PartialEq
-        let prev_dbg = format!("{:?}", prev);
-        let curr_dbg = format!("{:?}", self.phase);
-        if prev_dbg != curr_dbg {
+        if *prev != self.phase {
             Some(self.phase.clone())
         } else {
             None

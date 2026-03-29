@@ -67,7 +67,6 @@ impl OffsetDatabase {
         pb.insert("speedHeading".to_string(), player_base::SPEED_HEADING);
         pb.insert("name".to_string(), player_base::NAME);
         pb.insert("displayedName".to_string(), player_base::DISPLAYED_NAME);
-        pb.insert("standState".to_string(), player_zone::STANDSTATE);
         pb.insert("type".to_string(), player_base::TYPE);
         pb.insert("spawnId".to_string(), player_base::SPAWN_ID);
         pb.insert("lastName".to_string(), player_base::LASTNAME);
@@ -81,6 +80,7 @@ impl OffsetDatabase {
         pz.insert("charClass".to_string(), player_zone::CHAR_CLASS);
         pz.insert("enduranceCurrent".to_string(), player_zone::ENDURANCE_CURRENT);
         pz.insert("enduranceMax".to_string(), player_zone::ENDURANCE_MAX);
+        pz.insert("standState".to_string(), player_zone::STANDSTATE);
 
         let mut sm = HashMap::new();
         sm.insert("playerList".to_string(), spawn_manager::PLAYER_LIST);

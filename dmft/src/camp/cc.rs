@@ -90,6 +90,22 @@ impl CcTracker {
     /// - `current_spawn_ids`: all mob spawn IDs currently in camp radius
     /// - `assist_target_id`: the mob being killed — do NOT CC this one
     /// - `tick`: current game tick
+    /// Add a single new CC target without pruning existing targets.
+    /// Used when an add spawns mid-fight — we don't want to lose
+    /// existing CC state on other mobs.
+    pub fn add_target(&mut self, spawn_id: u32, name: String) {
+        if !self.targets.iter().any(|t| t.spawn_id == spawn_id) {
+            self.targets.push(CcTarget {
+                spawn_id,
+                name,
+                cc_applied: None,
+                cc_expiry_tick: 0,
+                assigned_to_pid: None,
+                debuffed: false,
+            });
+        }
+    }
+
     pub fn update(
         &mut self,
         current_spawns: &[(u32, String)],

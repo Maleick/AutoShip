@@ -10,7 +10,7 @@ drops = ["Crushbone Belt", "Emperor Crush's Crown"]
 priority = "high"
 
 [[named]]
-name = "Ambassador Dvinn"
+name = "Ambassador DVinn"
 level = 13
 respawn_min_minutes = 22
 respawn_max_minutes = 28

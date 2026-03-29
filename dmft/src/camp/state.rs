@@ -149,9 +149,8 @@ impl CampLoop {
                     .charm_break_response(spawn_id, &self.cc_members, self.tick)
             }
             CampEvent::AddSpawned { spawn_id, name } => {
-                // Update tracker with the new add, then assign CC
-                let spawns = vec![(spawn_id, name)];
-                self.cc_tracker.update(&spawns, None, self.tick);
+                // Add the new target without pruning existing CC state
+                self.cc_tracker.add_target(spawn_id, name);
                 // Debuff first, then CC
                 let mut cmds = self.cc_tracker.debuff_commands(
                     spawn_id,
