@@ -1,6 +1,18 @@
 //! Camp loop state machine — drives the pull/fight/loot/med cycle.
 
 use crate::camp::config::CampConfig;
+use crate::camp::positioning;
+
+/// Real-time game state snapshot for the camp loop.
+/// When available, the camp loop uses these values for smarter transitions
+/// instead of fixed tick timers.
+#[derive(Debug, Clone)]
+pub struct CampSnapshot {
+    pub healer_mana_pct: f32,
+    pub tank_hp_pct: f32,
+    pub target_hp_pct: Option<f32>,
+    pub target_is_dead: bool,
+}
 
 /// Current phase of the camp loop.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,13 +74,22 @@ impl CampLoop {
 
     /// Advance the state machine by one tick. Returns `(pid, slash_command)` pairs
     /// to send to EQ clients.
-    pub fn tick(&mut self) -> Vec<(u32, String)> {
+    ///
+    /// When `snapshot` is `Some`, real game state drives transitions (target dead,
+    /// healer mana ready, tank HP emergency). Falls back to tick timers when `None`.
+    pub fn tick(&mut self, snapshot: Option<&CampSnapshot>) -> Vec<(u32, String)> {
         self.tick += 1;
         let mut commands = Vec::new();
 
         match self.state.clone() {
             CampState::Idle => {
-                self.transition_to_pulling(&mut commands);
+                // Only pull if healer has enough mana (when we know)
+                let healer_ready = snapshot
+                    .map(|s| s.healer_mana_pct >= self.config.pull_mana_pct as f32)
+                    .unwrap_or(true);
+                if healer_ready {
+                    self.transition_to_pulling(&mut commands);
+                }
             }
             CampState::Pulling { started_tick } => {
                 if self.tick - started_tick >= PULL_DURATION {
@@ -76,7 +97,30 @@ impl CampLoop {
                 }
             }
             CampState::Fighting { started_tick } => {
-                if self.tick - started_tick >= FIGHT_DURATION {
+                // Emergency heal if tank HP < 20%
+                if let Some(snap) = snapshot {
+                    if snap.tank_hp_pct < 20.0 {
+                        if let Some(healer) = self.find_by_role(&Role::Healer) {
+                            commands.push((healer.pid, "/cast 1".into()));
+                        }
+                    }
+                }
+
+                // Every 5 ticks, melee characters /face their target
+                let fight_elapsed = self.tick - started_tick;
+                if fight_elapsed > 0 && fight_elapsed % 5 == 0 {
+                    let melee_members: Vec<(u32, Role)> = self
+                        .members
+                        .iter()
+                        .map(|m| (m.pid, m.role.clone()))
+                        .collect();
+                    commands.extend(positioning::fighting_face_commands(&melee_members));
+                }
+
+                // Transition to looting: target dead (real data) or timer expired (fallback)
+                let target_dead = snapshot.is_some_and(|s| s.target_is_dead);
+                let timer_expired = self.tick - started_tick >= FIGHT_DURATION;
+                if target_dead || timer_expired {
                     self.transition_to_looting(&mut commands);
                 }
             }
@@ -86,7 +130,12 @@ impl CampLoop {
                 }
             }
             CampState::Medding { started_tick } => {
-                if self.tick - started_tick >= MED_DURATION {
+                // Transition when healer mana is above pull threshold (real data) or timer (fallback)
+                let mana_ready = snapshot
+                    .map(|s| s.healer_mana_pct >= self.config.pull_mana_pct as f32)
+                    .unwrap_or(false);
+                let timer_expired = self.tick - started_tick >= MED_DURATION;
+                if mana_ready || timer_expired {
                     self.transition_to_idle(&mut commands);
                 }
             }
@@ -272,7 +321,7 @@ mod tests {
     #[test]
     fn test_idle_to_pulling() {
         let mut camp = CampLoop::new(test_config(), test_members());
-        let cmds = camp.tick();
+        let cmds = camp.tick(None);
 
         assert!(matches!(camp.state, CampState::Pulling { .. }));
         // Puller should get /target and /attack
@@ -285,16 +334,16 @@ mod tests {
     #[test]
     fn test_pulling_to_fighting() {
         let mut camp = CampLoop::new(test_config(), test_members());
-        camp.tick(); // Idle -> Pulling
+        camp.tick(None); // Idle -> Pulling
 
         // Advance through pull duration
         for _ in 0..PULL_DURATION - 1 {
-            let cmds = camp.tick();
+            let cmds = camp.tick(None);
             assert!(cmds.is_empty()); // No commands during wait
             assert!(matches!(camp.state, CampState::Pulling { .. }));
         }
 
-        let cmds = camp.tick(); // Should transition to Fighting
+        let cmds = camp.tick(None); // Should transition to Fighting
         assert!(matches!(camp.state, CampState::Fighting { .. }));
 
         // Tank should assist puller
@@ -314,18 +363,18 @@ mod tests {
     #[test]
     fn test_fighting_to_looting() {
         let mut camp = CampLoop::new(test_config(), test_members());
-        camp.tick(); // -> Pulling
+        camp.tick(None); // -> Pulling
         for _ in 0..PULL_DURATION {
-            camp.tick();
+            camp.tick(None);
         }
         assert!(matches!(camp.state, CampState::Fighting { .. }));
 
         // Advance through fight duration
         for _ in 0..FIGHT_DURATION - 1 {
-            camp.tick();
+            camp.tick(None);
         }
 
-        let cmds = camp.tick(); // -> Looting
+        let cmds = camp.tick(None); // -> Looting
         assert!(matches!(camp.state, CampState::Looting { .. }));
 
         // Everyone should get /attack off
@@ -341,20 +390,20 @@ mod tests {
     fn test_looting_to_medding() {
         let mut camp = CampLoop::new(test_config(), test_members());
         // Fast-forward to Looting
-        camp.tick(); // -> Pulling
+        camp.tick(None); // -> Pulling
         for _ in 0..PULL_DURATION {
-            camp.tick();
+            camp.tick(None);
         }
         for _ in 0..FIGHT_DURATION {
-            camp.tick();
+            camp.tick(None);
         }
         assert!(matches!(camp.state, CampState::Looting { .. }));
 
         for _ in 0..LOOT_DURATION - 1 {
-            camp.tick();
+            camp.tick(None);
         }
 
-        let cmds = camp.tick(); // -> Medding
+        let cmds = camp.tick(None); // -> Medding
         assert!(matches!(camp.state, CampState::Medding { .. }));
 
         // Casters should /sit
@@ -372,23 +421,23 @@ mod tests {
     fn test_medding_to_idle() {
         let mut camp = CampLoop::new(test_config(), test_members());
         // Fast-forward to Medding
-        camp.tick(); // -> Pulling
+        camp.tick(None); // -> Pulling
         for _ in 0..PULL_DURATION {
-            camp.tick();
+            camp.tick(None);
         }
         for _ in 0..FIGHT_DURATION {
-            camp.tick();
+            camp.tick(None);
         }
         for _ in 0..LOOT_DURATION {
-            camp.tick();
+            camp.tick(None);
         }
         assert!(matches!(camp.state, CampState::Medding { .. }));
 
         for _ in 0..MED_DURATION - 1 {
-            camp.tick();
+            camp.tick(None);
         }
 
-        let cmds = camp.tick(); // -> Idle
+        let cmds = camp.tick(None); // -> Idle
         assert_eq!(camp.state, CampState::Idle);
 
         // Everyone should /stand
@@ -404,13 +453,13 @@ mod tests {
         // Run through a complete cycle: Idle -> Pull -> Fight -> Loot -> Med -> Idle
         let total_ticks = 1 + PULL_DURATION + FIGHT_DURATION + LOOT_DURATION + MED_DURATION;
         for _ in 0..total_ticks {
-            camp.tick();
+            camp.tick(None);
         }
 
         assert_eq!(camp.state, CampState::Idle);
 
         // Next tick should start a new pull
-        camp.tick();
+        camp.tick(None);
         assert!(matches!(camp.state, CampState::Pulling { .. }));
     }
 
@@ -421,7 +470,7 @@ mod tests {
             CampMember { pid: 104, name: "Ranger01".into(), role: Role::DPS },
         ];
         let mut camp = CampLoop::new(test_config(), members);
-        let cmds = camp.tick();
+        let cmds = camp.tick(None);
 
         // Tank should pull when no puller exists
         let tank_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 100).collect();
@@ -434,7 +483,7 @@ mod tests {
         let mut config = test_config();
         config.pull_mob_names.clear();
         let mut camp = CampLoop::new(config, test_members());
-        let cmds = camp.tick();
+        let cmds = camp.tick(None);
 
         let target_cmd = cmds.iter().find(|(_, cmd)| cmd.contains("/target")).unwrap();
         assert!(target_cmd.1.contains("a_mob"));
@@ -447,13 +496,91 @@ mod tests {
         camp.tick = 1;
 
         for _ in 0..BUFF_DURATION - 1 {
-            let cmds = camp.tick();
+            let cmds = camp.tick(None);
             assert!(cmds.is_empty());
             assert!(matches!(camp.state, CampState::Buffing { .. }));
         }
 
-        let cmds = camp.tick(); // -> Idle
+        let cmds = camp.tick(None); // -> Idle
         assert_eq!(camp.state, CampState::Idle);
         assert!(!cmds.is_empty()); // /stand commands
+    }
+
+    // -- Snapshot-driven transition tests --
+
+    #[test]
+    fn test_fighting_to_looting_on_target_dead() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.tick(None); // -> Pulling
+        for _ in 0..PULL_DURATION {
+            camp.tick(None);
+        }
+        assert!(matches!(camp.state, CampState::Fighting { .. }));
+
+        // Target dead should trigger immediate transition (no timer wait)
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 90.0,
+            target_hp_pct: Some(0.0),
+            target_is_dead: true,
+        };
+        let cmds = camp.tick(Some(&snap));
+        assert!(matches!(camp.state, CampState::Looting { .. }));
+        assert!(cmds.iter().any(|(_, cmd)| cmd == "/attack off"));
+    }
+
+    #[test]
+    fn test_medding_to_idle_on_mana_ready() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        // Fast-forward to Medding
+        camp.state = CampState::Medding { started_tick: 1 };
+        camp.tick = 1;
+
+        // Healer mana above pull_mana_pct (30) should transition immediately
+        let snap = CampSnapshot {
+            healer_mana_pct: 50.0,
+            tank_hp_pct: 100.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+        };
+        let cmds = camp.tick(Some(&snap));
+        assert_eq!(camp.state, CampState::Idle);
+        assert!(!cmds.is_empty()); // /stand commands
+    }
+
+    #[test]
+    fn test_idle_blocks_pull_on_low_healer_mana() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        assert_eq!(camp.state, CampState::Idle);
+
+        // Healer mana below pull_mana_pct (30) should NOT pull
+        let snap = CampSnapshot {
+            healer_mana_pct: 10.0,
+            tank_hp_pct: 100.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+        };
+        let cmds = camp.tick(Some(&snap));
+        assert_eq!(camp.state, CampState::Idle);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn test_fighting_emergency_heal_on_low_tank_hp() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Fighting { started_tick: 1 };
+        camp.tick = 1;
+
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 15.0, // Below 20% threshold
+            target_hp_pct: Some(50.0),
+            target_is_dead: false,
+        };
+        let cmds = camp.tick(Some(&snap));
+        // Healer (pid 101) should get emergency /cast 1
+        assert!(cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd == "/cast 1"));
+        // Should still be fighting (target alive, timer not expired)
+        assert!(matches!(camp.state, CampState::Fighting { .. }));
     }
 }

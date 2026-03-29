@@ -1,9 +1,11 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
 use crate::camp::config::CampConfig;
-use crate::camp::state::{CampLoop, CampMember, CampState};
+use crate::camp::state::{CampLoop, CampMember, CampSnapshot, CampState, Role};
 use crate::ipc::pipe::CommandPipe;
+use crate::ipc::shared::SharedStateReader;
 use dmft_common::ipc::Command;
+use dmft_common::types::GameState;
 use std::collections::HashMap;
 
 /// Generate a PID-derived session token for IPC auth.
@@ -24,6 +26,10 @@ pub struct Orchestrator {
     pub tick_count: u64,
     /// Commands dispatched this tick (for status display).
     pub last_dispatched: Vec<(u32, String)>,
+    /// Latest game state per client PID.
+    pub game_states: HashMap<u32, GameState>,
+    /// Shared memory readers per client PID.
+    state_readers: HashMap<u32, SharedStateReader>,
 }
 
 impl Orchestrator {
@@ -34,7 +40,75 @@ impl Orchestrator {
             active_camp: None,
             tick_count: 0,
             last_dispatched: Vec::new(),
+            game_states: HashMap::new(),
+            state_readers: HashMap::new(),
         }
+    }
+
+    /// Get the latest game state for a client PID.
+    pub fn get_client_state(&self, pid: u32) -> Option<&GameState> {
+        self.game_states.get(&pid)
+    }
+
+    /// Read game state from shared memory for all known clients.
+    fn poll_game_states(&mut self) {
+        for &pid in &self.client_pids {
+            // Lazily create readers
+            if !self.state_readers.contains_key(&pid) {
+                match SharedStateReader::new(pid) {
+                    Ok(reader) => {
+                        self.state_readers.insert(pid, reader);
+                    }
+                    Err(e) => {
+                        tracing::debug!(pid, error = %e, "Failed to open shared memory reader");
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(reader) = self.state_readers.get(&pid) {
+                if let Some(state) = reader.read() {
+                    self.game_states.insert(pid, state);
+                }
+            }
+        }
+    }
+
+    /// Build a `CampSnapshot` from live game state for the active camp's members.
+    fn build_camp_snapshot(&self) -> Option<CampSnapshot> {
+        let camp = self.active_camp.as_ref()?;
+
+        let tank = camp.members.iter().find(|m| m.role == Role::Tank)?;
+        let healer = camp.members.iter().find(|m| m.role == Role::Healer)?;
+
+        let tank_state = self.game_states.get(&tank.pid)?;
+        let healer_state = self.game_states.get(&healer.pid)?;
+
+        let tank_hp_pct = tank_state
+            .local_player
+            .as_ref()
+            .map(|p| p.hp_pct())
+            .unwrap_or(100.0);
+
+        let healer_mana_pct = healer_state
+            .local_player
+            .as_ref()
+            .map(|p| p.mana_pct())
+            .unwrap_or(100.0);
+
+        // Use the tank's target for target HP info
+        let (target_hp_pct, target_is_dead) = tank_state
+            .target
+            .as_ref()
+            .map(|t| (Some(t.hp_pct()), t.hp_current <= 0))
+            .unwrap_or((None, false));
+
+        Some(CampSnapshot {
+            healer_mana_pct,
+            tank_hp_pct,
+            target_hp_pct,
+            target_is_dead,
+        })
     }
 
     /// Advance the camp loop (if active), collect commands, and send via IPC.
@@ -43,8 +117,11 @@ impl Orchestrator {
         self.tick_count += 1;
         self.last_dispatched.clear();
 
+        self.poll_game_states();
+        let snapshot = self.build_camp_snapshot();
+
         let commands = match self.active_camp.as_mut() {
-            Some(camp) => camp.tick(),
+            Some(camp) => camp.tick(snapshot.as_ref()),
             None => return 0,
         };
 
@@ -203,5 +280,88 @@ mod tests {
         let status = orch.camp_status();
         assert!(status.contains("Pulling"));
         assert!(status.contains("3 members"));
+    }
+
+    #[test]
+    fn test_get_client_state_none_without_data() {
+        let orch = Orchestrator::new();
+        assert!(orch.get_client_state(100).is_none());
+    }
+
+    #[test]
+    fn test_game_states_initialized_empty() {
+        let orch = Orchestrator::new();
+        assert!(orch.game_states.is_empty());
+        assert!(orch.state_readers.is_empty());
+    }
+
+    #[test]
+    fn test_build_camp_snapshot_none_without_camp() {
+        let orch = Orchestrator::new();
+        assert!(orch.build_camp_snapshot().is_none());
+    }
+
+    #[test]
+    fn test_build_camp_snapshot_none_without_game_state() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        // No game state inserted — snapshot should be None
+        assert!(orch.build_camp_snapshot().is_none());
+    }
+
+    #[test]
+    fn test_build_camp_snapshot_with_game_state() {
+        use dmft_common::types::{GameState, SpawnData};
+        use dmft_common::nav::NavStatus;
+        use dmft_common::combat::CombatStatus;
+
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+
+        fn make_spawn(hp: i64, hp_max: i64, mana: i32, mana_max: i32) -> SpawnData {
+            SpawnData {
+                spawn_id: 1,
+                name: "Test".into(),
+                displayed_name: "Test".into(),
+                spawn_type: 0,
+                level: 60,
+                class_id: 1,
+                x: 0.0, y: 0.0, z: 0.0, heading: 0.0,
+                hp_current: hp,
+                hp_max,
+                mana_current: mana,
+                mana_max,
+                endurance_current: 100,
+                endurance_max: 100,
+            }
+        }
+
+        // Tank at 80% HP
+        orch.game_states.insert(100, GameState {
+            client_id: 100,
+            local_player: Some(make_spawn(800, 1000, 0, 0)),
+            target: Some(make_spawn(500, 1000, 0, 0)),
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+        });
+
+        // Healer at 60% mana
+        orch.game_states.insert(101, GameState {
+            client_id: 101,
+            local_player: Some(make_spawn(1000, 1000, 600, 1000)),
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+        });
+
+        let snap = orch.build_camp_snapshot().expect("should build snapshot");
+        assert!((snap.tank_hp_pct - 80.0).abs() < 0.1);
+        assert!((snap.healer_mana_pct - 60.0).abs() < 0.1);
+        assert!((snap.target_hp_pct.unwrap() - 50.0).abs() < 0.1);
+        assert!(!snap.target_is_dead);
     }
 }

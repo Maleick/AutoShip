@@ -3,6 +3,7 @@
 pub mod casting;
 pub mod game_loop;
 pub mod movement;
+pub mod render;
 pub mod targeting;
 
 /// Installs all hooks. Called during DLL initialization.
@@ -28,5 +29,6 @@ pub fn install_all() -> Result<(), Box<dyn std::error::Error>> {
 pub fn remove_all() {
     tracing::info!("Removing all hooks...");
     game_loop::remove();
+    render::remove();
     tracing::info!("All hooks removed");
 }

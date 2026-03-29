@@ -175,11 +175,25 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
                 "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets rebase"
             );
             hooks::game_loop::install(expected)?;
-            return Ok(());
+        } else {
+            hooks::game_loop::install(main_loop_addr)?;
         }
+    } else {
+        hooks::game_loop::install(main_loop_addr)?;
     }
 
-    hooks::game_loop::install(main_loop_addr)?;
+    // Install render strobe hook -- background clients skip 3D rendering.
+    if let Some(render_addr) = dmft_common::offsets::rebase(
+        dmft_common::offsets::REAL_RENDER_WORLD,
+        eq_base,
+    ) {
+        if let Err(e) = hooks::render::install(render_addr) {
+            tracing::warn!("Render hook failed (continuing without render strobe): {}", e);
+        }
+    } else {
+        tracing::warn!("Could not rebase REAL_RENDER_WORLD -- render strobe disabled");
+    }
+
     Ok(())
 }
 
