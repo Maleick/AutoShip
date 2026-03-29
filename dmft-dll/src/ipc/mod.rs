@@ -147,22 +147,45 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             true
         }
         Command::StartLogin { .. } => {
-            // StartLogin also needs to work at the login screen.
-            // Queue it for the login FSM but also start the FSM immediately.
             if let Command::StartLogin {
                 account_name,
                 password,
-                server_name,
-                character_name,
+                server_name: _,
+                character_name: _,
             } = cmd
             {
-                crate::login::start_login(
-                    account_name.clone(),
-                    password.clone(),
-                    server_name.clone(),
-                    character_name.clone(),
+                // Direct login: write credentials to EQLogin struct and press Enter.
+                // This bypasses the FSM (which needs game loop ticks) and acts immediately.
+                let eqmain_base = crate::login::eqmain::find_eqmain();
+                if eqmain_base == 0 {
+                    tracing::error!("Cannot login: eqmain.dll not found");
+                    return true;
+                }
+
+                tracing::info!(
+                    account = %account_name,
+                    eqmain_base = format!("{:#x}", eqmain_base),
+                    "Writing login credentials directly"
                 );
-                tracing::info!("StartLogin handled immediately on IPC thread");
+
+                if crate::login::widgets::write_login_credentials(
+                    eqmain_base,
+                    account_name,
+                    password,
+                ) {
+                    tracing::info!("Credentials written to EQLogin struct");
+
+                    // Small delay before pressing Enter to let the UI update
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+
+                    if crate::login::widgets::simulate_enter_key(eqmain_base) {
+                        tracing::info!("Enter key sent — login should be submitting");
+                    } else {
+                        tracing::warn!("Failed to simulate Enter key");
+                    }
+                } else {
+                    tracing::error!("Failed to write credentials to EQLogin");
+                }
             }
             true
         }
