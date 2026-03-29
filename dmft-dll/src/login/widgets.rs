@@ -183,6 +183,9 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             let mut login_button: usize = 0;
             let mut prev_wnd: usize = 0;
             let mut prev_prev_wnd: usize = 0;
+            // Collect all "LOGIN" buttons — the login form submit button appears
+            // BEFORE the credential fields in the window array
+            let mut login_candidates: Vec<usize> = Vec::new();
 
             for i in 0..count as usize {
                 let wnd_ptr = *((array_ptr + i * 8) as *const usize);
@@ -203,16 +206,28 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                             "Found password edit widget (2 before PASSWORD label)"
                         );
                     }
-                    // The Login button on the login screen (not the main menu LOGIN)
-                    // is at a specific position — find it by checking for "LOGIN"
-                    // text on a visible button after the password label
-                    if text == "LOGIN" && password_edit != 0 && login_button == 0 {
-                        login_button = wnd_ptr;
+                    if text == "LOGIN" {
+                        login_candidates.push(wnd_ptr);
                     }
                 }
 
                 prev_prev_wnd = prev_wnd;
                 prev_wnd = wnd_ptr;
+            }
+
+            // The login form submit button is typically the second "LOGIN" in the list
+            // (idx=12 is the main menu LOGIN tab, idx=18 is the form submit button)
+            if login_candidates.len() >= 2 {
+                login_button = login_candidates[1]; // Form submit button
+            } else if login_candidates.len() == 1 {
+                login_button = login_candidates[0];
+            }
+            if login_button != 0 {
+                tracing::info!(
+                    ptr = format!("{:#x}", login_button),
+                    candidates = login_candidates.len(),
+                    "Found Login button"
+                );
             }
 
             if username_edit == 0 || password_edit == 0 {
