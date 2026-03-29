@@ -2,6 +2,8 @@ use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
 use crate::config::AccountsConfig;
 use crate::eq::hvt::HvtWatchlist;
+use crate::eq::log_parser::LootDatabase;
+use crate::eq::log_watcher::LogWatcher;
 use crate::eq::map_parser::ZoneMap;
 use crate::eq::named_tracker::NamedTracker;
 use crate::eq::structs::{GroupInfo, SpawnInfo, SpawnType};
@@ -194,6 +196,11 @@ pub struct App {
 
     // Account config for login automation
     pub accounts_config: Option<AccountsConfig>,
+
+    // Log parsing / session stats
+    pub loot_database: LootDatabase,
+    pub log_watchers: Vec<LogWatcher>,
+    pub session_start: std::time::Instant,
 }
 
 impl App {
@@ -256,6 +263,10 @@ impl App {
             help_visible: false,
 
             accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml")).ok(),
+
+            loot_database: LootDatabase::new(),
+            log_watchers: Vec::new(),
+            session_start: std::time::Instant::now(),
         }
     }
 

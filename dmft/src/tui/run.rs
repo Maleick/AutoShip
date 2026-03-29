@@ -19,6 +19,9 @@ const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
 /// How often to scan for new EQ processes (10 seconds).
 const PROCESS_SCAN_INTERVAL: Duration = Duration::from_secs(10);
 
+/// How often to poll log watchers (2 seconds).
+const LOG_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
 /// Camp loop tick interval (1 second).
 const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -51,6 +54,7 @@ fn run_loop(
     let mut last_soul_tick = Instant::now();
     let mut last_process_scan = Instant::now();
     let mut last_camp_tick = Instant::now();
+    let mut last_log_poll = Instant::now();
 
     while app.running {
         // Draw the UI
@@ -91,6 +95,12 @@ fn run_loop(
                 );
             }
             last_camp_tick = Instant::now();
+        }
+
+        // Poll log watchers (every 2 seconds)
+        if last_log_poll.elapsed() >= LOG_POLL_INTERVAL {
+            poll_log_watchers(app);
+            last_log_poll = Instant::now();
         }
 
         // Soul Engine tick (every 5 seconds)
@@ -581,4 +591,14 @@ fn tick_soul_engine(app: &mut App) {
     }
 
     app.soul_tick_counter += 1;
+}
+
+/// Poll all log watchers for new events and merge into the aggregate loot database.
+fn poll_log_watchers(app: &mut App) {
+    for watcher in &mut app.log_watchers {
+        let events = watcher.poll();
+        for event in &events {
+            app.loot_database.record(event);
+        }
+    }
 }

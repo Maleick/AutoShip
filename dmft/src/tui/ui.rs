@@ -248,8 +248,9 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(8),    // Group health bars
-            Constraint::Length(6), // Server info
+            Constraint::Min(8),     // Group health bars
+            Constraint::Length(12), // Session stats
+            Constraint::Length(6),  // Server info
         ])
         .split(area);
 
@@ -303,6 +304,9 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, inner);
 
+    // Session stats
+    draw_session_stats(frame, chunks[1], app);
+
     // Server info
     let server_info = vec![
         Line::from(vec![
@@ -330,7 +334,107 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
         .title(" Server Info ")
         .border_style(Style::default().fg(Color::Magenta));
     let paragraph = Paragraph::new(server_info).block(info_block);
-    frame.render_widget(paragraph, chunks[1]);
+    frame.render_widget(paragraph, chunks[2]);
+}
+
+fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App) {
+    let db = &app.loot_database;
+    let elapsed = app.session_start.elapsed();
+    let hours = elapsed.as_secs() as f64 / 3600.0;
+
+    let duration_str = {
+        let secs = elapsed.as_secs();
+        let h = secs / 3600;
+        let m = (secs % 3600) / 60;
+        let s = secs % 60;
+        format!("{:02}:{:02}:{:02}", h, m, s)
+    };
+
+    let xp_per_hour = if hours > 0.01 {
+        format!("{:.0}", db.total_xp_events as f64 / hours)
+    } else {
+        "-".into()
+    };
+
+    // Total plat (convert sub-currencies)
+    let total_plat_equiv = db.total_plat as f64
+        + db.total_gold as f64 / 10.0
+        + db.total_silver as f64 / 100.0
+        + db.total_copper as f64 / 1000.0;
+    let plat_per_hour = if hours > 0.01 {
+        format!("{:.1}", total_plat_equiv / hours)
+    } else {
+        "-".into()
+    };
+
+    // Top 5 items by count
+    let mut top_items: Vec<(&String, &u32)> = db.items.iter().collect();
+    top_items.sort_by(|a, b| b.1.cmp(a.1));
+    top_items.truncate(5);
+
+    // Top 5 mobs by kill count
+    let mut top_mobs: Vec<(&String, &u32)> = db.kills.iter().collect();
+    top_mobs.sort_by(|a, b| b.1.cmp(a.1));
+    top_mobs.truncate(5);
+
+    let total_kills: u32 = db.kills.values().sum();
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(vec![
+            Span::raw("Session: "),
+            Span::styled(&duration_str, Style::default().fg(Color::Cyan)),
+        ]),
+        Line::from(vec![
+            Span::raw("XP: "),
+            Span::styled(
+                format!("{} ({}/hr)", db.total_xp_events, xp_per_hour),
+                Style::default().fg(Color::Green),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("Plat: "),
+            Span::styled(
+                format!("{:.0} ({}/hr)", total_plat_equiv, plat_per_hour),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("Kills: "),
+            Span::styled(total_kills.to_string(), Style::default().fg(Color::Red)),
+            Span::raw("  Deaths: "),
+            Span::styled(
+                db.deaths.to_string(),
+                Style::default().fg(if db.deaths > 0 {
+                    Color::Red
+                } else {
+                    Color::DarkGray
+                }),
+            ),
+        ]),
+    ];
+
+    // Top items
+    if !top_items.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "Top Loot:",
+            Style::default().fg(Color::DarkGray),
+        )));
+        for (name, count) in &top_items {
+            let truncated: String = name.chars().take(20).collect();
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(format!("{}x ", count), Style::default().fg(Color::Yellow)),
+                Span::raw(truncated),
+            ]));
+        }
+    }
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Session Stats ")
+        .border_style(Style::default().fg(Color::Green));
+    let paragraph = Paragraph::new(lines).block(block);
+    frame.render_widget(paragraph, area);
 }
 
 // ─── Screen 2: Spawns ───────────────────────────────────────────────
