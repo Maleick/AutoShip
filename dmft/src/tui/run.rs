@@ -658,10 +658,17 @@ fn tick_soul_engine(app: &mut App) {
 
 /// Poll all log watchers for new events and merge into the aggregate loot database.
 fn poll_log_watchers(app: &mut App) {
+    use crate::eq::log_parser::LogEvent;
     for watcher in &mut app.log_watchers {
         let events = watcher.poll();
         for event in &events {
             app.loot_database.record(event);
+            if let LogEvent::Chat(chat) = event {
+                app.chat_events.push_back(chat.clone());
+                if app.chat_events.len() > 200 {
+                    app.chat_events.pop_front();
+                }
+            }
         }
     }
 }
