@@ -197,9 +197,9 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 /// Phase 2+3 of the login chain: server select → character select → enter world.
 /// Uses SendInput Enter for screen transitions (works reliably with EQ's UI).
 fn login_chain_phase2(_server_name: String, _character_name: String) {
-    // Wait for server select screen to load (~7 seconds after login)
-    tracing::info!("Login chain phase 2: waiting 7s for server select...");
-    std::thread::sleep(std::time::Duration::from_secs(7));
+    // Wait for server select screen to load (~12 seconds after login)
+    tracing::info!("Login chain phase 2: waiting 12s for server select...");
+    std::thread::sleep(std::time::Duration::from_secs(12));
 
     let eqmain_base = crate::login::eqmain::find_eqmain();
     if eqmain_base == 0 {
@@ -216,9 +216,9 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
         return;
     }
 
-    // Phase 3: Wait for character select (~10 seconds), then Enter World
-    tracing::info!("Login chain phase 3: waiting 10s for character select...");
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    // Phase 3: Wait for character select (~15 seconds), then Enter World
+    tracing::info!("Login chain phase 3: waiting 15s for character select...");
+    std::thread::sleep(std::time::Duration::from_secs(15));
 
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
