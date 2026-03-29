@@ -239,6 +239,9 @@ fn enqueue_command(cmd: dmft_common::ipc::Command, current_tick: u64) {
 /// Drain and execute any commands whose scheduled tick has arrived.
 fn process_pending_commands(current_tick: u64) {
     let ready: Vec<dmft_common::ipc::Command> = if let Ok(mut queue) = PENDING_COMMANDS.lock() {
+        if queue.is_empty() {
+            return;
+        }
         let mut ready = Vec::new();
         queue.retain(|pending| {
             if current_tick >= pending.execute_at_tick {
@@ -387,6 +390,10 @@ fn on_game_tick() {
 /// Read game state from EQ memory and publish to shared memory each tick.
 /// Local player + target are read every tick (fast — just pointer derefs).
 /// Nearby spawns are read every 30 ticks (~1 second) to reduce overhead.
+///
+/// Uses a cached GameState to avoid cloning ~100 SpawnData (each with 2 String
+/// heap allocations) on the 29/30 ticks where spawns haven't changed. Only the
+/// cheap fields (player, target, timestamp, nav/combat status) are updated in place.
 fn read_and_publish_state(tick: u64) {
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
     if eq_base == 0 {
@@ -402,34 +409,39 @@ fn read_and_publish_state(tick: u64) {
     // Read target (every tick).
     let target = read_target_state(eq_base);
 
-    // Read nearby spawns (every 30 ticks for performance).
-    // We store the last snapshot in a static so we can reuse it between refreshes.
-    static CACHED_SPAWNS: Mutex<Vec<dmft_common::types::SpawnData>> = Mutex::new(Vec::new());
+    // Cache the entire GameState to avoid cloning the spawn Vec on non-refresh ticks.
+    // On refresh ticks (every 30): rebuild spawns + all fields.
+    // On other ticks: update only cheap fields in place (no heap allocations for spawns).
+    static CACHED_STATE: Mutex<Option<dmft_common::types::GameState>> = Mutex::new(None);
 
-    let nearby_spawns = if tick.is_multiple_of(30) {
+    let Ok(mut cached) = CACHED_STATE.lock() else {
+        return;
+    };
+
+    let refresh_spawns = tick.is_multiple_of(30) || cached.is_none();
+
+    if refresh_spawns {
         let player = local_player.as_ref().unwrap();
         let spawns = read_nearby_spawns(eq_base, player.x, player.y, player.z);
-        if let Ok(mut cache) = CACHED_SPAWNS.lock() {
-            *cache = spawns.clone();
-        }
-        spawns
-    } else if let Ok(cache) = CACHED_SPAWNS.lock() {
-        cache.clone()
+        *cached = Some(dmft_common::types::GameState {
+            client_id: std::process::id(),
+            local_player,
+            target,
+            nearby_spawns: spawns,
+            timestamp_ms: current_time_ms(),
+            nav_status: crate::nav::status(),
+            combat_status: crate::combat::status(),
+        });
     } else {
-        Vec::new()
-    };
+        let state = cached.as_mut().unwrap();
+        state.local_player = local_player;
+        state.target = target;
+        state.timestamp_ms = current_time_ms();
+        state.nav_status = crate::nav::status();
+        state.combat_status = crate::combat::status();
+    }
 
-    let state = dmft_common::types::GameState {
-        client_id: std::process::id(),
-        local_player,
-        target,
-        nearby_spawns,
-        timestamp_ms: current_time_ms(),
-        nav_status: crate::nav::status(),
-        combat_status: crate::combat::status(),
-    };
-
-    crate::ipc::publish_state(&state);
+    crate::ipc::publish_state(cached.as_ref().unwrap());
 }
 
 /// Read a null-terminated string from an in-process address. Max `max_len` bytes.
