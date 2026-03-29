@@ -4,19 +4,21 @@ use crate::camp::config::CampConfig;
 use crate::camp::state::{CampLoop, CampMember, CampSnapshot, CampState, Role};
 use crate::ipc::pipe::CommandPipe;
 use crate::ipc::shared::SharedStateReader;
-use dmft_common::ipc::Command;
+use dmft_common::ipc::{Command, SessionToken};
 use dmft_common::types::GameState;
+use rand::RngCore;
 use std::collections::HashMap;
 
-/// Generate a PID-derived session token for IPC auth.
-fn generate_session_token(pid: u32) -> [u8; 32] {
-    let pid_bytes = pid.to_le_bytes();
+/// Generate a cryptographically random 32-byte session token using OS entropy.
+fn generate_session_token() -> SessionToken {
     let mut token = [0u8; 32];
-    for (i, byte) in token.iter_mut().enumerate() {
-        *byte = pid_bytes[i % 4] ^ (i as u8);
-    }
+    rand::rngs::OsRng.fill_bytes(&mut token);
     token
 }
+
+/// Maximum number of ticks a critical role's state can be stale before
+/// `build_camp_snapshot` refuses to produce a snapshot.
+const STALE_TICK_THRESHOLD: u64 = 3;
 
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
 pub struct Orchestrator {
@@ -30,6 +32,10 @@ pub struct Orchestrator {
     pub game_states: HashMap<u32, GameState>,
     /// Shared memory readers per client PID.
     state_readers: HashMap<u32, SharedStateReader>,
+    /// CSPRNG session tokens per client PID (generated at registration time).
+    session_tokens: HashMap<u32, SessionToken>,
+    /// Tick number when each client's game state was last updated.
+    state_timestamps: HashMap<u32, u64>,
 }
 
 impl Orchestrator {
@@ -42,6 +48,8 @@ impl Orchestrator {
             last_dispatched: Vec::new(),
             game_states: HashMap::new(),
             state_readers: HashMap::new(),
+            session_tokens: HashMap::new(),
+            state_timestamps: HashMap::new(),
         }
     }
 
@@ -69,17 +77,36 @@ impl Orchestrator {
             if let Some(reader) = self.state_readers.get(&pid) {
                 if let Some(state) = reader.read() {
                     self.game_states.insert(pid, state);
+                    self.state_timestamps.insert(pid, self.tick_count);
                 }
             }
         }
     }
 
     /// Build a `CampSnapshot` from live game state for the active camp's members.
+    /// Returns `None` if any critical role (tank/healer) has stale state.
     fn build_camp_snapshot(&self) -> Option<CampSnapshot> {
         let camp = self.active_camp.as_ref()?;
 
         let tank = camp.members.iter().find(|m| m.role == Role::Tank)?;
         let healer = camp.members.iter().find(|m| m.role == Role::Healer)?;
+
+        // Staleness check: refuse to act on data older than STALE_TICK_THRESHOLD ticks
+        for critical in [tank, healer] {
+            if let Some(&last_update) = self.state_timestamps.get(&critical.pid) {
+                if self.tick_count.saturating_sub(last_update) > STALE_TICK_THRESHOLD {
+                    tracing::warn!(
+                        pid = critical.pid,
+                        name = %critical.name,
+                        role = ?critical.role,
+                        stale_ticks = self.tick_count - last_update,
+                        "Stale game state for critical role — skipping snapshot"
+                    );
+                    return None;
+                }
+            }
+            // No timestamp at all means we never read state — handled by get() below
+        }
 
         let tank_state = self.game_states.get(&tank.pid)?;
         let healer_state = self.game_states.get(&healer.pid)?;
@@ -175,6 +202,17 @@ impl Orchestrator {
         }
     }
 
+    /// Register a client PID and generate a CSPRNG session token for it.
+    /// Returns the token so the caller can pass it to the DLL during injection.
+    pub fn register_client(&mut self, pid: u32) -> SessionToken {
+        let token = generate_session_token();
+        self.session_tokens.insert(pid, token);
+        if !self.client_pids.contains(&pid) {
+            self.client_pids.push(pid);
+        }
+        token
+    }
+
     /// Send a single slash command to a client via named pipe.
     fn send_command(&self, pid: u32, command: &str) {
         let name = self
@@ -183,9 +221,16 @@ impl Orchestrator {
             .map(|s| s.as_str())
             .unwrap_or("?");
 
+        let token = match self.session_tokens.get(&pid) {
+            Some(t) => *t,
+            None => {
+                tracing::warn!(pid, name, "No session token for client — skipping command");
+                return;
+            }
+        };
+
         match CommandPipe::connect(pid) {
             Ok(pipe) => {
-                let token = generate_session_token(pid);
                 if let Err(e) = pipe.send_raw_token(&token) {
                     tracing::warn!(pid, name, error = %e, "Failed to send token");
                     return;
@@ -229,9 +274,9 @@ mod tests {
 
     fn test_members() -> Vec<CampMember> {
         vec![
-            CampMember { pid: 100, name: "Tank".into(), role: Role::Tank },
-            CampMember { pid: 101, name: "Healer".into(), role: Role::Healer },
-            CampMember { pid: 102, name: "DPS".into(), role: Role::DPS },
+            CampMember::new(100, "Tank".into(), Role::Tank),
+            CampMember::new(101, "Healer".into(), Role::Healer),
+            CampMember::new(102, "DPS".into(), Role::DPS),
         ]
     }
 
@@ -336,6 +381,11 @@ mod tests {
             }
         }
 
+        // Set tick_count and timestamps so staleness check passes
+        orch.tick_count = 1;
+        orch.state_timestamps.insert(100, 1);
+        orch.state_timestamps.insert(101, 1);
+
         // Tank at 80% HP
         orch.game_states.insert(100, GameState {
             client_id: 100,
@@ -363,5 +413,79 @@ mod tests {
         assert!((snap.healer_mana_pct - 60.0).abs() < 0.1);
         assert!((snap.target_hp_pct.unwrap() - 50.0).abs() < 0.1);
         assert!(!snap.target_is_dead);
+    }
+
+    #[test]
+    fn test_register_client_generates_unique_tokens() {
+        let mut orch = Orchestrator::new();
+        let token_a = orch.register_client(100);
+        let token_b = orch.register_client(101);
+        // CSPRNG tokens should be different
+        assert_ne!(token_a, token_b);
+        // Client PID should be tracked
+        assert!(orch.client_pids.contains(&100));
+        assert!(orch.client_pids.contains(&101));
+        // Token should be stored
+        assert_eq!(orch.session_tokens[&100], token_a);
+    }
+
+    #[test]
+    fn test_stale_state_returns_none_snapshot() {
+        use dmft_common::types::{GameState, SpawnData};
+        use dmft_common::nav::NavStatus;
+        use dmft_common::combat::CombatStatus;
+
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+
+        fn make_spawn(hp: i64, hp_max: i64, mana: i32, mana_max: i32) -> SpawnData {
+            SpawnData {
+                spawn_id: 1,
+                name: "Test".into(),
+                displayed_name: "Test".into(),
+                spawn_type: 0,
+                level: 60,
+                class_id: 1,
+                x: 0.0, y: 0.0, z: 0.0, heading: 0.0,
+                hp_current: hp,
+                hp_max,
+                mana_current: mana,
+                mana_max,
+                endurance_current: 100,
+                endurance_max: 100,
+            }
+        }
+
+        // Insert game states
+        orch.game_states.insert(100, GameState {
+            client_id: 100,
+            local_player: Some(make_spawn(1000, 1000, 0, 0)),
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+        });
+        orch.game_states.insert(101, GameState {
+            client_id: 101,
+            local_player: Some(make_spawn(1000, 1000, 1000, 1000)),
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+        });
+
+        // State was updated at tick 1, current tick is 10 — stale by 9 ticks
+        orch.state_timestamps.insert(100, 1);
+        orch.state_timestamps.insert(101, 1);
+        orch.tick_count = 10;
+
+        assert!(orch.build_camp_snapshot().is_none(), "stale state should return None");
+
+        // Update timestamps to be fresh — snapshot should work
+        orch.state_timestamps.insert(100, 9);
+        orch.state_timestamps.insert(101, 9);
+        assert!(orch.build_camp_snapshot().is_some(), "fresh state should return Some");
     }
 }

@@ -32,3 +32,11 @@ command = "/cast 5"
 cooldown_secs = 60.0
 priority = 4
 condition = "mana_below_30"
+
+[[cc_abilities]]
+name = "Root"
+cc_type = "root"
+command = "/cast 6"
+cooldown_secs = 3.0
+duration_secs = 30.0
+priority = 5

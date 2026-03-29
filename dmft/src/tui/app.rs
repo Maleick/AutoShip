@@ -571,11 +571,7 @@ impl App {
                 } else {
                     client.character_name.clone()
                 };
-                CampMember {
-                    pid: client.pid,
-                    name,
-                    role,
-                }
+                CampMember::new(client.pid, name, role)
             })
             .collect()
     }

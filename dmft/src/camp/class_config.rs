@@ -15,6 +15,26 @@ pub struct ClassAbility {
     pub condition: Option<String>,
 }
 
+/// A crowd control ability (mez, stun, charm, snare, root).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CcAbilityConfig {
+    pub name: String,
+    pub cc_type: String,
+    pub command: String,
+    pub cooldown_secs: f32,
+    pub duration_secs: f32,
+    pub priority: u8,
+}
+
+/// A resist debuff ability (Tash, Malo) that lands before CC.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebuffAbilityConfig {
+    pub name: String,
+    pub command: String,
+    pub cooldown_secs: f32,
+    pub order: u8,
+}
+
 /// Full ability configuration for one EQ class.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassConfig {
@@ -26,6 +46,10 @@ pub struct ClassConfig {
     pub buff_abilities: Vec<ClassAbility>,
     #[serde(default)]
     pub emergency_abilities: Vec<ClassAbility>,
+    #[serde(default)]
+    pub cc_abilities: Vec<CcAbilityConfig>,
+    #[serde(default)]
+    pub debuff_abilities: Vec<DebuffAbilityConfig>,
     #[serde(default = "default_rest_command")]
     pub rest_command: String,
     /// Bard twist interval in seconds (only meaningful for bards).
@@ -87,6 +111,8 @@ mod tests {
             ],
             buff_abilities: vec![],
             emergency_abilities: vec![],
+            cc_abilities: vec![],
+            debuff_abilities: vec![],
             rest_command: "/sit".into(),
             twist_interval_secs: None,
         }

@@ -42,8 +42,8 @@ impl CommandListener {
 
             let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
 
-            // TODO(security-H1): Add restrictive security descriptor to limit pipe access
-            // to the current process SID.
+            let security_attrs = build_restrictive_security_attributes();
+
             let handle = unsafe {
                 CreateNamedPipeA(
                     PCSTR(pipe_name.as_ptr()),
@@ -53,7 +53,7 @@ impl CommandListener {
                     4096, // out buffer
                     4096, // in buffer
                     0,    // default timeout
-                    None, // default security
+                    security_attrs.as_ref(),
                 )
             }?;
 
@@ -192,6 +192,54 @@ fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
         diff |= a[i] ^ b[i];
     }
     diff == 0
+}
+
+/// Build a SECURITY_ATTRIBUTES with a DACL that grants GENERIC_READ|GENERIC_WRITE
+/// only to the current user SID, denying access to other users on the system.
+///
+/// Uses the SDDL string `D:(A;;GRGW;;;CU)` which means:
+/// - D: DACL
+/// - A: Allow
+/// - GRGW: GENERIC_READ | GENERIC_WRITE
+/// - CU: CREATOR_OWNER (resolves to the creating user's SID)
+///
+/// Returns `None` if the security descriptor cannot be created (non-fatal —
+/// the pipe falls back to default security).
+#[cfg(windows)]
+fn build_restrictive_security_attributes() -> Option<windows::Win32::Security::SECURITY_ATTRIBUTES> {
+    use windows::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorA;
+    use windows::core::PCSTR;
+
+    // SDDL: Owner = current user, DACL grants GENERIC_ALL only to CREATOR OWNER.
+    // "D:(A;;GA;;;CO)" — Allow / GENERIC_ALL / CREATOR_OWNER
+    let sddl = b"D:(A;;GA;;;CO)\0";
+    let mut sd_ptr: windows::Win32::Security::PSECURITY_DESCRIPTOR =
+        windows::Win32::Security::PSECURITY_DESCRIPTOR(std::ptr::null_mut());
+
+    let ok = unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorA(
+            PCSTR(sddl.as_ptr()),
+            1, // SDDL_REVISION_1
+            &mut sd_ptr,
+            None,
+        )
+    };
+
+    if ok.is_err() {
+        tracing::warn!("Failed to create restrictive DACL for pipe — using default security");
+        return None;
+    }
+
+    Some(windows::Win32::Security::SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<windows::Win32::Security::SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: sd_ptr.0,
+        bInheritHandle: false.into(),
+    })
+}
+
+#[cfg(not(windows))]
+fn build_restrictive_security_attributes() -> Option<()> {
+    None
 }
 
 impl Drop for CommandListener {

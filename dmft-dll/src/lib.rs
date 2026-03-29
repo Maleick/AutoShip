@@ -197,10 +197,39 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Generate a session token for IPC authentication. In production, this token
-/// is provided by the orchestrator during injection. For now, derive it from the
-/// process ID to produce a deterministic-but-unique value for testing.
+/// Read the session token injected by the orchestrator.
+///
+/// The orchestrator writes a 32-byte CSPRNG token to `%TEMP%/dmft/token_{pid}.bin`
+/// before injection. The DLL reads it once during init and deletes the file.
+/// Falls back to a PID-derived token with a warning if the file is missing (e.g.
+/// during development or manual injection).
 fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
+    let token_path = std::env::temp_dir()
+        .join("dmft")
+        .join(format!("token_{}.bin", pid));
+
+    if let Ok(data) = std::fs::read(&token_path) {
+        // Clean up — token is single-use
+        let _ = std::fs::remove_file(&token_path);
+
+        if data.len() == 32 {
+            let mut token = [0u8; 32];
+            token.copy_from_slice(&data);
+            tracing::info!("Loaded CSPRNG session token from orchestrator");
+            return token;
+        }
+        tracing::warn!(
+            len = data.len(),
+            "Token file has wrong size — falling back to PID-derived token"
+        );
+    } else {
+        tracing::warn!(
+            "No orchestrator token file at {} — using PID-derived fallback (insecure)",
+            token_path.display()
+        );
+    }
+
+    // PID-derived fallback for backwards compatibility / manual injection
     let pid_bytes = pid.to_le_bytes();
     let mut token = [0u8; 32];
     for (i, byte) in token.iter_mut().enumerate() {

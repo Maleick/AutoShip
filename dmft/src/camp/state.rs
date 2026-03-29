@@ -1,7 +1,19 @@
 //! Camp loop state machine — drives the pull/fight/loot/med cycle.
 
+use crate::camp::cc::{CcMember, CcTracker};
 use crate::camp::config::CampConfig;
-use crate::camp::positioning;
+use crate::camp::personality::PersonalityProfile;
+
+/// Events that can occur during the camp loop, triggering reactive behavior.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CampEvent {
+    /// A charm has broken — immediate emergency CC needed.
+    CharmBreak { spawn_id: u32 },
+    /// A new add has spawned or aggroed within camp radius.
+    AddSpawned { spawn_id: u32, name: String },
+    /// A CC effect is about to expire on a mob.
+    CcExpiring { spawn_id: u32 },
+}
 
 /// Real-time game state snapshot for the camp loop.
 /// When available, the camp loop uses these values for smarter transitions
@@ -42,6 +54,20 @@ pub struct CampMember {
     pub pid: u32,
     pub name: String,
     pub role: Role,
+    pub personality: PersonalityProfile,
+}
+
+impl CampMember {
+    /// Create a new camp member with an auto-generated personality from their name.
+    pub fn new(pid: u32, name: String, role: Role) -> Self {
+        let personality = PersonalityProfile::generate(&name);
+        Self {
+            pid,
+            name,
+            role,
+            personality,
+        }
+    }
 }
 
 /// Timer durations (in ticks) for each phase.
@@ -51,6 +77,9 @@ const LOOT_DURATION: u64 = 3;
 const MED_DURATION: u64 = 10;
 const BUFF_DURATION: u64 = 8;
 
+/// Ticks before CC expiry to start re-casting.
+const CC_REMEZ_BUFFER: u64 = 3;
+
 /// The camp loop state machine. Each `tick()` call advances state and
 /// returns slash commands to send to EQ clients via IPC.
 pub struct CampLoop {
@@ -59,6 +88,9 @@ pub struct CampLoop {
     pub members: Vec<CampMember>,
     pub tick: u64,
     pub last_pull_target: String,
+    pub cc_tracker: CcTracker,
+    pub cc_members: Vec<CcMember>,
+    pub pending_events: Vec<CampEvent>,
 }
 
 impl CampLoop {
@@ -69,6 +101,56 @@ impl CampLoop {
             members,
             tick: 0,
             last_pull_target: String::new(),
+            cc_tracker: CcTracker::new(),
+            cc_members: Vec::new(),
+            pending_events: Vec::new(),
+        }
+    }
+
+    /// Push an event to be processed on the next tick.
+    pub fn push_event(&mut self, event: CampEvent) {
+        self.pending_events.push(event);
+    }
+
+    /// Process all pending events, returning commands. Called at the start of tick().
+    fn process_events(&mut self) -> Vec<(u32, String)> {
+        let mut commands = Vec::new();
+        let events: Vec<CampEvent> = self.pending_events.drain(..).collect();
+
+        for event in events {
+            commands.extend(self.process_event(event));
+        }
+        commands
+    }
+
+    /// Handle a single camp event.
+    fn process_event(&mut self, event: CampEvent) -> Vec<(u32, String)> {
+        match event {
+            CampEvent::CharmBreak { spawn_id } => {
+                self.cc_tracker
+                    .charm_break_response(spawn_id, &self.cc_members, self.tick)
+            }
+            CampEvent::AddSpawned { spawn_id, name } => {
+                // Update tracker with the new add, then assign CC
+                let spawns = vec![(spawn_id, name)];
+                self.cc_tracker.update(&spawns, None, self.tick);
+                // Debuff first, then CC
+                let mut cmds = self.cc_tracker.debuff_commands(
+                    spawn_id,
+                    &self.cc_members,
+                    self.tick,
+                );
+                cmds.extend(self.cc_tracker.assign_cc(&self.cc_members, self.tick));
+                cmds
+            }
+            CampEvent::CcExpiring { spawn_id } => {
+                // Find the assigned member and re-CC
+                let members = &self.cc_members;
+                self.cc_tracker.needs_remez(self.tick, 0, members)
+                    .into_iter()
+                    .filter(|(_, cmd)| cmd.contains(&format!("{spawn_id}")))
+                    .collect()
+            }
         }
     }
 
@@ -81,11 +163,27 @@ impl CampLoop {
         self.tick += 1;
         let mut commands = Vec::new();
 
+        // Process pending events first (charm breaks, adds, etc.)
+        commands.extend(self.process_events());
+
+        // Check for CCs about to expire during fighting
+        if matches!(self.state, CampState::Fighting { .. }) && !self.cc_members.is_empty() {
+            let remez = self
+                .cc_tracker
+                .needs_remez(self.tick, CC_REMEZ_BUFFER, &self.cc_members);
+            commands.extend(remez);
+        }
+
         match self.state.clone() {
             CampState::Idle => {
-                // Only pull if healer has enough mana (when we know)
+                // Only pull if healer has enough mana (when we know).
+                // Apply healer's personality jitter to the threshold.
+                let pull_threshold = self
+                    .find_by_role(&Role::Healer)
+                    .map(|h| h.personality.adjust_mana_threshold(self.config.pull_mana_pct as f32))
+                    .unwrap_or(self.config.pull_mana_pct as f32);
                 let healer_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= self.config.pull_mana_pct as f32)
+                    .map(|s| s.healer_mana_pct >= pull_threshold)
                     .unwrap_or(true);
                 if healer_ready {
                     self.transition_to_pulling(&mut commands);
@@ -106,15 +204,21 @@ impl CampLoop {
                     }
                 }
 
-                // Every 5 ticks, melee characters /face their target
+                // Melee characters /face periodically, staggered by personality
                 let fight_elapsed = self.tick - started_tick;
-                if fight_elapsed > 0 && fight_elapsed % 5 == 0 {
-                    let melee_members: Vec<(u32, Role)> = self
-                        .members
-                        .iter()
-                        .map(|m| (m.pid, m.role.clone()))
-                        .collect();
-                    commands.extend(positioning::fighting_face_commands(&melee_members));
+                if fight_elapsed > 0 {
+                    for member in &self.members {
+                        if member.role != Role::Tank && member.role != Role::DPS {
+                            continue;
+                        }
+                        // Each member's clock starts after their phase_offset
+                        let personal_elapsed =
+                            fight_elapsed.saturating_sub(member.personality.phase_offset);
+                        let face_interval = member.personality.adjust_delay(5);
+                        if personal_elapsed > 0 && personal_elapsed % face_interval == 0 {
+                            commands.push((member.pid, "/face".into()));
+                        }
+                    }
                 }
 
                 // Transition to looting: target dead (real data) or timer expired (fallback)
@@ -130,9 +234,14 @@ impl CampLoop {
                 }
             }
             CampState::Medding { started_tick } => {
-                // Transition when healer mana is above pull threshold (real data) or timer (fallback)
+                // Transition when healer mana is above pull threshold (real data) or timer (fallback).
+                // Apply healer's personality jitter to the threshold.
+                let med_threshold = self
+                    .find_by_role(&Role::Healer)
+                    .map(|h| h.personality.adjust_mana_threshold(self.config.pull_mana_pct as f32))
+                    .unwrap_or(self.config.pull_mana_pct as f32);
                 let mana_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= self.config.pull_mana_pct as f32)
+                    .map(|s| s.healer_mana_pct >= med_threshold)
                     .unwrap_or(false);
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
                 if mana_ready || timer_expired {
@@ -302,12 +411,12 @@ mod tests {
 
     fn test_members() -> Vec<CampMember> {
         vec![
-            CampMember { pid: 100, name: "Warrior01".into(), role: Role::Tank },
-            CampMember { pid: 101, name: "Cleric01".into(), role: Role::Healer },
-            CampMember { pid: 102, name: "Enchanter01".into(), role: Role::CC },
-            CampMember { pid: 103, name: "Bard01".into(), role: Role::Puller },
-            CampMember { pid: 104, name: "Ranger01".into(), role: Role::DPS },
-            CampMember { pid: 105, name: "Ranger02".into(), role: Role::DPS },
+            CampMember::new(100, "Warrior01".into(), Role::Tank),
+            CampMember::new(101, "Cleric01".into(), Role::Healer),
+            CampMember::new(102, "Enchanter01".into(), Role::CC),
+            CampMember::new(103, "Bard01".into(), Role::Puller),
+            CampMember::new(104, "Ranger01".into(), Role::DPS),
+            CampMember::new(105, "Ranger02".into(), Role::DPS),
         ]
     }
 
@@ -466,8 +575,8 @@ mod tests {
     #[test]
     fn test_no_puller_falls_back_to_tank() {
         let members = vec![
-            CampMember { pid: 100, name: "Warrior01".into(), role: Role::Tank },
-            CampMember { pid: 104, name: "Ranger01".into(), role: Role::DPS },
+            CampMember::new(100, "Warrior01".into(), Role::Tank),
+            CampMember::new(104, "Ranger01".into(), Role::DPS),
         ];
         let mut camp = CampLoop::new(test_config(), members);
         let cmds = camp.tick(None);

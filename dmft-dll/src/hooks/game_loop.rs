@@ -89,19 +89,40 @@ struct PendingCommand {
 static PENDING_COMMANDS: Mutex<Vec<PendingCommand>> = Mutex::new(Vec::new());
 static JITTER_RNG: Mutex<Option<dmft_common::nav::Xorshift32>> = Mutex::new(None);
 
-/// Initialize the jitter RNG with a seed derived from the process ID.
+/// Initialize the jitter RNG with a seed derived from system time.
+/// Using time instead of PID avoids predictable sequences since PIDs
+/// are sequential and easily enumerated by anti-cheat.
 pub fn init_jitter_rng() {
-    let seed = std::process::id();
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u32;
+    let seed = if seed == 0 { 1 } else { seed };
     if let Ok(mut rng) = JITTER_RNG.lock() {
-        *rng = Some(dmft_common::nav::Xorshift32::from_client_id(seed));
+        *rng = Some(dmft_common::nav::Xorshift32::new(seed));
     }
 }
 
-/// Enqueue a command with a random delay of 1-10 ticks.
+/// Human-like jitter using a triangle distribution (sum of two uniform draws).
+/// Peaks at 6 ticks with occasional hesitation spikes simulating distraction.
+/// Range: 2-30 ticks (without hesitation: 2-10, with hesitation: 7-30).
+fn human_jitter_ticks(rng: &mut dmft_common::nav::Xorshift32) -> u64 {
+    // Triangle distribution: sum of two uniform draws (peaks at center)
+    let base = (rng.next_u32() % 5 + 1) + (rng.next_u32() % 5 + 1); // 2-10, peaks at 6
+    // 5% chance of hesitation spike (simulates distraction)
+    let hesitate = if rng.next_u32() % 20 == 0 {
+        rng.next_u32() % 15 + 5
+    } else {
+        0
+    };
+    (base + hesitate) as u64
+}
+
+/// Enqueue a command with a human-like jitter delay.
 fn enqueue_command(cmd: dmft_common::ipc::Command, current_tick: u64) {
     let delay = if let Ok(mut rng) = JITTER_RNG.lock() {
         if let Some(ref mut r) = *rng {
-            (r.next_u32() % 10) as u64 + 1 // 1-10 ticks
+            human_jitter_ticks(r)
         } else {
             5 // fallback: middle of range
         }
@@ -633,5 +654,57 @@ fn execute_slash_command(command: &str) {
     {
         let _ = command;
         tracing::warn!("Slash command execution not available on this platform");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_human_jitter_bounds() {
+        let mut rng = dmft_common::nav::Xorshift32::new(12345);
+        for _ in 0..10_000 {
+            let ticks = human_jitter_ticks(&mut rng);
+            // Base: 2-10, hesitation adds 5-19 (5% chance)
+            // Min = 2, max = 10 + 19 = 29
+            assert!(ticks >= 2, "jitter {ticks} below minimum 2");
+            assert!(ticks <= 29, "jitter {ticks} above maximum 29");
+        }
+    }
+
+    #[test]
+    fn test_human_jitter_distribution_peaks_at_center() {
+        let mut rng = dmft_common::nav::Xorshift32::new(42);
+        let mut counts = [0u32; 30]; // indices 0-29
+
+        for _ in 0..100_000 {
+            let ticks = human_jitter_ticks(&mut rng) as usize;
+            counts[ticks] += 1;
+        }
+
+        // The triangle distribution peaks at 6 (most common without hesitation).
+        // Verify tick 6 is the most common value in the 2-10 range.
+        let peak = counts[2..=10]
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, c)| *c)
+            .map(|(i, _)| i + 2)
+            .unwrap();
+        assert_eq!(peak, 6, "Expected peak at 6 ticks, got {peak}");
+    }
+
+    #[test]
+    fn test_human_jitter_produces_hesitation_spikes() {
+        let mut rng = dmft_common::nav::Xorshift32::new(99);
+        let mut saw_spike = false;
+        for _ in 0..10_000 {
+            let ticks = human_jitter_ticks(&mut rng);
+            if ticks > 10 {
+                saw_spike = true;
+                break;
+            }
+        }
+        assert!(saw_spike, "Expected at least one hesitation spike > 10 in 10000 draws");
     }
 }

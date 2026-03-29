@@ -21,6 +21,12 @@ cooldown_secs = 12.0
 priority = 5
 condition = "mana_below_50"
 
+[[debuff_abilities]]
+name = "Malo"
+command = "/cast 3"
+cooldown_secs = 3.0
+order = 2
+
 [[buff_abilities]]
 name = "Haste"
 command = "/cast 5"

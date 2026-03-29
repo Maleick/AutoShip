@@ -96,8 +96,20 @@ pub type SessionToken = [u8; 32];
 /// Size of shared memory region allocated per client (64 KB)
 pub const SHARED_MEMORY_SIZE: usize = 64 * 1024;
 
-/// Named pipe prefix for per-client IPC channels
+/// Legacy named pipe prefix — prefer `pipe_name()` with a session ID.
 pub const PIPE_NAME_PREFIX: &str = r"\\.\pipe\dmft_";
 
-/// Shared memory name prefix for per-client game state regions
+/// Legacy shared memory name prefix — prefer `shared_memory_name()` with a session ID.
 pub const SHARED_MEMORY_NAME_PREFIX: &str = "dmft_state_";
+
+/// Build a per-client pipe name incorporating a random session ID.
+/// Format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
+pub fn pipe_name(session_id: u64, client_id: u32) -> String {
+    format!(r"\\.\pipe\{:x}_cmd_{}", session_id, client_id)
+}
+
+/// Build a per-client shared memory name incorporating a random session ID.
+/// Format: `{session_id:x}_state_{client_id}`
+pub fn shared_memory_name(session_id: u64, client_id: u32) -> String {
+    format!("{:x}_state_{}", session_id, client_id)
+}
