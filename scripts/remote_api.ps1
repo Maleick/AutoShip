@@ -243,11 +243,81 @@ while ($listener.IsListening) {
                     Send-JsonResponse $response @{ error = $_.ToString() } 500
                 }
             }
+            "/launch-eq" {
+                # Dedicated EQ launcher — no allowlist needed
+                if ($method -ne "POST") {
+                    Send-JsonResponse $response @{ error = "POST required" } 405
+                } else {
+                    $reader = New-Object System.IO.StreamReader($request.InputStream)
+                    $body = $reader.ReadToEnd()
+                    $reader.Close()
+                    try {
+                        $parsed = $body | ConvertFrom-Json
+                    } catch {
+                        $parsed = @{ account = "frostmale001" }
+                    }
+                    $account = if ($parsed.account) { $parsed.account } else { "frostmale001" }
+                    $eqPath = "C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest"
+                    try {
+                        Start-Process -FilePath "$eqPath\eqgame.exe" `
+                            -ArgumentList "patchme","/login:$account" `
+                            -WorkingDirectory $eqPath
+                        Send-JsonResponse $response @{ success = $true; account = $account; message = "EQ launched" }
+                    } catch {
+                        Send-JsonResponse $response @{ success = $false; error = $_.ToString() } 500
+                    }
+                }
+            }
+            "/inject" {
+                # Inject DLL into running EQ
+                if ($method -ne "POST") {
+                    Send-JsonResponse $response @{ error = "POST required" } 405
+                } else {
+                    try {
+                        $result = & "$ProjectDir\target\release\dmft.exe" --inject 2>&1
+                        Send-JsonResponse $response @{ success = $true; output = ($result -join "`n") }
+                    } catch {
+                        Send-JsonResponse $response @{ success = $false; error = $_.ToString() } 500
+                    }
+                }
+            }
+            "/kill-eq" {
+                # Kill all EQ processes
+                if ($method -ne "POST") {
+                    Send-JsonResponse $response @{ error = "POST required" } 405
+                } else {
+                    $procs = Get-Process -Name "eqgame" -ErrorAction SilentlyContinue
+                    if ($procs) {
+                        $procs | Stop-Process -Force
+                        Send-JsonResponse $response @{ success = $true; killed = $procs.Count }
+                    } else {
+                        Send-JsonResponse $response @{ success = $true; killed = 0; message = "No EQ processes" }
+                    }
+                }
+            }
+            "/restart" {
+                # Pull latest code and restart the API
+                if ($method -ne "POST") {
+                    Send-JsonResponse $response @{ error = "POST required" } 405
+                } else {
+                    Send-JsonResponse $response @{ success = $true; message = "Restarting..." }
+                    Set-Location $ProjectDir
+                    & git pull
+                    # Stop listener and re-launch
+                    $listener.Stop()
+                    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File $ProjectDir\scripts\remote_api.ps1 -Port $Port"
+                    exit 0
+                }
+            }
             default {
                 $help = @{
                     endpoints = @(
                         "GET  /status       - EQ process status + DLL log summary"
                         "POST /run          - Execute command (body: {`"command`":`"...`"})"
+                        "POST /launch-eq    - Launch EQ (body: {`"account`":`"name`"})"
+                        "POST /inject       - Inject DLL into running EQ"
+                        "POST /kill-eq      - Kill all EQ processes"
+                        "POST /restart      - Pull latest + restart API"
                         "POST /screenshot   - Capture screen (returns PNG)"
                         "GET  /test-results - Latest test loop results"
                         "GET  /dll-log      - DLL log tail (?lines=N)"
