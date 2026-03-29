@@ -238,65 +238,57 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
         // eqmain.dll unloaded — we're at character select (eqgame.exe).
-        // /enterworld slash command doesn't work here. Send Enter key
-        // via PostMessageW which triggers the "Enter World" button.
+        // Call CCharacterListWnd::EnterWorld() directly — the MQ2 approach.
         tracing::info!("Phase 3: eqmain.dll unloaded — at character select");
 
-        // Get EQ's HWND from the game engine (not eqmain — it's gone)
-        #[cfg(windows)]
-        {
-            use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
-            use windows::Win32::UI::WindowsAndMessaging::{
-                FindWindowW, PostMessageW,
-            };
-            use windows::core::w;
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            tracing::error!("Phase 3: EQ base not resolved");
+            return;
+        }
 
-            const WM_KEYDOWN: u32 = 0x0100;
-            const WM_KEYUP: u32 = 0x0101;
-            const VK_RETURN: u16 = 0x0D;
-
+        // Resolve pinstCXWndManager in eqgame.exe to find CCharacterListWnd
+        if let Some(mgr_ptr_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::PINST_CXWND_MANAGER, eq_base,
+        ) {
             unsafe {
-                // Find EQ window by class name
-                let hwnd = FindWindowW(None, None);
-                // Try finding by window title pattern
-                let eq_hwnd = {
-                    use windows::Win32::UI::WindowsAndMessaging::EnumWindows;
-                    use windows::Win32::Foundation::BOOL;
-                    use std::sync::atomic::{AtomicIsize, Ordering};
+                let mgr = *(mgr_ptr_addr as *const usize);
+                if mgr == 0 {
+                    tracing::warn!("Phase 3: CXWndManager is null");
+                    return;
+                }
 
-                    static FOUND_HWND: AtomicIsize = AtomicIsize::new(0);
-                    FOUND_HWND.store(0, Ordering::SeqCst);
+                // Walk the window array to find "Enter World" button
+                use dmft_common::offsets::eqmain as off;
+                let array_ptr = *((mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+                let count = *((mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
 
-                    unsafe extern "system" fn enum_callback(hwnd: HWND, _: LPARAM) -> BOOL {
-                        use windows::Win32::UI::WindowsAndMessaging::GetWindowTextW;
-                        let mut buf = [0u16; 256];
-                        let len = GetWindowTextW(hwnd, &mut buf);
-                        if len > 0 {
-                            let title = String::from_utf16_lossy(&buf[..len as usize]);
-                            if title.contains("EQ") || title.contains("EverQuest") {
-                                FOUND_HWND.store(hwnd.0, Ordering::SeqCst);
-                                return BOOL(0); // stop enumeration
+                if array_ptr != 0 && count > 0 && count < 2000 {
+                    for i in 0..count as usize {
+                        let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+                        if wnd_ptr == 0 { continue; }
+
+                        if let Some(text) = crate::login::widgets::read_cxstr_pub(
+                            wnd_ptr + off::CXWND_WINDOW_TEXT,
+                        ) {
+                            if text == "Enter World" {
+                                tracing::info!(
+                                    ptr = format!("{:#x}", wnd_ptr),
+                                    "Phase 3: Found 'Enter World' button — clicking"
+                                );
+                                crate::login::widgets::click_button_via_vtable(wnd_ptr);
+                                tracing::info!("Phase 3 complete: Enter World clicked!");
+                                return;
                             }
                         }
-                        BOOL(1) // continue
                     }
-
-                    let _ = EnumWindows(Some(enum_callback), LPARAM(0));
-                    let h = FOUND_HWND.load(Ordering::SeqCst);
-                    if h != 0 { HWND(h) } else { hwnd }
-                };
-
-                tracing::info!(
-                    hwnd = format!("{:#x}", eq_hwnd.0),
-                    "Phase 3: Sending Enter key to EQ window"
-                );
-
-                let _ = PostMessageW(eq_hwnd, WM_KEYDOWN, WPARAM(VK_RETURN as usize), LPARAM(0));
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                let _ = PostMessageW(eq_hwnd, WM_KEYUP, WPARAM(VK_RETURN as usize), LPARAM(0));
-
-                tracing::info!("Phase 3 complete: Enter key sent");
+                    tracing::warn!(count, "Phase 3: 'Enter World' not found in {} windows", count);
+                } else {
+                    tracing::warn!("Phase 3: Invalid CXWndManager window array");
+                }
             }
+        } else {
+            tracing::warn!("Phase 3: Could not rebase pinstCXWndManager");
         }
         return;
     }

@@ -66,6 +66,17 @@ pub const EXECUTE_CMD: u64 = 0x1402235B0;
 /// Signature: void InterpretCmd(PlayerClient*, const char*)
 pub const INTERPRET_CMD: u64 = 0x140283FB0;
 
+/// pinstCXWndManager — eqgame.exe's UI window manager (not eqmain.dll's)
+pub const PINST_CXWND_MANAGER: u64 = 0x140F37B28;
+
+/// CCharacterListWnd::EnterWorld — enter world from character select
+/// Signature: void EnterWorld() (member function, takes this only)
+pub const CHAR_LIST_ENTER_WORLD: u64 = 0x1400D4B20;
+
+/// CCharacterListWnd::SelectCharacter — select a character by index
+/// Signature: void SelectCharacter(int index)
+pub const CHAR_LIST_SELECT_CHAR: u64 = 0x1400D5D20;
+
 /// CEverQuest::ClickedPlayer — click-target a player
 pub const CLICKED_PLAYER: u64 = 0x1402724F0;
 
