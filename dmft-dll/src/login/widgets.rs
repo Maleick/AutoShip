@@ -599,7 +599,126 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
         }
     }
 
+    // Enumerate CXWndManager windows to find login UI widgets
+    #[cfg(windows)]
+    if let Some(cxwnd_mgr) = eqmain::resolve_cxwnd_manager(eqmain_base) {
+        enumerate_cxwnd_windows(cxwnd_mgr);
+    }
+
     tracing::info!("=== END LOGIN CALIBRATION DUMP ===");
+}
+
+/// Read a CXStr value from a raw pointer. CXStr is a single pointer to CStrRep.
+/// CStrRep layout: refcount(4) + alloc(4) + length(4) + encoding(4) + freeList(8) + data[](at +0x18)
+#[cfg(windows)]
+unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
+    use dmft_common::offsets::eqmain as off;
+
+    let rep_ptr = *(cxstr_addr as *const usize);
+    if rep_ptr == 0 {
+        return None;
+    }
+
+    let length = *((rep_ptr + off::CSTRREP_LENGTH) as *const u32) as usize;
+    if length == 0 || length > 256 {
+        return None;
+    }
+
+    let data_ptr = (rep_ptr + off::CSTRREP_DATA) as *const u8;
+    let bytes = std::slice::from_raw_parts(data_ptr, length);
+    String::from_utf8(bytes.to_vec()).ok()
+}
+
+/// Write a string into a CXStr field by overwriting the existing CStrRep buffer.
+/// Only safe if the new text fits within the existing allocation.
+#[cfg(windows)]
+unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
+    use dmft_common::offsets::eqmain as off;
+
+    let rep_ptr = *(cxstr_addr as *const usize);
+    if rep_ptr == 0 {
+        tracing::warn!("CXStr rep is null — cannot write");
+        return false;
+    }
+
+    let alloc = *((rep_ptr + off::CSTRREP_ALLOC) as *const u32) as usize;
+    if text.len() >= alloc {
+        tracing::warn!(
+            text_len = text.len(),
+            alloc,
+            "CXStr buffer too small for text"
+        );
+        return false;
+    }
+
+    // Write the new string data
+    let data_ptr = (rep_ptr + off::CSTRREP_DATA) as *mut u8;
+    std::ptr::copy_nonoverlapping(text.as_ptr(), data_ptr, text.len());
+    // Null-terminate
+    *data_ptr.add(text.len()) = 0;
+    // Update length
+    *((rep_ptr + off::CSTRREP_LENGTH) as *mut u32) = text.len() as u32;
+
+    true
+}
+
+/// Walk CXWndManager's window array and log each window's address and WindowText.
+/// This helps identify the login UI widget addresses for direct credential writing.
+#[cfg(windows)]
+fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
+    use dmft_common::offsets::eqmain as off;
+
+    tracing::info!("=== WINDOW ENUMERATION ===");
+
+    unsafe {
+        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const i32);
+
+        tracing::info!(
+            array_ptr = format!("{:#x}", array_ptr),
+            count,
+            "CXWndManager::pWindows"
+        );
+
+        if array_ptr == 0 || count <= 0 || count > 500 {
+            tracing::warn!("Invalid window array");
+            return;
+        }
+
+        let focus_wnd = *((cxwnd_mgr + off::CXWNDMGR_FOCUS_WINDOW) as *const usize);
+        tracing::info!(focus = format!("{:#x}", focus_wnd), "FocusWindow");
+
+        for i in 0..count as usize {
+            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+            if wnd_ptr == 0 {
+                continue;
+            }
+
+            // Read WindowText (CXStr at +0x078)
+            let window_text = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT)
+                .unwrap_or_default();
+
+            // Read XMLIndex
+            let xml_index = *((wnd_ptr + off::CXWND_XML_INDEX) as *const i32);
+
+            // Read visibility
+            let visible = *((wnd_ptr + off::CXWND_DSHOW) as *const bool);
+
+            // Only log windows that are visible or have a name
+            if visible || !window_text.is_empty() {
+                tracing::info!(
+                    idx = i,
+                    ptr = format!("{:#x}", wnd_ptr),
+                    xml_index,
+                    visible,
+                    text = %window_text,
+                    "Window"
+                );
+            }
+        }
+    }
+
+    tracing::info!("=== END WINDOW ENUMERATION ===");
 }
 
 /// Read a list item from a CListWnd at the given row and column.
@@ -617,19 +736,10 @@ pub fn read_list_item(
 }
 
 /// Write a Rust string into an EQ CXStr field.
-/// CXStr is a pointer to CStrRep; CStrRep has UTF-8 data at offset 0x18.
+/// Delegates to write_cxstr_inplace which overwrites the existing CStrRep buffer.
 #[cfg(windows)]
 unsafe fn write_cxstr(cxstr_ptr: *mut u8, text: &str) {
-    // CXStr layout: pointer to CStrRep, which has the string data.
-    // For initial implementation, we write directly — this will need
-    // refinement once CXStr allocation patterns are validated on live.
-    //
-    // TODO: Use EQ's CXStr allocation functions to properly create/set strings.
-    // Direct memory writes risk heap corruption if the string grows beyond
-    // the existing buffer. Safe approach: call CXStr::operator=() or
-    // SetWindowText equivalent.
-    let _ = (cxstr_ptr, text);
-    tracing::trace!("CXStr write stub — will implement with validated layout");
+    write_cxstr_inplace(cxstr_ptr as usize, text);
 }
 
 #[cfg(test)]

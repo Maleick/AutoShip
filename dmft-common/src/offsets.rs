@@ -169,10 +169,46 @@ pub mod eqmain {
     // ─── UI widget field offsets ───
 
     /// CEditBaseWnd::InputText field offset (CXStr)
+    /// CXStr is a single pointer to CStrRep (8 bytes).
     pub const CEDITBASEWND_INPUT_TEXT: usize = 0x278;
 
     /// XWM_LCLICK notification code for button clicks
     pub const XWM_LCLICK: u32 = 1;
+
+    // ─── CXWndManager struct offsets ───
+    // From MQ2: CXWndManager { /*0x008*/ ArrayClass<CXWnd*> pWindows; ... }
+    // ArrayClass<T> = { T* m_array; int m_length; int m_alloc; }
+
+    /// CXWndManager::pWindows.m_array (pointer to CXWnd* array)
+    pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x008;
+    /// CXWndManager::pWindows.m_length (window count)
+    pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x010;
+    /// CXWndManager::FocusWindow (CXWnd*)
+    pub const CXWNDMGR_FOCUS_WINDOW: usize = 0x090;
+
+    // ─── CXWnd struct offsets ───
+
+    /// CXWnd::WindowText (CXStr at +0x078)
+    pub const CXWND_WINDOW_TEXT: usize = 0x078;
+    /// CXWnd::XMLIndex (int at +0x054 in eqmain, varies)
+    pub const CXWND_XML_INDEX: usize = 0x054;
+    /// CXWnd::dShow (bool at +0x06c)
+    pub const CXWND_DSHOW: usize = 0x06c;
+    /// CXWnd::FirstNode (child window, at +0x028)
+    pub const CXWND_FIRST_NODE: usize = 0x028;
+    /// CXWnd::Next (sibling window, at +0x020)
+    pub const CXWND_NEXT: usize = 0x020;
+
+    // ─── CStrRep struct offsets ───
+
+    /// CStrRep::length (u32 at +0x08)
+    pub const CSTRREP_LENGTH: usize = 0x08;
+    /// CStrRep::alloc (u32 at +0x04)
+    pub const CSTRREP_ALLOC: usize = 0x04;
+    /// CStrRep::encoding (enum at +0x0c, 0=utf8)
+    pub const CSTRREP_ENCODING: usize = 0x0c;
+    /// CStrRep::data (char[] at +0x18)
+    pub const CSTRREP_DATA: usize = 0x18;
 
     /// Convert a preferred-base eqmain.dll offset to an actual address.
     pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
