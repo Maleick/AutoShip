@@ -46,10 +46,26 @@ fn main() -> Result<()> {
     let dump_mode = args.iter().any(|a| a == "--dump");
     let inject_mode = args.iter().any(|a| a == "--inject" || a == "inject");
     let calibrate_mode = args.iter().any(|a| a == "--calibrate");
+    let login_mode = args.iter().position(|a| a == "--login");
     let cmd_mode = args.iter().position(|a| a == "--cmd");
 
     if calibrate_mode {
         return run_calibrate_mode();
+    } else if let Some(pos) = login_mode {
+        // --login <account> <password> [server] [character]
+        let account = args.get(pos + 1)
+            .context("--login requires: --login <account> <password> [server] [character]")?
+            .clone();
+        let password = args.get(pos + 2)
+            .context("--login requires: --login <account> <password>")?
+            .clone();
+        let server = args.get(pos + 3)
+            .cloned()
+            .unwrap_or_else(|| "Firiona Vie".to_string());
+        let character = args.get(pos + 4)
+            .cloned()
+            .unwrap_or_default();
+        return run_login_mode(&account, &password, &server, &character);
     } else if let Some(pos) = cmd_mode {
         // --cmd <pid> "<slash command>"
         let pid: u32 = args.get(pos + 1)
@@ -196,6 +212,51 @@ fn run_inject_mode() -> Result<()> {
     println!();
     println!("Run scripts\\verify_injection.bat to check injection status.");
 
+    Ok(())
+}
+
+/// Login mode (--login <account> <password> [server] [character]) — send StartLogin to all injected EQ clients.
+fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
+    use dmft_common::ipc::Command;
+
+    let config = load_config()?;
+    let pids = process::memory::find_processes_by_name(&config.process_name)?;
+
+    if pids.is_empty() {
+        println!("No EQ processes found. Launch EQ first, then inject, then login.");
+        return Ok(());
+    }
+
+    for &pid in &pids {
+        println!("Sending StartLogin to PID {} (account: {}, server: {})...", pid, account, server);
+
+        match ipc::pipe::CommandPipe::connect(pid) {
+            Ok(pipe) => {
+                let token = generate_session_token(pid);
+                if pipe.send_raw_token(&token).is_err() {
+                    println!("  Failed to auth with PID {}", pid);
+                    continue;
+                }
+
+                let cmd = Command::StartLogin {
+                    account_name: account.to_string(),
+                    password: password.to_string(),
+                    server_name: server.to_string(),
+                    character_name: character.to_string(),
+                };
+                if pipe.send_async(&cmd).is_ok() {
+                    println!("  StartLogin sent to PID {}", pid);
+                } else {
+                    println!("  Failed to send StartLogin to PID {}", pid);
+                }
+            }
+            Err(_) => {
+                println!("  Cannot connect to PID {} — is the DLL injected?", pid);
+            }
+        }
+    }
+
+    println!("\nLogin commands sent. Check DLL log for progress.");
     Ok(())
 }
 
