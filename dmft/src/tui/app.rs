@@ -631,8 +631,8 @@ impl App {
             if let Ok(proc) = ProcessHandle::open(client.pid) {
                 // Find the spawn address by walking the spawn list
                 let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
-                    Ok(a) => a,
-                    Err(_) => return Vec::new(),
+                    Some(a) => a,
+                    None => return Vec::new(),
                 };
                 let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
                     Ok(a) if a != 0 => a,
