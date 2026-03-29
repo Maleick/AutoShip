@@ -29,12 +29,11 @@ impl ClassStrategy for EnchanterStrategy {
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
-        // spawn_type 1 = player, 0 = NPC (no aggro = not engaged on us).
-        // If target has no aggro (is an NPC not currently fighting), mez it.
-        // Otherwise nuke.
+        // spawn_type: 0 = Player, 1 = NPC. Mez NPCs, nuke players (PvP) or assist target.
+        // In group XP, off-targets are NPCs that should be mezzed.
         let is_mez_target = ctx
             .target
-            .map(|t| t.spawn_type == 0) // NPC spawn type — not currently aggroed
+            .map(|t| t.spawn_type == 1) // NPC spawn type
             .unwrap_or(false);
 
         let spells = &ctx.config.spells;

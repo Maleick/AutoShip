@@ -172,12 +172,13 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
             *mut c_void, // this (CharacterZoneClient*)
             u32,         // skill_id
             *mut c_void, // target (PlayerZoneClient*)
+            bool,        // bAuto (false = manual activation)
         );
         let func: UseSkillFn = unsafe { std::mem::transmute(addr) };
 
         let target_ptr = target.unwrap_or(std::ptr::null_mut());
         tracing::info!(skill_id, addr = format!("{:#x}", addr), "Calling UseSkill");
-        unsafe { func(player, skill_id, target_ptr) };
+        unsafe { func(player, skill_id, target_ptr, false) };
     }
 
     #[cfg(not(windows))]
@@ -286,6 +287,70 @@ pub fn toggle_auto_attack(enable: bool) {
     execute_cmd(CMD_ATTACK, active);
 }
 
+/// Execute an EQ slash command string (e.g., "/face", "/pet attack").
+///
+/// Calls CEverQuest::InterpretCmd(this, pChar, szCmd).
+pub fn slash_command(command: &str) {
+    #[cfg(windows)]
+    {
+        let Some(eq_base) = get_eq_base() else {
+            tracing::error!("EQ base not set");
+            return;
+        };
+        let Some(player) = get_local_player(eq_base) else {
+            tracing::error!("Local player not available");
+            return;
+        };
+
+        // Get the CEverQuest instance pointer.
+        let Some(eq_inst_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::PINST_CEVERQUEST,
+            eq_base,
+        ) else {
+            tracing::error!("Failed to rebase PINST_CEVERQUEST");
+            return;
+        };
+
+        let eq_inst: *mut c_void = unsafe { *(eq_inst_addr as *const *mut c_void) };
+        if eq_inst.is_null() {
+            tracing::error!("CEverQuest instance pointer is null");
+            return;
+        }
+
+        let cmd_cstring = match std::ffi::CString::new(command) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(error = %e, "Invalid command string");
+                return;
+            }
+        };
+
+        // CEverQuest::InterpretCmd(this, PlayerClient*, const char*)
+        type InterpretCmdFn = unsafe extern "C" fn(
+            *mut c_void, // this (CEverQuest*)
+            *mut c_void, // pChar (PlayerClient*)
+            *const i8,   // szCmd
+        );
+        let Some(interpret_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::INTERPRET_CMD,
+            eq_base,
+        ) else {
+            tracing::error!("Failed to rebase INTERPRET_CMD");
+            return;
+        };
+        let func: InterpretCmdFn = unsafe { std::mem::transmute(interpret_addr) };
+
+        tracing::info!(cmd = command, "Executing slash command");
+        unsafe { func(eq_inst, player, cmd_cstring.as_ptr()) };
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = command;
+        tracing::warn!("Slash command not available on this platform");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +396,11 @@ mod tests {
     fn test_toggle_auto_attack_noop_without_eq_base() {
         toggle_auto_attack(true);
         toggle_auto_attack(false);
+    }
+
+    #[test]
+    fn test_slash_command_noop_without_eq_base() {
+        slash_command("/face");
+        slash_command("/pet attack");
     }
 }

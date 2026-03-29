@@ -13,6 +13,12 @@ use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
 use super::strategy::{build_strategy, ClassStrategy, CombatContext, GroupMemberState};
 
+/// Maximum spell range in EQ units. Spells beyond this distance will not fire.
+const MAX_SPELL_RANGE: f32 = 200.0;
+
+/// Pet classes that should issue `/pet attack` on engage.
+const PET_CLASSES: &[u8] = &[3, 10, 11, 13]; // SK, Shaman, Necro, Mage
+
 /// Internal FSM states — not exposed outside this module.
 /// The public-facing status uses `CombatStatus` from dmft-common.
 enum CombatState {
@@ -36,6 +42,8 @@ pub struct Combatant {
     /// via `status()` (which returns `CombatStatus::Fleeing`) to know it
     /// should send a flee waypoint to the navigator.
     flee_requested: bool,
+    /// True when we just entered Engaging state — triggers on_engage callback.
+    needs_on_engage: bool,
     /// Group member snapshots, populated by the orchestrator via IPC.
     /// Required for healer strategies (cleric, druid, shaman) to select
     /// heal targets. Empty until the orchestrator sends group state updates.
@@ -69,6 +77,7 @@ impl Combatant {
             holyshit,
             assist_target: None,
             flee_requested: false,
+            needs_on_engage: false,
             group_members: Vec::new(),
             tick_count: 0,
             config,
@@ -101,6 +110,12 @@ impl Combatant {
             tick: self.tick_count,
             in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
         };
+
+        // --- Call on_engage when first entering Engaging state ---
+        if self.needs_on_engage {
+            self.needs_on_engage = false;
+            self.strategy.on_engage(&ctx);
+        }
 
         // --- HolyShit evaluation (always runs first) ---
         if let Some(action) = self.holyshit.evaluate(&ctx) {
@@ -154,6 +169,15 @@ impl Combatant {
             CombatState::Engaging { .. } => {
                 if !self.gcd.is_ready() {
                     return;
+                }
+
+                // Range check — don't cast if target is too far away
+                if let Some(t) = target {
+                    let dist = distance_3d(player, t);
+                    if dist > MAX_SPELL_RANGE {
+                        tracing::debug!(dist, "Target out of spell range, waiting");
+                        return;
+                    }
                 }
 
                 // Check mana governor
@@ -255,17 +279,42 @@ impl Combatant {
     }
 
     /// Begin combat against a specific target.
-    /// Note: `on_engage` will be called on the strategy during the next `tick()`
-    /// when a real player snapshot is available.
+    /// Issues `/face` to turn toward the target (melee misses without facing)
+    /// and `/pet attack` for pet classes.
     pub fn engage(&mut self, target_id: u32) {
         tracing::info!(target_id, "Engaging target");
+
+        // Face the target so melee attacks connect
+        crate::eq::slash_command("/face");
+
+        // Pet classes send pet to attack
+        let class_id = self.strategy.class_id();
+        if PET_CLASSES.contains(&class_id) {
+            crate::eq::slash_command("/pet attack");
+            tracing::info!(class_id, "Sent /pet attack");
+        }
+
         crate::eq::toggle_auto_attack(true);
+        self.needs_on_engage = true;
         self.state = CombatState::Engaging { target_id };
     }
 
     /// Stop combat — return to idle.
     pub fn disengage(&mut self) {
         tracing::info!("Disengaging from combat");
+        // Notify strategy of kill/disengage for state cleanup
+        let player = SpawnData::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &self.group_members,
+            config: &self.config,
+            tick: self.tick_count,
+            in_combat: false,
+        };
+        self.strategy.on_kill(&ctx);
+
         crate::eq::toggle_auto_attack(false);
         self.assist_target = None;
         self.state = CombatState::Idle;
@@ -323,6 +372,11 @@ impl Combatant {
                 crate::eq::use_skill(SKILL_TAUNT, None);
                 crate::eq::use_skill(SKILL_KICK, None);
             }
+            3 => { // Shadow Knight: taunt + bash + kick
+                crate::eq::use_skill(SKILL_TAUNT, None);
+                crate::eq::use_skill(SKILL_BASH, None);
+                crate::eq::use_skill(SKILL_KICK, None);
+            }
             7 => { // Monk: flying kick + round kick + tiger claw + eagle strike
                 // Rotate through monk skills
                 let skill = match self.tick_count / 60 % 4 {
@@ -341,4 +395,12 @@ impl Combatant {
             }
         }
     }
+}
+
+/// 3D Euclidean distance between two spawns.
+fn distance_3d(a: &SpawnData, b: &SpawnData) -> f32 {
+    let dx = a.x - b.x;
+    let dy = a.y - b.y;
+    let dz = a.z - b.z;
+    (dx * dx + dy * dy + dz * dz).sqrt()
 }

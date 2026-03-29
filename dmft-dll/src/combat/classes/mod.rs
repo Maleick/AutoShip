@@ -6,6 +6,7 @@ pub mod generic_dps;
 pub mod magician;
 pub mod monk;
 pub mod necromancer;
+pub mod paladin;
 pub mod rogue;
 pub mod shaman;
 pub mod shadow_knight;
