@@ -219,6 +219,9 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                                     tracing::info!(ok, "Inline: SetWindowText username");
                                 }
 
+                                // Small delay between username and password
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+
                                 // Set password via SetWindowText vtable call
                                 if password_edit != 0 {
                                     let ok = crate::login::widgets::set_edit_text_via_vtable(
@@ -229,10 +232,9 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                                     tracing::warn!("Inline: password CEditWnd not found");
                                 }
 
-                                // Wait for EQ to process the SetWindowText calls.
-                                // The vtable call updates internal state but the UI
-                                // event loop needs time to read the new values.
-                                std::thread::sleep(std::time::Duration::from_secs(1));
+                                // Wait 2s for EQ's UI event loop to process the
+                                // SetWindowText calls before clicking Login.
+                                std::thread::sleep(std::time::Duration::from_secs(2));
 
                                 // Click Login button
                                 if login_button != 0 {
