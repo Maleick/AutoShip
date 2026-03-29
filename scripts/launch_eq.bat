@@ -1,14 +1,12 @@
 @echo off
-REM ============================================================
-REM  Launch 6 EQ clients with stagger delay
-REM  Copy to: C:\Users\xmale\Desktop\launch_eq.bat
-REM ============================================================
-setlocal
+echo ============================================
+echo  Frostreaver - EQ Multibox Launcher
+echo ============================================
+echo.
 
 cd /d "C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest"
 
-echo.
-echo  === Launching 6 EQ Clients ===
+echo Launching 6 EQ clients...
 echo.
 
 start "" eqgame.exe patchme /login:frostreaver01
@@ -36,6 +34,22 @@ echo  [6/6] frostreaver06 launched
 
 echo.
 echo  All 6 clients launched.
-echo  Log in characters, then run: inject_and_group.bat
+echo  Enter passwords and select characters on each client.
 echo.
-pause
+echo  Press any key when all characters are in-game...
+pause >nul
+
+echo.
+echo  Injecting DLL into all clients...
+cd /d C:\Users\xmale\Projects\DMFT
+target\release\dmft.exe --inject
+
+echo.
+echo  Waiting 3 seconds for hooks to initialize...
+timeout /t 3 /nobreak >nul
+
+echo.
+echo  Starting TUI dashboard...
+echo  (Press q to quit TUI)
+echo.
+target\release\dmft.exe
