@@ -175,6 +175,10 @@ pub mod eqmain {
     /// XWM_LCLICK notification code for button clicks
     pub const XWM_LCLICK: u32 = 1;
 
+    /// CXWnd vtable offset for WndNotification (eqmain.dll layout)
+    /// Signature: int WndNotification(CXWnd* sender, uint32_t message, void* data)
+    pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x110;
+
     // ─── CXWndManager struct offsets ───
     // From MQ2: CXWndManager { /*0x008*/ ArrayClass<CXWnd*> pWindows; ... }
     // ArrayClass<T> = { T* m_array; int m_length; int m_alloc; }
