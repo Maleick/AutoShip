@@ -1,7 +1,11 @@
 pub mod warrior;
 pub mod cleric;
+pub mod druid;
 pub mod enchanter;
 pub mod generic_dps;
-pub mod rogue;
+pub mod magician;
 pub mod monk;
+pub mod necromancer;
+pub mod rogue;
 pub mod shaman;
+pub mod wizard;

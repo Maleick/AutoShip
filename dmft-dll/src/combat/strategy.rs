@@ -2,12 +2,16 @@ use dmft_common::combat::{CombatConfig, CombatRole, SpellEntry};
 use dmft_common::types::SpawnData;
 
 use super::classes::cleric::ClericStrategy;
+use super::classes::druid::DruidStrategy;
 use super::classes::enchanter::EnchanterStrategy;
 use super::classes::generic_dps::GenericDpsStrategy;
+use super::classes::magician::MagicianStrategy;
 use super::classes::monk::MonkStrategy;
+use super::classes::necromancer::NecromancerStrategy;
 use super::classes::rogue::RogueStrategy;
 use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
+use super::classes::wizard::WizardStrategy;
 
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each tick.
 pub struct CombatContext<'a> {
@@ -61,12 +65,16 @@ pub trait ClassStrategy: Send {
 /// Factory function — creates the right strategy for a given class.
 pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrategy> {
     match class_id {
-        1 => Box::new(WarriorStrategy::new(class_id)),     // Warrior
-        2 => Box::new(ClericStrategy::new(class_id)),      // Cleric
-        7 => Box::new(MonkStrategy::new(class_id)),        // Monk
-        9 => Box::new(RogueStrategy::new(class_id)),       // Rogue
-        10 => Box::new(ShamanStrategy::new(class_id)),     // Shaman
-        14 => Box::new(EnchanterStrategy::new(class_id)),  // Enchanter
+        1 => Box::new(WarriorStrategy::new(class_id)),       // Warrior
+        2 => Box::new(ClericStrategy::new(class_id)),        // Cleric
+        5 => Box::new(WizardStrategy::new(class_id)),        // Wizard
+        6 => Box::new(DruidStrategy::new(class_id)),         // Druid
+        7 => Box::new(MonkStrategy::new(class_id)),          // Monk
+        9 => Box::new(RogueStrategy::new(class_id)),         // Rogue
+        10 => Box::new(ShamanStrategy::new(class_id)),       // Shaman
+        11 => Box::new(NecromancerStrategy::new(class_id)),  // Necromancer
+        13 => Box::new(MagicianStrategy::new(class_id)),     // Magician
+        14 => Box::new(EnchanterStrategy::new(class_id)),    // Enchanter
         _ => Box::new(GenericDpsStrategy::new(class_id, config)),
     }
 }
