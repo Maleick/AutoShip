@@ -84,6 +84,7 @@ mod dll_main {
 
 /// Initialize the DMFT DLL after injection.
 /// Called from a spawned thread (NOT under loader lock).
+#[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Set up tracing — write logs to a file since we have no console.
     init_tracing();
@@ -118,6 +119,7 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Initialize tracing with file output. Falls back silently if setup fails —
 /// better to run without logs than crash EQ.
+#[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn init_tracing() {
     use tracing_subscriber::{fmt, EnvFilter};
     use tracing_appender::rolling;
@@ -150,6 +152,7 @@ fn init_tracing() {
 }
 
 /// Resolve the base address of eqgame.exe in the current process.
+#[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn resolve_eq_base() -> u64 {
     #[cfg(windows)]
     {
@@ -171,6 +174,7 @@ fn resolve_eq_base() -> u64 {
 }
 
 /// Install all function hooks using the resolved EQ base address.
+#[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     // Primary: use the offset constant derived from PROCESS_GAME_EVENTS.
     let main_loop_offset = eq::MAIN_LOOP_OFFSET;
@@ -221,6 +225,7 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
 /// before injection. The DLL reads it once during init and deletes the file.
 /// Falls back to a PID-derived token with a warning if the file is missing (e.g.
 /// during development or manual injection).
+#[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
     let token_path = std::env::temp_dir()
         .join("dmft")
@@ -260,12 +265,14 @@ fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
 /// must be minimal — just set the flag. Heavy cleanup (hook removal, IPC close)
 /// is done by `graceful_shutdown()` via the eject command path BEFORE
 /// `DLL_PROCESS_DETACH` fires. Do NOT do I/O or acquire locks here.
+#[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
 }
 
 /// Full cleanup — call from the eject command handler, NOT from DLL_PROCESS_DETACH.
 /// This runs outside the loader lock so it's safe to do I/O, remove hooks, etc.
+#[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn graceful_shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
     hooks::remove_all();

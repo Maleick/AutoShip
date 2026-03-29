@@ -1,15 +1,28 @@
+// Modules for future milestones or Windows-only functionality.
+// Suppressed per-module instead of crate-wide to keep active code checked.
+#[allow(dead_code)]
 mod camp;
+#[allow(dead_code)]
 mod client;
+#[allow(dead_code)]
 mod combat;
 mod config;
+#[allow(dead_code)]
 mod credentials;
+#[allow(dead_code)]
 mod eq;
+#[allow(dead_code)]
 mod inject;
+#[allow(dead_code)]
 mod ipc;
+#[allow(dead_code)]
 mod launcher;
+#[allow(dead_code)]
 mod nav;
 mod orchestrator;
+#[allow(dead_code)]
 mod process;
+#[allow(dead_code)]
 mod soul;
 mod tui;
 

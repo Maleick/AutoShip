@@ -137,6 +137,7 @@ pub struct GroupDef {
     pub id: u8,
     pub name: String,
     pub account_range: (u8, u8),
+    #[allow(dead_code)]
     pub default_camp: String,
 }
 
@@ -152,6 +153,7 @@ pub struct ClientState {
     /// Character name parsed from the DLL-renamed window title.
     pub character_name: String,
     /// Group membership info for this client.
+    #[allow(dead_code)]
     pub group_info: Option<GroupInfo>,
     /// Status message specific to this client.
     pub client_status: String,
@@ -200,6 +202,7 @@ pub struct App {
     pub tick_count: u64,
 
     // Spawn list state
+    #[allow(dead_code)]
     pub spawn_scroll: usize,
     pub spawn_selected: usize,
     pub spawn_filter: String,
@@ -273,6 +276,7 @@ pub struct App {
 pub struct NavClientStatus {
     pub destination: String,
     pub status: String,
+    #[allow(dead_code)]
     pub eta_secs: Option<u32>,
 }
 
@@ -406,11 +410,13 @@ impl App {
     }
 
     /// Rebuild group definitions from accounts config. Called when config changes.
+    #[allow(dead_code)]
     pub fn rebuild_groups_from_config(&mut self) {
         self.groups = Self::build_default_groups();
     }
 
     /// Get the number of groups that have at least one connected client.
+    #[allow(dead_code)]
     pub fn active_group_count(&self) -> usize {
         self.groups.iter().enumerate()
             .filter(|(i, _)| !self.clients_in_group_idx(*i).is_empty())

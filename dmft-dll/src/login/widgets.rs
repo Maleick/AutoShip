@@ -339,7 +339,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 );
                 // Small delay to let credential writes settle
                 std::thread::sleep(std::time::Duration::from_millis(100));
-                click_button_via_vtable(login_button);
+                crate::eq::widgets::click_button_via_vtable(login_button);
                 tracing::info!("Login button clicked");
             } else {
                 tracing::warn!("Login button not found — credentials written but not submitted");
@@ -526,7 +526,7 @@ pub fn dismiss_splash(eqmain_base: u64) {
             if let Some(parent_wnd) = find_window_by_text_contains(eqmain_base, parent_text) {
                 // Found a window matching the parent — now find the button
                 if let Some(button_wnd) = find_child_button_by_text(parent_wnd, button_text) {
-                    unsafe { click_button_via_vtable(button_wnd); }
+                    unsafe { crate::eq::widgets::click_button_via_vtable(button_wnd); }
                     tracing::info!(
                         parent = parent_text,
                         button = button_text,
@@ -534,7 +534,7 @@ pub fn dismiss_splash(eqmain_base: u64) {
                     );
                 } else {
                     // Fallback: click the parent window itself
-                    unsafe { click_button_via_vtable(parent_wnd); }
+                    unsafe { crate::eq::widgets::click_button_via_vtable(parent_wnd); }
                     tracing::info!(
                         parent = parent_text,
                         "Dismissed pre-login prompt (clicked parent, button not found)"

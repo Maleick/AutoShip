@@ -79,10 +79,12 @@ pub struct AppConfig {
 
     /// Group definitions (optional for M1, needed for later milestones)
     #[serde(default)]
+    #[allow(dead_code)]
     pub group: Vec<GroupConfig>,
 
     /// Launch configuration for starting EQ clients
     #[serde(default)]
+    #[allow(dead_code)]
     pub launch: LaunchConfig,
 
     /// Server configuration
@@ -91,6 +93,7 @@ pub struct AppConfig {
 
     /// Retry / backoff configuration
     #[serde(default)]
+    #[allow(dead_code)]
     pub retry: RetryConfig,
 
     /// Soul Engine configuration
@@ -98,6 +101,7 @@ pub struct AppConfig {
     pub soul: SoulConfig,
 }
 
+#[allow(dead_code)] // Deserialized from config, consumed in later milestones
 #[derive(Debug, Deserialize, Clone)]
 pub struct GroupConfig {
     pub id: u32,
@@ -106,6 +110,7 @@ pub struct GroupConfig {
     pub toon: Vec<ToonConfig>,
 }
 
+#[allow(dead_code)] // Deserialized from config, consumed in later milestones
 #[derive(Debug, Deserialize, Clone)]
 pub struct ToonConfig {
     pub name: String,

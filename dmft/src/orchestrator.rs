@@ -10,6 +10,7 @@ use rand::RngCore;
 use std::collections::HashMap;
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
+#[allow(dead_code)] // Used when IPC is wired up in later milestones
 fn generate_session_token() -> SessionToken {
     let mut token = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut token);
@@ -54,6 +55,7 @@ impl Orchestrator {
     }
 
     /// Get the latest game state for a client PID.
+    #[allow(dead_code)]
     pub fn get_client_state(&self, pid: u32) -> Option<&GameState> {
         self.game_states.get(&pid)
     }
@@ -213,6 +215,7 @@ impl Orchestrator {
 
     /// Register a client PID and generate a CSPRNG session token for it.
     /// Returns the token so the caller can pass it to the DLL during injection.
+    #[allow(dead_code)]
     pub fn register_client(&mut self, pid: u32) -> SessionToken {
         let token = generate_session_token();
         self.session_tokens.insert(pid, token);

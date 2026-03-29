@@ -146,60 +146,52 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             crate::login::widgets::calibrate_login_dump(eqmain_base);
             true
         }
-        Command::StartLogin { .. } => {
-            if let Command::StartLogin {
-                account_name,
-                password,
-                server_name,
-                character_name,
-            } = cmd
-            {
-                // Clone password into Zeroizing wrapper so the local copy is wiped
-                // from memory when this scope exits — prevents plaintext from
-                // lingering on the IPC thread's stack after credential entry.
-                let password = zeroize::Zeroizing::new(password.clone());
+        Command::StartLogin {
+            account_name,
+            password,
+            server_name,
+            character_name,
+        } => {
+            // Clone password into Zeroizing wrapper so the local copy is wiped
+            // from memory when this scope exits — prevents plaintext from
+            // lingering on the IPC thread's stack after credential entry.
+            let password = zeroize::Zeroizing::new(password.clone());
 
-                tracing::info!(
-                    account = %account_name,
-                    "StartLogin received — running inline + delegating to FSM"
+            tracing::info!(
+                account = %account_name,
+                "StartLogin received — running inline + delegating to FSM"
+            );
+
+            // Store credentials in the FSM for later phases (server/char select)
+            // which run in the game loop after eqmain.dll unloads.
+            crate::login::start_login(
+                account_name.to_string(),
+                password.to_string(),
+                server_name.to_string(),
+                character_name.to_string(),
+            );
+
+            // Run credential entry inline on the IPC thread, because
+            // the game loop hook (ProcessGameEvents) doesn't fire during the
+            // login screen — eqmain.dll has its own event loop.
+            let eqmain_base = crate::login::eqmain::find_eqmain();
+            if eqmain_base != 0 {
+                let wrote = crate::login::widgets::type_credentials_to_window(
+                    eqmain_base, account_name, &password,
                 );
+                tracing::info!(wrote, "Inline: type_credentials_to_window");
 
-                // Store credentials in the FSM for later phases (server/char select)
-                // which run in the game loop after eqmain.dll unloads.
-                crate::login::start_login(
-                    account_name.to_string(),
-                    password.to_string(),
-                    server_name.to_string(),
-                    character_name.to_string(),
-                );
-
-                // Run credential entry inline on the IPC thread, because
-                // the game loop hook (ProcessGameEvents) doesn't fire during the
-                // login screen — eqmain.dll has its own event loop.
-                let eqmain_base = crate::login::eqmain::find_eqmain();
-                if eqmain_base != 0 {
-                    // Direct InputText property write (MQ2's actual approach):
-                    // Find CEditWnd widgets, write to CXStr at +0x278 (InputText),
-                    // clone CStrRep for empty password field, click Login.
-                    // type_credentials_to_window handles all of this including
-                    // hex dumps for debugging and readback verification.
-                    let wrote = crate::login::widgets::type_credentials_to_window(
-                        eqmain_base, account_name, &password,
-                    );
-                    tracing::info!(wrote, "Inline: type_credentials_to_window");
-
-                    // Spawn thread for phase 2 (server select)
-                    let srv = server_name.clone();
-                    let chr = character_name.clone();
-                    std::thread::Builder::new()
-                        .name("dmft-login-phase2".into())
-                        .spawn(move || {
-                            login_chain_phase2(srv, chr);
-                        })
-                        .ok();
-                } else {
-                    tracing::warn!("Inline: eqmain.dll not loaded — FSM will handle when game loop starts");
-                }
+                // Spawn thread for phase 2 (server select)
+                let srv = server_name.clone();
+                let chr = character_name.clone();
+                std::thread::Builder::new()
+                    .name("dmft-login-phase2".into())
+                    .spawn(move || {
+                        login_chain_phase2(srv, chr);
+                    })
+                    .ok();
+            } else {
+                tracing::warn!("Inline: eqmain.dll not loaded — FSM will handle when game loop starts");
             }
             true
         }
@@ -423,30 +415,8 @@ fn phase3_enter_world() {
 /// Find a button widget by its WindowText in the CXWndManager window list.
 #[allow(dead_code)]
 fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
-    use dmft_common::offsets::eqmain as off;
-
     let cxwnd_mgr = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base)?;
-
-    unsafe {
-        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-
-        if array_ptr == 0 || count == 0 || count > 500 {
-            return None;
-        }
-
-        for i in 0..count as usize {
-            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-            if wnd_ptr == 0 { continue; }
-
-            if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT)
-                && text == target_text {
-                    return Some(wnd_ptr);
-                }
-        }
-    }
-
-    None
+    unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, target_text) }
 }
 
 /// Background thread: creates a `CommandListener` and loops receiving commands
