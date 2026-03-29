@@ -266,7 +266,7 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
         // eqmain.dll unloaded — we're at character select (eqgame.exe).
-        phase3_enter_world();
+        phase3_enter_world(_character_name);
         return;
     }
 
@@ -297,7 +297,7 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
 /// Uses eqgame.exe CXWndManager offsets (NOT eqmain.dll — they differ!).
 /// MQ2 approach: walk window array, match SidlText == "CharacterListWnd",
 /// then call CCharacterListWnd::EnterWorld() as a direct function call.
-fn phase3_enter_world() {
+fn phase3_enter_world(character_name: String) {
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
     if eq_base == 0 {
         tracing::error!("Phase 3: EQ base not resolved");
@@ -409,7 +409,7 @@ fn phase3_enter_world() {
 
         // Queue to game loop thread — UI/game-state mutation must happen on main thread.
         // The game loop hook picks this up on the next tick via PENDING_ENTER_WORLD.
-        crate::hooks::game_loop::queue_enter_world(char_list_wnd, enter_world_addr);
+        crate::hooks::game_loop::queue_enter_world(char_list_wnd, enter_world_addr, character_name);
 
         tracing::info!("Phase 3: EnterWorld() queued — will execute on next game tick");
     }

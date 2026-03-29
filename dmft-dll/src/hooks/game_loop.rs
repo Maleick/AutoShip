@@ -99,6 +99,9 @@ static ENTER_WORLD_WAIT_UNTIL: std::sync::atomic::AtomicU64 =
 /// Retry counter for stage 3 rescan (abort after 150 ticks / ~5 seconds).
 static ENTER_WORLD_RETRIES: std::sync::atomic::AtomicU32 =
     std::sync::atomic::AtomicU32::new(0);
+/// Character name to select (set by IPC thread, read by game loop).
+static PENDING_CHAR_NAME: std::sync::OnceLock<std::sync::Mutex<String>> =
+    std::sync::OnceLock::new();
 
 /// Set a button widget address to be clicked on the next game loop tick.
 /// Called from the IPC thread after writing credentials.
@@ -106,16 +109,22 @@ pub fn queue_button_click(button_wnd: usize) {
     PENDING_BUTTON_CLICK.store(button_wnd, std::sync::atomic::Ordering::Release);
 }
 
-/// Queue a SelectCharacter(0) → EnterWorld() sequence on the game loop thread.
+/// Queue a SelectCharacter → EnterWorld() sequence on the game loop thread.
 /// Called from the IPC thread during Phase 3 of login chain.
-/// The game loop will: (1) call SelectCharacter(0), (2) wait ~90 ticks (~3s),
-/// (3) call EnterWorld(). Both calls happen on the game loop thread.
-pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize) {
+/// The game loop will: (1) find character index by name, (2) call SelectCharacter(index),
+/// (3) wait ~90 ticks (~3s), (4) call EnterWorld(). All calls happen on the game loop thread.
+pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize, character_name: String) {
     // Also resolve SelectCharacter address
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
     let select_fn = dmft_common::offsets::rebase(
         dmft_common::offsets::SELECT_CHARACTER, eq_base,
     ).unwrap_or(0);
+
+    // Store the character name for the game loop to look up.
+    let name_lock = PENDING_CHAR_NAME.get_or_init(|| std::sync::Mutex::new(String::new()));
+    if let Ok(mut name) = name_lock.lock() {
+        *name = character_name;
+    }
 
     // Store function addresses and window handle first (Relaxed is sufficient),
     // then store the stage flag last with Release ordering as the "commit" signal.
@@ -164,6 +173,58 @@ fn rescan_char_list_wnd() -> Option<usize> {
 
 #[cfg(not(windows))]
 fn rescan_char_list_wnd() -> Option<usize> { None }
+
+/// Find the index of a character by name in the Character_List CListWnd.
+///
+/// Walks the CCharacterListWnd's child windows to find "Character_List" (a CListWnd),
+/// then reads each row's column 2 (character name) for a case-insensitive match.
+/// Returns the matched index, or 0 as fallback if the name is empty or not found.
+#[cfg(windows)]
+fn find_character_index(char_list_wnd: usize, character_name: &str) -> i32 {
+    if character_name.is_empty() {
+        tracing::info!("Character name empty — defaulting to index 0");
+        return 0;
+    }
+
+    unsafe {
+        // Find the "Character_List" child (CListWnd) inside CCharacterListWnd
+        let Some(list_wnd) = crate::eq::widgets::find_child_by_sidl_text(
+            char_list_wnd, "Character_List",
+        ) else {
+            tracing::warn!("Character_List child not found — defaulting to index 0");
+            return 0;
+        };
+
+        let row_count = crate::eq::widgets::list_row_count(list_wnd);
+        tracing::info!(
+            list_wnd = format!("{:#x}", list_wnd),
+            row_count,
+            target = character_name,
+            "Searching Character_List for character"
+        );
+
+        // Column 2 is the character name (MQ2 convention)
+        for i in 0..row_count {
+            if let Some(name) = crate::eq::widgets::read_list_item_text(list_wnd, i, 2) {
+                tracing::info!(row = i, name = %name, "Character_List row");
+                if name.eq_ignore_ascii_case(character_name) {
+                    tracing::info!(index = i, name = %name, "Found matching character!");
+                    return i as i32;
+                }
+            }
+        }
+
+        tracing::warn!(
+            target = character_name,
+            row_count,
+            "Character not found in list — defaulting to index 0"
+        );
+    }
+    0
+}
+
+#[cfg(not(windows))]
+fn find_character_index(_char_list_wnd: usize, _character_name: &str) -> i32 { 0 }
 
 // ─── Command Jitter Queue ───
 // Commands are not executed immediately — they sit in a pending queue
@@ -300,7 +361,7 @@ fn on_game_tick() {
     }
 
     // Process Enter World sequence (SelectCharacter → wait → EnterWorld).
-    // Stage 1: Call SelectCharacter(0)
+    // Stage 1: Find character by name, call SelectCharacter(index)
     // Stage 2: Wait ~90 ticks (~3 seconds)
     // Stage 3: Call EnterWorld()
     let stage = ENTER_WORLD_STAGE.load(std::sync::atomic::Ordering::Acquire);
@@ -308,18 +369,27 @@ fn on_game_tick() {
         let wnd = PENDING_ENTER_WORLD_WND.load(std::sync::atomic::Ordering::Acquire);
         let select_fn = PENDING_SELECT_CHAR_FN.load(std::sync::atomic::Ordering::Acquire);
         if wnd != 0 && select_fn != 0 {
+            // Look up character index by name (falls back to 0 if not found/empty)
+            let char_name = PENDING_CHAR_NAME.get()
+                .and_then(|m| m.lock().ok())
+                .map(|n| n.clone())
+                .unwrap_or_default();
+            let index = find_character_index(wnd, &char_name);
+
             tracing::info!(
                 wnd = format!("{:#x}", wnd),
                 func = format!("{:#x}", select_fn),
-                "Phase 3: Calling SelectCharacter(0) on game loop thread"
+                character = %char_name,
+                index,
+                "Phase 3: Calling SelectCharacter on game loop thread"
             );
             unsafe {
                 // SelectCharacter(int index) — x64: RCX=this, RDX=index
                 type SelectCharFn = unsafe extern "C" fn(this: usize, index: i32);
                 let func: SelectCharFn = std::mem::transmute(select_fn);
-                func(wnd, 0); // Select first character
+                func(wnd, index);
             }
-            tracing::info!("Phase 3: SelectCharacter(0) called — waiting 3s before EnterWorld");
+            tracing::info!(index, "Phase 3: SelectCharacter called — waiting 3s before EnterWorld");
             ENTER_WORLD_WAIT_UNTIL.store(tick + 90, std::sync::atomic::Ordering::Release);
             ENTER_WORLD_STAGE.store(2, std::sync::atomic::Ordering::Release);
         } else {
