@@ -36,7 +36,8 @@ impl SharedStateReader {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
             use windows::core::PCWSTR;
             use windows::Win32::System::Memory::{
-                CreateFileMappingW, MapViewOfFile, FILE_MAP_READ, PAGE_READWRITE,
+                OpenFileMappingW, CreateFileMappingW, MapViewOfFile,
+                FILE_MAP_READ, PAGE_READWRITE,
             };
             use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
 
@@ -44,17 +45,28 @@ impl SharedStateReader {
                 .encode_utf16()
                 .collect();
 
-            // TODO(security-H2): Open with FILE_MAP_READ only for the reader side.
+            // Try to open existing shared memory with read-only access first (C2 audit fix).
+            // Fall back to CreateFileMappingW if the DLL hasn't created it yet.
             let handle = unsafe {
-                CreateFileMappingW(
-                    INVALID_HANDLE_VALUE,
-                    None,
-                    PAGE_READWRITE,
-                    0,
-                    SHARED_MEMORY_SIZE as u32,
+                OpenFileMappingW(
+                    FILE_MAP_READ.0,
+                    false,
                     PCWSTR(name.as_ptr()),
                 )
-            }?;
+            }.unwrap_or_else(|_| {
+                // DLL hasn't created the shared memory yet — create it ourselves.
+                // This is fine; the DLL will open the existing one when it starts.
+                unsafe {
+                    CreateFileMappingW(
+                        INVALID_HANDLE_VALUE,
+                        None,
+                        PAGE_READWRITE,
+                        0,
+                        SHARED_MEMORY_SIZE as u32,
+                        PCWSTR(name.as_ptr()),
+                    )
+                }.expect("Failed to create shared memory")
+            });
 
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_READ, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
