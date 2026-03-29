@@ -101,7 +101,9 @@ pub fn sell_commands(state: &SellState, vendor_name: &str, seller_pid: u32) -> V
             ]
         }
         SellState::Returning => {
-            vec![(seller_pid, "/camp".into())]
+            // Stand up and return to camp position. NOT /camp which logs out!
+            // The orchestrator will handle navigation back to camp_center.
+            vec![(seller_pid, "/stand".into())]
         }
     }
 }
@@ -207,6 +209,6 @@ mod tests {
     fn test_sell_commands_returning() {
         let cmds = sell_commands(&SellState::Returning, "Merchant_Leah", 104);
         assert_eq!(cmds.len(), 1);
-        assert_eq!(cmds[0].1, "/camp");
+        assert_eq!(cmds[0].1, "/stand");
     }
 }

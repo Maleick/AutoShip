@@ -103,8 +103,8 @@ pub fn check_buffs(
         if let Some(config) = class_configs.get(role_str) {
             for ability in &config.buff_abilities {
                 // Each buff caster buffs all members
-                // Duration: use cooldown_secs as a rough duration proxy (in ticks)
-                let duration_ticks = ability.cooldown_secs as u64;
+                // Use explicit buff duration if set, else fall back to cooldown
+                let duration_ticks = ability.effective_duration_secs() as u64;
 
                 for target in members {
                     if tracker.is_expired(target.pid, &ability.name, duration_ticks, current_tick) {
@@ -164,6 +164,7 @@ mod tests {
                     cooldown_secs: 100.0, // used as duration in ticks
                     priority: 1,
                     condition: None,
+                    duration_secs: None,
                 }],
                 emergency_abilities: vec![],
                 cc_abilities: vec![],
@@ -185,6 +186,7 @@ mod tests {
                         cooldown_secs: 120.0,
                         priority: 1,
                         condition: None,
+                        duration_secs: None,
                     },
                     ClassAbility {
                         name: "Clarity".into(),
@@ -192,6 +194,7 @@ mod tests {
                         cooldown_secs: 80.0,
                         priority: 2,
                         condition: None,
+                        duration_secs: None,
                     },
                 ],
                 emergency_abilities: vec![],
