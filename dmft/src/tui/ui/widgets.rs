@@ -1,0 +1,117 @@
+//! Shared widget-building helpers used across all screen modules.
+
+use ratatui::{
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Cell, Row},
+};
+
+use crate::tui::theme::Theme;
+use crate::eq::structs::{SpawnInfo, SpawnType};
+
+// ─── Block / panel helper ────────────────────────────────────────────────────
+
+/// Build a `Block` with the project's standard chrome: border type + style + title.
+/// Using this everywhere ensures every panel switches to rounded borders together.
+pub fn panel<'a>(title: impl Into<ratatui::text::Line<'a>>, border_style: Style, t: &Theme) -> Block<'a> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(t.border_type)
+        .title(title)
+        .border_style(border_style)
+}
+
+// ─── Table helpers ───────────────────────────────────────────────────────────
+
+/// Build a table header row with all cells styled using `theme.table_header`.
+pub fn themed_header_row<'a>(cells: Vec<&'a str>, t: &Theme) -> Row<'a> {
+    Row::new(
+        cells
+            .into_iter()
+            .map(|c| Cell::from(c).style(t.table_header))
+            .collect::<Vec<_>>(),
+    )
+    .height(1)
+    .bottom_margin(0)
+}
+
+// ─── Color helpers ───────────────────────────────────────────────────────────
+
+pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
+    if hp_pct > 75.0      { t.hp_high }
+    else if hp_pct > 25.0 { t.hp_mid  }
+    else                  { t.hp_low  }
+}
+
+pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> Color {
+    use crate::eq::structs::StandState;
+    match state {
+        StandState::Dead    => t.state_dead,
+        StandState::Sitting => t.state_sitting,
+        StandState::Feigned => t.state_feigned,
+        StandState::Frozen  => t.state_frozen,
+        _                   => t.state_normal,
+    }
+}
+
+pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
+    match st {
+        SpawnType::Player     => t.spawn_pc,
+        SpawnType::Npc        => t.spawn_npc,
+        SpawnType::Corpse     => t.spawn_corpse,
+        SpawnType::Unknown(_) => t.spawn_unknown,
+    }
+}
+
+pub fn spawn_row_style(spawn: &SpawnInfo, t: &Theme) -> ratatui::style::Style {
+    Style::default().fg(spawn_type_color(&spawn.spawn_type, t))
+}
+
+// ─── Spawn info lines ────────────────────────────────────────────────────────
+
+/// Render a `SpawnInfo` as a list of styled lines (used by target panel and character screen).
+pub fn spawn_info_lines(spawn: &SpawnInfo, redact: &dyn Fn(&str) -> std::borrow::Cow<str>, t: &Theme) -> Vec<Line<'static>> {
+    let hp_pct  = spawn.hp_pct();
+    let hp_col  = hp_color(hp_pct, t);
+    let name    = redact(&spawn.displayed_name).into_owned();
+    let rawname = redact(&spawn.name).into_owned();
+
+    vec![
+        Line::from(vec![
+            Span::styled(name, Style::default().fg(t.text_bright).add_modifier(Modifier::BOLD)),
+            Span::raw("  "),
+            Span::styled(format!("{} Lv{}", spawn.class_str(), spawn.level), Style::default().fg(t.text_accent)),
+            Span::raw(format!("  [{}]  {}", spawn.spawn_type, spawn.stand_state)),
+        ]),
+        Line::from(vec![
+            Span::styled("HP   ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{}/{} ({:.0}%)", spawn.hp_current, spawn.hp_max, hp_pct),
+                Style::default().fg(hp_col),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Mana ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{}/{}", spawn.mana_current, spawn.mana_max),
+                Style::default().fg(t.mana_color),
+            ),
+            Span::styled(
+                format!("  End {}/{}", spawn.endurance_current, spawn.endurance_max),
+                Style::default().fg(t.text_muted),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Pos  ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("({:.1}, {:.1}, {:.1})", spawn.y, spawn.x, spawn.z),
+                Style::default().fg(t.text_server),
+            ),
+            Span::styled(format!("  Hdg {:.1}", spawn.heading), Style::default().fg(t.text_muted)),
+        ]),
+        Line::from(vec![
+            Span::styled(format!("ID {} ", spawn.spawn_id), Style::default().fg(t.text_muted)),
+            Span::styled(rawname, Style::default().fg(t.text_secondary)),
+        ]),
+    ]
+}
