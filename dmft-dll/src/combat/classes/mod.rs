@@ -1,4 +1,6 @@
 pub mod bard;
+pub mod beastlord;
+pub mod berserker;
 pub mod cleric;
 pub mod druid;
 pub mod enchanter;

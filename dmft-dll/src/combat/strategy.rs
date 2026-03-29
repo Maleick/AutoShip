@@ -2,6 +2,8 @@ use dmft_common::combat::{CombatConfig, CombatRole, SpellEntry};
 use dmft_common::types::SpawnData;
 
 use super::classes::bard::BardStrategy;
+use super::classes::beastlord::BeastlordStrategy;
+use super::classes::berserker::BerserkerStrategy;
 use super::classes::cleric::ClericStrategy;
 use super::classes::druid::DruidStrategy;
 use super::classes::enchanter::EnchanterStrategy;
@@ -83,6 +85,8 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
         12 => Box::new(WizardStrategy::new(class_id)),       // Wizard
         13 => Box::new(MagicianStrategy::new(class_id)),     // Magician
         14 => Box::new(EnchanterStrategy::new(class_id)),    // Enchanter
+        15 => Box::new(BeastlordStrategy::new(class_id)),   // Beastlord
+        16 => Box::new(BerserkerStrategy::new(class_id)),   // Berserker
         _ => Box::new(GenericDpsStrategy::new(class_id, config)),
     }
 }
