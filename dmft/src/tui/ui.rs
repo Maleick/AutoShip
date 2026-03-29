@@ -926,86 +926,149 @@ fn draw_map_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_named_tracker_panel(frame: &mut Frame, area: Rect, app: &App) {
-    let tracked = app.named_tracker.tracked_spawns();
-    let alive_count = tracked.iter().filter(|s| s.is_alive).count();
-    let title = format!(" Named ({} up, {} tracked) ", alive_count, tracked.len());
+    let named = app.named_tracker.tracked_spawns();
+    let named_alive = named.iter().filter(|s| s.is_alive).count();
+    let user_tracked = &app.tracked_spawns;
+    let user_up = user_tracked.values().filter(|t| t.status == super::app::TrackedStatus::Up).count();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(title)
-        .border_style(Style::default().fg(Color::Yellow));
+    let has_user_tracked = !user_tracked.is_empty();
+    let has_named = !named.is_empty();
 
-    if tracked.is_empty() {
-        let paragraph = Paragraph::new("No named spawns detected")
-            .block(block)
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(paragraph, area);
-        return;
+    // Split area if we have both sections
+    let (named_area, user_area) = if has_user_tracked && has_named {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+            .split(area);
+        (Some(chunks[0]), Some(chunks[1]))
+    } else if has_user_tracked {
+        (None, Some(area))
+    } else {
+        (Some(area), None)
+    };
+
+    // --- Named spawns section ---
+    if let Some(named_area) = named_area {
+        let title = format!(" Named ({} up, {} tracked) ", named_alive, named.len());
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(Style::default().fg(Color::Yellow));
+
+        if named.is_empty() {
+            let paragraph = Paragraph::new("No named spawns detected")
+                .block(block)
+                .style(Style::default().fg(Color::DarkGray));
+            frame.render_widget(paragraph, named_area);
+        } else {
+            let header = Row::new(vec![
+                Cell::from("Name").style(Style::default().add_modifier(Modifier::BOLD)),
+                Cell::from("Status").style(Style::default().add_modifier(Modifier::BOLD)),
+                Cell::from("Timer").style(Style::default().add_modifier(Modifier::BOLD)),
+            ])
+            .height(1);
+
+            let rows: Vec<Row> = named
+                .iter()
+                .map(|status| {
+                    let (status_str, color) = if status.is_alive {
+                        ("UP", Color::Green)
+                    } else {
+                        ("DEAD", Color::Red)
+                    };
+
+                    let timer_str = if status.is_alive {
+                        String::new()
+                    } else if let Some(respawn) = status.estimated_respawn_tick {
+                        let remaining = respawn.saturating_sub(app.tick_count);
+                        let secs = remaining / 4;
+                        let mins = secs / 60;
+                        let secs_rem = secs % 60;
+                        format!("~{}:{:02}", mins, secs_rem)
+                    } else {
+                        "???".into()
+                    };
+
+                    let is_hvt = app
+                        .hvt_watchlist
+                        .as_ref()
+                        .is_some_and(|wl| wl.is_hvt(&status.name).is_some());
+
+                    let name_style = if is_hvt {
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
+
+                    Row::new(vec![
+                        Cell::from(status.name.clone()).style(name_style),
+                        Cell::from(status_str).style(Style::default().fg(color)),
+                        Cell::from(timer_str).style(Style::default().fg(Color::Cyan)),
+                    ])
+                })
+                .collect();
+
+            let table = Table::new(
+                rows,
+                [
+                    Constraint::Min(12),
+                    Constraint::Length(5),
+                    Constraint::Length(7),
+                ],
+            )
+            .header(header)
+            .block(block);
+
+            frame.render_widget(table, named_area);
+        }
     }
 
-    let header = Row::new(vec![
-        Cell::from("Name").style(Style::default().add_modifier(Modifier::BOLD)),
-        Cell::from("Status").style(Style::default().add_modifier(Modifier::BOLD)),
-        Cell::from("Timer").style(Style::default().add_modifier(Modifier::BOLD)),
-    ])
-    .height(1);
+    // --- User-tracked spawns section ---
+    if let Some(user_area) = user_area {
+        let title = format!(" Tracked ({} up, {} total) ", user_up, user_tracked.len());
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(Style::default().fg(Color::Magenta));
 
-    let rows: Vec<Row> = tracked
-        .iter()
-        .map(|status| {
-            let (status_str, color) = if status.is_alive {
-                ("UP", Color::Green)
-            } else {
-                ("DEAD", Color::Red)
-            };
+        let header = Row::new(vec![
+            Cell::from("Name").style(Style::default().add_modifier(Modifier::BOLD)),
+            Cell::from("Status").style(Style::default().add_modifier(Modifier::BOLD)),
+        ])
+        .height(1);
 
-            let timer_str = if status.is_alive {
-                String::new()
-            } else if let Some(respawn) = status.estimated_respawn_tick {
-                let remaining = respawn.saturating_sub(app.tick_count);
-                // Convert ticks to approximate seconds (250ms per tick)
-                let secs = remaining / 4;
-                let mins = secs / 60;
-                let secs_rem = secs % 60;
-                format!("~{}:{:02}", mins, secs_rem)
-            } else {
-                "???".into()
-            };
+        let mut sorted: Vec<_> = user_tracked.values().collect();
+        sorted.sort_by(|a, b| {
+            // Up first, then Down, then Unknown; alphabetical within
+            let ord_a = match a.status { super::app::TrackedStatus::Up => 0, super::app::TrackedStatus::Down => 1, super::app::TrackedStatus::Unknown => 2 };
+            let ord_b = match b.status { super::app::TrackedStatus::Up => 0, super::app::TrackedStatus::Down => 1, super::app::TrackedStatus::Unknown => 2 };
+            ord_a.cmp(&ord_b).then_with(|| a.name.cmp(&b.name))
+        });
 
-            // Check if this is an HVT
-            let is_hvt = app
-                .hvt_watchlist
-                .as_ref()
-                .is_some_and(|wl| wl.is_hvt(&status.name).is_some());
+        let rows: Vec<Row> = sorted
+            .iter()
+            .map(|t| {
+                Row::new(vec![
+                    Cell::from(t.name.clone()).style(Style::default().fg(Color::White)),
+                    Cell::from(t.status.label()).style(Style::default().fg(t.status.color())),
+                ])
+            })
+            .collect();
 
-            let name_style = if is_hvt {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Min(12),
+                Constraint::Length(5),
+            ],
+        )
+        .header(header)
+        .block(block);
 
-            Row::new(vec![
-                Cell::from(status.name.clone()).style(name_style),
-                Cell::from(status_str).style(Style::default().fg(color)),
-                Cell::from(timer_str).style(Style::default().fg(Color::Cyan)),
-            ])
-        })
-        .collect();
-
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Min(12),    // Name
-            Constraint::Length(5),  // Status
-            Constraint::Length(7),  // Timer
-        ],
-    )
-    .header(header)
-    .block(block);
-
-    frame.render_widget(table, area);
+        frame.render_widget(table, user_area);
+    }
 }
 
 // ─── Shared panels ──────────────────────────────────────────────────
@@ -1480,7 +1543,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
     use ratatui::widgets::Clear;
 
     let popup_width = 42u16;
-    let popup_height = 20u16;
+    let popup_height = 22u16;
     let x = area.x + area.width.saturating_sub(popup_width) / 2;
     let y = area.y + area.height.saturating_sub(popup_height) / 2;
     let popup_area = Rect::new(x, y, popup_width.min(area.width), popup_height.min(area.height));
@@ -1503,7 +1566,9 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(vec![Span::styled(" <pid> /cmd ", Style::default().fg(Color::Yellow)), Span::raw("Send to PID")]),
         Line::from(vec![Span::styled(" all /cmd   ", Style::default().fg(Color::Yellow)), Span::raw("Broadcast")]),
-        Line::from(vec![Span::styled(" camp <sub> ", Style::default().fg(Color::Yellow)), Span::raw("start|stop|status")]),
+        Line::from(vec![Span::styled(" camp <sub> ", Style::default().fg(Color::Yellow)), Span::raw("start|stop|list|add|rm")]),
+        Line::from(vec![Span::styled(" track <n>  ", Style::default().fg(Color::Yellow)), Span::raw("Track spawn")]),
+        Line::from(vec![Span::styled(" untrack <n>", Style::default().fg(Color::Yellow)), Span::raw("Untrack spawn")]),
         Line::from(vec![Span::styled(" help       ", Style::default().fg(Color::Yellow)), Span::raw("This help")]),
         Line::from(""),
         Line::from(Span::styled(" Press ? or Esc to close", Style::default().fg(Color::DarkGray))),

@@ -80,22 +80,23 @@ impl RecoveryTracker {
 /// - Dead char after rez: /stand
 /// - Returns `(pid, command)` pairs
 pub fn death_commands(
-    members_state: &[(u32, String, DeathState)],
+    members_state: &mut [(u32, String, DeathState)],
     cleric_pid: Option<u32>,
     rez_gem: u8,
 ) -> Vec<(u32, String)> {
     let mut commands = Vec::new();
 
-    // Find dead members
-    let dead: Vec<_> = members_state
+    // Find the first dead member's pid and name
+    let first_dead = members_state
         .iter()
-        .filter(|(_, _, state)| matches!(state, DeathState::Dead { .. }))
-        .collect();
+        .find(|(_, _, state)| matches!(state, DeathState::Dead { .. }))
+        .map(|(pid, name, _)| (*pid, name.clone()));
 
     // Find members waiting to rebuff (just got rezzed — stand up)
-    let rebuffing: Vec<_> = members_state
+    let rebuffing_pids: Vec<u32> = members_state
         .iter()
         .filter(|(_, _, state)| *state == DeathState::Rebuffing)
+        .map(|(pid, _, _)| *pid)
         .collect();
 
     // Cleric rezzes the first dead member
@@ -106,15 +107,20 @@ pub fn death_commands(
             .any(|(pid, _, state)| *pid == cleric && *state == DeathState::Alive);
 
         if cleric_alive {
-            if let Some((_, dead_name, _)) = dead.first() {
+            if let Some((dead_pid, dead_name)) = first_dead {
                 commands.push((cleric, format!("/target {dead_name}")));
                 commands.push((cleric, format!("/cast {rez_gem}")));
+
+                // Mark as WaitingForRez so we don't spam rez every tick
+                if let Some(member) = members_state.iter_mut().find(|(p, _, _)| *p == dead_pid) {
+                    member.2 = DeathState::WaitingForRez;
+                }
             }
         }
     }
 
     // Rebuffing members stand up
-    for (pid, _, _) in &rebuffing {
+    for pid in &rebuffing_pids {
         commands.push((*pid, "/stand".into()));
     }
 
@@ -187,11 +193,11 @@ mod tests {
 
     #[test]
     fn test_death_commands_cleric_rezzes_dead() {
-        let members = vec![
+        let mut members = vec![
             (100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 }),
             (101, "Cleric01".into(), DeathState::Alive),
         ];
-        let cmds = death_commands(&members, Some(101), 5);
+        let cmds = death_commands(&mut members, Some(101), 5);
 
         assert!(cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd.contains("/target Warrior01")));
         assert!(cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd == "/cast 5"));
@@ -199,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_death_commands_dead_cleric_no_rez() {
-        let members = vec![
+        let mut members = vec![
             (100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 }),
             (
                 101,
@@ -207,47 +213,47 @@ mod tests {
                 DeathState::Dead { died_at_tick: 5 },
             ),
         ];
-        let cmds = death_commands(&members, Some(101), 5);
+        let cmds = death_commands(&mut members, Some(101), 5);
         // Dead cleric can't cast
         assert!(cmds.is_empty());
     }
 
     #[test]
     fn test_death_commands_rebuffing_stands() {
-        let members = vec![
+        let mut members = vec![
             (100, "Warrior01".into(), DeathState::Rebuffing),
             (101, "Cleric01".into(), DeathState::Alive),
         ];
-        let cmds = death_commands(&members, Some(101), 5);
+        let cmds = death_commands(&mut members, Some(101), 5);
         assert!(cmds.iter().any(|(pid, cmd)| *pid == 100 && cmd == "/stand"));
     }
 
     #[test]
     fn test_death_commands_no_cleric() {
-        let members = vec![(100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 })];
-        let cmds = death_commands(&members, None, 5);
+        let mut members = vec![(100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 })];
+        let cmds = death_commands(&mut members, None, 5);
         // No cleric, no rez commands
         assert!(cmds.is_empty());
     }
 
     #[test]
     fn test_death_commands_all_alive_no_commands() {
-        let members = vec![
+        let mut members = vec![
             (100, "Warrior01".into(), DeathState::Alive),
             (101, "Cleric01".into(), DeathState::Alive),
         ];
-        let cmds = death_commands(&members, Some(101), 5);
+        let cmds = death_commands(&mut members, Some(101), 5);
         assert!(cmds.is_empty());
     }
 
     #[test]
     fn test_multiple_dead_rezzes_first() {
-        let members = vec![
+        let mut members = vec![
             (100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 }),
             (101, "Cleric01".into(), DeathState::Alive),
             (102, "Ranger01".into(), DeathState::Dead { died_at_tick: 6 }),
         ];
-        let cmds = death_commands(&members, Some(101), 5);
+        let cmds = death_commands(&mut members, Some(101), 5);
         // Should only target the first dead member
         let target_cmds: Vec<_> = cmds
             .iter()
@@ -267,5 +273,36 @@ mod tests {
             tracker.members[0].2,
             DeathState::Dead { died_at_tick: 10 }
         ));
+    }
+
+    // -- Bug #5: rez must not spam every tick --
+
+    #[test]
+    fn test_death_commands_marks_waiting_for_rez() {
+        let mut members = vec![
+            (100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 }),
+            (101, "Cleric01".into(), DeathState::Alive),
+        ];
+        let cmds = death_commands(&mut members, Some(101), 5);
+        assert!(!cmds.is_empty());
+
+        // After issuing rez, dead member should be WaitingForRez
+        assert_eq!(members[0].2, DeathState::WaitingForRez);
+    }
+
+    #[test]
+    fn test_death_commands_no_double_rez() {
+        let mut members = vec![
+            (100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 }),
+            (101, "Cleric01".into(), DeathState::Alive),
+        ];
+
+        // First call: issues rez and transitions to WaitingForRez
+        let cmds1 = death_commands(&mut members, Some(101), 5);
+        assert!(cmds1.iter().any(|(pid, cmd)| *pid == 101 && cmd.contains("/cast")));
+
+        // Second call: member is now WaitingForRez, no rez should be issued
+        let cmds2 = death_commands(&mut members, Some(101), 5);
+        assert!(!cmds2.iter().any(|(pid, cmd)| *pid == 101 && cmd.contains("/cast")));
     }
 }

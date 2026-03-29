@@ -140,16 +140,27 @@ impl CampLoop {
                     &self.cc_members,
                     self.tick,
                 );
-                cmds.extend(self.cc_tracker.assign_cc(&self.cc_members, self.tick));
+                cmds.extend(self.cc_tracker.assign_cc(&mut self.cc_members, self.tick));
                 cmds
             }
             CampEvent::CcExpiring { spawn_id } => {
-                // Find the assigned member and re-CC
-                let members = &self.cc_members;
-                self.cc_tracker.needs_remez(self.tick, 0, members)
-                    .into_iter()
-                    .filter(|(_, cmd)| cmd.contains(&format!("{spawn_id}")))
-                    .collect()
+                // Find the assigned member and re-CC (exact spawn_id match to avoid partial ID hits)
+                let all_cmds = self.cc_tracker.needs_remez(self.tick, 0, &mut self.cc_members);
+                let target_cmd = format!("/target id {spawn_id}");
+                let mut result = Vec::new();
+                let mut matched = false;
+                for (pid, cmd) in all_cmds {
+                    if cmd == target_cmd {
+                        matched = true;
+                        result.push((pid, cmd));
+                    } else if matched && cmd.starts_with("/cast") {
+                        result.push((pid, cmd));
+                        matched = false;
+                    } else {
+                        matched = false;
+                    }
+                }
+                result
             }
         }
     }
@@ -170,7 +181,7 @@ impl CampLoop {
         if matches!(self.state, CampState::Fighting { .. }) && !self.cc_members.is_empty() {
             let remez = self
                 .cc_tracker
-                .needs_remez(self.tick, CC_REMEZ_BUFFER, &self.cc_members);
+                .needs_remez(self.tick, CC_REMEZ_BUFFER, &mut self.cc_members);
             commands.extend(remez);
         }
 
@@ -691,5 +702,76 @@ mod tests {
         assert!(cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd == "/cast 1"));
         // Should still be fighting (target alive, timer not expired)
         assert!(matches!(camp.state, CampState::Fighting { .. }));
+    }
+
+    // -- Bug #6: CcExpiring must use exact spawn_id match --
+
+    #[test]
+    fn test_cc_expiring_event_no_partial_spawn_id_match() {
+        use crate::camp::cc::{CcAbility, CcMember, CcType};
+
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.tick = 10;
+
+        // Set up two CC targets: spawn_id 10 and spawn_id 100
+        let spawns = vec![(10, "orc pawn".into()), (100, "orc centurion".into())];
+        camp.cc_tracker.update(&spawns, None, 0);
+        camp.cc_tracker.targets[0].cc_applied = Some(CcType::Mez);
+        camp.cc_tracker.targets[0].cc_expiry_tick = 12; // About to expire
+        camp.cc_tracker.targets[0].assigned_to_pid = Some(200);
+        camp.cc_tracker.targets[1].cc_applied = Some(CcType::Mez);
+        camp.cc_tracker.targets[1].cc_expiry_tick = 999; // Not expiring — far future
+        camp.cc_tracker.targets[1].assigned_to_pid = Some(201);
+
+        camp.cc_members = vec![
+            CcMember {
+                pid: 200,
+                name: "Enc01".into(),
+                cc_abilities: vec![CcAbility {
+                    cc_type: CcType::Mez,
+                    command: "/cast 1".into(),
+                    cooldown_ticks: 3,
+                    duration_ticks: 18,
+                    priority: 2,
+                }],
+                debuff_abilities: vec![],
+                last_cast_tick: 0,
+            },
+            CcMember {
+                pid: 201,
+                name: "Enc02".into(),
+                cc_abilities: vec![CcAbility {
+                    cc_type: CcType::Mez,
+                    command: "/cast 1".into(),
+                    cooldown_ticks: 3,
+                    duration_ticks: 18,
+                    priority: 2,
+                }],
+                debuff_abilities: vec![],
+                last_cast_tick: 0,
+            },
+        ];
+
+        // Push event for spawn_id 10 only
+        camp.push_event(CampEvent::CcExpiring { spawn_id: 10 });
+        // Use Fighting state so tick() doesn't add pull commands
+        camp.state = CampState::Fighting { started_tick: camp.tick };
+
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 90.0,
+            target_hp_pct: Some(50.0),
+            target_is_dead: false,
+        };
+        let cmds = camp.tick(Some(&snap));
+
+        // Filter to only CC-related /target commands (from CcExpiring event processing)
+        let cc_target_cmds: Vec<_> = cmds
+            .iter()
+            .filter(|(_, cmd)| cmd.starts_with("/target id"))
+            .collect();
+        for (_, cmd) in &cc_target_cmds {
+            assert_eq!(*cmd, "/target id 10", "Should not partially match spawn_id 100");
+        }
     }
 }

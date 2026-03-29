@@ -8,6 +8,8 @@ pub struct VendorConfig {
     pub vendor_name: String,
     pub sell_interval_ticks: u64,
     pub keep_items: Vec<String>,
+    /// Ticks to wait in TravelingToVendor before transitioning to Selling.
+    pub travel_ticks: u64,
 }
 
 /// Current state of the sell cycle.
@@ -24,6 +26,7 @@ pub struct SellCycle {
     pub config: VendorConfig,
     pub state: SellState,
     pub last_sell_tick: u64,
+    pub state_entered_tick: u64,
     keep_set: HashSet<String>,
 }
 
@@ -34,6 +37,7 @@ impl SellCycle {
             config,
             state: SellState::NotNeeded,
             last_sell_tick: 0,
+            state_entered_tick: 0,
             keep_set,
         }
     }
@@ -55,16 +59,26 @@ impl SellCycle {
         match &self.state {
             SellState::NotNeeded => Vec::new(),
             SellState::TravelingToVendor => {
+                // Wait for travel time before transitioning to selling
+                if current_tick.saturating_sub(self.state_entered_tick) < self.config.travel_ticks {
+                    return Vec::new();
+                }
                 let cmds = sell_commands(&self.state, &self.config.vendor_name, seller_pid);
                 self.state = SellState::Selling;
+                self.state_entered_tick = current_tick;
                 cmds
             }
             SellState::Selling => {
                 let cmds = sell_commands(&self.state, &self.config.vendor_name, seller_pid);
                 self.state = SellState::Returning;
+                self.state_entered_tick = current_tick;
                 cmds
             }
             SellState::Returning => {
+                // Wait for travel time before completing the cycle
+                if current_tick.saturating_sub(self.state_entered_tick) < self.config.travel_ticks {
+                    return Vec::new();
+                }
                 let cmds = sell_commands(&self.state, &self.config.vendor_name, seller_pid);
                 self.state = SellState::NotNeeded;
                 self.last_sell_tick = current_tick;
@@ -74,9 +88,10 @@ impl SellCycle {
     }
 
     /// Begin the sell cycle.
-    pub fn start_sell(&mut self) {
+    pub fn start_sell(&mut self, current_tick: u64) {
         if self.state == SellState::NotNeeded {
             self.state = SellState::TravelingToVendor;
+            self.state_entered_tick = current_tick;
         }
     }
 }
@@ -117,6 +132,7 @@ mod tests {
             vendor_name: "Merchant_Leah".into(),
             sell_interval_ticks: 50,
             keep_items: vec!["Fine Steel Dagger".into(), "Bone Chips".into()],
+            travel_ticks: 5,
         }
     }
 
@@ -156,23 +172,37 @@ mod tests {
         let mut cycle = SellCycle::new(test_vendor_config());
         let pid = 104;
 
-        cycle.start_sell();
+        cycle.start_sell(50);
         assert_eq!(cycle.state, SellState::TravelingToVendor);
 
-        // Tick 1: traveling -> selling
-        let cmds = cycle.tick(pid, 50);
+        // During travel time (5 ticks) — no transition yet
+        for t in 50..55 {
+            let cmds = cycle.tick(pid, t);
+            assert_eq!(cycle.state, SellState::TravelingToVendor);
+            assert!(cmds.is_empty());
+        }
+
+        // After travel time: traveling -> selling
+        let cmds = cycle.tick(pid, 55);
         assert_eq!(cycle.state, SellState::Selling);
         assert!(cmds.iter().any(|(_, cmd)| cmd.contains("Merchant_Leah")));
 
-        // Tick 2: selling -> returning
-        let cmds = cycle.tick(pid, 51);
+        // Selling -> returning (immediate, no travel delay for selling itself)
+        let cmds = cycle.tick(pid, 56);
         assert_eq!(cycle.state, SellState::Returning);
         assert!(cmds.iter().any(|(_, cmd)| cmd.contains("right target")));
 
-        // Tick 3: returning -> not needed
-        let cmds = cycle.tick(pid, 52);
+        // During return travel time — no transition yet
+        for t in 57..61 {
+            let cmds = cycle.tick(pid, t);
+            assert_eq!(cycle.state, SellState::Returning);
+            assert!(cmds.is_empty());
+        }
+
+        // After return travel time: returning -> not needed
+        let cmds = cycle.tick(pid, 61);
         assert_eq!(cycle.state, SellState::NotNeeded);
-        assert_eq!(cycle.last_sell_tick, 52);
+        assert_eq!(cycle.last_sell_tick, 61);
         assert!(!cmds.is_empty());
     }
 
@@ -180,7 +210,7 @@ mod tests {
     fn test_start_sell_idempotent() {
         let mut cycle = SellCycle::new(test_vendor_config());
         cycle.state = SellState::Selling;
-        cycle.start_sell(); // Should not reset to TravelingToVendor
+        cycle.start_sell(100); // Should not reset to TravelingToVendor
         assert_eq!(cycle.state, SellState::Selling);
     }
 
@@ -210,5 +240,49 @@ mod tests {
         let cmds = sell_commands(&SellState::Returning, "Merchant_Leah", 104);
         assert_eq!(cmds.len(), 1);
         assert_eq!(cmds[0].1, "/stand");
+    }
+
+    // -- Bug #7: travel delay prevents instant cycle completion --
+
+    #[test]
+    fn test_travel_delay_blocks_immediate_transition() {
+        let mut cycle = SellCycle::new(test_vendor_config());
+        let pid = 104;
+
+        cycle.start_sell(100);
+        assert_eq!(cycle.state, SellState::TravelingToVendor);
+
+        // Tick at travel_ticks - 1 should NOT transition
+        let cmds = cycle.tick(pid, 104);
+        assert_eq!(cycle.state, SellState::TravelingToVendor);
+        assert!(cmds.is_empty());
+
+        // Tick at exactly travel_ticks should transition
+        let cmds = cycle.tick(pid, 105);
+        assert_eq!(cycle.state, SellState::Selling);
+        assert!(!cmds.is_empty());
+    }
+
+    #[test]
+    fn test_return_delay_blocks_immediate_completion() {
+        let mut cycle = SellCycle::new(test_vendor_config());
+        let pid = 104;
+
+        cycle.start_sell(100);
+        // Skip past travel
+        let _ = cycle.tick(pid, 105);
+        assert_eq!(cycle.state, SellState::Selling);
+        // Selling -> Returning (immediate)
+        let _ = cycle.tick(pid, 106);
+        assert_eq!(cycle.state, SellState::Returning);
+
+        // Return travel should also take travel_ticks
+        let cmds = cycle.tick(pid, 108);
+        assert_eq!(cycle.state, SellState::Returning);
+        assert!(cmds.is_empty());
+
+        let cmds = cycle.tick(pid, 111);
+        assert_eq!(cycle.state, SellState::NotNeeded);
+        assert!(!cmds.is_empty());
     }
 }

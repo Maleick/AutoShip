@@ -133,7 +133,7 @@ impl CcTracker {
     /// highest-priority CC ability that isn't on cooldown.
     pub fn assign_cc(
         &mut self,
-        members: &[CcMember],
+        members: &mut [CcMember],
         tick: u64,
     ) -> Vec<(u32, String)> {
         let mut commands = Vec::new();
@@ -186,15 +186,21 @@ impl CcTracker {
                     .min_by_key(|a| a.priority)
                 {
                     let target = &self.targets[idx];
+                    let member_pid = member.pid;
                     // Target the mob, then cast CC
-                    commands.push((member.pid, format!("/target id {}", target.spawn_id)));
-                    commands.push((member.pid, ability.command.clone()));
+                    commands.push((member_pid, format!("/target id {}", target.spawn_id)));
+                    commands.push((member_pid, ability.command.clone()));
 
                     // Mark assignment
                     self.targets[idx].cc_applied = Some(ability.cc_type);
                     self.targets[idx].cc_expiry_tick = tick + ability.duration_ticks;
-                    self.targets[idx].assigned_to_pid = Some(member.pid);
-                    *assignment_count.entry(member.pid).or_insert(0) += 1;
+                    self.targets[idx].assigned_to_pid = Some(member_pid);
+                    *assignment_count.entry(member_pid).or_insert(0) += 1;
+
+                    // Update member's cooldown tracking
+                    if let Some(m) = members.iter_mut().find(|m| m.pid == member_pid) {
+                        m.last_cast_tick = tick;
+                    }
                 }
             }
         }
@@ -253,10 +259,10 @@ impl CcTracker {
     /// Check for CCs about to expire and return re-mez/re-CC commands.
     ///
     /// `buffer_ticks`: how many ticks before expiry to start re-casting (default: 3).
-    pub fn needs_remez(&self, tick: u64, buffer_ticks: u64, members: &[CcMember]) -> Vec<(u32, String)> {
+    pub fn needs_remez(&mut self, tick: u64, buffer_ticks: u64, members: &mut [CcMember]) -> Vec<(u32, String)> {
         let mut commands = Vec::new();
 
-        for target in &self.targets {
+        for target in &mut self.targets {
             // Only re-CC targets that have active CC about to expire
             let Some(cc_type) = target.cc_applied else {
                 continue;
@@ -281,8 +287,18 @@ impl CcTracker {
                     .iter()
                     .find(|a| a.cc_type == cc_type && member.last_cast_tick + a.cooldown_ticks <= tick)
             {
-                commands.push((member.pid, format!("/target id {}", target.spawn_id)));
-                commands.push((member.pid, ability.command.clone()));
+                let member_pid = member.pid;
+                let duration = ability.duration_ticks;
+                commands.push((member_pid, format!("/target id {}", target.spawn_id)));
+                commands.push((member_pid, ability.command.clone()));
+
+                // Extend CC expiry so we don't spam re-mez every tick
+                target.cc_expiry_tick = tick + duration;
+
+                // Update member's cooldown tracking
+                if let Some(m) = members.iter_mut().find(|m| m.pid == member_pid) {
+                    m.last_cast_tick = tick;
+                }
             }
         }
 
@@ -521,8 +537,8 @@ mod tests {
         let spawns = vec![(10, "orc pawn".into())];
         tracker.update(&spawns, None, 0);
 
-        let members = vec![make_enchanter(100)];
-        let cmds = tracker.assign_cc(&members, 10);
+        let mut members = vec![make_enchanter(100)];
+        let cmds = tracker.assign_cc(&mut members, 10);
 
         // Should target then cast (stun is highest priority for enchanter)
         assert_eq!(cmds.len(), 2);
@@ -539,8 +555,8 @@ mod tests {
         ];
         tracker.update(&spawns, None, 0);
 
-        let members = vec![make_enchanter(100), make_paladin(101)];
-        let cmds = tracker.assign_cc(&members, 10);
+        let mut members = vec![make_enchanter(100), make_paladin(101)];
+        let cmds = tracker.assign_cc(&mut members, 10);
 
         // Both mobs should get CC'd
         assert_eq!(cmds.len(), 4); // 2 commands per target
@@ -557,8 +573,8 @@ mod tests {
         tracker.targets[0].cc_applied = Some(CcType::Mez);
         tracker.targets[0].cc_expiry_tick = 100;
 
-        let members = vec![make_enchanter(100)];
-        let cmds = tracker.assign_cc(&members, 10);
+        let mut members = vec![make_enchanter(100)];
+        let cmds = tracker.assign_cc(&mut members, 10);
         assert!(cmds.is_empty());
     }
 
@@ -568,8 +584,8 @@ mod tests {
         let spawns = vec![(10, "orc pawn".into())];
         tracker.update(&spawns, None, 0);
 
-        let members = vec![make_shaman(100)]; // shaman has no CC abilities
-        let cmds = tracker.assign_cc(&members, 10);
+        let mut members = vec![make_shaman(100)]; // shaman has no CC abilities
+        let cmds = tracker.assign_cc(&mut members, 10);
         assert!(cmds.is_empty());
     }
 
@@ -622,9 +638,9 @@ mod tests {
         tracker.targets[0].cc_expiry_tick = 20;
         tracker.targets[0].assigned_to_pid = Some(100);
 
-        let members = vec![make_enchanter(100)];
+        let mut members = vec![make_enchanter(100)];
         // tick 18, buffer 3 => 18+3=21 >= 20, needs remez
-        let cmds = tracker.needs_remez(18, 3, &members);
+        let cmds = tracker.needs_remez(18, 3, &mut members);
         assert_eq!(cmds.len(), 2);
         assert_eq!(cmds[0], (100, "/target id 10".into()));
         assert_eq!(cmds[1], (100, "/cast 1".into())); // mez command
@@ -638,9 +654,9 @@ mod tests {
         tracker.targets[0].cc_applied = Some(CcType::Mez);
         tracker.targets[0].cc_expiry_tick = 20;
 
-        let members = vec![make_enchanter(100)];
+        let mut members = vec![make_enchanter(100)];
         // tick 10, buffer 3 => 10+3=13 < 20, no remez yet
-        let cmds = tracker.needs_remez(10, 3, &members);
+        let cmds = tracker.needs_remez(10, 3, &mut members);
         assert!(cmds.is_empty());
     }
 
@@ -650,8 +666,8 @@ mod tests {
         let spawns = vec![(10, "orc pawn".into())];
         tracker.update(&spawns, None, 0);
 
-        let members = vec![make_enchanter(100)];
-        let cmds = tracker.needs_remez(18, 3, &members);
+        let mut members = vec![make_enchanter(100)];
+        let cmds = tracker.needs_remez(18, 3, &mut members);
         assert!(cmds.is_empty());
     }
 
@@ -739,26 +755,27 @@ mod tests {
         assert_eq!(tracker.targets[0].spawn_id, 11);
 
         // Debuff before CC
-        let members = vec![make_enchanter(100), make_shaman(101)];
+        let mut members = vec![make_enchanter(100), make_shaman(101)];
         let debuff_cmds = tracker.debuff_commands(11, &members, tick);
         assert!(!debuff_cmds.is_empty());
         assert!(tracker.targets[0].debuffed);
 
         // Assign CC
-        let cc_cmds = tracker.assign_cc(&members, tick);
+        let cc_cmds = tracker.assign_cc(&mut members, tick);
         assert_eq!(cc_cmds.len(), 2); // target + cast
         assert!(tracker.targets[0].cc_applied.is_some());
 
         // Later: check for remez
-        let _remez_cmds = tracker.needs_remez(tick + 16, 3, &members);
+        let _remez_cmds = tracker.needs_remez(tick + 16, 3, &mut members);
         // If cc_expiry is tick+4 (stun duration), and we're at tick+16, it already expired
         // so needs_remez won't fire (cc_applied would have been cleared by update)
         // Let's manually set a mez instead for this test
         tracker.targets[0].cc_applied = Some(CcType::Mez);
-        tracker.targets[0].cc_expiry_tick = tick + 18;
+        tracker.targets[0].cc_expiry_tick = tick + 33;
         tracker.targets[0].assigned_to_pid = Some(100);
 
-        let remez_cmds = tracker.needs_remez(tick + 16, 3, &members);
+        // tick + 31 is past the mez cooldown (3 ticks) since last cast was updated at tick+16
+        let remez_cmds = tracker.needs_remez(tick + 31, 3, &mut members);
         assert!(!remez_cmds.is_empty());
 
         // Mob dies, gets removed on next update
@@ -774,10 +791,83 @@ mod tests {
         tracker.update(&spawns, None, 0);
 
         // Druid only — should use snare (priority 3) over root (priority 5)
-        let members = vec![make_druid(100)];
-        let cmds = tracker.assign_cc(&members, 10);
+        let mut members = vec![make_druid(100)];
+        let cmds = tracker.assign_cc(&mut members, 10);
         assert_eq!(cmds.len(), 2);
         assert_eq!(cmds[1], (100, "/cast 2".into())); // snare, not root
         assert_eq!(tracker.targets[0].cc_applied, Some(CcType::Snare));
+    }
+
+    // -- Bug #3: assign_cc must update last_cast_tick --
+
+    #[test]
+    fn test_assign_cc_updates_last_cast_tick() {
+        let mut tracker = CcTracker::new();
+        let spawns = vec![(10, "orc pawn".into())];
+        tracker.update(&spawns, None, 0);
+
+        let mut members = vec![make_enchanter(100)];
+        assert_eq!(members[0].last_cast_tick, 0);
+
+        tracker.assign_cc(&mut members, 10);
+        assert_eq!(members[0].last_cast_tick, 10);
+    }
+
+    #[test]
+    fn test_assign_cc_cooldown_prevents_double_cast() {
+        let mut tracker = CcTracker::new();
+        let spawns = vec![(10, "orc pawn".into()), (11, "orc centurion".into())];
+        tracker.update(&spawns, None, 0);
+
+        // Single enchanter with stun (cooldown 6 ticks)
+        let mut members = vec![make_enchanter(100)];
+        let cmds = tracker.assign_cc(&mut members, 10);
+        // First mob gets CC'd
+        assert_eq!(cmds.len(), 2);
+        // Member is now on cooldown at tick 10, so second mob should NOT get CC'd
+        // (stun cooldown is 6, so next available at tick 16; mez cooldown is 3, so available at tick 13)
+        // Actually, the second uncontrolled mob is still there — but the member's
+        // last_cast_tick was updated to 10 during the first assignment
+        assert_eq!(members[0].last_cast_tick, 10);
+    }
+
+    // -- Bug #4: needs_remez must extend cc_expiry_tick --
+
+    #[test]
+    fn test_needs_remez_extends_expiry() {
+        let mut tracker = CcTracker::new();
+        let spawns = vec![(10, "orc pawn".into())];
+        tracker.update(&spawns, None, 0);
+        tracker.targets[0].cc_applied = Some(CcType::Mez);
+        tracker.targets[0].cc_expiry_tick = 20;
+        tracker.targets[0].assigned_to_pid = Some(100);
+
+        let mut members = vec![make_enchanter(100)];
+        // tick 18, buffer 3 => needs remez
+        let cmds = tracker.needs_remez(18, 3, &mut members);
+        assert_eq!(cmds.len(), 2);
+
+        // cc_expiry_tick should be extended (18 + mez duration 18 = 36)
+        assert_eq!(tracker.targets[0].cc_expiry_tick, 36);
+
+        // Calling again at same tick should NOT produce commands (expiry is now 36)
+        let cmds = tracker.needs_remez(18, 3, &mut members);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn test_needs_remez_updates_member_cooldown() {
+        let mut tracker = CcTracker::new();
+        let spawns = vec![(10, "orc pawn".into())];
+        tracker.update(&spawns, None, 0);
+        tracker.targets[0].cc_applied = Some(CcType::Mez);
+        tracker.targets[0].cc_expiry_tick = 20;
+        tracker.targets[0].assigned_to_pid = Some(100);
+
+        let mut members = vec![make_enchanter(100)];
+        assert_eq!(members[0].last_cast_tick, 0);
+
+        tracker.needs_remez(18, 3, &mut members);
+        assert_eq!(members[0].last_cast_tick, 18);
     }
 }

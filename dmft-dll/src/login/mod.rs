@@ -220,25 +220,23 @@ impl LoginFsm {
         let account = creds.account_name.clone();
         let password = creds.password.clone();
 
-        // Set username field
-        if !widgets::set_edit_text(self.eqmain_base, "LOGIN_UsernameEdit", &account) {
-            tracing::warn!("Failed to set username field");
+        // Write credentials directly to EQLogin's char arrays (bypasses CXStr/SIDL)
+        if !widgets::write_login_credentials(self.eqmain_base, &account, &password) {
+            tracing::warn!("Failed to write credentials to EQLogin");
             return;
         }
 
-        // Set password field
-        if !widgets::set_edit_text(self.eqmain_base, "LOGIN_PasswordEdit", &password) {
-            tracing::warn!("Failed to set password field");
-            return;
+        // Simulate Enter key to submit the login form
+        if !widgets::simulate_enter_key(self.eqmain_base) {
+            tracing::warn!("Failed to simulate Enter key — falling back to button click");
+            // Fallback: try clicking the connect button via SIDL
+            if !widgets::click_button(self.eqmain_base, "LOGIN_ConnectButton") {
+                tracing::warn!("Failed to click connect button");
+                return;
+            }
         }
 
-        // Click the connect button
-        if !widgets::click_button(self.eqmain_base, "LOGIN_ConnectButton") {
-            tracing::warn!("Failed to click connect button");
-            return;
-        }
-
-        tracing::info!(account = %account, "Credentials entered, clicking connect");
+        tracing::info!(account = %account, "Credentials written + Enter sent");
 
         // Zeroize credentials — drop the Credentials struct which zeros the password
         self.credentials = None;

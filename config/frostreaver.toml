@@ -13,6 +13,7 @@ max_spawns = 2048
 # stagger_max_secs = 15
 # max_concurrent_launches = 3
 # launch_args = []
+# max_working_set_mb = 800    # Max physical RAM per EQ client (0 = unlimited)
 
 # ─── Server Configuration ───
 # Target server name and optional status endpoint.

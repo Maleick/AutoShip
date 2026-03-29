@@ -25,6 +25,9 @@ pub enum Command {
     StopNavigation,
     // Login automation
     LoginPhaseQuery,
+    /// Dump all login-related pointer addresses to the DLL log for calibration.
+    /// Used to validate offsets on the live client before attempting auto-login.
+    CalibrateLogin,
     /// Start the automated login sequence. The DLL handles all UI steps
     /// autonomously and reports progress via LoginPhaseUpdate responses.
     /// Password is zeroized in DLL memory immediately after use.

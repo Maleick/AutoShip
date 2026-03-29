@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
 use crate::config::AccountsConfig;
@@ -84,6 +86,44 @@ impl SpawnFilter {
             Self::Named => "Named",
         }
     }
+}
+
+/// Status of a user-tracked spawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrackedStatus {
+    Up,
+    Down,
+    Unknown,
+}
+
+impl TrackedStatus {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Up => "UP",
+            Self::Down => "DOWN",
+            Self::Unknown => "???",
+        }
+    }
+
+    pub fn color(&self) -> ratatui::style::Color {
+        use ratatui::style::Color;
+        match self {
+            Self::Up => Color::Green,
+            Self::Down => Color::Red,
+            Self::Unknown => Color::DarkGray,
+        }
+    }
+}
+
+/// A user-tracked spawn (via :track command).
+#[derive(Debug, Clone)]
+pub struct TrackedSpawn {
+    pub name: String,
+    pub status: TrackedStatus,
+    pub last_seen_tick: Option<u64>,
+    pub last_x: f32,
+    pub last_y: f32,
+    pub last_z: f32,
 }
 
 /// Definition for a logical group of accounts.
@@ -191,6 +231,9 @@ pub struct App {
     pub named_tracker: NamedTracker,
     pub hvt_watchlist: Option<HvtWatchlist>,
 
+    // User-tracked spawns (via :track command)
+    pub tracked_spawns: HashMap<String, TrackedSpawn>,
+
     // Help overlay
     pub help_visible: bool,
 
@@ -259,6 +302,8 @@ impl App {
 
             named_tracker: NamedTracker::new(),
             hvt_watchlist: HvtWatchlist::load(std::path::Path::new("config/hvt_watchlist.toml")).ok(),
+
+            tracked_spawns: HashMap::new(),
 
             help_visible: false,
 
@@ -440,11 +485,83 @@ impl App {
     }
 
     /// Tab-complete the current command buffer.
+    /// Supports multi-level completion: first tab completes command name,
+    /// subsequent tabs complete context-specific arguments.
     pub fn complete_command(&mut self) {
         let buf = self.command_buffer.clone();
         let prefix = buf.trim_start();
 
-        // Build completions: static commands + client PIDs + character names
+        // --- Argument-level completion (command already typed + space) ---
+
+        // :camp <Tab> → camp subcommands + saved camp names
+        if let Some(rest) = prefix.strip_prefix("camp ") {
+            if let Some(camp_prefix) = rest.strip_prefix("start ") {
+                self.complete_with_candidates("camp start ", camp_prefix, &self.list_camp_names());
+            } else if let Some(camp_prefix) = rest.strip_prefix("remove ") {
+                self.complete_with_candidates("camp remove ", camp_prefix, &self.list_camp_names());
+            } else if let Some(add_rest) = rest.strip_prefix("add ") {
+                // Suggest zone-based name
+                let zone = self
+                    .active_client()
+                    .map(|c| c.zone_name.clone())
+                    .unwrap_or_else(|| "camp".into());
+                let suggestion = vec![zone];
+                self.complete_with_candidates("camp add ", add_rest, &suggestion);
+            } else {
+                // Subcommands + saved camp names (bare name = shortcut for start)
+                let mut sub_cmds: Vec<String> = vec![
+                    "start".into(), "stop".into(), "status".into(),
+                    "list".into(), "add".into(), "remove".into(),
+                ];
+                sub_cmds.extend(self.list_camp_names());
+                self.complete_with_candidates("camp ", rest, &sub_cmds);
+            }
+            return;
+        }
+
+        // :track <Tab> → cycle current zone spawn names
+        if let Some(rest) = prefix.strip_prefix("track ") {
+            if rest == "list" || rest.starts_with("list ") {
+                return; // "list" is complete
+            }
+            let spawn_names = self.list_spawn_names();
+            self.complete_with_candidates("track ", rest, &spawn_names);
+            return;
+        }
+
+        // :untrack <Tab> → cycle tracked spawn names
+        if let Some(rest) = prefix.strip_prefix("untrack ") {
+            let tracked_names: Vec<String> = self.tracked_spawns.values().map(|t| t.name.clone()).collect();
+            self.complete_with_candidates("untrack ", rest, &tracked_names);
+            return;
+        }
+
+        // :login <Tab> → login subcommands + account names
+        if let Some(rest) = prefix.strip_prefix("login ") {
+            let mut candidates: Vec<String> = vec!["all".into()];
+            for g in &self.groups {
+                candidates.push(format!("G{}", g.id));
+            }
+            if let Some(accts) = &self.accounts_config {
+                for entry in &accts.accounts {
+                    candidates.push(entry.name.clone());
+                }
+            }
+            self.complete_with_candidates("login ", rest, &candidates);
+            return;
+        }
+
+        // :all <Tab> → common slash commands
+        if let Some(rest) = prefix.strip_prefix("all ") {
+            let slash_cmds: Vec<String> = vec![
+                "/sit".into(), "/stand".into(), "/camp".into(),
+                "/follow".into(), "/assist".into(), "/disband".into(),
+            ];
+            self.complete_with_candidates("all ", rest, &slash_cmds);
+            return;
+        }
+
+        // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
             "help".into(),
             "camp".into(),
@@ -452,23 +569,9 @@ impl App {
             "all".into(),
             "inject".into(),
             "status".into(),
+            "track".into(),
+            "untrack".into(),
         ];
-        // Add subcommands if prefix starts with "camp "
-        if prefix.starts_with("camp ") {
-            let sub_prefix = &prefix[5..];
-            let sub_cmds = ["start", "stop", "status"];
-            let matches: Vec<&str> = sub_cmds
-                .iter()
-                .filter(|s| s.starts_with(sub_prefix))
-                .copied()
-                .collect();
-            if matches.len() == 1 {
-                self.command_buffer = format!("camp {}", matches[0]);
-            } else if !matches.is_empty() {
-                self.status_message = format!("camp: {}", matches.join(" | "));
-            }
-            return;
-        }
 
         for client in &self.clients {
             candidates.push(client.pid.to_string());
@@ -477,37 +580,162 @@ impl App {
             }
         }
 
-        let matches: Vec<&str> = candidates
+        self.complete_with_candidates("", prefix, &candidates);
+    }
+
+    /// Generic tab-completion helper. Given a command prefix (e.g. "camp "),
+    /// the user's partial input, and a list of candidates, complete or show options.
+    fn complete_with_candidates(&mut self, cmd_prefix: &str, input: &str, candidates: &[String]) {
+        // For multi-word matching, strip leading quote
+        let search = input.trim_start_matches('"').to_lowercase();
+
+        let matches: Vec<&String> = candidates
             .iter()
-            .filter(|c| c.starts_with(prefix))
-            .map(|s| s.as_str())
+            .filter(|c| c.to_lowercase().starts_with(&search))
             .collect();
 
         match matches.len() {
             0 => {}
             1 => {
-                self.command_buffer = format!("{} ", matches[0]);
+                let name = &matches[0];
+                // Quote multi-word names
+                let formatted = if name.contains(' ') {
+                    format!("\"{}\"", name)
+                } else {
+                    name.to_string()
+                };
+                self.command_buffer = format!("{}{} ", cmd_prefix, formatted);
             }
             _ => {
                 // Complete common prefix
-                let common = {
-                    let mut prefix = String::new();
-                    if let Some(first) = matches.first() {
-                        for (i, ch) in first.char_indices() {
-                            if matches.iter().all(|s| s.get(i..i + ch.len_utf8()) == Some(&first[i..i + ch.len_utf8()])) {
-                                prefix.push(ch);
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                    prefix
-                };
-                if common.len() > prefix.len() {
-                    self.command_buffer = common;
+                let first = matches[0].to_lowercase();
+                let common_len = first
+                    .char_indices()
+                    .take_while(|&(i, ch)| {
+                        matches.iter().all(|s| {
+                            s.to_lowercase().get(i..i + ch.len_utf8())
+                                == first.get(i..i + ch.len_utf8())
+                        })
+                    })
+                    .map(|(i, ch)| i + ch.len_utf8())
+                    .last()
+                    .unwrap_or(0);
+
+                if common_len > search.len() {
+                    let common = &matches[0][..common_len];
+                    self.command_buffer = format!("{}{}", cmd_prefix, common);
                 }
-                self.status_message = matches.join(" | ");
+                // Show available options (truncate if too many)
+                let display: Vec<&str> = matches.iter().take(10).map(|s| s.as_str()).collect();
+                let suffix = if matches.len() > 10 {
+                    format!(" (+{} more)", matches.len() - 10)
+                } else {
+                    String::new()
+                };
+                self.status_message = format!("{}{}", display.join(" | "), suffix);
             }
+        }
+    }
+
+    /// List available camp config file names from config/camps/.
+    fn list_camp_names(&self) -> Vec<String> {
+        let camps_dir = std::path::Path::new("config/camps");
+        match std::fs::read_dir(camps_dir) {
+            Ok(entries) => entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let path = e.path();
+                    if path.extension().is_some_and(|ext| ext == "toml") {
+                        path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// List all spawn display names in the current zone.
+    fn list_spawn_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .spawns
+            .iter()
+            .map(|s| s.displayed_name.clone())
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// Update user-tracked spawns against the current spawn list.
+    pub fn update_tracked_spawns(&mut self) {
+        for tracked in self.tracked_spawns.values_mut() {
+            let found = self.spawns.iter().find(|s| {
+                s.displayed_name.to_lowercase() == tracked.name.to_lowercase()
+            });
+            match found {
+                Some(spawn) => {
+                    tracked.status = TrackedStatus::Up;
+                    tracked.last_seen_tick = Some(self.tick_count);
+                    tracked.last_x = spawn.x;
+                    tracked.last_y = spawn.y;
+                    tracked.last_z = spawn.z;
+                }
+                None => {
+                    if tracked.status == TrackedStatus::Up {
+                        tracked.status = TrackedStatus::Down;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Add a spawn to the user-tracked list.
+    pub fn track_spawn(&mut self, name: &str) {
+        let key = name.to_lowercase();
+        if self.tracked_spawns.contains_key(&key) {
+            self.status_message = format!("Already tracking: {}", name);
+            return;
+        }
+
+        // Check if spawn exists in current spawn list
+        let found = self.spawns.iter().find(|s| {
+            s.displayed_name.to_lowercase() == key
+        });
+
+        let tracked = match found {
+            Some(spawn) => TrackedSpawn {
+                name: spawn.displayed_name.clone(),
+                status: TrackedStatus::Up,
+                last_seen_tick: Some(self.tick_count),
+                last_x: spawn.x,
+                last_y: spawn.y,
+                last_z: spawn.z,
+            },
+            None => TrackedSpawn {
+                name: name.to_string(),
+                status: TrackedStatus::Unknown,
+                last_seen_tick: None,
+                last_x: 0.0,
+                last_y: 0.0,
+                last_z: 0.0,
+            },
+        };
+
+        self.status_message = format!("Tracking: {} [{}]", tracked.name, tracked.status.label());
+        self.tracked_spawns.insert(key, tracked);
+    }
+
+    /// Remove a spawn from the user-tracked list.
+    pub fn untrack_spawn(&mut self, name: &str) {
+        let key = name.to_lowercase();
+        if self.tracked_spawns.remove(&key).is_some() {
+            self.status_message = format!("Untracked: {}", name);
+        } else {
+            self.status_message = format!("Not tracking: {}", name);
         }
     }
 
@@ -560,6 +788,19 @@ impl App {
             "login" => {
                 self.execute_login_command(&parts[1..]);
             }
+            "track" => {
+                self.execute_track_command(&parts[1..]);
+            }
+            "untrack" => {
+                if parts.get(1).is_some() {
+                    // Rejoin remaining parts for multi-word names, strip quotes
+                    let full_name = parts[1..].join(" ");
+                    let clean = full_name.trim_matches('"');
+                    self.untrack_spawn(clean);
+                } else {
+                    self.status_message = String::from("Usage: untrack <name>");
+                }
+            }
             "inject" => {
                 self.status_message = String::from("Inject requested (not yet wired)");
             }
@@ -610,6 +851,10 @@ impl App {
     /// Handle `camp <subcommand>` from the command bar.
     fn execute_camp_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
         match args.first().copied() {
+            None => {
+                self.status_message =
+                    String::from("Usage: camp <start|stop|status|list|add|remove> [name]");
+            }
             Some("start") => {
                 let camp_name = match args.get(1) {
                     Some(name) => *name,
@@ -622,7 +867,6 @@ impl App {
 
                 match CampConfig::load(camp_name) {
                     Ok(config) => {
-                        // Build members from currently connected clients
                         let members = self.build_camp_members();
                         if members.is_empty() {
                             self.status_message =
@@ -647,9 +891,112 @@ impl App {
             Some("status") => {
                 self.status_message = orchestrator.camp_status();
             }
-            _ => {
-                self.status_message =
-                    String::from("Usage: camp <start|stop|status> [name]");
+            Some("list") => {
+                let names = self.list_camp_names();
+                if names.is_empty() {
+                    self.status_message = String::from("No saved camps (config/camps/ is empty)");
+                } else {
+                    self.status_message = format!("Camps: {}", names.join(", "));
+                }
+            }
+            Some("add") => {
+                let camp_name = match args.get(1) {
+                    Some(name) => *name,
+                    None => {
+                        self.status_message =
+                            String::from("Usage: camp add <name>  (saves current position)");
+                        return;
+                    }
+                };
+
+                let (center, zone) = match &self.local_player {
+                    Some(player) => {
+                        let zone = self
+                            .active_client()
+                            .map(|c| c.zone_name.clone())
+                            .unwrap_or_else(|| "unknown".into());
+                        ([player.x, player.y, player.z], zone)
+                    }
+                    None => {
+                        self.status_message =
+                            String::from("No player data — cannot save camp position");
+                        return;
+                    }
+                };
+
+                let config = CampConfig {
+                    name: camp_name.to_string(),
+                    zone,
+                    camp_center: center,
+                    pull_point: [center[0] + 50.0, center[1] + 50.0, center[2]],
+                    pull_radius: 200.0,
+                    camp_radius: 30.0,
+                    leash_radius: 100.0,
+                    rest_mana_pct: 60,
+                    pull_mana_pct: 30,
+                    level_range: [1, 60],
+                    pull_mob_names: Vec::new(),
+                };
+
+                match config.save() {
+                    Ok(()) => {
+                        self.status_message = format!(
+                            "Camp '{}' saved at ({:.0}, {:.0}, {:.0})",
+                            camp_name, center[0], center[1], center[2]
+                        );
+                    }
+                    Err(e) => {
+                        self.status_message = format!("Failed to save camp '{}': {}", camp_name, e);
+                    }
+                }
+            }
+            Some("remove") => {
+                let camp_name = match args.get(1) {
+                    Some(name) => *name,
+                    None => {
+                        self.status_message =
+                            String::from("Usage: camp remove <name>");
+                        return;
+                    }
+                };
+
+                let path = std::path::Path::new("config/camps").join(format!("{}.toml", camp_name));
+                if path.exists() {
+                    match std::fs::remove_file(&path) {
+                        Ok(()) => {
+                            self.status_message = format!("Camp '{}' removed", camp_name);
+                        }
+                        Err(e) => {
+                            self.status_message =
+                                format!("Failed to remove camp '{}': {}", camp_name, e);
+                        }
+                    }
+                } else {
+                    self.status_message = format!("Camp '{}' not found", camp_name);
+                }
+            }
+            // Bare camp name — shortcut for camp start <name>
+            Some(name) => {
+                match CampConfig::load(name) {
+                    Ok(config) => {
+                        let members = self.build_camp_members();
+                        if members.is_empty() {
+                            self.status_message =
+                                String::from("No clients connected — cannot start camp");
+                            return;
+                        }
+                        let count = members.len();
+                        orchestrator.start_camp(config, members);
+                        self.status_message =
+                            format!("Camp '{}' started with {} members", name, count);
+                    }
+                    Err(_) => {
+                        self.status_message = format!(
+                            "Unknown camp subcommand or config: '{}'. Try: start|stop|status|list|add|remove",
+                            name
+                        );
+                    }
+                }
             }
         }
     }
@@ -747,6 +1094,34 @@ impl App {
                 } else {
                     self.status_message = format!("Account '{}' not found in config", name);
                 }
+            }
+        }
+    }
+
+    /// Handle `track <subcommand>` from the command bar.
+    fn execute_track_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            None => {
+                self.status_message =
+                    String::from("Usage: track <name> | track list");
+            }
+            Some("list") => {
+                if self.tracked_spawns.is_empty() {
+                    self.status_message = String::from("No spawns tracked");
+                } else {
+                    let entries: Vec<String> = self
+                        .tracked_spawns
+                        .values()
+                        .map(|t| format!("{} [{}]", t.name, t.status.label()))
+                        .collect();
+                    self.status_message = format!("Tracked: {}", entries.join(", "));
+                }
+            }
+            Some(_) => {
+                // Join all args for multi-word names, strip quotes
+                let full_name = args.join(" ");
+                let clean = full_name.trim_matches('"');
+                self.track_spawn(clean);
             }
         }
     }

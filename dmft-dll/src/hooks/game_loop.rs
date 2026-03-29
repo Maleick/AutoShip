@@ -605,6 +605,15 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
             let phase = crate::login::phase();
             crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
         }
+        Command::CalibrateLogin => {
+            tracing::info!("CalibrateLogin command received — dumping login pointers");
+            let eqmain_base = crate::login::eqmain::find_eqmain();
+            if eqmain_base == 0 {
+                tracing::warn!("CalibrateLogin: eqmain.dll not loaded yet");
+            } else {
+                crate::login::widgets::calibrate_login_dump(eqmain_base);
+            }
+        }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();

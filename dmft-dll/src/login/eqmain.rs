@@ -63,6 +63,66 @@ pub fn resolve_login_server_api(eqmain_base: u64) -> Option<usize> {
     }
 }
 
+/// Resolve the LoginClient pointer from eqmain.dll globals.
+/// LoginClient contains pLoginData (EQLogin*) which has the username/password char arrays.
+pub fn resolve_login_client(eqmain_base: u64) -> Option<usize> {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain;
+
+        let addr = eqmain::rebase(eqmain::PINST_LOGIN_CLIENT, eqmain_base)?;
+        let ptr = unsafe { *(addr as *const usize) };
+        if ptr == 0 { None } else { Some(ptr) }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = eqmain_base;
+        None
+    }
+}
+
+/// Resolve the EQLogin struct pointer from LoginClient→pLoginData.
+/// Returns the address of the EQLogin struct which has Login/PW char arrays.
+pub fn resolve_eqlogin(eqmain_base: u64) -> Option<usize> {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain as eqmain_offsets;
+
+        let login_client = resolve_login_client(eqmain_base)?;
+        let eqlogin_ptr = unsafe {
+            *((login_client + eqmain_offsets::LOGINCLIENT_LOGIN_DATA) as *const usize)
+        };
+        if eqlogin_ptr == 0 { None } else { Some(eqlogin_ptr) }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = eqmain_base;
+        None
+    }
+}
+
+/// Resolve the EQ window handle (HWND) from EQLogin::hEQWnd.
+pub fn resolve_eq_hwnd(eqmain_base: u64) -> Option<usize> {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain as eqmain_offsets;
+
+        let eqlogin = resolve_eqlogin(eqmain_base)?;
+        let hwnd = unsafe {
+            *((eqlogin + eqmain_offsets::EQLOGIN_HWND) as *const usize)
+        };
+        if hwnd == 0 { None } else { Some(hwnd) }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = eqmain_base;
+        None
+    }
+}
+
 /// Resolve the CXWndManager pointer from eqmain.dll globals.
 pub fn resolve_cxwnd_manager(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
@@ -98,5 +158,8 @@ mod tests {
         assert!(resolve_sidl_manager(0x180000000).is_none());
         assert!(resolve_login_server_api(0x180000000).is_none());
         assert!(resolve_cxwnd_manager(0x180000000).is_none());
+        assert!(resolve_login_client(0x180000000).is_none());
+        assert!(resolve_eqlogin(0x180000000).is_none());
+        assert!(resolve_eq_hwnd(0x180000000).is_none());
     }
 }

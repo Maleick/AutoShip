@@ -277,6 +277,7 @@ mod tests {
             stagger_max_secs: 5,
             max_concurrent_launches: 3,
             launch_args: Vec::new(),
+            max_working_set_mb: 800,
         };
         let retry = RetryConfig {
             max_retries: 3,

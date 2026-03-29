@@ -81,6 +81,7 @@ fn run_loop(
         if last_refresh.elapsed() >= refresh_interval {
             refresh_eq_data(app);
             app.tick_count += 1;
+            app.update_tracked_spawns();
             last_refresh = Instant::now();
         }
 

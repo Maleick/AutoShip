@@ -1,7 +1,8 @@
-//! UI widget manipulation helpers for EQ's SIDL-based UI system.
+//! UI widget manipulation helpers for EQ's login system.
 //!
-//! These functions find windows by XML name, set text fields, click buttons,
-//! and read list items — used by the login FSM to drive the login UI.
+//! Uses direct memory writes to EQLogin's fixed char arrays for credential entry,
+//! bypassing CXStr/SIDL widget navigation entirely. For other UI interactions
+//! (splash dismiss, error dialogs), falls back to SIDL window lookup.
 //!
 //! All functions are no-ops on non-Windows platforms.
 
@@ -59,27 +60,128 @@ fn find_window_by_name(eqmain_base: u64, name: &str) -> Option<*mut u8> {
     None
 }
 
+/// Write login credentials directly to EQLogin's fixed char arrays.
+///
+/// This bypasses SIDL widget navigation and CXStr entirely — EQLogin has
+/// plain `char[0x80]` arrays for Login and PW that we can write directly.
+///
+/// Path: eqmain_base → pinstLoginClient → deref → LoginClient
+///       → +0x010 (pLoginData) → deref → EQLogin → write Login/PW.
+pub fn write_login_credentials(eqmain_base: u64, account: &str, password: &str) -> bool {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain as eqmain_offsets;
+        use super::eqmain;
+
+        let Some(eqlogin) = eqmain::resolve_eqlogin(eqmain_base) else {
+            tracing::warn!("Cannot write credentials — EQLogin not resolved");
+            return false;
+        };
+
+        unsafe {
+            // Write username: zero buffer, then copy bytes (max 0x7F to leave null terminator)
+            let username_addr = (eqlogin + eqmain_offsets::EQLOGIN_USERNAME) as *mut u8;
+            std::ptr::write_bytes(username_addr, 0, 0x80);
+            let username_len = account.len().min(eqmain_offsets::EQLOGIN_FIELD_MAX);
+            std::ptr::copy_nonoverlapping(account.as_ptr(), username_addr, username_len);
+
+            // Write password: zero buffer, then copy bytes
+            let password_addr = (eqlogin + eqmain_offsets::EQLOGIN_PASSWORD) as *mut u8;
+            std::ptr::write_bytes(password_addr, 0, 0x80);
+            let password_len = password.len().min(eqmain_offsets::EQLOGIN_FIELD_MAX);
+            std::ptr::copy_nonoverlapping(password.as_ptr(), password_addr, password_len);
+        }
+
+        tracing::debug!(
+            account = %account,
+            eqlogin = format!("{:#x}", eqlogin),
+            "Wrote credentials to EQLogin char arrays (password redacted)"
+        );
+        true
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (eqmain_base, account, password);
+        false
+    }
+}
+
 /// Set text in a CEditWnd (username/password fields).
+///
+/// For login fields (LOGIN_UsernameEdit, LOGIN_PasswordEdit), this uses
+/// direct memory writes to EQLogin's char arrays instead of CXStr manipulation.
+/// For other edit widgets, falls back to the SIDL-based approach.
 pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     #[cfg(windows)]
     {
+        // For login credential fields, use direct-write path (bypasses CXStr entirely)
+        if window_name == LOGIN_USERNAME_EDIT || window_name == LOGIN_PASSWORD_EDIT {
+            // The direct-write path writes both fields at once via write_login_credentials().
+            // Individual field writes aren't meaningful since both must be set before login.
+            // Return true if EQLogin is accessible (the FSM calls write_login_credentials
+            // separately before clicking connect).
+            tracing::debug!(
+                window = window_name,
+                "set_edit_text for login field — use write_login_credentials() instead"
+            );
+            return super::eqmain::resolve_eqlogin(eqmain_base).is_some();
+        }
+
+        // Fallback: SIDL widget path for non-login edit fields
         let Some(edit_wnd) = find_window_by_name(eqmain_base, window_name) else {
             return false;
         };
 
         unsafe {
-            // CEditBaseWnd::InputText is a CXStr at offset 0x278
             let input_text_ptr = edit_wnd.add(dmft_common::offsets::eqmain::CEDITBASEWND_INPUT_TEXT);
             write_cxstr(input_text_ptr, text);
         }
 
-        tracing::debug!(window = window_name, "Set edit text");
+        tracing::debug!(window = window_name, "Set edit text via SIDL");
         true
     }
 
     #[cfg(not(windows))]
     {
         let _ = (eqmain_base, window_name, text);
+        false
+    }
+}
+
+/// Simulate pressing Enter on the EQ window to submit login credentials.
+///
+/// After writing credentials to EQLogin's char arrays, we send WM_KEYDOWN + WM_KEYUP
+/// with VK_RETURN to the EQ window to trigger the login submission.
+pub fn simulate_enter_key(eqmain_base: u64) -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_KEYDOWN, WM_KEYUP};
+        use windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN;
+        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
+
+        let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
+            tracing::warn!("Cannot simulate Enter — EQ HWND not resolved");
+            return false;
+        };
+
+        let hwnd = HWND(hwnd_val as *mut _);
+
+        unsafe {
+            // lParam for WM_KEYDOWN: repeat count=1, scan code for Enter (0x1C), extended=0
+            let lparam_down = LPARAM(0x001C_0001);
+            let lparam_up = LPARAM(0xC01C_0001_u32 as i32 as isize); // transition + previous state bits set
+            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN.0 as usize), lparam_down);
+            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN.0 as usize), lparam_up);
+        }
+
+        tracing::debug!(hwnd = format!("{:#x}", hwnd_val), "Simulated Enter key on EQ window");
+        true
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = eqmain_base;
         false
     }
 }
@@ -178,18 +280,29 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
             return false;
         };
 
-        // Resolve JoinServer function address
         let Some(join_server_addr) = eqmain_offsets::rebase(eqmain_offsets::JOIN_SERVER, eqmain_base) else {
             tracing::warn!("Failed to rebase JoinServer address");
             return false;
         };
 
-        // TODO: Find server ID by iterating LoginClient::ServerList at offset 0x178
-        // For now, we need to match server_name to a server ID.
-        // This requires reading the server list from LoginServerAPI.
-        // Placeholder: attempt server ID 0 (will be replaced with actual lookup)
-        let _ = (login_api, join_server_addr, server_name);
-        tracing::info!(server = server_name, "JoinServer lookup not yet implemented — will resolve on live client");
+        // TODO: Find server ID by iterating LoginClient::ServerList at offset 0x178.
+        // The ServerList is a DoublyLinkedList<EQClientServerData*>.
+        // EQClientServerData has ServerName (CXStr) at offset 0x08 and ID (ServerID) at 0x00.
+        // For now, log what we have and return false — need calibration dump to discover
+        // the actual server ID for the target TLP.
+        tracing::info!(
+            server = server_name,
+            login_api = format!("{:#x}", login_api),
+            join_server_fn = format!("{:#x}", join_server_addr),
+            "JoinServer: API resolved but server ID lookup not yet implemented. \
+             Use CalibrateLogin to dump server list."
+        );
+
+        // TODO: Once we know the server ID, call:
+        // type JoinServerFn = unsafe extern "C" fn(*mut u8, i32, *mut u8, i32) -> u32;
+        // let func: JoinServerFn = std::mem::transmute(join_server_addr);
+        // func(login_api as *mut u8, server_id, std::ptr::null_mut(), 10);
+
         false
     }
 
@@ -238,6 +351,108 @@ pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) ->
         let _ = (eqmain_base, eq_base, character_name);
         false
     }
+}
+
+/// Dump all login-related pointer addresses to the log for calibration.
+/// This is called when the DLL receives a CalibrateLogin command.
+pub fn calibrate_login_dump(eqmain_base: u64) {
+    use super::eqmain;
+    use dmft_common::offsets::eqmain as eqmain_offsets;
+
+    tracing::info!("=== LOGIN CALIBRATION DUMP ===");
+    tracing::info!(eqmain_base = format!("{:#x}", eqmain_base));
+
+    // LoginClient pointer
+    if let Some(addr) = eqmain_offsets::rebase(eqmain_offsets::PINST_LOGIN_CLIENT, eqmain_base) {
+        tracing::info!(
+            pinst_login_client_addr = format!("{:#x}", addr),
+            "pinstLoginClient address"
+        );
+
+        #[cfg(windows)]
+        {
+            let login_client = unsafe { *(addr as *const usize) };
+            tracing::info!(login_client_ptr = format!("{:#x}", login_client), "LoginClient*");
+
+            if login_client != 0 {
+                let eqlogin_ptr = unsafe {
+                    *((login_client + eqmain_offsets::LOGINCLIENT_LOGIN_DATA) as *const usize)
+                };
+                tracing::info!(eqlogin_ptr = format!("{:#x}", eqlogin_ptr), "EQLogin* (pLoginData)");
+
+                if eqlogin_ptr != 0 {
+                    // Dump HWND
+                    let hwnd = unsafe {
+                        *((eqlogin_ptr + eqmain_offsets::EQLOGIN_HWND) as *const usize)
+                    };
+                    tracing::info!(hwnd = format!("{:#x}", hwnd), "EQLogin::hEQWnd");
+
+                    // Dump username field (first 32 bytes)
+                    let username_addr = (eqlogin_ptr + eqmain_offsets::EQLOGIN_USERNAME) as *const u8;
+                    let username_bytes = unsafe { std::slice::from_raw_parts(username_addr, 32) };
+                    let username = String::from_utf8_lossy(
+                        &username_bytes[..username_bytes.iter().position(|&b| b == 0).unwrap_or(32)]
+                    );
+                    tracing::info!(
+                        username = %username,
+                        username_addr = format!("{:#x}", username_addr as usize),
+                        "EQLogin::Login"
+                    );
+
+                    // Dump password field presence (don't log actual password)
+                    let pw_addr = (eqlogin_ptr + eqmain_offsets::EQLOGIN_PASSWORD) as *const u8;
+                    let pw_first = unsafe { *pw_addr };
+                    tracing::info!(
+                        has_password = pw_first != 0,
+                        pw_addr = format!("{:#x}", pw_addr as usize),
+                        "EQLogin::PW (content redacted)"
+                    );
+
+                    // Dump ReturnCode
+                    let return_code = unsafe {
+                        *((eqlogin_ptr + 0x410) as *const i32)
+                    };
+                    tracing::info!(return_code, "EQLogin::ReturnCode");
+                }
+            }
+        }
+    }
+
+    // LoginServerAPI
+    if let Some(login_api) = eqmain::resolve_login_server_api(eqmain_base) {
+        tracing::info!(login_server_api = format!("{:#x}", login_api), "LoginServerAPI*");
+    } else {
+        tracing::info!("LoginServerAPI: not resolved (null or eqmain not loaded)");
+    }
+
+    // CSidlManager
+    if let Some(sidl) = eqmain::resolve_sidl_manager(eqmain_base) {
+        tracing::info!(sidl_manager = format!("{:#x}", sidl), "CSidlManager*");
+    } else {
+        tracing::info!("CSidlManager: not resolved");
+    }
+
+    // CXWndManager
+    if let Some(cxwnd) = eqmain::resolve_cxwnd_manager(eqmain_base) {
+        tracing::info!(cxwnd_manager = format!("{:#x}", cxwnd), "CXWndManager*");
+    } else {
+        tracing::info!("CXWndManager: not resolved");
+    }
+
+    // LoginController
+    if let Some(addr) = eqmain_offsets::rebase(eqmain_offsets::PINST_LOGIN_CONTROLLER, eqmain_base) {
+        tracing::info!(
+            pinst_login_controller_addr = format!("{:#x}", addr),
+            "pinstLoginController address"
+        );
+        #[cfg(windows)]
+        {
+            let controller_ptr = unsafe { *(addr as *const usize) };
+            tracing::info!(login_controller = format!("{:#x}", controller_ptr), "LoginController*");
+        }
+    }
+
+    tracing::info!("=== END LOGIN CALIBRATION DUMP ===");
 }
 
 /// Read a list item from a CListWnd at the given row and column.
@@ -307,6 +522,21 @@ mod tests {
     #[test]
     fn select_character_returns_false_on_macos() {
         assert!(!select_character(0, 0, "TestChar"));
+    }
+
+    #[test]
+    fn write_login_credentials_returns_false_on_macos() {
+        assert!(!write_login_credentials(0, "testaccount", "testpass"));
+    }
+
+    #[test]
+    fn simulate_enter_key_returns_false_on_macos() {
+        assert!(!simulate_enter_key(0));
+    }
+
+    #[test]
+    fn calibrate_login_dump_noop_on_macos() {
+        calibrate_login_dump(0); // Should not panic
     }
 
     #[test]

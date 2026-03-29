@@ -125,6 +125,8 @@ pub struct LaunchConfig {
     pub stagger_max_secs: u64,
     pub max_concurrent_launches: usize,
     pub launch_args: Vec<String>,
+    /// Maximum physical RAM (working set) per EQ client in MB. 0 = unlimited.
+    pub max_working_set_mb: u32,
 }
 
 impl Default for LaunchConfig {
@@ -135,6 +137,7 @@ impl Default for LaunchConfig {
             stagger_max_secs: 15,
             max_concurrent_launches: 3,
             launch_args: Vec::new(),
+            max_working_set_mb: 800,
         }
     }
 }

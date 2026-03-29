@@ -131,6 +131,41 @@ pub mod eqmain {
     /// LoginViewManager function address
     pub const LOGIN_VIEW_MANAGER: u64 = 0x18001B0E0;
 
+    // ─── Login pointer addresses (preferred base) ───
+
+    /// Pointer to LoginClient instance (LoginClient*)
+    /// Source: eqmain.h EQMain__pinstLoginClient_x (derived from pinstCLoginViewManager - 8)
+    pub const PINST_LOGIN_CLIENT: u64 = 0x18017F4E0;
+
+    /// Pointer to LoginController instance
+    /// Source: eqmain.h EQMain__pinstLoginController_x
+    pub const PINST_LOGIN_CONTROLLER: u64 = 0x18017F4F0;
+
+    // ─── LoginClient struct field offsets ───
+
+    /// LoginClient::pLoginData (EQLS::EQLogin*) at offset 0x010
+    pub const LOGINCLIENT_LOGIN_DATA: usize = 0x010;
+
+    /// LoginClient::ServerList (DoublyLinkedList) at offset 0x178
+    pub const LOGINCLIENT_SERVER_LIST: usize = 0x178;
+
+    // ─── EQLogin struct field offsets ───
+
+    /// EQLogin::hEQWnd (HWND) at offset 0x408
+    pub const EQLOGIN_HWND: usize = 0x408;
+
+    /// EQLogin::Login[0x80] (char array) at offset 0x414
+    pub const EQLOGIN_USERNAME: usize = 0x414;
+
+    /// EQLogin::PW[0x80] (char array) at offset 0x494
+    pub const EQLOGIN_PASSWORD: usize = 0x494;
+
+    /// EQLogin::Character[0x40] (char array) at offset 0x97C
+    pub const EQLOGIN_CHARACTER: usize = 0x97C;
+
+    /// Maximum length of login/password fields (0x80 = 128 bytes, use 0x7F for null terminator)
+    pub const EQLOGIN_FIELD_MAX: usize = 0x7F;
+
     // ─── UI widget field offsets ───
 
     /// CEditBaseWnd::InputText field offset (CXStr)
