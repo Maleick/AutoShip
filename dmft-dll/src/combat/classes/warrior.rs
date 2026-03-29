@@ -60,8 +60,6 @@ impl ClassStrategy for WarriorStrategy {
         }
     }
 
-    fn on_action_complete(&mut self, _ctx: &CombatContext) {}
-
     fn aoe_threshold(&self) -> u8 {
         2
     }

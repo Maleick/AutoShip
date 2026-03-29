@@ -55,10 +55,6 @@ impl ClassStrategy for EnchanterStrategy {
         ctx.nearby_enemies.len() <= 1
     }
 
-    fn on_engage(&mut self, _ctx: &CombatContext) {}
-
-    fn on_action_complete(&mut self, _ctx: &CombatContext) {}
-
     fn aoe_threshold(&self) -> u8 {
         // Never AoE, use single-target CC instead.
         255

@@ -56,12 +56,12 @@ pub trait ClassStrategy: Send {
     fn should_assist(&self, ctx: &CombatContext) -> bool;
 
     /// Called when engaging a new target.
-    fn on_engage(&mut self, ctx: &CombatContext);
+    /// Override to log engagement or toggle auto-attack.
+    fn on_engage(&mut self, _ctx: &CombatContext) {}
 
-    /// Called when a mob dies.
     /// Called after an action completes (spell cast, ability use, song twist).
-    /// Use this to advance internal state (e.g., bard twist index).
-    fn on_action_complete(&mut self, ctx: &CombatContext);
+    /// Override to advance internal state (e.g., bard twist index, auto-attack toggle).
+    fn on_action_complete(&mut self, _ctx: &CombatContext) {}
 
     /// Minimum enemy count before switching to AoE rotation.
     fn aoe_threshold(&self) -> u8;

@@ -470,6 +470,8 @@ pub fn simulate_enter_key(eqmain_base: u64) -> bool {
 }
 
 /// Click a button widget by sending XWM_LCLICK notification.
+/// Delegates to `crate::eq::widgets::click_button_via_vtable` which uses the
+/// named vtable offset (`CXWND_VTABLE_WND_NOTIFICATION`) rather than a hardcoded index.
 pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -478,22 +480,7 @@ pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
         };
 
         unsafe {
-            // Read vtable pointer
-            let vftable = *(button_wnd as *const *const usize);
-            // WndNotification is typically at vtable index ~30-40 (varies by class).
-            // TODO: Validate exact vtable index on live client.
-            const WNDNOTIFICATION_VFUNC_INDEX: usize = 34;
-            let wnd_notification_addr = *vftable.add(WNDNOTIFICATION_VFUNC_INDEX);
-
-            type WndNotificationFn =
-                unsafe extern "C" fn(usize, usize, u32, usize);
-            let func: WndNotificationFn = std::mem::transmute(wnd_notification_addr);
-            func(
-                button_wnd,
-                button_wnd,
-                dmft_common::offsets::eqmain::XWM_LCLICK,
-                0,
-            );
+            crate::eq::widgets::click_button_via_vtable(button_wnd);
         }
 
         tracing::debug!(window = window_name, "Clicked button");
