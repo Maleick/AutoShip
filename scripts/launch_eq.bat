@@ -6,7 +6,7 @@ echo.
 
 cd /d "C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest"
 
-echo Launching 6 EQ clients...
+echo Launching EQ clients...
 echo.
 
 start "" eqgame.exe patchme /login:frostreaver01
@@ -25,15 +25,15 @@ start "" eqgame.exe patchme /login:frostreaver04
 echo  [4/6] frostreaver04 launched
 timeout /t 5 /nobreak >nul
 
-start "" eqgame.exe patchme /login:frostreaver05
-echo  [5/6] frostreaver05 launched
+start "" eqgame.exe patchme /login:frostreaver06
+echo  [5/6] frostreaver06 launched
 timeout /t 5 /nobreak >nul
 
-start "" eqgame.exe patchme /login:frostreaver06
-echo  [6/6] frostreaver06 launched
+start "" eqgame.exe patchme /login:frostreaver07
+echo  [6/6] frostreaver07 launched
 
 echo.
-echo  All 6 clients launched.
+echo  All clients launched.
 echo  Enter passwords and select characters on each client.
 echo.
 echo  Press any key when all characters are in-game...
