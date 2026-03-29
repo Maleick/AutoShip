@@ -270,6 +270,19 @@ pub mod player_base {
     pub const LASTNAME: usize = 0x048;
 }
 
+/// Offsets within CharacterZoneClient (casting state)
+pub mod character_zone {
+    /// uint32_t — cast completion ETA (server timestamp when spell finishes)
+    /// Source: PlayerClient.h offset 0x010 (CharacterZoneClient::SpellETA)
+    pub const SPELL_ETA: usize = 0x010;
+    /// uint8_t — active spell gem slot (0xFF = not casting)
+    /// Source: PlayerClient.h offset 0x039 (CharacterZoneClient::SpellSlot)
+    pub const SPELL_SLOT: usize = 0x039;
+    /// uint32_t[15] — per-gem recast timestamp array
+    /// Source: PlayerClient.h offset 0x3B0 (CharacterZoneClient::SpellGemETA)
+    pub const SPELL_GEM_ETA: usize = 0x3B0;
+}
+
 /// Offsets within PlayerZoneClient (extends PlayerBase at 0x01c8)
 pub mod player_zone {
     /// int64_t — maximum HP
@@ -301,6 +314,9 @@ pub mod player_zone {
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
     /// uint32_t — maximum endurance
     pub const ENDURANCE_MAX: usize = 0x0538;
+    /// float — melee range radius
+    /// Source: PlayerClient.h offset 0x11D8
+    pub const MELEE_RADIUS: usize = 0x11D8;
 }
 
 /// Offsets within ActorClient (embedded in PlayerZoneClient at 0x0FC0)

@@ -74,23 +74,73 @@ impl RecoveryTracker {
     }
 }
 
+/// Role priority for resurrection order: lower number = rez first.
+fn rez_priority(role: &str) -> u8 {
+    match role {
+        "Healer" => 0,
+        "Tank" => 1,
+        "CC" => 2,
+        _ => 3, // DPS, Puller, Bard, etc.
+    }
+}
+
 /// Generate recovery commands based on current member states.
 ///
 /// - If cleric is alive and members are dead: target dead char + cast rez
 /// - Dead char after rez: /stand
 /// - Returns `(pid, command)` pairs
+///
+/// `role_map` provides an optional `(pid, role_name)` list for rez prioritization.
+/// When provided, dead members are rezzed in priority order: Healer > Tank > CC > DPS.
 pub fn death_commands(
     members_state: &mut [(u32, String, DeathState)],
     cleric_pid: Option<u32>,
     rez_gem: u8,
 ) -> Vec<(u32, String)> {
+    death_commands_with_roles(members_state, cleric_pid, rez_gem, &[])
+}
+
+/// Like `death_commands` but with role-based rez prioritization.
+pub fn death_commands_with_roles(
+    members_state: &mut [(u32, String, DeathState)],
+    cleric_pid: Option<u32>,
+    rez_gem: u8,
+    role_map: &[(u32, &str)],
+) -> Vec<(u32, String)> {
     let mut commands = Vec::new();
 
-    // Find the first dead member's pid and name
-    let first_dead = members_state
+    // Find the highest-priority dead member (by role) to rez first
+    let first_dead = {
+        let mut dead_members: Vec<_> = members_state
+            .iter()
+            .filter(|(_, _, state)| matches!(state, DeathState::Dead { .. }))
+            .map(|(pid, name, _)| (*pid, name.clone()))
+            .collect();
+
+        // Sort by role priority if role_map is provided
+        if !role_map.is_empty() {
+            dead_members.sort_by_key(|(pid, _)| {
+                role_map
+                    .iter()
+                    .find(|(p, _)| p == pid)
+                    .map(|(_, role)| rez_priority(role))
+                    .unwrap_or(3)
+            });
+        }
+
+        dead_members.into_iter().next()
+    };
+
+    // Members waiting for rez dialog — accept it
+    let waiting_pids: Vec<u32> = members_state
         .iter()
-        .find(|(_, _, state)| matches!(state, DeathState::Dead { .. }))
-        .map(|(pid, name, _)| (*pid, name.clone()));
+        .filter(|(_, _, state)| *state == DeathState::WaitingForRez)
+        .map(|(pid, _, _)| *pid)
+        .collect();
+
+    for pid in &waiting_pids {
+        commands.push((*pid, "/notify ResurrectWindow RW_Accept_Button leftmouseup".into()));
+    }
 
     // Find members waiting to rebuff (just got rezzed — stand up)
     let rebuffing_pids: Vec<u32> = members_state
@@ -304,5 +354,67 @@ mod tests {
         // Second call: member is now WaitingForRez, no rez should be issued
         let cmds2 = death_commands(&mut members, Some(101), 5);
         assert!(!cmds2.iter().any(|(pid, cmd)| *pid == 101 && cmd.contains("/cast")));
+    }
+
+    // -- Auto-accept rez dialog --
+
+    #[test]
+    fn test_waiting_for_rez_accepts_dialog() {
+        let mut members = vec![
+            (100, "Warrior01".into(), DeathState::WaitingForRez),
+            (101, "Cleric01".into(), DeathState::Alive),
+        ];
+        let cmds = death_commands(&mut members, Some(101), 5);
+        assert!(cmds.iter().any(|(pid, cmd)| *pid == 100
+            && cmd == "/notify ResurrectWindow RW_Accept_Button leftmouseup"));
+    }
+
+    #[test]
+    fn test_alive_members_no_rez_accept() {
+        let mut members = vec![
+            (100, "Warrior01".into(), DeathState::Alive),
+            (101, "Cleric01".into(), DeathState::Alive),
+        ];
+        let cmds = death_commands(&mut members, Some(101), 5);
+        assert!(!cmds.iter().any(|(_, cmd)| cmd.contains("ResurrectWindow")));
+    }
+
+    // -- Rez priority by role --
+
+    #[test]
+    fn test_rez_priority_healer_first() {
+        let mut members = vec![
+            (100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 }),
+            (101, "Cleric01".into(), DeathState::Alive),
+            (102, "Enchanter01".into(), DeathState::Dead { died_at_tick: 5 }),
+            (103, "Cleric02".into(), DeathState::Dead { died_at_tick: 5 }),
+        ];
+        let roles: Vec<(u32, &str)> = vec![
+            (100, "Tank"),
+            (101, "Healer"),
+            (102, "CC"),
+            (103, "Healer"),
+        ];
+        let cmds = death_commands_with_roles(&mut members, Some(101), 5, &roles);
+        // Should target the dead healer (Cleric02) first, not the tank or CC
+        let target_cmd = cmds.iter().find(|(pid, cmd)| *pid == 101 && cmd.contains("/target")).unwrap();
+        assert!(target_cmd.1.contains("Cleric02"));
+    }
+
+    #[test]
+    fn test_rez_priority_tank_before_dps() {
+        let mut members = vec![
+            (100, "Warrior01".into(), DeathState::Dead { died_at_tick: 5 }),
+            (101, "Cleric01".into(), DeathState::Alive),
+            (104, "Ranger01".into(), DeathState::Dead { died_at_tick: 5 }),
+        ];
+        let roles: Vec<(u32, &str)> = vec![
+            (100, "Tank"),
+            (101, "Healer"),
+            (104, "DPS"),
+        ];
+        let cmds = death_commands_with_roles(&mut members, Some(101), 5, &roles);
+        let target_cmd = cmds.iter().find(|(pid, cmd)| *pid == 101 && cmd.contains("/target")).unwrap();
+        assert!(target_cmd.1.contains("Warrior01"));
     }
 }

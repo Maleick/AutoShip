@@ -191,6 +191,14 @@ impl CampLoop {
         self.tick += 1;
         let mut commands = Vec::new();
 
+        // Cursor stuck watchdog: /autoinventory every 60 ticks as a safety net.
+        // This is a no-op if cursor is empty.
+        if self.tick % 60 == 0 {
+            for member in &self.members {
+                commands.push((member.pid, "/autoinventory".into()));
+            }
+        }
+
         // Process pending events first (charm breaks, adds, etc.)
         commands.extend(self.process_events());
 

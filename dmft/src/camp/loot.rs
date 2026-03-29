@@ -193,6 +193,10 @@ impl LootCycle {
                     if self.config.rules.auto_split {
                         commands.push((looter_pid, "/autosplit".into()));
                     }
+                    // Destroy junk items left on cursor
+                    if !self.config.rules.destroy_items.is_empty() {
+                        commands.push((looter_pid, "/destroy".into()));
+                    }
                     self.phase = LootPhase::CloseLoot {
                         entered_tick: current_tick,
                     };
