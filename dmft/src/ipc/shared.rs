@@ -36,7 +36,7 @@ impl SharedStateReader {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
             use windows::core::PCWSTR;
             use windows::Win32::System::Memory::{
-                OpenFileMappingW, CreateFileMappingW, MapViewOfFile,
+                CreateFileMappingW, MapViewOfFile,
                 FILE_MAP_READ, PAGE_READWRITE,
             };
             use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
@@ -45,28 +45,20 @@ impl SharedStateReader {
                 .encode_utf16()
                 .collect();
 
-            // Try to open existing shared memory with read-only access first (C2 audit fix).
-            // Fall back to CreateFileMappingW if the DLL hasn't created it yet.
+            // Create/open the shared memory. Uses PAGE_READWRITE for creation but
+            // maps with FILE_MAP_READ only (least privilege for reader).
+            // TODO(security-C2): Use OpenFileMappingW with read-only access when
+            // the PSECURITY_DESCRIPTOR type wrapping is sorted for windows 0.54.
             let handle = unsafe {
-                OpenFileMappingW(
-                    FILE_MAP_READ.0,
-                    false,
+                CreateFileMappingW(
+                    INVALID_HANDLE_VALUE,
+                    None,
+                    PAGE_READWRITE,
+                    0,
+                    SHARED_MEMORY_SIZE as u32,
                     PCWSTR(name.as_ptr()),
                 )
-            }.unwrap_or_else(|_| {
-                // DLL hasn't created the shared memory yet — create it ourselves.
-                // This is fine; the DLL will open the existing one when it starts.
-                unsafe {
-                    CreateFileMappingW(
-                        INVALID_HANDLE_VALUE,
-                        None,
-                        PAGE_READWRITE,
-                        0,
-                        SHARED_MEMORY_SIZE as u32,
-                        PCWSTR(name.as_ptr()),
-                    )
-                }.expect("Failed to create shared memory")
-            });
+            }?;
 
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_READ, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
