@@ -11,6 +11,12 @@
 
 use dmft_common::login::LoginError;
 
+// Re-export core widget primitives for internal use and external callers (IPC, game_loop).
+use crate::eq::widgets::click_button_via_vtable;
+pub use crate::eq::widgets::{
+    read_cxstr as read_cxstr_raw,
+    set_edit_text_via_vtable,
+};
 
 // ─── Widget XML names (stable across EQ patches) ───
 
