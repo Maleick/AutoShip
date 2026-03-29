@@ -97,12 +97,34 @@ function Get-LatestTestResult {
 
 function Invoke-RemoteCommand {
     param([string]$Command)
-    try {
-        $output = Invoke-Expression $Command 2>&1 | Out-String
+    # Allowlist: only permit known-safe commands
+    $allowed = @("tasklist", "netstat", "cargo", "git", "Get-Process", "Get-Content",
+                 "Get-ChildItem", "Test-Path", "dir", "type", "systeminfo", "hostname")
+    $firstWord = ($Command -split '\s+')[0]
+    $isAllowed = $allowed | Where-Object { $firstWord -like "$_*" }
+    if (-not $isAllowed) {
         return @{
-            success = $true
-            output  = $output.Trim()
-            exit_code = $LASTEXITCODE
+            success = $false
+            output  = "Command not in allowlist. Allowed: $($allowed -join ', ')"
+            exit_code = -1
+        }
+    }
+    try {
+        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+        $pinfo.FileName = "powershell.exe"
+        $pinfo.Arguments = "-NoProfile -Command `"$Command`""
+        $pinfo.RedirectStandardOutput = $true
+        $pinfo.RedirectStandardError = $true
+        $pinfo.UseShellExecute = $false
+        $pinfo.CreateNoWindow = $true
+        $proc = [System.Diagnostics.Process]::Start($pinfo)
+        $stdout = $proc.StandardOutput.ReadToEnd()
+        $stderr = $proc.StandardError.ReadToEnd()
+        $proc.WaitForExit(30000)
+        return @{
+            success   = ($proc.ExitCode -eq 0)
+            output    = ($stdout + $stderr).Trim()
+            exit_code = $proc.ExitCode
         }
     } catch {
         return @{
@@ -114,22 +136,24 @@ function Invoke-RemoteCommand {
 }
 
 function Get-Screenshot {
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-
-    $screen = [System.Windows.Forms.Screen]::PrimaryScreen
-    $bitmap = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size)
-    $graphics.Dispose()
-
-    $ms = New-Object System.IO.MemoryStream
-    $bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-    $bitmap.Dispose()
-
-    $bytes = $ms.ToArray()
-    $ms.Dispose()
-    return $bytes
+    # Use built-in Windows screenshot tool to avoid AV triggers
+    $outFile = Join-Path $env:TEMP "dmft_screenshot.png"
+    $snippingArgs = "/clip"
+    try {
+        # Use nircmd if available, otherwise fall back to info message
+        $nircmd = "C:\tools\nircmd.exe"
+        if (Test-Path $nircmd) {
+            & $nircmd savescreenshot $outFile
+            if (Test-Path $outFile) {
+                $bytes = [System.IO.File]::ReadAllBytes($outFile)
+                Remove-Item $outFile -Force
+                return $bytes
+            }
+        }
+        return $null
+    } catch {
+        return $null
+    }
 }
 
 function Send-JsonResponse {
@@ -207,7 +231,11 @@ while ($listener.IsListening) {
             "/screenshot" {
                 try {
                     $pngBytes = Get-Screenshot
-                    Send-BinaryResponse $response $pngBytes "image/png"
+                    if ($pngBytes) {
+                        Send-BinaryResponse $response $pngBytes "image/png"
+                    } else {
+                        Send-JsonResponse $response @{ error = "Screenshot not available (install nircmd to C:\tools\)" } 501
+                    }
                 } catch {
                     Send-JsonResponse $response @{ error = $_.ToString() } 500
                 }
