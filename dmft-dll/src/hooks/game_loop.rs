@@ -641,6 +641,20 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
                 crate::login::widgets::calibrate_login_dump(eqmain_base);
             }
         }
+        Command::CombatEngage { target_id } => {
+            tracing::info!(target_id, "CombatEngage received");
+            crate::combat::handle_command(crate::combat::CombatCommand::Engage { target_id });
+        }
+        Command::CombatDisengage => {
+            tracing::info!("CombatDisengage received");
+            crate::combat::handle_command(crate::combat::CombatCommand::Disengage);
+        }
+        Command::CombatSetAssistTarget { spawn_id } => {
+            tracing::info!(spawn_id, "CombatSetAssistTarget received");
+            crate::combat::handle_command(crate::combat::CombatCommand::SetAssistTarget {
+                spawn_id,
+            });
+        }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();

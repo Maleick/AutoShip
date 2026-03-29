@@ -1,7 +1,7 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
 use crate::camp::config::CampConfig;
-use crate::camp::state::{CampLoop, CampMember, CampSnapshot, CampState, Role};
+use crate::camp::state::{CampAction, CampLoop, CampMember, CampSnapshot, CampState, Role};
 use crate::ipc::pipe::CommandPipe;
 use crate::ipc::shared::SharedStateReader;
 use dmft_common::ipc::{Command, SessionToken};
@@ -27,7 +27,7 @@ pub struct Orchestrator {
     pub active_camp: Option<CampLoop>,
     pub tick_count: u64,
     /// Commands dispatched this tick (for status display).
-    pub last_dispatched: Vec<(u32, String)>,
+    pub last_dispatched: Vec<(u32, CampAction)>,
     /// Latest game state per client PID.
     pub game_states: HashMap<u32, GameState>,
     /// Shared memory readers per client PID.
@@ -123,12 +123,12 @@ impl Orchestrator {
             .map(|p| p.mana_pct())
             .unwrap_or(100.0);
 
-        // Use the tank's target for target HP info
-        let (target_hp_pct, target_is_dead) = tank_state
+        // Use the tank's target for target HP and spawn ID
+        let (target_hp_pct, target_is_dead, target_spawn_id) = tank_state
             .target
             .as_ref()
-            .map(|t| (Some(t.hp_pct()), t.hp_current <= 0))
-            .unwrap_or((None, false));
+            .map(|t| (Some(t.hp_pct()), t.hp_current <= 0, Some(t.spawn_id)))
+            .unwrap_or((None, false, None));
 
         // Collect per-member HP for death detection
         let member_hp: Vec<(u32, i32)> = camp.members.iter()
@@ -144,6 +144,7 @@ impl Orchestrator {
             tank_hp_pct,
             target_hp_pct,
             target_is_dead,
+            target_spawn_id,
             member_hp,
         })
     }
@@ -163,8 +164,8 @@ impl Orchestrator {
         };
 
         let count = commands.len();
-        for (pid, cmd) in &commands {
-            self.send_command(*pid, cmd);
+        for (pid, action) in &commands {
+            self.dispatch_action(*pid, action);
         }
         self.last_dispatched = commands;
         count
@@ -223,8 +224,59 @@ impl Orchestrator {
         token
     }
 
+    /// Dispatch a CampAction to the appropriate client via IPC.
+    fn dispatch_action(&self, pid: u32, action: &CampAction) {
+        match action {
+            CampAction::Slash(command) => {
+                self.send_slash_command(pid, command);
+            }
+            CampAction::CombatEngage { target_id } => {
+                self.send_ipc_command(pid, Command::CombatEngage {
+                    target_id: *target_id,
+                });
+            }
+            CampAction::CombatDisengage => {
+                self.send_ipc_command(pid, Command::CombatDisengage);
+            }
+        }
+    }
+
+    /// Send a structured IPC command to a client via named pipe.
+    fn send_ipc_command(&self, pid: u32, cmd: Command) {
+        let name = self
+            .client_names
+            .get(&pid)
+            .map(|s| s.as_str())
+            .unwrap_or("?");
+
+        let token = match self.session_tokens.get(&pid) {
+            Some(t) => *t,
+            None => {
+                tracing::warn!(pid, name, "No session token for client — skipping command");
+                return;
+            }
+        };
+
+        match CommandPipe::connect(pid) {
+            Ok(pipe) => {
+                if let Err(e) = pipe.send_raw_token(&token) {
+                    tracing::warn!(pid, name, error = %e, "Failed to send token");
+                    return;
+                }
+                if let Err(e) = pipe.send_async(&cmd) {
+                    tracing::warn!(pid, name, ?cmd, error = %e, "Failed to send IPC command");
+                } else {
+                    tracing::debug!(pid, name, ?cmd, "Dispatched IPC command");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(pid, name, error = %e, "Failed to connect pipe");
+            }
+        }
+    }
+
     /// Send a single slash command to a client via named pipe.
-    fn send_command(&self, pid: u32, command: &str) {
+    fn send_slash_command(&self, pid: u32, command: &str) {
         let name = self
             .client_names
             .get(&pid)

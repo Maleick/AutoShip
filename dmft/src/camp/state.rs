@@ -47,9 +47,63 @@ pub struct CampSnapshot {
     pub tank_hp_pct: f32,
     pub target_hp_pct: Option<f32>,
     pub target_is_dead: bool,
+    /// Spawn ID of the tank's current target (for CombatEngage commands).
+    pub target_spawn_id: Option<u32>,
     /// Per-member HP values: `(pid, current_hp)`. Used to detect deaths
     /// and trigger recovery (rez commands). Empty when HP data is unavailable.
     pub member_hp: Vec<(u32, i32)>,
+}
+
+/// An action the camp loop wants executed on a specific client.
+/// Wraps both slash commands and structured IPC commands so the
+/// orchestrator can dispatch them appropriately.
+#[derive(Debug, Clone)]
+pub enum CampAction {
+    /// A slash command string (e.g., "/attack", "/assist Tankname").
+    Slash(String),
+    /// Engage the Combatant FSM against a specific spawn.
+    CombatEngage { target_id: u32 },
+    /// Disengage the Combatant FSM.
+    CombatDisengage,
+}
+
+impl CampAction {
+    /// Helper to convert a vec of slash command strings into CampActions.
+    pub fn from_slash_vec(cmds: Vec<(u32, String)>) -> Vec<(u32, CampAction)> {
+        cmds.into_iter()
+            .map(|(pid, cmd)| (pid, CampAction::Slash(cmd)))
+            .collect()
+    }
+
+    /// Extract the slash command string, if this is a Slash action.
+    pub fn as_slash(&self) -> Option<&str> {
+        match self {
+            CampAction::Slash(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Check if this action's slash text contains a substring.
+    pub fn contains(&self, needle: &str) -> bool {
+        self.as_slash().is_some_and(|s| s.contains(needle))
+    }
+
+    /// Check if this action's slash text starts with a prefix.
+    pub fn starts_with(&self, prefix: &str) -> bool {
+        self.as_slash().is_some_and(|s| s.starts_with(prefix))
+    }
+}
+
+impl PartialEq<&str> for CampAction {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_slash() == Some(*other)
+    }
+}
+
+impl PartialEq<str> for CampAction {
+    fn eq(&self, other: &str) -> bool {
+        self.as_slash() == Some(other)
+    }
 }
 
 /// Current phase of the camp loop.
@@ -164,7 +218,7 @@ impl CampLoop {
     }
 
     /// Process all pending events, returning commands. Called at the start of tick().
-    fn process_events(&mut self) -> Vec<(u32, String)> {
+    fn process_events(&mut self) -> Vec<(u32, CampAction)> {
         let mut commands = Vec::new();
         let events: Vec<CampEvent> = self.pending_events.drain(..).collect();
 
@@ -175,26 +229,25 @@ impl CampLoop {
     }
 
     /// Handle a single camp event.
-    fn process_event(&mut self, event: CampEvent) -> Vec<(u32, String)> {
+    fn process_event(&mut self, event: CampEvent) -> Vec<(u32, CampAction)> {
         match event {
             CampEvent::CharmBreak { spawn_id } => {
-                self.cc_tracker
-                    .charm_break_response(spawn_id, &self.cc_members, self.tick)
+                CampAction::from_slash_vec(
+                    self.cc_tracker
+                        .charm_break_response(spawn_id, &self.cc_members, self.tick),
+                )
             }
             CampEvent::AddSpawned { spawn_id, name } => {
-                // Add the new target without pruning existing CC state
                 self.cc_tracker.add_target(spawn_id, name);
-                // Debuff first, then CC
                 let mut cmds = self.cc_tracker.debuff_commands(
                     spawn_id,
                     &self.cc_members,
                     self.tick,
                 );
                 cmds.extend(self.cc_tracker.assign_cc(&mut self.cc_members, self.tick));
-                cmds
+                CampAction::from_slash_vec(cmds)
             }
             CampEvent::CcExpiring { spawn_id } => {
-                // Find the assigned member and re-CC (exact spawn_id match to avoid partial ID hits)
                 let all_cmds = self.cc_tracker.needs_remez(self.tick, 0, &mut self.cc_members);
                 let target_cmd = format!("/target id {spawn_id}");
                 let mut result = Vec::new();
@@ -202,9 +255,9 @@ impl CampLoop {
                 for (pid, cmd) in all_cmds {
                     if cmd == target_cmd {
                         matched = true;
-                        result.push((pid, cmd));
+                        result.push((pid, CampAction::Slash(cmd)));
                     } else if matched && cmd.starts_with("/cast") {
-                        result.push((pid, cmd));
+                        result.push((pid, CampAction::Slash(cmd)));
                         matched = false;
                     } else {
                         matched = false;
@@ -220,15 +273,15 @@ impl CampLoop {
     ///
     /// When `snapshot` is `Some`, real game state drives transitions (target dead,
     /// healer mana ready, tank HP emergency). Falls back to tick timers when `None`.
-    pub fn tick(&mut self, snapshot: Option<&CampSnapshot>) -> Vec<(u32, String)> {
+    pub fn tick(&mut self, snapshot: Option<&CampSnapshot>) -> Vec<(u32, CampAction)> {
         self.tick += 1;
-        let mut commands = Vec::new();
+        let mut commands: Vec<(u32, CampAction)> = Vec::new();
 
         // Cursor stuck watchdog: /autoinventory every 60 ticks as a safety net.
         // This is a no-op if cursor is empty.
         if self.tick % 60 == 0 {
             for member in &self.members {
-                commands.push((member.pid, "/autoinventory".into()));
+                commands.push((member.pid, CampAction::Slash("/autoinventory".into())));
             }
         }
 
@@ -264,7 +317,7 @@ impl CampLoop {
                 self.rez_gem,
                 &role_map,
             );
-            commands.extend(rez_cmds);
+            commands.extend(CampAction::from_slash_vec(rez_cmds));
 
             // Don't pull or advance the main loop while recovering
             return commands;
@@ -278,7 +331,7 @@ impl CampLoop {
             let remez = self
                 .cc_tracker
                 .needs_remez(self.tick, CC_REMEZ_BUFFER, &mut self.cc_members);
-            commands.extend(remez);
+            commands.extend(CampAction::from_slash_vec(remez));
         }
 
         match self.state.clone() {
@@ -298,7 +351,8 @@ impl CampLoop {
             }
             CampState::Pulling { started_tick } => {
                 if self.tick - started_tick >= PULL_DURATION {
-                    self.transition_to_fighting(&mut commands);
+                    let target_id = snapshot.and_then(|s| s.target_spawn_id);
+                    self.transition_to_fighting(&mut commands, target_id);
                 }
             }
             CampState::Fighting { started_tick } => {
@@ -306,7 +360,7 @@ impl CampLoop {
                 if let Some(snap) = snapshot {
                     if snap.tank_hp_pct < 20.0 {
                         if let Some(healer) = self.find_by_role(&Role::Healer) {
-                            commands.push((healer.pid, "/cast 1".into()));
+                            commands.push((healer.pid, CampAction::Slash("/cast 1".into())));
                         }
                     }
                 }
@@ -323,7 +377,7 @@ impl CampLoop {
                             fight_elapsed.saturating_sub(member.personality.phase_offset);
                         let face_interval = member.personality.adjust_delay(5);
                         if personal_elapsed > 0 && personal_elapsed % face_interval == 0 {
-                            commands.push((member.pid, "/face".into()));
+                            commands.push((member.pid, CampAction::Slash("/face".into())));
                         }
                     }
                 }
@@ -346,7 +400,7 @@ impl CampLoop {
 
                 let cycle_done = if let Some(ref mut cycle) = self.loot_cycle {
                     if let Some((pid, personality)) = looter {
-                        commands.extend(cycle.tick(pid, self.tick, &personality));
+                        commands.extend(CampAction::from_slash_vec(cycle.tick(pid, self.tick, &personality)));
                     }
                     cycle.is_done()
                 } else {
@@ -404,18 +458,18 @@ impl CampLoop {
 
     // -- State transitions --
 
-    fn transition_to_pulling(&mut self, commands: &mut Vec<(u32, String)>) {
+    fn transition_to_pulling(&mut self, commands: &mut Vec<(u32, CampAction)>) {
         let target = self.pick_pull_target();
         self.last_pull_target = target.clone();
 
         // Puller targets and attacks
         if let Some(puller) = self.find_by_role(&Role::Puller) {
-            commands.push((puller.pid, format!("/target {target}")));
-            commands.push((puller.pid, "/attack".into()));
+            commands.push((puller.pid, CampAction::Slash(format!("/target {target}"))));
+            commands.push((puller.pid, CampAction::Slash("/attack".into())));
         } else if let Some(tank) = self.find_by_role(&Role::Tank) {
             // Fall back to tank as puller
-            commands.push((tank.pid, format!("/target {target}")));
-            commands.push((tank.pid, "/attack".into()));
+            commands.push((tank.pid, CampAction::Slash(format!("/target {target}"))));
+            commands.push((tank.pid, CampAction::Slash("/attack".into())));
         }
 
         self.state = CampState::Pulling {
@@ -423,7 +477,11 @@ impl CampLoop {
         };
     }
 
-    fn transition_to_fighting(&mut self, commands: &mut Vec<(u32, String)>) {
+    fn transition_to_fighting(
+        &mut self,
+        commands: &mut Vec<(u32, CampAction)>,
+        target_spawn_id: Option<u32>,
+    ) {
         let puller_name = self
             .find_by_role(&Role::Puller)
             .map(|m| m.name.clone())
@@ -437,9 +495,13 @@ impl CampLoop {
         // Tank assists puller and attacks
         if let Some(tank) = self.find_by_role(&Role::Tank) {
             if !puller_name.is_empty() {
-                commands.push((tank.pid, format!("/assist {puller_name}")));
+                commands.push((tank.pid, CampAction::Slash(format!("/assist {puller_name}"))));
             }
-            commands.push((tank.pid, "/attack".into()));
+            commands.push((tank.pid, CampAction::Slash("/attack".into())));
+            // Engage the Combatant FSM so class strategies activate
+            if let Some(tid) = target_spawn_id {
+                commands.push((tank.pid, CampAction::CombatEngage { target_id: tid }));
+            }
         }
 
         // DPS assists tank and attacks
@@ -451,15 +513,22 @@ impl CampLoop {
 
         for dps in self.find_all_by_role(&Role::DPS) {
             if !assist_name.is_empty() {
-                commands.push((dps.pid, format!("/assist {assist_name}")));
+                commands.push((dps.pid, CampAction::Slash(format!("/assist {assist_name}"))));
             }
-            commands.push((dps.pid, "/attack".into()));
+            commands.push((dps.pid, CampAction::Slash("/attack".into())));
+            if let Some(tid) = target_spawn_id {
+                commands.push((dps.pid, CampAction::CombatEngage { target_id: tid }));
+            }
         }
 
-        // Healer targets tank
+        // Healer targets tank (healers don't CombatEngage — they heal)
         if let Some(healer) = self.find_by_role(&Role::Healer) {
             if !tank_name.is_empty() {
-                commands.push((healer.pid, format!("/target {tank_name}")));
+                commands.push((healer.pid, CampAction::Slash(format!("/target {tank_name}"))));
+            }
+            // Healer also gets CombatEngage so healing strategies activate
+            if let Some(tid) = target_spawn_id {
+                commands.push((healer.pid, CampAction::CombatEngage { target_id: tid }));
             }
         }
 
@@ -468,10 +537,11 @@ impl CampLoop {
         };
     }
 
-    fn transition_to_looting(&mut self, commands: &mut Vec<(u32, String)>) {
-        // Everyone stops attacking
+    fn transition_to_looting(&mut self, commands: &mut Vec<(u32, CampAction)>) {
+        // Everyone stops attacking and disengages the Combatant FSM
         for member in &self.members {
-            commands.push((member.pid, "/attack off".into()));
+            commands.push((member.pid, CampAction::Slash("/attack off".into())));
+            commands.push((member.pid, CampAction::CombatDisengage));
         }
 
         // Create a loot cycle from pending corpses.
@@ -496,12 +566,12 @@ impl CampLoop {
         };
     }
 
-    fn transition_to_medding(&mut self, commands: &mut Vec<(u32, String)>) {
+    fn transition_to_medding(&mut self, commands: &mut Vec<(u32, CampAction)>) {
         // Casters sit to med
         for member in &self.members {
             match member.role {
                 Role::Healer | Role::CC | Role::DPS => {
-                    commands.push((member.pid, "/sit".into()));
+                    commands.push((member.pid, CampAction::Slash("/sit".into())));
                 }
                 _ => {}
             }
@@ -512,10 +582,10 @@ impl CampLoop {
         };
     }
 
-    fn transition_to_idle(&mut self, commands: &mut Vec<(u32, String)>) {
+    fn transition_to_idle(&mut self, commands: &mut Vec<(u32, CampAction)>) {
         // Everyone stand up
         for member in &self.members {
-            commands.push((member.pid, "/stand".into()));
+            commands.push((member.pid, CampAction::Slash("/stand".into())));
         }
 
         self.state = CampState::Idle;
@@ -799,6 +869,7 @@ mod tests {
             tank_hp_pct: 90.0,
             target_hp_pct: Some(0.0),
             target_is_dead: true,
+            target_spawn_id: None,
             member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
@@ -819,6 +890,7 @@ mod tests {
             tank_hp_pct: 100.0,
             target_hp_pct: None,
             target_is_dead: false,
+            target_spawn_id: None,
             member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
@@ -837,6 +909,7 @@ mod tests {
             tank_hp_pct: 100.0,
             target_hp_pct: None,
             target_is_dead: false,
+            target_spawn_id: None,
             member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
@@ -855,6 +928,7 @@ mod tests {
             tank_hp_pct: 15.0, // Below 20% threshold
             target_hp_pct: Some(50.0),
             target_is_dead: false,
+            target_spawn_id: None,
             member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
@@ -922,6 +996,7 @@ mod tests {
             tank_hp_pct: 90.0,
             target_hp_pct: Some(50.0),
             target_is_dead: false,
+            target_spawn_id: None,
             member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
