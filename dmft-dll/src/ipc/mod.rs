@@ -165,17 +165,18 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 tracing::info!(
                     account = %account_name,
                     eqmain_base = format!("{:#x}", eqmain_base),
-                    "Writing login credentials directly"
+                    "Typing login credentials via WM_CHAR"
                 );
 
-                if crate::login::widgets::write_login_credentials(
+                // Type credentials character by character into the focused UI fields
+                if crate::login::widgets::type_credentials_to_window(
                     eqmain_base,
                     account_name,
                     password,
                 ) {
-                    tracing::info!("Credentials written to EQLogin struct");
+                    tracing::info!("Credentials typed into UI fields");
 
-                    // Small delay before pressing Enter to let the UI update
+                    // Small delay before pressing Enter
                     std::thread::sleep(std::time::Duration::from_millis(500));
 
                     if crate::login::widgets::simulate_enter_key(eqmain_base) {
@@ -184,7 +185,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                         tracing::warn!("Failed to simulate Enter key");
                     }
                 } else {
-                    tracing::error!("Failed to write credentials to EQLogin");
+                    tracing::error!("Failed to type credentials into EQ window");
                 }
             }
             true

@@ -149,6 +149,72 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     }
 }
 
+/// Type text into the focused EQ window control by sending WM_CHAR for each character.
+/// This works because the password field is focused on the login screen.
+/// Tab key switches between username and password fields.
+pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CHAR, WM_KEYDOWN, WM_KEYUP};
+        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
+
+        const VK_TAB: usize = 0x09;
+        const VK_BACK: usize = 0x08;
+
+        let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
+            tracing::warn!("Cannot type credentials — EQ HWND not resolved");
+            return false;
+        };
+
+        let hwnd = HWND(hwnd_val as isize);
+
+        unsafe {
+            // Clear any existing text in username field with backspaces
+            for _ in 0..32 {
+                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(VK_BACK), LPARAM(0));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+
+            // Type account name character by character
+            for ch in account.chars() {
+                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(ch as usize), LPARAM(0));
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+
+            tracing::info!("Typed account name ({} chars)", account.len());
+
+            // Tab to password field
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_TAB), LPARAM(0x000F_0001));
+            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_TAB), LPARAM(0xC00F_0001_u32 as i32 as isize));
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+
+            // Clear any existing text in password field with backspaces
+            for _ in 0..32 {
+                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(VK_BACK), LPARAM(0));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+
+            // Type password character by character
+            for ch in password.chars() {
+                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(ch as usize), LPARAM(0));
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+
+            tracing::info!("Typed password ({} chars)", password.len());
+        }
+
+        true
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (eqmain_base, account, password);
+        false
+    }
+}
+
 /// Simulate pressing Enter on the EQ window to submit login credentials.
 ///
 /// After writing credentials to EQLogin's char arrays, we send WM_KEYDOWN + WM_KEYUP
