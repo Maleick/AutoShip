@@ -229,9 +229,13 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                                     tracing::warn!("Inline: password CEditWnd not found");
                                 }
 
+                                // Wait for EQ to process the SetWindowText calls.
+                                // The vtable call updates internal state but the UI
+                                // event loop needs time to read the new values.
+                                std::thread::sleep(std::time::Duration::from_secs(1));
+
                                 // Click Login button
                                 if login_button != 0 {
-                                    std::thread::sleep(std::time::Duration::from_millis(100));
                                     crate::login::widgets::click_button_via_vtable(login_button);
                                     tracing::info!("Inline: Login button clicked via vtable");
                                 } else {
