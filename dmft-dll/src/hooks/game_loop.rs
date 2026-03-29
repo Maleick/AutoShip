@@ -80,13 +80,22 @@ static TICK_COUNT: std::sync::atomic::AtomicU64 =
 static PENDING_BUTTON_CLICK: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-/// Pending EnterWorld call — set by IPC thread, executed on game loop thread.
-/// Contains the CCharacterListWnd* address, or 0 if none pending.
+/// Pending Enter World sequence — set by IPC thread, executed on game loop thread.
+/// Stage 0 = idle, 1 = SelectCharacter pending, 2 = waiting, 3 = EnterWorld pending.
 static PENDING_ENTER_WORLD_WND: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
-/// The rebased EnterWorld function address, paired with PENDING_ENTER_WORLD_WND.
+/// The rebased EnterWorld function address.
 static PENDING_ENTER_WORLD_FN: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
+/// The rebased SelectCharacter function address.
+static PENDING_SELECT_CHAR_FN: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+/// Enter World sequence stage (0=idle, 1=select, 2=wait, 3=enter).
+static ENTER_WORLD_STAGE: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0);
+/// Tick at which to advance from stage 2→3 (wait before EnterWorld).
+static ENTER_WORLD_WAIT_UNTIL: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Set a button widget address to be clicked on the next game loop tick.
 /// Called from the IPC thread after writing credentials.
@@ -94,12 +103,21 @@ pub fn queue_button_click(button_wnd: usize) {
     PENDING_BUTTON_CLICK.store(button_wnd, std::sync::atomic::Ordering::Release);
 }
 
-/// Queue an EnterWorld() call to be executed on the game loop thread.
+/// Queue a SelectCharacter(0) → EnterWorld() sequence on the game loop thread.
 /// Called from the IPC thread during Phase 3 of login chain.
+/// The game loop will: (1) call SelectCharacter(0), (2) wait ~90 ticks (~3s),
+/// (3) call EnterWorld(). Both calls happen on the game loop thread.
 pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize) {
-    // Store fn first, then wnd — reader checks wnd first via swap
+    // Also resolve SelectCharacter address
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    let select_fn = dmft_common::offsets::rebase(
+        dmft_common::offsets::SELECT_CHARACTER, eq_base,
+    ).unwrap_or(0);
+
+    PENDING_SELECT_CHAR_FN.store(select_fn, std::sync::atomic::Ordering::Release);
     PENDING_ENTER_WORLD_FN.store(enter_world_fn, std::sync::atomic::Ordering::Release);
     PENDING_ENTER_WORLD_WND.store(char_list_wnd, std::sync::atomic::Ordering::Release);
+    ENTER_WORLD_STAGE.store(1, std::sync::atomic::Ordering::Release);
 }
 
 // ─── Command Jitter Queue ───
@@ -233,23 +251,61 @@ fn on_game_tick() {
         }
     }
 
-    // Check for pending EnterWorld call (queued from IPC thread during Phase 3).
-    let enter_wnd = PENDING_ENTER_WORLD_WND.swap(0, std::sync::atomic::Ordering::AcqRel);
-    if enter_wnd != 0 {
-        let enter_fn = PENDING_ENTER_WORLD_FN.swap(0, std::sync::atomic::Ordering::AcqRel);
-        if enter_fn != 0 {
+    // Process Enter World sequence (SelectCharacter → wait → EnterWorld).
+    // Stage 1: Call SelectCharacter(0)
+    // Stage 2: Wait ~90 ticks (~3 seconds)
+    // Stage 3: Call EnterWorld()
+    let stage = ENTER_WORLD_STAGE.load(std::sync::atomic::Ordering::Acquire);
+    if stage == 1 {
+        let wnd = PENDING_ENTER_WORLD_WND.load(std::sync::atomic::Ordering::Acquire);
+        let select_fn = PENDING_SELECT_CHAR_FN.load(std::sync::atomic::Ordering::Acquire);
+        if wnd != 0 && select_fn != 0 {
             tracing::info!(
-                wnd = format!("{:#x}", enter_wnd),
+                wnd = format!("{:#x}", wnd),
+                func = format!("{:#x}", select_fn),
+                "Phase 3: Calling SelectCharacter(0) on game loop thread"
+            );
+            unsafe {
+                // SelectCharacter(int index) — x64: RCX=this, RDX=index
+                type SelectCharFn = unsafe extern "C" fn(this: usize, index: i32);
+                let func: SelectCharFn = std::mem::transmute(select_fn);
+                func(wnd, 0); // Select first character
+            }
+            tracing::info!("Phase 3: SelectCharacter(0) called — waiting 3s before EnterWorld");
+            ENTER_WORLD_WAIT_UNTIL.store(tick + 90, std::sync::atomic::Ordering::Release);
+            ENTER_WORLD_STAGE.store(2, std::sync::atomic::Ordering::Release);
+        } else {
+            // No SelectCharacter available — skip to EnterWorld directly
+            tracing::warn!("Phase 3: SelectCharacter not available — skipping to EnterWorld");
+            ENTER_WORLD_WAIT_UNTIL.store(tick + 30, std::sync::atomic::Ordering::Release);
+            ENTER_WORLD_STAGE.store(2, std::sync::atomic::Ordering::Release);
+        }
+    } else if stage == 2 {
+        let wait_until = ENTER_WORLD_WAIT_UNTIL.load(std::sync::atomic::Ordering::Acquire);
+        if tick >= wait_until {
+            ENTER_WORLD_STAGE.store(3, std::sync::atomic::Ordering::Release);
+        }
+    } else if stage == 3 {
+        let wnd = PENDING_ENTER_WORLD_WND.load(std::sync::atomic::Ordering::Acquire);
+        let enter_fn = PENDING_ENTER_WORLD_FN.load(std::sync::atomic::Ordering::Acquire);
+        if wnd != 0 && enter_fn != 0 {
+            tracing::info!(
+                wnd = format!("{:#x}", wnd),
                 func = format!("{:#x}", enter_fn),
                 "Phase 3: Calling EnterWorld() on game loop thread"
             );
             unsafe {
                 type EnterWorldFn = unsafe extern "C" fn(this: usize);
                 let func: EnterWorldFn = std::mem::transmute(enter_fn);
-                func(enter_wnd);
+                func(wnd);
             }
-            tracing::info!("Phase 3: EnterWorld() called on game loop thread — success!");
+            tracing::info!("Phase 3: EnterWorld() called — entering world!");
         }
+        // Reset all state
+        ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
+        PENDING_ENTER_WORLD_WND.store(0, std::sync::atomic::Ordering::Release);
+        PENDING_ENTER_WORLD_FN.store(0, std::sync::atomic::Ordering::Release);
+        PENDING_SELECT_CHAR_FN.store(0, std::sync::atomic::Ordering::Release);
     }
 
     // Run navigation state machine.
