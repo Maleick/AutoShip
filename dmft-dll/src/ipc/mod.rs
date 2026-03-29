@@ -195,9 +195,11 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 }
 
 /// Phase 2+3 of the login chain: server select → character select → enter world.
-/// Uses SendInput Enter for screen transitions (works reliably with EQ's UI).
+/// Uses vtable WndNotification clicks — no foreground focus needed (scales to 36 clients).
 fn login_chain_phase2(_server_name: String, _character_name: String) {
-    // Wait for server select screen to load (~12 seconds after login)
+    use dmft_common::offsets::eqmain as off;
+
+    // Phase 2: Wait for server select, then click PLAY EVERQUEST!
     tracing::info!("Login chain phase 2: waiting 12s for server select...");
     std::thread::sleep(std::time::Duration::from_secs(12));
 
@@ -207,31 +209,78 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
         return;
     }
 
-    // Phase 2: Press Enter to select server (default/last server)
-    tracing::info!("Phase 2: Pressing Enter for server select");
-    if crate::login::widgets::simulate_enter_key(eqmain_base) {
-        tracing::info!("Phase 2 complete: Enter sent at server select");
+    if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
+        tracing::info!(ptr = format!("{:#x}", play_btn), "Phase 2: Clicking PLAY EVERQUEST!");
+        unsafe { crate::login::widgets::click_button_via_vtable(play_btn); }
+        tracing::info!("Phase 2 complete: PLAY EVERQUEST clicked");
     } else {
-        tracing::warn!("Phase 2: Failed to send Enter");
-        return;
+        tracing::warn!("Phase 2: PLAY EVERQUEST button not found — trying Enter fallback");
+        if let Some(eqm) = Some(eqmain_base).filter(|b| *b != 0) {
+            crate::login::widgets::simulate_enter_key(eqm);
+        }
     }
 
-    // Phase 3: Wait for character select (~15 seconds), then Enter World
+    // Phase 3: Wait for character select, then click Enter World
     tracing::info!("Login chain phase 3: waiting 15s for character select...");
     std::thread::sleep(std::time::Duration::from_secs(15));
 
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
-        tracing::error!("Login chain: eqmain.dll not found at character select");
+        // eqmain.dll unloaded means we're already in-world!
+        tracing::info!("Phase 3: eqmain.dll unloaded — character is already in-world!");
         return;
     }
 
-    tracing::info!("Phase 3: Pressing Enter to enter world");
-    if crate::login::widgets::simulate_enter_key(eqmain_base3) {
-        tracing::info!("Phase 3 complete: Enter sent — character should be entering world");
-    } else {
-        tracing::warn!("Phase 3: Failed to send Enter for Enter World");
+    // Scan for Enter World / Enter / Play button
+    let enter_candidates = ["Enter World", "ENTER WORLD", "Enter", "Play"];
+    let mut found = false;
+    for candidate in &enter_candidates {
+        if let Some(btn) = find_button_by_text(eqmain_base3, candidate) {
+            tracing::info!(
+                ptr = format!("{:#x}", btn),
+                text = candidate,
+                "Phase 3: Clicking enter world button"
+            );
+            unsafe { crate::login::widgets::click_button_via_vtable(btn); }
+            tracing::info!("Phase 3 complete: Enter World clicked");
+            found = true;
+            break;
+        }
     }
+
+    if !found {
+        tracing::warn!("Phase 3: Enter World button not found — trying Enter fallback");
+        crate::login::widgets::simulate_enter_key(eqmain_base3);
+    }
+}
+
+/// Find a button widget by its WindowText in the CXWndManager window list.
+fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
+    use dmft_common::offsets::eqmain as off;
+
+    let cxwnd_mgr = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base)?;
+
+    unsafe {
+        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+
+        if array_ptr == 0 || count == 0 || count > 500 {
+            return None;
+        }
+
+        for i in 0..count as usize {
+            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+            if wnd_ptr == 0 { continue; }
+
+            if let Some(text) = crate::login::widgets::read_cxstr_pub(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                if text == target_text {
+                    return Some(wnd_ptr);
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Background thread: creates a `CommandListener` and loops receiving commands
