@@ -182,6 +182,9 @@ pub struct App {
     // Group definitions (6 groups of 6 accounts each)
     pub groups: Vec<GroupDef>,
 
+    // Active group focus: None = aggregate view, Some(0..5) = focused on group
+    pub active_group: Option<usize>,
+
     // Server name from config
     pub server_name: String,
 
@@ -238,6 +241,9 @@ pub struct App {
     // Help overlay
     pub help_visible: bool,
 
+    // Operating mode (camp vs hunt)
+    pub operating_mode: crate::camp::hunt::OperatingMode,
+
     // Account config for login automation
     pub accounts_config: Option<AccountsConfig>,
 
@@ -256,6 +262,7 @@ impl App {
 
             clients: Vec::new(),
             selected_client: 0,
+            active_group: None,
             groups: vec![
                 GroupDef { id: 1, name: "Alpha".into(), account_range: (1, 6), default_camp: "Camp A".into() },
                 GroupDef { id: 2, name: "Bravo".into(), account_range: (7, 12), default_camp: "Camp B".into() },
@@ -314,6 +321,8 @@ impl App {
 
             help_visible: false,
 
+            operating_mode: crate::camp::hunt::OperatingMode::Camp,
+
             accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml")).ok(),
 
             loot_database: LootDatabase::new(),
@@ -364,6 +373,76 @@ impl App {
             self.sync_from_selected_client();
             self.spawn_selected = 0;
         }
+    }
+
+    /// Focus on a specific group (0-indexed). Pass None to return to aggregate view.
+    pub fn set_active_group(&mut self, group: Option<usize>) {
+        if let Some(idx) = group {
+            if idx < self.groups.len() {
+                self.active_group = Some(idx);
+                let g = &self.groups[idx];
+                self.status_message = format!("Viewing: G{} {}", g.id, g.name);
+            }
+        } else {
+            self.active_group = None;
+            self.status_message = String::from("Viewing: All Groups");
+        }
+    }
+
+    /// Returns the display label for the current group focus.
+    pub fn group_focus_label(&self) -> String {
+        match self.active_group {
+            None => String::from("All Groups"),
+            Some(idx) => {
+                if let Some(g) = self.groups.get(idx) {
+                    // Find the zone of the first online member
+                    let zone = self.clients_in_group_idx(idx)
+                        .first()
+                        .map(|c| c.zone_name.as_str())
+                        .unwrap_or("???");
+                    format!("G{} {} ({})", g.id, g.name, zone)
+                } else {
+                    String::from("All Groups")
+                }
+            }
+        }
+    }
+
+    /// Get clients belonging to the group at the given index (0-based).
+    pub fn clients_in_group_idx(&self, group_idx: usize) -> Vec<&ClientState> {
+        if let Some(group) = self.groups.get(group_idx) {
+            let (lo, hi) = group.account_range;
+            self.clients.iter().filter(|c| {
+                let name = if !c.character_name.is_empty() {
+                    &c.character_name
+                } else if let Some(p) = &c.local_player {
+                    &p.displayed_name
+                } else {
+                    return false;
+                };
+                if let Some(num) = extract_account_number(name) {
+                    num >= lo && num <= hi
+                } else {
+                    false
+                }
+            }).collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get clients visible under the current group focus.
+    /// Returns all clients if aggregate view, or only the focused group's clients.
+    pub fn visible_clients(&self) -> Vec<&ClientState> {
+        match self.active_group {
+            None => self.clients.iter().collect(),
+            Some(idx) => self.clients_in_group_idx(idx),
+        }
+    }
+
+    /// Get PIDs of clients in the focused group (or all if aggregate).
+    pub fn focused_pids(&self) -> Vec<u32> {
+        self.visible_clients().iter().map(|c| c.pid).collect()
     }
 
     pub fn filtered_spawns(&self) -> Vec<&SpawnInfo> {
@@ -559,6 +638,13 @@ impl App {
             return;
         }
 
+        // :mode <Tab> → camp/hunt
+        if let Some(rest) = prefix.strip_prefix("mode ") {
+            let modes: Vec<String> = vec!["camp".into(), "hunt".into()];
+            self.complete_with_candidates("mode ", rest, &modes);
+            return;
+        }
+
         // :all <Tab> → common slash commands
         if let Some(rest) = prefix.strip_prefix("all ") {
             let slash_cmds: Vec<String> = vec![
@@ -569,16 +655,38 @@ impl App {
             return;
         }
 
+        // :G1-G6 <Tab> → common slash commands for group targeting
+        let upper_prefix = prefix.to_uppercase();
+        if let Some(digit) = upper_prefix.strip_prefix('G').and_then(|s| s.chars().next()) {
+            if ('1'..='6').contains(&digit) && prefix.len() >= 2 {
+                let cmd_prefix_str = &prefix[..2];
+                let rest = prefix[2..].trim_start();
+                if !rest.is_empty() {
+                    let slash_cmds: Vec<String> = vec![
+                        "/sit".into(), "/stand".into(), "/camp".into(),
+                        "/follow".into(), "/assist".into(), "/disband".into(),
+                    ];
+                    self.complete_with_candidates(
+                        &format!("{} ", cmd_prefix_str), rest, &slash_cmds,
+                    );
+                    return;
+                }
+            }
+        }
+
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
             "help".into(),
             "camp".into(),
             "login".into(),
+            "mode".into(),
             "all".into(),
             "inject".into(),
             "status".into(),
             "track".into(),
             "untrack".into(),
+            "G1".into(), "G2".into(), "G3".into(),
+            "G4".into(), "G5".into(), "G6".into(),
         ];
 
         for client in &self.clients {
@@ -770,6 +878,29 @@ impl App {
         }
     }
 
+    /// Parse a group prefix like "G1", "G2", ..., "G6" from the first word.
+    /// Returns (group_idx 0-based, remaining command) if found.
+    fn parse_group_prefix<'a>(&self, input: &'a str) -> Option<(usize, &'a str)> {
+        let trimmed = input.trim();
+        let bytes = trimmed.as_bytes();
+        if bytes.len() >= 2
+            && (bytes[0] == b'G' || bytes[0] == b'g')
+            && bytes[1].is_ascii_digit()
+        {
+            let num = (bytes[1] - b'0') as usize;
+            if (1..=6).contains(&num) {
+                let rest = trimmed[2..].trim();
+                return Some((num - 1, rest));
+            }
+        }
+        None
+    }
+
+    /// Get PIDs for a specific group index (0-based).
+    fn pids_for_group(&self, group_idx: usize) -> Vec<u32> {
+        self.clients_in_group_idx(group_idx).iter().map(|c| c.pid).collect()
+    }
+
     /// Execute the current command buffer content.
     pub fn execute_command(&mut self, orchestrator: &mut Orchestrator) {
         let input = self.command_buffer.trim().to_string();
@@ -779,6 +910,36 @@ impl App {
 
         // Save to history
         self.command_history.push(input.clone());
+
+        // Check for group prefix: :G1 /sit, :G2 camp start, etc.
+        if let Some((group_idx, rest)) = self.parse_group_prefix(&input) {
+            if rest.is_empty() {
+                // Just ":G1" with nothing after — focus on that group
+                self.set_active_group(Some(group_idx));
+                return;
+            }
+            let g = &self.groups[group_idx];
+            let group_name = format!("G{} {}", g.id, g.name);
+            let pids = self.pids_for_group(group_idx);
+            if pids.is_empty() {
+                self.status_message = format!("{}: no online members", group_name);
+                return;
+            }
+            let slash_cmd = rest;
+            let mut ok = 0usize;
+            let mut fail = 0usize;
+            for pid in &pids {
+                match send_slash_command(*pid, slash_cmd) {
+                    Ok(()) => ok += 1,
+                    Err(_) => fail += 1,
+                }
+            }
+            self.status_message = format!(
+                "{} {} → sent to {}, failed {}",
+                group_name, slash_cmd, ok, fail
+            );
+            return;
+        }
 
         let parts: Vec<&str> = input.splitn(3, ' ').collect();
         match parts[0] {
@@ -791,7 +952,15 @@ impl App {
             }
             "status" => {
                 let client_count = self.clients.len();
-                self.status_message = format!("{} client(s) connected", client_count);
+                let visible_count = self.visible_clients().len();
+                if self.active_group.is_some() {
+                    self.status_message = format!(
+                        "{} visible / {} total client(s) connected",
+                        visible_count, client_count
+                    );
+                } else {
+                    self.status_message = format!("{} client(s) connected", client_count);
+                }
             }
             "login" => {
                 self.execute_login_command(&parts[1..]);
@@ -807,6 +976,24 @@ impl App {
                     self.untrack_spawn(clean);
                 } else {
                     self.status_message = String::from("Usage: untrack <name>");
+                }
+            }
+            "mode" => {
+                match parts.get(1).copied() {
+                    Some("camp") => {
+                        self.operating_mode = crate::camp::hunt::OperatingMode::Camp;
+                        self.status_message = String::from("Switched to Camp mode");
+                    }
+                    Some("hunt") => {
+                        self.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
+                        self.status_message = String::from("Switched to Hunt mode");
+                    }
+                    _ => {
+                        self.status_message = format!(
+                            "Current mode: {}. Usage: mode <camp|hunt>",
+                            self.operating_mode
+                        );
+                    }
                 }
             }
             "inject" => {
@@ -1253,7 +1440,7 @@ impl App {
                     );
                     launched += 1;
                     // TODO: Wire into LaunchCoordinator for staggered launch + state tracking
-                    // TODO: After window title shows "EQ - <CharName>", auto-inject DLL
+                    // TODO: After window title shows "[DMFT] EQ - <CharName>", auto-inject DLL
                     // TODO: After DLL injection, auto-form groups + set camp
                 }
                 Err(e) => {
@@ -1301,6 +1488,17 @@ fn generate_session_token(pid: u32) -> [u8; 32] {
         *byte = pid_bytes[i % 4] ^ (i as u8);
     }
     token
+}
+
+/// Extract account number from a character name or window title.
+/// Looks for trailing digits (e.g., "frostreaver05" → 5).
+pub fn extract_account_number(name: &str) -> Option<u8> {
+    let digits: String = name.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let digits: String = digits.chars().rev().collect();
+    digits.parse().ok()
 }
 
 /// Send a slash command to a specific PID via named pipe.

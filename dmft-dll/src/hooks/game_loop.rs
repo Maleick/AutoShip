@@ -170,7 +170,7 @@ fn on_game_tick() {
         update_foreground_status();
     }
 
-    // Rename window every 100 ticks (~3 seconds) to "EQ - CharName (ZoneName)".
+    // Rename window every 100 ticks (~3 seconds) to "[DMFT] EQ - CharName (ZoneName)".
     if tick % 100 == 5 {
         update_window_title();
     }
@@ -442,7 +442,7 @@ pub fn is_foreground() -> bool {
 }
 
 /// Read character name + zone name from EQ memory and set the window title
-/// to "EQ - CharName (ZoneName)" so the orchestrator can identify clients by PID.
+/// to "[DMFT] EQ - CharName (ZoneName)" so the orchestrator can identify clients by PID.
 fn update_window_title() {
     #[cfg(windows)]
     {
@@ -463,12 +463,12 @@ fn update_window_title() {
             .or_else(|| read_zone_short_name(eq_base))
             .unwrap_or_default();
 
-        // Build title: "EQ - CharName (ZoneName)" or "EQ - CharName" if no zone.
+        // Build title: "[DMFT] EQ - CharName (ZoneName)" or "[DMFT] EQ - CharName" if no zone.
         let title = if zone_name.is_empty() {
             tracing::trace!(char_name = %char_name, "Zone name empty — title without zone");
-            format!("EQ - {}\0", char_name)
+            format!("[DMFT] EQ - {}\0", char_name)
         } else {
-            format!("EQ - {} ({})\0", char_name, zone_name)
+            format!("[DMFT] EQ - {} ({})\0", char_name, zone_name)
         };
 
         // Find our window by enumerating windows for this PID.

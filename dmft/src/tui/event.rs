@@ -116,6 +116,14 @@ pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orches
                 app.running = false;
                 return Ok(true);
             }
+            // Group focus: Shift+1-6 = focus group, Shift+0 or G+Esc = aggregate
+            (KeyCode::Char('!'), _) => { app.set_active_group(Some(0)); return Ok(true); }
+            (KeyCode::Char('@'), _) => { app.set_active_group(Some(1)); return Ok(true); }
+            (KeyCode::Char('#'), _) => { app.set_active_group(Some(2)); return Ok(true); }
+            (KeyCode::Char('$'), _) => { app.set_active_group(Some(3)); return Ok(true); }
+            (KeyCode::Char('%'), _) => { app.set_active_group(Some(4)); return Ok(true); }
+            (KeyCode::Char('^'), _) => { app.set_active_group(Some(5)); return Ok(true); }
+            (KeyCode::Char(')'), _) => { app.set_active_group(None); return Ok(true); }
             // Screen switching
             (KeyCode::Char('1'), _) => {
                 app.active_screen = ActiveScreen::Dashboard;
@@ -178,7 +186,11 @@ pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orches
                 return Ok(true);
             }
             (KeyCode::Esc, _) => {
-                app.clear_filter();
+                if app.active_group.is_some() {
+                    app.set_active_group(None);
+                } else {
+                    app.clear_filter();
+                }
                 return Ok(true);
             }
             _ => {}

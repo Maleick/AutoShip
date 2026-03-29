@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use super::app::{ActivePanel, ActiveScreen, App};
+use super::app::{extract_account_number, ActivePanel, ActiveScreen, App};
 use super::sprites;
 use crate::eq::structs::{SpawnInfo, SpawnType};
 
@@ -95,6 +95,13 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
+    let group_label = app.group_focus_label();
+    let group_color = if app.active_group.is_some() {
+        Color::Cyan
+    } else {
+        Color::DarkGray
+    };
+
     let mut spans = vec![
         Span::styled(
             &client_str,
@@ -108,6 +115,11 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" | "),
+        Span::styled(
+            format!(" {} ", group_label),
+            Style::default().fg(group_color).add_modifier(Modifier::BOLD),
         ),
         Span::raw(" | "),
         Span::styled(&server_str, Style::default().fg(Color::Magenta)),
@@ -145,12 +157,20 @@ fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
+    let visible = app.visible_clients();
+    let title = match app.active_group {
+        Some(idx) => {
+            let g = &app.groups[idx];
+            format!(" G{} {} ({}) ", g.id, g.name, visible.len())
+        }
+        None => format!(" Characters ({}) ", app.clients.len()),
+    };
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(format!(" Characters ({}) ", app.clients.len()))
+        .title(title)
         .border_style(Style::default().fg(Color::Green));
 
-    if app.clients.is_empty() {
+    if visible.is_empty() {
         let paragraph = Paragraph::new("No characters connected")
             .block(block)
             .style(Style::default().fg(Color::DarkGray));
@@ -170,12 +190,13 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .height(1);
 
-    let rows: Vec<Row> = app
-        .clients
+    let rows: Vec<Row> = visible
         .iter()
         .enumerate()
-        .map(|(i, client)| {
-            let is_selected = i == app.selected_client;
+        .map(|(_i, client)| {
+            // Find this client's index in app.clients for selection highlight
+            let global_idx = app.clients.iter().position(|c| c.pid == client.pid).unwrap_or(usize::MAX);
+            let is_selected = global_idx == app.selected_client;
             let marker = if is_selected { ">" } else { " " };
 
             if let Some(player) = &client.local_player {
@@ -266,13 +287,15 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
     let bar_width = inner.width.saturating_sub(16) as usize; // name(12) + space + bar + pct
     let mut lines: Vec<Line<'_>> = Vec::new();
 
-    for (i, client) in app.clients.iter().enumerate() {
+    let visible = app.visible_clients();
+    for client in &visible {
         if let Some(player) = &client.local_player {
             let hp_pct = player.hp_pct();
             let filled = ((hp_pct / 100.0) * bar_width as f64) as usize;
             let empty = bar_width.saturating_sub(filled);
             let color = hp_color(hp_pct);
-            let is_selected = i == app.selected_client;
+            let global_idx = app.clients.iter().position(|c| c.pid == client.pid).unwrap_or(usize::MAX);
+            let is_selected = global_idx == app.selected_client;
 
             let display_name = app.redact_name(&player.displayed_name).into_owned();
             let name_style = if is_selected {
@@ -1439,19 +1462,8 @@ fn draw_groups_screen(frame: &mut Frame, area: Rect, app: &App) {
         if i >= 6 {
             break;
         }
-        draw_group_panel(frame, panels[i], app, group);
+        draw_group_panel(frame, panels[i], app, group, i);
     }
-}
-
-/// Extract account number from a character name or window title.
-/// Looks for trailing digits (e.g., "frostreaver05" → 5).
-fn extract_account_number(name: &str) -> Option<u8> {
-    let digits: String = name.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
-    if digits.is_empty() {
-        return None;
-    }
-    let digits: String = digits.chars().rev().collect();
-    digits.parse().ok()
 }
 
 /// Get clients belonging to a group based on account number range.
@@ -1460,7 +1472,6 @@ fn clients_in_group<'a>(app: &'a App, group: &super::app::GroupDef) -> Vec<&'a s
     app.clients
         .iter()
         .filter(|c| {
-            // Try character_name first, then player displayed_name
             let name = if !c.character_name.is_empty() {
                 &c.character_name
             } else if let Some(p) = &c.local_player {
@@ -1477,13 +1488,23 @@ fn clients_in_group<'a>(app: &'a App, group: &super::app::GroupDef) -> Vec<&'a s
         .collect()
 }
 
-fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app::GroupDef) {
+fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app::GroupDef, group_idx: usize) {
     let members = clients_in_group(app, group);
     let online_count = members.len();
     let (lo, hi) = group.account_range;
     let total_slots = (hi - lo + 1) as usize;
+    let is_focused = app.active_group == Some(group_idx);
 
-    let border_color = if online_count == total_slots {
+    // Check for dead members
+    let has_dead = members.iter().any(|c| {
+        c.local_player.as_ref().is_some_and(|p| p.hp_current == 0)
+    });
+
+    let border_color = if is_focused {
+        Color::Cyan
+    } else if has_dead {
+        Color::Red
+    } else if online_count == total_slots {
         Color::Green
     } else if online_count > 0 {
         Color::Yellow
@@ -1491,11 +1512,20 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
         Color::DarkGray
     };
 
-    let title = format!(" G{} {} ({}/{}) ", group.id, group.name, online_count, total_slots);
+    // Show zone name of first member
+    let zone = members.first()
+        .map(|c| c.zone_name.as_str())
+        .unwrap_or("---");
+    let title = format!(" G{} {} ({}/{}) {} ", group.id, group.name, online_count, total_slots, zone);
+    let border_style = if is_focused {
+        Style::default().fg(border_color).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(border_color)
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .title(title)
-        .border_style(Style::default().fg(border_color));
+        .border_style(border_style);
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -1523,6 +1553,11 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
             if let Some(player) = &client.local_player {
                 let hp_pct = player.hp_pct();
                 let display_name = app.redact_name(&player.displayed_name).into_owned();
+                let mana_str = if player.mana_max > 0 {
+                    format!(" {:>3.0}%", player.mana_pct())
+                } else {
+                    "   - ".to_string()
+                };
                 lines.push(Line::from(vec![
                     Span::styled(
                         format!("{:<12}", display_name),
@@ -1539,6 +1574,10 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
                     Span::styled(
                         format!("{:>3.0}%", hp_pct),
                         Style::default().fg(hp_color(hp_pct)),
+                    ),
+                    Span::styled(
+                        mana_str,
+                        Style::default().fg(Color::Blue),
                     ),
                 ]));
             } else {
@@ -1569,8 +1608,8 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
 fn draw_help_overlay(frame: &mut Frame, area: Rect) {
     use ratatui::widgets::Clear;
 
-    let popup_width = 42u16;
-    let popup_height = 22u16;
+    let popup_width = 46u16;
+    let popup_height = 26u16;
     let x = area.x + area.width.saturating_sub(popup_width) / 2;
     let y = area.y + area.height.saturating_sub(popup_height) / 2;
     let popup_area = Rect::new(x, y, popup_width.min(area.width), popup_height.min(area.height));
@@ -1581,6 +1620,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(Span::styled("Keybindings", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
         Line::from(""),
         Line::from(vec![Span::styled(" 1-5      ", Style::default().fg(Color::Yellow)), Span::raw("Switch screens")]),
+        Line::from(vec![Span::styled(" Shift+1-6", Style::default().fg(Color::Yellow)), Span::raw("Focus group G1-G6")]),
+        Line::from(vec![Span::styled(" Shift+0  ", Style::default().fg(Color::Yellow)), Span::raw("All groups (aggregate)")]),
         Line::from(vec![Span::styled(" [ ]      ", Style::default().fg(Color::Yellow)), Span::raw("Cycle clients")]),
         Line::from(vec![Span::styled(" /        ", Style::default().fg(Color::Yellow)), Span::raw("Search spawns")]),
         Line::from(vec![Span::styled(" f        ", Style::default().fg(Color::Yellow)), Span::raw("Filter spawns")]),
@@ -1592,6 +1633,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(Span::styled("Commands (:mode)", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
         Line::from(""),
         Line::from(vec![Span::styled(" <pid> /cmd ", Style::default().fg(Color::Yellow)), Span::raw("Send to PID")]),
+        Line::from(vec![Span::styled(" G1-G6 /cmd", Style::default().fg(Color::Yellow)), Span::raw("Send to group")]),
         Line::from(vec![Span::styled(" all /cmd   ", Style::default().fg(Color::Yellow)), Span::raw("Broadcast")]),
         Line::from(vec![Span::styled(" camp <sub> ", Style::default().fg(Color::Yellow)), Span::raw("start|stop|list|add|rm")]),
         Line::from(vec![Span::styled(" track <n>  ", Style::default().fg(Color::Yellow)), Span::raw("Track spawn")]),
@@ -1623,10 +1665,15 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let privacy_indicator = if app.privacy_mode { " [PRIVATE]" } else { "" };
+    let group_indicator = match app.active_group {
+        Some(idx) => format!(" [G{}]", idx + 1),
+        None => String::new(),
+    };
     let keybinds = format!(
-        " 1-5:Screen | [/]:Client | /:Search | f:Filter({}) | p:Privacy{} | :Cmd | ?:Help",
+        " 1-5:Screen | Shift+1-6:Group | [/]:Client | /:Search | f:Filter({}) | p:Privacy{}{} | :Cmd | ?:Help",
         app.spawn_type_filter.label(),
-        privacy_indicator
+        privacy_indicator,
+        group_indicator
     );
 
     let status = Paragraph::new(Line::from(vec![
