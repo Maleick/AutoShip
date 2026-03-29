@@ -443,12 +443,18 @@ fn on_game_tick() {
             }
             tracing::info!("Phase 3: EnterWorld() called — entering world!");
         }
-        // Reset all state
-        ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
-        PENDING_ENTER_WORLD_WND.store(0, std::sync::atomic::Ordering::Release);
-        PENDING_ENTER_WORLD_FN.store(0, std::sync::atomic::Ordering::Release);
+        // Reset all state — clear payload atomics BEFORE clearing the stage flag.
+        // If ENTER_WORLD_STAGE were reset to 0 first, the IPC thread could observe
+        // stage == 0 and immediately queue a new enter-world, writing new values
+        // into PENDING_*; our subsequent stores of 0 would then silently discard
+        // that queued request.  Clearing payloads first (Relaxed is fine — they
+        // are guarded by the stage flag, not independently synchronized) and
+        // publishing the idle stage last (Release) eliminates that window.
+        PENDING_ENTER_WORLD_WND.store(0, std::sync::atomic::Ordering::Relaxed);
+        PENDING_ENTER_WORLD_FN.store(0, std::sync::atomic::Ordering::Relaxed);
+        PENDING_SELECT_CHAR_FN.store(0, std::sync::atomic::Ordering::Relaxed);
         ENTER_WORLD_RETRIES.store(0, std::sync::atomic::Ordering::Relaxed);
-        PENDING_SELECT_CHAR_FN.store(0, std::sync::atomic::Ordering::Release);
+        ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
     }
 
     // Run navigation state machine.

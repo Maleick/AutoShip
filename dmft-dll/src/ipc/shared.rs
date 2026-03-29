@@ -45,18 +45,29 @@ impl SharedStateWriter {
                 .encode_utf16()
                 .collect();
 
-            // TODO(security-C1): Add restrictive DACL to shared memory.
-            // Currently uses default DACL. See create_current_user_security_attributes().
+            // Restrict shared memory access to the current user via an explicit DACL.
+            // Falls back to the default DACL (with a warning) if DACL setup fails.
+            // sa_setup must be kept alive until after CreateFileMappingW returns.
+            let sa_setup = create_current_user_security_attributes();
+            if sa_setup.is_none() {
+                tracing::warn!(
+                    client_id,
+                    "DACL creation failed — shared memory will use the default DACL"
+                );
+            }
+            let sa_ptr = sa_setup.as_ref().map(SecuritySetup::sa_ptr);
+
             let handle = unsafe {
                 CreateFileMappingW(
                     INVALID_HANDLE_VALUE,
-                    None,
+                    sa_ptr,
                     PAGE_READWRITE,
                     0,
                     SHARED_MEMORY_SIZE as u32,
                     PCWSTR(name.as_ptr()),
                 )
             }?;
+            drop(sa_setup); // buffers no longer needed after CreateFileMappingW
 
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_WRITE, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
@@ -130,19 +141,110 @@ impl SharedStateWriter {
     }
 }
 
-/// Create SECURITY_ATTRIBUTES with a DACL that only allows the current user.
-/// Returns None if security setup fails (falls back to default DACL).
-///
-/// TODO(security-C1): Implement proper DACL using PSECURITY_DESCRIPTOR wrapper.
-/// The windows 0.54 crate requires PSECURITY_DESCRIPTOR type instead of raw pointers.
-/// For now, returns None (default DACL) to avoid Windows build breaks.
-/// This is tracked as a known security gap in the audit report.
+/// Owns the SECURITY_ATTRIBUTES and its backing buffers (absolute security
+/// descriptor + ACL).  Both buffers must outlive any Windows API call that
+/// reads the SA, because the kernel dereferences them synchronously before
+/// returning.  Moving this struct is safe: Vec stores its data on the heap,
+/// so the raw pointers inside `sa` remain valid across moves.
 #[cfg(windows)]
-fn create_current_user_security_attributes() -> Option<windows::Win32::Security::SECURITY_ATTRIBUTES> {
-    // Placeholder — returns None until PSECURITY_DESCRIPTOR wrapping is implemented.
-    // The CreateFileMappingW call uses `sa.as_ref().map(...)` which falls back to
-    // None (default DACL) when this returns None.
-    None
+struct SecuritySetup {
+    _sd_buf: Vec<u8>,
+    _acl_buf: Vec<u8>,
+    sa: windows::Win32::Security::SECURITY_ATTRIBUTES,
+}
+
+#[cfg(windows)]
+impl SecuritySetup {
+    fn sa_ptr(&self) -> *const windows::Win32::Security::SECURITY_ATTRIBUTES {
+        &self.sa
+    }
+}
+
+/// Build SECURITY_ATTRIBUTES with a DACL granting only the current user
+/// `FILE_MAP_ALL_ACCESS` to the shared memory region.
+///
+/// Returns `None` on any API failure; the caller falls back to the default
+/// DACL and logs a warning.  The returned `SecuritySetup` must be kept alive
+/// for the duration of the `CreateFileMappingW` call.
+#[cfg(windows)]
+fn create_current_user_security_attributes() -> Option<SecuritySetup> {
+    use std::mem;
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{
+        ACE_REVISION, ACL, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
+        TOKEN_QUERY, TOKEN_USER,
+        AddAccessAllowedAce, GetLengthSid, GetTokenInformation, InitializeAcl,
+        InitializeSecurityDescriptor, SetSecurityDescriptorDacl, TokenUser,
+    };
+    use windows::Win32::System::Memory::FILE_MAP_ALL_ACCESS;
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    unsafe {
+        // 1. Open the current process token (read-only query — no write needed).
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
+
+        // 2. Two-pass GetTokenInformation to obtain the user SID.
+        //    First call returns ERROR_INSUFFICIENT_BUFFER with the required size.
+        let mut info_size = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut info_size);
+        let mut user_buf = vec![0u8; info_size as usize];
+        let result = GetTokenInformation(
+            token,
+            TokenUser,
+            Some(user_buf.as_mut_ptr() as *mut _),
+            info_size,
+            &mut info_size,
+        );
+        let _ = CloseHandle(token);
+        result.ok()?;
+
+        let token_user = &*(user_buf.as_ptr() as *const TOKEN_USER);
+        let sid = token_user.User.Sid; // type inferred from TOKEN_USER.User.Sid
+
+        // 3. Build an ACL with one ACCESS_ALLOWED_ACE for the current user.
+        //    Layout: ACL header (8 B) + ACE_HEADER+ACCESS_MASK (8 B) + SID bytes.
+        let sid_len = GetLengthSid(sid) as usize;
+        let ace_size = 8usize + sid_len; // sizeof(ACE_HEADER) + sizeof(ACCESS_MASK) + SID
+        let acl_size = mem::size_of::<ACL>() + ace_size;
+        let mut acl_buf = vec![0u8; acl_size];
+        InitializeAcl(
+            acl_buf.as_mut_ptr() as *mut ACL,
+            acl_size as u32,
+            ACE_REVISION(2), // ACL_REVISION = 2
+        ).ok()?;
+        AddAccessAllowedAce(
+            acl_buf.as_mut_ptr() as *mut ACL,
+            ACE_REVISION(2), // ACL_REVISION = 2
+            FILE_MAP_ALL_ACCESS.0,
+            sid,
+        ).ok()?;
+
+        // 4. Build an absolute SECURITY_DESCRIPTOR pointing to the ACL.
+        let mut sd_buf = vec![0u8; mem::size_of::<SECURITY_DESCRIPTOR>()];
+        let sd_ptr = PSECURITY_DESCRIPTOR(sd_buf.as_mut_ptr() as *mut _);
+        InitializeSecurityDescriptor(
+            sd_ptr,
+            1, // SECURITY_DESCRIPTOR_REVISION
+        ).ok()?;
+        SetSecurityDescriptorDacl(
+            sd_ptr,
+            true,  // bDaclPresent — our explicit DACL applies
+            Some(acl_buf.as_mut_ptr() as *mut ACL),
+            false, // bDaclDefaulted — DACL was set explicitly, not inherited
+        ).ok()?;
+
+        // 5. Assemble SECURITY_ATTRIBUTES.
+        //    lpSecurityDescriptor points into sd_buf's heap allocation, which is
+        //    stable as long as SecuritySetup (and therefore sd_buf) is alive.
+        let sa = SECURITY_ATTRIBUTES {
+            nLength: mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: sd_buf.as_mut_ptr() as *mut _,
+            bInheritHandle: false.into(),
+        };
+
+        Some(SecuritySetup { _sd_buf: sd_buf, _acl_buf: acl_buf, sa })
+    }
 }
 
 impl Drop for SharedStateWriter {
