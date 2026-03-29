@@ -131,6 +131,45 @@ pub fn drain_responses() -> Vec<Response> {
     std::mem::take(&mut *queue)
 }
 
+/// Handle commands that must work even before the game loop runs
+/// (e.g., at the login screen). Returns true if handled.
+fn handle_immediate_command(cmd: &Command) -> bool {
+    match cmd {
+        Command::CalibrateLogin => {
+            let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
+            let eqmain_base = crate::login::eqmain::find_eqmain();
+            tracing::info!(
+                eq_base = format!("{:#x}", eq_base),
+                eqmain_base = format!("{:#x}", eqmain_base),
+                "CalibrateLogin: running calibration dump"
+            );
+            crate::login::widgets::calibrate_login_dump(eqmain_base);
+            true
+        }
+        Command::StartLogin { .. } => {
+            // StartLogin also needs to work at the login screen.
+            // Queue it for the login FSM but also start the FSM immediately.
+            if let Command::StartLogin {
+                account_name,
+                password,
+                server_name,
+                character_name,
+            } = cmd
+            {
+                crate::login::start_login(
+                    account_name.clone(),
+                    password.clone(),
+                    server_name.clone(),
+                    character_name.clone(),
+                );
+                tracing::info!("StartLogin handled immediately on IPC thread");
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Background thread: creates a `CommandListener` and loops receiving commands
 /// until `IPC_RUNNING` is cleared or the DLL is shutting down.
 fn listener_loop(client_id: ClientId, token: SessionToken) {
@@ -149,6 +188,12 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
         match listener.receive() {
             Ok(cmd) => {
                 tracing::debug!(client_id, ?cmd, "Received command");
+
+                // Handle commands that must work even at the login screen
+                // (before the game loop hook is running).
+                if handle_immediate_command(&cmd) {
+                    continue;
+                }
 
                 if let Some(pending) = PENDING_COMMANDS.get() {
                     if let Ok(mut queue) = pending.lock() {
