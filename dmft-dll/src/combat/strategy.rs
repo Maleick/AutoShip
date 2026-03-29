@@ -9,6 +9,7 @@ use super::classes::magician::MagicianStrategy;
 use super::classes::monk::MonkStrategy;
 use super::classes::necromancer::NecromancerStrategy;
 use super::classes::rogue::RogueStrategy;
+use super::classes::shadow_knight::ShadowKnightStrategy;
 use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
@@ -67,6 +68,7 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
     match class_id {
         1 => Box::new(WarriorStrategy::new(class_id)),       // Warrior
         2 => Box::new(ClericStrategy::new(class_id)),        // Cleric
+        3 => Box::new(ShadowKnightStrategy::new(class_id)), // Shadow Knight
         5 => Box::new(WizardStrategy::new(class_id)),        // Wizard
         6 => Box::new(DruidStrategy::new(class_id)),         // Druid
         7 => Box::new(MonkStrategy::new(class_id)),          // Monk

@@ -88,7 +88,7 @@ impl Combatant {
         // Fire melee skills when engaging (independent of GCD/spell casting)
         if matches!(self.state, CombatState::Engaging { .. }) {
             let class_id = self.strategy.class_id();
-            self.tick_melee_skills(class_id);
+            self.tick_melee_skills(class_id, player);
         }
 
         // Build context snapshot for this tick.
@@ -290,9 +290,8 @@ impl Combatant {
 
     /// Fire class-appropriate melee skills (kick, bash, taunt, backstab, etc.)
     /// Called every tick while Engaging. Uses per-skill cooldown tracking.
-    fn tick_melee_skills(&mut self, class_id: u8) {
+    fn tick_melee_skills(&mut self, class_id: u8, player: &SpawnData) {
         // Melee skills fire independently of the GCD (they have their own timers).
-        // Each skill checks its own cooldown before firing.
         // Skill IDs from EQ:
         const SKILL_KICK: u32 = 30;
         const SKILL_BASH: u32 = 10;
@@ -307,6 +306,16 @@ impl Combatant {
         let skill_ready = self.tick_count % 60 == 0;
         if !skill_ready {
             return;
+        }
+
+        // Endurance check — melee skills cost endurance, don't fire if too low
+        let end_pct = if player.endurance_max > 0 {
+            (player.endurance_current as f32 / player.endurance_max as f32) * 100.0
+        } else {
+            100.0
+        };
+        if end_pct < 10.0 {
+            return; // conserve endurance
         }
 
         match class_id {

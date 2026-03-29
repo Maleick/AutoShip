@@ -8,4 +8,5 @@ pub mod monk;
 pub mod necromancer;
 pub mod rogue;
 pub mod shaman;
+pub mod shadow_knight;
 pub mod wizard;
