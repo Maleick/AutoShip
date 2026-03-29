@@ -75,6 +75,17 @@ static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
 static TICK_COUNT: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 
+/// Pending login button click — set by IPC thread, executed on game loop thread.
+/// Contains the CXWnd* address of the button to click, or 0 if none pending.
+static PENDING_BUTTON_CLICK: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Set a button widget address to be clicked on the next game loop tick.
+/// Called from the IPC thread after writing credentials.
+pub fn queue_button_click(button_wnd: usize) {
+    PENDING_BUTTON_CLICK.store(button_wnd, std::sync::atomic::Ordering::Release);
+}
+
 // ─── Command Jitter Queue ───
 // Commands are not executed immediately — they sit in a pending queue
 // with a random delay of 1-10 ticks to avoid frame-perfect timing patterns.
@@ -182,6 +193,18 @@ fn on_game_tick() {
 
     // Execute commands whose scheduled tick has arrived.
     process_pending_commands(tick);
+
+    // Check for pending login button click (queued from IPC thread).
+    let button_addr = PENDING_BUTTON_CLICK.swap(0, std::sync::atomic::Ordering::AcqRel);
+    if button_addr != 0 {
+        tracing::info!(
+            ptr = format!("{:#x}", button_addr),
+            "Clicking login button on game loop thread"
+        );
+        unsafe {
+            crate::login::widgets::click_button_via_vtable(button_addr);
+        }
+    }
 
     // Run navigation state machine.
     crate::nav::tick();

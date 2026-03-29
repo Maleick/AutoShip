@@ -298,16 +298,16 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
             tracing::info!("=== END HEX DUMP ===");
 
-            // Log the Login button address for future use.
-            // NOTE: WndNotification vtable call must happen on EQ's main thread
-            // (game loop), not the IPC listener thread. Calling from IPC crashes EQ.
-            // For now, we write credentials and let simulate_enter_key handle submission.
-            // TODO: Queue button click to game loop via PENDING_COMMANDS.
+            // Queue the Login button click to the game loop thread.
+            // WndNotification must run on EQ's main thread — calling from IPC crashes.
             if login_button != 0 {
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
-                    "Login button found (click deferred to Enter key)"
+                    "Queuing Login button click to game loop thread"
                 );
+                crate::hooks::game_loop::queue_button_click(login_button);
+            } else {
+                tracing::warn!("Login button not found — credentials written but not submitted");
             }
         }
 
@@ -323,8 +323,9 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
 /// Click a button widget by calling WndNotification(XWM_LCLICK) through the vtable.
 /// This is the MQ2 approach — works with EQ's custom UI engine (DirectInput).
+/// MUST be called from EQ's main thread (game loop), not from the IPC thread.
 #[cfg(windows)]
-unsafe fn click_button_via_vtable(button_wnd: usize) {
+pub unsafe fn click_button_via_vtable(button_wnd: usize) {
     use dmft_common::offsets::eqmain as off;
 
     let vtable = *(button_wnd as *const usize);
@@ -754,6 +755,34 @@ unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
 
     true
 }
+
+/// Click a button widget by calling WndNotification(XWM_LCLICK) through the vtable.
+/// MUST be called from EQ's main thread (game loop), not from the IPC thread.
+#[cfg(windows)]
+pub unsafe fn click_button_via_vtable(button_wnd: usize) {
+    use dmft_common::offsets::eqmain as off;
+
+    let vtable = *(button_wnd as *const usize);
+    if vtable == 0 {
+        tracing::warn!("Button vtable is null");
+        return;
+    }
+
+    let wnd_notification_ptr = *((vtable + off::CXWND_VTABLE_WND_NOTIFICATION) as *const usize);
+    if wnd_notification_ptr == 0 {
+        tracing::warn!("WndNotification function pointer is null");
+        return;
+    }
+
+    // x64 calling convention: rcx=this, rdx=sender, r8=message, r9=data
+    type WndNotificationFn = unsafe extern "C" fn(usize, usize, u32, usize) -> i32;
+    let func: WndNotificationFn = std::mem::transmute(wnd_notification_ptr);
+    func(button_wnd, button_wnd, off::XWM_LCLICK, 0);
+}
+
+/// Non-windows stub for click_button_via_vtable.
+#[cfg(not(windows))]
+pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
 
 /// Clone a CStrRep from a donor, using the process default heap for allocation.
 /// This ensures EQ can safely free/manage the buffer since it uses the same heap.
