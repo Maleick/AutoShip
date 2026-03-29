@@ -597,16 +597,60 @@ impl App {
     /// Set the hex dump to view a specific spawn's raw memory.
     pub fn inspect_selected_spawn(&mut self) {
         // Extract data from the borrow before mutating self
-        let info: Option<(String, u32)> = {
+        let info: Option<(String, u32, usize)> = {
             let filtered = self.filtered_spawns();
             filtered
                 .get(self.spawn_selected)
-                .map(|s| (s.displayed_name.clone(), s.spawn_id))
+                .map(|s| (s.displayed_name.clone(), s.spawn_id, self.spawn_selected))
         };
-        if let Some((name, id)) = info {
+        if let Some((name, id, _idx)) = info {
             self.hex_label = format!("Raw memory: {} (ID {})", name, id);
             self.status_message = format!("Inspecting: {}", name);
+
+            // On Windows, read real spawn memory; on macOS, generate demo hex data
+            #[cfg(windows)]
+            {
+                self.hex_data = self.read_spawn_hex_data(id);
+                self.hex_address = 0;
+            }
+            #[cfg(not(windows))]
+            {
+                self.hex_data = generate_demo_hex_data(&name, id);
+                self.hex_address = 0x1000;
+            }
         }
+    }
+
+    /// Read spawn memory on Windows for hex dump display.
+    #[cfg(windows)]
+    fn read_spawn_hex_data(&self, spawn_id: u32) -> Vec<u8> {
+        use crate::process::memory::ProcessHandle;
+        use dmft_common::offsets;
+
+        if let Some(client) = self.active_client() {
+            if let Ok(proc) = ProcessHandle::open(client.pid) {
+                // Find the spawn address by walking the spawn list
+                let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
+                    Ok(a) => a,
+                    Err(_) => return Vec::new(),
+                };
+                let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
+                    Ok(a) if a != 0 => a,
+                    _ => return Vec::new(),
+                };
+
+                let list_addr = mgr_addr + offsets::spawn_manager::PLAYER_LIST;
+                let mut current = proc.read_ptr(list_addr).unwrap_or(0);
+                while current != 0 {
+                    let sid = proc.read::<u32>(current + offsets::player_base::SPAWN_ID).unwrap_or(0);
+                    if sid == spawn_id {
+                        return proc.read_bytes(current, 0x200).unwrap_or_default();
+                    }
+                    current = proc.read_ptr(current + offsets::player_base::NEXT).unwrap_or(0);
+                }
+            }
+        }
+        Vec::new()
     }
 
     pub fn clear_filter(&mut self) {
@@ -1721,6 +1765,37 @@ impl App {
             })
             .collect()
     }
+}
+
+/// Generate demo hex data for the hex dump viewer in macOS demo mode.
+/// Produces a realistic-looking spawn struct with recognizable fields.
+#[cfg(not(windows))]
+fn generate_demo_hex_data(name: &str, spawn_id: u32) -> Vec<u8> {
+    let mut data = vec![0u8; 0x200];
+
+    // Write spawn ID at a typical offset
+    let id_bytes = spawn_id.to_le_bytes();
+    data[0x00..0x04].copy_from_slice(&id_bytes);
+
+    // Write name as ASCII at a recognizable offset
+    let name_bytes = name.as_bytes();
+    let len = name_bytes.len().min(63);
+    data[0x10..0x10 + len].copy_from_slice(&name_bytes[..len]);
+
+    // Write some float-like position data
+    let x_bytes = 1234.5f32.to_le_bytes();
+    let y_bytes = (-567.8f32).to_le_bytes();
+    let z_bytes = 12.0f32.to_le_bytes();
+    data[0x80..0x84].copy_from_slice(&x_bytes);
+    data[0x84..0x88].copy_from_slice(&y_bytes);
+    data[0x88..0x8C].copy_from_slice(&z_bytes);
+
+    // Add some non-zero bytes to make it look realistic
+    for i in (0xA0..0x200).step_by(7) {
+        data[i] = ((i * 13 + spawn_id as usize) & 0xFF) as u8;
+    }
+
+    data
 }
 
 /// Generate a PID-derived session token for IPC auth.

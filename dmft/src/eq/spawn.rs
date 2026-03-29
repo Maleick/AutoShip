@@ -1,7 +1,7 @@
 use super::structs::{EqClass, GroupInfo, SpawnInfo, SpawnType, StandState};
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
-use dmft_common::offsets::{self, group, player_base, player_zone, spawn_manager};
+use dmft_common::offsets::{self, group, player_base, player_zone, spawn_manager, zone_info};
 
 /// Read a single spawn's data from the process at the given PlayerClient address.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
@@ -235,6 +235,40 @@ pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<Grou
         members,
         member_count,
     }))
+}
+
+/// Read the current zone's long name from the zoneHeader struct in memory.
+/// Returns the display name (e.g., "Queynos Hills") or an error if not zoned in.
+pub fn read_zone_name(proc: &ProcessHandle, eq_base: u64) -> Result<String> {
+    let zone_addr = offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)
+        .context("rebase underflow for instEQZoneInfo")?;
+
+    let long_name = proc
+        .read_string(zone_addr + zone_info::LONG_NAME, 128)
+        .context("Failed to read zone long name")?;
+
+    if long_name.is_empty() {
+        anyhow::bail!("Zone long name is empty — not zoned in?");
+    }
+
+    Ok(long_name)
+}
+
+/// Read the current zone's short name from the zoneHeader struct in memory.
+/// Returns the internal name (e.g., "qey2hh1") or an error if not zoned in.
+pub fn read_zone_short_name(proc: &ProcessHandle, eq_base: u64) -> Result<String> {
+    let zone_addr = offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)
+        .context("rebase underflow for instEQZoneInfo")?;
+
+    let short_name = proc
+        .read_string(zone_addr + zone_info::SHORT_NAME, 128)
+        .context("Failed to read zone short name")?;
+
+    if short_name.is_empty() {
+        anyhow::bail!("Zone short name is empty — not zoned in?");
+    }
+
+    Ok(short_name)
 }
 
 /// Read a range of raw bytes from a spawn's memory for offset calibration.

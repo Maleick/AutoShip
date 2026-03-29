@@ -155,8 +155,10 @@ fn scan_for_clients_live(app: &mut App) {
             if let Ok(base) = crate::get_module_base(&proc) {
                 let mut client = ClientState::new(pid, base);
 
-                // Try to extract zone name from window title
-                if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
+                // Read zone name from memory if possible
+                if let Ok(zone) = crate::eq::spawn::read_zone_name(&proc, base) {
+                    client.zone_name = zone;
+                } else if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
                     for w in &windows {
                         if w.pid == pid {
                             let (char_name, zone) = parse_title_fields(&w.title);
@@ -288,17 +290,31 @@ fn refresh_eq_data_live(app: &mut App) {
             Err(e) => client.client_status = format!("Spawn read error: {}", e),
         }
 
-        // Refresh zone name from window title
-        if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
-            for w in &windows {
-                if w.pid == client.pid {
-                    let (char_name, zone) = parse_title_fields(&w.title);
+        // Read zone name from memory (preferred) or fall back to window title
+        match eq::spawn::read_zone_name(&proc, client.eq_base) {
+            Ok(zone) => client.zone_name = zone,
+            Err(_) => {
+                // Fallback: parse from window title
+                if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
+                    for w in &windows {
+                        if w.pid == client.pid {
+                            let (char_name, zone) = parse_title_fields(&w.title);
                             if !char_name.is_empty() {
                                 client.character_name = char_name;
                             }
                             client.zone_name = if zone.is_empty() { String::from("Unknown") } else { zone };
-                    break;
+                            break;
+                        }
+                    }
                 }
+            }
+        }
+
+        // Read group info from memory
+        match eq::spawn::read_group_info(&proc, client.eq_base) {
+            Ok(group) => client.group_info = group,
+            Err(e) => {
+                tracing::trace!(pid = client.pid, error = %e, "Failed to read group info");
             }
         }
     }
@@ -315,10 +331,12 @@ fn load_demo_data(app: &mut App) {
 
     app.status_message = String::from("DEMO MODE — no EQ process");
 
-    // Create multiple demo clients to showcase multi-client TUI
+    // Create multiple demo clients to showcase multi-client TUI.
+    // Names use trailing digits (e.g., "Frostreaver01") so they match group slots
+    // via extract_account_number().
     let demo_clients = vec![
         (
-            "Frostreaver",
+            "Frostreaver01",
             1,
             "WAR",
             60,
@@ -330,7 +348,7 @@ fn load_demo_data(app: &mut App) {
             "Permafrost",
         ),
         (
-            "Iceweaver",
+            "Iceweaver02",
             14,
             "ENC",
             60,
@@ -342,7 +360,7 @@ fn load_demo_data(app: &mut App) {
             "Permafrost",
         ),
         (
-            "Coldchain",
+            "Coldchain03",
             2,
             "CLR",
             60,
@@ -354,7 +372,7 @@ fn load_demo_data(app: &mut App) {
             "Permafrost",
         ),
         (
-            "Glacialmend",
+            "Glacialmend07",
             10,
             "SHM",
             58,
@@ -366,7 +384,7 @@ fn load_demo_data(app: &mut App) {
             "Eastern Wastes",
         ),
         (
-            "Frostbolt",
+            "Frostbolt08",
             12,
             "WIZ",
             59,
@@ -378,7 +396,7 @@ fn load_demo_data(app: &mut App) {
             "Eastern Wastes",
         ),
         (
-            "Tundrastalker",
+            "Tundrastalker09",
             4,
             "RNG",
             57,
@@ -418,6 +436,7 @@ fn load_demo_data(app: &mut App) {
             spawn_id: i as u32 + 1,
             is_gm: false,
         });
+        client.character_name = name.to_string();
         client.client_status = format!("Demo client: {}", name);
         app.clients.push(client);
     }
@@ -425,7 +444,7 @@ fn load_demo_data(app: &mut App) {
     // Build spawns for first client (Frostreaver in Permafrost)
     let demo_spawns = vec![
         (
-            "Frostreaver",
+            "Frostreaver01",
             60,
             1,
             SpawnType::Player,
@@ -434,7 +453,7 @@ fn load_demo_data(app: &mut App) {
             StandState::Standing,
         ),
         (
-            "Iceweaver",
+            "Iceweaver02",
             60,
             14,
             SpawnType::Player,
@@ -443,7 +462,7 @@ fn load_demo_data(app: &mut App) {
             StandState::Standing,
         ),
         (
-            "Coldchain",
+            "Coldchain03",
             60,
             2,
             SpawnType::Player,
