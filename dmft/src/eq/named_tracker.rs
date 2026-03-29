@@ -269,6 +269,8 @@ mod tests {
             endurance_current: 0,
             endurance_max: 0,
             is_gm: false,
+            buff_slots: Vec::new(),
+            cast_state: None,
         }
     }
 

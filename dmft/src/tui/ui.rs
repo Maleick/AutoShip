@@ -8,7 +8,7 @@ use ratatui::{
 
 use super::app::{extract_account_number, ActivePanel, ActiveScreen, App};
 use super::sprites;
-use crate::eq::structs::{SpawnInfo, SpawnType};
+use crate::eq::structs::{BuffSlot, SpawnInfo, SpawnType};
 
 /// Main render function — dispatches to the active screen.
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -1633,6 +1633,30 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
                         Style::default().fg(Color::Blue),
                     ),
                 ]));
+
+                // Buff timer row — show active buffs with durations
+                let active_buffs: Vec<&BuffSlot> = player.buff_slots
+                    .iter()
+                    .filter(|b| !b.is_empty())
+                    .take(6)
+                    .collect();
+                if !active_buffs.is_empty() {
+                    // TODO: replace spell_id hex with spell name once spell_db is wired in
+                    let mut buff_spans: Vec<Span<'_>> = vec![
+                        Span::styled("  ", Style::default()),
+                    ];
+                    for b in &active_buffs {
+                        buff_spans.push(Span::styled(
+                            format!("{:04X}", b.spell_id),
+                            Style::default().fg(Color::Cyan),
+                        ));
+                        buff_spans.push(Span::styled(
+                            format!("({}) ", b.duration_str()),
+                            Style::default().fg(Color::DarkGray),
+                        ));
+                    }
+                    lines.push(Line::from(buff_spans));
+                }
             } else {
                 lines.push(Line::from(Span::styled(
                     format!("  PID {} (loading...)", client.pid),

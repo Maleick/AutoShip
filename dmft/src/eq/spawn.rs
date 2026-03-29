@@ -1,4 +1,4 @@
-use super::structs::{EqClass, GroupInfo, SpawnInfo, SpawnType, StandState};
+use super::structs::{BuffSlot, CastState, EqClass, GroupInfo, SpawnInfo, SpawnType, StandState};
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
 use dmft_common::offsets::{self, group, player_base, player_zone, spawn_manager, zone_info};
@@ -65,10 +65,12 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         endurance_current,
         endurance_max,
         is_gm: gm_flag != 0,
+        buff_slots: Vec::new(),
+        cast_state: None,
     })
 }
 
-/// Read the local player's spawn info.
+/// Read the local player's spawn info, including buff slots and cast state.
 pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo> {
     let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)
         .context("rebase underflow for pinstLocalPlayer")?;
@@ -80,7 +82,66 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
         anyhow::bail!("pinstLocalPlayer is null — not logged in?");
     }
 
-    read_spawn(proc, player_addr).context("Failed to read local player spawn data")
+    let mut spawn = read_spawn(proc, player_addr).context("Failed to read local player spawn data")?;
+    spawn.buff_slots = read_buff_slots(proc, eq_base);
+    spawn.cast_state = read_cast_state(proc, eq_base);
+    Ok(spawn)
+}
+
+/// Read buff slots for the local player via PINST_LOCAL_PC.
+/// On non-Windows builds returns an empty vec (stub).
+pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
+    #[cfg(not(windows))]
+    {
+        let _ = (proc, eq_base);
+        return Vec::new();
+    }
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::buff_slots as bs;
+        let pc_ptr_addr = match offsets::rebase(offsets::PINST_LOCAL_PC, eq_base) {
+            Some(a) => a,
+            None => return Vec::new(),
+        };
+        let pc_addr = match proc.read_ptr(pc_ptr_addr) {
+            Ok(a) if a != 0 => a,
+            _ => return Vec::new(),
+        };
+        let mut slots = Vec::new();
+        for i in 0..bs::MAX_BUFF_SLOTS {
+            let slot_addr = pc_addr + bs::BUFF_ARRAY_OFFSET + i * bs::BUFF_ENTRY_SIZE;
+            let spell_id = proc.read::<u32>(slot_addr + bs::SPELL_ID).unwrap_or(0xFFFF);
+            let duration_ticks = proc.read::<i32>(slot_addr + bs::DURATION_TICKS).unwrap_or(0);
+            let caster_level = proc.read::<u8>(slot_addr + bs::CASTER_LEVEL).unwrap_or(0);
+            slots.push(BuffSlot { spell_id, duration_ticks, caster_level });
+        }
+        slots
+    }
+}
+
+/// Read cast state for the local player via PINST_LOCAL_PC.
+/// On non-Windows builds returns None (stub).
+pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> {
+    #[cfg(not(windows))]
+    {
+        let _ = (proc, eq_base);
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::character_zone;
+        let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
+        let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
+        let spell_slot = proc.read::<u8>(pc_addr + character_zone::SPELL_SLOT).unwrap_or(0xFF);
+        let spell_eta = proc.read::<u32>(pc_addr + character_zone::SPELL_ETA).unwrap_or(0);
+        let mut gem_etas = [0u32; 15];
+        for (i, eta) in gem_etas.iter_mut().enumerate() {
+            *eta = proc
+                .read::<u32>(pc_addr + character_zone::SPELL_GEM_ETA + i * 4)
+                .unwrap_or(0);
+        }
+        Some(CastState { spell_slot, spell_eta, gem_etas })
+    }
 }
 
 /// Read the current target's spawn info, if any.

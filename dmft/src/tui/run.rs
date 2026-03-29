@@ -433,6 +433,8 @@ fn load_demo_data(app: &mut App) {
             heading: 128.0,
             spawn_id: i as u32 + 1,
             is_gm: false,
+            buff_slots: Vec::new(),
+            cast_state: None,
         });
         client.character_name = name.to_string();
         client.client_status = format!("Demo client: {}", name);
@@ -558,6 +560,8 @@ fn load_demo_data(app: &mut App) {
                 heading: 0.0,
                 spawn_id: i as u32 + 1,
                 is_gm: false,
+                buff_slots: Vec::new(),
+                cast_state: None,
             },
         )
         .collect();
