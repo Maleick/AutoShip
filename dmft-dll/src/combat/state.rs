@@ -85,6 +85,12 @@ impl Combatant {
         self.tick_count += 1;
         self.gcd.tick();
 
+        // Fire melee skills when engaging (independent of GCD/spell casting)
+        if matches!(self.state, CombatState::Engaging { .. }) {
+            let class_id = self.strategy.class_id();
+            self.tick_melee_skills(class_id);
+        }
+
         // Build context snapshot for this tick.
         let ctx = CombatContext {
             player,
@@ -280,5 +286,50 @@ impl Combatant {
     /// Clear the flee flag after the orchestrator has dispatched a flee waypoint.
     pub fn clear_flee_requested(&mut self) {
         self.flee_requested = false;
+    }
+
+    /// Fire class-appropriate melee skills (kick, bash, taunt, backstab, etc.)
+    /// Called every tick while Engaging. Uses per-skill cooldown tracking.
+    fn tick_melee_skills(&mut self, class_id: u8) {
+        // Melee skills fire independently of the GCD (they have their own timers).
+        // Each skill checks its own cooldown before firing.
+        // Skill IDs from EQ:
+        const SKILL_KICK: u32 = 30;
+        const SKILL_BASH: u32 = 10;
+        const SKILL_BACKSTAB: u32 = 8;
+        const SKILL_TAUNT: u32 = 73;
+        const SKILL_FLYING_KICK: u32 = 26;
+        const SKILL_ROUND_KICK: u32 = 38;
+        const SKILL_TIGER_CLAW: u32 = 52;
+        const SKILL_EAGLE_STRIKE: u32 = 23;
+
+        // Fire skills based on class — every 60 ticks (~3 seconds) as a rough cooldown
+        let skill_ready = self.tick_count % 60 == 0;
+        if !skill_ready {
+            return;
+        }
+
+        match class_id {
+            1 => { // Warrior: taunt + bash + kick
+                crate::eq::use_skill(SKILL_TAUNT, None);
+                crate::eq::use_skill(SKILL_KICK, None);
+            }
+            7 => { // Monk: flying kick + round kick + tiger claw + eagle strike
+                // Rotate through monk skills
+                let skill = match self.tick_count / 60 % 4 {
+                    0 => SKILL_FLYING_KICK,
+                    1 => SKILL_ROUND_KICK,
+                    2 => SKILL_TIGER_CLAW,
+                    _ => SKILL_EAGLE_STRIKE,
+                };
+                crate::eq::use_skill(skill, None);
+            }
+            9 => { // Rogue: backstab
+                crate::eq::use_skill(SKILL_BACKSTAB, None);
+            }
+            _ => { // Generic: kick if available
+                crate::eq::use_skill(SKILL_KICK, None);
+            }
+        }
     }
 }
