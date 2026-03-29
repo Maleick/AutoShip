@@ -1,4 +1,4 @@
-# Session Handoff — 2026-03-29 ~09:45 UTC
+# Session Handoff — 2026-03-29 ~18:00 UTC
 
 ## Start Here
 
@@ -10,117 +10,81 @@ Please initialize Serena. Read HANDOFF.md and check memories for full context. U
 ```
 
 ## Session Stats (Cumulative)
-- ~43,000+ lines added (~4,000+ this session)
-- ~105 commits (20 this session)
-- 610 tests passing across 3 crates
-- Auto-login: Phases 1-2 CONFIRMED WORKING (3 successful logins to server select)
-- Phase 3 (Enter World): NOT YET WORKING — needs MQ2 EnterWorld() approach
+- ~47,000+ lines added
+- ~106 commits
+- 621 tests passing across 3 crates (447 dmft + 46 dmft-common + 128 dmft-dll)
+- Auto-login: Phases 1-3 ALL CONFIRMED WORKING
+  - Phase 1: Credential entry via CXStr write
+  - Phase 2: Server select + PLAY EVERQUEST button click
+  - Phase 3: Enter World via eqgame.exe SidlText lookup + direct EnterWorld()
 - Camp↔Combat: FULLY WIRED (CombatEngage/Disengage IPC end-to-end)
 - TUI commands: :ma, :mt, :engage, :disengage now send real IPC commands
 
-## What's Done (This Session)
+## What's Done (Latest Session)
 
-### Login Chain — Phases 1-2 CONFIRMED WORKING ✅
-- `find_window_by_name` implemented (was a STUB returning None)
-- `find_window_by_text_contains` + `find_child_button_by_text` for fuzzy matching
-- EULA + 5 pre-login screen handlers from MQ2AutoLogin
-- Key discovery: game loop hook doesn't fire during eqmain.dll login screen
-- Restored inline IPC handler for credential entry (runs on IPC thread)
-- **Confirmed working approach:** Direct CXStr write to InputText (+0x278) with HeapAlloc CStrRep cloning for null password field
-- **Confirmed working:** Login button vtable click (WndNotification XWM_LCLICK)
-- **Confirmed working:** PLAY EVERQUEST button vtable click
-- **NOT working:** SetWindowText vtable at 0x280 — wrong function in eqmain.dll's vtable
-- **NOT working:** PostMessageW (WM_CHAR/VK_RETURN) — EQ uses DirectInput
-- **NOT working:** EQLogin char array write — UI doesn't read from backend
-- Null InputText fix: clones CStrRep from WindowText donor when InputText is null
+### Phase 3: Enter World — FIXED ✅ (commit 3088864)
+- Uses eqgame.exe offsets (not eqmain.dll) for CXWndManager
+- SidlText-based window lookup (finds "CharacterListWnd" via SIDL XML name)
+- Direct `CCharacterListWnd::EnterWorld()` function call at offset `0x1400D4B20`
+- Fallback: button click via vtable if EnterWorld() pointer is null
 
-### Login Chain — Phase 3 (Enter World) NOT YET WORKING
-- `/enterworld` slash command — executes but doesn't work at character select
-- PostMessageW Enter key — EQ ignores it (DirectInput)
-- eqgame.exe CXWndManager button search — "Enter World" text not found in 630 windows
-- Window dump shows character CREATE windows but not character SELECT buttons
-- **MQ2's approach:** `pCharacterListWnd->EnterWorld()` — direct function call
-  - `CCharacterListWnd::EnterWorld` at `0x1400D4B20` (preferred base)
-  - `pinstCXWndManager` at `0x140F37B28` (eqgame.exe, NOT eqmain.dll)
-  - Need to find `pCharacterListWnd` — MQ2 uses `FindMQ2Window("CharacterListWnd")`
+### Widget Pattern Extraction ✅
+- `dmft-dll/src/eq/widgets.rs` — shared primitives for all EQ UI interaction
+  - `find_window_by_name()`, `find_window_by_text_contains()`, `find_child_button_by_text()`
+  - `read_cxstr()`, `write_cxstr_inplace()`, `clone_cstrrep()`
+  - `click_button_via_vtable()`
+- `dmft-dll/src/login/widgets.rs` — login-specific widget helpers (SIDL names, pre-login prompts)
+- `dmft-dll/src/login/eqmain.rs` — eqmain.dll discovery and CSidlManager resolution
 
 ### Camp↔Combat Integration ✅
 - `CampAction` enum (Slash, CombatEngage, CombatDisengage)
-- `transition_to_fighting()` sends CombatEngage to all group members
-- `transition_to_looting()` sends CombatDisengage to all members
 - DLL `dispatch_command()` handles CombatEngage/Disengage/SetAssistTarget
 - Orchestrator `dispatch_action()` + `send_ipc_command()` for structured IPC
-- `CampSnapshot` includes `target_spawn_id`
 
 ### TUI Commands ✅
 - `:ma <name>` — sets MA, sends /assist to all focused clients
 - `:mt <name>` — sets Main Tank
 - `:engage [target_id]` — sends CombatEngage IPC
 - `:disengage` — sends CombatDisengage IPC
-- `send_ipc_command()` helper for structured IPC from TUI
-
-### Scripts & Desktop ✅
-- Desktop shortcuts → repo scripts (auto-update on git pull)
-- `test_autologin.bat` — fully automatic, 10s initial wait
-- Watchdog uses `/login:` flag to bypass EULA
 
 ## Priority TODO — Next Session
 
-### 1. Fix Phase 3: Enter World (USE TEAMCREATE FOR PARALLEL WORK)
-
-**Agent 1 — MQ2 Research:**
-- Deep-dive `StateMachine.cpp` CharacterSelect state handling
-- Find how MQ2 locates `pCharacterListWnd` at runtime
-- Check if it uses SIDL window lookup or a global pointer
-- Check eqgame.exe offsets for `pinstCCharacterListWnd` or similar
-- Research `CCharacterListWnd::EnterWorld()` function signature and calling convention
-
-**Agent 2 — Implementation:**
-- Implement `CCharacterListWnd::EnterWorld()` direct function call
-- Add offset `CHAR_LIST_ENTER_WORLD` = `0x1400D4B20` (already in offsets.rs)
-- Find pCharacterListWnd: either via eqgame.exe global pointer or SIDL window lookup
-- Alternative: find "Enter World" button using correct eqgame.exe CXWndManager offsets
-  (note: eqmain.dll offsets for CXWNDMGR_WINDOWS_ARRAY/COUNT might differ from eqgame.exe)
-
-**Agent 3 — Test Loop (if possible):**
-- SSH → close EQ → rebuild → trigger test_autologin.bat → wait → check DLL log
-- Parse log for Phase 3 results
-- Iterate until Enter World works
-
-### 2. Document Confirmed Working Patterns
-Extract into shared library (user requested):
-- `find_window_by_text()` — CXWndManager enumeration (WORKS)
-- `write_cxstr_inplace()` — direct InputText CXStr write (WORKS for non-null CXStr)
-- `clone_cstrrep_for_password()` — HeapAlloc CStrRep cloning (WORKS)
-- `click_button_via_vtable()` — WndNotification XWM_LCLICK (WORKS)
-- `set_edit_text_via_vtable()` — SetWindowText vtable 0x280 (DOES NOT WORK in eqmain.dll)
-
-### 3. TUI Fixes (from live testing feedback)
+### 1. TUI Fixes (from live testing feedback)
 - Zone name shows "Unknown" — offset calibration needed
 - Map shows points only — needs rasterized line rendering
 - Hex dump viewer empty — base address connection issue
 - Group tab not populating with online characters
+- Dynamic group window + character/server loading
 
-### 4. More Combat Features
+### 2. More Combat Features
 - Bard strategy + melody engine
 - Ranger strategy
 - Camp loop recovery wiring
 
-### 5. Peer Review Fixes (from this session)
+### 3. Navigation Tab
+- TUI navigation screen
+- Hunt/Camp mode tabs + commands
+
+### 4. Anti-Detection Hardening
+- Reflective injection (Phase 6)
+- String obfuscation
+
+### 5. Peer Review Fixes (from previous session)
 - ScreenMode = 3 before credential entry (MQ2 does this)
-- eqgame.exe CXWndManager offsets may differ from eqmain.dll
 - Thread safety: login credential writes happen on IPC thread, not game loop
 
 ## Key Technical Discoveries
 
-### Confirmed Working (eqmain.dll login screen)
+### Confirmed Working (all login phases)
 | Method | Status | Notes |
 |--------|--------|-------|
 | `write_cxstr_inplace` to InputText +0x278 | ✅ WORKS | When CXStr is non-null |
-| `clone_cstrrep_for_password` HeapAlloc | ✅ WORKS | Clones from donor CStrRep |
+| `clone_cstrrep` HeapAlloc | ✅ WORKS | Clones from donor CStrRep |
 | `click_button_via_vtable` WndNotification | ✅ WORKS | vtable offset 0x110 |
-| CXWndManager window enumeration | ✅ WORKS | "2 before label" heuristic |
+| CXWndManager window enumeration | ✅ WORKS | Both eqmain.dll and eqgame.exe |
+| SidlText-based window lookup | ✅ WORKS | For eqgame.exe windows (Phase 3) |
 | `/login:account` command-line flag | ✅ WORKS | Bypasses EULA |
+| Direct `EnterWorld()` function call | ✅ WORKS | Phase 3 character select → game |
 
 ### Does NOT Work
 | Method | Status | Notes |
@@ -135,9 +99,8 @@ Extract into shared library (user requested):
 - eqmain.dll has its OWN event loop — game loop hook doesn't fire during login
 - eqmain.dll and eqgame.exe have DIFFERENT CXWnd vtable layouts
 - eqmain.dll CXWndManager offsets (WINDOWS_ARRAY, WINDOWS_COUNT) confirmed working
-- eqgame.exe pinstCXWndManager at 0x140F37B28 resolves but may use different array offsets
+- eqgame.exe pinstCXWndManager at 0x140F37B28 — uses SidlText for window identification
 - CStrRep must be allocated on Windows process heap (HeapAlloc) for EQ to manage
-- `/login:` flag inconsistently populates InputText vs WindowText between launches
 
 ## Key File Paths
 
@@ -150,26 +113,3 @@ Extract into shared library (user requested):
 
 ### Mac (dev)
 - DMFT: `/Users/maleick/Projects/DMFT`
-
-## Windows MCP for Testing Loop
-
-**https://github.com/CursorTouch/Windows-MCP** — MCP server that bridges AI agents to Windows OS. Supports UI automation, screenshots, PowerShell execution, and application control.
-
-**Why this matters:** Enables a fully automated test loop from Claude Code:
-- Take screenshots to verify EQ UI state
-- Run PowerShell commands (build, trigger, check logs)
-- Click UI elements if needed
-- All via MCP protocol over SSE/HTTP transport
-
-**Setup on frostreaver:**
-1. Install Python 3.13+ and UV on frostreaver
-2. `pip install windows-mcp` or clone repo
-3. Run with SSE transport: `python -m windows_mcp --transport sse --port 8080`
-4. Connect from Claude Code as an MCP server via HTTP
-
-**Alternative:** Fork and create a minimal version focused on:
-- PowerShell command execution (already have via SSH)
-- Screenshot capture (new — would help verify login UI state)
-- Process management (kill EQ, check if running)
-
-If the full MCP can't be connected remotely from Claude Code, a lightweight fork with just SSH-tunneled screenshot + command execution would work.

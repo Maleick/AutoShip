@@ -29,6 +29,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         ActiveScreen::Character => draw_character_screen(frame, outer[1], app),
         ActiveScreen::Map => draw_map_screen(frame, outer[1], app),
         ActiveScreen::Groups => draw_groups_screen(frame, outer[1], app),
+        ActiveScreen::Navigation => draw_navigation_screen(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -1429,40 +1430,52 @@ fn spawn_row_style(spawn: &SpawnInfo) -> Style {
 // ─── Screen 5: Groups ──────────────────────────────────────────────
 
 fn draw_groups_screen(frame: &mut Frame, area: Rect, app: &App) {
-    // 2 rows × 3 columns
+    let group_count = app.groups.len();
+
+    if group_count == 0 {
+        let msg = Paragraph::new("No groups configured. Add groups to config/frostreaver.toml or config/accounts.toml")
+            .block(Block::default().borders(Borders::ALL).title(" Groups "))
+            .style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(msg, area);
+        return;
+    }
+
+    // Dynamic grid layout based on group count
+    let (num_rows, num_cols) = match group_count {
+        1 => (1, 1),
+        2 => (1, 2),
+        3 => (1, 3),
+        4 => (2, 2),
+        5..=6 => (2, 3),
+        7..=9 => (3, 3),
+        _ => (3, 4), // 10-12 groups
+    };
+
+    let row_constraints: Vec<Constraint> = (0..num_rows)
+        .map(|_| Constraint::Ratio(1, num_rows as u32))
+        .collect();
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints(row_constraints)
         .split(area);
 
-    let top_cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(33),
-            Constraint::Percentage(34),
-            Constraint::Percentage(33),
-        ])
-        .split(rows[0]);
+    let col_constraints: Vec<Constraint> = (0..num_cols)
+        .map(|_| Constraint::Ratio(1, num_cols as u32))
+        .collect();
 
-    let bot_cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(33),
-            Constraint::Percentage(34),
-            Constraint::Percentage(33),
-        ])
-        .split(rows[1]);
+    let mut panel_idx = 0;
+    for row in rows.iter() {
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(col_constraints.clone())
+            .split(*row);
 
-    let panels = [
-        top_cols[0], top_cols[1], top_cols[2],
-        bot_cols[0], bot_cols[1], bot_cols[2],
-    ];
-
-    for (i, group) in app.groups.iter().enumerate() {
-        if i >= 6 {
-            break;
+        for col in cols.iter() {
+            if panel_idx < group_count {
+                draw_group_panel(frame, *col, app, &app.groups[panel_idx], panel_idx);
+            }
+            panel_idx += 1;
         }
-        draw_group_panel(frame, panels[i], app, group, i);
     }
 }
 
@@ -1548,6 +1561,17 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
         }
     }
 
+    // Build a map of account_num → config entry for offline slot info
+    let config_map: std::collections::HashMap<u8, &crate::config::AccountEntry> =
+        app.accounts_config.as_ref()
+            .map(|cfg| {
+                cfg.accounts.iter()
+                    .filter(|a| a.group == group.id as u32)
+                    .filter_map(|a| extract_account_number(&a.name).map(|n| (n, a)))
+                    .collect()
+            })
+            .unwrap_or_default();
+
     for acct_num in lo..=hi {
         if let Some(client) = slot_map.get(&acct_num) {
             if let Some(player) = &client.local_player {
@@ -1586,23 +1610,239 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
                     Style::default().fg(Color::DarkGray),
                 )));
             }
+        } else if let Some(acct) = config_map.get(&acct_num) {
+            // Show config info for offline slots
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("  #{:02} ", acct_num),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    format!("{:<4}", acct.class),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    " offline",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]));
         } else {
             lines.push(Line::from(Span::styled(
-                format!("  #{:02} --- offline ---", acct_num),
+                format!("  #{:02} --- empty ---", acct_num),
                 Style::default().fg(Color::DarkGray),
             )));
         }
     }
 
-    // Group status line
+    // Group mode status
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  Status: Idle",
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
-    )));
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_color = match mode_str.as_str() {
+        "Camp" => Color::Green,
+        "Hunt" => Color::Yellow,
+        _ => Color::DarkGray,
+    };
+    lines.push(Line::from(vec![
+        Span::styled("  Mode: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(mode_str, Style::default().fg(mode_color).add_modifier(Modifier::ITALIC)),
+    ]));
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, inner);
+}
+
+// ─── Screen 6: Navigation ──────────────────────────────────────────
+
+fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(60), // Character nav status list
+            Constraint::Percentage(40), // Nav commands / info
+        ])
+        .split(area);
+
+    // Left panel: navigation status per character
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Navigation Status ")
+        .border_style(Style::default().fg(Color::Green));
+
+    let visible = app.visible_clients();
+
+    if visible.is_empty() {
+        let msg = Paragraph::new("No characters connected")
+            .block(block)
+            .style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(msg, cols[0]);
+    } else {
+        let header = Row::new(vec![
+            Cell::from("").style(Style::default().add_modifier(Modifier::BOLD)),
+            Cell::from("Character").style(Style::default().add_modifier(Modifier::BOLD)),
+            Cell::from("Zone").style(Style::default().add_modifier(Modifier::BOLD)),
+            Cell::from("Status").style(Style::default().add_modifier(Modifier::BOLD)),
+            Cell::from("Destination").style(Style::default().add_modifier(Modifier::BOLD)),
+        ])
+        .height(1);
+
+        let rows: Vec<Row> = visible
+            .iter()
+            .enumerate()
+            .map(|(i, client)| {
+                let is_selected = i == app.nav_selected;
+                let marker = if is_selected { ">" } else { " " };
+
+                let char_name = client
+                    .local_player
+                    .as_ref()
+                    .map(|p| app.redact_name(&p.displayed_name).into_owned())
+                    .unwrap_or_else(|| format!("PID {}", client.pid));
+
+                let nav_status = app.nav_statuses.get(&client.pid);
+                let status_str = nav_status
+                    .map(|s| s.status.as_str())
+                    .unwrap_or("Idle");
+                let dest_str = nav_status
+                    .map(|s| s.destination.as_str())
+                    .unwrap_or("-");
+
+                let status_color = match status_str {
+                    "Navigating" => Color::Yellow,
+                    "Arrived" => Color::Green,
+                    "Stuck" => Color::Red,
+                    _ => Color::DarkGray,
+                };
+
+                let style = if is_selected {
+                    Style::default()
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+
+                Row::new(vec![
+                    Cell::from(marker).style(Style::default().fg(Color::Cyan)),
+                    Cell::from(char_name),
+                    Cell::from(client.zone_name.as_str()).style(Style::default().fg(Color::White)),
+                    Cell::from(status_str).style(Style::default().fg(status_color)),
+                    Cell::from(dest_str).style(Style::default().fg(Color::Cyan)),
+                ])
+                .style(style)
+            })
+            .collect();
+
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Length(1),  // marker
+                Constraint::Min(14),    // Character
+                Constraint::Min(14),    // Zone
+                Constraint::Length(12), // Status
+                Constraint::Min(14),    // Destination
+            ],
+        )
+        .header(header)
+        .block(block);
+
+        frame.render_widget(table, cols[0]);
+    }
+
+    // Right panel: nav commands reference
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_color = match mode_str.as_str() {
+        "Camp" => Color::Green,
+        "Hunt" => Color::Yellow,
+        _ => Color::White,
+    };
+
+    let mut info_lines = vec![
+        Line::from(Span::styled(
+            "Operating Mode",
+            Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("  Mode: "),
+            Span::styled(
+                &mode_str,
+                Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+    ];
+
+    if let Some(ma) = &app.main_assist {
+        info_lines.push(Line::from(vec![
+            Span::raw("  MA:   "),
+            Span::styled(ma.as_str(), Style::default().fg(Color::Yellow)),
+        ]));
+    }
+    if let Some(mt) = &app.main_tank {
+        info_lines.push(Line::from(vec![
+            Span::raw("  MT:   "),
+            Span::styled(mt.as_str(), Style::default().fg(Color::Red)),
+        ]));
+    }
+
+    info_lines.push(Line::from(""));
+    info_lines.push(Line::from(Span::styled(
+        "Nav Commands (:mode)",
+        Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan),
+    )));
+    info_lines.push(Line::from(""));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :mode camp  ", Style::default().fg(Color::Yellow)),
+        Span::raw("Camp mode"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :mode hunt  ", Style::default().fg(Color::Yellow)),
+        Span::raw("Hunt mode"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :camp start ", Style::default().fg(Color::Yellow)),
+        Span::raw("Start camp"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :camp stop  ", Style::default().fg(Color::Yellow)),
+        Span::raw("Stop camp"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :camp next  ", Style::default().fg(Color::Yellow)),
+        Span::raw("Next camp"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :camp prev  ", Style::default().fg(Color::Yellow)),
+        Span::raw("Previous camp"),
+    ]));
+    info_lines.push(Line::from(""));
+    info_lines.push(Line::from(Span::styled(
+        "Group Commands",
+        Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan),
+    )));
+    info_lines.push(Line::from(""));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :invite <n> ", Style::default().fg(Color::Yellow)),
+        Span::raw("Invite to group"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :accept     ", Style::default().fg(Color::Yellow)),
+        Span::raw("Accept invite"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :ma <name>  ", Style::default().fg(Color::Yellow)),
+        Span::raw("Main Assist"),
+    ]));
+    info_lines.push(Line::from(vec![
+        Span::styled(" :mt <name>  ", Style::default().fg(Color::Yellow)),
+        Span::raw("Main Tank"),
+    ]));
+
+    let info_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Commands & Mode ")
+        .border_style(Style::default().fg(Color::Yellow));
+    let paragraph = Paragraph::new(info_lines).block(info_block);
+    frame.render_widget(paragraph, cols[1]);
 }
 
 fn draw_help_overlay(frame: &mut Frame, area: Rect) {
@@ -1619,7 +1859,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
     let help_text = vec![
         Line::from(Span::styled("Keybindings", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
         Line::from(""),
-        Line::from(vec![Span::styled(" 1-5      ", Style::default().fg(Color::Yellow)), Span::raw("Switch screens")]),
+        Line::from(vec![Span::styled(" 1-6      ", Style::default().fg(Color::Yellow)), Span::raw("Switch screens")]),
         Line::from(vec![Span::styled(" Shift+1-6", Style::default().fg(Color::Yellow)), Span::raw("Focus group G1-G6")]),
         Line::from(vec![Span::styled(" Shift+0  ", Style::default().fg(Color::Yellow)), Span::raw("All groups (aggregate)")]),
         Line::from(vec![Span::styled(" [ ]      ", Style::default().fg(Color::Yellow)), Span::raw("Cycle clients")]),

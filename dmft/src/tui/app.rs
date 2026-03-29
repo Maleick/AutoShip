@@ -21,6 +21,7 @@ pub enum ActiveScreen {
     Character,
     Map,
     Groups,
+    Navigation,
 }
 
 impl ActiveScreen {
@@ -31,6 +32,7 @@ impl ActiveScreen {
             Self::Character => "Character",
             Self::Map => "Map",
             Self::Groups => "Groups",
+            Self::Navigation => "Nav",
         }
     }
 
@@ -41,15 +43,17 @@ impl ActiveScreen {
             Self::Character => '3',
             Self::Map => '4',
             Self::Groups => '5',
+            Self::Navigation => '6',
         }
     }
 
-    pub const ALL: [ActiveScreen; 5] = [
+    pub const ALL: [ActiveScreen; 6] = [
         Self::Dashboard,
         Self::Spawns,
         Self::Character,
         Self::Map,
         Self::Groups,
+        Self::Navigation,
     ];
 }
 
@@ -258,6 +262,18 @@ pub struct App {
     pub loot_database: LootDatabase,
     pub log_watchers: Vec<LogWatcher>,
     pub session_start: std::time::Instant,
+
+    // Navigation state
+    pub nav_selected: usize,
+    pub nav_statuses: HashMap<u32, NavClientStatus>,
+}
+
+/// Navigation status for a single client.
+#[derive(Debug, Clone)]
+pub struct NavClientStatus {
+    pub destination: String,
+    pub status: String,
+    pub eta_secs: Option<u32>,
 }
 
 impl App {
@@ -270,14 +286,7 @@ impl App {
             clients: Vec::new(),
             selected_client: 0,
             active_group: None,
-            groups: vec![
-                GroupDef { id: 1, name: "Alpha".into(), account_range: (1, 6), default_camp: "Camp A".into() },
-                GroupDef { id: 2, name: "Bravo".into(), account_range: (7, 12), default_camp: "Camp B".into() },
-                GroupDef { id: 3, name: "Charlie".into(), account_range: (13, 18), default_camp: "Camp C".into() },
-                GroupDef { id: 4, name: "Delta".into(), account_range: (19, 24), default_camp: "Camp D".into() },
-                GroupDef { id: 5, name: "Echo".into(), account_range: (25, 30), default_camp: "Camp E".into() },
-                GroupDef { id: 6, name: "Foxtrot".into(), account_range: (31, 36), default_camp: "Camp F".into() },
-            ],
+            groups: Self::build_default_groups(),
 
             server_name: String::from("Firiona Vie"),
 
@@ -339,7 +348,73 @@ impl App {
             loot_database: LootDatabase::new(),
             log_watchers: Vec::new(),
             session_start: std::time::Instant::now(),
+
+            nav_selected: 0,
+            nav_statuses: HashMap::new(),
         }
+    }
+
+    /// Build default group definitions. If accounts config exists, derives groups
+    /// from the configured group IDs. Otherwise falls back to 6 default groups.
+    fn build_default_groups() -> Vec<GroupDef> {
+        let default_names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"];
+
+        if let Ok(accts) = AccountsConfig::load(std::path::Path::new("config/accounts.toml")) {
+            // Discover unique group IDs from account config
+            let mut group_ids: Vec<u32> = accts.accounts.iter().map(|a| a.group).collect();
+            group_ids.sort();
+            group_ids.dedup();
+            group_ids.retain(|&id| id > 0); // skip ungrouped (0)
+
+            if !group_ids.is_empty() {
+                return group_ids.iter().map(|&id| {
+                    let accounts_in_group: Vec<&crate::config::AccountEntry> =
+                        accts.accounts.iter().filter(|a| a.group == id).collect();
+
+                    // Derive account range from actual account numbers
+                    let account_nums: Vec<u8> = accounts_in_group.iter()
+                        .filter_map(|a| extract_account_number(&a.name))
+                        .collect();
+                    let lo = account_nums.iter().copied().min().unwrap_or(1);
+                    let hi = account_nums.iter().copied().max().unwrap_or(lo);
+
+                    let name = default_names.get((id - 1) as usize)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("Group {}", id));
+
+                    GroupDef {
+                        id: id as u8,
+                        name,
+                        account_range: (lo, hi),
+                        default_camp: format!("Camp {}", id),
+                    }
+                }).collect();
+            }
+        }
+
+        // Fallback: 6 groups with 6 slots each
+        (0..6).map(|i| {
+            let lo = (i * 6 + 1) as u8;
+            let hi = ((i + 1) * 6) as u8;
+            GroupDef {
+                id: (i + 1) as u8,
+                name: default_names[i].to_string(),
+                account_range: (lo, hi),
+                default_camp: format!("Camp {}", default_names[i]),
+            }
+        }).collect()
+    }
+
+    /// Rebuild group definitions from accounts config. Called when config changes.
+    pub fn rebuild_groups_from_config(&mut self) {
+        self.groups = Self::build_default_groups();
+    }
+
+    /// Get the number of groups that have at least one connected client.
+    pub fn active_group_count(&self) -> usize {
+        self.groups.iter().enumerate()
+            .filter(|(i, _)| !self.clients_in_group_idx(*i).is_empty())
+            .count()
     }
 
     /// Get the currently selected client, if any.

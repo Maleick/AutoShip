@@ -145,6 +145,10 @@ pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orches
                 app.active_screen = ActiveScreen::Groups;
                 return Ok(true);
             }
+            (KeyCode::Char('6'), _) => {
+                app.active_screen = ActiveScreen::Navigation;
+                return Ok(true);
+            }
             (KeyCode::Tab, _) => {
                 app.toggle_panel();
                 return Ok(true);

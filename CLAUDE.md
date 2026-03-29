@@ -17,7 +17,7 @@ cargo clippy             # Lint
 cargo fmt --check        # Check formatting
 ```
 
-The project has 283 tests across all three crates. Run `cargo test` to execute them. The project uses Rust edition 2024.
+The project has 621 tests across all three crates. Run `cargo test` to execute them. The project uses Rust edition 2024.
 
 ## Architecture
 
@@ -65,8 +65,8 @@ The project follows a milestone-based plan:
 - **M2.5** (complete): Login automation — credential store (SQLite + AES-GCM + Argon2), process spawner, login state machine, launch coordinator with stagger, post-login sequencer, CPU affinity manager, hot-updatable offset database
 - **M3** (complete): Navigation — waypoint-based pathfinding, Navigator FSM, movement humanization, stuck detection with escalating recovery, waypoint recorder, camp positioning, zone router
 - **M4** (complete): Combat automation — ClassStrategy trait with per-class implementations (warrior/cleric/enchanter/generic DPS), HolyShit conditional ability system, GCD tracker, mana governor, puller FSM, aggro detection, combat coordinator
-- **M5** (next): Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics
-- **M6**: LLM Character AI — API integration (Gemini/Claude), in-game chat responses
+- **M5** (complete): Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics
+- **M6** (next): LLM Character AI — API integration (Gemini/Claude), in-game chat responses
 - **M7**: Learning/RL — behavioral cloning, RL fine-tuning, auto-research loops
 - **M8**: Economy — vendor automation, EC tunnel trading, Bazaar, price tracking
 
@@ -91,6 +91,7 @@ The control approach uses DLL injection (like MacroQuest) rather than PostMessag
   - `game_loop.rs`: Main game loop hook (ProcessGameEvents), `movement.rs`: Movement hooks
   - `casting.rs`: Spell casting hooks, `targeting.rs`: Target selection hooks
 - **`dmft-dll/src/eq/`** — EQ function bindings for direct calls from DLL
+  - `widgets.rs`: Shared UI widget primitives (CXWndManager scan, CXStr read/write, button click via vtable, window find)
 - **`dmft-dll/src/ipc/`** — DLL-side IPC (shared memory + named pipes)
   - `shared.rs`: Shared memory access, `pipe.rs`: Named pipe client
 - **`dmft-dll/src/nav/`** — DLL-side navigation engine
@@ -102,6 +103,9 @@ The control approach uses DLL injection (like MacroQuest) rather than PostMessag
   - `holyshit.rs`: conditional ability evaluator, `gcd.rs`: GCD tracker, `mana.rs`: ManaGovernor
   - `puller.rs`: pull cycle FSM, `aggro.rs`: heading-based aggro detection
   - `positioning.rs`: Combat positioning, `humanize.rs`: Combat action humanization
+- **`dmft-dll/src/login/`** — Login automation (DLL-side)
+  - `mod.rs`: Login state machine integration, `eqmain.rs`: eqmain.dll discovery and pointer resolution
+  - `widgets.rs`: Login-specific UI widget helpers (credential entry, splash dismiss, SIDL window names)
 
 ### Module structure (dmft orchestrator — M2-M4)
 

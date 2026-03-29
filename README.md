@@ -6,7 +6,7 @@ Frostreaver reads live game state from EQ client memory, injects a DLL for direc
 
 ## Status
 
-**DLL injection + command execution confirmed working on live eqgame.exe** (March 2026 build). Two characters successfully grouped, following, sitting/standing via remote commands.
+**DLL injection + command execution confirmed working on live eqgame.exe** (March 2026 build). Login automation (Phases 1-3) working end-to-end: credential entry, server select, character select, Enter World. Two characters successfully grouped, following, sitting/standing via remote commands.
 
 ## Features
 
@@ -121,7 +121,7 @@ DLL executes InterpretCmd with human-like jitter delay
 ```bash
 cargo build              # Debug build
 cargo run                # TUI with demo data
-cargo test               # Run all ~459 tests
+cargo test               # Run all 621 tests
 cargo clippy             # Lint
 ```
 
