@@ -229,18 +229,24 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
         }
     }
 
-    // Phase 3: Wait for character select, then click Enter World
+    // Phase 3: Wait for character select, then enter world.
+    // At character select, eqmain.dll is unloaded and eqgame.exe is active.
+    // Our game loop hook IS running, so we can use InterpretCmd.
     tracing::info!("Login chain phase 3: waiting 15s for character select...");
     std::thread::sleep(std::time::Duration::from_secs(15));
 
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
-        // eqmain.dll unloaded means we're already in-world!
-        tracing::info!("Phase 3: eqmain.dll unloaded — character is already in-world!");
+        // eqmain.dll unloaded — we're at character select (eqgame.exe).
+        // Queue /enterworld as a slash command via PENDING_COMMANDS.
+        // The game loop will pick it up and execute InterpretCmd.
+        tracing::info!("Phase 3: eqmain.dll unloaded — at character select, sending /enterworld");
+        crate::hooks::game_loop::queue_slash_command("/enterworld".to_string());
+        tracing::info!("Phase 3 complete: /enterworld queued");
         return;
     }
 
-    // Scan for Enter World / Enter / Play button
+    // eqmain.dll still loaded — try button click as fallback
     let enter_candidates = ["Enter World", "ENTER WORLD", "Enter", "Play"];
     let mut found = false;
     for candidate in &enter_candidates {
@@ -258,8 +264,8 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
     }
 
     if !found {
-        tracing::warn!("Phase 3: Enter World button not found — trying Enter fallback");
-        crate::login::widgets::simulate_enter_key(eqmain_base3);
+        tracing::warn!("Phase 3: Enter World button not found — trying /enterworld command");
+        crate::hooks::game_loop::queue_slash_command("/enterworld".to_string());
     }
 }
 

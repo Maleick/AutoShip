@@ -129,6 +129,17 @@ fn human_jitter_ticks(rng: &mut dmft_common::nav::Xorshift32) -> u64 {
     (base + hesitate) as u64
 }
 
+/// Queue a slash command for execution on the next game loop tick.
+/// Safe to call from any thread — the game loop will pick it up.
+pub fn queue_slash_command(command: String) {
+    if let Ok(mut queue) = PENDING_COMMANDS.lock() {
+        queue.push(PendingCommand {
+            command: dmft_common::ipc::Command::SlashCommand { command },
+            execute_at_tick: 0, // execute immediately on next tick
+        });
+    }
+}
+
 /// Enqueue a command with a human-like jitter delay.
 fn enqueue_command(cmd: dmft_common::ipc::Command, current_tick: u64) {
     let delay = if let Ok(mut rng) = JITTER_RNG.lock() {
