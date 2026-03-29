@@ -173,26 +173,15 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 // login screen — eqmain.dll has its own event loop.
                 let eqmain_base = crate::login::eqmain::find_eqmain();
                 if eqmain_base != 0 {
-                    // Try CXStr approach FIRST — writes to CEditWnd which the
-                    // UI actually reads. The char-array approach writes to
-                    // EQLogin backend but the UI doesn't refresh from it.
-                    let wrote = crate::login::widgets::type_credentials_to_window(
+                    // Write to EQLogin char arrays. EQ reads these when Login
+                    // is clicked, even though the UI doesn't display them.
+                    // (CXStr/CEditWnd approach crashes — offset mismatch in eqmain.dll)
+                    let wrote = crate::login::widgets::write_login_credentials(
                         eqmain_base, &account_name, &password,
                     );
-                    if wrote {
-                        tracing::info!("Inline: credentials written via CXStr (UI-visible)");
-                    } else {
-                        // Fallback: write to EQLogin char arrays (backend only)
-                        let wrote_backend = crate::login::widgets::write_login_credentials(
-                            eqmain_base, &account_name, &password,
-                        );
-                        tracing::info!(
-                            wrote_backend,
-                            "Inline: CXStr write failed, tried EQLogin char arrays"
-                        );
-                    }
+                    tracing::info!(wrote, "Inline: wrote credentials to EQLogin char arrays");
 
-                    // Click Login button
+                    // Click Login button via vtable
                     let clicked =
                         crate::login::widgets::click_button(eqmain_base, "Login")
                         || crate::login::widgets::click_button(eqmain_base, "LOGIN")
