@@ -106,6 +106,26 @@ impl PostLoginSequencer {
     }
 }
 
+/// Generate `/invite <name>` commands for forming groups.
+/// `leader_pid` is the PID of the group leader's EQ client.
+/// `member_names` are the character names to invite.
+/// Returns a list of SlashCommand to send to the leader's DLL.
+pub fn group_invite_commands(member_names: &[&str]) -> Vec<Command> {
+    member_names
+        .iter()
+        .map(|name| Command::SlashCommand {
+            command: format!("/invite {name}"),
+        })
+        .collect()
+}
+
+/// Generate `/accept` command for group members to accept invites.
+pub fn group_accept_command() -> Command {
+    Command::SlashCommand {
+        command: "/accept".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
