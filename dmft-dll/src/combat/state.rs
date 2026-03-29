@@ -253,12 +253,14 @@ impl Combatant {
     /// when a real player snapshot is available.
     pub fn engage(&mut self, target_id: u32) {
         tracing::info!(target_id, "Engaging target");
+        crate::eq::toggle_auto_attack(true);
         self.state = CombatState::Engaging { target_id };
     }
 
     /// Stop combat — return to idle.
     pub fn disengage(&mut self) {
         tracing::info!("Disengaging from combat");
+        crate::eq::toggle_auto_attack(false);
         self.assist_target = None;
         self.state = CombatState::Idle;
     }
