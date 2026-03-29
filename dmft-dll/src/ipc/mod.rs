@@ -173,20 +173,25 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 // login screen — eqmain.dll has its own event loop.
                 let eqmain_base = crate::login::eqmain::find_eqmain();
                 if eqmain_base != 0 {
-                    // Write to EQLogin char arrays. EQ reads these when Login
-                    // is clicked, even though the UI doesn't display them.
-                    // (CXStr/CEditWnd approach crashes — offset mismatch in eqmain.dll)
-                    let wrote = crate::login::widgets::write_login_credentials(
-                        eqmain_base, &account_name, &password,
+                    // With /login:account flag, the username is pre-filled.
+                    // Type the password via PostMessageW(WM_CHAR) which works
+                    // even when EQ is not foreground, then press Enter.
+                    let typed = crate::login::widgets::type_password_wm_char(
+                        eqmain_base, &password,
                     );
-                    tracing::info!(wrote, "Inline: wrote credentials to EQLogin char arrays");
+                    tracing::info!(typed, "Inline: typed password via WM_CHAR");
 
-                    // Click Login button via vtable
-                    let clicked =
-                        crate::login::widgets::click_button(eqmain_base, "Login")
-                        || crate::login::widgets::click_button(eqmain_base, "LOGIN")
-                        || crate::login::widgets::simulate_enter_key(eqmain_base);
-                    tracing::info!(clicked, "Inline: Login button click attempted");
+                    if !typed {
+                        // Fallback: write char arrays + click Login
+                        let wrote = crate::login::widgets::write_login_credentials(
+                            eqmain_base, &account_name, &password,
+                        );
+                        tracing::info!(wrote, "Inline: fallback wrote EQLogin char arrays");
+                        let clicked =
+                            crate::login::widgets::click_button(eqmain_base, "Login")
+                            || crate::login::widgets::click_button(eqmain_base, "LOGIN");
+                        tracing::info!(clicked, "Inline: fallback Login button click");
+                    }
 
                     // Spawn thread for phase 2 (server select)
                     let srv = server_name.clone();

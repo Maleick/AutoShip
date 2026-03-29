@@ -432,6 +432,65 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 }
 
 /// Simulate pressing Enter on the EQ window to submit login credentials.
+/// Type the password into EQ's focused password field using PostMessageW(WM_CHAR).
+/// This works even when EQ is not the foreground window. The username should
+/// already be filled by the /login: command-line flag.
+///
+/// Flow: click password field → type password char-by-char → press Enter.
+pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+
+        let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
+            tracing::warn!("Cannot type password — EQ HWND not resolved");
+            return false;
+        };
+
+        let hwnd = HWND(hwnd_val as *mut _);
+        const WM_CHAR: u32 = 0x0102;
+        const WM_KEYDOWN: u32 = 0x0100;
+        const WM_KEYUP: u32 = 0x0101;
+        const VK_TAB: u16 = 0x09;
+        const VK_RETURN: u16 = 0x0D;
+
+        unsafe {
+            // Tab to move focus from username to password field
+            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_TAB as usize), LPARAM(0));
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_TAB as usize), LPARAM(0));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+
+            // Type each character of the password via WM_CHAR
+            for ch in password.chars() {
+                let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(ch as usize), LPARAM(0));
+                std::thread::sleep(std::time::Duration::from_millis(15));
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+
+            // Press Enter to submit
+            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN as usize), LPARAM(0));
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN as usize), LPARAM(0));
+        }
+
+        tracing::info!(
+            hwnd = format!("{:#x}", hwnd_val),
+            pw_len = password.len(),
+            "Typed password via WM_CHAR + Enter"
+        );
+        true
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (eqmain_base, password);
+        false
+    }
+}
+
 /// Uses SendInput for hardware-level key simulation.
 pub fn simulate_enter_key(eqmain_base: u64) -> bool {
     #[cfg(windows)]
