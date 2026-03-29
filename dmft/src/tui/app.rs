@@ -1,5 +1,5 @@
 use crate::eq::map_parser::ZoneMap;
-use crate::eq::structs::{SpawnInfo, SpawnType};
+use crate::eq::structs::{GroupInfo, SpawnInfo, SpawnType};
 use crate::soul::coordinator::SoulCoordinator;
 
 /// Which screen is currently displayed.
@@ -83,6 +83,8 @@ pub struct ClientState {
     pub target: Option<SpawnInfo>,
     pub spawns: Vec<SpawnInfo>,
     pub zone_name: String,
+    /// Group membership info for this client.
+    pub group_info: Option<GroupInfo>,
     /// Status message specific to this client.
     pub client_status: String,
 }
@@ -96,6 +98,7 @@ impl ClientState {
             target: None,
             spawns: Vec::new(),
             zone_name: String::from("Unknown"),
+            group_info: None,
             client_status: format!("Attached to PID {}", pid),
         }
     }

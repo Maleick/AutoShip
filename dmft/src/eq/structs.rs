@@ -166,6 +166,14 @@ impl fmt::Display for StandState {
     }
 }
 
+/// Group membership info read from CGroup in memory.
+#[derive(Debug, Clone)]
+pub struct GroupInfo {
+    pub leader_name: String,
+    pub members: Vec<String>,
+    pub member_count: u8,
+}
+
 /// Extracted spawn data — not a repr(C) struct, but a high-level view
 /// built by reading individual fields at their offsets.
 #[derive(Debug, Clone)]

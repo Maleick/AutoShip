@@ -181,6 +181,42 @@ pub mod actor_client {
     pub const CHAR_CLASS: usize = 0x0FDC;
 }
 
+/// Group-related offsets
+/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h
+pub mod group {
+    /// Offset of CGroup* pointer within PcClient struct
+    /// PcClient.Group at 0x2EB0
+    pub const PC_CLIENT_GROUP_PTR: usize = 0x2EB0;
+
+    /// MAX_GROUP_SIZE = 6 (including self)
+    pub const MAX_GROUP_SIZE: usize = 6;
+
+    // ─── CGroupBase layout (vtable at 0x00) ───
+    /// CGroupMember* m_groupMembers[6] — array of 6 member pointers
+    pub const GROUP_MEMBERS: usize = 0x08;
+    /// CGroupMember* m_groupLeader — pointer to leader member
+    pub const GROUP_LEADER: usize = 0x38;
+    /// uint32_t m_id — group ID
+    pub const GROUP_ID: usize = 0x40;
+
+    // ─── CGroupMemberBase layout (vtable at 0x00) ───
+    /// CXStr Name — member name (CXStr = pointer to CStrRep)
+    pub const MEMBER_NAME_CXSTR: usize = 0x08;
+    /// short Type — player type (PC=0, NPC=1, etc.)
+    pub const MEMBER_TYPE: usize = 0x10;
+    /// CXStr OwnerName — mercenary owner name
+    pub const MEMBER_OWNER_CXSTR: usize = 0x18;
+    /// int Level
+    pub const MEMBER_LEVEL: usize = 0x20;
+    /// bool bIsOffline
+    pub const MEMBER_IS_OFFLINE: usize = 0x24;
+
+    // ─── CXStr / CStrRep layout ───
+    /// CXStr is a single pointer to CStrRep (m_data at offset 0x00)
+    /// CStrRep.utf8 string data starts at offset 0x18
+    pub const CXSTR_REP_UTF8: usize = 0x18;
+}
+
 /// Offsets within SpawnManager (PlayerManagerBase)
 pub mod spawn_manager {
     /// TList<PlayerClient*> — start of the player linked list

@@ -1,7 +1,7 @@
-use super::structs::{EqClass, SpawnInfo, SpawnType, StandState};
+use super::structs::{EqClass, GroupInfo, SpawnInfo, SpawnType, StandState};
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
-use dmft_common::offsets::{self, actor_client, player_base, player_zone, spawn_manager};
+use dmft_common::offsets::{self, actor_client, group, player_base, player_zone, spawn_manager};
 
 /// Read a single spawn's data from the process at the given PlayerClient address.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
@@ -159,6 +159,79 @@ pub fn read_all_spawns(
     }
 
     Ok(spawns)
+}
+
+/// Read a CXStr (EQ's string type) from memory.
+/// CXStr is a pointer to CStrRep; the UTF-8 data lives at CStrRep+0x18.
+fn read_cxstr(proc: &ProcessHandle, cxstr_addr: usize, max_len: usize) -> Result<String> {
+    let rep_ptr = proc
+        .read_ptr(cxstr_addr)
+        .context("Failed to read CXStr.m_data pointer")?;
+    if rep_ptr == 0 {
+        return Ok(String::new());
+    }
+    proc.read_string(rep_ptr + group::CXSTR_REP_UTF8, max_len)
+        .context("Failed to read CStrRep.utf8 data")
+}
+
+/// Read group membership info from the local PC's CGroup pointer.
+///
+/// Path: pLocalPC -> +0x2EB0 (CGroup*) -> CGroupBase members array.
+/// Each CGroupMember has a CXStr Name at offset 0x08.
+pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<GroupInfo>> {
+    // Read pLocalPC
+    let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)
+        .context("rebase underflow for pinstLocalPC")?;
+    let pc_addr = proc
+        .read_ptr(pc_ptr_addr)
+        .context("Failed to read pinstLocalPC pointer")?;
+    if pc_addr == 0 {
+        return Ok(None);
+    }
+
+    // Read CGroup* from PcClient
+    let group_ptr = proc
+        .read_ptr(pc_addr + group::PC_CLIENT_GROUP_PTR)
+        .context("Failed to read PcClient.Group pointer")?;
+    if group_ptr == 0 {
+        return Ok(None);
+    }
+
+    // Read leader pointer and name
+    let leader_ptr = proc
+        .read_ptr(group_ptr + group::GROUP_LEADER)
+        .unwrap_or(0);
+    let leader_name = if leader_ptr != 0 {
+        read_cxstr(proc, leader_ptr + group::MEMBER_NAME_CXSTR, 64).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    // Read member pointers (6 slots)
+    let mut members = Vec::new();
+    for i in 0..group::MAX_GROUP_SIZE {
+        let member_ptr_addr = group_ptr + group::GROUP_MEMBERS + (i * 8);
+        let member_ptr = proc.read_ptr(member_ptr_addr).unwrap_or(0);
+        if member_ptr == 0 {
+            continue;
+        }
+        let name = read_cxstr(proc, member_ptr + group::MEMBER_NAME_CXSTR, 64)
+            .unwrap_or_default();
+        if !name.is_empty() {
+            members.push(name);
+        }
+    }
+
+    if members.is_empty() {
+        return Ok(None);
+    }
+
+    let member_count = members.len() as u8;
+    Ok(Some(GroupInfo {
+        leader_name,
+        members,
+        member_count,
+    }))
 }
 
 /// Read a range of raw bytes from a spawn's memory for offset calibration.
