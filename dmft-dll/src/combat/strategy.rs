@@ -4,6 +4,9 @@ use dmft_common::types::SpawnData;
 use super::classes::cleric::ClericStrategy;
 use super::classes::enchanter::EnchanterStrategy;
 use super::classes::generic_dps::GenericDpsStrategy;
+use super::classes::monk::MonkStrategy;
+use super::classes::rogue::RogueStrategy;
+use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each tick.
@@ -58,9 +61,12 @@ pub trait ClassStrategy: Send {
 /// Factory function — creates the right strategy for a given class.
 pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrategy> {
     match class_id {
-        1 => Box::new(WarriorStrategy::new(class_id)),
-        2 => Box::new(ClericStrategy::new(class_id)),
-        14 => Box::new(EnchanterStrategy::new(class_id)),
+        1 => Box::new(WarriorStrategy::new(class_id)),     // Warrior
+        2 => Box::new(ClericStrategy::new(class_id)),      // Cleric
+        7 => Box::new(MonkStrategy::new(class_id)),        // Monk
+        9 => Box::new(RogueStrategy::new(class_id)),       // Rogue
+        10 => Box::new(ShamanStrategy::new(class_id)),     // Shaman
+        14 => Box::new(EnchanterStrategy::new(class_id)),  // Enchanter
         _ => Box::new(GenericDpsStrategy::new(class_id, config)),
     }
 }

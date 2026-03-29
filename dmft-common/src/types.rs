@@ -14,7 +14,7 @@ pub struct GameState {
 }
 
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct SpawnData {
     pub spawn_id: u32,
     pub name: String,
