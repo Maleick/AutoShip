@@ -593,11 +593,15 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
             server_name,
             character_name,
         } => {
+            // NOTE: Currently unreachable — handle_immediate_command() in ipc/mod.rs
+            // intercepts StartLogin before it reaches PENDING_COMMANDS. The immediate
+            // handler uses WM_CHAR typing which works at the login screen (before game
+            // loop runs). This FSM path is preserved for future server/char selection.
             tracing::info!(
                 account = %account_name,
                 server = %server_name,
                 character = %character_name,
-                "StartLogin command received (password redacted)"
+                "StartLogin via game loop FSM (password redacted)"
             );
             crate::login::start_login(account_name, password, server_name, character_name);
         }

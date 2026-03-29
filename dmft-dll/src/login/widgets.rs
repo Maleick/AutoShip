@@ -169,8 +169,9 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
         let hwnd = HWND(hwnd_val as isize);
 
         unsafe {
-            // Clear any existing text in username field with backspaces
-            for _ in 0..32 {
+            // Clear any existing text in username field with backspaces.
+            // EQLOGIN_FIELD_MAX is 0x7F (127), so send enough to clear the full buffer.
+            for _ in 0..128 {
                 let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(VK_BACK), LPARAM(0));
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -190,8 +191,8 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
             std::thread::sleep(std::time::Duration::from_millis(100));
 
-            // Clear any existing text in password field with backspaces
-            for _ in 0..32 {
+            // Clear any existing text in password field with backspaces.
+            for _ in 0..128 {
                 let _ = PostMessageW(hwnd, WM_CHAR, WPARAM(VK_BACK), LPARAM(0));
             }
             std::thread::sleep(std::time::Duration::from_millis(50));

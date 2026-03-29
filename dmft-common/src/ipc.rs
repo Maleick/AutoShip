@@ -1,7 +1,7 @@
 use crate::types::ClientId;
 
 /// Commands sent from the manager to an injected DLL
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     // Movement
     MoveTo { x: f32, y: f32, z: f32 },
@@ -65,6 +65,26 @@ pub enum Command {
     Ping,
     Eject,
     SetHookState { enabled: bool },
+}
+
+impl std::fmt::Debug for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StartLogin { account_name, server_name, character_name, .. } => {
+                f.debug_struct("StartLogin")
+                    .field("account_name", account_name)
+                    .field("password", &"[REDACTED]")
+                    .field("server_name", server_name)
+                    .field("character_name", character_name)
+                    .finish()
+            }
+            other => write!(f, "{}", {
+                // Fall through to derived-style output for all other variants.
+                // This uses serde_json as a quick Debug proxy since we removed derive(Debug).
+                serde_json::to_string(other).unwrap_or_else(|_| "Command(?)".to_string())
+            }),
+        }
+    }
 }
 
 /// Responses sent from the DLL back to the manager

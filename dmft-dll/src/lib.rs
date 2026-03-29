@@ -116,7 +116,12 @@ fn init_tracing() {
 
     let log_dir = std::env::temp_dir().join("dmft");
     std::fs::create_dir_all(&log_dir).ok();
-    let file_appender = rolling::daily(&log_dir, "dmft-dll.log");
+    let file_appender = rolling::RollingFileAppender::builder()
+        .rotation(rolling::Rotation::DAILY)
+        .filename_prefix("dmft-dll.log")
+        .max_log_files(7) // Keep 1 week of logs
+        .build(&log_dir)
+        .unwrap_or_else(|_| rolling::daily(&log_dir, "dmft-dll.log"));
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     // Leak the guard so it lives for the DLL's lifetime — there is no clean

@@ -28,7 +28,12 @@ fn main() -> Result<()> {
     // Set up file logging — must be done before anything else.
     let log_dir = std::env::current_dir().unwrap_or_default().join("logs");
     std::fs::create_dir_all(&log_dir).ok();
-    let file_appender = rolling::daily(&log_dir, "dmft.log");
+    let file_appender = rolling::RollingFileAppender::builder()
+        .rotation(rolling::Rotation::DAILY)
+        .filename_prefix("dmft.log")
+        .max_log_files(7) // Keep 1 week of logs
+        .build(&log_dir)
+        .unwrap_or_else(|_| rolling::daily(&log_dir, "dmft.log"));
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     let filter = EnvFilter::try_from_default_env()
