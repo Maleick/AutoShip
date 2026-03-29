@@ -124,6 +124,44 @@ pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize) {
     ENTER_WORLD_STAGE.store(1, std::sync::atomic::Ordering::Release);
 }
 
+/// Re-scan CXWndManager for CCharacterListWnd by SidlText.
+/// Used in Stage 3 to validate the pointer is still valid before calling EnterWorld.
+#[cfg(windows)]
+fn rescan_char_list_wnd() -> Option<usize> {
+    use dmft_common::offsets::eqgame as eqg;
+
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    let mgr_ptr_addr = dmft_common::offsets::rebase(
+        dmft_common::offsets::PINST_CXWND_MANAGER, eq_base,
+    )?;
+
+    unsafe {
+        let mgr = *(mgr_ptr_addr as *const usize);
+        if mgr == 0 { return None; }
+
+        let array_ptr = *((mgr + eqg::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+        let count = *((mgr + eqg::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+        if array_ptr == 0 || count == 0 || count > 2000 { return None; }
+
+        for i in 0..count as usize {
+            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+            if wnd_ptr == 0 { continue; }
+
+            if let Some(sidl_text) = crate::eq::widgets::read_cxstr(
+                wnd_ptr + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
+            ) {
+                if sidl_text == "CharacterListWnd" {
+                    return Some(wnd_ptr);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn rescan_char_list_wnd() -> Option<usize> { None }
+
 // ─── Command Jitter Queue ───
 // Commands are not executed immediately — they sit in a pending queue
 // with a random delay of 1-10 ticks to avoid frame-perfect timing patterns.
@@ -290,13 +328,18 @@ fn on_game_tick() {
             ENTER_WORLD_STAGE.store(3, std::sync::atomic::Ordering::Release);
         }
     } else if stage == 3 {
-        let wnd = PENDING_ENTER_WORLD_WND.load(std::sync::atomic::Ordering::Acquire);
         let enter_fn = PENDING_ENTER_WORLD_FN.load(std::sync::atomic::Ordering::Acquire);
+        // Re-scan for CCharacterListWnd fresh — the pointer stored in Stage 1
+        // may be stale if the window was destroyed/recreated during the wait.
+        let wnd = rescan_char_list_wnd().unwrap_or_else(|| {
+            // Fall back to stored pointer if re-scan fails
+            PENDING_ENTER_WORLD_WND.load(std::sync::atomic::Ordering::Acquire)
+        });
         if wnd != 0 && enter_fn != 0 {
             tracing::info!(
                 wnd = format!("{:#x}", wnd),
                 func = format!("{:#x}", enter_fn),
-                "Phase 3: Calling EnterWorld() on game loop thread"
+                "Phase 3: Calling EnterWorld() on game loop thread (re-validated)"
             );
             unsafe {
                 type EnterWorldFn = unsafe extern "C" fn(this: usize);
