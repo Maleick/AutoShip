@@ -1,4 +1,4 @@
-# Session Handoff — 2026-03-29 Late Night
+# Session Handoff — 2026-03-29 Deep Night Sprint
 
 ## Start Here
 
@@ -9,88 +9,113 @@ Read this file + check memories (`MEMORY.md`) for full project context.
 Read HANDOFF.md and check memories for full context. Use TeamCreate (not background sub-agents) for any parallel work — the user wants visible agent teams in tmux splits. Continue from where we left off.
 ```
 
-## What Was Done This Session
+## What Was Done This Session (MASSIVE)
 
-### Major Milestone: DLL Injection + Command Execution WORKING
-- **First successful DLL injection** into live eqgame.exe (2026-03-29 00:24 UTC)
-- **InterpretCmd working**: `/sit`, `/stand` executed on both clients via IPC pipe
-- **Command pipeline**: `dmft.exe --cmd <pid> "/command"` → Named Pipe → DLL → InterpretCmd → game action
-- EQ base: 0x7ff78f000000, hook at ProcessGameEvents (0x7ff78f28e0f0)
-- DLL staged with randomized name (e.g. `msvc_svc6946.dll`)
-- Logs: `%TEMP%\dmft\dmft-dll.log`
+### DLL Injection — WORKING LIVE
+- First successful DLL injection into live eqgame.exe (2026-03-29 00:24 UTC)
+- InterpretCmd confirmed: /sit, /stand, /invite, /target, /follow all executed
+- Two characters grouped and following each other via remote commands
+- Command pipeline: `dmft.exe --cmd <pid> "/slash_command"` → pipe → DLL → InterpretCmd
+- `dmft.exe --inject` finds processes, stages DLL with random name, injects
+- Window renaming: DLL renames to "EQ - CharName (ZoneName)"
 
-### TUI Multi-Screen Dashboard
-- **4 screens**: Dashboard (1), Spawns (2), Character (3), Map (4) — switch with number keys
-- **Tab bar** in header shows active screen
-- **Search mode**: `/` key types live filter text, `Esc` cancels
-- **Filter cycling**: `f` key cycles All → PC → NPC → Named
-- **Privacy mode**: `p` key redacts character names + server for screenshots
-- **Spawn list scroll**: Fixed — selection stays visible past 20 rows
-- **Pixel art sprites**: Half-block renderer (▀▄) with EQ class emblems (warrior swords, cleric ankh, SK skull, etc.) + state animations
-- **Map parser**: Brewall .txt format, Bresenham line rasterization, spawn overlay
+### TUI — 5 Screens + Command Bar
+- **Dashboard (1)**: Character grid with HP/mana/state/zone
+- **Spawns (2)**: Full spawn list with search (`/`) and filter cycling (`f`)
+- **Character (3)**: Detail view with pixel art class emblem sprites
+- **Map (4)**: Brewall zone geometry with Bresenham line rasterization, spawn overlay, named mob panel, legend
+- **Groups (5)**: 2x3 grid of 6 groups (Alpha-Foxtrot) with member status
+- **Command bar (`:`)**: Send commands to PIDs, broadcast `all /cmd`, camp control
+- **Privacy mode (`p`)**: Redacts character names + server
 
-### Offset Calibration
-- **CHAR_CLASS**: 0x0420 → 0x0FDC (ActorClient)
-- **STANDSTATE**: 0x0134 → 0x0574 (PlayerZoneClient) — **still reads wrong** (shows FD when sitting, needs hex dump scan)
-- **Mana**: correct, but only valid for local player
+### Camp Loop + Orchestrator
+- 5-phase state machine: Idle → Pull → Fight → Loot → Med
+- Orchestrator ticks camp loop, sends slash commands via IPC
+- TOML camp configs (camp center, pull point, radius, mana thresholds)
+- TUI commands: `:camp start <name>`, `:camp stop`, `:camp status`
+- 16 class ability configs (all EQ classes) with cooldowns, priorities, conditions
+- Bard uses /melody (TLP native twist)
 
-### DLL Infrastructure
-- **MAIN_LOOP_OFFSET**: fixed from 0x0 → 0x28E0F0 (was silently skipping hook)
-- **Pipe bug (C3)**: fixed connect→auth→read→disconnect cycle
-- **Render skipping**: foreground detection added (GetForegroundWindow every 30 ticks)
-- **Shutdown**: split into minimal `shutdown()` (loader lock safe) + `graceful_shutdown()`
-- **`dmft.exe --inject`**: finds EQ processes, stages DLL, injects, reports status
-- **`dmft.exe --cmd <pid> <command>`**: sends slash commands to injected clients
-- **launch_eq.bat**: on desktop, launches both clients with stagger
+### Game State Publishing
+- DLL reads local player + target every tick (HP, mana, position, class, level)
+- Nearby spawns read every 30 ticks (500 unit radius, 100 cap, linked list walk)
+- Published to shared memory via IPC for orchestrator consumption
+- Command jitter: 1-10 tick random delay via Xorshift32 PRNG
 
-### Research Completed
-- **EQ INI optimization** (`docs/eq-ini-optimization.md`): ~500MB/client with full optimization, PlayNice = render skipping, Job Object memory caps
-- **WinEQ 2022** (`docs/wineq-research.md`): render strobing (97.8% GPU reduction), 30 profile limit
-- **EQ Maps** (`docs/eq-maps-research.md`): Brewall format, coordinate transform, Rust parser
-- **MQ2 Deep Dive** (`docs/mq2-deep-dive.md`): nav, combat, stick/follow gap analysis, 36-box group comp
-- **Code Review** (`docs/code-review-session3.md`): 3 critical (2 fixed), 5 important, 6 minor
-- **Roadmap Review** (`docs/roadmap-review.md`): reorder Economy before Soul Engine, anti-detection is #1 risk
+### Named Spawn Tracker + HVT
+- Named mob detection (filters "a "/"an "/"the " prefix names)
+- HVT watchlist: config/hvt_watchlist.toml with 10 classic named mobs
+- Up/down alerts with respawn timer estimation
+- Map shows ! for named, X for dead named spawn locations
+
+### Supporting Systems
+- EQ log parser: loot/kill/money/XP/death/zone events, LootDatabase stats
+- GM flag reading (player_zone::GM offset 0x03ec)
+- Anti-detection: command jitter, Warden research doc, string audit
+- Offset calibration: CHAR_CLASS→0x0FDC, group member offsets, zone info offsets
+- Pixel art sprites: half-block renderer with 16 class emblems
+- 1707 Brewall map files installed on frostreaver
+- Navmeshes downloaded: Classic, Kunark, Velious, Luclin, PoP
+
+### Research Docs
+- docs/orchestration-design.md — 7-phase plan, group model, camp loop
+- docs/anti-detection.md — Warden research, mitigation strategies
+- docs/redguides-automation-research.md — CWTN, KissAssist, camp loops
+- docs/mq2-deep-dive.md — nav, combat, stick/follow gap analysis
+- docs/eq-maps-research.md — Brewall format, coordinate transform
+- docs/wineq-research.md — render strobing, window management
+- docs/eq-ini-optimization.md — 4-tier settings, memory budgets
+- docs/roadmap-review.md — milestone reorder, anti-detection priorities
+- docs/code-review-session3.md — 3 critical (2 fixed), 5 important, 6 minor
+- docs/dll-injection-plan.md — injection sequence, integration loop
+
+### Scripts
+- scripts/launch_eq.bat — launches 6 EQ clients with stagger
+- scripts/inject_test.bat — one-click injection
+- scripts/verify_injection.bat — 4-point verification
+- scripts/inject_and_group.bat — inject + group helper
+- scripts/cmd_all.bat — broadcast command to all clients
+- scripts/optimize_ini.ps1 — apply minimal INI settings
+
+### Stats
+- 340 tests passing across 3 crates
+- ~15,000 lines added this session
+- 16 commits
 
 ## Known Issues
 
 ### STANDSTATE offset still wrong
-- 0x0574 reads 110 (FD) when character is sitting — needs hex dump scan on frostreaver
-- Old offset 0x0134 always read 0 (Standing) — neither is correct
+- 0x0574 reads wrong value (shows FD when sitting)
+- Needs hex dump scan on live client
+
+### StickFigures=1 not working
+- INI setting didn't take effect — may need different key or section
 
 ### Pipe response not wired
-- Orchestrator uses fire-and-forget (send_async) — works but no response/confirmation
-- DLL doesn't send Response after executing commands yet
+- Orchestrator uses fire-and-forget — no confirmation from DLL
 
-### Session token is predictable
-- PID-derived token — any local process can reconstruct it
-- Needs random injection-time token for production
+### Game state → orchestrator not wired
+- DLL publishes to shared memory, but orchestrator doesn't read it yet
+- Camp loop still uses timers, not real HP/mana values
+- Need SharedStateReader on orchestrator side
 
-### Double injection
-- Running `--inject` twice loads DLL twice into same process
-- Need guard to prevent re-injection (check if already loaded)
+## Immediate Next Steps (Testing Priority)
 
-## Immediate Next Steps (Priority Order)
+1. **Test window renaming**: Relaunch + inject → verify windows show "EQ - CharName (zone)"
+2. **Test map rendering**: Press 4 in TUI → verify Freeport/PoK zone geometry shows
+3. **Test command bar**: Press `:` → type `<pid> /sit` → verify execution
+4. **Test camp loop**: `:camp start test_camp` (need to create a test camp config first)
+5. **Wire SharedStateReader**: Orchestrator reads game state from shared memory for smart camp decisions
+6. **Render strobing**: Hook CDisplay::RealRender_World for background clients
 
-1. **Window renaming**: DLL renames eqgame.exe window to character name (enables PID→name mapping)
-2. **Characters meet**: Send `/target` + `/follow` to get two characters together
-3. **Group invite**: `/invite` via InterpretCmd
-4. **TUI command bar**: `:` mode for typing commands in the TUI
-5. **STANDSTATE calibration**: Hex dump scan to find correct offset
-6. **INI optimization**: Deploy optimized eqclient.ini to reduce ~2GB → ~500MB per client
-7. **Render strobing**: Hook CDisplay::RealRender_World to skip rendering for background clients
-8. **Anti-detection**: Research Warden, implement string stripping, innocent mode
-9. **Map files**: Download Brewall's maps for Classic through PoP zones
+## Architecture
 
-## Architecture Reminders
-
-- **Use TeamCreate** for parallel agent work (visible in tmux splits)
-- **DLL injection path**: `target\release\dmft_dll.dll` → staged with randomized name → CreateRemoteThread + LoadLibraryW
-- **Command pipeline**: `dmft.exe --cmd <pid> "/slash_command"` → pipe → DLL → InterpretCmd
-- **EQ base**: 0x7ff78f000000 (March 10, 2026 build)
-- **Hook**: ProcessGameEvents at base + 0x28E0F0
-- **InterpretCmd**: at base + 0x283FB0 — `void InterpretCmd(PlayerClient*, const char*)`
-- **IPC pipes**: `\\.\pipe\dmft_cmd_{pid}` — one per injected client
-- **Logs**: DLL → `%TEMP%\dmft\dmft-dll.log`, Orchestrator → `logs/dmft.log`
+- **DLL injection**: `target\release\dmft_dll.dll` staged with random name → CreateRemoteThread + LoadLibraryW
+- **Command pipeline**: TUI `:` command or `dmft.exe --cmd <pid> "/cmd"` → pipe → DLL → InterpretCmd
+- **Game state**: DLL reads EQ memory → publishes GameState to shared memory → orchestrator reads (TODO)
+- **Camp loop**: Orchestrator ticks state machine → generates (pid, slash_cmd) pairs → sends via IPC
+- **Maps**: Brewall .txt files in config/maps/ → parsed by map_parser.rs → rasterized with Bresenham
+- **Logs**: DLL → %TEMP%\dmft\dmft-dll.log, Orchestrator → logs/dmft.log
 
 ## Key File Paths
 
@@ -98,9 +123,8 @@ Read HANDOFF.md and check memories for full context. Use TeamCreate (not backgro
 - DMFT: `C:\Users\xmale\Projects\DMFT`
 - EQ: `C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest`
 - DLL logs: `C:\Users\xmale\AppData\Local\Temp\dmft\dmft-dll.log`
-- Launch script: `C:\Users\xmale\Desktop\launch_eq.bat`
-- Inject: `target\release\dmft.exe --inject`
-- Send cmd: `target\release\dmft.exe --cmd <pid> "/command"`
+- Launch: `C:\Users\xmale\Desktop\launch_eq.bat`
+- Local IP: 192.168.1.130 (Tailscale: 100.121.123.85)
 
 ### Mac (dev)
 - DMFT: `/Users/maleick/Projects/DMFT`
