@@ -248,6 +248,17 @@ impl Combatant {
 
                 if *ticks_remaining == 0 {
                     tracing::trace!("Cast complete, transitioning to OnGcd");
+                    // Notify strategy that a cast/action completed (e.g., bard twist advance)
+                    let ctx = CombatContext {
+                        player,
+                        target,
+                        nearby_enemies: nearby,
+                        group_members: &[],
+                        config: &self.config,
+                        tick: self.tick_count,
+                        in_combat: true,
+                    };
+                    self.strategy.on_action_complete(&ctx);
                     self.state = CombatState::OnGcd;
                 }
             }

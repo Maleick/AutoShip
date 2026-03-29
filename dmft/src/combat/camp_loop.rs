@@ -123,9 +123,16 @@ impl CampLoop {
         let mut commands = Vec::new();
 
         match (&self.state, event) {
-            // AtCamp → Pulling (when group is ready)
+            // AtCamp → Pulling (when group is ready and no dead members)
             (CampState::AtCamp, CampEvent::GroupReady) => {
-                if self.state_entered.elapsed() >= self.camp_delay
+                if self.dead_count > 0 {
+                    tracing::warn!(
+                        dead = self.dead_count,
+                        "Camp loop: cannot pull — {} dead members need rez first",
+                        self.dead_count
+                    );
+                    // Stay at camp, don't pull until members are alive
+                } else if self.state_entered.elapsed() >= self.camp_delay
                     && let Some(puller_id) = self.puller_id {
                         tracing::info!("Camp loop: sending puller");
                         commands.push((puller_id, Command::CombatEngage { target_id: 0 }));
