@@ -86,9 +86,6 @@ impl ClassStrategy for DruidStrategy {
         true
     }
 
-    fn on_engage(&mut self, _ctx: &CombatContext) {}
-    fn on_action_complete(&mut self, _ctx: &CombatContext) {}
-
     fn aoe_threshold(&self) -> u8 {
         3
     }
