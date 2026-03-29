@@ -50,7 +50,7 @@ impl SharedStateReader {
             let handle = unsafe {
                 OpenFileMappingW(
                     FILE_MAP_READ.0,
-                    windows::Win32::Foundation::BOOLEAN(0), // bInheritHandle = FALSE
+                    windows::Win32::Foundation::BOOL(0), // bInheritHandle = FALSE
                     PCWSTR(name.as_ptr()),
                 )
             }.unwrap_or_else(|_| {

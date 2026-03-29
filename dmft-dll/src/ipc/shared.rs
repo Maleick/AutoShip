@@ -140,7 +140,7 @@ fn create_current_user_security_attributes() -> Option<windows::Win32::Security:
         SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
         InitializeSecurityDescriptor, SetSecurityDescriptorDacl,
     };
-    use windows::Win32::Foundation::BOOLEAN;
+    use windows::Win32::Foundation::BOOL;
 
     // SECURITY_DESCRIPTOR_REVISION = 1
     const SD_REVISION: u32 = 1;
@@ -160,9 +160,9 @@ fn create_current_user_security_attributes() -> Option<windows::Win32::Security:
         // The creator process (us) retains full access via CREATOR_OWNER SID.
         if SetSecurityDescriptorDacl(
             &mut sd as *mut _ as *mut _,
-            BOOLEAN(1), // bDaclPresent = TRUE
-            None,       // Empty DACL = deny all except owner
-            BOOLEAN(0), // bDaclDefaulted = FALSE
+            BOOL(1), // bDaclPresent = TRUE
+            None,    // Empty DACL = deny all except owner
+            BOOL(0), // bDaclDefaulted = FALSE
         ).is_err() {
             tracing::warn!("Failed to set DACL");
             return None;
@@ -175,7 +175,7 @@ fn create_current_user_security_attributes() -> Option<windows::Win32::Security:
         Some(SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: sd_box as *mut _ as *mut _,
-            bInheritHandle: BOOLEAN(0),
+            bInheritHandle: BOOL(0),
         })
     }
 }
