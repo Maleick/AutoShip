@@ -556,15 +556,56 @@ fn load_demo_data(app: &mut App) {
     }
 }
 
-/// Convert a zone display name to its short name for map file lookup.
-/// In a full implementation this would use an EQ zone table; for now, simple lowercase mapping.
+/// Convert a zone display name (long name from zoneHeader) to its EQ short name
+/// for Brewall map file lookup. Handles both display names ("West Freeport") and
+/// short names that are already correct ("freportw").
 fn zone_to_short_name(zone_name: &str) -> String {
-    match zone_name.to_lowercase().as_str() {
+    let lower = zone_name.to_lowercase();
+    match lower.as_str() {
+        // Classic zones
         "permafrost" | "permafrost caverns" | "permafrost keep" => "permafrost".to_string(),
         "east commonlands" | "eastern commonlands" => "ecommons".to_string(),
-        "west freeport" | "west freeport gates" => "freportw".to_string(),
+        "west commonlands" | "western commonlands" => "commons".to_string(),
+        "west freeport" => "freeportwest".to_string(),
+        "east freeport" => "freeporteast".to_string(),
+        "north freeport" => "freportn".to_string(),
         "eastern wastes" => "eastwastes".to_string(),
-        _ => zone_name.to_lowercase().replace(' ', ""),
+        "western wastes" => "westwastes".to_string(),
+        "great divide" | "the great divide" => "greatdivide".to_string(),
+        "cobalt scar" => "cobaltscar".to_string(),
+        "north karana" | "northern plains of karana" => "northkarana".to_string(),
+        "south karana" | "southern plains of karana" => "southkarana".to_string(),
+        "east karana" | "eastern plains of karana" => "eastkarana".to_string(),
+        "lake rathetear" => "lakerathe".to_string(),
+        "north ro" | "northern desert of ro" => "nro".to_string(),
+        "south ro" | "southern desert of ro" => "sro".to_string(),
+        "ocean of tears" => "oot".to_string(),
+        "butcherblock mountains" => "butcher".to_string(),
+        "greater faydark" => "gfaydark".to_string(),
+        "lesser faydark" => "lfaydark".to_string(),
+        "steamfont mountains" => "steamfont".to_string(),
+        "misty thicket" => "misty".to_string(),
+        "plane of knowledge" => "poknowledge".to_string(),
+        "plane of tranquility" => "potranquility".to_string(),
+        "plane of hate" => "hateplane".to_string(),
+        "plane of fear" => "fearplane".to_string(),
+        "plane of air" | "plane of sky" => "airplane".to_string(),
+        "the bazaar" => "bazaar".to_string(),
+        "the nexus" => "nexus".to_string(),
+        "everfrost peaks" => "everfrost".to_string(),
+        "lavastorm mountains" => "lavastorm".to_string(),
+        "highpass hold" | "high keep" => "highkeep".to_string(),
+        "field of bone" => "fieldofbone".to_string(),
+        "emerald jungle" => "emeraldjungle".to_string(),
+        "burning woods" => "burningwood".to_string(),
+        "dreadlands" | "the dreadlands" => "dreadlands".to_string(),
+        "lake of ill omen" => "lakeofillomen".to_string(),
+        "swamp of no hope" => "swampofnohope".to_string(),
+        "frontier mountains" => "frontiermtns".to_string(),
+        "kael drakkel" => "kael".to_string(),
+        "skyshrine" => "skyshrine".to_string(),
+        "velketor's labyrinth" => "velketor".to_string(),
+        _ => lower.replace(' ', ""),
     }
 }
 

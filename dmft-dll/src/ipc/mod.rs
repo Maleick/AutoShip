@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
-use dmft_common::ipc::{Command, SessionToken};
+use dmft_common::ipc::{Command, Response, SessionToken};
 use dmft_common::types::{ClientId, GameState};
 
 use self::pipe::CommandListener;
@@ -106,6 +106,29 @@ pub fn publish_state(state: &GameState) {
     if let Err(e) = writer.write(state) {
         tracing::error!(error = %e, "Failed to publish game state");
     }
+}
+
+/// Buffered responses to send back to the orchestrator on the next pipe write.
+static PENDING_RESPONSES: OnceLock<Mutex<Vec<Response>>> = OnceLock::new();
+
+/// Enqueue a response to be sent to the orchestrator.
+/// Called from the game loop thread (e.g., login FSM phase updates).
+pub fn send_response(response: Response) {
+    let pending = PENDING_RESPONSES.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(mut queue) = pending.lock() {
+        queue.push(response);
+    }
+}
+
+/// Drain pending responses. Called by the IPC listener thread.
+pub fn drain_responses() -> Vec<Response> {
+    let Some(pending) = PENDING_RESPONSES.get() else {
+        return Vec::new();
+    };
+    let Ok(mut queue) = pending.lock() else {
+        return Vec::new();
+    };
+    std::mem::take(&mut *queue)
 }
 
 /// Background thread: creates a `CommandListener` and loops receiving commands

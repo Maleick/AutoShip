@@ -78,7 +78,7 @@ impl OffsetDatabase {
         pz.insert("manaMax".to_string(), player_zone::MANA_MAX);
         pz.insert("manaCurrent".to_string(), player_zone::MANA_CURRENT);
         pz.insert("level".to_string(), player_zone::LEVEL);
-        pz.insert("charClass".to_string(), actor_client::CHAR_CLASS);
+        pz.insert("charClass".to_string(), player_zone::CHAR_CLASS);
         pz.insert("enduranceCurrent".to_string(), player_zone::ENDURANCE_CURRENT);
         pz.insert("enduranceMax".to_string(), player_zone::ENDURANCE_MAX);
 

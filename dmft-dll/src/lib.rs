@@ -7,6 +7,7 @@ mod combat;
 mod eq;
 mod hooks;
 mod ipc;
+mod login;
 mod nav;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -92,6 +93,9 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Initialize command jitter RNG for anti-detection.
     hooks::game_loop::init_jitter_rng();
+
+    // 4.5. Initialize login FSM.
+    login::init();
 
     // 5. Start IPC listener.
     let client_id = std::process::id();

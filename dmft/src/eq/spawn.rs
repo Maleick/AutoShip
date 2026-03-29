@@ -1,7 +1,7 @@
 use super::structs::{EqClass, GroupInfo, SpawnInfo, SpawnType, StandState};
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
-use dmft_common::offsets::{self, actor_client, group, player_base, player_zone, spawn_manager};
+use dmft_common::offsets::{self, group, player_base, player_zone, spawn_manager};
 
 /// Read a single spawn's data from the process at the given PlayerClient address.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
@@ -24,8 +24,8 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
     let heading = proc.read::<f32>(addr + player_base::HEADING).unwrap_or(0.0);
 
     let level = proc.read::<u8>(addr + player_zone::LEVEL).unwrap_or(0);
-    // Class is in ActorClient (mActorClient at 0x0FC0 + ActorBase.Class at 0x1C)
-    let class_id = proc.read::<u8>(addr + actor_client::CHAR_CLASS).unwrap_or(0);
+    // Class is a direct uint8_t field in PlayerZoneClient at 0x0420
+    let class_id = proc.read::<u8>(addr + player_zone::CHAR_CLASS).unwrap_or(0);
     let stand_state_id = proc.read::<u8>(addr + player_zone::STANDSTATE).unwrap_or(0);
     let hp_current = proc
         .read::<i64>(addr + player_zone::HP_CURRENT)

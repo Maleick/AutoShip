@@ -105,6 +105,55 @@ pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
     Some((actual_base + offset) as usize)
 }
 
+// ─── eqmain.dll offsets ───
+// These are preferred-base addresses within eqmain.dll (loaded into eqgame.exe process).
+// eqmain.dll has its own base address; use `eqmain::rebase()` to convert.
+// Source: MQ2 AutoLogin / eqmain offsets, client date 20260310
+
+pub mod eqmain {
+    /// Preferred base address of eqmain.dll (64-bit)
+    pub const EQMAIN_PREFERRED_BASE: u64 = 0x180000000;
+
+    // ─── Global pointer addresses (preferred base) ───
+
+    /// Pointer to CSidlManager instance
+    pub const SIDL_MANAGER: u64 = 0x1803824C0;
+
+    /// Pointer to LoginServerAPI instance
+    pub const LOGIN_SERVER_API: u64 = 0x18017F4D0;
+
+    /// Pointer to CXWndManager instance
+    pub const CXWND_MANAGER: u64 = 0x1803824B8;
+
+    /// LoginServerAPI::JoinServer function address
+    pub const JOIN_SERVER: u64 = 0x180018050;
+
+    /// LoginViewManager function address
+    pub const LOGIN_VIEW_MANAGER: u64 = 0x18001B0E0;
+
+    // ─── UI widget field offsets ───
+
+    /// CEditBaseWnd::InputText field offset (CXStr)
+    pub const CEDITBASEWND_INPUT_TEXT: usize = 0x278;
+
+    /// XWM_LCLICK notification code for button clicks
+    pub const XWM_LCLICK: u32 = 1;
+
+    /// Convert a preferred-base eqmain.dll offset to an actual address.
+    pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
+        let offset = preferred_addr.checked_sub(EQMAIN_PREFERRED_BASE)?;
+        Some((actual_base + offset) as usize)
+    }
+}
+
+// ─── Character select offsets (eqgame.exe) ───
+
+/// CCharacterListWnd::SelectCharacter function address (preferred base, eqgame.exe)
+pub const SELECT_CHARACTER: u64 = 0x1400D5D20;
+
+/// CCharacterListWnd::EnterWorld function address (preferred base, eqgame.exe)
+pub const ENTER_WORLD: u64 = 0x1400D4B20;
+
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
 // Source: mq2-reference/src/eqlib/include/eqlib/game/PlayerClient.h
@@ -167,6 +216,11 @@ pub mod player_zone {
     pub const GM: usize = 0x03ec;
     /// uint8_t — GM rank. Source: PlayerClient.h offset 0x0368
     pub const GM_RANK: usize = 0x0368;
+    /// uint8_t — character class ID (1=WAR, 2=CLR, ..., 16=BER)
+    /// Source: PlayerZoneClient offset 0x0420 in PlayerClient.h
+    /// This is the direct field — more reliable than the ActorClient path (0x0FDC)
+    /// which requires traversing through mActorClient at 0x0FC0.
+    pub const CHAR_CLASS: usize = 0x0420;
     /// int32_t — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
     /// uint32_t — maximum endurance
@@ -181,7 +235,8 @@ pub mod actor_client {
     pub const RACE_OVERRIDE: usize = 0x0FD8;
     /// int32_t — character class ID (from ActorBase at offset 0x1C)
     /// Source: ActorClient at 0x0FC0 + ActorBase.Class at 0x1C = 0x0FDC
-    /// Read as u8 for EqClass::from_id() compatibility (valid range 1-16)
+    /// Note: Prefer player_zone::CHAR_CLASS (0x0420) for spawn reads — it's a
+    /// direct field and less likely to break if struct layout shifts.
     pub const CHAR_CLASS: usize = 0x0FDC;
 }
 

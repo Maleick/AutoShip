@@ -25,6 +25,15 @@ pub enum Command {
     StopNavigation,
     // Login automation
     LoginPhaseQuery,
+    /// Start the automated login sequence. The DLL handles all UI steps
+    /// autonomously and reports progress via LoginPhaseUpdate responses.
+    /// Password is zeroized in DLL memory immediately after use.
+    StartLogin {
+        account_name: String,
+        password: String,
+        server_name: String,
+        character_name: String,
+    },
     // Post-login
     JoinGroup { group_id: u32 },
     ApplyBuffs,

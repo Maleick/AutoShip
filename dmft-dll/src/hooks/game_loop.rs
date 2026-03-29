@@ -186,6 +186,25 @@ fn on_game_tick() {
     // Run navigation state machine.
     crate::nav::tick();
 
+    // Run login FSM when not yet in world (local_player is null).
+    // The login FSM drives credential entry, server/char selection autonomously.
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        let in_world = if eq_base != 0 {
+            dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
+                .map(|addr| unsafe { *(addr as *const usize) } != 0)
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
+        if !in_world
+            && let Some(phase) = crate::login::tick()
+        {
+            crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
+        }
+    }
+
     // Read game state and publish to shared memory for the orchestrator.
     read_and_publish_state(tick);
 }
@@ -259,7 +278,7 @@ unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
 /// # Safety
 /// Caller must ensure `spawn_ptr` is a valid PlayerClient address.
 unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
-    use dmft_common::offsets::{actor_client, player_base, player_zone};
+    use dmft_common::offsets::{player_base, player_zone};
 
     let name = unsafe { read_string_at(spawn_ptr + player_base::NAME, 64) };
     let displayed_name = unsafe { read_string_at(spawn_ptr + player_base::DISPLAYED_NAME, 64) };
@@ -270,7 +289,7 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     let z = unsafe { *((spawn_ptr + player_base::Z) as *const f32) };
     let heading = unsafe { *((spawn_ptr + player_base::HEADING) as *const f32) };
     let level = unsafe { *((spawn_ptr + player_zone::LEVEL) as *const u8) };
-    let class_id = unsafe { *((spawn_ptr + actor_client::CHAR_CLASS) as *const u8) };
+    let class_id = unsafe { *((spawn_ptr + player_zone::CHAR_CLASS) as *const u8) };
     let hp_current = unsafe { *((spawn_ptr + player_zone::HP_CURRENT) as *const i64) };
     let hp_max = unsafe { *((spawn_ptr + player_zone::HP_MAX) as *const i64) };
     let mana_current = unsafe { *((spawn_ptr + player_zone::MANA_CURRENT) as *const i32) };
@@ -438,11 +457,15 @@ fn update_window_title() {
             _ => return, // Not logged in yet — skip.
         };
 
-        // Read zone short name from zoneHeader struct.
-        let zone_name = read_zone_short_name(eq_base).unwrap_or_default();
+        // Read zone name from zoneHeader struct. Prefer long name (display name like
+        // "West Freeport") for readability, fall back to short name ("freportw").
+        let zone_name = read_zone_long_name(eq_base)
+            .or_else(|| read_zone_short_name(eq_base))
+            .unwrap_or_default();
 
         // Build title: "EQ - CharName (ZoneName)" or "EQ - CharName" if no zone.
         let title = if zone_name.is_empty() {
+            tracing::trace!(char_name = %char_name, "Zone name empty — title without zone");
             format!("EQ - {}\0", char_name)
         } else {
             format!("EQ - {} ({})\0", char_name, zone_name)
@@ -484,6 +507,21 @@ fn read_zone_short_name(eq_base: u64) -> Option<String> {
     let zone_addr = dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)?;
     let short_name_addr = zone_addr + zone_info::SHORT_NAME;
     let name_bytes = unsafe { std::slice::from_raw_parts(short_name_addr as *const u8, 128) };
+    let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(128);
+    if len == 0 {
+        return None;
+    }
+    String::from_utf8(name_bytes[..len].to_vec()).ok()
+}
+
+/// Read the zone long name (char[128]) from instEQZoneInfo (e.g., "West Freeport").
+#[cfg(windows)]
+fn read_zone_long_name(eq_base: u64) -> Option<String> {
+    use dmft_common::offsets::zone_info;
+
+    let zone_addr = dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)?;
+    let long_name_addr = zone_addr + zone_info::LONG_NAME;
+    let name_bytes = unsafe { std::slice::from_raw_parts(long_name_addr as *const u8, 128) };
     let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(128);
     if len == 0 {
         return None;
@@ -548,6 +586,24 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         }
         Command::Ping => {
             tracing::info!("Ping received");
+        }
+        Command::StartLogin {
+            account_name,
+            password,
+            server_name,
+            character_name,
+        } => {
+            tracing::info!(
+                account = %account_name,
+                server = %server_name,
+                character = %character_name,
+                "StartLogin command received (password redacted)"
+            );
+            crate::login::start_login(account_name, password, server_name, character_name);
+        }
+        Command::LoginPhaseQuery => {
+            let phase = crate::login::phase();
+            crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
         }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");

@@ -15,7 +15,7 @@ pub enum LoginPhase {
     Failed { reason: LoginError },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LoginError {
     WrongPassword,
     AccountLocked,
