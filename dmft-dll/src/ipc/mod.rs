@@ -168,54 +168,46 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                     character_name.to_string(),
                 );
 
-                // ALSO run credential entry inline on the IPC thread, because
+                // Run credential entry inline on the IPC thread, because
                 // the game loop hook (ProcessGameEvents) doesn't fire during the
-                // login screen — eqmain.dll has its own event loop. The FSM's
-                // tick() will handle server/char select once the game loop starts.
+                // login screen — eqmain.dll has its own event loop.
                 let eqmain_base = crate::login::eqmain::find_eqmain();
                 if eqmain_base != 0 {
-                    // Write credentials to EQLogin char arrays
-                    if crate::login::widgets::write_login_credentials(
+                    // Try CXStr approach FIRST — writes to CEditWnd which the
+                    // UI actually reads. The char-array approach writes to
+                    // EQLogin backend but the UI doesn't refresh from it.
+                    let wrote = crate::login::widgets::type_credentials_to_window(
                         eqmain_base, &account_name, &password,
-                    ) {
-                        tracing::info!("Inline: credentials written to EQLogin char arrays");
-
-                        // Click Login button via CXWndManager
-                        let clicked =
-                            crate::login::widgets::click_button(eqmain_base, "Login")
-                            || crate::login::widgets::click_button(eqmain_base, "LOGIN")
-                            || crate::login::widgets::simulate_enter_key(eqmain_base);
-                        tracing::info!(clicked, "Inline: Login button click attempted");
-
-                        // Spawn a thread for phase 2 (server select) since the
-                        // game loop won't handle it until eqmain unloads
-                        let srv = server_name.clone();
-                        let chr = character_name.clone();
-                        std::thread::Builder::new()
-                            .name("dmft-login-phase2".into())
-                            .spawn(move || {
-                                login_chain_phase2(srv, chr);
-                            })
-                            .ok();
+                    );
+                    if wrote {
+                        tracing::info!("Inline: credentials written via CXStr (UI-visible)");
                     } else {
-                        tracing::warn!("Inline: char array credential write failed — trying CXStr approach");
-                        // Fallback: try the CXWndManager CXStr approach
-                        if crate::login::widgets::type_credentials_to_window(
+                        // Fallback: write to EQLogin char arrays (backend only)
+                        let wrote_backend = crate::login::widgets::write_login_credentials(
                             eqmain_base, &account_name, &password,
-                        ) {
-                            tracing::info!("Inline: credentials written via CXStr approach");
-                            let srv = server_name.clone();
-                            let chr = character_name.clone();
-                            std::thread::Builder::new()
-                                .name("dmft-login-phase2".into())
-                                .spawn(move || {
-                                    login_chain_phase2(srv, chr);
-                                })
-                                .ok();
-                        } else {
-                            tracing::error!("Inline: both credential write methods failed");
-                        }
+                        );
+                        tracing::info!(
+                            wrote_backend,
+                            "Inline: CXStr write failed, tried EQLogin char arrays"
+                        );
                     }
+
+                    // Click Login button
+                    let clicked =
+                        crate::login::widgets::click_button(eqmain_base, "Login")
+                        || crate::login::widgets::click_button(eqmain_base, "LOGIN")
+                        || crate::login::widgets::simulate_enter_key(eqmain_base);
+                    tracing::info!(clicked, "Inline: Login button click attempted");
+
+                    // Spawn thread for phase 2 (server select)
+                    let srv = server_name.clone();
+                    let chr = character_name.clone();
+                    std::thread::Builder::new()
+                        .name("dmft-login-phase2".into())
+                        .spawn(move || {
+                            login_chain_phase2(srv, chr);
+                        })
+                        .ok();
                 } else {
                     tracing::warn!("Inline: eqmain.dll not loaded — FSM will handle when game loop starts");
                 }
