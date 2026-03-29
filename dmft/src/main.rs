@@ -208,15 +208,15 @@ fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     pipe.send_raw_token(&token)
         .context("Failed to send session token")?;
 
-    // Send the slash command.
+    // Send the slash command (fire-and-forget — DLL disconnects pipe after read).
     let cmd = Command::SlashCommand {
         command: command.to_string(),
     };
 
-    let response = pipe.send(&cmd)
+    pipe.send_async(&cmd)
         .context("Failed to send command")?;
 
-    println!("Response: {:?}", response);
+    println!("Command sent successfully.");
 
     Ok(())
 }
