@@ -1,11 +1,19 @@
+use dmft_common::combat::CombatStatus;
 use dmft_common::ipc::Command;
 use dmft_common::types::{ClientId, GameState};
 use std::collections::HashMap;
+
+use super::camp_loop::{CampEvent, CampLoop, CampState};
 
 pub struct CombatCoordinator {
     assist_target: Option<u32>,
     main_tank_id: Option<ClientId>,
     cc_assignments: HashMap<u32, ClientId>,
+    camp_loop: CampLoop,
+    /// Track which clients were in combat last tick for edge detection.
+    prev_in_combat: bool,
+    /// Track which clients were dead last tick.
+    prev_dead: HashMap<ClientId, bool>,
 }
 
 impl CombatCoordinator {
@@ -14,11 +22,33 @@ impl CombatCoordinator {
             assist_target: None,
             main_tank_id: None,
             cc_assignments: HashMap::new(),
+            camp_loop: CampLoop::new(),
+            prev_in_combat: false,
+            prev_dead: HashMap::new(),
         }
     }
 
     pub fn set_main_tank(&mut self, client_id: ClientId) {
         self.main_tank_id = Some(client_id);
+    }
+
+    pub fn camp_loop(&self) -> &CampLoop {
+        &self.camp_loop
+    }
+
+    /// Start the camp→pull→fight→loot cycle.
+    pub fn start_camp(&mut self) {
+        self.camp_loop.start();
+    }
+
+    /// Stop the camp loop.
+    pub fn stop_camp(&mut self) {
+        self.camp_loop.stop();
+    }
+
+    /// Set the puller for the camp loop.
+    pub fn set_puller(&mut self, client_id: ClientId) {
+        self.camp_loop.set_puller(client_id);
     }
 
     /// Called each orchestrator tick with all client states.
@@ -44,7 +74,92 @@ impl CombatCoordinator {
             }
         }
 
+        // 2. Camp loop integration — detect state changes and feed events
+        if self.camp_loop.is_active() {
+            let camp_events = self.detect_camp_events(states);
+            for event in camp_events {
+                let camp_commands = self.camp_loop.process_event(event);
+                commands.extend(camp_commands);
+            }
+
+            // Check for state timeouts
+            if let Some(timeout_event) = self.camp_loop.check_timeout() {
+                let camp_commands = self.camp_loop.process_event(timeout_event);
+                commands.extend(camp_commands);
+            }
+        }
+
         commands
+    }
+
+    /// Detect combat state changes from GameState and convert to CampEvents.
+    fn detect_camp_events(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<CampEvent> {
+        let mut events = Vec::new();
+
+        let any_in_combat = states.values().any(|gs| {
+            matches!(
+                gs.combat_status,
+                CombatStatus::Engaging { .. }
+                    | CombatStatus::Casting { .. }
+                    | CombatStatus::OnGcd
+                    | CombatStatus::Pulling { .. }
+            )
+        });
+
+        let any_pulling = states.values().any(|gs| {
+            matches!(gs.combat_status, CombatStatus::Pulling { .. })
+        });
+
+        // Detect combat start (edge: was not in combat, now is)
+        if any_in_combat && !self.prev_in_combat {
+            if any_pulling {
+                events.push(CampEvent::PullIncoming);
+            } else {
+                events.push(CampEvent::CombatStarted);
+            }
+        }
+
+        // Detect combat end (edge: was in combat, now nobody is)
+        if !any_in_combat && self.prev_in_combat {
+            events.push(CampEvent::CombatEnded);
+        }
+
+        // Detect deaths (edge: client was alive, now dead)
+        for (&client_id, gs) in states {
+            let is_dead = matches!(gs.combat_status, CombatStatus::Dead);
+            let was_dead = self.prev_dead.get(&client_id).copied().unwrap_or(false);
+            if is_dead && !was_dead {
+                events.push(CampEvent::MemberDied { client_id });
+            }
+        }
+
+        // Check for group wipe (all clients dead)
+        let all_dead = !states.is_empty()
+            && states
+                .values()
+                .all(|gs| matches!(gs.combat_status, CombatStatus::Dead));
+        if all_dead && self.prev_in_combat {
+            events.push(CampEvent::GroupWiped);
+        }
+
+        // GroupReady: at camp, nobody in combat, nobody dead
+        if !any_in_combat
+            && *self.camp_loop.state() == CampState::AtCamp
+            && states
+                .values()
+                .all(|gs| !matches!(gs.combat_status, CombatStatus::Dead))
+        {
+            events.push(CampEvent::GroupReady);
+        }
+
+        // Update tracking state
+        self.prev_in_combat = any_in_combat;
+        self.prev_dead = states
+            .iter()
+            .map(|(&cid, gs)| (cid, matches!(gs.combat_status, CombatStatus::Dead)))
+            .collect();
+
+        events
     }
 
     fn decide_assist_target(&self, states: &HashMap<ClientId, GameState>) -> Option<u32> {
