@@ -173,85 +173,15 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 // login screen — eqmain.dll has its own event loop.
                 let eqmain_base = crate::login::eqmain::find_eqmain();
                 if eqmain_base != 0 {
-                    // MQ2 approach: find CEditWnd widgets, call SetWindowText
-                    // through the vtable to set both UI display and internal state.
-                    use dmft_common::offsets::eqmain as off;
-
-                    let cxwnd_mgr = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base);
-                    if let Some(mgr) = cxwnd_mgr {
-                        unsafe {
-                            let array_ptr = *((mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-                            let count = *((mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-
-                            if array_ptr != 0 && count > 0 && count <= 500 {
-                                let mut username_edit: usize = 0;
-                                let mut password_edit: usize = 0;
-                                let mut login_button: usize = 0;
-                                let mut prev_wnd: usize = 0;
-                                let mut prev_prev_wnd: usize = 0;
-
-                                for i in 0..count as usize {
-                                    let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-                                    if wnd_ptr == 0 { continue; }
-
-                                    if let Some(text) = crate::login::widgets::read_cxstr_pub(
-                                        wnd_ptr + off::CXWND_WINDOW_TEXT,
-                                    ) {
-                                        if text == "USERNAME" && prev_prev_wnd != 0 {
-                                            username_edit = prev_prev_wnd;
-                                        }
-                                        if text == "PASSWORD" && prev_prev_wnd != 0 {
-                                            password_edit = prev_prev_wnd;
-                                        }
-                                        if text == "Login" && login_button == 0 {
-                                            login_button = wnd_ptr;
-                                        }
-                                    }
-                                    prev_prev_wnd = prev_wnd;
-                                    prev_wnd = wnd_ptr;
-                                }
-
-                                // Set username via SetWindowText vtable call
-                                if username_edit != 0 {
-                                    let ok = crate::login::widgets::set_edit_text_via_vtable(
-                                        username_edit, &account_name,
-                                    );
-                                    tracing::info!(ok, "Inline: SetWindowText username");
-                                }
-
-                                // Small delay between username and password
-                                std::thread::sleep(std::time::Duration::from_millis(500));
-
-                                // Set password via SetWindowText vtable call
-                                if password_edit != 0 {
-                                    let ok = crate::login::widgets::set_edit_text_via_vtable(
-                                        password_edit, &password,
-                                    );
-                                    tracing::info!(ok, "Inline: SetWindowText password (redacted)");
-                                } else {
-                                    tracing::warn!("Inline: password CEditWnd not found");
-                                }
-
-                                // Wait 2s for EQ's UI event loop to process the
-                                // SetWindowText calls before clicking Login.
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-
-                                // Click Login button
-                                if login_button != 0 {
-                                    crate::login::widgets::click_button_via_vtable(login_button);
-                                    tracing::info!("Inline: Login button clicked via vtable");
-                                } else {
-                                    // Fallback: find by text
-                                    let clicked =
-                                        crate::login::widgets::click_button(eqmain_base, "Login")
-                                        || crate::login::widgets::click_button(eqmain_base, "LOGIN");
-                                    tracing::info!(clicked, "Inline: Login button click (fallback)");
-                                }
-                            }
-                        }
-                    } else {
-                        tracing::warn!("Inline: CXWndManager not resolved");
-                    }
+                    // Direct InputText property write (MQ2's actual approach):
+                    // Find CEditWnd widgets, write to CXStr at +0x278 (InputText),
+                    // clone CStrRep for empty password field, click Login.
+                    // type_credentials_to_window handles all of this including
+                    // hex dumps for debugging and readback verification.
+                    let wrote = crate::login::widgets::type_credentials_to_window(
+                        eqmain_base, &account_name, &password,
+                    );
+                    tracing::info!(wrote, "Inline: type_credentials_to_window");
 
                     // Spawn thread for phase 2 (server select)
                     let srv = server_name.clone();
