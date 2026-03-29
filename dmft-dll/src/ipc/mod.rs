@@ -155,7 +155,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             // Clone password into Zeroizing wrapper so the local copy is wiped
             // from memory when this scope exits — prevents plaintext from
             // lingering on the IPC thread's stack after credential entry.
-            let password = zeroize::Zeroizing::new(password.clone());
+            let mut password = zeroize::Zeroizing::new(password.clone());
 
             tracing::info!(
                 account = %account_name,
@@ -164,9 +164,12 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 
             // Store credentials in the FSM for later phases (server/char select)
             // which run in the game loop after eqmain.dll unloads.
+            // The FSM needs to own the password for later phases. We pass the
+            // inner String directly — the Zeroizing wrapper on the IPC side
+            // ensures the local copy is wiped. The FSM should zeroize on Drop.
             crate::login::start_login(
                 account_name.to_string(),
-                password.to_string(),
+                std::mem::take(&mut *password),
                 server_name.to_string(),
                 character_name.to_string(),
             );
