@@ -20,6 +20,17 @@ pub const YES_NO_DIALOG: &str = "yesnodialog";
 pub const DBG_SPLASH: &str = "dbgsplash";
 pub const SOE_SPLASH: &str = "soesplash";
 
+// ─── Pre-login prompt screens (from MQ2AutoLogin) ───
+// These are (parent_window_text, button_text) pairs for screens that must be
+// dismissed before reaching the login form. Matched by WindowText substring.
+const PRE_LOGIN_PROMPTS: &[(&str, &str)] = &[
+    ("EULA", "I Accept"),           // End User License Agreement
+    ("Order", "Decline"),           // OrderWindow upsell
+    ("Expansion", "Decline"),       // OrderExpansionWindow upsell
+    ("seizure", "OK"),              // Seizure / photosensitivity warning
+    ("news", "OK"),                 // News / patch notes
+];
+
 /// Check if a named window is visible in the UI.
 pub fn is_window_visible(eqmain_base: u64, window_name: &str) -> bool {
     #[cfg(windows)]
@@ -42,21 +53,102 @@ pub fn is_window_visible(eqmain_base: u64, window_name: &str) -> bool {
 
 /// Find a SIDL window by its XML name.
 /// Returns a raw pointer to the CXWnd, or None if not found.
+/// Walks CXWndManager's window array and matches by WindowText (case-insensitive).
 #[cfg(windows)]
 fn find_window_by_name(eqmain_base: u64, name: &str) -> Option<*mut u8> {
-    use super::eqmain;
+    use dmft_common::offsets::eqmain as off;
+    let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
 
-    let sidl_mgr = eqmain::resolve_sidl_manager(eqmain_base)?;
+    unsafe {
+        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
 
-    // CSidlManager maintains a hash map of window name → CXWnd*.
-    // We need to walk this to find windows by name.
-    // For the initial implementation, we use CSidlManager::FindScreenPieceTemplate
-    // or iterate the window list.
-    //
-    // TODO: Implement CSidlManager window lookup once we validate the struct layout
-    // on the live client. For now, return None to let the FSM retry on next tick.
-    let _ = (sidl_mgr, name);
-    tracing::trace!(name, "Window lookup not yet implemented — will resolve on live client");
+        if array_ptr == 0 || count == 0 || count > 500 {
+            return None;
+        }
+
+        for i in 0..count as usize {
+            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+            if wnd_ptr == 0 { continue; }
+
+            if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                if text.eq_ignore_ascii_case(name) {
+                    return Some(wnd_ptr as *mut u8);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Find a window whose WindowText contains the given substring (case-insensitive).
+/// Returns the window pointer if found. Used for fuzzy matching pre-login screens
+/// whose exact WindowText may vary between patches.
+#[cfg(windows)]
+fn find_window_by_text_contains(eqmain_base: u64, substring: &str) -> Option<usize> {
+    use dmft_common::offsets::eqmain as off;
+    let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
+    let needle = substring.to_ascii_lowercase();
+
+    unsafe {
+        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+
+        if array_ptr == 0 || count == 0 || count > 500 {
+            return None;
+        }
+
+        for i in 0..count as usize {
+            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+            if wnd_ptr == 0 { continue; }
+
+            if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                if text.to_ascii_lowercase().contains(&needle) {
+                    return Some(wnd_ptr);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Walk a parent window's child list looking for a button whose WindowText
+/// contains the given substring. Returns the child window pointer.
+/// CXWnd children are a TList: first child at CXWND_FIRST_NODE, next sibling at CXWND_NEXT.
+#[cfg(windows)]
+fn find_child_button_by_text(parent_wnd: usize, button_text: &str) -> Option<usize> {
+    use dmft_common::offsets::eqmain as off;
+    let needle = button_text.to_ascii_lowercase();
+
+    unsafe {
+        let mut child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
+        let mut count = 0u32;
+
+        while child != 0 && count < 200 {
+            count += 1;
+
+            if let Some(text) = read_cxstr(child + off::CXWND_WINDOW_TEXT) {
+                if text.to_ascii_lowercase().contains(&needle) {
+                    return Some(child);
+                }
+            }
+
+            // Also recurse one level into grandchildren
+            let mut grandchild = *((child + off::CXWND_FIRST_NODE) as *const usize);
+            let mut gc_count = 0u32;
+            while grandchild != 0 && gc_count < 200 {
+                gc_count += 1;
+                if let Some(text) = read_cxstr(grandchild + off::CXWND_WINDOW_TEXT) {
+                    if text.to_ascii_lowercase().contains(&needle) {
+                        return Some(grandchild);
+                    }
+                }
+                grandchild = *((grandchild + off::CXWND_NEXT) as *const usize);
+            }
+
+            child = *((child + off::CXWND_NEXT) as *const usize);
+        }
+    }
     None
 }
 
@@ -432,14 +524,39 @@ pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
     }
 }
 
-/// Dismiss splash screens (dbgsplash, soesplash) if visible.
+/// Dismiss splash screens and pre-login prompts (EULA, order windows, seizure
+/// warning, news) if visible. MQ2AutoLogin clicks through 6+ screens before
+/// the login form appears — we do the same.
 pub fn dismiss_splash(eqmain_base: u64) {
     #[cfg(windows)]
     {
+        // Classic splash screens — click anywhere to dismiss
         for name in &[DBG_SPLASH, SOE_SPLASH] {
             if is_window_visible(eqmain_base, name) {
                 click_button(eqmain_base, name);
-                tracing::debug!(splash = name, "Dismissed splash screen");
+                tracing::info!(splash = name, "Dismissed splash screen");
+            }
+        }
+
+        // Pre-login prompt screens — find by parent text, click matching button
+        for &(parent_text, button_text) in PRE_LOGIN_PROMPTS {
+            if let Some(parent_wnd) = find_window_by_text_contains(eqmain_base, parent_text) {
+                // Found a window matching the parent — now find the button
+                if let Some(button_wnd) = find_child_button_by_text(parent_wnd, button_text) {
+                    unsafe { click_button_via_vtable(button_wnd); }
+                    tracing::info!(
+                        parent = parent_text,
+                        button = button_text,
+                        "Dismissed pre-login prompt"
+                    );
+                } else {
+                    // Fallback: click the parent window itself
+                    unsafe { click_button_via_vtable(parent_wnd); }
+                    tracing::info!(
+                        parent = parent_text,
+                        "Dismissed pre-login prompt (clicked parent, button not found)"
+                    );
+                }
             }
         }
     }
@@ -557,6 +674,47 @@ pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) ->
     {
         let _ = (eqmain_base, eq_base, character_name);
         false
+    }
+}
+
+/// Log all window texts visible in the CXWndManager array.
+/// Used for calibration — helps identify EULA and pre-login screen widget names.
+pub fn log_all_window_texts(eqmain_base: u64) {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain as off;
+        let Some(cxwnd_mgr) = super::eqmain::resolve_cxwnd_manager(eqmain_base) else {
+            return;
+        };
+
+        tracing::info!("=== WINDOW TEXT DUMP (pre-login calibration) ===");
+        unsafe {
+            let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+            let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+            if array_ptr == 0 || count == 0 || count > 500 { return; }
+
+            for i in 0..count as usize {
+                let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+                if wnd_ptr == 0 { continue; }
+
+                if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                    let visible = *((wnd_ptr + off::CXWND_DSHOW) as *const u8) != 0;
+                    tracing::info!(
+                        idx = i,
+                        ptr = format!("{:#x}", wnd_ptr),
+                        text = %text,
+                        visible,
+                        "Window"
+                    );
+                }
+            }
+        }
+        tracing::info!("=== END WINDOW TEXT DUMP ===");
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = eqmain_base;
     }
 }
 

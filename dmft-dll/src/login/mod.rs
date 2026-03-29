@@ -199,11 +199,18 @@ impl LoginFsm {
     }
 
     fn tick_wait_for_login_screen(&mut self) {
-        // Dismiss splash screens if present
+        // Log all visible windows on first tick for calibration
+        if self.retries == 0 && self.state_entered_at.elapsed().as_millis() < 500 {
+            widgets::log_all_window_texts(self.eqmain_base);
+        }
+
+        // Dismiss splash screens and pre-login prompts (EULA, order, seizure, news)
         widgets::dismiss_splash(self.eqmain_base);
 
-        // Check if login screen is visible (LOGIN_ConnectButton exists and visible)
-        if widgets::is_window_visible(self.eqmain_base, "LOGIN_ConnectButton") {
+        // Check if login screen is visible (look for LOGIN or USERNAME text)
+        if widgets::is_window_visible(self.eqmain_base, "LOGIN_ConnectButton")
+            || widgets::is_window_visible(self.eqmain_base, "USERNAME")
+        {
             tracing::info!("Login screen detected");
             self.transition(State::EnteringCredentials);
         }
