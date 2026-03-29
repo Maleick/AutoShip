@@ -46,6 +46,9 @@ pub enum Command {
     Emote { emote: String },
     /// Execute a soul action (idle behavior, etc.).
     SoulAction { action: crate::soul::SoulAction },
+    /// Execute a slash command as if typed in the chat window.
+    /// Uses EQ's InterpretCmd internally (e.g. "/target Camrene", "/follow").
+    SlashCommand { command: String },
     // System
     Ping,
     Eject,

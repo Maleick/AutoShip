@@ -85,12 +85,13 @@ fn on_game_tick() {
         update_foreground_status();
     }
 
+    // Drain and dispatch IPC commands from the orchestrator.
+    for cmd in crate::ipc::poll_commands() {
+        dispatch_command(cmd);
+    }
+
     // Run navigation state machine.
     crate::nav::tick();
-
-    // TODO: Read game state from EQ memory (local player, target, spawns)
-    // TODO: Publish state to shared memory via IPC
-    // TODO: Check for and execute pending commands from the orchestrator
 
     // Combat FSM tick — runs after nav, before IPC publish.
     // Uncomment when we have a real game state snapshot:
@@ -134,4 +135,108 @@ fn update_foreground_status() {
 /// background clients, saving near-zero GPU usage across 35 bot clients.
 pub fn is_foreground() -> bool {
     WINDOW_IS_FOREGROUND.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Dispatch a single IPC command received from the orchestrator.
+fn dispatch_command(cmd: dmft_common::ipc::Command) {
+    use dmft_common::ipc::Command;
+
+    match cmd {
+        Command::SlashCommand { command } => {
+            tracing::info!(cmd = %command, "Executing slash command");
+            execute_slash_command(&command);
+        }
+        Command::NavigateTo { waypoints } => {
+            crate::nav::handle_command(crate::nav::NavCommand::Navigate(waypoints));
+        }
+        Command::SetCamp { spot } => {
+            crate::nav::handle_command(crate::nav::NavCommand::SetCamp(spot));
+        }
+        Command::StopNavigation => {
+            crate::nav::handle_command(crate::nav::NavCommand::Stop);
+        }
+        Command::Ping => {
+            tracing::info!("Ping received");
+        }
+        Command::Eject => {
+            tracing::info!("Eject command received — shutting down");
+            crate::graceful_shutdown();
+        }
+        other => {
+            tracing::debug!(?other, "Unhandled command");
+        }
+    }
+}
+
+/// Call EQ's InterpretCmd to execute a slash command string.
+/// Signature: void CEverQuest::InterpretCmd(PlayerClient* pChar, const char* szCmd)
+fn execute_slash_command(command: &str) {
+    #[cfg(windows)]
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            tracing::error!("Cannot execute slash command — EQ base not resolved");
+            return;
+        }
+
+        // Get the local player pointer (CharSpawn / pLocalPlayer).
+        let char_spawn_addr = dmft_common::offsets::rebase(
+            dmft_common::offsets::PINST_LOCAL_PLAYER,
+            eq_base,
+        );
+        let Some(char_spawn_addr) = char_spawn_addr else {
+            tracing::error!("Failed to rebase CHAR_SPAWN");
+            return;
+        };
+
+        let player_ptr: *mut core::ffi::c_void = unsafe {
+            *(char_spawn_addr as *const *mut core::ffi::c_void)
+        };
+
+        if player_ptr.is_null() {
+            tracing::error!("Local player pointer is null — not logged in?");
+            return;
+        }
+
+        // Get InterpretCmd function address.
+        let Some(interpret_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::INTERPRET_CMD,
+            eq_base,
+        ) else {
+            tracing::error!("Failed to rebase INTERPRET_CMD");
+            return;
+        };
+
+        // Build null-terminated command string.
+        let cmd_cstring = match std::ffi::CString::new(command) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(error = %e, "Invalid command string");
+                return;
+            }
+        };
+
+        // Call InterpretCmd(PlayerClient*, const char*)
+        type InterpretCmdFn = unsafe extern "C" fn(*mut core::ffi::c_void, *const i8);
+        let interpret_cmd: InterpretCmdFn = unsafe { std::mem::transmute(interpret_addr) };
+
+        tracing::info!(
+            addr = format!("{:#x}", interpret_addr),
+            player = format!("{:?}", player_ptr),
+            cmd = command,
+            "Calling InterpretCmd"
+        );
+
+        unsafe {
+            interpret_cmd(player_ptr, cmd_cstring.as_ptr());
+        }
+
+        tracing::info!(cmd = command, "Slash command executed");
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = command;
+        tracing::warn!("Slash command execution not available on this platform");
+    }
 }

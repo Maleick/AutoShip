@@ -98,6 +98,27 @@ impl CommandPipe {
         }
     }
 
+    /// Send the raw 32-byte session token for authentication handshake.
+    /// Must be called once after connecting, before sending any commands.
+    pub fn send_raw_token(&self, token: &[u8; 32]) -> Result<()> {
+        #[cfg(windows)]
+        {
+            use windows::Win32::Storage::FileSystem::WriteFile;
+
+            let mut written: u32 = 0;
+            unsafe {
+                WriteFile(self.handle, Some(token.as_slice()), Some(&mut written), None)?;
+            }
+            Ok(())
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = token;
+            Ok(())
+        }
+    }
+
     /// Send a command without waiting for response (fire-and-forget).
     pub fn send_async(&self, cmd: &Command) -> Result<()> {
         #[cfg(windows)]

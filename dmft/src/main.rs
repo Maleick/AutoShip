@@ -43,8 +43,19 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let dump_mode = args.iter().any(|a| a == "--dump");
     let inject_mode = args.iter().any(|a| a == "--inject" || a == "inject");
+    let cmd_mode = args.iter().position(|a| a == "--cmd");
 
-    if inject_mode {
+    if let Some(pos) = cmd_mode {
+        // --cmd <pid> "<slash command>"
+        let pid: u32 = args.get(pos + 1)
+            .context("--cmd requires: --cmd <pid> <command>")?
+            .parse()
+            .context("PID must be a number")?;
+        let command = args.get(pos + 2)
+            .context("--cmd requires: --cmd <pid> <command>")?
+            .clone();
+        run_cmd_mode(pid, &command)
+    } else if inject_mode {
         run_inject_mode()
     } else if dump_mode {
         run_dump_mode()
@@ -180,6 +191,44 @@ fn run_inject_mode() -> Result<()> {
     println!("Run scripts\\verify_injection.bat to check injection status.");
 
     Ok(())
+}
+
+/// Command mode (--cmd <pid> <command>) — send a slash command to an injected client.
+fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
+    use dmft_common::ipc::Command;
+
+    println!("Sending command to PID {}: {}", pid, command);
+
+    let pipe = ipc::pipe::CommandPipe::connect(pid)
+        .with_context(|| format!("Failed to connect to PID {}. Is the DLL injected?", pid))?;
+
+    // Send the session token first (handshake).
+    // For now, use the same PID-derived token the DLL generates.
+    let token = generate_session_token(pid);
+    pipe.send_raw_token(&token)
+        .context("Failed to send session token")?;
+
+    // Send the slash command.
+    let cmd = Command::SlashCommand {
+        command: command.to_string(),
+    };
+
+    let response = pipe.send(&cmd)
+        .context("Failed to send command")?;
+
+    println!("Response: {:?}", response);
+
+    Ok(())
+}
+
+/// Generate the same session token the DLL uses (PID-derived, for testing).
+fn generate_session_token(pid: u32) -> [u8; 32] {
+    let pid_bytes = pid.to_le_bytes();
+    let mut token = [0u8; 32];
+    for (i, byte) in token.iter_mut().enumerate() {
+        *byte = pid_bytes[i % 4] ^ (i as u8);
+    }
+    token
 }
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.
