@@ -1,4 +1,4 @@
-# Session Handoff — 2026-03-29 Final
+# Session Handoff — 2026-03-29 Late Night
 
 ## Start Here
 
@@ -6,114 +6,123 @@ Read this file + check memories (`MEMORY.md`) for full project context.
 
 **Prompt to start next session:**
 ```
-Read HANDOFF.md and check memories for full context. Use TeamCreate (not background sub-agents) for any parallel work — the user wants visible agent teams in tmux splits. Continue from where we left off.
+Read HANDOFF.md and check memories for full context. Use TeamCreate (not background sub-agents) for any parallel work — the user wants visible agent teams in tmux splits. Continue from where we left off. Priority #1: Test WM_CHAR auto-login — the build is deployed on frostreaver, just needs one more test cycle (close EQ, run test_autologin.bat, send --login command).
 ```
 
-## Session Stats
-- ~25,000+ lines added
-- ~30 commits
-- 459 tests passing across 3 crates
-- 15+ agent team sprints
-- 2 peer reviews (GPT + Gemini)
-- DLL injection proven live on eqgame.exe
+## Session Stats (Cumulative)
+- ~33,000+ lines added (8,000+ this session)
+- ~45 commits (15+ this session)
+- 552 tests passing across 3 crates (was 479)
+- 8 agent team sprints this session
+- 4 peer reviews (login, camp, TUI, infra)
+- Auto-login pointer chain validated on live EQ
 
 ## What Works (Proven Live)
 
 ### DLL Injection + Command Execution
 - `dmft.exe --inject` finds eqgame.exe, stages DLL with random name, injects
 - `dmft.exe --cmd <pid> "/slash_command"` sends commands via IPC pipe
+- `dmft.exe --calibrate` sends CalibrateLogin to all injected clients
+- `dmft.exe --login <account> <password> [server] [character]` sends StartLogin
 - InterpretCmd calls EQ's internal function — /sit, /stand, /invite, /target, /follow confirmed
-- Two characters grouped and following each other
-- Window renaming: DLL sets title to "EQ - CharName (zone)"
+- Window renaming: DLL sets title to "[DMFT] EQ - CharName (ZoneName)"
 - Game state publishing: DLL reads HP/mana/target/spawns every tick to shared memory
+- IPC pipe DACL fixed — Authenticated Users (was CREATOR_OWNER, blocked orchestrator)
+- IPC commands handled on listener thread (works at login screen before game loop runs)
 
-### TUI (5 screens)
+### Auto-Login (calibrated, WM_CHAR approach deployed but untested)
+- All EQLogin pointer chain validated on live March 10 EQ build
+- eqmain.dll discovery working (GetModuleHandleW)
+- LoginClient, EQLogin, HWND, LoginServerAPI, CSidlManager all resolve correctly
+- Direct memory write to EQLogin works but doesn't update UI widgets
+- WM_CHAR typing approach deployed: sends keystrokes char-by-char via PostMessageW
+- Accounts/passwords in accounts.csv (36 accounts, 7 created)
+- **NEEDS TESTING**: Close EQ, run test_autologin.bat, then `dmft.exe --login frostreaver01 <password>`
+
+### TUI (5 screens + enhancements)
 - Dashboard (1): character grid, session stats (XP/hr, plat/hr)
 - Spawns (2): full list with search (/), filter cycling (f), scroll
-- Character (3): detail view with pixel art class emblem sprites (16 classes)
-- Map (4): Brewall zone geometry, spawn overlay, named mob tracker, legend
-- Groups (5): 2x3 grid of 6 groups with member status
-- Command bar (:): Tab completion, history, camp control
-- Help overlay (?): all keybinds and commands
-- Privacy mode (p): redacts names + server
+- Character (3): detail view with pixel art class emblem sprites
+- Map (4): Brewall zone geometry, spawn overlay, named mob tracker with respawn timers
+- Groups (5): 2x3 grid with per-group zone/camp info, color-coded status
+- Command bar (:): Multi-level tab completion (camp add/list/remove, track, mode, G1-G6)
+- :track/:untrack — spawn tracking with Up/Down/Unknown status
+- :camp add/list/remove/start/stop/status — camp management
+- :mode camp/hunt — operating mode switching
+- Multi-group focus: Shift+1-6 to focus groups, Shift+0 for aggregate
+- :G1-G6 command prefix for group-targeted commands
+- Help overlay (?), Privacy mode (p)
+- 45 zone-to-filename mappings for Brewall maps
 
 ### Camp Loop
 - 5-phase state machine: Idle → Pull → Fight → Loot → Med
-- Smart transitions from real game state (HP/mana-driven)
-- Orchestrator sends slash commands via IPC each tick
-- 16 class ability configs (TOML) with cooldowns + priorities
-- CC system: charm/mez tracking, Tash→Malo debuff chain, charm break response
-- Rogue backstab positioning (EQ heading math)
-- Intelligent pull target selection (distance, HVT priority)
-- Buff maintenance (duration tracking, auto-rebuff during idle/med)
-- Death recovery (detect death, cleric rez, rebuff sequence)
-- Sell/bank cycle (vendor state machine)
-- Per-character personality profiles (anti-synchronicity)
-- Human-like command jitter (triangle distribution + hesitation)
+- Loot automation: LootCycle FSM (target → approach → open → loot → close → next corpse)
+- Vendor interaction: VendorStep sub-FSM with /notify commands
+- Camp progression: 11 camps (levels 1-55), auto-advance on outlevel
+- Named mob database: 8 zones with respawn tracking, priority pull override
+- Hunt mode: HuntLoop FSM with role-based soft-follow (melee 20u, casters 70u, healers 50u)
+- CC system: charm/mez tracking, Tash→Malo debuff chain
+- Death recovery, buff maintenance, per-character personality profiles
+- All 5 peer review bugs fixed (#3-#7)
 
 ### Security + Anti-Detection
 - CSPRNG random session tokens
-- Randomized IPC pipe/shared memory names (session GUID)
-- Restrictive pipe DACL (current user SID only)
-- GM flag detection
-- Render strobing (skip 3D for background clients, strobe every 5s)
-- Command jitter with human-like timing distribution
-- DLL staged with randomized system-looking filename
+- Randomized IPC pipe/shared memory names
+- Pipe DACL (Authenticated Users + session token handshake)
+- Password zeroization (credentials borrowed, not cloned)
+- GM flag detection, render strobing, command jitter
 
-### Data + Maps
-- 1707 Brewall map files installed (all EQ zones)
-- Navmeshes downloaded: Classic, Kunark, Velious, Luclin, PoP
-- EQ log parser: loot/kill/money/XP/death events
-- Log watcher tails files in real-time for TUI stats
-- HVT watchlist with 10 classic named mobs
-- Named spawn tracker with respawn timers
+### Infrastructure
+- 800MB working set limits (SetProcessWorkingSetSize, configurable)
+- CPU affinity management (-1 = Windows auto-distribute)
+- Optimized eqclient_multibox.ini template
+- CharClass offset fixed (0x0420 direct field)
+- Zone long name in window titles
 
 ## Known Issues
 
-### Must Fix Before Live XP Testing
-- **STANDSTATE offset wrong** (0x0574 reads FD when sitting) — needs hex dump scan
-- **StickFigures=1 not working** — INI setting correct but no effect in-game
-- **Auto-login password entry** — needs UI widget manipulation (CEditWnd), manual for now
-- **CC cooldown not tracked** — assign_cc never updates last_cast_tick (GPT peer review #3)
-- **Re-mez spams every tick** — needs_remez doesn't extend cc_expiry_tick (#4)
-- **Rez spams every tick** — death_commands has no cast-in-progress guard (#5)
-- **Spawn ID partial match** — CcExpiring filter matches partial IDs (#6)
-- **Vendor sell cycle has no travel time** — completes in 3 ticks (#7 medium)
+### Must Fix
+- **Auto-login WM_CHAR untested** — Build deployed, needs one test cycle
+- **Zone name still showing "Unknown"** — Zone long name read may need offset validation
+- **STANDSTATE offset (0x0574)** — Reads wrong value, needs hex dump calibration
+- **StickFigures=1 not working** — INI setting has no effect in-game
+- **Working set limit is soft** — SetProcessWorkingSetSize, not Ex version (advisory only)
 
 ### Deferred (from peer reviews)
-- Reflective DLL injection (avoid LoadLibrary detection)
-- Seqlock retry on read contention
-- Lock-free command queue (replace Mutex on game thread)
-- Ring buffer logging instead of file logging from DLL
-- String obfuscation in DLL binary
+- TUI: Demo mode groups empty (demo names lack account numbers)
+- TUI: Group focus doesn't sync selected_client
+- TUI: :mode missing from help overlay
+- TUI: :G1 <Tab> with empty rest shows nothing
+- Camp: charm_break_response takes immutable members (can't update cooldown)
+- Camp: LootConfig.target_delay is dead config
+- Camp: Empty members causes stuck Looting state
+- Login: Error dialogs all classified as WrongPassword
+- Session token is PID-derived (deterministic, needs CSPRNG)
 
 ## Testing Checklist
 
-### Quick Test (2 characters)
-1. Launch EQ clients manually or via `launch_eq.bat`
-2. Log in frostreaver01 + frostreaver02
-3. `target\release\dmft.exe --inject`
-4. `target\release\dmft.exe` (TUI)
-5. Test: `1-5` screen switching, `?` help, `:` command bar
-6. Test: `:<pid> /sit` and `:<pid> /stand`
-7. Test: `4` map screen — should show zone geometry
-8. Test: `p` privacy mode
+### Auto-Login Test (PRIORITY #1)
+1. Close all EQ clients
+2. Double-click `test_autologin.bat` on desktop
+3. Wait for password screen, press any key
+4. From Command Prompt: `cd C:\Users\xmale\Projects\DMFT`
+5. `target\release\dmft.exe --login frostreaver01 dr698iDBBa1IpTS`
+6. Watch EQ window — should see username/password being typed, then login submit
 
-### 6-Character Test
-1. Double-click `launch_eq.bat` on desktop
-2. Enter passwords on all 6 clients (01, 02, 03, 04, 06, 07)
-3. Create characters on accounts that don't have them yet
-4. Press any key when all in-game → auto-inject + TUI
-5. Test: `:all /sit` broadcasts to all
-6. Test: Group formation via `:` commands
+### Quick Test (6 characters)
+1. `launch_eq.bat` on desktop
+2. Log in all 6 manually (until auto-login works)
+3. Press any key → auto-inject + TUI
+4. Test: screens 1-5, tab completion, :track, :camp, :mode, Shift+1-6
 
 ## Key File Paths
 
 ### frostreaver (Windows)
 - DMFT: `C:\Users\xmale\Projects\DMFT`
 - EQ: `C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest`
-- DLL logs: `C:\Users\xmale\AppData\Local\Temp\dmft\dmft-dll.log`
+- DLL logs: `C:\Users\xmale\AppData\Local\Temp\dmft\dmft-dll.log.YYYY-MM-DD`
 - Launch: `C:\Users\xmale\Desktop\launch_eq.bat`
+- Calibrate: `C:\Users\xmale\Desktop\test_autologin.bat`
 - Local IP: 192.168.1.130
 
 ### Mac (dev)
@@ -121,10 +130,9 @@ Read HANDOFF.md and check memories for full context. Use TeamCreate (not backgro
 - SSH: `sshpass -p '1118' ssh maleick@frostreaver`
 
 ## Next Priorities
-1. Fix peer review bugs (#3-#7 from GPT review)
-2. Live 2-character combat test in a newbie zone
-3. Auto-login (UI widget password entry)
-4. Create characters on accounts 03, 04, 06, 07
-5. 6-character group XP test
-6. Navmesh loader for pathfinding
-7. Anti-detection hardening
+1. Test WM_CHAR auto-login (one more cycle)
+2. Build auto-login batch for all 6 accounts
+3. Live 6-character group test with TUI
+4. Navmesh loader (biggest remaining gap for autonomous operation)
+5. Cross-zone travel
+6. Anti-detection hardening
