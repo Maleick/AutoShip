@@ -237,6 +237,20 @@ pub mod eqmain {
     }
 }
 
+// ─── eqgame.exe CXWndManager offsets ───
+// NOTE: These differ from eqmain.dll! eqgame.exe has CXWndManager::pWindows at +0x008,
+// while eqmain.dll has it at +0x010 (different struct layout).
+pub mod eqgame {
+    /// CXWndManager::pWindows.m_array in eqgame.exe (ArrayClass at +0x008)
+    pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x008;
+    /// CXWndManager::pWindows.m_length in eqgame.exe
+    pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x010;
+
+    /// CSidlScreenWnd::SidlText (CXStr at +0x270) — the SIDL window name
+    /// Used to find windows like "CharacterListWnd" by name
+    pub const CSIDL_SCREEN_WND_SIDL_TEXT: usize = 0x270;
+}
+
 // ─── Character select offsets (eqgame.exe) ───
 
 /// CCharacterListWnd::SelectCharacter function address (preferred base, eqgame.exe)

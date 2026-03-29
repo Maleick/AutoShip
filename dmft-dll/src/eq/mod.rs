@@ -1,6 +1,8 @@
-//! EQ internal function addresses and signatures.
+//! EQ internal function addresses, signatures, and widget interaction primitives.
 //! These are offsets from the eqgame.exe base address.
 //! Derived from MQ2 source headers.
+
+pub mod widgets;
 
 /// CEverQuest::MainLoop offset from EQ base.
 /// Derived from dmft_common::offsets::PROCESS_GAME_EVENTS (0x14028E0F0)

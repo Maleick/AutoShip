@@ -206,8 +206,6 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 /// Uses vtable WndNotification clicks — no foreground focus needed (scales to 36 clients).
 /// Called inline from IPC thread since the game loop doesn't run during login.
 fn login_chain_phase2(_server_name: String, _character_name: String) {
-    use dmft_common::offsets::eqmain as off;
-
     // Phase 2: Wait for server select, then click PLAY EVERQUEST!
     tracing::info!("Login chain phase 2: waiting 8s for server select...");
     std::thread::sleep(std::time::Duration::from_secs(8));
@@ -238,78 +236,12 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
         // eqmain.dll unloaded — we're at character select (eqgame.exe).
-        // Call CCharacterListWnd::EnterWorld() directly — the MQ2 approach.
         tracing::info!("Phase 3: eqmain.dll unloaded — at character select");
-
-        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-        if eq_base == 0 {
-            tracing::error!("Phase 3: EQ base not resolved");
-            return;
-        }
-
-        // Resolve pinstCXWndManager in eqgame.exe to find CCharacterListWnd
-        if let Some(mgr_ptr_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::PINST_CXWND_MANAGER, eq_base,
-        ) {
-            unsafe {
-                let mgr = *(mgr_ptr_addr as *const usize);
-                if mgr == 0 {
-                    tracing::warn!("Phase 3: CXWndManager is null");
-                    return;
-                }
-
-                // Walk the window array to find "Enter World" button
-                use dmft_common::offsets::eqmain as off;
-                let array_ptr = *((mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-                let count = *((mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-
-                if array_ptr != 0 && count > 0 && count < 2000 {
-                    // Log some windows for calibration
-                    let mut logged = 0u32;
-                    for i in 0..count as usize {
-                        let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-                        if wnd_ptr == 0 { continue; }
-
-                        if let Some(text) = crate::login::widgets::read_cxstr_pub(
-                            wnd_ptr + off::CXWND_WINDOW_TEXT,
-                        ) {
-                            // Log first 30 windows with text for calibration
-                            if logged < 30 && !text.is_empty() {
-                                tracing::info!(
-                                    idx = i,
-                                    ptr = format!("{:#x}", wnd_ptr),
-                                    text = %text,
-                                    "Phase 3 window"
-                                );
-                                logged += 1;
-                            }
-
-                            // Match "Enter World" case-insensitive + substring
-                            let lower = text.to_ascii_lowercase();
-                            if lower.contains("enter world") || lower == "enter world" {
-                                tracing::info!(
-                                    ptr = format!("{:#x}", wnd_ptr),
-                                    text = %text,
-                                    "Phase 3: Found Enter World button — clicking"
-                                );
-                                crate::login::widgets::click_button_via_vtable(wnd_ptr);
-                                tracing::info!("Phase 3 complete: Enter World clicked!");
-                                return;
-                            }
-                        }
-                    }
-                    tracing::warn!(count, "Phase 3: 'Enter World' not found in {} windows", count);
-                } else {
-                    tracing::warn!("Phase 3: Invalid CXWndManager window array");
-                }
-            }
-        } else {
-            tracing::warn!("Phase 3: Could not rebase pinstCXWndManager");
-        }
+        phase3_enter_world();
         return;
     }
 
-    // eqmain.dll still loaded — try button click as fallback
+    // eqmain.dll still loaded — try button click as fallback (shouldn't happen normally)
     let enter_candidates = ["Enter World", "ENTER WORLD", "Enter", "Play"];
     let mut found = false;
     for candidate in &enter_candidates {
@@ -317,18 +249,143 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
             tracing::info!(
                 ptr = format!("{:#x}", btn),
                 text = candidate,
-                "Phase 3: Clicking enter world button"
+                "Phase 3: Clicking enter world button (eqmain still loaded)"
             );
             unsafe { crate::login::widgets::click_button_via_vtable(btn); }
-            tracing::info!("Phase 3 complete: Enter World clicked");
             found = true;
             break;
         }
     }
 
     if !found {
-        tracing::warn!("Phase 3: Enter World button not found — trying /enterworld command");
+        tracing::warn!("Phase 3: Enter World not found — trying /enterworld command");
         crate::hooks::game_loop::queue_slash_command("/enterworld".to_string());
+    }
+}
+
+/// Phase 3 implementation: Find CCharacterListWnd by SidlText and call EnterWorld().
+///
+/// Uses eqgame.exe CXWndManager offsets (NOT eqmain.dll — they differ!).
+/// MQ2 approach: walk window array, match SidlText == "CharacterListWnd",
+/// then call CCharacterListWnd::EnterWorld() as a direct function call.
+fn phase3_enter_world() {
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    if eq_base == 0 {
+        tracing::error!("Phase 3: EQ base not resolved");
+        return;
+    }
+
+    // Resolve pinstCXWndManager in eqgame.exe
+    let Some(mgr_ptr_addr) = dmft_common::offsets::rebase(
+        dmft_common::offsets::PINST_CXWND_MANAGER, eq_base,
+    ) else {
+        tracing::warn!("Phase 3: Could not rebase pinstCXWndManager");
+        return;
+    };
+
+    // Use eqgame.exe offsets (NOT eqmain.dll — different CXWndManager layout!)
+    use dmft_common::offsets::eqgame as eqg;
+
+    unsafe {
+        let mgr = *(mgr_ptr_addr as *const usize);
+        if mgr == 0 {
+            tracing::warn!("Phase 3: CXWndManager is null");
+            return;
+        }
+
+        // Read window array using eqgame.exe offsets (+0x008/+0x010, not +0x010/+0x018)
+        let array_ptr = *((mgr + eqg::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+        let count = *((mgr + eqg::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+
+        tracing::info!(
+            mgr = format!("{:#x}", mgr),
+            array = format!("{:#x}", array_ptr),
+            count,
+            "Phase 3: CXWndManager resolved (eqgame.exe offsets)"
+        );
+
+        if array_ptr == 0 || count == 0 || count > 2000 {
+            tracing::warn!("Phase 3: Invalid CXWndManager window array");
+            return;
+        }
+
+        // Walk the window array — find CCharacterListWnd by SidlText at +0x270
+        let mut char_list_wnd: usize = 0;
+        let mut logged = 0u32;
+
+        for i in 0..count as usize {
+            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+            if wnd_ptr == 0 { continue; }
+
+            // Read SidlText (CSidlScreenWnd::SidlText at +0x270)
+            if let Some(sidl_text) = crate::login::widgets::read_cxstr_pub(
+                wnd_ptr + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
+            ) {
+                if logged < 30 && !sidl_text.is_empty() {
+                    tracing::info!(
+                        idx = i,
+                        ptr = format!("{:#x}", wnd_ptr),
+                        sidl = %sidl_text,
+                        "Phase 3 eqgame window"
+                    );
+                    logged += 1;
+                }
+
+                if sidl_text == "CharacterListWnd" {
+                    char_list_wnd = wnd_ptr;
+                    tracing::info!(
+                        ptr = format!("{:#x}", wnd_ptr),
+                        "Phase 3: Found CCharacterListWnd!"
+                    );
+                    break;
+                }
+            }
+
+            // Also check WindowText for calibration logging
+            if logged < 30 {
+                if let Some(wnd_text) = crate::login::widgets::read_cxstr_pub(
+                    wnd_ptr + dmft_common::offsets::eqmain::CXWND_WINDOW_TEXT,
+                ) {
+                    if !wnd_text.is_empty() {
+                        tracing::info!(
+                            idx = i,
+                            ptr = format!("{:#x}", wnd_ptr),
+                            text = %wnd_text,
+                            "Phase 3 eqgame window (WindowText)"
+                        );
+                    }
+                }
+            }
+        }
+
+        if char_list_wnd == 0 {
+            tracing::warn!(count, "Phase 3: CCharacterListWnd not found in {} windows", count);
+            // Fallback: try /enterworld slash command
+            crate::hooks::game_loop::queue_slash_command("/enterworld".to_string());
+            return;
+        }
+
+        // Call CCharacterListWnd::EnterWorld() directly — the MQ2 approach.
+        // Signature: void EnterWorld() — __thiscall, just `this` pointer (RCX on x64)
+        let Some(enter_world_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::ENTER_WORLD, eq_base,
+        ) else {
+            tracing::warn!("Phase 3: Could not rebase ENTER_WORLD");
+            return;
+        };
+
+        tracing::info!(
+            char_list_wnd = format!("{:#x}", char_list_wnd),
+            enter_world = format!("{:#x}", enter_world_addr),
+            "Phase 3: Calling CCharacterListWnd::EnterWorld()"
+        );
+
+        // x64 calling convention: RCX = this (pCharacterListWnd)
+        type EnterWorldFn = unsafe extern "C" fn(this: usize);
+        let enter_world: EnterWorldFn = std::mem::transmute(enter_world_addr);
+        enter_world(char_list_wnd);
+
+        tracing::info!("Phase 3 complete: EnterWorld() called!");
     }
 }
 

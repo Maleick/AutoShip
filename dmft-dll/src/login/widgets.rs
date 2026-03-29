@@ -4,9 +4,15 @@
 //! bypassing CXStr/SIDL widget navigation entirely. For other UI interactions
 //! (splash dismiss, error dialogs), falls back to SIDL window lookup.
 //!
+//! Core widget primitives (CXStr read/write, button click, window find) live in
+//! `crate::eq::widgets` — this module re-exports and composes them for login-specific flows.
+//!
 //! All functions are no-ops on non-Windows platforms.
 
 use dmft_common::login::LoginError;
+
+// Re-export core widget primitives for external callers (IPC, game_loop).
+pub use crate::eq::widgets::click_button_via_vtable;
 
 // ─── Widget XML names (stable across EQ patches) ───
 
@@ -51,105 +57,29 @@ pub fn is_window_visible(eqmain_base: u64, window_name: &str) -> bool {
     }
 }
 
-/// Find a SIDL window by its XML name.
-/// Returns a raw pointer to the CXWnd, or None if not found.
-/// Walks CXWndManager's window array and matches by WindowText (case-insensitive).
+/// Find a SIDL window by its XML name. Resolves CXWndManager from eqmain_base,
+/// then delegates to `crate::eq::widgets::find_window_by_name()`.
 #[cfg(windows)]
 fn find_window_by_name(eqmain_base: u64, name: &str) -> Option<*mut u8> {
-    use dmft_common::offsets::eqmain as off;
     let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
-
     unsafe {
-        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-
-        if array_ptr == 0 || count == 0 || count > 500 {
-            return None;
-        }
-
-        for i in 0..count as usize {
-            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-            if wnd_ptr == 0 { continue; }
-
-            if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
-                if text.eq_ignore_ascii_case(name) {
-                    return Some(wnd_ptr as *mut u8);
-                }
-            }
-        }
+        crate::eq::widgets::find_window_by_name(cxwnd_mgr, name)
+            .map(|ptr| ptr as *mut u8)
     }
-    None
 }
 
 /// Find a window whose WindowText contains the given substring (case-insensitive).
-/// Returns the window pointer if found. Used for fuzzy matching pre-login screens
-/// whose exact WindowText may vary between patches.
 #[cfg(windows)]
 fn find_window_by_text_contains(eqmain_base: u64, substring: &str) -> Option<usize> {
-    use dmft_common::offsets::eqmain as off;
     let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
-    let needle = substring.to_ascii_lowercase();
-
-    unsafe {
-        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-
-        if array_ptr == 0 || count == 0 || count > 500 {
-            return None;
-        }
-
-        for i in 0..count as usize {
-            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-            if wnd_ptr == 0 { continue; }
-
-            if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
-                if text.to_ascii_lowercase().contains(&needle) {
-                    return Some(wnd_ptr);
-                }
-            }
-        }
-    }
-    None
+    unsafe { crate::eq::widgets::find_window_by_text_contains(cxwnd_mgr, substring) }
 }
 
 /// Walk a parent window's child list looking for a button whose WindowText
-/// contains the given substring. Returns the child window pointer.
-/// CXWnd children are a TList: first child at CXWND_FIRST_NODE, next sibling at CXWND_NEXT.
+/// contains the given substring.
 #[cfg(windows)]
 fn find_child_button_by_text(parent_wnd: usize, button_text: &str) -> Option<usize> {
-    use dmft_common::offsets::eqmain as off;
-    let needle = button_text.to_ascii_lowercase();
-
-    unsafe {
-        let mut child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
-        let mut count = 0u32;
-
-        while child != 0 && count < 200 {
-            count += 1;
-
-            if let Some(text) = read_cxstr(child + off::CXWND_WINDOW_TEXT) {
-                if text.to_ascii_lowercase().contains(&needle) {
-                    return Some(child);
-                }
-            }
-
-            // Also recurse one level into grandchildren
-            let mut grandchild = *((child + off::CXWND_FIRST_NODE) as *const usize);
-            let mut gc_count = 0u32;
-            while grandchild != 0 && gc_count < 200 {
-                gc_count += 1;
-                if let Some(text) = read_cxstr(grandchild + off::CXWND_WINDOW_TEXT) {
-                    if text.to_ascii_lowercase().contains(&needle) {
-                        return Some(grandchild);
-                    }
-                }
-                grandchild = *((grandchild + off::CXWND_NEXT) as *const usize);
-            }
-
-            child = *((child + off::CXWND_NEXT) as *const usize);
-        }
-    }
-    None
+    unsafe { crate::eq::widgets::find_child_button_by_text(parent_wnd, button_text) }
 }
 
 /// Write login credentials directly to EQLogin's fixed char arrays.
@@ -747,23 +677,15 @@ pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) ->
 pub fn log_all_window_texts(eqmain_base: u64) {
     #[cfg(windows)]
     {
-        use dmft_common::offsets::eqmain as off;
         let Some(cxwnd_mgr) = super::eqmain::resolve_cxwnd_manager(eqmain_base) else {
             return;
         };
 
         tracing::info!("=== WINDOW TEXT DUMP (pre-login calibration) ===");
         unsafe {
-            let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-            let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-            if array_ptr == 0 || count == 0 || count > 500 { return; }
-
-            for i in 0..count as usize {
-                let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-                if wnd_ptr == 0 { continue; }
-
-                if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
-                    let visible = *((wnd_ptr + off::CXWND_DSHOW) as *const u8) != 0;
+            crate::eq::widgets::for_each_window(cxwnd_mgr, |i, wnd_ptr, text| {
+                if let Some(text) = text {
+                    let visible = crate::eq::widgets::is_visible(wnd_ptr);
                     tracing::info!(
                         idx = i,
                         ptr = format!("{:#x}", wnd_ptr),
@@ -772,7 +694,8 @@ pub fn log_all_window_texts(eqmain_base: u64) {
                         "Window"
                     );
                 }
-            }
+                true
+            });
         }
         tracing::info!("=== END WINDOW TEXT DUMP ===");
     }
@@ -912,221 +835,34 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
     tracing::info!("=== END LOGIN CALIBRATION DUMP ===");
 }
 
+// ─── Delegates to crate::eq::widgets ───
+// Core widget primitives now live in crate::eq::widgets. These thin wrappers
+// maintain the local API that login-specific code calls.
+
 /// Public wrapper for read_cxstr, used by the login chain in ipc/mod.rs.
-#[cfg(windows)]
 pub unsafe fn read_cxstr_pub(cxstr_addr: usize) -> Option<String> {
-    read_cxstr(cxstr_addr)
+    unsafe { crate::eq::widgets::read_cxstr(cxstr_addr) }
 }
 
-/// Non-windows stub
-#[cfg(not(windows))]
-pub unsafe fn read_cxstr_pub(_cxstr_addr: usize) -> Option<String> { None }
-
-/// Read a CXStr value from a raw pointer. CXStr is a single pointer to CStrRep.
-/// CStrRep layout: refcount(4) + alloc(4) + length(4) + encoding(4) + freeList(8) + data[](at +0x18)
+/// Private read_cxstr for use within this module.
 #[cfg(windows)]
 unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
-    use dmft_common::offsets::eqmain as off;
-
-    let rep_ptr = *(cxstr_addr as *const usize);
-    if rep_ptr == 0 {
-        return None;
-    }
-
-    let length = *((rep_ptr + off::CSTRREP_LENGTH) as *const u32) as usize;
-    if length == 0 || length > 256 {
-        return None;
-    }
-
-    let data_ptr = (rep_ptr + off::CSTRREP_DATA) as *const u8;
-    let bytes = std::slice::from_raw_parts(data_ptr, length);
-    String::from_utf8(bytes.to_vec()).ok()
+    crate::eq::widgets::read_cxstr(cxstr_addr)
 }
 
-/// Write a string into a CXStr field by overwriting the existing CStrRep buffer.
-/// If the CStrRep is null (empty CXStr), allocates a new one on the heap.
+/// Write a string into a CXStr field.
 #[cfg(windows)]
 unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
-    use dmft_common::offsets::eqmain as off;
-
-    let mut rep_ptr = *(cxstr_addr as *const usize);
-
-    if rep_ptr == 0 {
-        // Cannot write to a null CXStr — EQ must allocate through its own CXFreeList.
-        // Allocating from Rust's heap crashes EQ on deallocation.
-        // Caller should use a donor CStrRep from another widget.
-        tracing::warn!("CXStr rep is null — need donor CStrRep");
-        return false;
-    }
-
-    let alloc = *((rep_ptr + off::CSTRREP_ALLOC) as *const u32) as usize;
-    if text.len() >= alloc {
-        tracing::warn!(
-            text_len = text.len(),
-            alloc,
-            "CXStr buffer too small for text"
-        );
-        return false;
-    }
-
-    // Write the new string data
-    let data_ptr = (rep_ptr + off::CSTRREP_DATA) as *mut u8;
-    std::ptr::copy_nonoverlapping(text.as_ptr(), data_ptr, text.len());
-    // Null-terminate
-    *data_ptr.add(text.len()) = 0;
-    // Update length
-    *((rep_ptr + off::CSTRREP_LENGTH) as *mut u32) = text.len() as u32;
-
-    true
+    crate::eq::widgets::write_cxstr_inplace(cxstr_addr, text)
 }
 
-/// Click a button widget by calling WndNotification(XWM_LCLICK) through the vtable.
-/// MUST be called from EQ's main thread (game loop), not from the IPC thread.
-#[cfg(windows)]
-pub unsafe fn click_button_via_vtable(button_wnd: usize) {
-    use dmft_common::offsets::eqmain as off;
-
-    let vtable = *(button_wnd as *const usize);
-    if vtable == 0 {
-        tracing::warn!("Button vtable is null");
-        return;
-    }
-
-    let wnd_notification_ptr = *((vtable + off::CXWND_VTABLE_WND_NOTIFICATION) as *const usize);
-    if wnd_notification_ptr == 0 {
-        tracing::warn!("WndNotification function pointer is null");
-        return;
-    }
-
-    // x64 calling convention: rcx=this, rdx=sender, r8=message, r9=data
-    type WndNotificationFn = unsafe extern "C" fn(usize, usize, u32, usize) -> i32;
-    let func: WndNotificationFn = std::mem::transmute(wnd_notification_ptr);
-    func(button_wnd, button_wnd, off::XWM_LCLICK, 0);
-}
-
-/// Non-windows stub for click_button_via_vtable.
-#[cfg(not(windows))]
-pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
-
-/// Set text on a CEditWnd by calling SetWindowText through the vtable.
-/// This is the MQ2 approach — calls EQ's own function which updates both
-/// the UI display and internal state.
-///
-/// CXWnd vtable layout: SetWindowText at offset 0x280
-/// Signature: void CEditWnd::SetWindowText(const CXStr& text)
-/// x64: RCX=this, RDX=&CXStr (pointer to pointer to CStrRep)
-#[cfg(windows)]
-pub unsafe fn set_edit_text_via_vtable(edit_wnd: usize, text: &str) -> bool {
-    use dmft_common::offsets::eqmain as off;
-    use windows::Win32::System::Memory::{GetProcessHeap, HeapAlloc, HEAP_ZERO_MEMORY};
-
-    let vtable = *(edit_wnd as *const usize);
-    if vtable == 0 {
-        tracing::warn!("CEditWnd vtable is null");
-        return false;
-    }
-
-    let set_window_text_ptr =
-        *((vtable + off::CXWND_VTABLE_SET_WINDOW_TEXT) as *const usize);
-    if set_window_text_ptr == 0 {
-        tracing::warn!("SetWindowText function pointer is null");
-        return false;
-    }
-
-    // Allocate a CStrRep on the process heap with our text.
-    // CStrRep layout: refCount(i32@0), alloc(u32@4), length(u32@8), encoding(u32@0c),
-    //                 freeList(usize@0x10), data(bytes@0x18)
-    let text_len = text.len();
-    let alloc_size = text_len + 64; // extra room
-    let total_size = off::CSTRREP_DATA + alloc_size;
-
-    let heap = match GetProcessHeap() {
-        Ok(h) => h,
-        Err(_) => {
-            tracing::error!("GetProcessHeap failed");
-            return false;
-        }
-    };
-    let rep = HeapAlloc(heap, HEAP_ZERO_MEMORY, total_size);
-    if rep.is_null() {
-        tracing::error!("HeapAlloc failed for CStrRep");
-        return false;
-    }
-    let rep_addr = rep as usize;
-
-    // Fill CStrRep fields
-    *(rep_addr as *mut i32) = 1; // refCount = 1
-    *((rep_addr + off::CSTRREP_ALLOC) as *mut u32) = alloc_size as u32;
-    *((rep_addr + off::CSTRREP_LENGTH) as *mut u32) = text_len as u32;
-    *((rep_addr + off::CSTRREP_ENCODING) as *mut u32) = 0; // ASCII
-
-    // Copy text data
-    let data_ptr = (rep_addr + off::CSTRREP_DATA) as *mut u8;
-    std::ptr::copy_nonoverlapping(text.as_ptr(), data_ptr, text_len);
-    *data_ptr.add(text_len) = 0; // null terminate
-
-    // CXStr is just a pointer to CStrRep. SetWindowText takes `const CXStr&`
-    // which means a pointer to the CXStr (pointer to pointer to CStrRep).
-    let cxstr: usize = rep_addr; // CXStr value = pointer to CStrRep
-    let cxstr_ref: *const usize = &cxstr; // &CXStr = pointer to the pointer
-
-    // Call SetWindowText(this, &cxstr)
-    // x64: RCX=this(edit_wnd), RDX=&CXStr
-    type SetWindowTextFn = unsafe extern "C" fn(usize, *const usize);
-    let func: SetWindowTextFn = std::mem::transmute(set_window_text_ptr);
-    func(edit_wnd, cxstr_ref);
-
-    tracing::info!(
-        wnd = format!("{:#x}", edit_wnd),
-        vtable_fn = format!("{:#x}", set_window_text_ptr),
-        text_len,
-        "Called CEditWnd::SetWindowText via vtable"
-    );
-
-    // Don't free the CStrRep — EQ now owns it via refCount.
-    // EQ's CXStr destructor will free it when the widget is destroyed or text changes.
-    true
-}
-
-/// Non-windows stub for set_edit_text_via_vtable.
-#[cfg(not(windows))]
-pub unsafe fn set_edit_text_via_vtable(_edit_wnd: usize, _text: &str) -> bool {
-    false
-}
-
-/// Clone a CStrRep from a donor, using the process default heap for allocation.
-/// This ensures EQ can safely free/manage the buffer since it uses the same heap.
+/// Clone a CStrRep from a donor.
 #[cfg(windows)]
 unsafe fn clone_cstrrep_for_password(donor_rep: usize) -> Option<usize> {
-    use dmft_common::offsets::eqmain as off;
-    use windows::Win32::System::Memory::{GetProcessHeap, HeapAlloc, HEAP_ZERO_MEMORY};
-
-    let donor_alloc = *((donor_rep + off::CSTRREP_ALLOC) as *const u32) as usize;
-    let total_size = off::CSTRREP_DATA + donor_alloc.max(128);
-
-    let heap = GetProcessHeap().ok()?;
-    let new_rep = HeapAlloc(heap, HEAP_ZERO_MEMORY, total_size);
-    if new_rep.is_null() {
-        tracing::error!("HeapAlloc failed for CStrRep clone");
-        return None;
-    }
-
-    let new_rep_addr = new_rep as usize;
-
-    // Copy header from donor
-    *(new_rep_addr as *mut i32) = 1; // refCount = 1
-    *((new_rep_addr + off::CSTRREP_ALLOC) as *mut u32) = donor_alloc.max(128) as u32;
-    *((new_rep_addr + off::CSTRREP_LENGTH) as *mut u32) = 0; // empty initially
-    *((new_rep_addr + off::CSTRREP_ENCODING) as *mut u32) =
-        *((donor_rep + off::CSTRREP_ENCODING) as *const u32); // same encoding
-    // Copy freeList pointer from donor — critical for EQ's deallocation
-    *((new_rep_addr + 0x10) as *mut usize) = *((donor_rep + 0x10) as *const usize);
-
-    Some(new_rep_addr)
+    crate::eq::widgets::clone_cstrrep(donor_rep)
 }
 
-/// Walk CXWndManager's window array and log each window's address and WindowText.
-/// This helps identify the login UI widget addresses for direct credential writing.
+/// Walk CXWndManager's window array and log each window for calibration.
 #[cfg(windows)]
 fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
     use dmft_common::offsets::eqmain as off;
@@ -1134,51 +870,26 @@ fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
     tracing::info!("=== WINDOW ENUMERATION ===");
 
     unsafe {
-        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const i32);
-
-        tracing::info!(
-            array_ptr = format!("{:#x}", array_ptr),
-            count,
-            "CXWndManager::pWindows"
-        );
-
-        if array_ptr == 0 || count <= 0 || count > 500 {
-            tracing::warn!("Invalid window array");
-            return;
-        }
-
         let focus_wnd = *((cxwnd_mgr + off::CXWNDMGR_FOCUS_WINDOW) as *const usize);
         tracing::info!(focus = format!("{:#x}", focus_wnd), "FocusWindow");
 
-        for i in 0..count as usize {
-            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-            if wnd_ptr == 0 {
-                continue;
-            }
+        crate::eq::widgets::for_each_window(cxwnd_mgr, |i, wnd_ptr, text| {
+            let window_text = text.unwrap_or_default();
+            let visible = crate::eq::widgets::is_visible(wnd_ptr);
+            let xml_idx = crate::eq::widgets::xml_index(wnd_ptr);
 
-            // Read WindowText (CXStr at +0x078)
-            let window_text = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT)
-                .unwrap_or_default();
-
-            // Read XMLIndex
-            let xml_index = *((wnd_ptr + off::CXWND_XML_INDEX) as *const i32);
-
-            // Read visibility
-            let visible = *((wnd_ptr + off::CXWND_DSHOW) as *const bool);
-
-            // Only log windows that are visible or have a name
             if visible || !window_text.is_empty() {
                 tracing::info!(
                     idx = i,
                     ptr = format!("{:#x}", wnd_ptr),
-                    xml_index,
+                    xml_index = xml_idx,
                     visible,
                     text = %window_text,
                     "Window"
                 );
             }
-        }
+            true // continue iteration
+        });
     }
 
     tracing::info!("=== END WINDOW ENUMERATION ===");
@@ -1194,15 +905,13 @@ pub fn read_list_item(
     _col: usize,
 ) -> Option<String> {
     // TODO: Implement CListWnd item reading once struct layout is validated.
-    // CListWnd stores items in a nested structure that varies by EQ version.
     None
 }
 
 /// Write a Rust string into an EQ CXStr field.
-/// Delegates to write_cxstr_inplace which overwrites the existing CStrRep buffer.
 #[cfg(windows)]
 unsafe fn write_cxstr(cxstr_ptr: *mut u8, text: &str) {
-    write_cxstr_inplace(cxstr_ptr as usize, text);
+    crate::eq::widgets::write_cxstr_inplace(cxstr_ptr as usize, text);
 }
 
 #[cfg(test)]
