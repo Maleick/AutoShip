@@ -689,6 +689,16 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
     tracing::info!("=== END LOGIN CALIBRATION DUMP ===");
 }
 
+/// Public wrapper for read_cxstr, used by the login chain in ipc/mod.rs.
+#[cfg(windows)]
+pub unsafe fn read_cxstr_pub(cxstr_addr: usize) -> Option<String> {
+    read_cxstr(cxstr_addr)
+}
+
+/// Non-windows stub
+#[cfg(not(windows))]
+pub unsafe fn read_cxstr_pub(_cxstr_addr: usize) -> Option<String> { None }
+
 /// Read a CXStr value from a raw pointer. CXStr is a single pointer to CStrRep.
 /// CStrRep layout: refcount(4) + alloc(4) + length(4) + encoding(4) + freeList(8) + data[](at +0x18)
 #[cfg(windows)]

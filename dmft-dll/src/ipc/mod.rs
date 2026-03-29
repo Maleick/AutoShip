@@ -150,12 +150,10 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             if let Command::StartLogin {
                 account_name,
                 password,
-                server_name: _,
-                character_name: _,
+                server_name,
+                character_name,
             } = cmd
             {
-                // Direct login: write credentials to EQLogin struct and press Enter.
-                // This bypasses the FSM (which needs game loop ticks) and acts immediately.
                 let eqmain_base = crate::login::eqmain::find_eqmain();
                 if eqmain_base == 0 {
                     tracing::error!("Cannot login: eqmain.dll not found");
@@ -165,32 +163,133 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 tracing::info!(
                     account = %account_name,
                     eqmain_base = format!("{:#x}", eqmain_base),
-                    "Typing login credentials via WM_CHAR"
+                    "Starting full login chain"
                 );
 
-                // Type credentials character by character into the focused UI fields
-                if crate::login::widgets::type_credentials_to_window(
+                // Phase 1: Write credentials and click Login
+                if !crate::login::widgets::type_credentials_to_window(
                     eqmain_base,
                     account_name,
                     password,
                 ) {
-                    tracing::info!("Credentials typed into UI fields");
-
-                    // Small delay before pressing Enter
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-
-                    if crate::login::widgets::simulate_enter_key(eqmain_base) {
-                        tracing::info!("Enter key sent — login should be submitting");
-                    } else {
-                        tracing::warn!("Failed to simulate Enter key");
-                    }
-                } else {
-                    tracing::error!("Failed to type credentials into EQ window");
+                    tracing::error!("Failed to write credentials to UI fields");
+                    return true;
                 }
+                tracing::info!("Phase 1 complete: credentials written + Login clicked");
+
+                // Phase 2: Wait for server select screen, then click Play
+                // Spawn a thread so we don't block the IPC listener
+                let server = server_name.clone();
+                let character = character_name.clone();
+                std::thread::Builder::new()
+                    .name("dmft-login-chain".into())
+                    .spawn(move || {
+                        login_chain_phase2(server, character);
+                    })
+                    .ok();
             }
             true
         }
         _ => false,
+    }
+}
+
+/// Phase 2+3 of the login chain: server select → character select → enter world.
+/// Runs on a dedicated thread spawned from the IPC handler.
+fn login_chain_phase2(server_name: String, character_name: String) {
+    use dmft_common::offsets::eqmain as off;
+
+    // Wait for server select screen to load (~7 seconds after login)
+    tracing::info!("Login chain phase 2: waiting 7s for server select...");
+    std::thread::sleep(std::time::Duration::from_secs(7));
+
+    let eqmain_base = crate::login::eqmain::find_eqmain();
+    if eqmain_base == 0 {
+        tracing::error!("Login chain: eqmain.dll not found after login");
+        return;
+    }
+
+    let Some(cxwnd_mgr) = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base) else {
+        tracing::error!("Login chain: CXWndManager not resolved");
+        return;
+    };
+
+    // Scan for "PLAY EVERQUEST!" button
+    unsafe {
+        let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+        let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+
+        if array_ptr == 0 || count == 0 || count > 500 {
+            tracing::warn!("Login chain: invalid window array");
+            return;
+        }
+
+        let mut play_button: usize = 0;
+        let mut enter_world_button: usize = 0;
+
+        for i in 0..count as usize {
+            let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+            if wnd_ptr == 0 { continue; }
+
+            if let Some(text) = crate::login::widgets::read_cxstr_pub(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                if text == "PLAY EVERQUEST!" {
+                    play_button = wnd_ptr;
+                }
+                if text == "Enter World" || text == "ENTER WORLD" || text == "Enter" {
+                    enter_world_button = wnd_ptr;
+                }
+            }
+        }
+
+        // Click "PLAY EVERQUEST!" to enter the server
+        if play_button != 0 {
+            tracing::info!(
+                ptr = format!("{:#x}", play_button),
+                "Phase 2: Clicking PLAY EVERQUEST!"
+            );
+            crate::login::widgets::click_button_via_vtable(play_button);
+            tracing::info!("Phase 2 complete: PLAY EVERQUEST clicked");
+
+            // Phase 3: Wait for character select (~10 seconds), then enter world
+            tracing::info!("Login chain phase 3: waiting 10s for character select...");
+            std::thread::sleep(std::time::Duration::from_secs(10));
+
+            // Re-scan windows for Enter World button (UI changed after server connect)
+            let eqmain_base2 = crate::login::eqmain::find_eqmain();
+            if eqmain_base2 != 0 {
+                if let Some(mgr2) = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base2) {
+                    let array2 = *((mgr2 + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+                    let count2 = *((mgr2 + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+
+                    if array2 != 0 && count2 > 0 && count2 <= 500 {
+                        for i in 0..count2 as usize {
+                            let wnd_ptr = *((array2 + i * 8) as *const usize);
+                            if wnd_ptr == 0 { continue; }
+                            if let Some(text) = crate::login::widgets::read_cxstr_pub(
+                                wnd_ptr + off::CXWND_WINDOW_TEXT
+                            ) {
+                                if text == "Enter World" || text == "ENTER WORLD" || text == "Enter" {
+                                    enter_world_button = wnd_ptr;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if enter_world_button != 0 {
+                tracing::info!(
+                    ptr = format!("{:#x}", enter_world_button),
+                    "Phase 3: Clicking Enter World"
+                );
+                crate::login::widgets::click_button_via_vtable(enter_world_button);
+                tracing::info!("Phase 3 complete: Enter World clicked — character should be loading");
+            } else {
+                tracing::warn!("Phase 3: Enter World button not found — may need manual click");
+            }
+        } else {
+            tracing::warn!("Phase 2: PLAY EVERQUEST button not found");
+        }
     }
 }
 
