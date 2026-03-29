@@ -1,0 +1,27 @@
+class_name = "warrior"
+role = "tank"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Taunt"
+command = "/taunt"
+cooldown_secs = 8.0
+priority = 1
+
+[[combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 6.0
+priority = 2
+
+[[combat_abilities]]
+name = "Bash"
+command = "/bash"
+cooldown_secs = 6.0
+priority = 3
+
+[[combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 10

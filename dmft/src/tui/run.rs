@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use super::app::App;
 use super::event::handle_events;
 use super::ui::draw;
+use crate::orchestrator::Orchestrator;
 
 /// Soul Engine tick interval (5 seconds).
 const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
@@ -18,8 +19,11 @@ const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
 /// How often to scan for new EQ processes (10 seconds).
 const PROCESS_SCAN_INTERVAL: Duration = Duration::from_secs(10);
 
+/// Camp loop tick interval (1 second).
+const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Initialize crossterm, run the TUI loop, and clean up on exit.
-pub fn run_tui(mut app: App) -> Result<()> {
+pub fn run_tui(mut app: App, mut orchestrator: Orchestrator) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -27,7 +31,7 @@ pub fn run_tui(mut app: App) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_loop(&mut terminal, &mut app);
+    let result = run_loop(&mut terminal, &mut app, &mut orchestrator);
 
     // Restore terminal — always runs even if loop panicked
     disable_raw_mode()?;
@@ -37,11 +41,16 @@ pub fn run_tui(mut app: App) -> Result<()> {
     result
 }
 
-fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> Result<()> {
+fn run_loop(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    orchestrator: &mut Orchestrator,
+) -> Result<()> {
     let refresh_interval = Duration::from_millis(app.refresh_rate_ms);
     let mut last_refresh = Instant::now();
     let mut last_soul_tick = Instant::now();
     let mut last_process_scan = Instant::now();
+    let mut last_camp_tick = Instant::now();
 
     while app.running {
         // Draw the UI
@@ -49,11 +58,18 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App
 
         // Handle keyboard events (with a short poll timeout so we stay responsive)
         let poll_timeout = Duration::from_millis(50);
-        handle_events(app, poll_timeout)?;
+        handle_events(app, poll_timeout, orchestrator)?;
 
         // Periodic scan for new/lost EQ processes
         if last_process_scan.elapsed() >= PROCESS_SCAN_INTERVAL {
             scan_for_clients(app);
+            // Sync orchestrator's client list from app
+            orchestrator.client_pids = app.clients.iter().map(|c| c.pid).collect();
+            orchestrator.client_names = app
+                .clients
+                .iter()
+                .map(|c| (c.pid, c.character_name.clone()))
+                .collect();
             last_process_scan = Instant::now();
         }
 
@@ -62,6 +78,19 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App
             refresh_eq_data(app);
             app.tick_count += 1;
             last_refresh = Instant::now();
+        }
+
+        // Camp loop tick (every 1 second)
+        if last_camp_tick.elapsed() >= CAMP_TICK_INTERVAL {
+            let dispatched = orchestrator.tick();
+            if dispatched > 0 {
+                app.status_message = format!(
+                    "Camp: {} cmds dispatched | {}",
+                    dispatched,
+                    orchestrator.camp_status()
+                );
+            }
+            last_camp_tick = Instant::now();
         }
 
         // Soul Engine tick (every 5 seconds)

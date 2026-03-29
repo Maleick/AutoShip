@@ -34,3 +34,7 @@ credentials.db*
 
 # Account credentials
 accounts.csv
+
+# Downloaded data files (maps, navmeshes — too large for git)
+data/
+config/maps/*.txt

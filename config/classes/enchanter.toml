@@ -1,0 +1,28 @@
+class_name = "enchanter"
+role = "cc"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Mesmerize"
+command = "/cast 1"
+cooldown_secs = 3.0
+priority = 1
+condition = "add_count_above_1"
+
+[[combat_abilities]]
+name = "Tash"
+command = "/cast 2"
+cooldown_secs = 30.0
+priority = 2
+
+[[buff_abilities]]
+name = "Haste"
+command = "/cast 5"
+cooldown_secs = 600.0
+priority = 1
+
+[[buff_abilities]]
+name = "Clarity"
+command = "/cast 6"
+cooldown_secs = 600.0
+priority = 2

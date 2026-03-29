@@ -1,0 +1,28 @@
+class_name = "ranger"
+role = "dps"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 6.0
+priority = 2
+
+[[combat_abilities]]
+name = "Snare"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 3
+condition = "mob_fleeing"
+
+[[buff_abilities]]
+name = "Strength"
+command = "/cast 5"
+cooldown_secs = 600.0
+priority = 1

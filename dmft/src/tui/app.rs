@@ -1,5 +1,8 @@
+use crate::camp::config::CampConfig;
+use crate::camp::state::{CampMember, Role};
 use crate::eq::map_parser::ZoneMap;
 use crate::eq::structs::{GroupInfo, SpawnInfo, SpawnType};
+use crate::orchestrator::Orchestrator;
 use crate::soul::coordinator::SoulCoordinator;
 
 /// Which screen is currently displayed.
@@ -405,7 +408,7 @@ impl App {
     }
 
     /// Execute the current command buffer content.
-    pub fn execute_command(&mut self) {
+    pub fn execute_command(&mut self, orchestrator: &mut Orchestrator) {
         let input = self.command_buffer.trim().to_string();
         if input.is_empty() {
             return;
@@ -414,8 +417,11 @@ impl App {
         // Save to history
         self.command_history.push(input.clone());
 
-        let parts: Vec<&str> = input.splitn(2, ' ').collect();
+        let parts: Vec<&str> = input.splitn(3, ' ').collect();
         match parts[0] {
+            "camp" => {
+                self.execute_camp_command(&parts[1..], orchestrator);
+            }
             "status" => {
                 let client_count = self.clients.len();
                 self.status_message = format!("{} client(s) connected", client_count);
@@ -465,6 +471,80 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Handle `camp <subcommand>` from the command bar.
+    fn execute_camp_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        match args.first().copied() {
+            Some("start") => {
+                let camp_name = match args.get(1) {
+                    Some(name) => *name,
+                    None => {
+                        self.status_message =
+                            String::from("Usage: camp start <name>  (loads config/camps/<name>.toml)");
+                        return;
+                    }
+                };
+
+                match CampConfig::load(camp_name) {
+                    Ok(config) => {
+                        // Build members from currently connected clients
+                        let members = self.build_camp_members();
+                        if members.is_empty() {
+                            self.status_message =
+                                String::from("No clients connected — cannot start camp");
+                            return;
+                        }
+                        let count = members.len();
+                        orchestrator.start_camp(config, members);
+                        self.status_message =
+                            format!("Camp '{}' started with {} members", camp_name, count);
+                    }
+                    Err(e) => {
+                        self.status_message =
+                            format!("Failed to load camp '{}': {}", camp_name, e);
+                    }
+                }
+            }
+            Some("stop") => {
+                orchestrator.stop_camp();
+                self.status_message = String::from("Camp stopped");
+            }
+            Some("status") => {
+                self.status_message = orchestrator.camp_status();
+            }
+            _ => {
+                self.status_message =
+                    String::from("Usage: camp <start|stop|status> [name]");
+            }
+        }
+    }
+
+    /// Build camp members from connected clients using simple role assignment.
+    /// First client = Tank, second = Healer, third = Puller, rest = DPS.
+    fn build_camp_members(&self) -> Vec<CampMember> {
+        self.clients
+            .iter()
+            .enumerate()
+            .map(|(i, client)| {
+                let role = match i {
+                    0 => Role::Tank,
+                    1 => Role::Healer,
+                    2 => Role::Puller,
+                    _ => Role::DPS,
+                };
+                let name = if client.character_name.is_empty() {
+                    format!("Client-{}", client.pid)
+                } else {
+                    client.character_name.clone()
+                };
+                CampMember {
+                    pid: client.pid,
+                    name,
+                    role,
+                }
+            })
+            .collect()
     }
 }
 

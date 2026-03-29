@@ -1,0 +1,29 @@
+class_name = "bard"
+role = "bard"
+rest_command = "/sit"
+twist_interval_secs = 3.0
+
+[[combat_abilities]]
+name = "Twist Song 1"
+command = "/cast 1"
+cooldown_secs = 3.0
+priority = 1
+
+[[combat_abilities]]
+name = "Twist Song 2"
+command = "/cast 2"
+cooldown_secs = 3.0
+priority = 2
+
+[[combat_abilities]]
+name = "Twist Song 3"
+command = "/cast 3"
+cooldown_secs = 3.0
+priority = 3
+
+[[buff_abilities]]
+name = "Selos"
+command = "/cast 5"
+cooldown_secs = 600.0
+priority = 1
+condition = "out_of_combat"

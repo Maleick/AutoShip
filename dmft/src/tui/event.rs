@@ -3,10 +3,11 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use std::time::Duration;
 
 use super::app::{ActivePanel, ActiveScreen, App};
+use crate::orchestrator::Orchestrator;
 
 /// Poll for keyboard events and update app state.
 /// Returns true if an event was handled.
-pub fn handle_events(app: &mut App, timeout: Duration) -> Result<bool> {
+pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orchestrator) -> Result<bool> {
     if !event::poll(timeout)? {
         return Ok(false);
     }
@@ -29,7 +30,7 @@ pub fn handle_events(app: &mut App, timeout: Duration) -> Result<bool> {
                 KeyCode::Enter => {
                     app.command_mode = false;
                     app.command_history_idx = None;
-                    app.execute_command();
+                    app.execute_command(orchestrator);
                     app.command_buffer.clear();
                     return Ok(true);
                 }

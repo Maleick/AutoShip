@@ -10,6 +10,7 @@ mod inject;
 mod ipc;
 mod launcher;
 mod nav;
+mod orchestrator;
 mod process;
 mod soul;
 mod tui;
@@ -118,7 +119,8 @@ fn run_tui_mode() -> Result<()> {
         }
     }
 
-    tui::run::run_tui(app)
+    let orchestrator = orchestrator::Orchestrator::new();
+    tui::run::run_tui(app, orchestrator)
 }
 
 /// Inject mode (--inject) — find eqgame.exe processes and inject dmft_dll.dll into each.
