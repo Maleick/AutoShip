@@ -237,15 +237,33 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 "Wrote username to edit widget"
             );
 
-            // Write password
-            let wrote_password = write_cxstr_inplace(
-                password_edit + off::CEDITBASEWND_INPUT_TEXT,
-                password,
-            );
-            let wrote_pw_wt = write_cxstr_inplace(
-                password_edit + off::CXWND_WINDOW_TEXT,
-                password,
-            );
+            // Write password — the password CEditWnd may have null CXStr (never typed in).
+            // If null, clone the username's CStrRep structure using EQ's process heap
+            // so EQ can safely manage it (HeapAlloc matches EQ's deallocation path).
+            let pw_input_addr = password_edit + off::CEDITBASEWND_INPUT_TEXT;
+            let pw_wt_addr = password_edit + off::CXWND_WINDOW_TEXT;
+
+            let pw_rep = *(pw_input_addr as *const usize);
+            if pw_rep == 0 {
+                let un_rep = *((username_edit + off::CEDITBASEWND_INPUT_TEXT) as *const usize);
+                if un_rep != 0 {
+                    // Clone the CStrRep using the process default heap (same heap EQ uses)
+                    if let Some(new_rep) = clone_cstrrep_for_password(un_rep) {
+                        *(pw_input_addr as *mut usize) = new_rep;
+                        *(pw_wt_addr as *mut usize) = new_rep;
+                        tracing::info!("Cloned CStrRep for password via process heap");
+                    }
+                }
+            }
+
+            let wrote_password = write_cxstr_inplace(pw_input_addr as usize, password);
+            let wrote_pw_wt = {
+                let wt_rep = *(pw_wt_addr as *const usize);
+                let it_rep = *(pw_input_addr as *const usize);
+                if wt_rep == it_rep { true } // same rep, already written
+                else if wt_rep != 0 { write_cxstr_inplace(pw_wt_addr as usize, password) }
+                else { false }
+            };
             tracing::info!(
                 input_text = wrote_password,
                 window_text = wrote_pw_wt,
@@ -671,26 +689,11 @@ unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
     let mut rep_ptr = *(cxstr_addr as *const usize);
 
     if rep_ptr == 0 {
-        // Allocate a new CStrRep on the heap.
-        // Layout: refcount(4) + alloc(4) + length(4) + encoding(4) + freeList(8) + data[256]
-        let total_size = off::CSTRREP_DATA + 256;
-        let layout = std::alloc::Layout::from_size_align(total_size, 8).unwrap();
-        let new_rep = std::alloc::alloc_zeroed(layout);
-        if new_rep.is_null() {
-            tracing::error!("Failed to allocate CStrRep");
-            return false;
-        }
-        // Initialize fields
-        *(new_rep as *mut i32) = 1;  // refCount = 1
-        *((new_rep as usize + off::CSTRREP_ALLOC) as *mut u32) = 256;  // alloc
-        *((new_rep as usize + off::CSTRREP_ENCODING) as *mut u32) = 0;  // utf8
-        // freeList = null (already zeroed)
-
-        // Point the CXStr at our new CStrRep
-        *(cxstr_addr as *mut usize) = new_rep as usize;
-        rep_ptr = new_rep as usize;
-
-        tracing::info!("Allocated new CStrRep for empty CXStr");
+        // Cannot write to a null CXStr — EQ must allocate through its own CXFreeList.
+        // Allocating from Rust's heap crashes EQ on deallocation.
+        // Caller should use a donor CStrRep from another widget.
+        tracing::warn!("CXStr rep is null — need donor CStrRep");
+        return false;
     }
 
     let alloc = *((rep_ptr + off::CSTRREP_ALLOC) as *const u32) as usize;
@@ -712,6 +715,37 @@ unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
     *((rep_ptr + off::CSTRREP_LENGTH) as *mut u32) = text.len() as u32;
 
     true
+}
+
+/// Clone a CStrRep from a donor, using the process default heap for allocation.
+/// This ensures EQ can safely free/manage the buffer since it uses the same heap.
+#[cfg(windows)]
+unsafe fn clone_cstrrep_for_password(donor_rep: usize) -> Option<usize> {
+    use dmft_common::offsets::eqmain as off;
+    use windows::Win32::System::Memory::{GetProcessHeap, HeapAlloc, HEAP_ZERO_MEMORY};
+
+    let donor_alloc = *((donor_rep + off::CSTRREP_ALLOC) as *const u32) as usize;
+    let total_size = off::CSTRREP_DATA + donor_alloc.max(128);
+
+    let heap = GetProcessHeap().ok()?;
+    let new_rep = HeapAlloc(heap, HEAP_ZERO_MEMORY, total_size);
+    if new_rep.is_null() {
+        tracing::error!("HeapAlloc failed for CStrRep clone");
+        return None;
+    }
+
+    let new_rep_addr = new_rep as usize;
+
+    // Copy header from donor
+    *(new_rep_addr as *mut i32) = 1; // refCount = 1
+    *((new_rep_addr + off::CSTRREP_ALLOC) as *mut u32) = donor_alloc.max(128) as u32;
+    *((new_rep_addr + off::CSTRREP_LENGTH) as *mut u32) = 0; // empty initially
+    *((new_rep_addr + off::CSTRREP_ENCODING) as *mut u32) =
+        *((donor_rep + off::CSTRREP_ENCODING) as *const u32); // same encoding
+    // Copy freeList pointer from donor — critical for EQ's deallocation
+    *((new_rep_addr + 0x10) as *mut usize) = *((donor_rep + 0x10) as *const usize);
+
+    Some(new_rep_addr)
 }
 
 /// Walk CXWndManager's window array and log each window's address and WindowText.
