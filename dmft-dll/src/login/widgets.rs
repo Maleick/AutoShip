@@ -599,9 +599,30 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
         }
     }
 
-    // Enumerate CXWndManager windows to find login UI widgets
+    // Hex dump CXWndManager to discover actual struct layout (eqmain vs eqgame offsets differ)
     #[cfg(windows)]
     if let Some(cxwnd_mgr) = eqmain::resolve_cxwnd_manager(eqmain_base) {
+        tracing::info!("=== CXWNDMANAGER HEX DUMP ===");
+        unsafe {
+            // Dump first 0x200 bytes to find ArrayClass<CXWnd*> pWindows
+            for row in 0..32u64 {
+                let offset = row * 16;
+                let addr = cxwnd_mgr + offset as usize;
+                let bytes: [u8; 16] = std::ptr::read(addr as *const [u8; 16]);
+                let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                // Also interpret as usize pairs (pointers)
+                let ptr1 = *(addr as *const usize);
+                let ptr2 = *((addr + 8) as *const usize);
+                tracing::info!(
+                    offset = format!("+{:#05x}", offset),
+                    hex = %hex,
+                    p1 = format!("{:#018x}", ptr1),
+                    p2 = format!("{:#018x}", ptr2),
+                    "CXWndMgr"
+                );
+            }
+        }
+        tracing::info!("=== END CXWNDMANAGER HEX DUMP ===");
         enumerate_cxwnd_windows(cxwnd_mgr);
     }
 
