@@ -209,8 +209,8 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
     use dmft_common::offsets::eqmain as off;
 
     // Phase 2: Wait for server select, then click PLAY EVERQUEST!
-    tracing::info!("Login chain phase 2: waiting 12s for server select...");
-    std::thread::sleep(std::time::Duration::from_secs(12));
+    tracing::info!("Login chain phase 2: waiting 8s for server select...");
+    std::thread::sleep(std::time::Duration::from_secs(8));
 
     let eqmain_base = crate::login::eqmain::find_eqmain();
     if eqmain_base == 0 {
@@ -232,8 +232,8 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
     // Phase 3: Wait for character select, then enter world.
     // At character select, eqmain.dll is unloaded and eqgame.exe is active.
     // Our game loop hook IS running, so we can use InterpretCmd.
-    tracing::info!("Login chain phase 3: waiting 15s for character select...");
-    std::thread::sleep(std::time::Duration::from_secs(15));
+    tracing::info!("Login chain phase 3: waiting 10s for character select...");
+    std::thread::sleep(std::time::Duration::from_secs(10));
 
     let eqmain_base3 = crate::login::eqmain::find_eqmain();
     if eqmain_base3 == 0 {
@@ -264,6 +264,8 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
                 let count = *((mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
 
                 if array_ptr != 0 && count > 0 && count < 2000 {
+                    // Log some windows for calibration
+                    let mut logged = 0u32;
                     for i in 0..count as usize {
                         let wnd_ptr = *((array_ptr + i * 8) as *const usize);
                         if wnd_ptr == 0 { continue; }
@@ -271,10 +273,24 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
                         if let Some(text) = crate::login::widgets::read_cxstr_pub(
                             wnd_ptr + off::CXWND_WINDOW_TEXT,
                         ) {
-                            if text == "Enter World" {
+                            // Log first 30 windows with text for calibration
+                            if logged < 30 && !text.is_empty() {
+                                tracing::info!(
+                                    idx = i,
+                                    ptr = format!("{:#x}", wnd_ptr),
+                                    text = %text,
+                                    "Phase 3 window"
+                                );
+                                logged += 1;
+                            }
+
+                            // Match "Enter World" case-insensitive + substring
+                            let lower = text.to_ascii_lowercase();
+                            if lower.contains("enter world") || lower == "enter world" {
                                 tracing::info!(
                                     ptr = format!("{:#x}", wnd_ptr),
-                                    "Phase 3: Found 'Enter World' button — clicking"
+                                    text = %text,
+                                    "Phase 3: Found Enter World button — clicking"
                                 );
                                 crate::login::widgets::click_button_via_vtable(wnd_ptr);
                                 tracing::info!("Phase 3 complete: Enter World clicked!");
