@@ -154,39 +154,20 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 character_name,
             } = cmd
             {
-                let eqmain_base = crate::login::eqmain::find_eqmain();
-                if eqmain_base == 0 {
-                    tracing::error!("Cannot login: eqmain.dll not found");
-                    return true;
-                }
-
                 tracing::info!(
                     account = %account_name,
-                    eqmain_base = format!("{:#x}", eqmain_base),
-                    "Starting full login chain"
+                    "StartLogin received — delegating to Login FSM"
                 );
 
-                // Phase 1: Write credentials and click Login
-                if !crate::login::widgets::type_credentials_to_window(
-                    eqmain_base,
-                    account_name,
-                    password,
-                ) {
-                    tracing::error!("Failed to write credentials to UI fields");
-                    return true;
-                }
-                tracing::info!("Phase 1 complete: credentials written + Login clicked");
-
-                // Phase 2: Wait for server select screen, then click Play
-                // Spawn a thread so we don't block the IPC listener
-                let server = server_name.clone();
-                let character = character_name.clone();
-                std::thread::Builder::new()
-                    .name("dmft-login-chain".into())
-                    .spawn(move || {
-                        login_chain_phase2(server, character);
-                    })
-                    .ok();
+                // Delegate to the Login FSM which handles the full login chain
+                // with proper state machine, timeouts, retries, and simpler
+                // char-array credential writes (more reliable than CXStr approach).
+                crate::login::start_login(
+                    account_name.to_string(),
+                    password.to_string(),
+                    server_name.to_string(),
+                    character_name.to_string(),
+                );
             }
             true
         }
@@ -196,6 +177,8 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 
 /// Phase 2+3 of the login chain: server select → character select → enter world.
 /// Uses vtable WndNotification clicks — no foreground focus needed (scales to 36 clients).
+/// NOTE: Kept for reference — the Login FSM now handles the full chain via tick().
+#[allow(dead_code)]
 fn login_chain_phase2(_server_name: String, _character_name: String) {
     use dmft_common::offsets::eqmain as off;
 
@@ -255,6 +238,7 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
 }
 
 /// Find a button widget by its WindowText in the CXWndManager window list.
+#[allow(dead_code)]
 fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
 

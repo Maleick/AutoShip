@@ -224,30 +224,33 @@ impl LoginFsm {
             return;
         };
 
-        // Borrow credentials directly — avoid cloning password to prevent
-        // unzeroized copies lingering on the heap.
         let account = creds.account_name.as_str();
         let password = creds.password.as_str();
 
         // Write credentials directly to EQLogin's char arrays (bypasses CXStr/SIDL)
         if !widgets::write_login_credentials(self.eqmain_base, account, password) {
-            tracing::warn!("Failed to write credentials to EQLogin");
-            return;
-        }
-
-        // Simulate Enter key to submit the login form
-        if !widgets::simulate_enter_key(self.eqmain_base) {
-            tracing::warn!("Failed to simulate Enter key — falling back to button click");
-            // Fallback: try clicking the connect button via SIDL
-            if !widgets::click_button(self.eqmain_base, "LOGIN_ConnectButton") {
-                tracing::warn!("Failed to click connect button");
+            tracing::warn!("Failed to write credentials to EQLogin char arrays");
+            // Fallback: try the CXWndManager CXStr approach
+            if !widgets::type_credentials_to_window(self.eqmain_base, account, password) {
+                tracing::warn!("Both credential write methods failed — retrying next tick");
                 return;
             }
         }
 
-        tracing::info!(account = %account, "Credentials written + Enter sent");
+        // Click the Login button via vtable. The button text is "Login" (idx=130
+        // from calibration). Try exact match first, then the "connect" button.
+        let clicked = widgets::click_button(self.eqmain_base, "Login")
+            || widgets::click_button(self.eqmain_base, "LOGIN")
+            || widgets::simulate_enter_key(self.eqmain_base);
 
-        // Zeroize credentials — drop the Credentials struct which zeros the password
+        if !clicked {
+            tracing::warn!("Failed to click Login button — retrying next tick");
+            return;
+        }
+
+        tracing::info!(account = %account, "Credentials written + Login clicked");
+
+        // Zeroize credentials
         self.credentials = None;
 
         self.transition(State::WaitForServerSelect);
@@ -260,33 +263,36 @@ impl LoginFsm {
             return;
         }
 
-        // Check if server list is visible
-        if widgets::is_window_visible(self.eqmain_base, "SERVERSELECT_ServerList") {
+        // Check if server select is visible. Calibration shows:
+        // - "PLAY EVERQUEST!" (idx=35) — main action button
+        // - "SERVER SELECT" (idx=40) — header text
+        // - "Firiona Vie" (idx=42) — server name
+        if widgets::is_window_visible(self.eqmain_base, "PLAY EVERQUEST!")
+            || widgets::is_window_visible(self.eqmain_base, "SERVER SELECT")
+        {
             tracing::info!("Server select screen detected");
             self.transition(State::SelectingServer);
         }
     }
 
     fn tick_selecting_server(&mut self) {
-        if self.server_name.is_empty() {
-            tracing::error!("No server name available for server selection");
-            self.transition(State::Error(LoginError::Timeout {
-                phase: "SelectingServer (no server name)".into(),
-            }));
-            return;
-        }
+        // Click "PLAY EVERQUEST!" to join the default/last server.
+        // The server is usually pre-selected on the server list.
+        let clicked = widgets::click_button(self.eqmain_base, "PLAY EVERQUEST!")
+            || widgets::click_button(self.eqmain_base, "QUICK CONNECT TO LAST SERVER");
 
-        let server_name = self.server_name.clone();
-        self.do_select_server(&server_name);
-    }
-
-    fn do_select_server(&mut self, server_name: &str) {
-        // Use JoinServer API directly (bypasses UI list)
-        if widgets::join_server(self.eqmain_base, server_name) {
-            tracing::info!(server = %server_name, "Server join requested");
+        if clicked {
+            tracing::info!(server = %self.server_name, "PLAY EVERQUEST clicked");
             self.transition(State::WaitForCharSelect);
         } else {
-            tracing::warn!(server = %server_name, "Failed to join server — retrying next tick");
+            // Fallback: try the JoinServer API
+            let server_name = self.server_name.clone();
+            if !server_name.is_empty() && widgets::join_server(self.eqmain_base, &server_name) {
+                tracing::info!(server = %server_name, "Server join requested via API");
+                self.transition(State::WaitForCharSelect);
+            } else {
+                tracing::warn!("Failed to select server — retrying next tick");
+            }
         }
     }
 
@@ -297,15 +303,27 @@ impl LoginFsm {
             return;
         }
 
-        // Check for "already logged in" dialog
-        if widgets::is_window_visible(self.eqmain_base, "yesnodialog") {
-            tracing::info!("'Already logged in' dialog detected — clicking Yes");
-            widgets::click_button(self.eqmain_base, "yesnodialog");
+        // Check for "already logged in" dialog — click YES to kick
+        if widgets::is_window_visible(self.eqmain_base, "Confirmation") {
+            tracing::info!("'Already logged in' dialog detected — clicking YES");
+            widgets::click_button(self.eqmain_base, "YES");
             return;
         }
 
-        // Check if character list is visible
-        if widgets::is_window_visible(self.eqmain_base, "Character_List") {
+        // Character select: eqmain.dll unloads and eqgame.exe takes over.
+        // Detect by checking if eqmain is gone or if local player pointer is set.
+        let eqmain = crate::login::eqmain::find_eqmain();
+        if eqmain == 0 {
+            // eqmain.dll unloaded = we're past login, in character select or world
+            tracing::info!("eqmain.dll unloaded — transitioning to character select");
+            self.transition(State::SelectingCharacter);
+            return;
+        }
+
+        // Also check for "Enter World" button (text may vary)
+        if widgets::is_window_visible(self.eqmain_base, "ENTER WORLD")
+            || widgets::is_window_visible(self.eqmain_base, "Enter World")
+        {
             tracing::info!("Character select screen detected");
             self.transition(State::SelectingCharacter);
         }

@@ -20,9 +20,9 @@ while ($true) {
             $account = $content[1]
             $password = $content[2]
 
-            Write-Host "  Launching EQ for $account..."
+            Write-Host "  Launching EQ for $account with /login flag..."
             $eqPath = 'C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest'
-            Start-Process -FilePath "$eqPath\eqgame.exe" -ArgumentList "patchme /login:$account" -WorkingDirectory $eqPath
+            Start-Process -FilePath "$eqPath\eqgame.exe" -ArgumentList 'patchme', "/login:$account" -WorkingDirectory $eqPath
 
             Write-Host '  Waiting 20s for login screen...'
             Start-Sleep -Seconds 20
