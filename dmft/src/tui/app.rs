@@ -244,6 +244,10 @@ pub struct App {
     // Operating mode (camp vs hunt)
     pub operating_mode: crate::camp::hunt::OperatingMode,
 
+    // Combat roles
+    pub main_assist: Option<String>,
+    pub main_tank: Option<String>,
+
     // Heal-cancel toggle (cleric duck on high HP during cast)
     pub heal_cancel_enabled: bool,
 
@@ -326,6 +330,8 @@ impl App {
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
+            main_assist: None,
+            main_tank: None,
             heal_cancel_enabled: true,
 
             accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml")).ok(),
@@ -1050,27 +1056,60 @@ impl App {
             }
             "ma" => {
                 if let Some(name) = parts.get(1) {
-                    tracing::info!(target = %name, "Main Assist set");
-                    self.status_message = format!("Main Assist set to {}", name);
+                    self.main_assist = Some(name.to_string());
+                    // Send /assist command to all DPS in active group
+                    let pids = self.focused_pids();
+                    let mut ok = 0;
+                    for pid in &pids {
+                        if send_slash_command(*pid, &format!("/assist {}", name)).is_ok() {
+                            ok += 1;
+                        }
+                    }
+                    tracing::info!(target = %name, sent = ok, "Main Assist set");
+                    self.status_message = format!("MA → {} (sent /assist to {} clients)", name, ok);
                 } else {
-                    self.status_message = String::from("Usage: ma <character_name>");
+                    self.status_message = match &self.main_assist {
+                        Some(ma) => format!("Main Assist: {}", ma),
+                        None => "No MA set. Usage: ma <character_name>".into(),
+                    };
                 }
             }
             "mt" => {
                 if let Some(name) = parts.get(1) {
+                    self.main_tank = Some(name.to_string());
                     tracing::info!(target = %name, "Main Tank set");
-                    self.status_message = format!("Main Tank set to {}", name);
+                    self.status_message = format!("MT → {}", name);
                 } else {
-                    self.status_message = String::from("Usage: mt <character_name>");
+                    self.status_message = match &self.main_tank {
+                        Some(mt) => format!("Main Tank: {}", mt),
+                        None => "No MT set. Usage: mt <character_name>".into(),
+                    };
                 }
             }
             "engage" => {
-                tracing::info!("Combat engage requested for all group members");
-                self.status_message = String::from("Engage: combat started for all group members");
+                let pids = self.focused_pids();
+                let target_id = parts.get(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+                let mut ok = 0;
+                for pid in &pids {
+                    let cmd = dmft_common::ipc::Command::CombatEngage { target_id };
+                    if send_ipc_command(*pid, &cmd).is_ok() {
+                        ok += 1;
+                    }
+                }
+                tracing::info!(target_id, sent = ok, "Combat engage sent");
+                self.status_message = format!("Engage → {} clients (target_id={})", ok, target_id);
             }
             "disengage" => {
-                tracing::info!("Combat disengage requested for all group members");
-                self.status_message = String::from("Disengage: combat stopped for all group members");
+                let pids = self.focused_pids();
+                let mut ok = 0;
+                for pid in &pids {
+                    let cmd = dmft_common::ipc::Command::CombatDisengage;
+                    if send_ipc_command(*pid, &cmd).is_ok() {
+                        ok += 1;
+                    }
+                }
+                tracing::info!(sent = ok, "Combat disengage sent");
+                self.status_message = format!("Disengage → {} clients", ok);
             }
             "invite" => {
                 if let Some(name) = parts.get(1) {
@@ -1632,14 +1671,18 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
 
 /// Send a slash command to a specific PID via named pipe.
 fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
-    use crate::ipc::pipe::CommandPipe;
     use dmft_common::ipc::Command;
+    send_ipc_command(pid, &Command::SlashCommand {
+        command: command.to_string(),
+    })
+}
+
+fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result<()> {
+    use crate::ipc::pipe::CommandPipe;
 
     let pipe = CommandPipe::connect(pid)?;
     let token = generate_session_token(pid);
     pipe.send_raw_token(&token)?;
-    pipe.send_async(&Command::SlashCommand {
-        command: command.to_string(),
-    })?;
+    pipe.send_async(cmd)?;
     Ok(())
 }

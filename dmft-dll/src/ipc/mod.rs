@@ -156,18 +156,69 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             {
                 tracing::info!(
                     account = %account_name,
-                    "StartLogin received — delegating to Login FSM"
+                    "StartLogin received — running inline + delegating to FSM"
                 );
 
-                // Delegate to the Login FSM which handles the full login chain
-                // with proper state machine, timeouts, retries, and simpler
-                // char-array credential writes (more reliable than CXStr approach).
+                // Store credentials in the FSM for later phases (server/char select)
+                // which run in the game loop after eqmain.dll unloads.
                 crate::login::start_login(
                     account_name.to_string(),
                     password.to_string(),
                     server_name.to_string(),
                     character_name.to_string(),
                 );
+
+                // ALSO run credential entry inline on the IPC thread, because
+                // the game loop hook (ProcessGameEvents) doesn't fire during the
+                // login screen — eqmain.dll has its own event loop. The FSM's
+                // tick() will handle server/char select once the game loop starts.
+                let eqmain_base = crate::login::eqmain::find_eqmain();
+                if eqmain_base != 0 {
+                    // Write credentials to EQLogin char arrays
+                    if crate::login::widgets::write_login_credentials(
+                        eqmain_base, &account_name, &password,
+                    ) {
+                        tracing::info!("Inline: credentials written to EQLogin char arrays");
+
+                        // Click Login button via CXWndManager
+                        let clicked =
+                            crate::login::widgets::click_button(eqmain_base, "Login")
+                            || crate::login::widgets::click_button(eqmain_base, "LOGIN")
+                            || crate::login::widgets::simulate_enter_key(eqmain_base);
+                        tracing::info!(clicked, "Inline: Login button click attempted");
+
+                        // Spawn a thread for phase 2 (server select) since the
+                        // game loop won't handle it until eqmain unloads
+                        let srv = server_name.clone();
+                        let chr = character_name.clone();
+                        std::thread::Builder::new()
+                            .name("dmft-login-phase2".into())
+                            .spawn(move || {
+                                login_chain_phase2(srv, chr);
+                            })
+                            .ok();
+                    } else {
+                        tracing::warn!("Inline: char array credential write failed — trying CXStr approach");
+                        // Fallback: try the CXWndManager CXStr approach
+                        if crate::login::widgets::type_credentials_to_window(
+                            eqmain_base, &account_name, &password,
+                        ) {
+                            tracing::info!("Inline: credentials written via CXStr approach");
+                            let srv = server_name.clone();
+                            let chr = character_name.clone();
+                            std::thread::Builder::new()
+                                .name("dmft-login-phase2".into())
+                                .spawn(move || {
+                                    login_chain_phase2(srv, chr);
+                                })
+                                .ok();
+                        } else {
+                            tracing::error!("Inline: both credential write methods failed");
+                        }
+                    }
+                } else {
+                    tracing::warn!("Inline: eqmain.dll not loaded — FSM will handle when game loop starts");
+                }
             }
             true
         }
@@ -177,8 +228,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 
 /// Phase 2+3 of the login chain: server select → character select → enter world.
 /// Uses vtable WndNotification clicks — no foreground focus needed (scales to 36 clients).
-/// NOTE: Kept for reference — the Login FSM now handles the full chain via tick().
-#[allow(dead_code)]
+/// Called inline from IPC thread since the game loop doesn't run during login.
 fn login_chain_phase2(_server_name: String, _character_name: String) {
     use dmft_common::offsets::eqmain as off;
 
