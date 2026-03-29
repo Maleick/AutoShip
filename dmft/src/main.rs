@@ -45,9 +45,12 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let dump_mode = args.iter().any(|a| a == "--dump");
     let inject_mode = args.iter().any(|a| a == "--inject" || a == "inject");
+    let calibrate_mode = args.iter().any(|a| a == "--calibrate");
     let cmd_mode = args.iter().position(|a| a == "--cmd");
 
-    if let Some(pos) = cmd_mode {
+    if calibrate_mode {
+        return run_calibrate_mode();
+    } else if let Some(pos) = cmd_mode {
         // --cmd <pid> "<slash command>"
         let pid: u32 = args.get(pos + 1)
             .context("--cmd requires: --cmd <pid> <command>")?
@@ -193,6 +196,46 @@ fn run_inject_mode() -> Result<()> {
     println!();
     println!("Run scripts\\verify_injection.bat to check injection status.");
 
+    Ok(())
+}
+
+/// Calibrate mode (--calibrate) — find all EQ processes and send calibrate_login to each.
+fn run_calibrate_mode() -> Result<()> {
+    use dmft_common::ipc::Command;
+
+    let config = load_config()?;
+    let pids = process::memory::find_processes_by_name(&config.process_name)?;
+
+    if pids.is_empty() {
+        println!("No EQ processes found. Launch EQ first, then inject, then calibrate.");
+        return Ok(());
+    }
+
+    for &pid in &pids {
+        println!("Sending calibrate_login to PID {}...", pid);
+
+        match ipc::pipe::CommandPipe::connect(pid) {
+            Ok(pipe) => {
+                let token = generate_session_token(pid);
+                if pipe.send_raw_token(&token).is_err() {
+                    println!("  Failed to auth with PID {}", pid);
+                    continue;
+                }
+
+                let cmd = Command::CalibrateLogin;
+                if pipe.send_async(&cmd).is_ok() {
+                    println!("  Calibration sent to PID {}", pid);
+                } else {
+                    println!("  Failed to send calibration to PID {}", pid);
+                }
+            }
+            Err(_) => {
+                println!("  Cannot connect to PID {} — is the DLL injected?", pid);
+            }
+        }
+    }
+
+    println!("\nCalibration complete. Check DLL log at %TEMP%\\dmft\\dmft-dll.log");
     Ok(())
 }
 
