@@ -175,6 +175,21 @@ impl Combatant {
                     return;
                 }
 
+                // Ask strategy for a spell target (may differ from assist target).
+                // Healers target lowest-HP group member, enchanters target off-mobs
+                // for mez, etc. This only influences spell targeting — it does NOT
+                // override the assist target for auto-attack.
+                if let Some(spell_target) = self.strategy.select_target(&ctx) {
+                    if target.is_none_or(|t| t.spawn_id != spell_target) {
+                        tracing::debug!(
+                            spell_target,
+                            assist = ?self.assist_target,
+                            "Strategy selected different spell target"
+                        );
+                        crate::eq::slash_command(&format!("/target id {spell_target}"));
+                    }
+                }
+
                 // Range check — don't cast if target is too far away
                 if let Some(t) = target {
                     let dist = distance_3d(player, t);
@@ -216,6 +231,22 @@ impl Combatant {
             }
 
             CombatState::Casting { ticks_remaining, .. } => {
+                // Healer heal-cancel: if lowest HP member recovered above 85%,
+                // duck to interrupt the heal and save mana.
+                if matches!(self.config.role, CombatRole::Healer) && *ticks_remaining > 5 {
+                    let all_healthy = ctx.group_members.iter()
+                        .filter(|m| m.hp_pct > 0.0)
+                        .all(|m| m.hp_pct >= 85.0);
+                    if all_healthy && !ctx.group_members.is_empty() {
+                        tracing::info!("Healer: canceling heal — group HP recovered above 85%");
+                        // Duck to interrupt cast (write STANDSTATE=4 briefly)
+                        crate::eq::slash_command("/duck");
+                        self.state = CombatState::OnGcd;
+                        self.gcd.consume();
+                        return;
+                    }
+                }
+
                 if *ticks_remaining == 0 {
                     tracing::trace!("Cast complete, transitioning to OnGcd");
                     self.state = CombatState::OnGcd;
@@ -342,25 +373,9 @@ impl Combatant {
     }
 
     /// Fire class-appropriate melee skills (kick, bash, taunt, backstab, etc.)
-    /// Called every tick while Engaging. Uses per-skill cooldown tracking.
+    /// Called every tick while Engaging. Each skill fires independently as soon
+    /// as its individual cooldown expires.
     fn tick_melee_skills(&mut self, class_id: u8, player: &SpawnData) {
-        // Melee skills fire independently of the GCD (they have their own timers).
-        // Skill IDs from EQ:
-        const SKILL_KICK: u32 = 30;
-        const SKILL_BASH: u32 = 10;
-        const SKILL_BACKSTAB: u32 = 8;
-        const SKILL_TAUNT: u32 = 73;
-        const SKILL_FLYING_KICK: u32 = 26;
-        const SKILL_ROUND_KICK: u32 = 38;
-        const SKILL_TIGER_CLAW: u32 = 52;
-        const SKILL_EAGLE_STRIKE: u32 = 23;
-
-        // Fire skills based on class — every 60 ticks (~3 seconds) as a rough cooldown
-        let skill_ready = self.tick_count % 60 == 0;
-        if !skill_ready {
-            return;
-        }
-
         // Endurance check — melee skills cost endurance, don't fire if too low
         let end_pct = if player.endurance_max > 0 {
             (player.endurance_current as f32 / player.endurance_max as f32) * 100.0
@@ -371,31 +386,22 @@ impl Combatant {
             return; // conserve endurance
         }
 
-        match class_id {
-            1 => { // Warrior: taunt + bash + kick
-                crate::eq::use_skill(SKILL_TAUNT, None);
-                crate::eq::use_skill(SKILL_KICK, None);
-            }
-            3 => { // Shadow Knight: taunt + bash + kick
-                crate::eq::use_skill(SKILL_TAUNT, None);
-                crate::eq::use_skill(SKILL_BASH, None);
-                crate::eq::use_skill(SKILL_KICK, None);
-            }
-            7 => { // Monk: flying kick + round kick + tiger claw + eagle strike
-                // Rotate through monk skills
-                let skill = match self.tick_count / 60 % 4 {
-                    0 => SKILL_FLYING_KICK,
-                    1 => SKILL_ROUND_KICK,
-                    2 => SKILL_TIGER_CLAW,
-                    _ => SKILL_EAGLE_STRIKE,
-                };
-                crate::eq::use_skill(skill, None);
-            }
-            9 => { // Rogue: backstab
-                crate::eq::use_skill(SKILL_BACKSTAB, None);
-            }
-            _ => { // Generic: kick if available
-                crate::eq::use_skill(SKILL_KICK, None);
+        // Build the skill list for this class
+        let skills: &[u32] = match class_id {
+            1 => &[73, 30],             // Warrior: taunt, kick
+            3 => &[73, 10, 30],         // Shadow Knight: taunt, bash, kick
+            7 => &[26, 38, 52, 23],     // Monk: flying kick, round kick, tiger claw, eagle strike
+            9 => &[8],                  // Rogue: backstab
+            _ => &[30],                 // Generic: kick
+        };
+
+        // Fire each skill independently when its cooldown is ready
+        for &skill_id in skills {
+            if self.skill_cooldowns.is_ready(skill_id) {
+                crate::eq::use_skill(skill_id, None);
+                if let Some(cd) = default_cooldown(skill_id) {
+                    self.skill_cooldowns.consume(skill_id, cd);
+                }
             }
         }
     }

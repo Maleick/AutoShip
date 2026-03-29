@@ -2,7 +2,12 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
+/// HP threshold above which clerics should cancel current heal (duck to interrupt).
+/// Prevents wasting mana on a heal when the target is already healthy.
+const HEAL_CANCEL_THRESHOLD: f32 = 85.0;
+
 /// Cleric strategy: healer, targets lowest HP group member, prioritizes heals by urgency.
+/// Cancels heals (duck) when target HP recovers above threshold during cast.
 pub struct ClericStrategy {
     class_id: u8,
 }
@@ -16,8 +21,18 @@ impl ClericStrategy {
     fn lowest_hp_member(&self, ctx: &CombatContext) -> Option<(u32, f32)> {
         ctx.group_members
             .iter()
+            .filter(|m| m.hp_pct > 0.0) // exclude dead members
             .min_by(|a, b| a.hp_pct.partial_cmp(&b.hp_pct).unwrap_or(std::cmp::Ordering::Equal))
             .map(|m| (m.spawn_id, m.hp_pct))
+    }
+
+    /// Check if the cleric should cancel an in-progress heal because the target
+    /// has recovered above threshold. Called from the combat FSM during Casting state.
+    pub fn should_cancel_heal(&self, ctx: &CombatContext) -> bool {
+        let Some((_, lowest_hp)) = self.lowest_hp_member(ctx) else {
+            return true; // no one to heal, cancel
+        };
+        lowest_hp >= HEAL_CANCEL_THRESHOLD
     }
 }
 
