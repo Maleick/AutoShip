@@ -14,6 +14,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tracing-appender = "0.2"
 anyhow = "1"
+zeroize = "1"
 
 [target.'cfg(windows)'.dependencies]
 retour = { version = "0.3", features = ["static-detour"] }

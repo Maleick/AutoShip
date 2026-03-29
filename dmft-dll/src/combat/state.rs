@@ -179,8 +179,8 @@ impl Combatant {
                 // Healers target lowest-HP group member, enchanters target off-mobs
                 // for mez, etc. This only influences spell targeting — it does NOT
                 // override the assist target for auto-attack.
-                if let Some(spell_target) = self.strategy.select_target(&ctx) {
-                    if target.is_none_or(|t| t.spawn_id != spell_target) {
+                if let Some(spell_target) = self.strategy.select_target(&ctx)
+                    && target.is_none_or(|t| t.spawn_id != spell_target) {
                         tracing::debug!(
                             spell_target,
                             assist = ?self.assist_target,
@@ -188,7 +188,6 @@ impl Combatant {
                         );
                         crate::eq::slash_command(&format!("/target id {spell_target}"));
                     }
-                }
 
                 // Range check — don't cast if target is too far away
                 if let Some(t) = target {

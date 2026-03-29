@@ -11,13 +11,6 @@
 
 use dmft_common::login::LoginError;
 
-// Re-export core widget primitives for internal use and external callers (IPC, game_loop).
-use crate::eq::widgets::click_button_via_vtable;
-pub use crate::eq::widgets::{
-    read_cxstr as read_cxstr_raw,
-    set_edit_text_via_vtable,
-};
-
 // ─── Widget XML names (stable across EQ patches) ───
 
 pub const LOGIN_USERNAME_EDIT: &str = "LOGIN_UsernameEdit";
@@ -26,7 +19,6 @@ pub const LOGIN_CONNECT_BUTTON: &str = "LOGIN_ConnectButton";
 pub const SERVERSELECT_SERVER_LIST: &str = "SERVERSELECT_ServerList";
 pub const CHARACTER_LIST: &str = "Character_List";
 pub const OK_DIALOG: &str = "okdialog";
-pub const YES_NO_DIALOG: &str = "yesnodialog";
 pub const DBG_SPLASH: &str = "dbgsplash";
 pub const SOE_SPLASH: &str = "soesplash";
 
@@ -45,13 +37,9 @@ const PRE_LOGIN_PROMPTS: &[(&str, &str)] = &[
 pub fn is_window_visible(eqmain_base: u64, window_name: &str) -> bool {
     #[cfg(windows)]
     {
-        let Some(wnd) = find_window_by_name(eqmain_base, window_name) else {
-            return false;
-        };
-        // CXWnd visibility flag is at a known offset in the vtable/struct.
-        // For now, a non-null window pointer means it exists in the SIDL tree.
         // TODO: Check CXWnd::IsVisible() or dShow flag at runtime.
-        !wnd.is_null()
+        // For now, existence in the SIDL tree means "visible".
+        find_window_by_name(eqmain_base, window_name).is_some()
     }
 
     #[cfg(not(windows))]
@@ -64,12 +52,9 @@ pub fn is_window_visible(eqmain_base: u64, window_name: &str) -> bool {
 /// Find a SIDL window by its XML name. Resolves CXWndManager from eqmain_base,
 /// then delegates to `crate::eq::widgets::find_window_by_name()`.
 #[cfg(windows)]
-fn find_window_by_name(eqmain_base: u64, name: &str) -> Option<*mut u8> {
+fn find_window_by_name(eqmain_base: u64, name: &str) -> Option<usize> {
     let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
-    unsafe {
-        crate::eq::widgets::find_window_by_name(cxwnd_mgr, name)
-            .map(|ptr| ptr as *mut u8)
-    }
+    unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, name) }
 }
 
 /// Find a window whose WindowText contains the given substring (case-insensitive).
@@ -160,8 +145,8 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
         };
 
         unsafe {
-            let input_text_ptr = edit_wnd.add(dmft_common::offsets::eqmain::CEDITBASEWND_INPUT_TEXT);
-            write_cxstr(input_text_ptr, text);
+            let input_text_addr = edit_wnd + dmft_common::offsets::eqmain::CEDITBASEWND_INPUT_TEXT;
+            crate::eq::widgets::write_cxstr_inplace(input_text_addr, text);
         }
 
         tracing::debug!(window = window_name, "Set edit text via SIDL");
@@ -217,7 +202,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 let wnd_ptr = *((array_ptr + i * 8) as *const usize);
                 if wnd_ptr == 0 { continue; }
 
-                if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
                     if text == "USERNAME" && prev_prev_wnd != 0 {
                         username_edit = prev_prev_wnd;
                         tracing::info!(
@@ -273,15 +258,15 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
             // If username InputText is null, allocate a CStrRep for it
             if *(un_input_addr as *const usize) == 0 && donor_rep != 0 {
-                if let Some(new_rep) = clone_cstrrep_for_password(donor_rep) {
+                if let Some(new_rep) = crate::eq::widgets::clone_cstrrep(donor_rep) {
                     *(un_input_addr as *mut usize) = new_rep;
                     tracing::info!("Allocated CStrRep for username InputText");
                 }
             }
 
             // Write username to both InputText (+0x278) and WindowText (+0x078)
-            let wrote_username = write_cxstr_inplace(un_input_addr as usize, account);
-            let wrote_wt = write_cxstr_inplace(un_wt_addr as usize, account);
+            let wrote_username = crate::eq::widgets::write_cxstr_inplace(un_input_addr, account);
+            let wrote_wt = crate::eq::widgets::write_cxstr_inplace(un_wt_addr, account);
             tracing::info!(
                 input_text = wrote_username,
                 window_text = wrote_wt,
@@ -296,19 +281,19 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
             let pw_rep = *(pw_input_addr as *const usize);
             if pw_rep == 0 && donor_rep != 0 {
-                if let Some(new_rep) = clone_cstrrep_for_password(donor_rep) {
+                if let Some(new_rep) = crate::eq::widgets::clone_cstrrep(donor_rep) {
                     *(pw_input_addr as *mut usize) = new_rep;
                     *(pw_wt_addr as *mut usize) = new_rep;
                     tracing::info!("Cloned CStrRep for password via process heap");
                 }
             }
 
-            let wrote_password = write_cxstr_inplace(pw_input_addr as usize, password);
+            let wrote_password = crate::eq::widgets::write_cxstr_inplace(pw_input_addr, password);
             let wrote_pw_wt = {
                 let wt_rep = *(pw_wt_addr as *const usize);
                 let it_rep = *(pw_input_addr as *const usize);
                 if wt_rep == it_rep { true } // same rep, already written
-                else if wt_rep != 0 { write_cxstr_inplace(pw_wt_addr as usize, password) }
+                else if wt_rep != 0 { crate::eq::widgets::write_cxstr_inplace(pw_wt_addr, password) }
                 else { false }
             };
             tracing::info!(
@@ -323,12 +308,12 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
 
             // Read back to verify writes took effect
-            if let Some(readback) = read_cxstr(username_edit + off::CEDITBASEWND_INPUT_TEXT) {
+            if let Some(readback) = crate::eq::widgets::read_cxstr(username_edit + off::CEDITBASEWND_INPUT_TEXT) {
                 tracing::info!(readback = %readback, "Username InputText readback");
             } else {
                 tracing::warn!("Username InputText readback: null or empty");
             }
-            if let Some(readback) = read_cxstr(username_edit + off::CXWND_WINDOW_TEXT) {
+            if let Some(readback) = crate::eq::widgets::read_cxstr(username_edit + off::CXWND_WINDOW_TEXT) {
                 tracing::info!(readback = %readback, "Username WindowText readback");
             }
 
@@ -497,18 +482,17 @@ pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
             let vftable = *(button_wnd as *const *const usize);
             // WndNotification is typically at vtable index ~30-40 (varies by class).
             // TODO: Validate exact vtable index on live client.
-            // For now, use a placeholder index that will be calibrated.
             const WNDNOTIFICATION_VFUNC_INDEX: usize = 34;
             let wnd_notification_addr = *vftable.add(WNDNOTIFICATION_VFUNC_INDEX);
 
             type WndNotificationFn =
-                unsafe extern "C" fn(*mut u8, *mut u8, u32, *mut u8);
+                unsafe extern "C" fn(usize, usize, u32, usize);
             let func: WndNotificationFn = std::mem::transmute(wnd_notification_addr);
             func(
                 button_wnd,
                 button_wnd,
                 dmft_common::offsets::eqmain::XWM_LCLICK,
-                std::ptr::null_mut(),
+                0,
             );
         }
 
@@ -839,33 +823,6 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
     tracing::info!("=== END LOGIN CALIBRATION DUMP ===");
 }
 
-// ─── Delegates to crate::eq::widgets ───
-// Core widget primitives now live in crate::eq::widgets. These thin wrappers
-// maintain the local API that login-specific code calls.
-
-/// Public wrapper for read_cxstr, used by the login chain in ipc/mod.rs.
-pub unsafe fn read_cxstr_pub(cxstr_addr: usize) -> Option<String> {
-    unsafe { crate::eq::widgets::read_cxstr(cxstr_addr) }
-}
-
-/// Private read_cxstr for use within this module.
-#[cfg(windows)]
-unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
-    crate::eq::widgets::read_cxstr(cxstr_addr)
-}
-
-/// Write a string into a CXStr field.
-#[cfg(windows)]
-unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
-    crate::eq::widgets::write_cxstr_inplace(cxstr_addr, text)
-}
-
-/// Clone a CStrRep from a donor.
-#[cfg(windows)]
-unsafe fn clone_cstrrep_for_password(donor_rep: usize) -> Option<usize> {
-    crate::eq::widgets::clone_cstrrep(donor_rep)
-}
-
 /// Walk CXWndManager's window array and log each window for calibration.
 #[cfg(windows)]
 fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
@@ -897,25 +854,6 @@ fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
     }
 
     tracing::info!("=== END WINDOW ENUMERATION ===");
-}
-
-/// Read a list item from a CListWnd at the given row and column.
-#[cfg(windows)]
-#[allow(dead_code)]
-pub fn read_list_item(
-    _eqmain_base: u64,
-    _list_wnd: *mut u8,
-    _row: usize,
-    _col: usize,
-) -> Option<String> {
-    // TODO: Implement CListWnd item reading once struct layout is validated.
-    None
-}
-
-/// Write a Rust string into an EQ CXStr field.
-#[cfg(windows)]
-unsafe fn write_cxstr(cxstr_ptr: *mut u8, text: &str) {
-    crate::eq::widgets::write_cxstr_inplace(cxstr_ptr as usize, text);
 }
 
 #[cfg(test)]

@@ -1,13 +1,21 @@
 //! DMFT injected DLL payload.
 //! This cdylib is loaded into eqgame.exe via CreateRemoteThread + LoadLibrary.
 //! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
-#![allow(dead_code)]
 
+// All DLL modules are Windows-only at runtime (cdylib loaded into eqgame.exe).
+// On macOS they compile with stubs but nothing calls into them, so suppress
+// dead_code warnings per-module rather than crate-wide.
+#[allow(dead_code)]
 mod combat;
+#[allow(dead_code)]
 mod eq;
+#[allow(dead_code)]
 mod hooks;
+#[allow(dead_code)]
 mod ipc;
+#[allow(dead_code)]
 mod login;
+#[allow(dead_code)]
 mod nav;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -124,9 +132,10 @@ fn init_tracing() {
         .unwrap_or_else(|_| rolling::daily(&log_dir, "dmft-dll.log"));
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-    // Leak the guard so it lives for the DLL's lifetime — there is no clean
-    // drop point for a cdylib that outlives its init thread.
-    std::mem::forget(_guard);
+    // Intentionally leak the guard so it lives for the DLL's lifetime — there is
+    // no clean drop point for a cdylib that outlives its init thread.
+    // Box::leak is preferred over mem::forget as it makes the intent explicit.
+    Box::leak(Box::new(_guard));
 
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info"));

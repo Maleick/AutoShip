@@ -123,7 +123,7 @@ pub enum Role {
     Tank,
     Healer,
     CC,
-    DPS,
+    Dps,
     Puller,
     Bard,
 }
@@ -279,18 +279,17 @@ impl CampLoop {
 
         // Cursor stuck watchdog: /autoinventory every 60 ticks as a safety net.
         // This is a no-op if cursor is empty.
-        if self.tick % 60 == 0 {
+        if self.tick.is_multiple_of(60) {
             for member in &self.members {
                 commands.push((member.pid, CampAction::Slash("/autoinventory".into())));
             }
         }
 
         // --- Recovery check: detect deaths and issue rez commands ---
-        if let Some(snap) = snapshot {
-            if !snap.member_hp.is_empty() {
+        if let Some(snap) = snapshot
+            && !snap.member_hp.is_empty() {
                 self.recovery.update_hp(&snap.member_hp, self.tick);
             }
-        }
 
         if self.recovery.recovery_in_progress() {
             // Build role map for rez prioritization
@@ -303,7 +302,7 @@ impl CampLoop {
                         Role::Tank => "Tank",
                         Role::CC => "CC",
                         Role::Puller => "Puller",
-                        Role::DPS => "DPS",
+                        Role::Dps => "DPS",
                         Role::Bard => "Bard",
                     };
                     (m.pid, role_str)
@@ -357,19 +356,17 @@ impl CampLoop {
             }
             CampState::Fighting { started_tick } => {
                 // Emergency heal if tank HP < 20%
-                if let Some(snap) = snapshot {
-                    if snap.tank_hp_pct < 20.0 {
-                        if let Some(healer) = self.find_by_role(&Role::Healer) {
+                if let Some(snap) = snapshot
+                    && snap.tank_hp_pct < 20.0
+                        && let Some(healer) = self.find_by_role(&Role::Healer) {
                             commands.push((healer.pid, CampAction::Slash("/cast 1".into())));
                         }
-                    }
-                }
 
                 // Melee characters /face periodically, staggered by personality
                 let fight_elapsed = self.tick - started_tick;
                 if fight_elapsed > 0 {
                     for member in &self.members {
-                        if member.role != Role::Tank && member.role != Role::DPS {
+                        if member.role != Role::Tank && member.role != Role::Dps {
                             continue;
                         }
                         // Each member's clock starts after their phase_offset
@@ -393,7 +390,7 @@ impl CampLoop {
                 // Drive the loot cycle FSM if active.
                 // Extract looter info before borrowing loot_cycle mutably.
                 let looter = self
-                    .find_all_by_role(&Role::DPS)
+                    .find_all_by_role(&Role::Dps)
                     .first()
                     .or(self.members.first().as_ref())
                     .map(|m| (m.pid, m.personality.clone()));
@@ -511,7 +508,7 @@ impl CampLoop {
             &puller_name
         };
 
-        for dps in self.find_all_by_role(&Role::DPS) {
+        for dps in self.find_all_by_role(&Role::Dps) {
             if !assist_name.is_empty() {
                 commands.push((dps.pid, CampAction::Slash(format!("/assist {assist_name}"))));
             }
@@ -570,7 +567,7 @@ impl CampLoop {
         // Casters sit to med
         for member in &self.members {
             match member.role {
-                Role::Healer | Role::CC | Role::DPS => {
+                Role::Healer | Role::CC | Role::Dps => {
                     commands.push((member.pid, CampAction::Slash("/sit".into())));
                 }
                 _ => {}
@@ -622,8 +619,8 @@ mod tests {
             CampMember::new(101, "Cleric01".into(), Role::Healer),
             CampMember::new(102, "Enchanter01".into(), Role::CC),
             CampMember::new(103, "Bard01".into(), Role::Puller),
-            CampMember::new(104, "Ranger01".into(), Role::DPS),
-            CampMember::new(105, "Ranger02".into(), Role::DPS),
+            CampMember::new(104, "Ranger01".into(), Role::Dps),
+            CampMember::new(105, "Ranger02".into(), Role::Dps),
         ]
     }
 
@@ -813,7 +810,7 @@ mod tests {
     fn test_no_puller_falls_back_to_tank() {
         let members = vec![
             CampMember::new(100, "Warrior01".into(), Role::Tank),
-            CampMember::new(104, "Ranger01".into(), Role::DPS),
+            CampMember::new(104, "Ranger01".into(), Role::Dps),
         ];
         let mut camp = CampLoop::new(test_config(), members);
         let cmds = camp.tick(None);

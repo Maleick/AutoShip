@@ -40,7 +40,7 @@ impl HolyShitEvaluator {
             ConditionExpr::AggroOnMe => {
                 // Simplified: check if target is facing us (uses aggro module)
                 // For now, approximate as "target exists and is NPC"
-                ctx.target.map_or(false, |t| t.spawn_type == 1) // NPC type
+                ctx.target.is_some_and(|t| t.spawn_type == 1) // NPC type
             }
             ConditionExpr::And(conditions) => {
                 conditions.iter().all(|c| Self::eval_condition(c, ctx))

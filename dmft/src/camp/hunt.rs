@@ -160,7 +160,7 @@ impl FormationManager {
     fn role_distances(&self, role: &Role) -> (f32, f32) {
         match role {
             Role::Tank | Role::Puller => (0.0, 0.0), // tank doesn't follow itself
-            Role::DPS => (self.config.melee_follow_dist, self.config.melee_leash_dist),
+            Role::Dps => (self.config.melee_follow_dist, self.config.melee_leash_dist),
             Role::Healer => (self.config.healer_follow_dist, self.config.healer_leash_dist),
             Role::CC | Role::Bard => (self.config.caster_follow_dist, self.config.caster_leash_dist),
         }
@@ -214,11 +214,10 @@ impl HuntLoop {
         let mut commands = Vec::new();
 
         // Non-tank members check formation every FORMATION_CHECK_INTERVAL ticks
-        if self.tick % FORMATION_CHECK_INTERVAL == 0 {
-            if let Some(snap) = snapshot {
+        if self.tick.is_multiple_of(FORMATION_CHECK_INTERVAL)
+            && let Some(snap) = snapshot {
                 commands.extend(self.formation_tick(snap));
             }
-        }
 
         match self.state.clone() {
             HuntState::Roaming => {
@@ -316,19 +315,17 @@ impl HuntLoop {
         started_tick: u64,
     ) {
         // Emergency heal
-        if let Some(snap) = snapshot {
-            if snap.tank_hp_pct < 20.0 {
-                if let Some(healer) = self.find_by_role(&Role::Healer) {
+        if let Some(snap) = snapshot
+            && snap.tank_hp_pct < 20.0
+                && let Some(healer) = self.find_by_role(&Role::Healer) {
                     commands.push((healer.pid, "/cast 1".into()));
                 }
-            }
-        }
 
         // Melee /face periodically with personality stagger
         let fight_elapsed = self.tick - started_tick;
         if fight_elapsed > 0 {
             for member in &self.members {
-                if !matches!(member.role, Role::Tank | Role::DPS) {
+                if !matches!(member.role, Role::Tank | Role::Dps) {
                     continue;
                 }
                 let personal_elapsed = fight_elapsed.saturating_sub(member.personality.phase_offset);
@@ -368,7 +365,7 @@ impl HuntLoop {
             .unwrap_or_default();
 
         // DPS assists tank and attacks
-        for dps in self.find_all_by_role(&Role::DPS) {
+        for dps in self.find_all_by_role(&Role::Dps) {
             if !tank_name.is_empty() {
                 commands.push((dps.pid, format!("/assist {tank_name}")));
             }
@@ -376,11 +373,10 @@ impl HuntLoop {
         }
 
         // Healer targets tank for heals
-        if let Some(healer) = self.find_by_role(&Role::Healer) {
-            if !tank_name.is_empty() {
+        if let Some(healer) = self.find_by_role(&Role::Healer)
+            && !tank_name.is_empty() {
                 commands.push((healer.pid, format!("/target {tank_name}")));
             }
-        }
 
         // CC assists for caster DPS (cast instead of melee)
         for cc in self.find_all_by_role(&Role::CC) {
@@ -451,8 +447,8 @@ mod tests {
             CampMember::new(100, "Warrior01".into(), Role::Tank),
             CampMember::new(101, "Cleric01".into(), Role::Healer),
             CampMember::new(102, "Enchanter01".into(), Role::CC),
-            CampMember::new(103, "Ranger01".into(), Role::DPS),
-            CampMember::new(104, "Ranger02".into(), Role::DPS),
+            CampMember::new(103, "Ranger01".into(), Role::Dps),
+            CampMember::new(104, "Ranger02".into(), Role::Dps),
         ]
     }
 
@@ -611,7 +607,7 @@ mod tests {
     #[test]
     fn test_formation_melee_in_position() {
         let fm = FormationManager::new(FormationConfig::default());
-        let member = CampMember::new(103, "Ranger01".into(), Role::DPS);
+        let member = CampMember::new(103, "Ranger01".into(), Role::Dps);
         let member_pos = Pos2D::new(100.0, 215.0); // ~15 from tank
         let tank_pos = Pos2D::new(100.0, 200.0);
 
@@ -622,7 +618,7 @@ mod tests {
     #[test]
     fn test_formation_melee_too_far() {
         let fm = FormationManager::new(FormationConfig::default());
-        let member = CampMember::new(103, "Ranger01".into(), Role::DPS);
+        let member = CampMember::new(103, "Ranger01".into(), Role::Dps);
         let member_pos = Pos2D::new(100.0, 250.0); // ~50 from tank, beyond leash of 40
         let tank_pos = Pos2D::new(100.0, 200.0);
 

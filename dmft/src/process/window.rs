@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use anyhow::Result;
 
 /// Window handle wrapper for sending input to EQ clients.

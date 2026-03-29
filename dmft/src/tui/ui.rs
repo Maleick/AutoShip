@@ -193,8 +193,8 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
 
     let rows: Vec<Row> = visible
         .iter()
-        .enumerate()
-        .map(|(_i, client)| {
+        
+        .map(|client| {
             // Find this client's index in app.clients for selection highlight
             let global_idx = app.clients.iter().position(|c| c.pid == client.pid).unwrap_or(usize::MAX);
             let is_selected = global_idx == app.selected_client;
@@ -824,6 +824,7 @@ fn map_rgb_to_color(r: u8, g: u8, b: u8) -> Color {
 }
 
 /// Bresenham's line algorithm — rasterize a line onto the character grid.
+#[allow(clippy::too_many_arguments)]
 fn bresenham_line(
     x0: i32, y0: i32, x1: i32, y1: i32,
     w: usize, h: usize,

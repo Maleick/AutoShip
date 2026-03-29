@@ -93,7 +93,7 @@ pub fn rogue_positioning_commands(
 pub fn fighting_face_commands(members: &[(u32, super::state::Role)]) -> Vec<(u32, String)> {
     members
         .iter()
-        .filter(|(_, role)| matches!(role, super::state::Role::Tank | super::state::Role::DPS))
+        .filter(|(_, role)| matches!(role, super::state::Role::Tank | super::state::Role::Dps))
         .map(|(pid, _)| (*pid, "/face".to_string()))
         .collect()
 }
@@ -155,7 +155,7 @@ mod tests {
             (100, Role::Tank),
             (101, Role::Healer),
             (102, Role::CC),
-            (103, Role::DPS),
+            (103, Role::Dps),
             (104, Role::Puller),
             (105, Role::Bard),
         ];
@@ -176,8 +176,8 @@ mod tests {
     fn test_fighting_face_commands_all_melee() {
         let members = vec![
             (100, Role::Tank),
-            (101, Role::DPS),
-            (102, Role::DPS),
+            (101, Role::Dps),
+            (102, Role::Dps),
         ];
         let cmds = fighting_face_commands(&members);
         assert_eq!(cmds.len(), 3);

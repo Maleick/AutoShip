@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod camp;
 mod client;
 mod combat;
@@ -55,7 +53,7 @@ fn main() -> Result<()> {
     let cmd_mode = args.iter().position(|a| a == "--cmd");
 
     if calibrate_mode {
-        return run_calibrate_mode();
+        run_calibrate_mode()
     } else if let Some(pos) = login_mode {
         // --login <account> <password> [server] [character]
         let account = args.get(pos + 1)
@@ -70,7 +68,7 @@ fn main() -> Result<()> {
         let character = args.get(pos + 4)
             .cloned()
             .unwrap_or_default();
-        return run_login_mode(&account, &password, &server, &character);
+        run_login_mode(&account, &password, &server, &character)
     } else if let Some(pos) = cmd_mode {
         // --cmd <pid> "<slash command>"
         let pid: u32 = args.get(pos + 1)
@@ -570,8 +568,8 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     }
 
     // Step 8: If +0x08 is null, try alternative list heads in SpawnManager
-    if let Ok(next_at_08) = proc.read_ptr(first_node + 0x08) {
-        if next_at_08 == 0 {
+    if let Ok(next_at_08) = proc.read_ptr(first_node + 0x08)
+        && next_at_08 == 0 {
             info!("--- NEXT at +0x08 is NULL. Checking alternative SpawnManager members ---");
 
             // Try SpawnManager+0x00 (might be a different list or vtable)
@@ -610,7 +608,6 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                 _ => info!("SpawnManager+0x08 -> NULL or unreadable"),
             }
         }
-    }
 
     info!("===================================================");
 }

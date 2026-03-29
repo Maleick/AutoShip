@@ -9,7 +9,7 @@ use crate::eq::named_tracker::NamedTracker;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnType {
     Player,
-    NPC,
+    Npc,
     Corpse,
     Other,
 }
@@ -51,7 +51,7 @@ pub fn select_pull_target(
     // Filter to valid pull candidates
     let candidates: Vec<&NearbySpawn> = nearby_spawns
         .iter()
-        .filter(|s| s.spawn_type == SpawnType::NPC)
+        .filter(|s| s.spawn_type == SpawnType::Npc)
         .filter(|s| distance_2d(s.x, s.y, pull_x, pull_y) <= camp_config.pull_radius)
         .filter(|s| !cc_ids.contains(&s.spawn_id))
         .collect();
@@ -119,7 +119,7 @@ pub fn select_pull_target_with_named(
         let cc_ids: Vec<u32> = cc_tracker.targets.iter().map(|t| t.spawn_id).collect();
 
         let in_range = nearby_spawns.iter().any(|s| {
-            s.spawn_type == SpawnType::NPC
+            s.spawn_type == SpawnType::Npc
                 && s.name == priority_named.name
                 && distance_2d(s.x, s.y, pull_x, pull_y) <= camp_config.pull_radius
                 && !cc_ids.contains(&s.spawn_id)
@@ -172,8 +172,8 @@ mod tests {
     #[test]
     fn test_selects_configured_mob_name() {
         let spawns = vec![
-            make_spawn(1, "an orc centurion", SpawnType::NPC, 160.0, 260.0),
-            make_spawn(2, "an orc pawn", SpawnType::NPC, 170.0, 270.0),
+            make_spawn(1, "an orc centurion", SpawnType::Npc, 160.0, 260.0),
+            make_spawn(2, "an orc pawn", SpawnType::Npc, 170.0, 270.0),
         ];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
@@ -185,8 +185,8 @@ mod tests {
         let mut config = test_config();
         config.pull_mob_names.clear();
         let spawns = vec![
-            make_spawn(1, "an orc centurion", SpawnType::NPC, 160.0, 260.0),
-            make_spawn(2, "a named mob", SpawnType::NPC, 170.0, 270.0),
+            make_spawn(1, "an orc centurion", SpawnType::Npc, 160.0, 260.0),
+            make_spawn(2, "a named mob", SpawnType::Npc, 170.0, 270.0),
         ];
         let cc = CcTracker::new();
         let hvt = vec!["a named mob".to_string()];
@@ -199,8 +199,8 @@ mod tests {
         let mut config = test_config();
         config.pull_mob_names.clear();
         let spawns = vec![
-            make_spawn(1, "far orc", SpawnType::NPC, 300.0, 400.0),
-            make_spawn(2, "close orc", SpawnType::NPC, 155.0, 255.0),
+            make_spawn(1, "far orc", SpawnType::Npc, 300.0, 400.0),
+            make_spawn(2, "close orc", SpawnType::Npc, 155.0, 255.0),
         ];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &config, &cc, &[]);
@@ -211,7 +211,7 @@ mod tests {
     fn test_filters_out_players() {
         let spawns = vec![
             make_spawn(1, "PlayerChar", SpawnType::Player, 155.0, 255.0),
-            make_spawn(2, "an orc pawn", SpawnType::NPC, 170.0, 270.0),
+            make_spawn(2, "an orc pawn", SpawnType::Npc, 170.0, 270.0),
         ];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
@@ -231,8 +231,8 @@ mod tests {
     #[test]
     fn test_filters_out_cc_tracked_mobs() {
         let spawns = vec![
-            make_spawn(1, "an orc pawn", SpawnType::NPC, 155.0, 255.0),
-            make_spawn(2, "an orc centurion", SpawnType::NPC, 160.0, 260.0),
+            make_spawn(1, "an orc pawn", SpawnType::Npc, 155.0, 255.0),
+            make_spawn(2, "an orc centurion", SpawnType::Npc, 160.0, 260.0),
         ];
         let mut cc = CcTracker::new();
         cc.update(&[(1, "an orc pawn".into())], None, 0);
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn test_filters_out_of_range() {
         let spawns = vec![
-            make_spawn(1, "an orc pawn", SpawnType::NPC, 9999.0, 9999.0),
+            make_spawn(1, "an orc pawn", SpawnType::Npc, 9999.0, 9999.0),
         ];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
@@ -265,8 +265,8 @@ mod tests {
             ..test_config()
         };
         let spawns = vec![
-            make_spawn(1, "an orc pawn", SpawnType::NPC, 300.0, 350.0),
-            make_spawn(2, "an orc pawn", SpawnType::NPC, 155.0, 255.0),
+            make_spawn(1, "an orc pawn", SpawnType::Npc, 300.0, 350.0),
+            make_spawn(2, "an orc pawn", SpawnType::Npc, 155.0, 255.0),
         ];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &config, &cc, &[]);

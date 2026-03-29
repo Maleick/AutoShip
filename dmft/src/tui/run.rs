@@ -334,8 +334,7 @@ fn load_demo_data(app: &mut App) {
     // Create multiple demo clients to showcase multi-client TUI.
     // Names use trailing digits (e.g., "Frostreaver01") so they match group slots
     // via extract_account_number().
-    let demo_clients = vec![
-        (
+    let demo_clients = [(
             "Frostreaver01",
             1,
             "WAR",
@@ -406,8 +405,7 @@ fn load_demo_data(app: &mut App) {
             2500,
             StandState::Ducking,
             "Eastern Wastes",
-        ),
-    ];
+        )];
 
     for (i, (name, class_id, _class_str, level, hp, hp_max, mana, mana_max, stand, zone)) in
         demo_clients.iter().enumerate()

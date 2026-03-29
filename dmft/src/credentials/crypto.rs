@@ -1,5 +1,5 @@
 use aes_gcm::{
-    Aes256Gcm, Key, Nonce,
+    Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, OsRng},
 };
 use anyhow::Result;
@@ -35,11 +35,11 @@ pub fn derive_key_from_master(master_key: &[u8; 32], salt: &[u8]) -> Result<Zero
 
 /// Encrypt plaintext using AES-256-GCM. Returns (ciphertext, nonce).
 pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let cipher = Aes256Gcm::new(key.into());
 
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = &Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
         .encrypt(nonce, plaintext)
@@ -50,7 +50,8 @@ pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
 
 /// Decrypt ciphertext using AES-256-GCM.
 pub fn decrypt(ciphertext: &[u8], key: &[u8; 32], nonce: &[u8]) -> Result<Vec<u8>> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let cipher = Aes256Gcm::new(key.into());
+    #[allow(deprecated)] // from_slice needed for runtime-length nonce slices
     let nonce = Nonce::from_slice(nonce);
 
     cipher

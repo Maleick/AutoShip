@@ -24,32 +24,29 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
     };
 
     // --You have looted a Rusty Short Sword.--
-    if let Some(rest) = text.strip_prefix("--You have looted a ") {
-        if let Some(item) = rest.strip_suffix(".--") {
+    if let Some(rest) = text.strip_prefix("--You have looted a ")
+        && let Some(item) = rest.strip_suffix(".--") {
             return Some(LogEvent::Loot {
                 character: String::new(),
                 item: item.to_string(),
             });
         }
-    }
 
     // You have slain a moss snake!
-    if let Some(rest) = text.strip_prefix("You have slain ") {
-        if let Some(mob) = rest.strip_suffix('!') {
+    if let Some(rest) = text.strip_prefix("You have slain ")
+        && let Some(mob) = rest.strip_suffix('!') {
             return Some(LogEvent::Kill {
                 mob: mob.to_string(),
             });
         }
-    }
 
     // You have been slain by a moss snake!
-    if let Some(rest) = text.strip_prefix("You have been slain by ") {
-        if let Some(killed_by) = rest.strip_suffix('!') {
+    if let Some(rest) = text.strip_prefix("You have been slain by ")
+        && let Some(killed_by) = rest.strip_suffix('!') {
             return Some(LogEvent::Death {
                 killed_by: killed_by.to_string(),
             });
         }
-    }
 
     // You receive 5 platinum, 3 gold, 2 silver and 1 copper from the corpse.
     if text.starts_with("You receive ") && text.contains(" from the corpse") {
@@ -63,8 +60,8 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
             if i == 0 {
                 continue;
             }
-            if let Ok(amount) = word.parse::<u32>() {
-                if let Some(currency) = words.get(i + 1) {
+            if let Ok(amount) = word.parse::<u32>()
+                && let Some(currency) = words.get(i + 1) {
                     let currency = currency.trim_matches(|c: char| !c.is_alphabetic());
                     match currency {
                         "platinum" => plat = amount,
@@ -74,7 +71,6 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
                         _ => {}
                     }
                 }
-            }
         }
 
         return Some(LogEvent::Money { plat, gold, silver, copper });
@@ -89,13 +85,12 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
     }
 
     // You have entered West Freeport.
-    if let Some(rest) = text.strip_prefix("You have entered ") {
-        if let Some(zone) = rest.strip_suffix('.') {
+    if let Some(rest) = text.strip_prefix("You have entered ")
+        && let Some(zone) = rest.strip_suffix('.') {
             return Some(LogEvent::ZoneEnter {
                 zone: zone.to_string(),
             });
         }
-    }
 
     None
 }

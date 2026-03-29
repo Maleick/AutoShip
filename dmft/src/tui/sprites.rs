@@ -16,7 +16,7 @@ use crate::eq::structs::{EqClass, StandState};
 pub const SPRITE_W: usize = 10;
 pub const SPRITE_H: usize = 10;
 /// Terminal lines needed to render one sprite (2 pixel rows per line).
-pub const SPRITE_RENDER_H: u16 = (SPRITE_H as u16 + 1) / 2; // 5
+pub const SPRITE_RENDER_H: u16 = (SPRITE_H as u16).div_ceil(2); // 5
 
 type Sprite = [[u8; SPRITE_W]; SPRITE_H];
 type Palette = &'static [(u8, u8, u8)];
@@ -31,8 +31,7 @@ pub fn render_sprite_lines(sprite: &Sprite, palette: Palette) -> Vec<Line<'stati
     for y in (0..SPRITE_H).step_by(2) {
         let mut spans: Vec<Span<'static>> = Vec::with_capacity(SPRITE_W);
 
-        for x in 0..SPRITE_W {
-            let top = sprite[y][x];
+        for (x, &top) in sprite[y].iter().enumerate() {
             let bot = if y + 1 < SPRITE_H {
                 sprite[y + 1][x]
             } else {

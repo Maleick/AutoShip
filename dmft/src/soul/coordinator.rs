@@ -195,8 +195,7 @@ impl SoulCoordinator {
                 .souls
                 .iter_mut()
                 .find(|(_, s)| s.name == request.character_name)
-            {
-                if let Ok(response) = soul.responder.generate(&request) {
+                && let Ok(response) = soul.responder.generate(&request) {
                     commands.push((
                         cid,
                         Command::Say {
@@ -206,7 +205,6 @@ impl SoulCoordinator {
                         },
                     ));
                 }
-            }
         }
 
         commands

@@ -49,7 +49,7 @@ impl ChChain {
             return None;
         }
 
-        let should_fire = self.tick_count % self.ticks_per_interval == 0;
+        let should_fire = self.tick_count.is_multiple_of(self.ticks_per_interval);
         self.tick_count += 1;
 
         if should_fire {
@@ -75,9 +75,7 @@ impl ChChain {
     pub fn remove_member(&mut self, pid: u32) {
         if let Some(pos) = self.members.iter().position(|&p| p == pid) {
             self.members.remove(pos);
-            if self.members.is_empty() {
-                self.current_index = 0;
-            } else if self.current_index >= self.members.len() {
+            if self.members.is_empty() || self.current_index >= self.members.len() {
                 self.current_index = 0;
             } else if pos < self.current_index {
                 self.current_index -= 1;

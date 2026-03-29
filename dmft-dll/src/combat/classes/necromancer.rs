@@ -28,8 +28,8 @@ impl ClassStrategy for NecromancerStrategy {
         let hp_pct = ctx.player.hp_pct();
 
         // Priority 1: Lifetap when HP is low (self-sustain)
-        if hp_pct < 50.0 {
-            if let Some(tap) = ctx.config.spells.iter()
+        if hp_pct < 50.0
+            && let Some(tap) = ctx.config.spells.iter()
                 .filter(|s| s.name.contains("Tap") || s.name.contains("tap")
                          || s.name.contains("Drain") || s.name.contains("Leech"))
                 .filter(|s| mana_pct >= s.min_mana_pct)
@@ -38,7 +38,6 @@ impl ClassStrategy for NecromancerStrategy {
             {
                 return Some(tap);
             }
-        }
 
         // Priority 2: DoTs (necro's bread and butter)
         if let Some(dot) = ctx.config.spells.iter()

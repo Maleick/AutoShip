@@ -114,9 +114,13 @@ pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize) {
         dmft_common::offsets::SELECT_CHARACTER, eq_base,
     ).unwrap_or(0);
 
-    PENDING_SELECT_CHAR_FN.store(select_fn, std::sync::atomic::Ordering::Release);
-    PENDING_ENTER_WORLD_FN.store(enter_world_fn, std::sync::atomic::Ordering::Release);
-    PENDING_ENTER_WORLD_WND.store(char_list_wnd, std::sync::atomic::Ordering::Release);
+    // Store function addresses and window handle first (Relaxed is sufficient),
+    // then store the stage flag last with Release ordering as the "commit" signal.
+    // The reader's Acquire load of ENTER_WORLD_STAGE establishes happens-before
+    // for all prior stores, guaranteeing the addresses are visible.
+    PENDING_SELECT_CHAR_FN.store(select_fn, std::sync::atomic::Ordering::Relaxed);
+    PENDING_ENTER_WORLD_FN.store(enter_world_fn, std::sync::atomic::Ordering::Relaxed);
+    PENDING_ENTER_WORLD_WND.store(char_list_wnd, std::sync::atomic::Ordering::Relaxed);
     ENTER_WORLD_STAGE.store(1, std::sync::atomic::Ordering::Release);
 }
 
@@ -155,7 +159,7 @@ fn human_jitter_ticks(rng: &mut dmft_common::nav::Xorshift32) -> u64 {
     // Triangle distribution: sum of two uniform draws (peaks at center)
     let base = (rng.next_u32() % 5 + 1) + (rng.next_u32() % 5 + 1); // 2-10, peaks at 6
     // 5% chance of hesitation spike (simulates distraction)
-    let hesitate = if rng.next_u32() % 20 == 0 {
+    let hesitate = if rng.next_u32().is_multiple_of(20) {
         rng.next_u32() % 15 + 5
     } else {
         0

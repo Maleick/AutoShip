@@ -81,7 +81,7 @@ fn should_render() -> bool {
         return true;
     }
     let tick = RENDER_TICK.fetch_add(1, Ordering::Relaxed);
-    tick % STROBE_INTERVAL == 0
+    tick.is_multiple_of(STROBE_INTERVAL)
 }
 
 #[cfg(test)]

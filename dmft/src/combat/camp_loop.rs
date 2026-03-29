@@ -122,13 +122,12 @@ impl CampLoop {
         match (&self.state, event) {
             // AtCamp → Pulling (when group is ready)
             (CampState::AtCamp, CampEvent::GroupReady) => {
-                if self.state_entered.elapsed() >= self.camp_delay {
-                    if let Some(puller_id) = self.puller_id {
+                if self.state_entered.elapsed() >= self.camp_delay
+                    && let Some(puller_id) = self.puller_id {
                         tracing::info!("Camp loop: sending puller");
                         commands.push((puller_id, Command::CombatEngage { target_id: 0 }));
                         self.transition(CampState::Pulling);
                     }
-                }
             }
 
             // Pulling → Fighting (mob is incoming)

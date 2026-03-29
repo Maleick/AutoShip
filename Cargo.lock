@@ -364,6 +364,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "windows",
+ "zeroize",
 ]
 
 [[package]]

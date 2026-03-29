@@ -28,23 +28,21 @@ impl RecoveryTracker {
     /// Update member state based on HP values. HP <= 0 means dead.
     pub fn update_hp(&mut self, hp_map: &[(u32, i32)], current_tick: u64) {
         for (pid, hp) in hp_map {
-            if let Some(member) = self.members.iter_mut().find(|(p, _, _)| p == pid) {
-                if *hp <= 0 && member.2 == DeathState::Alive {
+            if let Some(member) = self.members.iter_mut().find(|(p, _, _)| p == pid)
+                && *hp <= 0 && member.2 == DeathState::Alive {
                     member.2 = DeathState::Dead {
                         died_at_tick: current_tick,
                     };
                 }
-            }
         }
     }
 
     /// Mark a member as having received a rez (waiting to accept/stand).
     pub fn mark_rezzed(&mut self, pid: u32) {
-        if let Some(member) = self.members.iter_mut().find(|(p, _, _)| *p == pid) {
-            if matches!(member.2, DeathState::Dead { .. } | DeathState::WaitingForRez) {
+        if let Some(member) = self.members.iter_mut().find(|(p, _, _)| *p == pid)
+            && matches!(member.2, DeathState::Dead { .. } | DeathState::WaitingForRez) {
                 member.2 = DeathState::Rebuffing;
             }
-        }
     }
 
     /// Mark a member as fully recovered.
@@ -156,8 +154,8 @@ pub fn death_commands_with_roles(
             .iter()
             .any(|(pid, _, state)| *pid == cleric && *state == DeathState::Alive);
 
-        if cleric_alive {
-            if let Some((dead_pid, dead_name)) = first_dead {
+        if cleric_alive
+            && let Some((dead_pid, dead_name)) = first_dead {
                 commands.push((cleric, format!("/target {dead_name}")));
                 commands.push((cleric, format!("/cast {rez_gem}")));
 
@@ -166,7 +164,6 @@ pub fn death_commands_with_roles(
                     member.2 = DeathState::WaitingForRez;
                 }
             }
-        }
     }
 
     // Rebuffing members stand up

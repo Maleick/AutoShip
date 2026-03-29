@@ -95,7 +95,7 @@ pub fn check_buffs(
             Role::Tank => "tank",
             Role::Healer => "healer",
             Role::CC => "cc",
-            Role::DPS => "dps",
+            Role::Dps => "dps",
             Role::Puller => "puller",
             Role::Bard => "bard",
         };

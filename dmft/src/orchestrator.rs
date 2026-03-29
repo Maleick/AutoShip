@@ -62,10 +62,10 @@ impl Orchestrator {
     fn poll_game_states(&mut self) {
         for &pid in &self.client_pids {
             // Lazily create readers
-            if !self.state_readers.contains_key(&pid) {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.state_readers.entry(pid) {
                 match SharedStateReader::new(pid) {
                     Ok(reader) => {
-                        self.state_readers.insert(pid, reader);
+                        e.insert(reader);
                     }
                     Err(e) => {
                         tracing::debug!(pid, error = %e, "Failed to open shared memory reader");
@@ -74,12 +74,11 @@ impl Orchestrator {
                 }
             }
 
-            if let Some(reader) = self.state_readers.get(&pid) {
-                if let Some(state) = reader.read() {
+            if let Some(reader) = self.state_readers.get(&pid)
+                && let Some(state) = reader.read() {
                     self.game_states.insert(pid, state);
                     self.state_timestamps.insert(pid, self.tick_count);
                 }
-            }
         }
     }
 
@@ -93,8 +92,8 @@ impl Orchestrator {
 
         // Staleness check: refuse to act on data older than STALE_TICK_THRESHOLD ticks
         for critical in [tank, healer] {
-            if let Some(&last_update) = self.state_timestamps.get(&critical.pid) {
-                if self.tick_count.saturating_sub(last_update) > STALE_TICK_THRESHOLD {
+            if let Some(&last_update) = self.state_timestamps.get(&critical.pid)
+                && self.tick_count.saturating_sub(last_update) > STALE_TICK_THRESHOLD {
                     tracing::warn!(
                         pid = critical.pid,
                         name = %critical.name,
@@ -104,7 +103,6 @@ impl Orchestrator {
                     );
                     return None;
                 }
-            }
             // No timestamp at all means we never read state — handled by get() below
         }
 
@@ -342,7 +340,7 @@ mod tests {
         vec![
             CampMember::new(100, "Tank".into(), Role::Tank),
             CampMember::new(101, "Healer".into(), Role::Healer),
-            CampMember::new(102, "DPS".into(), Role::DPS),
+            CampMember::new(102, "DPS".into(), Role::Dps),
         ]
     }
 

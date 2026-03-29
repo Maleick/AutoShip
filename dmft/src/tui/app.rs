@@ -675,11 +675,10 @@ impl App {
             return std::borrow::Cow::Borrowed(name);
         }
         for (i, client) in self.clients.iter().enumerate() {
-            if let Some(player) = &client.local_player {
-                if player.displayed_name == name || player.name == name {
+            if let Some(player) = &client.local_player
+                && (player.displayed_name == name || player.name == name) {
                     return std::borrow::Cow::Owned(format!("Toon-{:02}", i + 1));
                 }
-            }
         }
         std::borrow::Cow::Borrowed(name)
     }
@@ -815,8 +814,8 @@ impl App {
 
         // :G1-G6 <Tab> → common slash commands for group targeting
         let upper_prefix = prefix.to_uppercase();
-        if let Some(digit) = upper_prefix.strip_prefix('G').and_then(|s| s.chars().next()) {
-            if ('1'..='6').contains(&digit) && prefix.len() >= 2 {
+        if let Some(digit) = upper_prefix.strip_prefix('G').and_then(|s| s.chars().next())
+            && ('1'..='6').contains(&digit) && prefix.len() >= 2 {
                 let cmd_prefix_str = &prefix[..2];
                 let rest = prefix[2..].trim_start();
                 if !rest.is_empty() {
@@ -830,7 +829,6 @@ impl App {
                     return;
                 }
             }
-        }
 
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
@@ -1122,7 +1120,6 @@ impl App {
         match parts[0] {
             "help" => {
                 self.help_visible = true;
-                return;
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
@@ -1646,7 +1643,7 @@ impl App {
             // :login <account_name> — launch a single account
             Some(name) => {
                 if let Some(entry) = accounts.find_account(name) {
-                    self.enqueue_account_launches(&[entry.clone()]);
+                    self.enqueue_account_launches(std::slice::from_ref(entry));
                 } else {
                     self.status_message = format!("Account '{}' not found in config", name);
                 }
@@ -1754,7 +1751,7 @@ impl App {
                     0 => Role::Tank,
                     1 => Role::Healer,
                     2 => Role::Puller,
-                    _ => Role::DPS,
+                    _ => Role::Dps,
                 };
                 let name = if client.character_name.is_empty() {
                     format!("Client-{}", client.pid)

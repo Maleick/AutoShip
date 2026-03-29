@@ -154,6 +154,11 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 character_name,
             } = cmd
             {
+                // Clone password into Zeroizing wrapper so the local copy is wiped
+                // from memory when this scope exits — prevents plaintext from
+                // lingering on the IPC thread's stack after credential entry.
+                let password = zeroize::Zeroizing::new(password.clone());
+
                 tracing::info!(
                     account = %account_name,
                     "StartLogin received — running inline + delegating to FSM"
@@ -179,7 +184,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                     // type_credentials_to_window handles all of this including
                     // hex dumps for debugging and readback verification.
                     let wrote = crate::login::widgets::type_credentials_to_window(
-                        eqmain_base, &account_name, &password,
+                        eqmain_base, account_name, &password,
                     );
                     tracing::info!(wrote, "Inline: type_credentials_to_window");
 
@@ -371,11 +376,11 @@ fn phase3_enter_world() {
             }
 
             // Also check WindowText for calibration logging
-            if logged < 30 {
-                if let Some(wnd_text) = crate::eq::widgets::read_cxstr(
+            if logged < 30
+                && let Some(wnd_text) = crate::eq::widgets::read_cxstr(
                     wnd_ptr + dmft_common::offsets::eqmain::CXWND_WINDOW_TEXT,
-                ) {
-                    if !wnd_text.is_empty() {
+                )
+                    && !wnd_text.is_empty() {
                         tracing::info!(
                             idx = i,
                             ptr = format!("{:#x}", wnd_ptr),
@@ -383,8 +388,6 @@ fn phase3_enter_world() {
                             "Phase 3 eqgame window (WindowText)"
                         );
                     }
-                }
-            }
         }
 
         if char_list_wnd == 0 {
@@ -436,11 +439,10 @@ fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
             let wnd_ptr = *((array_ptr + i * 8) as *const usize);
             if wnd_ptr == 0 { continue; }
 
-            if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
-                if text == target_text {
+            if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT)
+                && text == target_text {
                     return Some(wnd_ptr);
                 }
-            }
         }
     }
 
@@ -472,11 +474,10 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     continue;
                 }
 
-                if let Some(pending) = PENDING_COMMANDS.get() {
-                    if let Ok(mut queue) = pending.lock() {
+                if let Some(pending) = PENDING_COMMANDS.get()
+                    && let Ok(mut queue) = pending.lock() {
                         queue.push(cmd);
                     }
-                }
             }
             Err(e) => {
                 // On pipe disconnect or error, reset auth and retry unless

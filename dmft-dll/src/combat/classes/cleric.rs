@@ -47,9 +47,7 @@ impl ClassStrategy for ClericStrategy {
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
-        let Some((_, lowest_hp)) = self.lowest_hp_member(ctx) else {
-            return None;
-        };
+        let (_, lowest_hp) = self.lowest_hp_member(ctx)?;
 
         if lowest_hp < 50.0 {
             // Emergency: return highest priority heal spell.
