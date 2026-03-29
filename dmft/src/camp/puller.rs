@@ -3,6 +3,7 @@
 use crate::camp::cc::CcTracker;
 use crate::camp::config::CampConfig;
 use crate::camp::positioning::distance_2d;
+use crate::eq::named_tracker::NamedTracker;
 
 /// Spawn type discriminator matching EQ's internal spawn types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,6 +101,39 @@ pub fn select_pull_target(
         .map(|s| s.name.clone())
 }
 
+/// Extended pull target selection that checks the named tracker first.
+/// If a named mob from the database is alive and in range, it takes priority
+/// over all other targets.
+pub fn select_pull_target_with_named(
+    nearby_spawns: &[NearbySpawn],
+    camp_config: &CampConfig,
+    cc_tracker: &CcTracker,
+    hvt_watchlist: &[String],
+    named_tracker: &NamedTracker,
+) -> Option<String> {
+    // Check for a high-priority named mob override
+    if let Some(priority_named) = named_tracker.priority_target() {
+        // Verify the named mob is actually in our spawn list and in range
+        let pull_x = camp_config.pull_point[0];
+        let pull_y = camp_config.pull_point[1];
+        let cc_ids: Vec<u32> = cc_tracker.targets.iter().map(|t| t.spawn_id).collect();
+
+        let in_range = nearby_spawns.iter().any(|s| {
+            s.spawn_type == SpawnType::NPC
+                && s.name == priority_named.name
+                && distance_2d(s.x, s.y, pull_x, pull_y) <= camp_config.pull_radius
+                && !cc_ids.contains(&s.spawn_id)
+        });
+
+        if in_range {
+            return Some(priority_named.name.clone());
+        }
+    }
+
+    // Fall back to normal selection
+    select_pull_target(nearby_spawns, camp_config, cc_tracker, hvt_watchlist)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,6 +151,10 @@ mod tests {
             pull_mana_pct: 30,
             level_range: [5, 12],
             pull_mob_names: vec!["an orc pawn".into()],
+            ignore_mob_names: Vec::new(),
+            burn_mob_names: Vec::new(),
+            next_camp: None,
+            prev_camp: None,
         }
     }
 

@@ -1,0 +1,15 @@
+name = "mistmoore_entrance"
+zone = "mistmoore"
+camp_center = [100.0, 0.0, 3.0]
+pull_point = [150.0, 50.0, 3.0]
+pull_radius = 220
+camp_radius = 30
+leash_radius = 110
+rest_mana_pct = 65
+pull_mana_pct = 35
+level_range = [25, 33]
+pull_mob_names = ["a dark stalker", "a shadowbone", "a gloom rider"]
+ignore_mob_names = ["Mayong Mistmoore"]
+burn_mob_names = []
+next_camp = "mistmoore_castle"
+prev_camp = "unrest_basement"

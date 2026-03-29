@@ -1,0 +1,37 @@
+zone = "chardok"
+
+[[named]]
+name = "Overking Bathezid"
+level = 60
+respawn_min_minutes = 72
+respawn_max_minutes = 84
+location = [800.0, -1200.0, 115.0]
+drops = ["Overking's Signet", "Sarnak Battlehammer"]
+priority = "high"
+
+[[named]]
+name = "Prince Selrach Di'zok"
+level = 58
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [600.0, -900.0, 100.0]
+drops = ["Di'zok Signet of Service"]
+priority = "high"
+
+[[named]]
+name = "Drill Master Dih'roul"
+level = 55
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [350.0, -600.0, 80.0]
+drops = ["Drill Master's Baton"]
+priority = "medium"
+
+[[named]]
+name = "Warlord Skargus"
+level = 56
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [500.0, -750.0, 90.0]
+drops = ["Warlord's Breastplate"]
+priority = "medium"

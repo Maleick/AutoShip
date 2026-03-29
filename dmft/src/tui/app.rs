@@ -7,6 +7,7 @@ use crate::eq::hvt::HvtWatchlist;
 use crate::eq::log_parser::LootDatabase;
 use crate::eq::log_watcher::LogWatcher;
 use crate::eq::map_parser::ZoneMap;
+use crate::eq::named_db::NamedMobDatabase;
 use crate::eq::named_tracker::NamedTracker;
 use crate::eq::structs::{GroupInfo, SpawnInfo, SpawnType};
 use crate::orchestrator::Orchestrator;
@@ -300,7 +301,13 @@ impl App {
             command_history: Vec::new(),
             command_history_idx: None,
 
-            named_tracker: NamedTracker::new(),
+            named_tracker: {
+                let db = NamedMobDatabase::load(std::path::Path::new("config/named_mobs")).ok();
+                match db {
+                    Some(db) => NamedTracker::with_db(db),
+                    None => NamedTracker::new(),
+                }
+            },
             hvt_watchlist: HvtWatchlist::load(std::path::Path::new("config/hvt_watchlist.toml")).ok(),
 
             tracked_spawns: HashMap::new(),
@@ -512,6 +519,7 @@ impl App {
                 let mut sub_cmds: Vec<String> = vec![
                     "start".into(), "stop".into(), "status".into(),
                     "list".into(), "add".into(), "remove".into(),
+                    "next".into(), "prev".into(),
                 ];
                 sub_cmds.extend(self.list_camp_names());
                 self.complete_with_candidates("camp ", rest, &sub_cmds);
@@ -853,7 +861,7 @@ impl App {
         match args.first().copied() {
             None => {
                 self.status_message =
-                    String::from("Usage: camp <start|stop|status|list|add|remove> [name]");
+                    String::from("Usage: camp <start|stop|status|list|add|remove|next|prev> [name]");
             }
             Some("start") => {
                 let camp_name = match args.get(1) {
@@ -936,6 +944,10 @@ impl App {
                     pull_mana_pct: 30,
                     level_range: [1, 60],
                     pull_mob_names: Vec::new(),
+                    ignore_mob_names: Vec::new(),
+                    burn_mob_names: Vec::new(),
+                    next_camp: None,
+                    prev_camp: None,
                 };
 
                 match config.save() {
@@ -975,6 +987,76 @@ impl App {
                     self.status_message = format!("Camp '{}' not found", camp_name);
                 }
             }
+            Some("next") => {
+                match &orchestrator.active_camp {
+                    None => {
+                        self.status_message = String::from("No active camp — start one first");
+                    }
+                    Some(camp) => {
+                        let current = camp.config.name.clone();
+                        match &camp.config.next_camp {
+                            Some(next_name) => match CampConfig::load(next_name) {
+                                Ok(config) => {
+                                    let members = self.build_camp_members();
+                                    if members.is_empty() {
+                                        self.status_message =
+                                            String::from("No clients connected — cannot advance camp");
+                                        return;
+                                    }
+                                    let count = members.len();
+                                    let to = config.name.clone();
+                                    orchestrator.start_camp(config, members);
+                                    self.status_message =
+                                        format!("Advanced: {} → {} ({} members)", current, to, count);
+                                }
+                                Err(e) => {
+                                    self.status_message =
+                                        format!("Failed to load next camp '{}': {}", next_name, e);
+                                }
+                            },
+                            None => {
+                                self.status_message =
+                                    format!("Camp '{}' has no next camp configured", current);
+                            }
+                        }
+                    }
+                }
+            }
+            Some("prev") => {
+                match &orchestrator.active_camp {
+                    None => {
+                        self.status_message = String::from("No active camp — start one first");
+                    }
+                    Some(camp) => {
+                        let current = camp.config.name.clone();
+                        match &camp.config.prev_camp {
+                            Some(prev_name) => match CampConfig::load(prev_name) {
+                                Ok(config) => {
+                                    let members = self.build_camp_members();
+                                    if members.is_empty() {
+                                        self.status_message =
+                                            String::from("No clients connected — cannot fall back");
+                                        return;
+                                    }
+                                    let count = members.len();
+                                    let to = config.name.clone();
+                                    orchestrator.start_camp(config, members);
+                                    self.status_message =
+                                        format!("Fell back: {} → {} ({} members)", current, to, count);
+                                }
+                                Err(e) => {
+                                    self.status_message =
+                                        format!("Failed to load prev camp '{}': {}", prev_name, e);
+                                }
+                            },
+                            None => {
+                                self.status_message =
+                                    format!("Camp '{}' has no previous camp configured", current);
+                            }
+                        }
+                    }
+                }
+            }
             // Bare camp name — shortcut for camp start <name>
             Some(name) => {
                 match CampConfig::load(name) {
@@ -992,7 +1074,7 @@ impl App {
                     }
                     Err(_) => {
                         self.status_message = format!(
-                            "Unknown camp subcommand or config: '{}'. Try: start|stop|status|list|add|remove",
+                            "Unknown camp subcommand or config: '{}'. Try: start|stop|status|list|add|remove|next|prev",
                             name
                         );
                     }

@@ -1,0 +1,15 @@
+name = "crushbone_throne"
+zone = "crushbone"
+camp_center = [-200.0, -100.0, 25.0]
+pull_point = [-150.0, -50.0, 25.0]
+pull_radius = 180
+camp_radius = 25
+leash_radius = 90
+rest_mana_pct = 60
+pull_mana_pct = 30
+level_range = [11, 16]
+pull_mob_names = ["a Crushbone legionnaire", "a Crushbone centurion", "a Crushbone slaver"]
+ignore_mob_names = ["Ambassador DVinn"]
+burn_mob_names = ["Emperor Crush", "Ambassador DVinn"]
+next_camp = "unrest_yard"
+prev_camp = "crushbone_entrance"

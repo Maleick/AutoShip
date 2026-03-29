@@ -1,0 +1,15 @@
+name = "lguk_live_side"
+zone = "gukbottom"
+camp_center = [500.0, -300.0, -20.0]
+pull_point = [550.0, -250.0, -20.0]
+pull_radius = 180
+camp_radius = 25
+leash_radius = 90
+rest_mana_pct = 65
+pull_mana_pct = 35
+level_range = [35, 42]
+pull_mob_names = ["a froglok ghoul knight", "a froglok shin knight", "a froglok gaz knight"]
+ignore_mob_names = ["the ghoul lord"]
+burn_mob_names = ["the ghoul lord"]
+next_camp = "lguk_dead_side"
+prev_camp = "mistmoore_castle"

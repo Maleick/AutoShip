@@ -1,0 +1,15 @@
+name = "unrest_yard"
+zone = "unrest"
+camp_center = [50.0, -200.0, 3.0]
+pull_point = [100.0, -150.0, 3.0]
+pull_radius = 250
+camp_radius = 35
+leash_radius = 120
+rest_mana_pct = 60
+pull_mana_pct = 30
+level_range = [15, 22]
+pull_mob_names = ["a festering hag", "a dry bone skeleton", "a decaying skeleton"]
+ignore_mob_names = ["Garanel Rucksif"]
+burn_mob_names = ["Garanel Rucksif"]
+next_camp = "unrest_basement"
+prev_camp = "crushbone_throne"

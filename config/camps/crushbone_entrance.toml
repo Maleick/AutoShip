@@ -1,0 +1,15 @@
+name = "crushbone_entrance"
+zone = "crushbone"
+camp_center = [-500.0, 200.0, 3.0]
+pull_point = [-450.0, 250.0, 3.0]
+pull_radius = 200
+camp_radius = 30
+leash_radius = 100
+rest_mana_pct = 60
+pull_mana_pct = 30
+level_range = [8, 13]
+pull_mob_names = ["an orc pawn", "an orc centurion", "a Crushbone orc"]
+ignore_mob_names = ["Ambassador DVinn", "a Crushbone trainer"]
+burn_mob_names = ["Emperor Crush"]
+next_camp = "crushbone_throne"
+prev_camp = "crescent_reach_undead"

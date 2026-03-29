@@ -1,0 +1,14 @@
+name = "crescent_reach_newbie"
+zone = "crescent"
+camp_center = [-1200.0, -250.0, 3.0]
+pull_point = [-1150.0, -200.0, 3.0]
+pull_radius = 150
+camp_radius = 25
+leash_radius = 80
+rest_mana_pct = 50
+pull_mana_pct = 20
+level_range = [1, 5]
+pull_mob_names = ["a cave bat", "a giant rat", "a large spider"]
+ignore_mob_names = []
+burn_mob_names = []
+next_camp = "crescent_reach_undead"

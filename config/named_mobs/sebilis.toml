@@ -1,0 +1,37 @@
+zone = "sebilis"
+
+[[named]]
+name = "Trakanon"
+level = 65
+respawn_min_minutes = 72
+respawn_max_minutes = 84
+location = [-1590.0, -300.0, -40.0]
+drops = ["Singing Short Sword", "Trakanon's Tooth"]
+priority = "high"
+
+[[named]]
+name = "Baron Yosig"
+level = 55
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [-1200.0, 200.0, -60.0]
+drops = ["Elder Spiritist's Helm"]
+priority = "medium"
+
+[[named]]
+name = "Crypt Caretaker"
+level = 53
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-1050.0, 380.0, -60.0]
+drops = ["Crypt Caretaker's Shield"]
+priority = "low"
+
+[[named]]
+name = "Sebilite Protector"
+level = 54
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-1350.0, 100.0, -60.0]
+drops = ["Sebilite Scale Leggings"]
+priority = "medium"

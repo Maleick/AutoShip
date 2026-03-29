@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::named_db::{NamedMobDatabase, NamedPriority};
 use super::structs::{SpawnInfo, SpawnType};
 
 /// Status of a tracked named spawn.
@@ -12,6 +13,10 @@ pub struct NamedSpawnStatus {
     pub is_alive: bool,
     pub death_tick: Option<u64>,
     pub estimated_respawn_tick: Option<u64>,
+    /// End of the respawn window (max estimate). None if no database entry.
+    pub respawn_window_end_tick: Option<u64>,
+    /// Priority from the named mob database.
+    pub priority: Option<NamedPriority>,
     /// Last known position for map rendering of dead named spawns.
     pub last_x: f32,
     pub last_y: f32,
@@ -42,6 +47,8 @@ pub struct NamedTracker {
     tracked: HashMap<String, NamedSpawnStatus>,
     /// Current zone (used for alert context).
     zone: String,
+    /// Named mob database for respawn estimates and priority.
+    db: Option<NamedMobDatabase>,
 }
 
 impl NamedTracker {
@@ -49,7 +56,22 @@ impl NamedTracker {
         Self {
             tracked: HashMap::new(),
             zone: String::new(),
+            db: None,
         }
+    }
+
+    /// Create a tracker with a named mob database for respawn estimates.
+    pub fn with_db(db: NamedMobDatabase) -> Self {
+        Self {
+            tracked: HashMap::new(),
+            zone: String::new(),
+            db: Some(db),
+        }
+    }
+
+    /// Set the named mob database (can be called after construction).
+    pub fn set_db(&mut self, db: NamedMobDatabase) {
+        self.db = Some(db);
     }
 
     /// Set the current zone name (call when zone changes).
@@ -83,6 +105,7 @@ impl NamedTracker {
                     existing.spawn_id = spawn.spawn_id;
                     existing.death_tick = None;
                     existing.estimated_respawn_tick = None;
+                    existing.respawn_window_end_tick = None;
                     existing.last_x = spawn.x;
                     existing.last_y = spawn.y;
                     existing.last_z = spawn.z;
@@ -97,7 +120,12 @@ impl NamedTracker {
                     existing.last_z = spawn.z;
                 }
             } else {
-                // Brand new named spawn
+                // Brand new named spawn — look up priority from database
+                let priority = self
+                    .db
+                    .as_ref()
+                    .and_then(|db| db.get(&self.zone, &spawn.displayed_name))
+                    .map(|entry| entry.priority);
                 self.tracked.insert(
                     key.clone(),
                     NamedSpawnStatus {
@@ -108,6 +136,8 @@ impl NamedTracker {
                         is_alive: true,
                         death_tick: None,
                         estimated_respawn_tick: None,
+                        respawn_window_end_tick: None,
+                        priority,
                         last_x: spawn.x,
                         last_y: spawn.y,
                         last_z: spawn.z,
@@ -125,11 +155,22 @@ impl NamedTracker {
             if status.is_alive && !alive_names.contains_key(key) {
                 status.is_alive = false;
                 status.death_tick = Some(tick);
-                status.estimated_respawn_tick = Some(tick + DEFAULT_RESPAWN_TICKS);
+
+                // Use database respawn times if available, else default
+                let (min_ticks, max_ticks) = self
+                    .db
+                    .as_ref()
+                    .and_then(|db| db.get(&self.zone, &status.name))
+                    .map(|entry| (entry.respawn_min_ticks(), entry.respawn_max_ticks()))
+                    .unwrap_or((DEFAULT_RESPAWN_TICKS, DEFAULT_RESPAWN_TICKS));
+
+                status.estimated_respawn_tick = Some(tick + min_ticks);
+                status.respawn_window_end_tick = Some(tick + max_ticks);
+
                 alerts.push(NamedAlert::SpawnDown {
                     name: status.name.clone(),
                     zone: self.zone.clone(),
-                    respawn_estimate: tick + DEFAULT_RESPAWN_TICKS,
+                    respawn_estimate: tick + min_ticks,
                 });
             }
         }
@@ -148,6 +189,36 @@ impl NamedTracker {
                 .then_with(|| a.name.cmp(&b.name))
         });
         result
+    }
+
+    /// Returns the highest-priority alive named mob, if any.
+    /// Used by the camp loop to override normal pull targets.
+    pub fn priority_target(&self) -> Option<&NamedSpawnStatus> {
+        self.tracked
+            .values()
+            .filter(|s| s.is_alive)
+            .filter(|s| s.priority.is_some())
+            .min_by_key(|s| match s.priority {
+                Some(NamedPriority::High) => 0,
+                Some(NamedPriority::Medium) => 1,
+                Some(NamedPriority::Low) => 2,
+                None => 3,
+            })
+    }
+
+    /// Check if a respawn window is currently active for any tracked named mob.
+    /// Returns named mobs whose respawn window has opened (past min estimate).
+    pub fn in_respawn_window(&self, current_tick: u64) -> Vec<&NamedSpawnStatus> {
+        self.tracked
+            .values()
+            .filter(|s| !s.is_alive)
+            .filter(|s| {
+                s.estimated_respawn_tick
+                    .is_some_and(|min| current_tick >= min)
+                    && s.respawn_window_end_tick
+                        .is_some_and(|max| current_tick <= max)
+            })
+            .collect()
     }
 
     /// Number of tracked named spawns.
@@ -358,5 +429,133 @@ mod tests {
         let alerts = tracker.update(&spawns, 1);
         assert!(alerts.is_empty());
         assert_eq!(tracker.len(), 0);
+    }
+
+    #[test]
+    fn test_db_respawn_times_used() {
+        use crate::eq::named_db::NamedMobDatabase;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let toml = r#"
+zone = "crushbone"
+
+[[named]]
+name = "Emperor Crush"
+level = 15
+respawn_min_minutes = 28
+respawn_max_minutes = 32
+location = [-688.0, 118.0, 28.0]
+drops = ["Crushbone Belt"]
+priority = "high"
+"#;
+        let mut f = std::fs::File::create(dir.path().join("crushbone.toml")).unwrap();
+        f.write_all(toml.as_bytes()).unwrap();
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        let mut tracker = NamedTracker::with_db(db);
+        tracker.set_zone("crushbone");
+
+        // Spawn and kill
+        let spawns = vec![make_npc("Emperor Crush", 1001)];
+        tracker.update(&spawns, 1);
+        tracker.update(&[], 100);
+
+        let tracked = tracker.tracked_spawns();
+        assert_eq!(tracked.len(), 1);
+        assert!(!tracked[0].is_alive);
+        // 28 min * 60 * 4 = 6720 ticks
+        assert_eq!(tracked[0].estimated_respawn_tick, Some(100 + 6720));
+        // 32 min * 60 * 4 = 7680 ticks
+        assert_eq!(tracked[0].respawn_window_end_tick, Some(100 + 7680));
+        assert_eq!(tracked[0].priority, Some(NamedPriority::High));
+    }
+
+    #[test]
+    fn test_priority_target() {
+        use crate::eq::named_db::NamedMobDatabase;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let toml = r#"
+zone = "crushbone"
+
+[[named]]
+name = "Emperor Crush"
+level = 15
+respawn_min_minutes = 28
+respawn_max_minutes = 32
+location = [-688.0, 118.0, 28.0]
+drops = ["Crushbone Belt"]
+priority = "high"
+
+[[named]]
+name = "Lord Darish"
+level = 12
+respawn_min_minutes = 16
+respawn_max_minutes = 22
+location = [-340.0, 370.0, 28.0]
+drops = []
+priority = "low"
+"#;
+        let mut f = std::fs::File::create(dir.path().join("crushbone.toml")).unwrap();
+        f.write_all(toml.as_bytes()).unwrap();
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        let mut tracker = NamedTracker::with_db(db);
+        tracker.set_zone("crushbone");
+
+        let spawns = vec![
+            make_npc("Emperor Crush", 1001),
+            make_npc("Lord Darish", 1002),
+        ];
+        tracker.update(&spawns, 1);
+
+        let target = tracker.priority_target().unwrap();
+        assert_eq!(target.name, "Emperor Crush");
+    }
+
+    #[test]
+    fn test_in_respawn_window() {
+        use crate::eq::named_db::NamedMobDatabase;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let toml = r#"
+zone = "crushbone"
+
+[[named]]
+name = "Emperor Crush"
+level = 15
+respawn_min_minutes = 1
+respawn_max_minutes = 2
+location = [-688.0, 118.0, 28.0]
+drops = []
+priority = "high"
+"#;
+        let mut f = std::fs::File::create(dir.path().join("crushbone.toml")).unwrap();
+        f.write_all(toml.as_bytes()).unwrap();
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        let mut tracker = NamedTracker::with_db(db);
+        tracker.set_zone("crushbone");
+
+        let spawns = vec![make_npc("Emperor Crush", 1001)];
+        tracker.update(&spawns, 0);
+        tracker.update(&[], 100); // Kill at tick 100
+
+        // min = 1 min * 60 * 4 = 240 ticks -> respawn at 340
+        // max = 2 min * 60 * 4 = 480 ticks -> window end at 580
+
+        // Before window: tick 300 (before 340)
+        assert!(tracker.in_respawn_window(300).is_empty());
+
+        // In window: tick 400 (between 340 and 580)
+        let in_window = tracker.in_respawn_window(400);
+        assert_eq!(in_window.len(), 1);
+        assert_eq!(in_window[0].name, "Emperor Crush");
+
+        // After window: tick 600 (after 580)
+        assert!(tracker.in_respawn_window(600).is_empty());
     }
 }

@@ -1,0 +1,15 @@
+name = "mistmoore_castle"
+zone = "mistmoore"
+camp_center = [-200.0, 300.0, 50.0]
+pull_point = [-150.0, 350.0, 50.0]
+pull_radius = 200
+camp_radius = 25
+leash_radius = 100
+rest_mana_pct = 65
+pull_mana_pct = 35
+level_range = [30, 38]
+pull_mob_names = ["a vampire bat", "a dark elf guard", "a dark elf priest"]
+ignore_mob_names = ["Mayong Mistmoore"]
+burn_mob_names = ["Mayong Mistmoore"]
+next_camp = "lguk_live_side"
+prev_camp = "mistmoore_entrance"

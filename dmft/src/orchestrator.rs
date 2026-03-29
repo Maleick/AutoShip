@@ -269,6 +269,10 @@ mod tests {
             pull_mana_pct: 20,
             level_range: [1, 10],
             pull_mob_names: vec!["a_mob".into()],
+            ignore_mob_names: Vec::new(),
+            burn_mob_names: Vec::new(),
+            next_camp: None,
+            prev_camp: None,
         }
     }
 

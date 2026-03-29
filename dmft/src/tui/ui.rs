@@ -973,18 +973,39 @@ fn draw_named_tracker_panel(frame: &mut Frame, area: Rect, app: &App) {
                 .map(|status| {
                     let (status_str, color) = if status.is_alive {
                         ("UP", Color::Green)
+                    } else if let Some(min_tick) = status.estimated_respawn_tick {
+                        if app.tick_count >= min_tick {
+                            // Respawn window is open
+                            ("SOON", Color::Yellow)
+                        } else {
+                            ("DEAD", Color::Red)
+                        }
                     } else {
                         ("DEAD", Color::Red)
                     };
 
                     let timer_str = if status.is_alive {
                         String::new()
-                    } else if let Some(respawn) = status.estimated_respawn_tick {
-                        let remaining = respawn.saturating_sub(app.tick_count);
-                        let secs = remaining / 4;
-                        let mins = secs / 60;
-                        let secs_rem = secs % 60;
-                        format!("~{}:{:02}", mins, secs_rem)
+                    } else if let Some(respawn_min) = status.estimated_respawn_tick {
+                        let remaining = respawn_min.saturating_sub(app.tick_count);
+                        if remaining > 0 {
+                            let secs = remaining / 4;
+                            let mins = secs / 60;
+                            let secs_rem = secs % 60;
+                            format!("~{}:{:02}", mins, secs_rem)
+                        } else if let Some(window_end) = status.respawn_window_end_tick {
+                            let window_remaining = window_end.saturating_sub(app.tick_count);
+                            if window_remaining > 0 {
+                                let secs = window_remaining / 4;
+                                let mins = secs / 60;
+                                let secs_rem = secs % 60;
+                                format!("<{}:{:02}", mins, secs_rem)
+                            } else {
+                                "LATE".into()
+                            }
+                        } else {
+                            "SOON".into()
+                        }
                     } else {
                         "???".into()
                     };
@@ -1002,10 +1023,16 @@ fn draw_named_tracker_panel(frame: &mut Frame, area: Rect, app: &App) {
                         Style::default().fg(Color::White)
                     };
 
+                    let timer_color = if color == Color::Yellow {
+                        Color::Yellow
+                    } else {
+                        Color::Cyan
+                    };
+
                     Row::new(vec![
                         Cell::from(status.name.clone()).style(name_style),
                         Cell::from(status_str).style(Style::default().fg(color)),
-                        Cell::from(timer_str).style(Style::default().fg(Color::Cyan)),
+                        Cell::from(timer_str).style(Style::default().fg(timer_color)),
                     ])
                 })
                 .collect();

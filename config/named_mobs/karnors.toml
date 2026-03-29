@@ -1,0 +1,46 @@
+zone = "karnors"
+
+[[named]]
+name = "Venril Sathir"
+level = 60
+respawn_min_minutes = 72
+respawn_max_minutes = 84
+location = [250.0, -520.0, 5.0]
+drops = ["Sathir's Wand", "Venril Sathir's Remains"]
+priority = "high"
+
+[[named]]
+name = "Construct of Sathir"
+level = 55
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [100.0, -300.0, 5.0]
+drops = ["Drolvarg Mantle"]
+priority = "medium"
+
+[[named]]
+name = "Hangnail"
+level = 52
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [180.0, -150.0, 5.0]
+drops = ["Drolvarg Hide Pack"]
+priority = "low"
+
+[[named]]
+name = "Underboss Myli"
+level = 54
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [300.0, -400.0, 5.0]
+drops = ["Burnished Wooden Stave"]
+priority = "medium"
+
+[[named]]
+name = "Caller of Sathir"
+level = 53
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [50.0, -250.0, 5.0]
+drops = ["Drolvarg Shoulderpads"]
+priority = "low"

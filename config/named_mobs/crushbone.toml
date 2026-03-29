@@ -1,0 +1,37 @@
+zone = "crushbone"
+
+[[named]]
+name = "Emperor Crush"
+level = 15
+respawn_min_minutes = 28
+respawn_max_minutes = 32
+location = [-688.0, 118.0, 28.0]
+drops = ["Crushbone Belt", "Emperor Crush's Crown"]
+priority = "high"
+
+[[named]]
+name = "Ambassador Dvinn"
+level = 13
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-450.0, 250.0, 50.0]
+drops = ["Elven Chainmail", "DVinn's Ceremonial Sword"]
+priority = "medium"
+
+[[named]]
+name = "Lord Darish"
+level = 12
+respawn_min_minutes = 16
+respawn_max_minutes = 22
+location = [-340.0, 370.0, 28.0]
+drops = ["Crushbone Shoulderpads"]
+priority = "low"
+
+[[named]]
+name = "Retainer of Crush"
+level = 14
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-600.0, 180.0, 28.0]
+drops = ["Brass Earring"]
+priority = "low"

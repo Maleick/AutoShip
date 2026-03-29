@@ -1,0 +1,14 @@
+name = "sebilis_disco"
+zone = "sebilis"
+camp_center = [-100.0, 200.0, 0.0]
+pull_point = [-50.0, 250.0, 0.0]
+pull_radius = 220
+camp_radius = 30
+leash_radius = 110
+rest_mana_pct = 70
+pull_mana_pct = 40
+level_range = [45, 55]
+pull_mob_names = ["a sebilite guardian", "a sebilite protector", "a crypt caretaker"]
+ignore_mob_names = ["Trakanon"]
+burn_mob_names = ["a sebilite juggernaut"]
+prev_camp = "lguk_dead_side"

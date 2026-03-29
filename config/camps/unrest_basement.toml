@@ -1,0 +1,15 @@
+name = "unrest_basement"
+zone = "unrest"
+camp_center = [-100.0, -400.0, -50.0]
+pull_point = [-50.0, -350.0, -50.0]
+pull_radius = 200
+camp_radius = 30
+leash_radius = 100
+rest_mana_pct = 65
+pull_mana_pct = 35
+level_range = [20, 28]
+pull_mob_names = ["a greater dark bone", "a haunted corpse", "a werebat"]
+ignore_mob_names = []
+burn_mob_names = ["a skeletal monk"]
+next_camp = "mistmoore_entrance"
+prev_camp = "unrest_yard"

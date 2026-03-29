@@ -1,0 +1,28 @@
+zone = "upperguk"
+
+[[named]]
+name = "Assassin"
+level = 30
+respawn_min_minutes = 16
+respawn_max_minutes = 22
+location = [97.0, -51.0, -5.0]
+drops = ["Serrated Bone Dirk"]
+priority = "medium"
+
+[[named]]
+name = "Supplier"
+level = 28
+respawn_min_minutes = 16
+respawn_max_minutes = 22
+location = [150.0, -100.0, -5.0]
+drops = ["Woven Spider Silk"]
+priority = "low"
+
+[[named]]
+name = "Herbalist"
+level = 27
+respawn_min_minutes = 16
+respawn_max_minutes = 22
+location = [80.0, -130.0, -5.0]
+drops = ["Thick Fur Cloak"]
+priority = "low"

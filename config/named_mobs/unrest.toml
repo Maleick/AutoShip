@@ -1,0 +1,37 @@
+zone = "unrest"
+
+[[named]]
+name = "Garanel Rucksif"
+level = 30
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [43.0, -217.0, 3.0]
+drops = ["Shiny Brass Shield", "Garanel's Ring"]
+priority = "high"
+
+[[named]]
+name = "Festering Hag"
+level = 25
+respawn_min_minutes = 16
+respawn_max_minutes = 22
+location = [120.0, -90.0, 3.0]
+drops = ["Hag's Ring"]
+priority = "medium"
+
+[[named]]
+name = "Undead Barkeep"
+level = 22
+respawn_min_minutes = 12
+respawn_max_minutes = 16
+location = [90.0, -40.0, 3.0]
+drops = ["Jade Earring"]
+priority = "low"
+
+[[named]]
+name = "The Curse Bearer"
+level = 28
+respawn_min_minutes = 20
+respawn_max_minutes = 26
+location = [-20.0, -180.0, -20.0]
+drops = ["Mace of the Shadowed Soul"]
+priority = "medium"

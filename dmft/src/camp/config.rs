@@ -20,6 +20,18 @@ pub struct CampConfig {
     /// Mob names to pull. Empty means pull anything in range.
     #[serde(default)]
     pub pull_mob_names: Vec<String>,
+    /// Mob names to never pull (named mobs, quest NPCs, etc.).
+    #[serde(default)]
+    pub ignore_mob_names: Vec<String>,
+    /// Mob names to burn down immediately when spotted (named/rare spawns).
+    #[serde(default)]
+    pub burn_mob_names: Vec<String>,
+    /// Camp file name to progress to when the group outlevels this camp.
+    #[serde(default)]
+    pub next_camp: Option<String>,
+    /// Camp file name to fall back to (reverse progression).
+    #[serde(default)]
+    pub prev_camp: Option<String>,
 }
 
 impl CampConfig {
@@ -74,6 +86,10 @@ mod tests {
             pull_mana_pct: 30,
             level_range: [5, 12],
             pull_mob_names: vec!["an orc pawn".into(), "an orc centurion".into()],
+            ignore_mob_names: vec!["Ambassador DVinn".into()],
+            burn_mob_names: vec!["Emperor Crush".into()],
+            next_camp: Some("crushbone_throne".into()),
+            prev_camp: None,
         }
     }
 

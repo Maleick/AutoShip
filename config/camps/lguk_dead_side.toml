@@ -1,0 +1,15 @@
+name = "lguk_dead_side"
+zone = "gukbottom"
+camp_center = [-400.0, 100.0, -40.0]
+pull_point = [-350.0, 150.0, -40.0]
+pull_radius = 200
+camp_radius = 30
+leash_radius = 100
+rest_mana_pct = 70
+pull_mana_pct = 40
+level_range = [40, 48]
+pull_mob_names = ["a froglok realist", "a froglok idealist", "a froglok ton knight"]
+ignore_mob_names = ["the froglok king"]
+burn_mob_names = ["the froglok king"]
+next_camp = "sebilis_disco"
+prev_camp = "lguk_live_side"

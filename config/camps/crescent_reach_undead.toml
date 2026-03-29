@@ -1,0 +1,15 @@
+name = "crescent_reach_undead"
+zone = "crescent"
+camp_center = [-800.0, 400.0, 10.0]
+pull_point = [-750.0, 450.0, 10.0]
+pull_radius = 180
+camp_radius = 30
+leash_radius = 90
+rest_mana_pct = 55
+pull_mana_pct = 25
+level_range = [5, 10]
+pull_mob_names = ["a skeletal scout", "a decaying skeleton", "a risen guard"]
+ignore_mob_names = []
+burn_mob_names = []
+next_camp = "crushbone_entrance"
+prev_camp = "crescent_reach_newbie"

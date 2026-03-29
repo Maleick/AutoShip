@@ -1,0 +1,46 @@
+zone = "lowerguk"
+
+[[named]]
+name = "Ghoul Lord"
+level = 45
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [-308.0, -868.0, -81.0]
+drops = ["Flowing Black Silk Sash", "Ghoulbane"]
+priority = "high"
+
+[[named]]
+name = "Frenzied Ghoul"
+level = 44
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [-215.0, -845.0, -81.0]
+drops = ["Short Sword of the Ykesha"]
+priority = "high"
+
+[[named]]
+name = "King Tranix"
+level = 46
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [-170.0, -1015.0, -110.0]
+drops = ["Robe of the Ishva"]
+priority = "medium"
+
+[[named]]
+name = "Ritualist of Hate"
+level = 42
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-280.0, -940.0, -81.0]
+drops = ["Idol of the Underking"]
+priority = "low"
+
+[[named]]
+name = "Templar Visk"
+level = 43
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-195.0, -900.0, -81.0]
+drops = ["Dark Circlet"]
+priority = "medium"

@@ -1,0 +1,46 @@
+zone = "mistmoore"
+
+[[named]]
+name = "Mayong Mistmoore"
+level = 55
+respawn_min_minutes = 72
+respawn_max_minutes = 84
+location = [110.0, -220.0, -178.0]
+drops = ["Manastone", "Barbed Ringmail"]
+priority = "high"
+
+[[named]]
+name = "Advisor Svartmansen"
+level = 45
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-30.0, -90.0, -178.0]
+drops = ["Advisor Robe"]
+priority = "medium"
+
+[[named]]
+name = "Black Dire"
+level = 40
+respawn_min_minutes = 16
+respawn_max_minutes = 22
+location = [180.0, -70.0, -160.0]
+drops = ["Black Dire Pelt"]
+priority = "low"
+
+[[named]]
+name = "Butler Syncall"
+level = 42
+respawn_min_minutes = 18
+respawn_max_minutes = 24
+location = [50.0, -160.0, -178.0]
+drops = ["Butler's Serving Tray"]
+priority = "low"
+
+[[named]]
+name = "Lasna Cheroon"
+level = 43
+respawn_min_minutes = 20
+respawn_max_minutes = 26
+location = [75.0, -195.0, -178.0]
+drops = ["Crystallized Pumice"]
+priority = "medium"
