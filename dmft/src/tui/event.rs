@@ -189,6 +189,10 @@ pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orches
                 app.cycle_spawn_filter();
                 return Ok(true);
             }
+            (KeyCode::Char('T'), _) => {
+                app.cycle_theme();
+                return Ok(true);
+            }
             (KeyCode::Esc, _) => {
                 if app.active_group.is_some() {
                     app.set_active_group(None);
