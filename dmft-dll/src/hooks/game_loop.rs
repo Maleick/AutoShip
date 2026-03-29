@@ -268,7 +268,7 @@ fn read_char_name(eq_base: u64) -> Option<String> {
 fn read_zone_short_name(eq_base: u64) -> Option<String> {
     use dmft_common::offsets::zone_info;
 
-    let zone_addr = offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)?;
+    let zone_addr = dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)?;
     let short_name_addr = zone_addr + zone_info::SHORT_NAME;
     let name_bytes = unsafe { std::slice::from_raw_parts(short_name_addr as *const u8, 128) };
     let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(128);
