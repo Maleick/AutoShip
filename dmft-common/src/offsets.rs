@@ -180,9 +180,10 @@ pub mod eqmain {
     // ArrayClass<T> = { T* m_array; int m_length; int m_alloc; }
 
     /// CXWndManager::pWindows.m_array (pointer to CXWnd* array)
-    pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x008;
-    /// CXWndManager::pWindows.m_length (window count)
-    pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x010;
+    /// NOTE: eqmain.dll layout differs from eqgame.exe — calibrated from hex dump
+    pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
+    /// CXWndManager::pWindows.m_length (window count, u32)
+    pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x018;
     /// CXWndManager::FocusWindow (CXWnd*)
     pub const CXWNDMGR_FOCUS_WINDOW: usize = 0x090;
 
