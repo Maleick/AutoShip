@@ -196,11 +196,11 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                             "Found username edit widget (2 before USERNAME label)"
                         );
                     }
-                    if text == "PASSWORD" && prev_wnd != 0 {
-                        password_edit = prev_wnd;
+                    if text == "PASSWORD" && prev_prev_wnd != 0 {
+                        password_edit = prev_prev_wnd;
                         tracing::info!(
                             ptr = format!("{:#x}", password_edit),
-                            "Found password edit widget (1 before PASSWORD label)"
+                            "Found password edit widget (2 before PASSWORD label)"
                         );
                     }
                     // The Login button on the login screen (not the main menu LOGIN)
@@ -256,6 +256,29 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 tracing::error!("Failed to write username to any CXStr field");
                 return false;
             }
+
+            // Read back to verify writes took effect
+            if let Some(readback) = read_cxstr(username_edit + off::CEDITBASEWND_INPUT_TEXT) {
+                tracing::info!(readback = %readback, "Username InputText readback");
+            } else {
+                tracing::warn!("Username InputText readback: null or empty");
+            }
+            if let Some(readback) = read_cxstr(username_edit + off::CXWND_WINDOW_TEXT) {
+                tracing::info!(readback = %readback, "Username WindowText readback");
+            }
+
+            // Hex dump the edit widget around the CXStr fields to verify layout
+            tracing::info!("=== USERNAME EDIT WIDGET HEX DUMP ===");
+            for row_off in [0x070usize, 0x078, 0x080, 0x270, 0x278, 0x280] {
+                let addr = username_edit + row_off;
+                let val = *(addr as *const usize);
+                tracing::info!(
+                    offset = format!("+{:#05x}", row_off),
+                    val = format!("{:#018x}", val),
+                    "EditWnd field"
+                );
+            }
+            tracing::info!("=== END HEX DUMP ===");
         }
 
         true
