@@ -11,6 +11,7 @@ use super::gcd::GcdTracker;
 use super::holyshit::HolyShitEvaluator;
 use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
+use super::skill_cooldowns::{default_cooldown, SkillCooldownTracker};
 use super::strategy::{build_strategy, ClassStrategy, CombatContext, GroupMemberState};
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
@@ -48,6 +49,7 @@ pub struct Combatant {
     /// Required for healer strategies (cleric, druid, shaman) to select
     /// heal targets. Empty until the orchestrator sends group state updates.
     group_members: Vec<GroupMemberState>,
+    skill_cooldowns: SkillCooldownTracker,
     tick_count: u32,
     config: CombatConfig,
 }
@@ -79,6 +81,7 @@ impl Combatant {
             flee_requested: false,
             needs_on_engage: false,
             group_members: Vec::new(),
+            skill_cooldowns: SkillCooldownTracker::new(),
             tick_count: 0,
             config,
         }
@@ -93,6 +96,7 @@ impl Combatant {
     ) {
         self.tick_count += 1;
         self.gcd.tick();
+        self.skill_cooldowns.tick();
 
         // Fire melee skills when engaging (independent of GCD/spell casting)
         if matches!(self.state, CombatState::Engaging { .. }) {

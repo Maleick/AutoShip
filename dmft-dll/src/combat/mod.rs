@@ -5,6 +5,7 @@ pub mod holyshit;
 pub mod humanize;
 pub mod mana;
 pub mod positioning;
+pub mod skill_cooldowns;
 pub mod state;
 pub mod strategy;
 

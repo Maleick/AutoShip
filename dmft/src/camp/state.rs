@@ -1,9 +1,31 @@
 //! Camp loop state machine — drives the pull/fight/loot/med cycle.
+//!
+//! # Integration architecture
+//!
+//! Two systems cooperate for combat:
+//!
+//! - **Camp loop** (this module, orchestrator-side): Generates macro-level slash commands
+//!   (`/assist`, `/attack`, `/target`) to drive the pull→fight→loot→med cycle. It manages
+//!   group-level flow: who pulls, when to engage, when to loot, when to med.
+//!
+//! - **Combatant FSM** (`dmft-dll/src/combat/state.rs`, DLL-side): Handles micro-level
+//!   execution per character — class strategy spell rotations, melee skill firing, GCD
+//!   tracking, mana governance, and HolyShit emergency overrides.
+//!
+//! Both are needed: the camp loop orchestrates the group, the combatant executes per-character
+//! combat logic. Integration point: `transition_to_fighting()` sends slash commands AND should
+//! trigger a `CombatEngage` IPC command so each DLL's Combatant FSM transitions from Idle to
+//! Engaging (activating class strategies).
+//!
+//! Recovery: The `RecoveryTracker` (from `recovery.rs`) detects dead members and generates
+//! rez commands. It is checked every tick before the main state match — if recovery is in
+//! progress, pulling is paused until all members are alive.
 
 use crate::camp::cc::{CcMember, CcTracker};
 use crate::camp::config::CampConfig;
 use crate::camp::loot::{CorpseEntry, LootConfig, LootCycle};
 use crate::camp::personality::PersonalityProfile;
+use crate::camp::recovery::{death_commands_with_roles, RecoveryTracker};
 
 /// Events that can occur during the camp loop, triggering reactive behavior.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +47,9 @@ pub struct CampSnapshot {
     pub tank_hp_pct: f32,
     pub target_hp_pct: Option<f32>,
     pub target_is_dead: bool,
+    /// Per-member HP values: `(pid, current_hp)`. Used to detect deaths
+    /// and trigger recovery (rez commands). Empty when HP data is unavailable.
+    pub member_hp: Vec<(u32, i32)>,
 }
 
 /// Current phase of the camp loop.
@@ -728,6 +753,7 @@ mod tests {
             tank_hp_pct: 90.0,
             target_hp_pct: Some(0.0),
             target_is_dead: true,
+            member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         assert!(matches!(camp.state, CampState::Looting { .. }));
@@ -747,6 +773,7 @@ mod tests {
             tank_hp_pct: 100.0,
             target_hp_pct: None,
             target_is_dead: false,
+            member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         assert_eq!(camp.state, CampState::Idle);
@@ -764,6 +791,7 @@ mod tests {
             tank_hp_pct: 100.0,
             target_hp_pct: None,
             target_is_dead: false,
+            member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         assert_eq!(camp.state, CampState::Idle);
@@ -781,6 +809,7 @@ mod tests {
             tank_hp_pct: 15.0, // Below 20% threshold
             target_hp_pct: Some(50.0),
             target_is_dead: false,
+            member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         // Healer (pid 101) should get emergency /cast 1
@@ -847,6 +876,7 @@ mod tests {
             tank_hp_pct: 90.0,
             target_hp_pct: Some(50.0),
             target_is_dead: false,
+            member_hp: vec![],
         };
         let cmds = camp.tick(Some(&snap));
 

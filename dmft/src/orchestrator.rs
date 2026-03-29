@@ -130,11 +130,21 @@ impl Orchestrator {
             .map(|t| (Some(t.hp_pct()), t.hp_current <= 0))
             .unwrap_or((None, false));
 
+        // Collect per-member HP for death detection
+        let member_hp: Vec<(u32, i32)> = camp.members.iter()
+            .filter_map(|m| {
+                self.game_states.get(&m.pid).and_then(|gs| {
+                    gs.local_player.as_ref().map(|lp| (m.pid, lp.hp_current as i32))
+                })
+            })
+            .collect();
+
         Some(CampSnapshot {
             healer_mana_pct,
             tank_hp_pct,
             target_hp_pct,
             target_is_dead,
+            member_hp,
         })
     }
 
