@@ -1,5 +1,6 @@
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
+use crate::config::AccountsConfig;
 use crate::eq::hvt::HvtWatchlist;
 use crate::eq::map_parser::ZoneMap;
 use crate::eq::named_tracker::NamedTracker;
@@ -187,6 +188,12 @@ pub struct App {
     // Named spawn tracking
     pub named_tracker: NamedTracker,
     pub hvt_watchlist: Option<HvtWatchlist>,
+
+    // Help overlay
+    pub help_visible: bool,
+
+    // Account config for login automation
+    pub accounts_config: Option<AccountsConfig>,
 }
 
 impl App {
@@ -245,6 +252,10 @@ impl App {
 
             named_tracker: NamedTracker::new(),
             hvt_watchlist: HvtWatchlist::load(std::path::Path::new("config/hvt_watchlist.toml")).ok(),
+
+            help_visible: false,
+
+            accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml")).ok(),
         }
     }
 
@@ -417,6 +428,78 @@ impl App {
         };
     }
 
+    /// Tab-complete the current command buffer.
+    pub fn complete_command(&mut self) {
+        let buf = self.command_buffer.clone();
+        let prefix = buf.trim_start();
+
+        // Build completions: static commands + client PIDs + character names
+        let mut candidates: Vec<String> = vec![
+            "help".into(),
+            "camp".into(),
+            "login".into(),
+            "all".into(),
+            "inject".into(),
+            "status".into(),
+        ];
+        // Add subcommands if prefix starts with "camp "
+        if prefix.starts_with("camp ") {
+            let sub_prefix = &prefix[5..];
+            let sub_cmds = ["start", "stop", "status"];
+            let matches: Vec<&str> = sub_cmds
+                .iter()
+                .filter(|s| s.starts_with(sub_prefix))
+                .copied()
+                .collect();
+            if matches.len() == 1 {
+                self.command_buffer = format!("camp {}", matches[0]);
+            } else if !matches.is_empty() {
+                self.status_message = format!("camp: {}", matches.join(" | "));
+            }
+            return;
+        }
+
+        for client in &self.clients {
+            candidates.push(client.pid.to_string());
+            if !client.character_name.is_empty() {
+                candidates.push(client.character_name.clone());
+            }
+        }
+
+        let matches: Vec<&str> = candidates
+            .iter()
+            .filter(|c| c.starts_with(prefix))
+            .map(|s| s.as_str())
+            .collect();
+
+        match matches.len() {
+            0 => {}
+            1 => {
+                self.command_buffer = format!("{} ", matches[0]);
+            }
+            _ => {
+                // Complete common prefix
+                let common = {
+                    let mut prefix = String::new();
+                    if let Some(first) = matches.first() {
+                        for (i, ch) in first.char_indices() {
+                            if matches.iter().all(|s| s.get(i..i + ch.len_utf8()) == Some(&first[i..i + ch.len_utf8()])) {
+                                prefix.push(ch);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    prefix
+                };
+                if common.len() > prefix.len() {
+                    self.command_buffer = common;
+                }
+                self.status_message = matches.join(" | ");
+            }
+        }
+    }
+
     /// Load the zone map for the given zone short name from the map directory.
     pub fn load_zone_map(&mut self, zone_short_name: &str) {
         match crate::eq::map_parser::load_zone_map(&self.map_dir, zone_short_name) {
@@ -452,12 +535,19 @@ impl App {
 
         let parts: Vec<&str> = input.splitn(3, ' ').collect();
         match parts[0] {
+            "help" => {
+                self.help_visible = true;
+                return;
+            }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
             }
             "status" => {
                 let client_count = self.clients.len();
                 self.status_message = format!("{} client(s) connected", client_count);
+            }
+            "login" => {
+                self.execute_login_command(&parts[1..]);
             }
             "inject" => {
                 self.status_message = String::from("Inject requested (not yet wired)");
@@ -551,6 +641,164 @@ impl App {
                     String::from("Usage: camp <start|stop|status> [name]");
             }
         }
+    }
+
+    /// Handle `login <subcommand>` from the command bar.
+    ///
+    /// Subcommands:
+    ///   login             — list all configured accounts and status
+    ///   login all         — launch all configured accounts
+    ///   login G<n>        — launch all accounts in group n
+    ///   login <name>      — launch a single account by name
+    fn execute_login_command(&mut self, args: &[&str]) {
+        let accounts = match &self.accounts_config {
+            Some(cfg) => cfg.clone(),
+            None => {
+                self.status_message =
+                    String::from("No accounts config — create config/accounts.toml");
+                return;
+            }
+        };
+
+        match args.first().copied() {
+            // :login — list all accounts and their online/offline status
+            None => {
+                if accounts.accounts.is_empty() {
+                    self.status_message = String::from("No accounts configured");
+                    return;
+                }
+                let online_chars: Vec<String> = self
+                    .clients
+                    .iter()
+                    .map(|c| c.character_name.to_lowercase())
+                    .collect();
+
+                let mut lines: Vec<String> = Vec::new();
+                for acct in &accounts.accounts {
+                    let is_online = online_chars
+                        .iter()
+                        .any(|c| !c.is_empty() && c == &acct.character.to_lowercase());
+                    let status = if is_online { "ONLINE" } else { "offline" };
+                    lines.push(format!(
+                        "  {} ({} G{}) [{}]",
+                        acct.name, acct.class, acct.group, status
+                    ));
+                }
+                let online_count = accounts
+                    .accounts
+                    .iter()
+                    .filter(|a| {
+                        online_chars
+                            .iter()
+                            .any(|c| !c.is_empty() && c == &a.character.to_lowercase())
+                    })
+                    .count();
+                self.status_message = format!(
+                    "{}/{} accounts online. Use :login all | G<n> | <name>",
+                    online_count,
+                    accounts.accounts.len()
+                );
+                tracing::info!(
+                    total = accounts.accounts.len(),
+                    online = online_count,
+                    "Login status query"
+                );
+                for line in &lines {
+                    tracing::info!("{}", line);
+                }
+            }
+
+            // :login all — enqueue all accounts for launch
+            Some("all") => {
+                self.enqueue_account_launches(&accounts.accounts);
+            }
+
+            // :login G<n> — launch accounts in a specific group
+            Some(arg) if arg.starts_with('G') || arg.starts_with('g') => {
+                if let Ok(group_id) = arg[1..].parse::<u32>() {
+                    let group_accounts: Vec<_> =
+                        accounts.accounts_for_group(group_id).into_iter().cloned().collect();
+                    if group_accounts.is_empty() {
+                        self.status_message =
+                            format!("No accounts configured for group {}", group_id);
+                    } else {
+                        self.enqueue_account_launches(&group_accounts);
+                    }
+                } else {
+                    self.status_message = format!("Invalid group: {}", arg);
+                }
+            }
+
+            // :login <account_name> — launch a single account
+            Some(name) => {
+                if let Some(entry) = accounts.find_account(name) {
+                    self.enqueue_account_launches(&[entry.clone()]);
+                } else {
+                    self.status_message = format!("Account '{}' not found in config", name);
+                }
+            }
+        }
+    }
+
+    /// Enqueue accounts for staggered launch via the spawner.
+    /// On non-Windows (macOS dev), logs what would happen and updates status.
+    fn enqueue_account_launches(&mut self, entries: &[crate::config::AccountEntry]) {
+        use crate::config::AccountsConfig;
+
+        let count = entries.len();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+
+        if cfg!(not(windows)) {
+            // Dev mode: log what would be launched
+            self.status_message = format!(
+                "Launch queued: {} account(s) [dev mode — Windows only]. Accounts: {}",
+                count,
+                names.join(", ")
+            );
+            tracing::info!(
+                count,
+                accounts = ?names,
+                "Login launch queued (stub — not on Windows)"
+            );
+            return;
+        }
+
+        // On Windows: use the spawner to launch each account with stagger
+        let mut launched = 0u32;
+        let mut failed = 0u32;
+        for entry in entries {
+            let info = AccountsConfig::to_account_info(entry);
+            let eq_path = std::path::Path::new("C:\\EverQuest");
+            // TODO: Read eq_path from AppConfig.launch.eq_path instead of hardcoding
+            match crate::launcher::spawner::spawn_eq_client(
+                eq_path,
+                &info.account_name,
+                &info.server_name,
+                &[],
+            ) {
+                Ok(spawned) => {
+                    tracing::info!(
+                        pid = spawned.pid,
+                        account = "[redacted]",
+                        server = %info.server_name,
+                        "Launched EQ client for login"
+                    );
+                    launched += 1;
+                    // TODO: Wire into LaunchCoordinator for staggered launch + state tracking
+                    // TODO: After window title shows "EQ - <CharName>", auto-inject DLL
+                    // TODO: After DLL injection, auto-form groups + set camp
+                }
+                Err(e) => {
+                    tracing::error!(account = "[redacted]", %e, "Failed to launch EQ client");
+                    failed += 1;
+                }
+            }
+        }
+
+        self.status_message = format!(
+            "Login: launched {}, failed {} of {} queued",
+            launched, failed, count
+        );
     }
 
     /// Build camp members from connected clients using simple role assignment.

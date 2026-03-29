@@ -62,12 +62,27 @@ pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orches
                     }
                     return Ok(true);
                 }
+                KeyCode::Tab => {
+                    app.complete_command();
+                    return Ok(true);
+                }
                 KeyCode::Char(c) => {
                     app.command_buffer.push(c);
                     return Ok(true);
                 }
                 _ => return Ok(false),
             }
+        }
+
+        // Help overlay — dismiss with ? or Esc
+        if app.help_visible {
+            match key.code {
+                KeyCode::Char('?') | KeyCode::Esc => {
+                    app.help_visible = false;
+                }
+                _ => {}
+            }
+            return Ok(true);
         }
 
         // When in search mode, capture text input
@@ -137,6 +152,10 @@ pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orches
             }
             (KeyCode::Char('p'), _) => {
                 app.toggle_privacy();
+                return Ok(true);
+            }
+            (KeyCode::Char('?'), _) => {
+                app.help_visible = !app.help_visible;
                 return Ok(true);
             }
             (KeyCode::Char(':'), _) => {

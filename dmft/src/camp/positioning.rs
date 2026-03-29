@@ -39,8 +39,57 @@ pub fn melee_positioning_commands(
     cmds
 }
 
+/// EQ heading units per full rotation (0-512, not 0-360).
+const EQ_HEADING_UNITS: f32 = 512.0;
+
+/// Default backstab offset distance in EQ units.
+const BACKSTAB_OFFSET: f32 = 5.0;
+
+/// Calculate the position directly behind a target based on EQ heading.
+///
+/// EQ heading is 0-512. "Behind" = heading + 256 (mod 512).
+/// Heading-to-radians: `radians = heading * (2π / 512)`.
+/// Position: `(target_x + offset * sin(behind_heading_rad), target_y + offset * cos(behind_heading_rad))`.
+pub fn behind_target_position(
+    target_x: f32,
+    target_y: f32,
+    target_heading: f32,
+    offset_distance: f32,
+) -> (f32, f32) {
+    let behind_heading = (target_heading + EQ_HEADING_UNITS / 2.0) % EQ_HEADING_UNITS;
+    let radians = behind_heading * (std::f32::consts::TAU / EQ_HEADING_UNITS);
+    (
+        target_x + offset_distance * radians.sin(),
+        target_y + offset_distance * radians.cos(),
+    )
+}
+
+/// Generate movement commands for a rogue to get behind their target for backstab.
+///
+/// If already behind the target (within backstab offset range), returns just `/face`.
+/// Otherwise returns `/face` + movement to the behind position.
+pub fn rogue_positioning_commands(
+    player_pos: (f32, f32),
+    target_pos: (f32, f32),
+    target_heading: f32,
+) -> Vec<String> {
+    let (behind_x, behind_y) =
+        behind_target_position(target_pos.0, target_pos.1, target_heading, BACKSTAB_OFFSET);
+    let dist_to_behind = distance_2d(player_pos.0, player_pos.1, behind_x, behind_y);
+
+    if dist_to_behind <= BACKSTAB_OFFSET {
+        // Already behind — just face the mob
+        vec!["/face".to_string()]
+    } else {
+        // Move to behind position, then face
+        vec!["/face".to_string(), "/nav target".to_string()]
+    }
+}
+
 /// Returns `/face` commands for all melee members (Tank, DPS) in a camp group.
 /// Intended to be called periodically during the Fighting state.
+///
+/// Rogues (identified by `is_rogue` closure) get backstab positioning instead of plain `/face`.
 pub fn fighting_face_commands(members: &[(u32, super::state::Role)]) -> Vec<(u32, String)> {
     members
         .iter()
@@ -132,5 +181,69 @@ mod tests {
         ];
         let cmds = fighting_face_commands(&members);
         assert_eq!(cmds.len(), 3);
+    }
+
+    // -- Backstab positioning tests --
+
+    #[test]
+    fn test_behind_target_heading_zero() {
+        // Heading 0 → behind = 256 (south in EQ)
+        let (bx, by) = behind_target_position(100.0, 200.0, 0.0, 5.0);
+        // behind_heading = 256, radians = 256 * 2π/512 = π
+        // sin(π) ≈ 0, cos(π) = -1
+        assert!((bx - 100.0).abs() < 0.1, "x should be ~100, got {bx}");
+        assert!((by - 195.0).abs() < 0.1, "y should be ~195, got {by}");
+    }
+
+    #[test]
+    fn test_behind_target_heading_256() {
+        // Heading 256 → behind = 0 (north in EQ)
+        let (bx, by) = behind_target_position(100.0, 200.0, 256.0, 5.0);
+        // behind_heading = 0, radians = 0
+        // sin(0) = 0, cos(0) = 1
+        assert!((bx - 100.0).abs() < 0.1, "x should be ~100, got {bx}");
+        assert!((by - 205.0).abs() < 0.1, "y should be ~205, got {by}");
+    }
+
+    #[test]
+    fn test_behind_target_heading_wraps() {
+        // Heading 400 → behind = (400 + 256) % 512 = 144
+        let (bx, by) = behind_target_position(0.0, 0.0, 400.0, 5.0);
+        let behind_heading = 144.0_f32;
+        let radians = behind_heading * (std::f32::consts::TAU / 512.0);
+        let expected_x = 5.0 * radians.sin();
+        let expected_y = 5.0 * radians.cos();
+        assert!((bx - expected_x).abs() < 0.01);
+        assert!((by - expected_y).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_behind_target_offset_distance() {
+        let (bx, by) = behind_target_position(0.0, 0.0, 0.0, 10.0);
+        let dist = distance_2d(0.0, 0.0, bx, by);
+        assert!((dist - 10.0).abs() < 0.1, "distance should be ~10, got {dist}");
+    }
+
+    #[test]
+    fn test_rogue_positioning_already_behind() {
+        // Player is already at the behind position
+        let (behind_x, behind_y) = behind_target_position(100.0, 200.0, 0.0, BACKSTAB_OFFSET);
+        let cmds = rogue_positioning_commands(
+            (behind_x, behind_y),
+            (100.0, 200.0),
+            0.0,
+        );
+        assert_eq!(cmds, vec!["/face"]);
+    }
+
+    #[test]
+    fn test_rogue_positioning_not_behind() {
+        // Player is far from the behind position
+        let cmds = rogue_positioning_commands(
+            (200.0, 200.0), // far away
+            (100.0, 200.0),
+            0.0,
+        );
+        assert_eq!(cmds, vec!["/face", "/nav target"]);
     }
 }

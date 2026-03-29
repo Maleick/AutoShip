@@ -32,6 +32,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
 
     draw_status_bar(frame, outer[2], app);
+
+    if app.help_visible {
+        let full_area = frame.area();
+        draw_help_overlay(frame, full_area);
+    }
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
@@ -1367,6 +1372,49 @@ fn draw_group_panel(frame: &mut Frame, area: Rect, app: &App, group: &super::app
     frame.render_widget(paragraph, inner);
 }
 
+fn draw_help_overlay(frame: &mut Frame, area: Rect) {
+    use ratatui::widgets::Clear;
+
+    let popup_width = 42u16;
+    let popup_height = 20u16;
+    let x = area.x + area.width.saturating_sub(popup_width) / 2;
+    let y = area.y + area.height.saturating_sub(popup_height) / 2;
+    let popup_area = Rect::new(x, y, popup_width.min(area.width), popup_height.min(area.height));
+
+    frame.render_widget(Clear, popup_area);
+
+    let help_text = vec![
+        Line::from(Span::styled("Keybindings", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+        Line::from(""),
+        Line::from(vec![Span::styled(" 1-5      ", Style::default().fg(Color::Yellow)), Span::raw("Switch screens")]),
+        Line::from(vec![Span::styled(" [ ]      ", Style::default().fg(Color::Yellow)), Span::raw("Cycle clients")]),
+        Line::from(vec![Span::styled(" /        ", Style::default().fg(Color::Yellow)), Span::raw("Search spawns")]),
+        Line::from(vec![Span::styled(" f        ", Style::default().fg(Color::Yellow)), Span::raw("Filter spawns")]),
+        Line::from(vec![Span::styled(" p        ", Style::default().fg(Color::Yellow)), Span::raw("Privacy mode")]),
+        Line::from(vec![Span::styled(" :        ", Style::default().fg(Color::Yellow)), Span::raw("Command mode")]),
+        Line::from(vec![Span::styled(" ?        ", Style::default().fg(Color::Yellow)), Span::raw("This help")]),
+        Line::from(vec![Span::styled(" q        ", Style::default().fg(Color::Yellow)), Span::raw("Quit")]),
+        Line::from(""),
+        Line::from(Span::styled("Commands (:mode)", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+        Line::from(""),
+        Line::from(vec![Span::styled(" <pid> /cmd ", Style::default().fg(Color::Yellow)), Span::raw("Send to PID")]),
+        Line::from(vec![Span::styled(" all /cmd   ", Style::default().fg(Color::Yellow)), Span::raw("Broadcast")]),
+        Line::from(vec![Span::styled(" camp <sub> ", Style::default().fg(Color::Yellow)), Span::raw("start|stop|status")]),
+        Line::from(vec![Span::styled(" help       ", Style::default().fg(Color::Yellow)), Span::raw("This help")]),
+        Line::from(""),
+        Line::from(Span::styled(" Press ? or Esc to close", Style::default().fg(Color::DarkGray))),
+    ];
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Help ")
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Black));
+
+    let paragraph = Paragraph::new(help_text).block(block);
+    frame.render_widget(paragraph, popup_area);
+}
+
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     if app.command_mode {
         let cmd_line = format!(": {}_", app.command_buffer);
@@ -1380,7 +1428,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
     let privacy_indicator = if app.privacy_mode { " [PRIVATE]" } else { "" };
     let keybinds = format!(
-        " 1-4:Screen | q:Quit | Tab:Panel | [/]:Client | Arrows:Nav | Enter:Inspect | Esc:Clear | /:Search | f:Filter({}) | p:Privacy{} | :Cmd",
+        " 1-5:Screen | [/]:Client | /:Search | f:Filter({}) | p:Privacy{} | :Cmd | ?:Help",
         app.spawn_type_filter.label(),
         privacy_indicator
     );

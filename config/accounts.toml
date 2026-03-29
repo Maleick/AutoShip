@@ -1,0 +1,101 @@
+# Account Configuration for Frostreaver
+# Each account maps to a Daybreak login, target server, and character.
+# Passwords are stored separately in the encrypted credential store.
+#
+# Usage from TUI:
+#   :login all        — launch all accounts below
+#   :login G1         — launch only accounts in group 1
+#   :login frostreaver01 — launch a single account
+
+[[accounts]]
+name = "frostreaver01"
+server = "Firiona Vie"
+character = "TBD"
+class = "WAR"
+group = 1
+
+[[accounts]]
+name = "frostreaver02"
+server = "Firiona Vie"
+character = "TBD"
+class = "SHM"
+group = 1
+
+[[accounts]]
+name = "frostreaver03"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 1
+
+[[accounts]]
+name = "frostreaver04"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 1
+
+[[accounts]]
+name = "frostreaver05"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 1
+
+[[accounts]]
+name = "frostreaver06"
+server = "Firiona Vie"
+character = "TBD"
+class = "BRD"
+group = 1
+
+[[accounts]]
+name = "frostreaver07"
+server = "Firiona Vie"
+character = "TBD"
+class = "PAL"
+group = 2
+
+[[accounts]]
+name = "frostreaver08"
+server = "Firiona Vie"
+character = "TBD"
+class = "ENC"
+group = 2
+
+[[accounts]]
+name = "frostreaver09"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 2
+
+[[accounts]]
+name = "frostreaver10"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 2
+
+[[accounts]]
+name = "frostreaver11"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 2
+
+[[accounts]]
+name = "frostreaver12"
+server = "Firiona Vie"
+character = "TBD"
+class = "BRD"
+group = 2
+
+# Add more accounts for groups 3-6 as needed.
+# Template:
+# [[accounts]]
+# name = "frostreaver13"
+# server = "Firiona Vie"
+# character = "TBD"
+# class = "SK"
+# group = 3
