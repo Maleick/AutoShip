@@ -78,48 +78,48 @@ impl CommandListener {
 
     /// Block until a command is received, then return it.
     ///
-    /// On a new connection the first message must be the 32-byte session token.
-    /// If authentication fails, the connection is dropped and an error returned.
+    /// Each call is a full cycle: wait for connect → auth → read command →
+    /// disconnect. This ensures the pipe is ready for the next client.
     pub fn receive(&mut self) -> Result<Command> {
         #[cfg(windows)]
         {
             use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
             use windows::Win32::Storage::FileSystem::ReadFile;
+            use windows::Win32::Foundation::ERROR_PIPE_CONNECTED;
 
-            // Wait for client to connect
-            unsafe {
-                ConnectNamedPipe(self.handle, None)?;
+            // Wait for client to connect. ERROR_PIPE_CONNECTED means a client
+            // connected between CreateNamedPipe and ConnectNamedPipe — that's fine.
+            let connect_result = unsafe { ConnectNamedPipe(self.handle, None) };
+            if let Err(ref e) = connect_result {
+                if e.code() != ERROR_PIPE_CONNECTED.into() {
+                    return Err(connect_result.unwrap_err().into());
+                }
             }
 
-            // --- Session token handshake (first message on new connection) ---
-            if !self.authenticated {
-                let mut token_buf = [0u8; 32];
-                let mut token_bytes_read: u32 = 0;
-                unsafe {
-                    ReadFile(self.handle, Some(&mut token_buf), Some(&mut token_bytes_read), None)?;
-                }
+            // Read 32-byte session token (first message on every connection).
+            let mut token_buf = [0u8; 32];
+            let mut token_bytes_read: u32 = 0;
+            let token_result = unsafe {
+                ReadFile(self.handle, Some(&mut token_buf), Some(&mut token_bytes_read), None)
+            };
 
-                if token_bytes_read != 32
-                    || !constant_time_eq(&token_buf, &self.expected_token)
-                {
-                    tracing::error!(
-                        client_id = self.client_id,
-                        "Session token validation failed — dropping connection"
-                    );
-                    unsafe { let _ = DisconnectNamedPipe(self.handle); }
-                    anyhow::bail!(
-                        "Session token mismatch for client {}",
-                        self.client_id
-                    );
-                }
-
-                self.authenticated = true;
-                tracing::info!(
+            if token_result.is_err() || token_bytes_read != 32
+                || !constant_time_eq(&token_buf, &self.expected_token)
+            {
+                tracing::error!(
                     client_id = self.client_id,
-                    "Pipe session authenticated"
+                    "Session token validation failed — dropping connection"
+                );
+                unsafe { let _ = DisconnectNamedPipe(self.handle); }
+                anyhow::bail!(
+                    "Session token mismatch for client {}",
+                    self.client_id
                 );
             }
 
+            tracing::debug!(client_id = self.client_id, "Pipe session authenticated");
+
+            // Read the actual command.
             let mut buf = vec![0u8; 4096];
             let mut bytes_read: u32 = 0;
             unsafe {
@@ -130,8 +130,12 @@ impl CommandListener {
                 .ok_or_else(|| anyhow::anyhow!("Failed to decode command for client {}", self.client_id))?;
 
             if !validate_command(&cmd) {
+                unsafe { let _ = DisconnectNamedPipe(self.handle); }
                 anyhow::bail!("Command validation failed for client {}", self.client_id);
             }
+
+            // Disconnect so the pipe is ready for the next connection.
+            unsafe { let _ = DisconnectNamedPipe(self.handle); }
 
             Ok(cmd)
         }
@@ -143,9 +147,9 @@ impl CommandListener {
         }
     }
 
-    /// Reset authentication state (call when the pipe is disconnected/reconnected).
+    /// Reset authentication state (no longer needed — each connection re-auths).
     pub fn reset_auth(&mut self) {
-        self.authenticated = false;
+        // No-op: authentication is now per-connection.
     }
 
     /// Send a response back to the orchestrator.
