@@ -663,15 +663,34 @@ unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
 }
 
 /// Write a string into a CXStr field by overwriting the existing CStrRep buffer.
-/// Only safe if the new text fits within the existing allocation.
+/// If the CStrRep is null (empty CXStr), allocates a new one on the heap.
 #[cfg(windows)]
 unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
     use dmft_common::offsets::eqmain as off;
 
-    let rep_ptr = *(cxstr_addr as *const usize);
+    let mut rep_ptr = *(cxstr_addr as *const usize);
+
     if rep_ptr == 0 {
-        tracing::warn!("CXStr rep is null — cannot write");
-        return false;
+        // Allocate a new CStrRep on the heap.
+        // Layout: refcount(4) + alloc(4) + length(4) + encoding(4) + freeList(8) + data[256]
+        let total_size = off::CSTRREP_DATA + 256;
+        let layout = std::alloc::Layout::from_size_align(total_size, 8).unwrap();
+        let new_rep = std::alloc::alloc_zeroed(layout);
+        if new_rep.is_null() {
+            tracing::error!("Failed to allocate CStrRep");
+            return false;
+        }
+        // Initialize fields
+        *(new_rep as *mut i32) = 1;  // refCount = 1
+        *((new_rep as usize + off::CSTRREP_ALLOC) as *mut u32) = 256;  // alloc
+        *((new_rep as usize + off::CSTRREP_ENCODING) as *mut u32) = 0;  // utf8
+        // freeList = null (already zeroed)
+
+        // Point the CXStr at our new CStrRep
+        *(cxstr_addr as *mut usize) = new_rep as usize;
+        rep_ptr = new_rep as usize;
+
+        tracing::info!("Allocated new CStrRep for empty CXStr");
     }
 
     let alloc = *((rep_ptr + off::CSTRREP_ALLOC) as *const u32) as usize;
