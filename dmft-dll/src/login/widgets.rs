@@ -298,15 +298,16 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
             tracing::info!("=== END HEX DUMP ===");
 
-            // Click the Login button via WndNotification(XWM_LCLICK)
+            // Log the Login button address for future use.
+            // NOTE: WndNotification vtable call must happen on EQ's main thread
+            // (game loop), not the IPC listener thread. Calling from IPC crashes EQ.
+            // For now, we write credentials and let simulate_enter_key handle submission.
+            // TODO: Queue button click to game loop via PENDING_COMMANDS.
             if login_button != 0 {
-                click_button_via_vtable(login_button);
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
-                    "Clicked Login button via WndNotification"
+                    "Login button found (click deferred to Enter key)"
                 );
-            } else {
-                tracing::warn!("Login button not found — credentials written but not submitted");
             }
         }
 
