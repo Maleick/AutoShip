@@ -145,7 +145,7 @@ fn on_game_tick() {
     let tick = TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     // Check foreground status every 30 ticks (~1 second) to minimize overhead.
-    if tick % 30 == 0 {
+    if tick.is_multiple_of(30) {
         update_foreground_status();
     }
 
@@ -165,12 +165,204 @@ fn on_game_tick() {
     // Run navigation state machine.
     crate::nav::tick();
 
-    // Combat FSM tick — runs after nav, before IPC publish.
-    // Uncomment when we have a real game state snapshot:
-    //
-    //   if let Some(ref player) = game_state.local_player {
-    //       crate::combat::tick(player, game_state.target.as_ref(), &game_state.nearby_spawns);
-    //   }
+    // Read game state and publish to shared memory for the orchestrator.
+    read_and_publish_state(tick);
+}
+
+// ─── Game State Reading ───
+// Reads EQ memory directly (we're in-process) and publishes to shared memory.
+
+/// Read game state from EQ memory and publish to shared memory each tick.
+/// Local player + target are read every tick (fast — just pointer derefs).
+/// Nearby spawns are read every 30 ticks (~1 second) to reduce overhead.
+fn read_and_publish_state(tick: u64) {
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    if eq_base == 0 {
+        return;
+    }
+
+    // Read local player (every tick).
+    let local_player = read_local_player_state(eq_base);
+    if local_player.is_none() {
+        return; // Not logged in — nothing to publish.
+    }
+
+    // Read target (every tick).
+    let target = read_target_state(eq_base);
+
+    // Read nearby spawns (every 30 ticks for performance).
+    // We store the last snapshot in a static so we can reuse it between refreshes.
+    static CACHED_SPAWNS: Mutex<Vec<dmft_common::types::SpawnData>> = Mutex::new(Vec::new());
+
+    let nearby_spawns = if tick.is_multiple_of(30) {
+        let player = local_player.as_ref().unwrap();
+        let spawns = read_nearby_spawns(eq_base, player.x, player.y, player.z);
+        if let Ok(mut cache) = CACHED_SPAWNS.lock() {
+            *cache = spawns.clone();
+        }
+        spawns
+    } else if let Ok(cache) = CACHED_SPAWNS.lock() {
+        cache.clone()
+    } else {
+        Vec::new()
+    };
+
+    let state = dmft_common::types::GameState {
+        client_id: std::process::id(),
+        local_player,
+        target,
+        nearby_spawns,
+        timestamp_ms: current_time_ms(),
+        nav_status: crate::nav::status(),
+        combat_status: crate::combat::status(),
+    };
+
+    crate::ipc::publish_state(&state);
+}
+
+/// Read a null-terminated string from an in-process address. Max `max_len` bytes.
+///
+/// # Safety
+/// Caller must ensure `addr` points to readable memory of at least `max_len` bytes.
+unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
+    if addr == 0 {
+        return String::new();
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(addr as *const u8, max_len) };
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(max_len);
+    String::from_utf8_lossy(&bytes[..len]).into_owned()
+}
+
+/// Build a `SpawnData` from a PlayerClient pointer (in-process direct read).
+///
+/// # Safety
+/// Caller must ensure `spawn_ptr` is a valid PlayerClient address.
+unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
+    use dmft_common::offsets::{actor_client, player_base, player_zone};
+
+    let name = unsafe { read_string_at(spawn_ptr + player_base::NAME, 64) };
+    let displayed_name = unsafe { read_string_at(spawn_ptr + player_base::DISPLAYED_NAME, 64) };
+    let spawn_id = unsafe { *((spawn_ptr + player_base::SPAWN_ID) as *const u32) };
+    let spawn_type = unsafe { *((spawn_ptr + player_base::TYPE) as *const u8) };
+    let x = unsafe { *((spawn_ptr + player_base::X) as *const f32) };
+    let y = unsafe { *((spawn_ptr + player_base::Y) as *const f32) };
+    let z = unsafe { *((spawn_ptr + player_base::Z) as *const f32) };
+    let heading = unsafe { *((spawn_ptr + player_base::HEADING) as *const f32) };
+    let level = unsafe { *((spawn_ptr + player_zone::LEVEL) as *const u8) };
+    let class_id = unsafe { *((spawn_ptr + actor_client::CHAR_CLASS) as *const u8) };
+    let hp_current = unsafe { *((spawn_ptr + player_zone::HP_CURRENT) as *const i64) };
+    let hp_max = unsafe { *((spawn_ptr + player_zone::HP_MAX) as *const i64) };
+    let mana_current = unsafe { *((spawn_ptr + player_zone::MANA_CURRENT) as *const i32) };
+    let mana_max = unsafe { *((spawn_ptr + player_zone::MANA_MAX) as *const i32) };
+    let endurance_current = unsafe { *((spawn_ptr + player_zone::ENDURANCE_CURRENT) as *const i32) };
+    let endurance_max = unsafe { *((spawn_ptr + player_zone::ENDURANCE_MAX) as *const u32) };
+
+    dmft_common::types::SpawnData {
+        spawn_id,
+        name,
+        displayed_name,
+        spawn_type,
+        level,
+        class_id,
+        x,
+        y,
+        z,
+        heading,
+        hp_current,
+        hp_max,
+        mana_current,
+        mana_max,
+        endurance_current,
+        endurance_max,
+    }
+}
+
+/// Read local player state. Returns None if not logged in.
+fn read_local_player_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
+    let player_ptr_addr = dmft_common::offsets::rebase(
+        dmft_common::offsets::PINST_LOCAL_PLAYER,
+        eq_base,
+    )?;
+    let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
+    if player_ptr == 0 {
+        return None;
+    }
+    Some(unsafe { read_spawn_data(player_ptr) })
+}
+
+/// Read current target state. Returns None if no target selected.
+fn read_target_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
+    let target_ptr_addr = dmft_common::offsets::rebase(
+        dmft_common::offsets::PINST_TARGET,
+        eq_base,
+    )?;
+    let target_ptr = unsafe { *(target_ptr_addr as *const usize) };
+    if target_ptr == 0 {
+        return None;
+    }
+    Some(unsafe { read_spawn_data(target_ptr) })
+}
+
+/// Walk the spawn linked list and collect spawns within `max_distance` units
+/// of the given position. Capped at 100 spawns.
+fn read_nearby_spawns(eq_base: u64, player_x: f32, player_y: f32, player_z: f32) -> Vec<dmft_common::types::SpawnData> {
+    use dmft_common::offsets::{player_base, spawn_manager};
+
+    const MAX_NEARBY: usize = 100;
+    const MAX_DISTANCE_SQ: f32 = 500.0 * 500.0;
+
+    let mgr_ptr_addr = match dmft_common::offsets::rebase(
+        dmft_common::offsets::PINST_SPAWN_MANAGER,
+        eq_base,
+    ) {
+        Some(addr) => addr,
+        None => return Vec::new(),
+    };
+
+    let mgr_ptr = unsafe { *(mgr_ptr_addr as *const usize) };
+    if mgr_ptr == 0 {
+        return Vec::new();
+    }
+
+    // TList at spawn_manager::PLAYER_LIST, first node pointer at offset 0x00.
+    let list_addr = mgr_ptr + spawn_manager::PLAYER_LIST;
+    let mut current = unsafe { *(list_addr as *const usize) };
+
+    let mut spawns = Vec::new();
+    let mut walked: usize = 0;
+    const MAX_WALK: usize = 2000; // Safety limit to prevent infinite loops.
+
+    while current != 0 && spawns.len() < MAX_NEARBY && walked < MAX_WALK {
+        walked += 1;
+
+        // Quick distance check before building full SpawnData.
+        let sx = unsafe { *((current + player_base::X) as *const f32) };
+        let sy = unsafe { *((current + player_base::Y) as *const f32) };
+        let sz = unsafe { *((current + player_base::Z) as *const f32) };
+
+        let dx = sx - player_x;
+        let dy = sy - player_y;
+        let dz = sz - player_z;
+        let dist_sq = dx * dx + dy * dy + dz * dz;
+
+        if dist_sq <= MAX_DISTANCE_SQ {
+            let spawn = unsafe { read_spawn_data(current) };
+            spawns.push(spawn);
+        }
+
+        // Follow NEXT pointer in linked list.
+        current = unsafe { *((current + player_base::NEXT) as *const usize) };
+    }
+
+    spawns
+}
+
+/// Current time in milliseconds since UNIX epoch.
+fn current_time_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// Check if our window is the foreground window. Used for render skipping —

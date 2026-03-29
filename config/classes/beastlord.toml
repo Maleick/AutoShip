@@ -1,0 +1,33 @@
+class_name = "beastlord"
+role = "dps"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[combat_abilities]]
+name = "Slow"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 2
+
+[[combat_abilities]]
+name = "Heal"
+command = "/cast 2"
+cooldown_secs = 8.0
+priority = 3
+
+[[combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 6.0
+priority = 4
+
+[[combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 5

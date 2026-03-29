@@ -1,6 +1,8 @@
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
+use crate::eq::hvt::HvtWatchlist;
 use crate::eq::map_parser::ZoneMap;
+use crate::eq::named_tracker::NamedTracker;
 use crate::eq::structs::{GroupInfo, SpawnInfo, SpawnType};
 use crate::orchestrator::Orchestrator;
 use crate::soul::coordinator::SoulCoordinator;
@@ -181,6 +183,10 @@ pub struct App {
     pub command_buffer: String,
     pub command_history: Vec<String>,
     pub command_history_idx: Option<usize>,
+
+    // Named spawn tracking
+    pub named_tracker: NamedTracker,
+    pub hvt_watchlist: Option<HvtWatchlist>,
 }
 
 impl App {
@@ -236,6 +242,9 @@ impl App {
             command_buffer: String::new(),
             command_history: Vec::new(),
             command_history_idx: None,
+
+            named_tracker: NamedTracker::new(),
+            hvt_watchlist: HvtWatchlist::load(std::path::Path::new("config/hvt_watchlist.toml")).ok(),
         }
     }
 

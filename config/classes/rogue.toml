@@ -1,0 +1,35 @@
+class_name = "rogue"
+role = "dps"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[combat_abilities]]
+name = "Backstab"
+command = "/disc 1"
+cooldown_secs = 6.0
+priority = 2
+
+[[combat_abilities]]
+name = "Evade"
+command = "/disc 2"
+cooldown_secs = 18.0
+priority = 3
+
+[[combat_abilities]]
+name = "Hide"
+command = "/hide"
+cooldown_secs = 0.0
+priority = 10
+condition = "out_of_combat"
+
+[[combat_abilities]]
+name = "Sneak"
+command = "/sneak"
+cooldown_secs = 0.0
+priority = 11
+condition = "out_of_combat"

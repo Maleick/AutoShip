@@ -1,0 +1,27 @@
+class_name = "berserker"
+role = "dps"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[combat_abilities]]
+name = "Frenzy"
+command = "/disc 1"
+cooldown_secs = 6.0
+priority = 2
+
+[[combat_abilities]]
+name = "Volley"
+command = "/disc 2"
+cooldown_secs = 30.0
+priority = 3
+
+[[combat_abilities]]
+name = "Rage"
+command = "/disc 3"
+cooldown_secs = 120.0
+priority = 4

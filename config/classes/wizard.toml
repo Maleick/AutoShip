@@ -1,0 +1,28 @@
+class_name = "wizard"
+role = "dps"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Nuke 1"
+command = "/cast 1"
+cooldown_secs = 6.0
+priority = 1
+
+[[combat_abilities]]
+name = "Nuke 2"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 2
+
+[[combat_abilities]]
+name = "Harvest"
+command = "/cast 3"
+cooldown_secs = 60.0
+priority = 3
+condition = "mana_below_20"
+
+[[emergency_abilities]]
+name = "Evacuate"
+command = "/cast 4"
+cooldown_secs = 0.0
+priority = 0

@@ -1,0 +1,34 @@
+class_name = "druid"
+role = "healer"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Heal"
+command = "/cast 1"
+cooldown_secs = 4.0
+priority = 1
+
+[[combat_abilities]]
+name = "Snare"
+command = "/cast 2"
+cooldown_secs = 12.0
+priority = 2
+condition = "mob_fleeing"
+
+[[combat_abilities]]
+name = "DoT"
+command = "/cast 3"
+cooldown_secs = 30.0
+priority = 3
+
+[[buff_abilities]]
+name = "Damage Shield"
+command = "/cast 5"
+cooldown_secs = 600.0
+priority = 1
+
+[[buff_abilities]]
+name = "Spirit of Wolf"
+command = "/cast 6"
+cooldown_secs = 600.0
+priority = 2

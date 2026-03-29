@@ -1,0 +1,72 @@
+# High-Value Target Watchlist
+# Named mobs to track for alerts and respawn timers.
+
+[[targets]]
+name = "Emperor Crush"
+zone = "crushbone"
+priority = "high"
+alert_discord = true
+note = "Drops Belt of the River"
+
+[[targets]]
+name = "Lord Bergurgle"
+zone = "runnyeye"
+priority = "high"
+alert_discord = true
+note = "Drops Goblin Gazughi Ring"
+
+[[targets]]
+name = "the Ghoul Lord"
+zone = "lowerguk"
+priority = "high"
+alert_discord = true
+note = "Drops FBSS"
+
+[[targets]]
+name = "Lord Nagafen"
+zone = "nagafen"
+priority = "critical"
+alert_discord = true
+note = "Dragon raid target"
+
+[[targets]]
+name = "Lady Vox"
+zone = "permafrost"
+priority = "critical"
+alert_discord = true
+note = "Dragon raid target"
+
+[[targets]]
+name = "Phinigel Autropos"
+zone = "kedge"
+priority = "high"
+alert_discord = true
+note = "Drops Robe of the Kedge"
+
+[[targets]]
+name = "Ragefire"
+zone = "soltemple"
+priority = "critical"
+alert_discord = true
+note = "Drops Cloak of Flames"
+
+[[targets]]
+name = "the Tangrin"
+zone = "highkeep"
+priority = "medium"
+alert_discord = false
+note = "Drops Mithril Two-Handed Sword"
+
+[[targets]]
+name = "Frenzied Ghoul"
+zone = "lowerguk"
+priority = "medium"
+alert_discord = false
+note = "Drops Short Sword of the Ykesha"
+
+[[targets]]
+name = "Ambassador Dvinn"
+zone = "crushbone"
+priority = "medium"
+alert_discord = false
+note = "Drops Dragoon Dirk"

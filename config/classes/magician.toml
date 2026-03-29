@@ -1,0 +1,28 @@
+class_name = "magician"
+role = "dps"
+rest_command = "/sit"
+
+[[combat_abilities]]
+name = "Pet Attack"
+command = "/cast 1"
+cooldown_secs = 0.0
+priority = 1
+
+[[combat_abilities]]
+name = "Nuke"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 2
+
+[[combat_abilities]]
+name = "Mod Rod"
+command = "/cast 4"
+cooldown_secs = 300.0
+priority = 4
+condition = "mana_below_40"
+
+[[buff_abilities]]
+name = "Damage Shield"
+command = "/cast 3"
+cooldown_secs = 600.0
+priority = 1

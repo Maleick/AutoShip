@@ -468,13 +468,15 @@ fn draw_map_screen(frame: &mut Frame, area: Rect, app: &App) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(70), // Map view
-            Constraint::Percentage(30), // Spawn position list
+            Constraint::Percentage(55), // Map view
+            Constraint::Percentage(25), // Spawn position list
+            Constraint::Percentage(20), // Named tracker panel
         ])
         .split(area);
 
     draw_map_view(frame, cols[0], app);
     draw_map_spawn_list(frame, cols[1], app);
+    draw_named_tracker_panel(frame, cols[2], app);
 }
 
 fn draw_map_view(frame: &mut Frame, area: Rect, app: &App) {
@@ -613,6 +615,18 @@ fn draw_map_view(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
+    // Overlay dead named spawn positions from the tracker
+    for status in app.named_tracker.tracked_spawns() {
+        if !status.is_alive {
+            let mx = -status.last_y;
+            let my = -status.last_x;
+            let (col, row) = to_grid(mx, my);
+            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+                grid[row as usize][col as usize] = ('X', Color::Red);
+            }
+        }
+    }
+
     // Mark local player on top
     if let Some(player) = &app.local_player {
         let mx = -player.y;
@@ -623,15 +637,42 @@ fn draw_map_view(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    // Render grid to terminal
+    // Render grid to terminal — reserve last row for legend
+    let legend_row = h.saturating_sub(1);
     let lines: Vec<Line<'_>> = grid
         .into_iter()
-        .map(|row| {
-            Line::from(
-                row.into_iter()
-                    .map(|(ch, color)| Span::styled(String::from(ch), Style::default().fg(color)))
-                    .collect::<Vec<_>>(),
-            )
+        .enumerate()
+        .map(|(i, row)| {
+            if i == legend_row {
+                // Map legend
+                Line::from(vec![
+                    Span::styled("+ ", Style::default().fg(Color::LightCyan)),
+                    Span::styled("You", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" | "),
+                    Span::styled("@ ", Style::default().fg(Color::Green)),
+                    Span::styled("PC", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" | "),
+                    Span::styled("* ", Style::default().fg(Color::White)),
+                    Span::styled("NPC", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" | "),
+                    Span::styled("! ", Style::default().fg(Color::Yellow)),
+                    Span::styled("Named", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" | "),
+                    Span::styled("X ", Style::default().fg(Color::Red)),
+                    Span::styled("Dead Named", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" | "),
+                    Span::styled(". ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("Corpse", Style::default().fg(Color::DarkGray)),
+                ])
+            } else {
+                Line::from(
+                    row.into_iter()
+                        .map(|(ch, color)| {
+                            Span::styled(String::from(ch), Style::default().fg(color))
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            }
         })
         .collect();
 
@@ -767,6 +808,89 @@ fn draw_map_spawn_list(frame: &mut Frame, area: Rect, app: &App) {
             Constraint::Length(7),  // Y
             Constraint::Length(7),  // X
             Constraint::Length(5),  // Z
+        ],
+    )
+    .header(header)
+    .block(block);
+
+    frame.render_widget(table, area);
+}
+
+fn draw_named_tracker_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let tracked = app.named_tracker.tracked_spawns();
+    let alive_count = tracked.iter().filter(|s| s.is_alive).count();
+    let title = format!(" Named ({} up, {} tracked) ", alive_count, tracked.len());
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .border_style(Style::default().fg(Color::Yellow));
+
+    if tracked.is_empty() {
+        let paragraph = Paragraph::new("No named spawns detected")
+            .block(block)
+            .style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
+    let header = Row::new(vec![
+        Cell::from("Name").style(Style::default().add_modifier(Modifier::BOLD)),
+        Cell::from("Status").style(Style::default().add_modifier(Modifier::BOLD)),
+        Cell::from("Timer").style(Style::default().add_modifier(Modifier::BOLD)),
+    ])
+    .height(1);
+
+    let rows: Vec<Row> = tracked
+        .iter()
+        .map(|status| {
+            let (status_str, color) = if status.is_alive {
+                ("UP", Color::Green)
+            } else {
+                ("DEAD", Color::Red)
+            };
+
+            let timer_str = if status.is_alive {
+                String::new()
+            } else if let Some(respawn) = status.estimated_respawn_tick {
+                let remaining = respawn.saturating_sub(app.tick_count);
+                // Convert ticks to approximate seconds (250ms per tick)
+                let secs = remaining / 4;
+                let mins = secs / 60;
+                let secs_rem = secs % 60;
+                format!("~{}:{:02}", mins, secs_rem)
+            } else {
+                "???".into()
+            };
+
+            // Check if this is an HVT
+            let is_hvt = app
+                .hvt_watchlist
+                .as_ref()
+                .is_some_and(|wl| wl.is_hvt(&status.name).is_some());
+
+            let name_style = if is_hvt {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            Row::new(vec![
+                Cell::from(status.name.clone()).style(name_style),
+                Cell::from(status_str).style(Style::default().fg(color)),
+                Cell::from(timer_str).style(Style::default().fg(Color::Cyan)),
+            ])
+        })
+        .collect();
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Min(12),    // Name
+            Constraint::Length(5),  // Status
+            Constraint::Length(7),  // Timer
         ],
     )
     .header(header)
