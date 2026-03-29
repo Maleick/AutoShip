@@ -41,6 +41,9 @@ pub enum AssistMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpellEntry {
     pub slot: u8,
+    /// EQ spell ID — used by CastSpell FFI. 0 = use whatever is memorized in slot.
+    #[serde(default)]
+    pub spell_id: i32,
     pub name: String,
     pub min_mana_pct: f32,
     pub priority: u8,

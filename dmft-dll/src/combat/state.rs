@@ -101,23 +101,24 @@ impl Combatant {
             match action {
                 HolyShitAction::CastSpell(slot) => {
                     tracing::warn!(slot, "HolyShit: casting emergency spell");
+                    crate::eq::cast_spell(*slot, 0); // spell_id 0 = use whatever is in the gem
                     self.gcd.consume();
                     self.state = CombatState::Casting {
                         spell_slot: *slot,
-                        ticks_remaining: 20, // ~1 second cast estimate
+                        ticks_remaining: 20,
                     };
                     return;
                 }
                 HolyShitAction::UseAbility(ability_id) => {
                     tracing::warn!(ability_id, "HolyShit: using emergency ability");
-                    // Abilities are instant — go straight to GCD
+                    crate::eq::do_combat_ability(*ability_id as i32, true);
                     self.gcd.consume();
                     self.state = CombatState::OnGcd;
                     return;
                 }
                 HolyShitAction::UseItem(item_id) => {
                     tracing::warn!(item_id, "HolyShit: using emergency item");
-                    // Items are instant — go straight to GCD
+                    // Item usage not yet wired — log for now
                     self.gcd.consume();
                     self.state = CombatState::OnGcd;
                     return;
@@ -165,6 +166,10 @@ impl Combatant {
                         name = %spell.name,
                         "Strategy selected spell"
                     );
+
+                    // Call the real EQ CastSpell function via FFI
+                    crate::eq::cast_spell(spell.slot, spell.spell_id);
+
                     // Apply humanization delay (cast_start_delay absorbed into cast time)
                     let cast_delay = self.personality.next_cast_delay() as u32;
                     self.gcd.consume();
