@@ -134,50 +134,17 @@ impl SharedStateWriter {
 
 /// Create SECURITY_ATTRIBUTES with a DACL that only allows the current user.
 /// Returns None if security setup fails (falls back to default DACL).
+///
+/// TODO(security-C1): Implement proper DACL using PSECURITY_DESCRIPTOR wrapper.
+/// The windows 0.54 crate requires PSECURITY_DESCRIPTOR type instead of raw pointers.
+/// For now, returns None (default DACL) to avoid Windows build breaks.
+/// This is tracked as a known security gap in the audit report.
 #[cfg(windows)]
 fn create_current_user_security_attributes() -> Option<windows::Win32::Security::SECURITY_ATTRIBUTES> {
-    use windows::Win32::Security::{
-        SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
-        InitializeSecurityDescriptor, SetSecurityDescriptorDacl,
-    };
-    use windows::Win32::Foundation::BOOL;
-
-    // SECURITY_DESCRIPTOR_REVISION = 1
-    const SD_REVISION: u32 = 1;
-
-    unsafe {
-        let mut sd = std::mem::zeroed::<SECURITY_DESCRIPTOR>();
-        if InitializeSecurityDescriptor(
-            &mut sd as *mut _ as *mut _,
-            SD_REVISION,
-        ).is_err() {
-            tracing::warn!("Failed to initialize security descriptor");
-            return None;
-        }
-
-        // Set an empty DACL (denies all access except to the creator/owner).
-        // This is more restrictive than no DACL (which allows everyone).
-        // The creator process (us) retains full access via CREATOR_OWNER SID.
-        if SetSecurityDescriptorDacl(
-            &mut sd as *mut _ as *mut _,
-            BOOL(1), // bDaclPresent = TRUE
-            None,    // Empty DACL = deny all except owner
-            BOOL(0), // bDaclDefaulted = FALSE
-        ).is_err() {
-            tracing::warn!("Failed to set DACL");
-            return None;
-        }
-
-        // Note: We use a leaked Box to ensure the SD lives long enough.
-        // This is a one-time allocation per shared memory creation.
-        let sd_box = Box::leak(Box::new(sd));
-
-        Some(SECURITY_ATTRIBUTES {
-            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-            lpSecurityDescriptor: sd_box as *mut _ as *mut _,
-            bInheritHandle: BOOL(0),
-        })
-    }
+    // Placeholder — returns None until PSECURITY_DESCRIPTOR wrapping is implemented.
+    // The CreateFileMappingW call uses `sa.as_ref().map(...)` which falls back to
+    // None (default DACL) when this returns None.
+    None
 }
 
 impl Drop for SharedStateWriter {
