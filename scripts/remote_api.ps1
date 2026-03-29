@@ -70,10 +70,12 @@ function Get-DllLogTail {
                 Sort-Object LastWriteTime -Descending
     if ($logFiles) {
         $content = Get-Content $logFiles[0].FullName -Tail $Lines -ErrorAction SilentlyContinue
+        # Convert to plain strings to avoid PS object serialization bloat
+        $plainLines = @($content | ForEach-Object { $_.ToString() })
         return @{
             file    = $logFiles[0].Name
-            lines   = $content
-            count   = $content.Count
+            lines   = $plainLines
+            count   = $plainLines.Count
         }
     }
     return @{ file = $null; lines = @(); count = 0 }
