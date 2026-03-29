@@ -175,6 +175,10 @@ pub mod eqmain {
     /// XWM_LCLICK notification code for button clicks
     pub const XWM_LCLICK: u32 = 1;
 
+    /// CXWnd vtable offset for SetWindowText (virtual void SetWindowText(const CXStr&))
+    /// From MQ2: CXWnd vtable layout has SetWindowText at /*0x280*/
+    pub const CXWND_VTABLE_SET_WINDOW_TEXT: usize = 0x280;
+
     /// CXWnd vtable offset for WndNotification (eqmain.dll layout)
     /// Signature: int WndNotification(CXWnd* sender, uint32_t message, void* data)
     pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x110;

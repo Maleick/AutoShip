@@ -1002,6 +1002,92 @@ pub unsafe fn click_button_via_vtable(button_wnd: usize) {
 #[cfg(not(windows))]
 pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
 
+/// Set text on a CEditWnd by calling SetWindowText through the vtable.
+/// This is the MQ2 approach — calls EQ's own function which updates both
+/// the UI display and internal state.
+///
+/// CXWnd vtable layout: SetWindowText at offset 0x280
+/// Signature: void CEditWnd::SetWindowText(const CXStr& text)
+/// x64: RCX=this, RDX=&CXStr (pointer to pointer to CStrRep)
+#[cfg(windows)]
+pub unsafe fn set_edit_text_via_vtable(edit_wnd: usize, text: &str) -> bool {
+    use dmft_common::offsets::eqmain as off;
+    use windows::Win32::System::Memory::{GetProcessHeap, HeapAlloc, HEAP_ZERO_MEMORY};
+
+    let vtable = *(edit_wnd as *const usize);
+    if vtable == 0 {
+        tracing::warn!("CEditWnd vtable is null");
+        return false;
+    }
+
+    let set_window_text_ptr =
+        *((vtable + off::CXWND_VTABLE_SET_WINDOW_TEXT) as *const usize);
+    if set_window_text_ptr == 0 {
+        tracing::warn!("SetWindowText function pointer is null");
+        return false;
+    }
+
+    // Allocate a CStrRep on the process heap with our text.
+    // CStrRep layout: refCount(i32@0), alloc(u32@4), length(u32@8), encoding(u32@0c),
+    //                 freeList(usize@0x10), data(bytes@0x18)
+    let text_len = text.len();
+    let alloc_size = text_len + 64; // extra room
+    let total_size = off::CSTRREP_DATA + alloc_size;
+
+    let heap = match GetProcessHeap() {
+        Ok(h) => h,
+        Err(_) => {
+            tracing::error!("GetProcessHeap failed");
+            return false;
+        }
+    };
+    let rep = HeapAlloc(heap, HEAP_ZERO_MEMORY, total_size);
+    if rep.is_null() {
+        tracing::error!("HeapAlloc failed for CStrRep");
+        return false;
+    }
+    let rep_addr = rep as usize;
+
+    // Fill CStrRep fields
+    *(rep_addr as *mut i32) = 1; // refCount = 1
+    *((rep_addr + off::CSTRREP_ALLOC) as *mut u32) = alloc_size as u32;
+    *((rep_addr + off::CSTRREP_LENGTH) as *mut u32) = text_len as u32;
+    *((rep_addr + off::CSTRREP_ENCODING) as *mut u32) = 0; // ASCII
+
+    // Copy text data
+    let data_ptr = (rep_addr + off::CSTRREP_DATA) as *mut u8;
+    std::ptr::copy_nonoverlapping(text.as_ptr(), data_ptr, text_len);
+    *data_ptr.add(text_len) = 0; // null terminate
+
+    // CXStr is just a pointer to CStrRep. SetWindowText takes `const CXStr&`
+    // which means a pointer to the CXStr (pointer to pointer to CStrRep).
+    let cxstr: usize = rep_addr; // CXStr value = pointer to CStrRep
+    let cxstr_ref: *const usize = &cxstr; // &CXStr = pointer to the pointer
+
+    // Call SetWindowText(this, &cxstr)
+    // x64: RCX=this(edit_wnd), RDX=&CXStr
+    type SetWindowTextFn = unsafe extern "C" fn(usize, *const usize);
+    let func: SetWindowTextFn = std::mem::transmute(set_window_text_ptr);
+    func(edit_wnd, cxstr_ref);
+
+    tracing::info!(
+        wnd = format!("{:#x}", edit_wnd),
+        vtable_fn = format!("{:#x}", set_window_text_ptr),
+        text_len,
+        "Called CEditWnd::SetWindowText via vtable"
+    );
+
+    // Don't free the CStrRep — EQ now owns it via refCount.
+    // EQ's CXStr destructor will free it when the widget is destroyed or text changes.
+    true
+}
+
+/// Non-windows stub for set_edit_text_via_vtable.
+#[cfg(not(windows))]
+pub unsafe fn set_edit_text_via_vtable(_edit_wnd: usize, _text: &str) -> bool {
+    false
+}
+
 /// Clone a CStrRep from a donor, using the process default heap for allocation.
 /// This ensures EQ can safely free/manage the buffer since it uses the same heap.
 #[cfg(windows)]
