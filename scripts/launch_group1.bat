@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo  Frostreaver - Group 1 Launch (5 clients)
+echo  Frostreaver - Group 1 Launch (6 clients)
 echo ============================================
 echo.
 
@@ -67,7 +67,7 @@ echo   frostreaver04 login sent
 timeout /t %STAGGER% /nobreak >nul
 
 REM --- Client 5: frostreaver06 (BRD) --- (skipping 05, not created)
-echo [5/5] Launching frostreaver06 (BRD)...
+echo [5/6] Launching frostreaver06 (BRD)...
 cd /d "%EQ_PATH%"
 start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver06
 cd /d "%DMFT_PATH%"
@@ -76,10 +76,22 @@ timeout /t 12 /nobreak >nul
 timeout /t 2 /nobreak >nul
 "%DMFT_PATH%\target\release\dmft.exe" --login frostreaver06 DXOXKC1dIvSFXDB "%SERVER%"
 echo   frostreaver06 login sent
+timeout /t %STAGGER% /nobreak >nul
+
+REM --- Client 6: frostreaver07 (PAL) ---
+echo [6/6] Launching frostreaver07 (PAL)...
+cd /d "%EQ_PATH%"
+start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver07
+cd /d "%DMFT_PATH%"
+timeout /t 12 /nobreak >nul
+"%DMFT_PATH%\target\release\dmft.exe" --inject
+timeout /t 2 /nobreak >nul
+"%DMFT_PATH%\target\release\dmft.exe" --login frostreaver07 aTWmNmNn4jYAXYf "%SERVER%"
+echo   frostreaver07 login sent
 
 echo.
 echo ============================================
-echo  All 5 clients launched!
+echo  All 6 clients launched!
 echo  Each will auto-login and enter world.
 echo ============================================
 echo.
