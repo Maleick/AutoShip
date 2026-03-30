@@ -1,4 +1,4 @@
-# Session Handoff — 2026-03-30 ~02:10 UTC
+# Session Handoff — 2026-03-30 ~02:30 UTC
 
 ## Start Here
 
@@ -6,10 +6,17 @@ Read this file + check memories (`MEMORY.md`) for full project context.
 
 ## Session Stats (Cumulative)
 - ~54,000+ lines across 3 crates
-- ~145+ commits
-- 474+ tests passing (on Windows; macOS stub tests skipped)
+- ~155+ commits (~15 this session)
+- 474 tests passing (2 pre-existing affinity test failures on Windows, need #[cfg(not(windows))])
 - 0 clippy errors
 - Login chain: **FULLY WORKING** — login → server select → character select → enter world
+- 36 account credentials stored in config/accounts.csv (gitignored)
+- 6-client Group 1 launch script ready (scripts/launch_group1.bat)
+
+## Unmerged Branches
+- `claude/nostalgic-cray` — audit fixes (shared memory DACL, DLL injection improvements). Has merge conflicts with login chain rewrite. Cherry-pick in next session.
+- `claude/vibrant-ishizaka` — already merged
+- Other `claude/*` branches — empty/stale, locked by worktrees from dispatch sessions
 
 ## What's Done (This Session — 2026-03-30)
 
