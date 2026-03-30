@@ -1,114 +1,106 @@
-# Session Handoff — 2026-03-30 ~07:30 UTC
+# Session Handoff — 2026-03-30 ~08:30 UTC
 
 ## Start Here
 
 Read this file + check memories (`MEMORY.md`) for full project context.
 
 ## Session Stats (Cumulative)
-- ~55,000+ lines across 3 crates
-- ~165+ commits (~10 this session)
-- 631 tests passing (474 dmft + 46 dmft-common + 111 dmft-dll), 0 failures
-- 0 clippy errors
-- Login chain: credentials → server → char select WORKING
-- Enter world: BROKEN (EnterWorld() never triggers — #1 priority fix)
-- Navigation: framework working but movement broken (writes heading but ExecuteCmd added, untested)
-- Zone info: reading from shared memory WORKING ("West Freeport (freeportwest)" confirmed)
-- 6 accounts launched, DLL injected, at character select (need manual Enter to enter world)
+- ~57,000+ lines across 3 crates
+- ~175+ commits (~20 this session)
+- 645+ tests passing, 0 failures
+- Navigation: **NAVMESH PATHFINDING WORKING** (Detour integration via mqmesh.com)
+- Zone graph: **888-zone adjacency graph** readable from EQ memory
+- Login chain: credentials → server → char select WORKING, Enter World fix applied (UNTESTED)
+- 6 accounts configured, scripts ready
 
-## What's Done (This Session — 2026-03-30)
+## What's Done (This Session — Overnight 2026-03-30)
 
-### Multi-Client Infrastructure ✅
+### Navigation System (TOP PRIORITY) ✅
+- **Navmesh pathfinding** — downloads .navmesh from mqmesh.com, parses binary format (header + zlib + protobuf), loads Detour tiles via C++ FFI shim
+- **`--navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>`** — offline path query (verified: freeportwest 486 tiles, 5-waypoint path)
+- **`--nav <PID> <x> <y> <z>`** — mesh-aware navigation (reads zone from shared memory, queries mesh, sends full waypoints)
+- **`--navall <x> <y> <z>`** — navigate ALL clients to a point with mesh paths
+- **Navigator calls ExecuteCmd(CMD_FORWARD)** — wired but UNTESTED on live client
+- **Zone info in shared state** — zone_short_name + zone_long_name from zoneHeader
+
+### Zone-to-Zone Navigation ✅
+- **ZoneGuideManagerClient reader** — DLL reads 888-zone graph from EQ memory singleton
+- **BFS pathfinding** — `ZoneGraph::find_path(from, to)` with transfer type awareness
+- **`--zones <PID>`** — dump full zone graph from live client
+- **IPC: QueryZoneGraph** command + Response::ZoneGraph
+
+### Enter World Fix ✅ (UNTESTED)
+- Root cause: `find_visible_window_by_sidl_name` used eqmain dShow offset in eqgame context
+- Fix: replaced with `rescan_char_list_wnd()` (SidlText scan only)
+- Fallback: `send_enter_to_eq()` instead of `/enterworld` slash command
+
+### New CLI Commands ✅
 - `--inject-pid <PID>` — inject DLL into specific process
 - `--login-pid <PID>` — send login to specific process
-- `--status <PID>` — read shared memory (player, position, zone, nav status)
-- `--nav <PID> <x> <y> <z>` — send NavigateTo command
-- CSPRNG session token auth (written before injection, DLL reads at init)
-- Double-injection guard (ALREADY_INITIALIZED atomic bool)
-- "Already logged in" YESNO dialog handler in Phase 3 polling
+- `--status <PID>` — player state + zone info
+- `--statusall` — table view of all EQ clients
+- `--nav <PID> <x> <y> <z>` — mesh-aware navigation
+- `--navall <x> <y> <z>` — navigate all clients
+- `--navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>` — offline path query
+- `--zones <PID>` — dump zone graph
 
-### Zone Info ✅
-- `zone_short_name` and `zone_long_name` added to GameState shared memory
-- DLL reads from zoneHeader struct every 30 ticks
-- Confirmed working: "West Freeport (freeportwest)"
+### Auto-Accept Dialogs ✅
+- Scans for group invite, raid invite, trade, task, resurrect, expedition dialogs
+- Auto-clicks accept button via SIDL name matching
+- Toggle via `SetAutoAccept` IPC command
 
-### Navigation Framework (Partially Working)
-- Navigator lazy-inits on first in-world tick
-- ExecuteCmd(CMD_FORWARD) wired into MovementController (NEW — untested with live client)
-- Nav sends NavigateTo, Navigator receives waypoints, stuck detection works
-- BUT: characters don't actually walk yet (needs testing with new DLL)
+### Research Reports ✅
+- GAP_ANALYSIS.md — comprehensive MQ2 vs Frostreaver feature comparison
+- MQ2NAV_RESEARCH.md — navmesh format, Detour integration
+- eqlib deep dive — Enter World, zone routing, movement, struct validation
+- AutoAccept patterns, RedGuides/OpenVanilla, goodurden maps, nav-mesh-updater
 
-### Test/Audit Cleanup ✅
-- All null-pointer stub tests gated with `#[cfg(not(windows))]`
-- Cherry-picked audit fixes from claude/nostalgic-cray
-- 10 local + 4 remote stale branches deleted
-- All pushed to master
+## MORNING TEST PLAN
 
-### Research Completed ✅
-1. **Navmesh**: mqmesh.com serves `.navmesh` files (protobuf + Detour tiles). `divert` Rust crate for pathfinding.
-2. **Zone routing**: ZoneGuideManagerClient at 0x1403571F0 has 888-zone adjacency graph in EQ memory. BFS pathfinding.
-3. **eqlib deep dive**: Enter World = `CCharacterListWnd::EnterWorld()`, movement = `ExecuteCmd(CMD_FORWARD)`, doors = `EQSwitch::UseSwitch()`.
-4. **All offsets verified correct** against MQ2 eqlib (March 2026 patch 20260310).
+### 1. Enter World (press Enter on 6 clients)
+- Characters are at char select with new DLL
+- Enter World fix should auto-enter after pressing Enter once
+- Verify with `--statusall` — should show zone names and real positions
 
-## IMMEDIATE TODO — Next Session
+### 2. Test Navigation
+```bash
+# Check all clients
+./target/release/dmft.exe --statusall
 
-### 1. Fix Enter World Automation (CRITICAL)
-The login chain reaches character select but EnterWorld() never fires. The code exists in game_loop.rs (stages 1-3) but `ENTER_WORLD_STAGE` is never set to 1.
+# Navigate one client with mesh pathfinding
+./target/release/dmft.exe --nav <PID> <x> <y> <z>
 
-**Root cause**: The login FSM's `do_select_character_via_game_loop()` should queue the enter world, but something in the chain from `tick_selecting_character()` → `do_select_character_via_game_loop()` → `queue_enter_world()` isn't firing.
+# Navigate all clients to a point
+./target/release/dmft.exe --navall <x> <y> <z>
+```
 
-**Fix approach**:
-- Trace the login FSM from Phase 3 (eqmain unloaded) through character select
-- The FSM transitions to `SelectingCharacter` but may not find CCharacterListWnd
-- Alternative: call EnterWorld() directly when at char select (simpler than the stage system)
-- Reference: MQ2 AutoLogin just calls `CCharacterListWnd::EnterWorld()` directly
+### 3. Test Zone Graph
+```bash
+./target/release/dmft.exe --zones <PID>
+```
 
-### 2. Test Navigation Movement
-The new DLL has `ExecuteCmd(CMD_FORWARD)` wired in but hasn't been tested on a live in-world client. Need to:
-- Get a character in-world with the latest DLL
-- Send `--nav <PID> <x> <y> <z>` to a reachable nearby point
-- Verify the character actually walks
+## Build Requirements
 
-### 3. Navmesh Integration
-- Add `divert` crate dependency
-- Download zone meshes from mqmesh.com
-- Parse .navmesh protobuf → Detour tiles → NavMeshQuery
-- Replace straight-line nav with mesh-aware pathfinding
+```bash
+export PATH="/c/Program Files/CMake/bin:/c/Program Files/LLVM/bin:$PATH"
+export LIBCLANG_PATH="C:/Program Files/LLVM/bin"
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
+cargo build --release
+```
 
-### 4. Zone-to-Zone Navigation
-- Read ZoneGuideManagerClient from memory (zone graph)
-- Implement BFS pathfinder
-- Add EQSwitch::UseSwitch binding for doors/books
-- Record zone line coordinates for key routes
+## Key Offsets (NEVER CHANGE)
 
-## Key Offsets (NEVER CHANGE WITHOUT LIVE TEST)
+| Offset | Value | Context |
+|--------|-------|---------|
+| CEDITBASEWND_INPUT_TEXT | 0x278 | eqmain |
+| CXWND_VTABLE_WND_NOTIFICATION | 0x110 | eqmain |
+| CXWND_VTABLE_WND_NOTIFICATION | 0x120 | eqgame |
+| EXECUTE_CMD | 0x1402235B0 | eqgame |
+| ZONE_GUIDE_MANAGER | 0x1403571F0 | eqgame |
 
-| Offset | Value | Context | Notes |
-|--------|-------|---------|-------|
-| CEDITBASEWND_INPUT_TEXT | 0x278 | eqmain | NOT 0x280 |
-| CXWND_VTABLE_WND_NOTIFICATION | 0x110 | eqmain | Different from eqgame! |
-| CXWND_VTABLE_WND_NOTIFICATION | 0x120 | eqgame | Different from eqmain! |
-| EXECUTE_CMD | 0x1402235B0 | eqgame | CMD_FORWARD=2, CMD_BACK=3 |
-| ENTER_WORLD | 0x14027E1F0 | eqgame | CCharacterListWnd::EnterWorld |
-| ZoneGuideManagerClient | 0x1403571F0 | eqgame | 888-zone graph |
-| EQSwitch::UseSwitch | 0x14026B060 | eqgame | Door/book interaction |
-
-## Key File Paths
-
-### MQ2 References
-- Login automation: https://github.com/macroquest/macroquest/tree/master/src/login
-- Zone routing: https://github.com/macroquest/macroquest/tree/master/src/routing
-- HUD overlay: https://github.com/macroquest/macroquest/blob/master/src/plugins/hud/MQ2HUD.cpp
+## Key References
+- MQ2 Login: https://github.com/macroquest/macroquest/tree/master/src/login
+- MQ2 Routing: https://github.com/macroquest/macroquest/tree/master/src/routing
+- MQ2Nav: https://github.com/brainiac/MQ2Nav
 - eqlib: https://github.com/macroquest/eqlib
-- Local clones: mq2-reference/, mq2-eqlib/, mq2-definitions/
-
-### Frostreaver (Windows)
-- DMFT: `C:\Users\xmale\Projects\DMFT`
-- EQ: `C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest`
-- DLL logs: `C:\Users\xmale\AppData\Local\Temp\dmft\dmft-dll.log.YYYY-MM-DD`
-
-### Session Notes
-- EQ requires Console session with GPU (not RDP)
-- Characters stuck in-world take 5-10 min to timeout
-- `/login:` flag required to skip EULA
-- PowerShell `$pid` is reserved — use `$procId` instead
-- Git Bash converts `/slash` paths — use `MSYS_NO_PATHCONV=1`
+- mqmesh.com — navmesh downloads + updater.json manifest
