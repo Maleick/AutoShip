@@ -67,8 +67,15 @@ fn main() -> Result<()> {
     let login_pid_mode = args.iter().position(|a| a == "--login-pid");
     let cmd_mode = args.iter().position(|a| a == "--cmd");
     let nav_mode = args.iter().position(|a| a == "--nav");
+    let status_mode = args.iter().position(|a| a == "--status");
 
-    if calibrate_mode {
+    if let Some(pos) = status_mode {
+        let pid: u32 = args.get(pos + 1)
+            .context("--status requires: --status <PID>")?
+            .parse()
+            .context("PID must be a number")?;
+        return run_status_mode(pid);
+    } else if calibrate_mode {
         run_calibrate_mode()
     } else if let Some(pos) = login_pid_mode {
         // --login-pid <PID> <account> <password> [server] [character]
@@ -280,6 +287,35 @@ fn run_inject_mode() -> Result<()> {
     println!();
     println!("Run scripts\\verify_injection.bat to check injection status.");
 
+    Ok(())
+}
+
+/// Status mode (--status <PID>) — read shared memory and print player state.
+fn run_status_mode(pid: u32) -> Result<()> {
+    let reader = ipc::shared::SharedStateReader::new(pid)
+        .context(format!("Cannot open shared memory for PID {} — is the DLL injected?", pid))?;
+
+    match reader.read() {
+        Some(state) => {
+            if let Some(ref player) = state.local_player {
+                println!("Player: {} (ID: {})", player.name, player.spawn_id);
+                println!("Position: x={:.1}, y={:.1}, z={:.1} heading={:.1}", player.x, player.y, player.z, player.heading);
+                println!("HP: {}/{} ({:.0}%)", player.hp_current, player.hp_max, player.hp_pct());
+                println!("Mana: {}/{}", player.mana_current, player.mana_max);
+                println!("Level: {} Class: {}", player.level, player.class_id);
+                println!("Nav: {:?}", state.nav_status);
+            } else {
+                println!("No player data (not in world?)");
+            }
+            if let Some(ref target) = state.target {
+                println!("Target: {} (ID: {}) HP: {:.0}%", target.name, target.spawn_id, target.hp_pct());
+            }
+            println!("Nearby spawns: {}", state.nearby_spawns.len());
+        }
+        None => {
+            println!("No data from shared memory (DLL hasn't written yet or write in progress)");
+        }
+    }
     Ok(())
 }
 
