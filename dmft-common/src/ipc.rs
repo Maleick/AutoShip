@@ -69,6 +69,8 @@ pub enum Command {
     Ping,
     Eject,
     SetHookState { enabled: bool },
+    /// Enable or disable automatic dialog acceptance (group invite, trade, etc.).
+    SetAutoAccept { enabled: bool },
 }
 
 impl std::fmt::Debug for Command {

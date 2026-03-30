@@ -336,6 +336,11 @@ fn on_game_tick() {
         update_foreground_status();
     }
 
+    // Auto-accept dialogs every 30 ticks (~1 second).
+    if tick % 30 == 15 {
+        unsafe { crate::dialog::check_dialogs(); }
+    }
+
     // Rename window every 100 ticks (~3 seconds) to "[DMFT] EQ - CharName (ZoneName)".
     if tick % 100 == 5 {
         update_window_title();
@@ -1060,6 +1065,10 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         Command::LootAll => {
             tracing::info!("LootAll received");
             crate::combat::loot::loot_all_items();
+        }
+        Command::SetAutoAccept { enabled } => {
+            tracing::info!(enabled, "SetAutoAccept received");
+            crate::dialog::set_enabled(enabled);
         }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");

@@ -70,8 +70,11 @@ fn main() -> Result<()> {
     let navpath_mode = args.iter().position(|a| a == "--navpath");
     let navall_mode = args.iter().position(|a| a == "--navall");
     let status_mode = args.iter().position(|a| a == "--status");
+    let statusall_mode = args.iter().any(|a| a == "--statusall");
 
-    if let Some(pos) = status_mode {
+    if statusall_mode {
+        return run_statusall_mode();
+    } else if let Some(pos) = status_mode {
         let pid: u32 = args.get(pos + 1)
             .context("--status requires: --status <PID>")?
             .parse()
@@ -348,6 +351,81 @@ fn run_status_mode(pid: u32) -> Result<()> {
             println!("No data from shared memory (DLL hasn't written yet or write in progress)");
         }
     }
+    Ok(())
+}
+
+/// Status-all mode (--statusall) — read shared memory for all EQ clients and print a summary table.
+fn run_statusall_mode() -> Result<()> {
+    let pids = process::memory::find_processes_by_name("eqgame.exe")?;
+
+    if pids.is_empty() {
+        println!("No eqgame.exe processes found.");
+        return Ok(());
+    }
+
+    // Header
+    println!(
+        "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+        "PID", "Character", "Zone", "Position", "HP%", "Lv", "Nav", "Spawns"
+    );
+
+    for &pid in &pids {
+        match ipc::shared::SharedStateReader::new(pid) {
+            Ok(reader) => match reader.read() {
+                Some(state) => {
+                    if let Some(ref player) = state.local_player {
+                        let pos = format!(
+                            "({:.0}, {:.0}, {:.0})",
+                            player.x, player.y, player.z
+                        );
+                        let hp = format!("{:.0}%", player.hp_pct());
+                        let nav = match &state.nav_status {
+                            dmft_common::nav::NavStatus::Idle => "Idle".to_string(),
+                            dmft_common::nav::NavStatus::Moving { waypoint_index, waypoint_count, .. } => {
+                                format!("{}/{}", waypoint_index, waypoint_count)
+                            }
+                            dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
+                            dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
+                        };
+                        let zone = if state.zone_short_name.is_empty() {
+                            "(unknown)".to_string()
+                        } else {
+                            state.zone_short_name.clone()
+                        };
+                        println!(
+                            "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+                            pid,
+                            player.name,
+                            zone,
+                            pos,
+                            hp,
+                            player.level,
+                            nav,
+                            state.nearby_spawns.len()
+                        );
+                    } else {
+                        println!(
+                            "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+                            pid, "(no player)", "(not in world)", "-", "-", "-", "-", "-"
+                        );
+                    }
+                }
+                None => {
+                    println!(
+                        "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+                        pid, "(no data)", "-", "-", "-", "-", "-", "-"
+                    );
+                }
+            },
+            Err(_) => {
+                println!(
+                    "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+                    pid, "(no shm)", "-", "-", "-", "-", "-", "-"
+                );
+            }
+        }
+    }
+
     Ok(())
 }
 
