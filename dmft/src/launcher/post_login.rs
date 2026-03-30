@@ -140,6 +140,8 @@ mod tests {
             timestamp_ms: 0,
             nav_status: dmft_common::nav::NavStatus::Idle,
             combat_status: dmft_common::combat::CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
         }
     }
 

@@ -11,6 +11,8 @@ pub struct GameState {
     pub timestamp_ms: u64,
     pub nav_status: crate::nav::NavStatus,
     pub combat_status: crate::combat::CombatStatus,
+    pub zone_short_name: String,
+    pub zone_long_name: String,
 }
 
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)

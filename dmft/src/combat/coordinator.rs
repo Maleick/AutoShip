@@ -235,6 +235,8 @@ mod tests {
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
             combat_status: CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
         }
     }
 

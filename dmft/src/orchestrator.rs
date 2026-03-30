@@ -462,6 +462,8 @@ mod tests {
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
             combat_status: CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
         });
 
         // Healer at 60% mana
@@ -473,6 +475,8 @@ mod tests {
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
             combat_status: CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
         });
 
         let snap = orch.build_camp_snapshot().expect("should build snapshot");
@@ -532,6 +536,8 @@ mod tests {
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
             combat_status: CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
         });
         orch.game_states.insert(101, GameState {
             client_id: 101,
@@ -541,6 +547,8 @@ mod tests {
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
             combat_status: CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
         });
 
         // State was updated at tick 1, current tick is 10 — stale by 9 ticks

@@ -7,6 +7,12 @@ use dmft_common::nav::Waypoint;
 /// Arrival threshold in game units (close enough to "be there").
 pub const ARRIVAL_DISTANCE: f32 = 15.0;
 
+/// EQ command IDs for ExecuteCmd.
+pub const CMD_AUTORUN: u32 = 0;
+pub const CMD_JUMP: u32 = 1;
+pub const CMD_FORWARD: u32 = 2;
+pub const CMD_BACK: u32 = 3;
+
 /// Calculate heading from current position to target (EQ heading: 0-512, 0=north, increases CW).
 pub fn calc_heading(from: &Waypoint, to: &Waypoint) -> f32 {
     let dx = to.x - from.x;
@@ -95,6 +101,37 @@ impl MovementController {
             tracing::trace!("read_position (stub)");
             Waypoint::new(0.0, 0.0, 0.0)
         }
+    }
+
+    /// Press forward key (start walking).
+    pub fn press_forward(&self) {
+        self.execute_cmd(CMD_FORWARD, true);
+    }
+
+    /// Release forward key (stop walking).
+    pub fn stop_forward(&self) {
+        self.execute_cmd(CMD_FORWARD, false);
+    }
+
+    /// Call EQ's __ExecuteCmd to simulate key presses.
+    /// Signature: void __ExecuteCmd(uint32_t command, bool keyDown, void* data, void* pTarget)
+    pub fn execute_cmd(&self, command: u32, key_down: bool) {
+        #[cfg(windows)]
+        {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base == 0 {
+                return;
+            }
+            if let Some(addr) = dmft_common::offsets::rebase(dmft_common::offsets::EXECUTE_CMD, eq_base) {
+                type ExecuteCmdFn = unsafe extern "C" fn(command: u32, key_down: i32, data: usize, target: usize);
+                unsafe {
+                    let func: ExecuteCmdFn = std::mem::transmute(addr);
+                    func(command, key_down as i32, 0, 0);
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        tracing::trace!(command, key_down, "execute_cmd (stub)");
     }
 
     /// Read current heading.

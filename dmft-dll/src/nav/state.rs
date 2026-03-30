@@ -72,6 +72,7 @@ impl Navigator {
 
     /// Stop navigation immediately.
     pub fn stop(&mut self) {
+        self.controller.stop_forward();
         self.queue.clear();
         self.camp = None;
         self.stuck.reset();
@@ -148,14 +149,15 @@ impl Navigator {
         if let Some(target) = self.queue.current() {
             let heading = movement::calc_heading(&current_pos, target);
             let wobbled = self.personality.wobble_heading(heading);
-            // Write heading directly — avoid face_toward which recalculates calc_heading.
             self.controller.write_heading(wobbled);
             self.controller.write_speed_heading(wobbled);
+            // Actually walk forward via ExecuteCmd.
+            self.controller.press_forward();
         }
     }
 
     fn on_path_complete(&mut self) {
-        // If we have a camp spot, face the camp heading.
+        self.controller.stop_forward();
         if let Some(ref camp) = self.camp {
             self.controller.write_heading(camp.heading);
             tracing::info!(role = %camp.role, "Arrived at camp spot");

@@ -297,6 +297,9 @@ fn run_status_mode(pid: u32) -> Result<()> {
 
     match reader.read() {
         Some(state) => {
+            if !state.zone_short_name.is_empty() {
+                println!("Zone: {} ({})", state.zone_long_name, state.zone_short_name);
+            }
             if let Some(ref player) = state.local_player {
                 println!("Player: {} (ID: {})", player.name, player.spawn_id);
                 println!("Position: x={:.1}, y={:.1}, z={:.1} heading={:.1}", player.x, player.y, player.z, player.heading);
@@ -317,6 +320,54 @@ fn run_status_mode(pid: u32) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Read zone short name and long name from EQ process memory via ReadProcessMemory.
+fn read_zone_info(pid: u32) -> Option<(String, String)> {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::zone_info;
+
+        let proc = match process::memory::ProcessHandle::open(pid) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Zone: cannot open process {}: {}", pid, e);
+                return None;
+            }
+        };
+
+        // Get actual module base (ASLR may relocate eqgame.exe).
+        let eq_base = proc.module_base().unwrap_or(0x140000000);
+        let zone_addr = match dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base) {
+            Some(a) => a,
+            None => {
+                eprintln!("Zone: rebase failed for INST_EQ_ZONE_INFO");
+                return None;
+            }
+        };
+
+        let short_name = match proc.read_string(zone_addr + zone_info::SHORT_NAME, 128) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Zone: read_string failed at {:#x}: {}", zone_addr, e);
+                return None;
+            }
+        };
+        let long_name = proc.read_string(zone_addr + zone_info::LONG_NAME, 128).unwrap_or_default();
+
+        if short_name.is_empty() {
+            eprintln!("Zone: short_name is empty at {:#x}", zone_addr);
+            return None;
+        }
+
+        Some((short_name, long_name))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = pid;
+        None
+    }
 }
 
 /// Navigate mode (--nav <PID> <x> <y> <z>) — send NavigateTo to a specific client.

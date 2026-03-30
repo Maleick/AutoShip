@@ -23,6 +23,21 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
     let z = proc.read::<f32>(addr + player_base::Z).unwrap_or(0.0);
     let heading = proc.read::<f32>(addr + player_base::HEADING).unwrap_or(0.0);
 
+    // Diagnostic: if position looks suspicious (all near-zero) but name is valid,
+    // hex-dump the region around the position offsets so we can verify them.
+    if x.abs() < 1.0 && y.abs() < 1.0 && !name.is_empty() && name != "<unreadable>" {
+        if let Ok(bytes) = proc.read_bytes(addr + 0x060, 0x50) {
+            tracing::warn!(
+                spawn_addr = format!("{:#x}", addr),
+                name = %name,
+                spawn_id,
+                x, y, z,
+                hex_0x060_to_0x0b0 = format!("{:02x?}", bytes),
+                "Position near zero — hex dump of PlayerBase 0x060..0x0b0 for offset verification"
+            );
+        }
+    }
+
     let level = proc.read::<u8>(addr + player_zone::LEVEL).unwrap_or(0);
     // Class is a direct uint8_t field in PlayerZoneClient at 0x0420
     let class_id = proc.read::<u8>(addr + player_zone::CHAR_CLASS).unwrap_or(0);
@@ -81,6 +96,13 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
     if player_addr == 0 {
         anyhow::bail!("pinstLocalPlayer is null — not logged in?");
     }
+
+    tracing::debug!(
+        player_ptr_addr = format!("{:#x}", player_ptr_addr),
+        player_addr = format!("{:#x}", player_addr),
+        eq_base = format!("{:#x}", eq_base),
+        "read_local_player pointer chain"
+    );
 
     let mut spawn = read_spawn(proc, player_addr).context("Failed to read local player spawn data")?;
     spawn.buff_slots = read_buff_slots(proc, eq_base);

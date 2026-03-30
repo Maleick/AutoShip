@@ -28,6 +28,31 @@ impl ProcessHandle {
         Ok(Self { pid })
     }
 
+    /// Get the base address of the main executable module in the target process.
+    #[cfg(windows)]
+    pub fn module_base(&self) -> Result<u64> {
+        use windows::Win32::System::ProcessStatus::EnumProcessModules;
+        use windows::Win32::Foundation::HMODULE;
+
+        let mut module = HMODULE::default();
+        let mut bytes_needed: u32 = 0;
+        unsafe {
+            EnumProcessModules(
+                self.handle,
+                &mut module,
+                std::mem::size_of::<HMODULE>() as u32,
+                &mut bytes_needed,
+            )
+        }.context("EnumProcessModules failed")?;
+
+        Ok(module.0 as u64)
+    }
+
+    #[cfg(not(windows))]
+    pub fn module_base(&self) -> Result<u64> {
+        Ok(0x140000000) // Preferred base fallback
+    }
+
     /// Read a value of type T from the process at the given address.
     #[cfg(windows)]
     pub fn read<T: Copy>(&self, address: usize) -> Result<T> {

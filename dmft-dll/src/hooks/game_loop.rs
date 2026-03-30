@@ -596,6 +596,7 @@ fn read_and_publish_state(tick: u64) {
     if refresh_spawns {
         let player = local_player.as_ref().unwrap();
         let spawns = read_nearby_spawns(eq_base, player.x, player.y, player.z);
+        let (zone_short, zone_long) = read_zone_names(eq_base);
         *cached = Some(dmft_common::types::GameState {
             client_id: std::process::id(),
             local_player,
@@ -604,6 +605,8 @@ fn read_and_publish_state(tick: u64) {
             timestamp_ms: current_time_ms(),
             nav_status: crate::nav::status(),
             combat_status: crate::combat::status(),
+            zone_short_name: zone_short,
+            zone_long_name: zone_long,
         });
     } else {
         let state = cached.as_mut().unwrap();
@@ -656,6 +659,26 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     let y = unsafe { *((spawn_ptr + player_base::Y) as *const f32) };
     let z = unsafe { *((spawn_ptr + player_base::Z) as *const f32) };
     let heading = unsafe { *((spawn_ptr + player_base::HEADING) as *const f32) };
+
+    // Diagnostic: log once if position looks suspicious (near-zero with valid name)
+    {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static DIAG_TICK: AtomicU64 = AtomicU64::new(0);
+        let tick = DIAG_TICK.fetch_add(1, Ordering::Relaxed);
+        if x.abs() < 1.0 && y.abs() < 1.0 && tick % 300 == 0 {
+            // Dump raw bytes from 0x060..0x0b0 to verify position offsets
+            let raw: [u8; 0x50] = unsafe { std::ptr::read((spawn_ptr + 0x060) as *const [u8; 0x50]) };
+            tracing::warn!(
+                spawn_ptr = format!("{:#x}", spawn_ptr),
+                name = %name,
+                spawn_id,
+                x, y, z,
+                hex_0x060_to_0x0b0 = format!("{:02x?}", &raw[..]),
+                "DLL: position near zero — hex dump for offset verification"
+            );
+        }
+    }
+
     let level = unsafe { *((spawn_ptr + player_zone::LEVEL) as *const u8) };
     let class_id = unsafe { *((spawn_ptr + player_zone::CHAR_CLASS) as *const u8) };
     let hp_current = unsafe { *((spawn_ptr + player_zone::HP_CURRENT) as *const i64) };
@@ -685,6 +708,20 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     }
 }
 
+/// Read zone short name and long name from zoneHeader struct.
+fn read_zone_names(eq_base: u64) -> (String, String) {
+    use dmft_common::offsets::zone_info;
+
+    let zone_addr = match dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base) {
+        Some(a) => a,
+        None => return (String::new(), String::new()),
+    };
+
+    let short = unsafe { read_string_at(zone_addr + zone_info::SHORT_NAME, 128) };
+    let long = unsafe { read_string_at(zone_addr + zone_info::LONG_NAME, 128) };
+    (short, long)
+}
+
 /// Read local player state. Returns None if not logged in.
 fn read_local_player_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
     let player_ptr_addr = dmft_common::offsets::rebase(
@@ -695,6 +732,21 @@ fn read_local_player_state(eq_base: u64) -> Option<dmft_common::types::SpawnData
     if player_ptr == 0 {
         return None;
     }
+
+    // One-time diagnostic log of the pointer chain
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static LOGGED: AtomicBool = AtomicBool::new(false);
+        if !LOGGED.swap(true, Ordering::Relaxed) {
+            tracing::info!(
+                eq_base = format!("{:#x}", eq_base),
+                player_ptr_addr = format!("{:#x}", player_ptr_addr),
+                player_ptr = format!("{:#x}", player_ptr),
+                "read_local_player_state pointer chain (one-time)"
+            );
+        }
+    }
+
     Some(unsafe { read_spawn_data(player_ptr) })
 }
 
