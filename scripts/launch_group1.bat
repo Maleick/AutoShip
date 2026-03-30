@@ -1,13 +1,26 @@
 @echo off
+setlocal enabledelayedexpansion
 echo ============================================
 echo  Frostreaver - Group 1 Launch (6 clients)
+echo  Per-PID injection + login targeting
 echo ============================================
 echo.
 
 set EQ_PATH=C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest
 set DMFT_PATH=C:\Users\xmale\Projects\DMFT
+set DMFT_EXE=%DMFT_PATH%\target\release\dmft.exe
 set SERVER=Firiona Vie
+set INJECT_WAIT=12
+set HOOK_WAIT=2
 set STAGGER=15
+
+REM Account list: name password
+set ACCT1=frostreaver01 dr698iDBBa1IpTS
+set ACCT2=frostreaver02 rLlkT9TEzVzbtAJ
+set ACCT3=frostreaver03 2U2dDrgMuI6sDTi
+set ACCT4=frostreaver04 67FbF2LmZMEFIR7
+set ACCT5=frostreaver06 DXOXKC1dIvSFXDB
+set ACCT6=frostreaver07 aTWmNmNn4jYAXYf
 
 REM Kill any existing EQ
 echo Killing existing EQ processes...
@@ -17,77 +30,70 @@ timeout /t 3 /nobreak >nul
 REM Clear DLL logs
 del /q "%TEMP%\dmft\dmft-dll.log.*" 2>nul
 
-REM --- Client 1: frostreaver01 (WAR) ---
-echo.
-echo [1/5] Launching frostreaver01 (WAR)...
-cd /d "%EQ_PATH%"
-start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver01
-cd /d "%DMFT_PATH%"
-timeout /t 12 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --inject
-timeout /t 2 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --login frostreaver01 dr698iDBBa1IpTS "%SERVER%"
-echo   frostreaver01 login sent
-timeout /t %STAGGER% /nobreak >nul
+REM Snapshot existing PIDs before first launch
+for /f "tokens=2" %%a in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
+    set "EXISTING_%%a=1"
+)
 
-REM --- Client 2: frostreaver02 (SHM) ---
-echo [2/5] Launching frostreaver02 (SHM)...
-cd /d "%EQ_PATH%"
-start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver02
-cd /d "%DMFT_PATH%"
-timeout /t 12 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --inject
-timeout /t 2 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --login frostreaver02 rLlkT9TEzVzbtAJ "%SERVER%"
-echo   frostreaver02 login sent
-timeout /t %STAGGER% /nobreak >nul
+set CLIENT_NUM=0
 
-REM --- Client 3: frostreaver03 (CLR) ---
-echo [3/5] Launching frostreaver03 (CLR)...
-cd /d "%EQ_PATH%"
-start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver03
-cd /d "%DMFT_PATH%"
-timeout /t 12 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --inject
-timeout /t 2 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --login frostreaver03 2U2dDrgMuI6sDTi "%SERVER%"
-echo   frostreaver03 login sent
-timeout /t %STAGGER% /nobreak >nul
+REM --- Launch function ---
+REM Uses: ACCT (name password), CLIENT_NUM, captures PID
+for %%A in (
+    "frostreaver01 dr698iDBBa1IpTS"
+    "frostreaver02 rLlkT9TEzVzbtAJ"
+    "frostreaver03 2U2dDrgMuI6sDTi"
+    "frostreaver04 67FbF2LmZMEFIR7"
+    "frostreaver06 DXOXKC1dIvSFXDB"
+    "frostreaver07 aTWmNmNn4jYAXYf"
+) do (
+    set /a CLIENT_NUM+=1
+    for /f "tokens=1,2" %%U in (%%A) do (
+        echo.
+        echo [!CLIENT_NUM!/6] Launching %%U...
 
-REM --- Client 4: frostreaver04 (CLR) ---
-echo [4/5] Launching frostreaver04 (CLR)...
-cd /d "%EQ_PATH%"
-start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver04
-cd /d "%DMFT_PATH%"
-timeout /t 12 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --inject
-timeout /t 2 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --login frostreaver04 67FbF2LmZMEFIR7 "%SERVER%"
-echo   frostreaver04 login sent
-timeout /t %STAGGER% /nobreak >nul
+        REM Launch EQ
+        cd /d "%EQ_PATH%"
+        start "" "%EQ_PATH%\eqgame.exe" patchme /login:%%U
+        cd /d "%DMFT_PATH%"
 
-REM --- Client 5: frostreaver06 (BRD) --- (skipping 05, not created)
-echo [5/6] Launching frostreaver06 (BRD)...
-cd /d "%EQ_PATH%"
-start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver06
-cd /d "%DMFT_PATH%"
-timeout /t 12 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --inject
-timeout /t 2 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --login frostreaver06 DXOXKC1dIvSFXDB "%SERVER%"
-echo   frostreaver06 login sent
-timeout /t %STAGGER% /nobreak >nul
+        REM Wait for process to start, then find its PID
+        timeout /t 3 /nobreak >nul
+        set "NEW_PID="
+        for /f "tokens=2" %%P in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
+            if not defined KNOWN_%%P (
+                set "NEW_PID=%%P"
+            )
+        )
 
-REM --- Client 6: frostreaver07 (PAL) ---
-echo [6/6] Launching frostreaver07 (PAL)...
-cd /d "%EQ_PATH%"
-start "" "%EQ_PATH%\eqgame.exe" patchme /login:frostreaver07
-cd /d "%DMFT_PATH%"
-timeout /t 12 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --inject
-timeout /t 2 /nobreak >nul
-"%DMFT_PATH%\target\release\dmft.exe" --login frostreaver07 aTWmNmNn4jYAXYf "%SERVER%"
-echo   frostreaver07 login sent
+        if not defined NEW_PID (
+            echo   ERROR: Could not find new eqgame.exe PID for %%U
+        ) else (
+            echo   PID: !NEW_PID!
+            set "KNOWN_!NEW_PID!=1"
+
+            REM Wait for login screen
+            echo   Waiting %INJECT_WAIT%s for login screen...
+            timeout /t %INJECT_WAIT% /nobreak >nul
+
+            REM Inject into this specific PID
+            echo   Injecting DLL into PID !NEW_PID!...
+            "%DMFT_EXE%" --inject-pid !NEW_PID!
+            timeout /t %HOOK_WAIT% /nobreak >nul
+
+            REM Send login to this specific PID
+            echo   Sending login for %%U...
+            "%DMFT_EXE%" --login-pid !NEW_PID! %%U %%V "%SERVER%"
+            echo   %%U login sent to PID !NEW_PID!
+
+            REM Stagger before next client
+            if !CLIENT_NUM! LSS 6 (
+                echo   Waiting %STAGGER%s before next client...
+                timeout /t %STAGGER% /nobreak >nul
+            )
+        )
+    )
+)
 
 echo.
 echo ============================================
@@ -95,7 +101,8 @@ echo  All 6 clients launched!
 echo  Each will auto-login and enter world.
 echo ============================================
 echo.
-echo Monitoring for 120s...
+echo Monitoring DLL logs for 120s...
+echo Log dir: %TEMP%\dmft\
 timeout /t 120 /nobreak >nul
 echo.
 echo Done. Press any key to exit.

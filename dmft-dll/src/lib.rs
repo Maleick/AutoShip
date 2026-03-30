@@ -28,6 +28,11 @@ pub static EQ_BASE: AtomicU64 = AtomicU64::new(0);
 /// Checked by long-running loops (IPC listener, nav ticks) to exit gracefully.
 pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
+/// Guard against double injection. Set to true on first DLL_PROCESS_ATTACH.
+/// If a second copy is loaded (randomized DLL names bypass LoadLibrary dedup),
+/// the init thread exits immediately.
+static ALREADY_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
 #[cfg(windows)]
 mod dll_main {
     use windows::Win32::Foundation::{BOOL, HMODULE, TRUE};
@@ -38,6 +43,10 @@ mod dll_main {
     /// Thread procedure for `CreateThread`. Must match the `LPTHREAD_START_ROUTINE`
     /// signature: `extern "system" fn(*mut c_void) -> u32`.
     unsafe extern "system" fn init_thread(_param: *mut core::ffi::c_void) -> u32 {
+        // Prevent double initialization if injected twice into the same process.
+        if super::ALREADY_INITIALIZED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return 0;
+        }
         if let Err(e) = super::initialize() {
             tracing::error!("DMFT DLL initialization failed: {}", e);
         }

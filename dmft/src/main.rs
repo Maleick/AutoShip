@@ -61,12 +61,33 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let dump_mode = args.iter().any(|a| a == "--dump");
     let inject_mode = args.iter().any(|a| a == "--inject" || a == "inject");
+    let inject_pid_mode = args.iter().position(|a| a == "--inject-pid");
     let calibrate_mode = args.iter().any(|a| a == "--calibrate");
     let login_mode = args.iter().position(|a| a == "--login");
+    let login_pid_mode = args.iter().position(|a| a == "--login-pid");
     let cmd_mode = args.iter().position(|a| a == "--cmd");
 
     if calibrate_mode {
         run_calibrate_mode()
+    } else if let Some(pos) = login_pid_mode {
+        // --login-pid <PID> <account> <password> [server] [character]
+        let pid: u32 = args.get(pos + 1)
+            .context("--login-pid requires: --login-pid <PID> <account> <password> [server] [character]")?
+            .parse()
+            .context("PID must be a number")?;
+        let account = args.get(pos + 2)
+            .context("--login-pid requires: --login-pid <PID> <account> <password>")?
+            .clone();
+        let password = args.get(pos + 3)
+            .context("--login-pid requires: --login-pid <PID> <account> <password>")?
+            .clone();
+        let server = args.get(pos + 4)
+            .cloned()
+            .unwrap_or_else(|| "Firiona Vie".to_string());
+        let character = args.get(pos + 5)
+            .cloned()
+            .unwrap_or_default();
+        run_login_pid_mode(pid, &account, &password, &server, &character)
     } else if let Some(pos) = login_mode {
         // --login <account> <password> [server] [character]
         let account = args.get(pos + 1)
@@ -92,6 +113,13 @@ fn main() -> Result<()> {
             .context("--cmd requires: --cmd <pid> <command>")?
             .clone();
         run_cmd_mode(pid, &command)
+    } else if let Some(pos) = inject_pid_mode {
+        // --inject-pid <PID> — inject into a specific process only
+        let pid: u32 = args.get(pos + 1)
+            .context("--inject-pid requires: --inject-pid <PID>")?
+            .parse()
+            .context("PID must be a number")?;
+        run_inject_pid_mode(pid)
     } else if inject_mode {
         run_inject_mode()
     } else if dump_mode {
@@ -197,6 +225,10 @@ fn run_inject_mode() -> Result<()> {
 
     for &pid in &pids {
         print!("Injecting into PID {}... ", pid);
+        // Write session token before injection so DLL can read it during init.
+        if let Err(e) = write_session_token_file(pid) {
+            println!("WARN: token write failed: {:#}", e);
+        }
         match inject::loader::inject_dll(pid, &staged_dll) {
             Ok(()) => {
                 println!("OK");
@@ -228,6 +260,60 @@ fn run_inject_mode() -> Result<()> {
     println!();
     println!("Run scripts\\verify_injection.bat to check injection status.");
 
+    Ok(())
+}
+
+/// Inject mode targeting a specific PID (--inject-pid <PID>).
+fn run_inject_pid_mode(pid: u32) -> Result<()> {
+    info!(pid, "DMFT inject-pid mode — targeting single process");
+
+    let project_dir = std::env::current_dir().unwrap_or_default();
+    let dll_candidates = [
+        project_dir.join("target/release/dmft_dll.dll"),
+        project_dir.join("target/debug/dmft_dll.dll"),
+    ];
+
+    let source_dll = dll_candidates
+        .iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| anyhow::anyhow!(
+            "Cannot find dmft_dll.dll. Run `cargo build --release` first."
+        ))?;
+
+    // Write session token file BEFORE injection so DLL can read it during init.
+    write_session_token_file(pid)?;
+
+    let staged_dll = inject::dll_prep::prepare_dll(source_dll)?;
+    println!("Injecting into PID {}...", pid);
+
+    inject::loader::inject_dll(pid, &staged_dll)?;
+    println!("OK — DLL injected into PID {}", pid);
+    Ok(())
+}
+
+/// Login mode targeting a specific PID (--login-pid <PID> <account> <password> [server] [character]).
+fn run_login_pid_mode(pid: u32, account: &str, password: &str, server: &str, character: &str) -> Result<()> {
+    use dmft_common::ipc::Command;
+
+    println!("Sending StartLogin to PID {} (account: {}, server: {})...", pid, account, server);
+
+    let pipe = ipc::pipe::CommandPipe::connect(pid)
+        .context(format!("Cannot connect to PID {} — is the DLL injected?", pid))?;
+
+    let token = generate_session_token(pid);
+    pipe.send_raw_token(&token)
+        .context(format!("Failed to auth with PID {}", pid))?;
+
+    let cmd = Command::StartLogin {
+        account_name: account.to_string(),
+        password: password.to_string(),
+        server_name: server.to_string(),
+        character_name: character.to_string(),
+    };
+    pipe.send_async(&cmd)
+        .context(format!("Failed to send StartLogin to PID {}", pid))?;
+
+    println!("StartLogin sent to PID {}", pid);
     Ok(())
 }
 
@@ -345,7 +431,44 @@ fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 }
 
 /// Generate the same session token the DLL uses (PID-derived, for testing).
+/// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
+/// Must be called BEFORE injection.
+fn write_session_token_file(pid: u32) -> Result<()> {
+    let token_dir = std::env::temp_dir().join("dmft");
+    std::fs::create_dir_all(&token_dir)?;
+    let token_path = token_dir.join(format!("token_{}.bin", pid));
+
+    use rand::RngCore;
+    let mut token = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut token);
+
+    std::fs::write(&token_path, &token)?;
+    // Also cache in memory for later --login-pid calls in the same process
+    // (not needed — separate process invocations. Write a second copy for login to read.)
+    let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
+    std::fs::write(&login_token_path, &token)?;
+
+    info!(pid, "Session token written to {}", token_path.display());
+    Ok(())
+}
+
+/// Read the session token for authenticating with an already-injected DLL.
+/// The token was written by --inject-pid before injection.
 fn generate_session_token(pid: u32) -> [u8; 32] {
+    let token_path = std::env::temp_dir()
+        .join("dmft")
+        .join(format!("login_token_{}.bin", pid));
+
+    if let Ok(data) = std::fs::read(&token_path) {
+        if data.len() == 32 {
+            let mut token = [0u8; 32];
+            token.copy_from_slice(&data);
+            return token;
+        }
+    }
+
+    // Fallback: PID-derived (won't match DLL's random token — will fail auth)
+    warn!(pid, "No login token file found — auth will likely fail");
     let pid_bytes = pid.to_le_bytes();
     let mut token = [0u8; 32];
     for (i, byte) in token.iter_mut().enumerate() {
