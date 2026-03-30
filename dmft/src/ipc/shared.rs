@@ -1,8 +1,8 @@
 //! Shared memory READER (orchestrator side).
 //!
 //! Reads game state published by the injected DLL via a named shared memory
-//! region. On Windows this uses CreateFileMappingW / MapViewOfFile; on other
-//! platforms it returns an empty stub so the project compiles.
+//! region. Uses `OpenFileMappingW` with `FILE_MAP_READ` (read-only, least privilege).
+//! On non-Windows platforms it returns an empty stub so the project compiles.
 
 use dmft_common::types::{ClientId, GameState};
 use anyhow::Result;
@@ -34,6 +34,9 @@ impl SharedStateReader {
     /// should retry on the next poll cycle.
     ///
     /// Memory name: `dmft_state_{client_id}`
+    ///
+    /// Uses `OpenFileMappingW` + `FILE_MAP_READ` — the orchestrator has no need
+    /// for write access to the DLL-owned mapping.
     pub fn new(client_id: ClientId) -> Result<Self> {
         #[cfg(windows)]
         {

@@ -2,10 +2,23 @@
 members = ["dmft", "dmft-dll", "dmft-common"]
 resolver = "2"
 
-# panic = "abort" in the release profile:
-#   - For dmft-dll (cdylib): critical — unwinding across FFI into eqgame.exe's
-#     C++ stack frames is undefined behaviour.  abort avoids that entirely.
-#   - For dmft (orchestrator): produces a smaller, deterministic binary; panics
-#     terminate the process either way, so no information is lost.
+# Shared dependencies — versions and base features declared once here.
+# Crates reference these with `dependency.workspace = true` and may add
+# extra features at the crate level without changing the shared version.
+[workspace.dependencies]
+anyhow = "1"
+bincode = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing-appender = "0.2"
+
+# Release profile for the injected DLL and orchestrator.
+# `panic = "abort"` is critical for the cdylib: an unwinding panic from the DLL
+# into eqgame.exe's stack frames would crash the game.
 [profile.release]
+lto = "thin"
+codegen-units = 1
 panic = "abort"
+strip = "debuginfo"

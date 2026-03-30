@@ -247,16 +247,24 @@ fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
         );
     } else {
         tracing::warn!(
-            "No orchestrator token file at {} — using PID-derived fallback (insecure)",
+            "No orchestrator token file at {} — generating random fallback token",
             token_path.display()
         );
     }
 
-    // PID-derived fallback for backwards compatibility / manual injection
-    let pid_bytes = pid.to_le_bytes();
+    // Random fallback: use OS entropy (getrandom) so the token is not predictable
+    // even without the orchestrator's token file (e.g. during manual injection).
     let mut token = [0u8; 32];
-    for (i, byte) in token.iter_mut().enumerate() {
-        *byte = pid_bytes[i % 4] ^ (i as u8);
+    if getrandom::getrandom(&mut token).is_err() {
+        // getrandom itself failed — extremely unlikely on any supported Windows version.
+        // Log prominently and fall back to a PID-mixed value as absolute last resort.
+        tracing::error!(
+            "getrandom failed — session token entropy is degraded (should never happen)"
+        );
+        let pid_bytes = pid.to_le_bytes();
+        for (i, byte) in token.iter_mut().enumerate() {
+            *byte = pid_bytes[i % 4] ^ (i as u8 ^ 0xA5);
+        }
     }
     token
 }

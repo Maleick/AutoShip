@@ -25,20 +25,15 @@ pub fn cleanup_dll(path: &Path) {
     }
 }
 
-/// Generate a random name that blends in with system DLLs.
+/// Generate a random hex DLL name with no guessable pattern.
+///
+/// Uses `OsRng` to produce 16 random bytes formatted as a 32-char hex string,
+/// e.g. `a3f2c891b4d7e05f1234567890abcdef.dll`. This removes the predictable
+/// prefix/suffix/number pattern that a forensic scan could match against.
 fn generate_random_dll_name() -> String {
-    let prefixes = [
-        "msvc", "dx", "d3d", "win", "sys", "rt", "api", "cfg", "net", "sec",
-    ];
-    let suffixes = [
-        "rt", "cfg", "hlp", "svc", "ext", "lib", "mod", "core", "base", "util",
-    ];
-
-    let r1: u32 = rand::random::<u32>();
-    let r2: u32 = rand::random::<u32>();
-    let prefix = prefixes[(r1 as usize) % prefixes.len()];
-    let suffix = suffixes[(r2 as usize) % suffixes.len()];
-    let num: u32 = rand::random::<u32>() % 10000;
-
-    format!("{}_{}{}.dll", prefix, suffix, num)
+    use rand::RngCore;
+    let mut rng = rand::rngs::OsRng;
+    let hi = rng.next_u64();
+    let lo = rng.next_u64();
+    format!("{:016x}{:016x}.dll", hi, lo)
 }

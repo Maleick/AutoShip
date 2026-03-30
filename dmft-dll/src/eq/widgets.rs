@@ -190,7 +190,7 @@ where
     let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
     let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
 
-    if array_ptr == 0 || count == 0 || count > 2000 {
+    if array_ptr == 0 || count == 0 || count > MAX_WINDOW_COUNT {
         return;
     }
 

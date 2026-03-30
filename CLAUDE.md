@@ -17,7 +17,7 @@ cargo clippy             # Lint
 cargo fmt --check        # Check formatting
 ```
 
-The project has 621 tests across all three crates. Run `cargo test` to execute them. The project uses Rust edition 2024.
+The project has ~621 tests on Windows (all three crates); ~128 platform-independent tests run on macOS/Linux (Windows-only tests are behind `#[cfg(windows)]`). Run `cargo test` to execute them. The project uses Rust edition 2024.
 
 ## Architecture
 

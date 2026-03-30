@@ -462,25 +462,32 @@ fn on_game_tick() {
 
     // Run login FSM when not yet in world (local_player is null).
     // The login FSM drives credential entry, server/char selection autonomously.
+    // Once login is done (InWorld, Error, or Idle), stop all login automation
+    // including the periodic Enter key — otherwise it could dismiss NPC dialogs,
+    // close windows, or cause other unintended actions in the live game.
     {
-        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-        let in_world = if eq_base != 0 {
-            dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
-                .map(|addr| unsafe { *(addr as *const usize) } != 0)
-                .unwrap_or(false)
-        } else {
-            false
-        };
+        let login_done = crate::login::is_done();
 
-        if !in_world {
-            if let Some(phase) = crate::login::tick() {
-                crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
-            }
+        if !login_done {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            let in_world = if eq_base != 0 {
+                dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
+                    .map(|addr| unsafe { *(addr as *const usize) } != 0)
+                    .unwrap_or(false)
+            } else {
+                false
+            };
 
-            // If not in world and game loop is running, we're at character select.
-            // Send Enter key every ~3 seconds to click the Enter World button.
-            if tick % 90 == 45 {
-                send_enter_to_eq();
+            if !in_world {
+                if let Some(phase) = crate::login::tick() {
+                    crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
+                }
+
+                // If not in world and game loop is running, we're at character select.
+                // Send Enter key every ~3 seconds to click the Enter World button.
+                if tick % 90 == 45 {
+                    send_enter_to_eq();
+                }
             }
         }
     }
@@ -596,7 +603,11 @@ fn read_and_publish_state(tick: u64) {
 /// Read a null-terminated string from an in-process address. Max `max_len` bytes.
 ///
 /// # Safety
-/// Caller must ensure `addr` points to readable memory of at least `max_len` bytes.
+/// * `addr` must point to readable memory of at least `max_len` bytes.
+/// * `max_len` must not exceed the actual allocated buffer size for the field being read.
+///   EQ's fixed-size char arrays (name=64, displayedName=64, zone=128) always meet this
+///   requirement per the MQ2 `PlayerClient.h` layout. Do not pass arbitrary `max_len` values.
+/// * Returns an empty string safely when `addr == 0`.
 unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
     if addr == 0 {
         return String::new();
@@ -613,9 +624,16 @@ unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
 unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     use dmft_common::offsets::{player_base, player_zone};
 
+    // Read spawn_id first as a validity canary: id == 0 means the PlayerClient
+    // slot is empty or has been freed. Reading further fields from a freed spawn
+    // causes an access violation and crashes eqgame.exe.
+    let spawn_id = unsafe { *((spawn_ptr + player_base::SPAWN_ID) as *const u32) };
+    if spawn_id == 0 {
+        return dmft_common::types::SpawnData::default();
+    }
+
     let name = unsafe { read_string_at(spawn_ptr + player_base::NAME, 64) };
     let displayed_name = unsafe { read_string_at(spawn_ptr + player_base::DISPLAYED_NAME, 64) };
-    let spawn_id = unsafe { *((spawn_ptr + player_base::SPAWN_ID) as *const u32) };
     let spawn_type = unsafe { *((spawn_ptr + player_base::TYPE) as *const u8) };
     let x = unsafe { *((spawn_ptr + player_base::X) as *const f32) };
     let y = unsafe { *((spawn_ptr + player_base::Y) as *const f32) };

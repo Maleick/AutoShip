@@ -12,8 +12,8 @@
     "pinstCEverQuest": 5381732184
   },
   "player_base": {
-    "next": 8,
-    "prev": 0,
+    "next": 16,
+    "prev": 8,
     "y": 116,
     "x": 120,
     "z": 124,

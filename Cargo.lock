@@ -358,6 +358,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "dmft-common",
+ "getrandom 0.2.17",
  "retour",
  "thiserror",
  "tracing",

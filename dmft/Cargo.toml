@@ -6,14 +6,14 @@ description = "External process memory reader for EverQuest (Frostreaver TLP 36-
 
 [dependencies]
 dmft-common = { path = "../dmft-common" }
-bincode = { version = "2", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+bincode.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 toml = "0.8"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-tracing-appender = "0.2"
-anyhow = "1"
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+anyhow.workspace = true
 ratatui = "0.29"
 crossterm = "0.28"
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -31,6 +31,7 @@ windows = { version = "0.54", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_IO",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",

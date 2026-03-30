@@ -122,12 +122,123 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     result
 }
 
-/// Eject a DLL from a target process (FreeLibrary via CreateRemoteThread).
+/// Eject a DLL from a target process via `CreateRemoteThread(FreeLibrary, module_base)`.
+///
+/// Finds the DLL's module base address in the target process using a Toolhelp snapshot,
+/// then spawns a remote thread calling `FreeLibrary` on that address.
 #[cfg(windows)]
 pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
-    // TODO: Find module handle in remote process, call FreeLibrary
-    tracing::info!(pid, dll = dll_name, "DLL ejection not yet implemented");
-    Ok(())
+    use anyhow::Context;
+    use windows::Win32::Foundation::{CloseHandle, HMODULE};
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Module32FirstW, Module32NextW,
+        MODULEENTRY32W, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+    };
+    use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+    use windows::Win32::System::Threading::{
+        CreateRemoteThread, OpenProcess, WaitForSingleObject,
+        PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    };
+    use windows::Win32::Foundation::WAIT_EVENT;
+    use windows::core::{w, PCSTR};
+    const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
+
+    // Snapshot all modules loaded in the target process.
+    let snap = unsafe {
+        CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
+    }
+    .context("CreateToolhelp32Snapshot failed")?;
+
+    let dll_name_lower = dll_name.to_ascii_lowercase();
+    let mut module_base = HMODULE::default();
+
+    let mut entry = MODULEENTRY32W {
+        dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
+        ..Default::default()
+    };
+
+    // Walk the module list looking for a name that contains dll_name (case-insensitive).
+    let found = unsafe {
+        if Module32FirstW(snap, &mut entry).is_ok() {
+            loop {
+                let name: String = entry
+                    .szModule
+                    .iter()
+                    .take_while(|&&c| c != 0)
+                    .map(|&c| char::from_u32(c as u32).unwrap_or('?'))
+                    .collect::<String>()
+                    .to_ascii_lowercase();
+
+                if name.contains(&dll_name_lower) {
+                    module_base = HMODULE(entry.modBaseAddr as isize);
+                    break true;
+                }
+                if Module32NextW(snap, &mut entry).is_err() {
+                    break false;
+                }
+            }
+        } else {
+            false
+        }
+    };
+
+    unsafe { let _ = CloseHandle(snap); }
+
+    if !found || module_base.is_invalid() {
+        bail!("DLL '{}' not found in modules of process {}", dll_name, pid);
+    }
+
+    // Open target process with thread-creation rights.
+    let process = unsafe {
+        OpenProcess(
+            PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+            false,
+            pid,
+        )
+    }
+    .context("OpenProcess failed for eject")?;
+
+    let result = (|| -> Result<()> {
+        // Get FreeLibrary address from kernel32 — identical in all processes on x64 Windows.
+        let kernel32 = unsafe { GetModuleHandleW(w!("kernel32.dll")) }
+            .context("Failed to get kernel32 handle")?;
+
+        let free_library_addr = unsafe {
+            GetProcAddress(kernel32, PCSTR(b"FreeLibrary\0".as_ptr()))
+        }
+        .context("GetProcAddress(FreeLibrary) failed")?;
+
+        let free_library_fn: unsafe extern "system" fn(*mut core::ffi::c_void) -> u32 =
+            unsafe { std::mem::transmute(free_library_addr) };
+
+        // Spawn a remote thread executing FreeLibrary(module_base).
+        let thread = unsafe {
+            CreateRemoteThread(
+                process,
+                None,
+                0,
+                Some(std::mem::transmute(free_library_fn)),
+                Some(module_base.0 as *const _),
+                0,
+                None,
+            )
+        }
+        .context("CreateRemoteThread(FreeLibrary) failed")?;
+
+        unsafe {
+            let wait_result = WaitForSingleObject(thread, 5000); // 5s timeout
+            let _ = CloseHandle(thread);
+            if wait_result != WAIT_OBJECT_0 {
+                bail!("DLL ejection timed out waiting for FreeLibrary remote thread");
+            }
+        }
+
+        tracing::info!(pid, dll = dll_name, "DLL ejected successfully");
+        Ok(())
+    })();
+
+    unsafe { let _ = CloseHandle(process); }
+    result
 }
 
 #[cfg(not(windows))]

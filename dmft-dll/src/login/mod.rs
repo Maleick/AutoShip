@@ -11,6 +11,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use dmft_common::login::{LoginError, LoginPhase};
+use zeroize::Zeroizing;
 
 /// Global login FSM instance, one per injected DLL.
 static LOGIN_FSM: Mutex<Option<LoginFsm>> = Mutex::new(None);
@@ -92,24 +93,15 @@ enum State {
 const ACTION_COOLDOWN_TICKS: u32 = 15;
 
 /// Credentials stored temporarily in memory, zeroized after use.
+///
+/// The `password` field uses `Zeroizing<String>` which overwrites the heap buffer
+/// with volatile zeroes on drop — preventing compiler optimization from eliding the
+/// zeroing and covering prior heap reallocations that a manual loop would miss.
 struct Credentials {
     account_name: String,
-    password: String,
+    password: Zeroizing<String>,
     server_name: String,
     character_name: String,
-}
-
-impl Drop for Credentials {
-    fn drop(&mut self) {
-        // Zeroize password bytes in place
-        // Safety: we're overwriting the String's buffer before it's freed
-        unsafe {
-            let bytes = self.password.as_bytes_mut();
-            for b in bytes.iter_mut() {
-                *b = 0;
-            }
-        }
-    }
 }
 
 /// The login state machine. Drives EQ's login UI from credential entry to in-world.
@@ -176,7 +168,7 @@ impl LoginFsm {
         self.character_name = character_name.clone();
         self.credentials = Some(Credentials {
             account_name,
-            password,
+            password: Zeroizing::new(password),
             server_name,
             character_name,
         });
@@ -760,7 +752,7 @@ mod tests {
     fn test_credentials_password_zeroized_on_drop() {
         let creds = Credentials {
             account_name: "test".into(),
-            password: "secret123".into(),
+            password: Zeroizing::new("secret123".to_string()),
             server_name: "srv".into(),
             character_name: "chr".into(),
         };

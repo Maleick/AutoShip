@@ -34,6 +34,7 @@ credentials.db*
 
 # Account credentials
 accounts.csv
+config/accounts.toml
 
 # Downloaded data files (maps, navmeshes — too large for git)
 data/
