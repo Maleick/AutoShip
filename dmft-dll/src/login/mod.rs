@@ -59,6 +59,15 @@ pub fn phase() -> LoginPhase {
         .unwrap_or(LoginPhase::NotStarted)
 }
 
+/// Check if the login FSM has completed (in world, error, or idle after completion).
+pub fn is_done() -> bool {
+    let guard = LOGIN_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    guard
+        .as_ref()
+        .map(|fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))
+        .unwrap_or(true)
+}
+
 /// Internal states for the login FSM — more granular than the IPC-facing LoginPhase.
 #[derive(Debug, Clone, PartialEq)]
 enum State {
@@ -198,6 +207,16 @@ impl LoginFsm {
         // Resolve eqmain.dll base on every tick — it can load/unload during login.
         self.eqmain_base = eqmain::find_eqmain();
 
+        // Log eqmain status periodically for debugging
+        if self.ticks_in_state % 20 == 1 {
+            tracing::info!(
+                eqmain_base = format!("{:#x}", self.eqmain_base),
+                state = ?self.state,
+                ticks = self.ticks_in_state,
+                "Login FSM tick"
+            );
+        }
+
         // Before doing state-specific work, check for dialogs that can appear
         // at any point during login (error dialogs, "already logged in", etc.)
         if self.eqmain_base != 0 {
@@ -264,32 +283,29 @@ impl LoginFsm {
     }
 
     fn tick_wait_for_login_screen(&mut self) {
-        // Log all visible windows once for calibration
-        if self.ticks_in_state == 1 && self.eqmain_base != 0 {
-            widgets::log_all_window_texts(self.eqmain_base);
-        }
+        if self.eqmain_base == 0 { return; }
 
-        // Dismiss splash screens and pre-login prompts (EULA, order, seizure, news)
-        if self.eqmain_base != 0 {
-            widgets::dismiss_splash(self.eqmain_base);
-        }
-
-        // Detect login screen by SIDL name "connect" (MQ2 AutoLogin approach)
-        if self.eqmain_base != 0
-            && widgets::is_sidl_window_visible(self.eqmain_base, widgets::SIDL_CONNECT)
-        {
-            tracing::info!("Login screen detected (SIDL: connect)");
-            self.transition(State::EnteringCredentials);
-            return;
-        }
-
-        // Fallback: detect by WindowText (for older/variant clients)
-        if self.eqmain_base != 0
-            && (widgets::is_window_visible(self.eqmain_base, "LOGIN_ConnectButton")
-                || widgets::is_window_visible(self.eqmain_base, "USERNAME"))
-        {
-            tracing::info!("Login screen detected (fallback: WindowText)");
-            self.transition(State::EnteringCredentials);
+        // Use the proven type_credentials_to_window approach that was working
+        // before the FSM rewrite. It scans for USERNAME/PASSWORD labels and
+        // writes credentials + clicks Login. If it succeeds, skip to server select.
+        if !self.action_taken {
+            let creds = self.credentials.as_ref();
+            if let Some(creds) = creds {
+                // Try writing credentials (proven working approach)
+                let wrote = widgets::type_credentials_to_window(
+                    self.eqmain_base,
+                    &creds.account_name,
+                    &creds.password,
+                );
+                if wrote {
+                    tracing::info!("Credentials written + Login clicked");
+                    // Also type password via WM_CHAR as backup
+                    widgets::type_password_wm_char(self.eqmain_base, &creds.password);
+                    self.action_taken = true;
+                    self.transition(State::WaitForServerSelect);
+                    return;
+                }
+            }
         }
     }
 

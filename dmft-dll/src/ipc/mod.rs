@@ -164,10 +164,15 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 "StartLogin received — delegating to FSM (password redacted)"
             );
 
-            // Store credentials in the FSM. The FSM tick (driven from the game
-            // loop) handles all UI interaction: detecting which screen is visible,
-            // writing credentials, clicking buttons, dismissing dialogs, selecting
-            // characters, and entering world. No background thread needed.
+            // Type password via WM_CHAR FIRST (before mem::take moves password).
+            // This is the proven working approach — PostMessage directly to EQ's HWND.
+            let eqmain_base = crate::login::eqmain::find_eqmain();
+            if eqmain_base != 0 {
+                tracing::info!("Typing password via WM_CHAR + Enter");
+                crate::login::widgets::type_password_wm_char(eqmain_base, &password);
+            }
+
+            // Store credentials in the FSM for character select phase.
             crate::login::start_login(
                 account_name.to_string(),
                 std::mem::take(&mut *password),
@@ -175,10 +180,65 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 character_name.to_string(),
             );
 
+            // Spawn background thread for Phase 2+3 (server select → char select).
+            // Polls every 500ms. Uses Enter key to dismiss dialogs.
+            // Game loop tick handles Phase 4 (character select → enter world).
+            std::thread::Builder::new()
+                .name("dmft-login-phase2".into())
+                .spawn(move || {
+                    login_chain_phase2();
+                })
+                .ok();
+
             true
         }
         _ => false,
     }
+}
+
+/// Phase 2+3: poll for server select → character select.
+/// Uses Enter key (PostMessage) to dismiss dialogs and advance.
+/// Runs until eqmain.dll unloads, then game loop tick handles character select.
+fn login_chain_phase2() {
+    // Phase 2: Wait for authentication, then press Enter/click PLAY EVERQUEST
+    tracing::info!("Phase 2: Waiting 5s for authentication...");
+    std::thread::sleep(std::time::Duration::from_secs(5));
+
+    // Press Enter to submit login if needed, then poll for PLAY EVERQUEST
+    for attempt in 0..60 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let eqmain_base = crate::login::eqmain::find_eqmain();
+        if eqmain_base == 0 {
+            tracing::info!(attempt, "Phase 2: eqmain.dll gone — already at char select");
+            return;
+        }
+
+        // Press Enter every 3s to dismiss dialogs or click default button
+        if attempt % 6 == 0 {
+            tracing::info!(attempt, "Phase 2: Pressing Enter");
+            crate::login::widgets::simulate_enter_key(eqmain_base);
+        }
+    }
+
+    // Phase 3: Poll for eqmain.dll unload (character select)
+    tracing::info!("Phase 3: Polling for character select...");
+    for attempt in 0..120 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let eqmain_base = crate::login::eqmain::find_eqmain();
+        if eqmain_base == 0 {
+            tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
+            // Let the game loop FSM tick handle character selection
+            return;
+        }
+        // Keep pressing Enter to dismiss dialogs
+        if attempt % 6 == 3 {
+            if eqmain_base != 0 {
+                tracing::info!(attempt, "Phase 3: Pressing Enter to dismiss dialog");
+                crate::login::widgets::simulate_enter_key(eqmain_base);
+            }
+        }
+    }
+    tracing::warn!("Phase 3: Timed out waiting for character select after 60s");
 }
 
 /// Background thread: creates a `CommandListener` and loops receiving commands
