@@ -1,111 +1,114 @@
-# Session Handoff — 2026-03-30 ~02:30 UTC
+# Session Handoff — 2026-03-30 ~07:30 UTC
 
 ## Start Here
 
 Read this file + check memories (`MEMORY.md`) for full project context.
 
 ## Session Stats (Cumulative)
-- ~54,000+ lines across 3 crates
-- ~155+ commits (~15 this session)
-- 474 tests passing (2 pre-existing affinity test failures on Windows, need #[cfg(not(windows))])
+- ~55,000+ lines across 3 crates
+- ~165+ commits (~10 this session)
+- 631 tests passing (474 dmft + 46 dmft-common + 111 dmft-dll), 0 failures
 - 0 clippy errors
-- Login chain: **FULLY WORKING** — login → server select → character select → enter world
-- 36 account credentials stored in config/accounts.csv (gitignored)
-- 6-client Group 1 launch script ready (scripts/launch_group1.bat)
-
-## Unmerged Branches
-- `claude/nostalgic-cray` — audit fixes (shared memory DACL, DLL injection improvements). Has merge conflicts with login chain rewrite. Cherry-pick in next session.
-- `claude/vibrant-ishizaka` — already merged
-- Other `claude/*` branches — empty/stale, locked by worktrees from dispatch sessions
+- Login chain: credentials → server → char select WORKING
+- Enter world: BROKEN (EnterWorld() never triggers — #1 priority fix)
+- Navigation: framework working but movement broken (writes heading but ExecuteCmd added, untested)
+- Zone info: reading from shared memory WORKING ("West Freeport (freeportwest)" confirmed)
+- 6 accounts launched, DLL injected, at character select (need manual Enter to enter world)
 
 ## What's Done (This Session — 2026-03-30)
 
-### Login Chain — FULLY WORKING ✅
-Root causes found and fixed:
-1. **eqmain vtable WndNotification at 0x110** (not 0x120 like eqgame) — eqmain::CXWnd has different vtable layout than eqgame CXWnd. This was why PLAY EVERQUEST clicks didn't work.
-2. **Password empty bug** — `mem::take` moved password before credential write. Fixed ordering.
-3. **CXWndManager offsets swapped** — eqgame count at +0x008, array at +0x010 (ArrayClass layout).
-4. **Window scan crash** — bad pointer at end of array. Fixed with early exit.
-5. **IPC pipe error loop** — missing DisconnectNamedPipe + no backoff → 8.5GB log. Fixed.
-6. **PostMessage Enter** — simulate_enter_key used SendInput (foreground only). Fixed to PostMessage.
-7. **Game loop Enter key** — sends VK_RETURN every 3s when at character select to click Enter World.
+### Multi-Client Infrastructure ✅
+- `--inject-pid <PID>` — inject DLL into specific process
+- `--login-pid <PID>` — send login to specific process
+- `--status <PID>` — read shared memory (player, position, zone, nav status)
+- `--nav <PID> <x> <y> <z>` — send NavigateTo command
+- CSPRNG session token auth (written before injection, DLL reads at init)
+- Double-injection guard (ALREADY_INITIALIZED atomic bool)
+- "Already logged in" YESNO dialog handler in Phase 3 polling
 
-### Proven Working Flow:
-1. Launch EQ: `eqgame.exe patchme /login:frostreaver01`
-2. Wait 12s for login screen
-3. Inject DLL: `dmft.exe --inject`
-4. Wait 2s
-5. Send login: `dmft.exe --login frostreaver01 <password> "Firiona Vie"`
-6. DLL writes credentials via CStrRep + clicks Login via WndNotification(0x110)
-7. DLL also types password via WM_CHAR as backup
-8. Phase 2: finds PLAY EVERQUEST, vtable clicks it
-9. Phase 3: eqmain.dll unloads → character select
-10. Game loop sends Enter → enters world (memory jumps to 1GB)
+### Zone Info ✅
+- `zone_short_name` and `zone_long_name` added to GameState shared memory
+- DLL reads from zoneHeader struct every 30 ticks
+- Confirmed working: "West Freeport (freeportwest)"
 
-### Research Done ✅
-- Cloned macroquest, eqlib, mq-definitions repos to mq2-reference/, mq2-eqlib/, mq2-definitions/
-- Deep analysis of MQ2 AutoLogin StateMachine.cpp — complete window name map, state flow, dialog handling
-- eqmain::CXWnd vtable layout discovered in LoginFrontend.h (different from eqgame CXWnd.h)
-- CListWnd inherits CXWnd (not CSidlScreenWnd) — confirmed
-- Navmesh: MQ2Nav uses Recast/Detour with protobuf-wrapped .navmesh files
-- /stick: uses ExecuteCmd for movement (keyboard simulation), not CPhysicsInfo writes
-- Casting: CastSpell by gem slot, interrupt detection via chat message parsing
-- IPC: MQ2 uses TCP (EQBC), our shared memory approach is better for single-machine
+### Navigation Framework (Partially Working)
+- Navigator lazy-inits on first in-world tick
+- ExecuteCmd(CMD_FORWARD) wired into MovementController (NEW — untested with live client)
+- Nav sends NavigateTo, Navigator receives waypoints, stuck detection works
+- BUT: characters don't actually walk yet (needs testing with new DLL)
 
-### Code Quality ✅
-- IPC pipe backoff (exponential 10ms→5s)
-- read_cxstr pointer validation (rep_ptr < 0x10000)
-- Window scan early exit to prevent crashes
-- Tests gated with #[cfg(not(windows))] for null-pointer stub tests
+### Test/Audit Cleanup ✅
+- All null-pointer stub tests gated with `#[cfg(not(windows))]`
+- Cherry-picked audit fixes from claude/nostalgic-cray
+- 10 local + 4 remote stale branches deleted
+- All pushed to master
+
+### Research Completed ✅
+1. **Navmesh**: mqmesh.com serves `.navmesh` files (protobuf + Detour tiles). `divert` Rust crate for pathfinding.
+2. **Zone routing**: ZoneGuideManagerClient at 0x1403571F0 has 888-zone adjacency graph in EQ memory. BFS pathfinding.
+3. **eqlib deep dive**: Enter World = `CCharacterListWnd::EnterWorld()`, movement = `ExecuteCmd(CMD_FORWARD)`, doors = `EQSwitch::UseSwitch()`.
+4. **All offsets verified correct** against MQ2 eqlib (March 2026 patch 20260310).
+
+## IMMEDIATE TODO — Next Session
+
+### 1. Fix Enter World Automation (CRITICAL)
+The login chain reaches character select but EnterWorld() never fires. The code exists in game_loop.rs (stages 1-3) but `ENTER_WORLD_STAGE` is never set to 1.
+
+**Root cause**: The login FSM's `do_select_character_via_game_loop()` should queue the enter world, but something in the chain from `tick_selecting_character()` → `do_select_character_via_game_loop()` → `queue_enter_world()` isn't firing.
+
+**Fix approach**:
+- Trace the login FSM from Phase 3 (eqmain unloaded) through character select
+- The FSM transitions to `SelectingCharacter` but may not find CCharacterListWnd
+- Alternative: call EnterWorld() directly when at char select (simpler than the stage system)
+- Reference: MQ2 AutoLogin just calls `CCharacterListWnd::EnterWorld()` directly
+
+### 2. Test Navigation Movement
+The new DLL has `ExecuteCmd(CMD_FORWARD)` wired in but hasn't been tested on a live in-world client. Need to:
+- Get a character in-world with the latest DLL
+- Send `--nav <PID> <x> <y> <z>` to a reachable nearby point
+- Verify the character actually walks
+
+### 3. Navmesh Integration
+- Add `divert` crate dependency
+- Download zone meshes from mqmesh.com
+- Parse .navmesh protobuf → Detour tiles → NavMeshQuery
+- Replace straight-line nav with mesh-aware pathfinding
+
+### 4. Zone-to-Zone Navigation
+- Read ZoneGuideManagerClient from memory (zone graph)
+- Implement BFS pathfinder
+- Add EQSwitch::UseSwitch binding for doors/books
+- Record zone line coordinates for key routes
 
 ## Key Offsets (NEVER CHANGE WITHOUT LIVE TEST)
 
 | Offset | Value | Context | Notes |
 |--------|-------|---------|-------|
-| CEDITBASEWND_INPUT_TEXT | 0x278 | eqmain | NOT 0x280 (eqlib says 0x280 but that's wrong for this client) |
-| CXWND_WINDOW_TEXT | 0x078 | both | Confirmed |
-| CSIDL_SCREEN_WND_SIDL_TEXT | 0x270 | both | CSidlScreenWnd only, not CListWnd |
+| CEDITBASEWND_INPUT_TEXT | 0x278 | eqmain | NOT 0x280 |
 | CXWND_VTABLE_WND_NOTIFICATION | 0x110 | eqmain | Different from eqgame! |
 | CXWND_VTABLE_WND_NOTIFICATION | 0x120 | eqgame | Different from eqmain! |
-| CXWndManager COUNT | 0x008 | eqgame | ArrayClass: m_length first |
-| CXWndManager ARRAY | 0x010 | eqgame | ArrayClass: m_array second |
-| CXWndManager ARRAY | 0x010 | eqmain | Different layout |
-| CXWndManager COUNT | 0x018 | eqmain | Different layout |
-
-## IMMEDIATE TODO — Next Session
-
-### 1. Multi-Client Testing
-- Test `scripts/launch_and_login.bat` with single client
-- Create multi-account batch for 6 clients with staggered launch
-- Need additional account credentials in config
-
-### 2. Character Select Improvements
-- SelectCharacter by name (currently Enter selects first/default character)
-- Use CCharacterListWnd::SelectCharacter(index) + EnterWorld() via game loop
-- Stop sending Enter once in-world
-
-### 3. Dialog Handling
-- Implement proper "character already logged in" Yes/No dialog detection
-- Use eqmain child window names: YESNO_YesButton, YESNO_NoButton
-- Need eqmain vtable offset (0x110) for these button clicks
-
-### 4. Continue Audit + Cleanup
-- Run simplify on login chain code
-- Fix remaining clippy warnings
-- Add tests for new widget primitives
+| EXECUTE_CMD | 0x1402235B0 | eqgame | CMD_FORWARD=2, CMD_BACK=3 |
+| ENTER_WORLD | 0x14027E1F0 | eqgame | CCharacterListWnd::EnterWorld |
+| ZoneGuideManagerClient | 0x1403571F0 | eqgame | 888-zone graph |
+| EQSwitch::UseSwitch | 0x14026B060 | eqgame | Door/book interaction |
 
 ## Key File Paths
 
-### frostreaver (Windows)
+### MQ2 References
+- Login automation: https://github.com/macroquest/macroquest/tree/master/src/login
+- Zone routing: https://github.com/macroquest/macroquest/tree/master/src/routing
+- HUD overlay: https://github.com/macroquest/macroquest/blob/master/src/plugins/hud/MQ2HUD.cpp
+- eqlib: https://github.com/macroquest/eqlib
+- Local clones: mq2-reference/, mq2-eqlib/, mq2-definitions/
+
+### Frostreaver (Windows)
 - DMFT: `C:\Users\xmale\Projects\DMFT`
 - EQ: `C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest`
 - DLL logs: `C:\Users\xmale\AppData\Local\Temp\dmft\dmft-dll.log.YYYY-MM-DD`
-- Test: `C:\Users\xmale\Projects\DMFT\scripts\launch_and_login.bat`
-- MQ2 ref: `C:\Users\xmale\Projects\DMFT\mq2-reference/`
-- eqlib ref: `C:\Users\xmale\Projects\DMFT\mq2-eqlib/`
 
 ### Session Notes
 - EQ requires Console session with GPU (not RDP)
-- Use `tscon` or disconnect RDP to activate console
-- Character stuck in-world takes 5-10 min to timeout
+- Characters stuck in-world take 5-10 min to timeout
 - `/login:` flag required to skip EULA
+- PowerShell `$pid` is reserved — use `$procId` instead
+- Git Bash converts `/slash` paths — use `MSYS_NO_PATHCONV=1`

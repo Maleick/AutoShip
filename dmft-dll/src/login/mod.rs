@@ -458,51 +458,21 @@ impl LoginFsm {
 
     /// Queue character selection and enter world via the game loop's existing mechanism.
     fn do_select_character_via_game_loop(&mut self, eq_base: u64, character_name: &str) {
-        // Find CCharacterListWnd by scanning eqgame.exe's CXWndManager
-        let Some(mgr_ptr_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::PINST_CXWND_MANAGER,
-            eq_base,
-        ) else {
-            tracing::warn!("Failed to rebase pinstCXWndManager");
-            return;
-        };
-
-        let char_list_wnd = {
-            #[cfg(windows)]
-            {
-                use dmft_common::offsets::eqgame as eqg;
-                unsafe {
-                    let mgr = *(mgr_ptr_addr as *const usize);
-                    if mgr == 0 {
-                        tracing::warn!("CXWndManager is null");
-                        return;
-                    }
-
-                    // Use eqgame offsets to find CharacterListWnd
-                    crate::eq::widgets::find_visible_window_by_sidl_name(
-                        mgr,
-                        widgets::SIDL_CHARACTER_LIST_WND,
-                        eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
-                        eqg::CXWNDMGR_WINDOWS_ARRAY,
-                        eqg::CXWNDMGR_WINDOWS_COUNT,
-                    )
-                }
-            }
-            #[cfg(not(windows))]
-            {
-                let _ = mgr_ptr_addr;
-                None::<usize>
-            }
-        };
+        // Find CCharacterListWnd by scanning eqgame.exe's CXWndManager.
+        // We use rescan_char_list_wnd() from the game loop module — it scans by
+        // SidlText WITHOUT checking dShow visibility, which is critical because
+        // the eqmain dShow offset (0x06c) may not match eqgame's CXWnd layout.
+        let char_list_wnd = crate::hooks::game_loop::rescan_char_list_wnd();
 
         let Some(wnd) = char_list_wnd else {
             if self.ticks_in_state < 150 {
                 // Still loading — retry next tick
                 return;
             }
-            tracing::warn!("CharacterListWnd not found after extended wait");
-            // Try fallback: /enterworld slash command
-            crate::hooks::game_loop::queue_slash_command("/enterworld".to_string());
+            tracing::warn!("CharacterListWnd not found after extended wait — trying Enter key");
+            // Fallback: send Enter key to click the Enter World button.
+            // (Slash commands require local player, which is null at char select.)
+            crate::hooks::game_loop::send_enter_to_eq();
             self.action_taken = true;
             return;
         };

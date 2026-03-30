@@ -67,6 +67,7 @@ fn main() -> Result<()> {
     let login_pid_mode = args.iter().position(|a| a == "--login-pid");
     let cmd_mode = args.iter().position(|a| a == "--cmd");
     let nav_mode = args.iter().position(|a| a == "--nav");
+    let navpath_mode = args.iter().position(|a| a == "--navpath");
     let status_mode = args.iter().position(|a| a == "--status");
 
     if let Some(pos) = status_mode {
@@ -149,6 +150,18 @@ fn main() -> Result<()> {
         run_inject_pid_mode(pid)
     } else if inject_mode {
         run_inject_mode()
+    } else if let Some(pos) = navpath_mode {
+        // --navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>
+        let zone = args.get(pos + 1)
+            .context("--navpath requires: --navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>")?
+            .clone();
+        let x1: f32 = args.get(pos + 2).context("missing x1")?.parse().context("x1 not a number")?;
+        let y1: f32 = args.get(pos + 3).context("missing y1")?.parse().context("y1 not a number")?;
+        let z1: f32 = args.get(pos + 4).context("missing z1")?.parse().context("z1 not a number")?;
+        let x2: f32 = args.get(pos + 5).context("missing x2")?.parse().context("x2 not a number")?;
+        let y2: f32 = args.get(pos + 6).context("missing y2")?.parse().context("y2 not a number")?;
+        let z2: f32 = args.get(pos + 7).context("missing z2")?.parse().context("z2 not a number")?;
+        run_navpath_mode(&zone, (x1, y1, z1), (x2, y2, z2))
     } else if dump_mode {
         run_dump_mode()
     } else {
@@ -606,6 +619,33 @@ fn generate_session_token(pid: u32) -> [u8; 32] {
         *byte = pid_bytes[i % 4] ^ (i as u8);
     }
     token
+}
+
+/// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
+fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> Result<()> {
+    info!("Navpath mode: zone={zone} from={from:?} to={to:?}");
+    println!("Loading navmesh for zone '{zone}'...");
+
+    // Parse first to show mesh params for debugging
+    let data = nav::mesh::download_zone_mesh(zone)?;
+    let proto = nav::mesh::parse_navmesh(&data)?;
+    if let Some(ts) = &proto.tile_set {
+        if let Some(p) = &ts.mesh_params {
+            let o = p.origin.as_ref().map(|v| (v.x, v.y, v.z)).unwrap_or_default();
+            println!("  Mesh params: origin=({:.1}, {:.1}, {:.1}) tile={}x{} tiles={} polys={}",
+                o.0, o.1, o.2, p.tile_width, p.tile_height, p.max_tiles, p.max_polys);
+        }
+        println!("  Tiles: {}", ts.tiles.len());
+    }
+    let loaded = nav::mesh::load_navmesh(&proto)?;
+    println!("Navmesh loaded. Finding path...");
+
+    let waypoints = nav::mesh::find_path(&loaded, from, to)?;
+    println!("Path found ({} waypoints):", waypoints.len());
+    for (i, (x, y, z)) in waypoints.iter().enumerate() {
+        println!("  [{i:>3}] ({x:.2}, {y:.2}, {z:.2})");
+    }
+    Ok(())
 }
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.

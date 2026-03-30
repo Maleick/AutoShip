@@ -22,6 +22,13 @@ argon2 = "0.5"
 rpassword = "7"
 rand = "0.8"
 zeroize = { version = "1", features = ["alloc"] }
+prost = "0.13"
+flate2 = "1"
+reqwest = { version = "0.12", features = ["blocking"] }
+recastnavigation-sys = { version = "1.0.3", features = ["detour_large_nav_meshes"] }
+
+[build-dependencies]
+cc = "1"
 
 [dev-dependencies]
 tempfile = "3"

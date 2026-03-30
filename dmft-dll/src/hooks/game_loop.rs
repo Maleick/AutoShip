@@ -137,9 +137,10 @@ pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize, character_
 }
 
 /// Re-scan CXWndManager for CCharacterListWnd by SidlText.
-/// Used in Stage 3 to validate the pointer is still valid before calling EnterWorld.
+/// Used in Stage 3 to validate the pointer is still valid before calling EnterWorld,
+/// and by the login FSM to find the window for initial character selection.
 #[cfg(windows)]
-fn rescan_char_list_wnd() -> Option<usize> {
+pub fn rescan_char_list_wnd() -> Option<usize> {
     use dmft_common::offsets::eqgame as eqg;
 
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
@@ -172,7 +173,7 @@ fn rescan_char_list_wnd() -> Option<usize> {
 }
 
 #[cfg(not(windows))]
-fn rescan_char_list_wnd() -> Option<usize> { None }
+pub fn rescan_char_list_wnd() -> Option<usize> { None }
 
 /// Find the index of a character by name in the Character_List CListWnd.
 ///
@@ -516,7 +517,7 @@ fn on_game_tick() {
 /// Send Enter key to this EQ process's window via PostMessage.
 /// Used at character select to click "Enter World".
 #[cfg(windows)]
-fn send_enter_to_eq() {
+pub fn send_enter_to_eq() {
     use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowThreadProcessId, IsWindowVisible, PostMessageW,
@@ -555,7 +556,7 @@ fn send_enter_to_eq() {
 }
 
 #[cfg(not(windows))]
-fn send_enter_to_eq() {}
+pub fn send_enter_to_eq() {}
 
 // ─── Game State Reading ───
 // Reads EQ memory directly (we're in-process) and publishes to shared memory.

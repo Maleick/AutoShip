@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package nav;
+
+message vector3 {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+}
+
+message color {
+    uint32 r = 1;
+    uint32 g = 2;
+    uint32 b = 3;
+    uint32 a = 4;
+}
+
+message dtNavMeshParams {
+    vector3 origin = 1;
+    float tile_width = 2;
+    float tile_height = 3;
+    int32 max_tiles = 4;
+    int32 max_polys = 5;
+}
+
+message NavMeshTile {
+    uint64 tile_ref = 1;
+    bytes tile_data = 2;
+}
+
+message NavMeshTileSet {
+    int32 compatibility_version = 1;
+    dtNavMeshParams mesh_params = 2;
+    repeated NavMeshTile tiles = 3;
+}
+
+message BuildSettings {
+    float tile_size = 1;
+    float cell_size = 2;
+    float cell_height = 3;
+    float agent_height = 4;
+    float agent_radius = 5;
+    float agent_max_climb = 6;
+    float agent_max_slope = 7;
+    float region_min_size = 8;
+    float region_merge_size = 9;
+    float edge_max_len = 10;
+    float edge_max_error = 11;
+    float verts_per_poly = 12;
+    float detail_sample_dist = 13;
+    float detail_sample_max_error = 14;
+    int32 partition_type = 15;
+    vector3 bounds_min = 16;
+    vector3 bounds_max = 17;
+    int32 config_version = 18;
+}
+
+message ConvexVolume {
+    uint32 area_type = 1;
+    float height_min = 2;
+    float height_max = 3;
+    repeated vector3 vertices = 4;
+    string name = 5;
+    uint32 id = 6;
+}
+
+message PolyAreaType {
+    uint32 id = 1;
+    string name = 2;
+    color color = 3;
+    uint32 flags = 4;
+    float cost = 5;
+}
+
+enum ConnectionType {
+    Basic = 0;
+}
+
+message Connection {
+    uint32 id = 1;
+    string name = 2;
+    uint32 type = 3;
+    vector3 pos_from = 4;
+    vector3 pos_to = 5;
+    uint32 area_type = 6;
+    bool one_way = 7;
+}
+
+message NavMeshFile {
+    string zone_short_name = 1;
+    NavMeshTileSet tile_set = 2;
+    BuildSettings build_settings = 3;
+    repeated ConvexVolume convex_volumes = 4;
+    repeated PolyAreaType areas = 5;
+    repeated Connection connections = 6;
+}
