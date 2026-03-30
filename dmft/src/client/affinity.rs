@@ -122,6 +122,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(windows))]
     fn working_set_limit_stub_returns_ok() {
         // On non-Windows, the stub should succeed without error
         let result = apply_working_set_limit(1234, 800);
@@ -129,6 +130,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn working_set_limit_zero_mb_returns_ok() {
         let result = apply_working_set_limit(1234, 0);
         assert!(result.is_ok());
