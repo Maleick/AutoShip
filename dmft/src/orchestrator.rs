@@ -37,6 +37,8 @@ pub struct Orchestrator {
     session_tokens: HashMap<u32, SessionToken>,
     /// Tick number when each client's game state was last updated.
     state_timestamps: HashMap<u32, u64>,
+    /// Persistent pipe connections per client PID (one long-lived pipe per client).
+    pipe_pool: HashMap<u32, CommandPipe>,
 }
 
 impl Orchestrator {
@@ -51,6 +53,7 @@ impl Orchestrator {
             state_readers: HashMap::new(),
             session_tokens: HashMap::new(),
             state_timestamps: HashMap::new(),
+            pipe_pool: HashMap::new(),
         }
     }
 
@@ -65,7 +68,10 @@ impl Orchestrator {
         for &pid in &self.client_pids {
             // Lazily create readers
             if let std::collections::hash_map::Entry::Vacant(e) = self.state_readers.entry(pid) {
-                match SharedStateReader::new(pid) {
+                let session_id = self.session_tokens.get(&pid)
+                    .map(|t| dmft_common::ipc::session_id_from_token(t))
+                    .unwrap_or(0);
+                match SharedStateReader::new(pid, session_id) {
                     Ok(reader) => {
                         e.insert(reader);
                     }
@@ -232,7 +238,7 @@ impl Orchestrator {
     }
 
     /// Dispatch a CampAction to the appropriate client via IPC.
-    fn dispatch_action(&self, pid: u32, action: &CampAction) {
+    fn dispatch_action(&mut self, pid: u32, action: &CampAction) {
         match action {
             CampAction::Slash(command) => {
                 self.send_slash_command(pid, command);
@@ -251,8 +257,9 @@ impl Orchestrator {
         }
     }
 
-    /// Send a structured IPC command to a client via named pipe.
-    fn send_ipc_command(&self, pid: u32, cmd: Command) {
+    /// Get or create a persistent pipe connection for a client.
+    /// Authenticates once on first connect; reuses the connection thereafter.
+    fn get_pipe(&mut self, pid: u32) -> Option<&CommandPipe> {
         let name = self
             .client_names
             .get(&pid)
@@ -262,62 +269,79 @@ impl Orchestrator {
         let token = match self.session_tokens.get(&pid) {
             Some(t) => *t,
             None => {
-                tracing::warn!(pid, name, "No session token for client — skipping command");
-                return;
+                tracing::warn!(pid, name, "No session token for client — skipping");
+                return None;
             }
         };
 
-        match CommandPipe::connect(pid) {
-            Ok(pipe) => {
-                if let Err(e) = pipe.send_raw_token(&token) {
-                    tracing::warn!(pid, name, error = %e, "Failed to send token");
-                    return;
+        // Reuse existing connection or create a new one.
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(entry) = self.pipe_pool.entry(pid) {
+            let session_id = dmft_common::ipc::session_id_from_token(&token);
+            match CommandPipe::connect(pid, session_id) {
+                Ok(pipe) => {
+                    if let Err(e) = pipe.send_raw_token(&token) {
+                        tracing::warn!(pid, name, error = %e, "Failed to send token");
+                        return None;
+                    }
+                    entry.insert(pipe);
                 }
-                if let Err(e) = pipe.send_async(&cmd) {
-                    tracing::warn!(pid, name, ?cmd, error = %e, "Failed to send IPC command");
-                } else {
-                    tracing::debug!(pid, name, ?cmd, "Dispatched IPC command");
+                Err(e) => {
+                    tracing::warn!(pid, name, error = %e, "Failed to connect pipe");
+                    return None;
                 }
             }
+        }
+
+        self.pipe_pool.get(&pid)
+    }
+
+    /// Send a structured IPC command to a client via named pipe.
+    /// Uses persistent connections — one pipe per client, reused across ticks.
+    fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
+        let name = self
+            .client_names
+            .get(&pid)
+            .map(|s| s.as_str())
+            .unwrap_or("?")
+            .to_string();
+
+        let Some(pipe) = self.get_pipe(pid) else {
+            return;
+        };
+        match pipe.send_async(&cmd) {
+            Ok(()) => {
+                tracing::debug!(pid, name = %name, ?cmd, "Dispatched IPC command");
+            }
             Err(e) => {
-                tracing::warn!(pid, name, error = %e, "Failed to connect pipe");
+                tracing::warn!(pid, name = %name, ?cmd, error = %e, "Failed to send — dropping pipe");
+                self.pipe_pool.remove(&pid);
             }
         }
     }
 
     /// Send a single slash command to a client via named pipe.
-    fn send_slash_command(&self, pid: u32, command: &str) {
+    fn send_slash_command(&mut self, pid: u32, command: &str) {
         let name = self
             .client_names
             .get(&pid)
             .map(|s| s.as_str())
-            .unwrap_or("?");
+            .unwrap_or("?")
+            .to_string();
 
-        let token = match self.session_tokens.get(&pid) {
-            Some(t) => *t,
-            None => {
-                tracing::warn!(pid, name, "No session token for client — skipping command");
-                return;
-            }
+        let Some(pipe) = self.get_pipe(pid) else {
+            return;
         };
-
-        match CommandPipe::connect(pid) {
-            Ok(pipe) => {
-                if let Err(e) = pipe.send_raw_token(&token) {
-                    tracing::warn!(pid, name, error = %e, "Failed to send token");
-                    return;
-                }
-                let cmd = Command::SlashCommand {
-                    command: command.to_string(),
-                };
-                if let Err(e) = pipe.send_async(&cmd) {
-                    tracing::warn!(pid, name, %command, error = %e, "Failed to send command");
-                } else {
-                    tracing::debug!(pid, name, %command, "Dispatched command");
-                }
+        let cmd = Command::SlashCommand {
+            command: command.to_string(),
+        };
+        match pipe.send_async(&cmd) {
+            Ok(()) => {
+                tracing::debug!(pid, name = %name, %command, "Dispatched command");
             }
             Err(e) => {
-                tracing::warn!(pid, name, error = %e, "Failed to connect pipe");
+                tracing::warn!(pid, name = %name, %command, error = %e, "Failed to send — dropping pipe");
+                self.pipe_pool.remove(&pid);
             }
         }
     }

@@ -37,16 +37,17 @@ impl SharedStateReader {
     ///
     /// Uses `OpenFileMappingW` + `FILE_MAP_READ` — the orchestrator has no need
     /// for write access to the DLL-owned mapping.
-    pub fn new(client_id: ClientId) -> Result<Self> {
+    pub fn new(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
             use windows::Win32::System::Memory::{FILE_MAP_READ, MapViewOfFile, OpenFileMappingW};
             use windows::core::PCWSTR;
 
-            let name: Vec<u16> = format!("dmft_state_{}\0", client_id)
-                .encode_utf16()
-                .collect();
+            let name: Vec<u16> =
+                format!("{}\0", dmft_common::ipc::shared_memory_name(session_id, client_id))
+                    .encode_utf16()
+                    .collect();
 
             // Open the mapping created by the DLL with read-only access.
             // OpenFileMappingW (not CreateFileMappingW) ensures the orchestrator
@@ -70,6 +71,7 @@ impl SharedStateReader {
 
         #[cfg(not(windows))]
         {
+            let _ = session_id;
             Ok(Self { client_id })
         }
     }

@@ -5,7 +5,7 @@
 Read this file + check memories (`MEMORY.md`) for full project context.
 
 ## Session Stats (Cumulative)
-- ~57,000+ lines across 3 crates
+- ~40,700 lines across 3 crates
 - ~175+ commits (~20 this session)
 - 686 tests passing, 0 failures (481 dmft + 53 dmft-common + 152 dmft-dll)
 - Navigation: **NAVMESH PATHFINDING WORKING** (Detour integration via mqmesh.com)

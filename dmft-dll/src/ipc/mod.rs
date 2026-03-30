@@ -41,7 +41,8 @@ pub fn start(client_id: ClientId, token: SessionToken) -> Result<(), Box<dyn std
     }
 
     // --- Shared memory writer ---
-    let writer = match SharedStateWriter::new(client_id) {
+    let session_id = dmft_common::ipc::session_id_from_token(&token);
+    let writer = match SharedStateWriter::new(client_id, session_id) {
         Ok(w) => w,
         Err(e) => {
             tracing::error!(client_id, error = %e, "Failed to create shared memory writer");
@@ -307,14 +308,38 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                 tracing::debug!(client_id, ?cmd, "Received command");
 
                 if handle_immediate_command(&cmd) {
+                    // Immediate commands get an Ack response.
+                    let _ = listener.respond(&Response::CommandResult {
+                        success: true,
+                        message: "handled".into(),
+                    });
                     continue;
                 }
 
+                // Respond to Ping inline — no need to queue.
+                if matches!(&cmd, Command::Ping) {
+                    let _ = listener.respond(&Response::Pong {
+                        client_id,
+                        timestamp_ms: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis() as u64)
+                            .unwrap_or(0),
+                    });
+                    continue;
+                }
+
+                // Queue for game loop processing.
                 if let Some(pending) = PENDING_COMMANDS.get()
                     && let Ok(mut queue) = pending.lock()
                 {
                     queue.push(cmd);
                 }
+
+                // Send Ack so the orchestrator isn't left waiting.
+                let _ = listener.respond(&Response::CommandResult {
+                    success: true,
+                    message: "queued".into(),
+                });
             }
             Err(e) => {
                 if IPC_RUNNING.load(Ordering::SeqCst) {
@@ -328,7 +353,9 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                             "Suppressing repeated pipe errors"
                         );
                     }
-                    listener.reset_auth();
+                    // Connection dropped — disconnect will make next receive() wait
+                    // for a new connection.
+                    listener.disconnect();
                     let backoff_ms = std::cmp::min(10 * (1u64 << consecutive_errors.min(9)), 5000);
                     std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
                 }

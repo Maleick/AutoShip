@@ -15,7 +15,7 @@ Frostreaver reads live game state from EQ client memory, injects a DLL for direc
 - **DLL Injection** — Rust `cdylib` injected via CreateRemoteThread + LoadLibraryW, staged with randomized names
 - **InterpretCmd** — Calls EQ's internal `CEverQuest::InterpretCmd` to execute any slash command invisibly
 - **Game State Publishing** — DLL reads HP/mana/target/nearby spawns every tick, publishes via shared memory
-- **IPC Pipeline** — Named pipes (commands) + shared memory (game state) with CSPRNG tokens and DACL security
+- **IPC Pipeline** — Named pipes (commands) + shared memory (game state) with current-user DACL security
 - **Render Strobing** — Hooks `CDisplay::RealRender_World`, skips 3D rendering for background clients (~97% GPU savings)
 
 ### TUI Dashboard (5 screens)

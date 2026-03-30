@@ -382,10 +382,11 @@ fn run_zones_mode(pid: u32) -> Result<()> {
 
     println!("Querying zone graph from PID {}...", pid);
 
-    let pipe = ipc::pipe::CommandPipe::connect(pid)
+    let token = generate_session_token(pid);
+    let session_id = dmft_common::ipc::session_id_from_token(&token);
+    let pipe = ipc::pipe::CommandPipe::connect(pid, session_id)
         .with_context(|| format!("Failed to connect to PID {}. Is the DLL injected?", pid))?;
 
-    let token = generate_session_token(pid);
     pipe.send_raw_token(&token)
         .context("Failed to send session token")?;
 
@@ -457,7 +458,9 @@ fn run_zones_mode(pid: u32) -> Result<()> {
 }
 
 fn run_status_mode(pid: u32) -> Result<()> {
-    let reader = ipc::shared::SharedStateReader::new(pid).context(format!(
+    let token = generate_session_token(pid);
+    let session_id = dmft_common::ipc::session_id_from_token(&token);
+    let reader = ipc::shared::SharedStateReader::new(pid, session_id).context(format!(
         "Cannot open shared memory for PID {} — is the DLL injected?",
         pid
     ))?;
@@ -518,7 +521,9 @@ fn run_statusall_mode() -> Result<()> {
     );
 
     for &pid in &pids {
-        match ipc::shared::SharedStateReader::new(pid) {
+        let token = generate_session_token(pid);
+        let session_id = dmft_common::ipc::session_id_from_token(&token);
+        match ipc::shared::SharedStateReader::new(pid, session_id) {
             Ok(reader) => match reader.read() {
                 Some(state) => {
                     if let Some(ref player) = state.local_player {
@@ -586,7 +591,9 @@ fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     println!("Navigating PID {} -> ({}, {}, {})", pid, x, y, z);
 
     // 1. Read shared memory to get current position and zone
-    let waypoints = match ipc::shared::SharedStateReader::new(pid) {
+    let token = generate_session_token(pid);
+    let session_id = dmft_common::ipc::session_id_from_token(&token);
+    let waypoints = match ipc::shared::SharedStateReader::new(pid, session_id) {
         Ok(reader) => match reader.read() {
             Some(state) if !state.zone_short_name.is_empty() => {
                 let player = state
@@ -646,12 +653,11 @@ fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     };
 
     // 3. Send waypoints via IPC pipe
-    let pipe = ipc::pipe::CommandPipe::connect(pid).context(format!(
+    let pipe = ipc::pipe::CommandPipe::connect(pid, session_id).context(format!(
         "Cannot connect to PID {} — is the DLL injected?",
         pid
     ))?;
 
-    let token = generate_session_token(pid);
     pipe.send_raw_token(&token)
         .context(format!("Failed to auth with PID {}", pid))?;
 
@@ -688,8 +694,10 @@ fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
     let mut fail_count = 0u32;
 
     for &pid in &pids {
+        let token = generate_session_token(pid);
+        let session_id = dmft_common::ipc::session_id_from_token(&token);
         // Read shared memory for position + zone
-        let waypoints = match ipc::shared::SharedStateReader::new(pid) {
+        let waypoints = match ipc::shared::SharedStateReader::new(pid, session_id) {
             Ok(reader) => match reader.read() {
                 Some(state) if !state.zone_short_name.is_empty() => {
                     let player = match state.local_player.as_ref() {
@@ -746,9 +754,8 @@ fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
         };
 
         // Send via IPC
-        match ipc::pipe::CommandPipe::connect(pid) {
+        match ipc::pipe::CommandPipe::connect(pid, session_id) {
             Ok(pipe) => {
-                let token = generate_session_token(pid);
                 if pipe.send_raw_token(&token).is_err() {
                     println!("  PID {}: auth failed — skipping", pid);
                     fail_count += 1;
@@ -813,12 +820,13 @@ fn run_login_pid_mode(
         pid, account, server
     );
 
-    let pipe = ipc::pipe::CommandPipe::connect(pid).context(format!(
+    let token = generate_session_token(pid);
+    let session_id = dmft_common::ipc::session_id_from_token(&token);
+    let pipe = ipc::pipe::CommandPipe::connect(pid, session_id).context(format!(
         "Cannot connect to PID {} — is the DLL injected?",
         pid
     ))?;
 
-    let token = generate_session_token(pid);
     pipe.send_raw_token(&token)
         .context(format!("Failed to auth with PID {}", pid))?;
 
@@ -853,9 +861,10 @@ fn run_login_mode(account: &str, password: &str, server: &str, character: &str) 
             pid, account, server
         );
 
-        match ipc::pipe::CommandPipe::connect(pid) {
+        let token = generate_session_token(pid);
+        let session_id = dmft_common::ipc::session_id_from_token(&token);
+        match ipc::pipe::CommandPipe::connect(pid, session_id) {
             Ok(pipe) => {
-                let token = generate_session_token(pid);
                 if pipe.send_raw_token(&token).is_err() {
                     println!("  Failed to auth with PID {}", pid);
                     continue;
@@ -898,9 +907,10 @@ fn run_calibrate_mode() -> Result<()> {
     for &pid in &pids {
         println!("Sending calibrate_login to PID {}...", pid);
 
-        match ipc::pipe::CommandPipe::connect(pid) {
+        let token = generate_session_token(pid);
+        let session_id = dmft_common::ipc::session_id_from_token(&token);
+        match ipc::pipe::CommandPipe::connect(pid, session_id) {
             Ok(pipe) => {
-                let token = generate_session_token(pid);
                 if pipe.send_raw_token(&token).is_err() {
                     println!("  Failed to auth with PID {}", pid);
                     continue;
@@ -929,12 +939,12 @@ fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 
     println!("Sending command to PID {}: {}", pid, command);
 
-    let pipe = ipc::pipe::CommandPipe::connect(pid)
+    let token = generate_session_token(pid);
+    let session_id = dmft_common::ipc::session_id_from_token(&token);
+    let pipe = ipc::pipe::CommandPipe::connect(pid, session_id)
         .with_context(|| format!("Failed to connect to PID {}. Is the DLL injected?", pid))?;
 
-    // Send the session token first (handshake).
-    // For now, use the same PID-derived token the DLL generates.
-    let token = generate_session_token(pid);
+    // Send the session token (handshake).
     pipe.send_raw_token(&token)
         .context("Failed to send session token")?;
 

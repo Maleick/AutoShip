@@ -1903,8 +1903,9 @@ fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
 fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result<()> {
     use crate::ipc::pipe::CommandPipe;
 
-    let pipe = CommandPipe::connect(pid)?;
     let token = generate_session_token(pid);
+    let session_id = dmft_common::ipc::session_id_from_token(&token);
+    let pipe = CommandPipe::connect(pid, session_id)?;
     pipe.send_raw_token(&token)?;
     pipe.send_async(cmd)?;
     Ok(())

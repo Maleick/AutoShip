@@ -5,8 +5,6 @@
 //! compile-only stub.
 
 use anyhow::Result;
-#[cfg(windows)]
-use dmft_common::ipc::PIPE_NAME_PREFIX;
 use dmft_common::ipc::{Command, Response};
 #[cfg(windows)]
 use dmft_common::protocol;
@@ -28,7 +26,7 @@ impl CommandPipe {
     /// index. The injected DLL creates its pipe using `std::process::id()`
     /// (i.e., the PID) as the client_id. The orchestrator must match this
     /// by passing the PID discovered via `find_processes_by_name`.
-    pub fn connect(client_id: ClientId) -> Result<Self> {
+    pub fn connect(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {
             use windows::Win32::Foundation::GENERIC_READ;
@@ -37,7 +35,7 @@ impl CommandPipe {
             };
             use windows::core::PCSTR;
 
-            let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
+            let pipe_name = format!("{}\0", dmft_common::ipc::pipe_name(session_id, client_id));
 
             let handle = unsafe {
                 CreateFileA(
@@ -56,6 +54,7 @@ impl CommandPipe {
 
         #[cfg(not(windows))]
         {
+            let _ = session_id;
             Ok(Self { client_id })
         }
     }

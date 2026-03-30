@@ -31,7 +31,7 @@ impl SharedStateWriter {
     /// Create the named shared memory region for `client_id`.
     ///
     /// Memory name: `dmft_state_{client_id}`
-    pub fn new(client_id: ClientId) -> Result<Self> {
+    pub fn new(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
@@ -41,9 +41,10 @@ impl SharedStateWriter {
             };
             use windows::core::PCWSTR;
 
-            let name: Vec<u16> = format!("dmft_state_{}\0", client_id)
-                .encode_utf16()
-                .collect();
+            let name: Vec<u16> =
+                format!("{}\0", dmft_common::ipc::shared_memory_name(session_id, client_id))
+                    .encode_utf16()
+                    .collect();
 
             // Restrict shared memory access to the current user via an explicit DACL.
             // Fail closed: if DACL creation fails, abort rather than using default (open) security.
@@ -83,7 +84,7 @@ impl SharedStateWriter {
 
         #[cfg(not(windows))]
         {
-            let _ = client_id;
+            let _ = (client_id, session_id);
             Ok(Self { client_id })
         }
     }

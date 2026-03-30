@@ -5,9 +5,24 @@ use dmft_common::offsets::{self, group, player_base, player_zone, spawn_manager,
 
 /// Read a single spawn's data from the process at the given PlayerClient address.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
+    // Critical fields — hard fail if any are unreadable (corrupt memory → skip spawn)
     let name = proc
         .read_string(addr + player_base::NAME, 64)
-        .unwrap_or_else(|_| String::from("<unreadable>"));
+        .context("critical field: name")?;
+    let spawn_type_id = proc
+        .read::<u8>(addr + player_base::TYPE)
+        .context("critical field: spawn_type")?;
+    let y = proc
+        .read::<f32>(addr + player_base::Y)
+        .context("critical field: y")?;
+    let x = proc
+        .read::<f32>(addr + player_base::X)
+        .context("critical field: x")?;
+    let z = proc
+        .read::<f32>(addr + player_base::Z)
+        .context("critical field: z")?;
+
+    // Non-critical fields — degrade gracefully with defaults
     let displayed_name = proc
         .read_string(addr + player_base::DISPLAYED_NAME, 64)
         .unwrap_or_else(|_| String::from("<unreadable>"));
@@ -16,11 +31,6 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         .unwrap_or_default();
 
     let spawn_id = proc.read::<u32>(addr + player_base::SPAWN_ID).unwrap_or(0);
-    let spawn_type_id = proc.read::<u8>(addr + player_base::TYPE).unwrap_or(255);
-
-    let y = proc.read::<f32>(addr + player_base::Y).unwrap_or(0.0);
-    let x = proc.read::<f32>(addr + player_base::X).unwrap_or(0.0);
-    let z = proc.read::<f32>(addr + player_base::Z).unwrap_or(0.0);
     let heading = proc.read::<f32>(addr + player_base::HEADING).unwrap_or(0.0);
 
     // Diagnostic: if position looks suspicious (all near-zero) but name is valid,
@@ -41,7 +51,9 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         );
     }
 
-    let level = proc.read::<u8>(addr + player_zone::LEVEL).unwrap_or(0);
+    let level = proc
+        .read::<u8>(addr + player_zone::LEVEL)
+        .context("critical field: level")?;
     // Class is a direct uint8_t field in PlayerZoneClient at 0x0420
     let class_id = proc.read::<u8>(addr + player_zone::CHAR_CLASS).unwrap_or(0);
     let stand_state_id = proc.read::<u8>(addr + player_zone::STANDSTATE).unwrap_or(0);
@@ -233,8 +245,7 @@ pub fn read_all_spawns(
                 spawns.push(spawn);
             }
             Err(e) => {
-                tracing::warn!(addr = format!("{:#x}", current), error = %e, "Failed to read spawn, stopping iteration");
-                break;
+                tracing::warn!(addr = format!("{:#x}", current), error = %e, "Skipping spawn with unreadable critical fields");
             }
         }
 

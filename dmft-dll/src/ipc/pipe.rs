@@ -4,21 +4,23 @@
 //! On non-Windows platforms this is a compile-only stub.
 
 use anyhow::Result;
-#[cfg(windows)]
-use dmft_common::ipc::PIPE_NAME_PREFIX;
 use dmft_common::ipc::{Command, Response, SessionToken};
 #[cfg(windows)]
 use dmft_common::protocol;
 use dmft_common::types::ClientId;
 
 /// Listens for commands from the orchestrator via named pipe.
+///
+/// Supports persistent connections: the orchestrator authenticates once per
+/// connection, then sends multiple commands without reconnecting. If the
+/// connection drops, the listener waits for a new one.
 pub struct CommandListener {
     client_id: ClientId,
     /// Session token set at injection time. The orchestrator must present this
     /// token as the first message after connecting before any commands are accepted.
     expected_token: SessionToken,
     /// Whether the current connection has been authenticated.
-    authenticated: bool,
+    connected: bool,
     #[cfg(windows)]
     handle: windows::Win32::Foundation::HANDLE,
 }
@@ -41,7 +43,8 @@ impl CommandListener {
             const PIPE_ACCESS_DUPLEX: FILE_FLAGS_AND_ATTRIBUTES =
                 FILE_FLAGS_AND_ATTRIBUTES(0x00000003);
 
-            let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
+            let session_id = dmft_common::ipc::session_id_from_token(&token);
+            let pipe_name = format!("{}\0", dmft_common::ipc::pipe_name(session_id, client_id));
 
             let security_setup = build_restrictive_security_attributes().map_err(|e| {
                 anyhow::anyhow!(
@@ -66,7 +69,7 @@ impl CommandListener {
             Ok(Self {
                 client_id,
                 expected_token: token,
-                authenticated: false,
+                connected: false,
                 handle,
             })
         }
@@ -77,15 +80,19 @@ impl CommandListener {
             Ok(Self {
                 client_id,
                 expected_token: token,
-                authenticated: false,
+                connected: false,
             })
         }
     }
 
     /// Block until a command is received, then return it.
     ///
-    /// Each call is a full cycle: wait for connect → auth → read command →
-    /// disconnect. This ensures the pipe is ready for the next client.
+    /// On the first call (or after a disconnection), waits for the orchestrator
+    /// to connect and authenticate with a 32-byte session token. Subsequent
+    /// calls read commands from the same connection without re-authenticating.
+    ///
+    /// If the read fails (orchestrator disconnected), the pipe is reset and the
+    /// next call will wait for a new connection.
     pub fn receive(&mut self) -> Result<Command> {
         #[cfg(windows)]
         {
@@ -93,48 +100,61 @@ impl CommandListener {
             use windows::Win32::Storage::FileSystem::ReadFile;
             use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
 
-            // Wait for client to connect. ERROR_PIPE_CONNECTED means a client
-            // connected between CreateNamedPipe and ConnectNamedPipe — that's fine.
-            let connect_result = unsafe { ConnectNamedPipe(self.handle, None) };
-            if let Err(ref e) = connect_result {
-                if e.code() != ERROR_PIPE_CONNECTED.into() {
-                    return Err(connect_result.unwrap_err().into());
+            // If not connected, wait for a new connection + authenticate.
+            if !self.connected {
+                let connect_result = unsafe { ConnectNamedPipe(self.handle, None) };
+                if let Err(ref e) = connect_result {
+                    if e.code() != ERROR_PIPE_CONNECTED.into() {
+                        return Err(connect_result.unwrap_err().into());
+                    }
                 }
+
+                // Read 32-byte session token (once per connection).
+                let mut token_buf = [0u8; 32];
+                let mut token_bytes_read: u32 = 0;
+                let token_result = unsafe {
+                    ReadFile(
+                        self.handle,
+                        Some(&mut token_buf),
+                        Some(&mut token_bytes_read),
+                        None,
+                    )
+                };
+
+                if token_result.is_err()
+                    || token_bytes_read != 32
+                    || !constant_time_eq(&token_buf, &self.expected_token)
+                {
+                    tracing::error!(
+                        client_id = self.client_id,
+                        "Session token validation failed — dropping connection"
+                    );
+                    unsafe {
+                        let _ = DisconnectNamedPipe(self.handle);
+                    }
+                    anyhow::bail!("Session token mismatch for client {}", self.client_id);
+                }
+
+                tracing::debug!(client_id = self.client_id, "Pipe session authenticated");
+                self.connected = true;
             }
 
-            // Read 32-byte session token (first message on every connection).
-            let mut token_buf = [0u8; 32];
-            let mut token_bytes_read: u32 = 0;
-            let token_result = unsafe {
-                ReadFile(
-                    self.handle,
-                    Some(&mut token_buf),
-                    Some(&mut token_bytes_read),
-                    None,
-                )
-            };
-
-            if token_result.is_err()
-                || token_bytes_read != 32
-                || !constant_time_eq(&token_buf, &self.expected_token)
-            {
-                tracing::error!(
-                    client_id = self.client_id,
-                    "Session token validation failed — dropping connection"
-                );
-                unsafe {
-                    let _ = DisconnectNamedPipe(self.handle);
-                }
-                anyhow::bail!("Session token mismatch for client {}", self.client_id);
-            }
-
-            tracing::debug!(client_id = self.client_id, "Pipe session authenticated");
-
-            // Read the actual command.
+            // Read the next command from the connected pipe.
             let mut buf = vec![0u8; 4096];
             let mut bytes_read: u32 = 0;
-            unsafe {
-                ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)?;
+            let read_result = unsafe {
+                ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)
+            };
+
+            if let Err(e) = read_result {
+                // Orchestrator disconnected — reset for next connection.
+                tracing::debug!(
+                    client_id = self.client_id,
+                    error = %e,
+                    "Pipe read failed — orchestrator likely disconnected"
+                );
+                self.disconnect();
+                return Err(e.into());
             }
 
             let (cmd, _) =
@@ -143,15 +163,7 @@ impl CommandListener {
                 })?;
 
             if !validate_command(&cmd) {
-                unsafe {
-                    let _ = DisconnectNamedPipe(self.handle);
-                }
                 anyhow::bail!("Command validation failed for client {}", self.client_id);
-            }
-
-            // Disconnect so the pipe is ready for the next connection.
-            unsafe {
-                let _ = DisconnectNamedPipe(self.handle);
             }
 
             Ok(cmd)
@@ -164,9 +176,16 @@ impl CommandListener {
         }
     }
 
-    /// Reset authentication state (no longer needed — each connection re-auths).
-    pub fn reset_auth(&mut self) {
-        // No-op: authentication is now per-connection.
+    /// Disconnect the current client and prepare for a new connection.
+    pub fn disconnect(&mut self) {
+        self.connected = false;
+        #[cfg(windows)]
+        {
+            use windows::Win32::System::Pipes::DisconnectNamedPipe;
+            unsafe {
+                let _ = DisconnectNamedPipe(self.handle);
+            }
+        }
     }
 
     /// Send a response back to the orchestrator.
