@@ -433,6 +433,8 @@ fn load_demo_data(app: &mut App) {
             heading: 128.0,
             spawn_id: i as u32 + 1,
             is_gm: false,
+            buff_slots: Vec::new(),
+            cast_state: None,
         });
         client.character_name = name.to_string();
         client.client_status = format!("Demo client: {}", name);
@@ -558,6 +560,8 @@ fn load_demo_data(app: &mut App) {
                 heading: 0.0,
                 spawn_id: i as u32 + 1,
                 is_gm: false,
+                buff_slots: Vec::new(),
+                cast_state: None,
             },
         )
         .collect();
@@ -658,10 +662,17 @@ fn tick_soul_engine(app: &mut App) {
 
 /// Poll all log watchers for new events and merge into the aggregate loot database.
 fn poll_log_watchers(app: &mut App) {
+    use crate::eq::log_parser::LogEvent;
     for watcher in &mut app.log_watchers {
         let events = watcher.poll();
         for event in &events {
             app.loot_database.record(event);
+            if let LogEvent::Chat(chat) = event {
+                app.chat_events.push_back(chat.clone());
+                if app.chat_events.len() > 200 {
+                    app.chat_events.pop_front();
+                }
+            }
         }
     }
 }

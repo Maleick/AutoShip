@@ -63,8 +63,32 @@ pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
     }
 }
 
-pub fn spawn_row_style(spawn: &SpawnInfo, t: &Theme) -> ratatui::style::Style {
-    Style::default().fg(spawn_type_color(&spawn.spawn_type, t))
+/// EQ con color — level delta from player perspective.
+/// delta = mob_level - player_level
+pub fn con_color(player_level: u8, mob_level: u8) -> Color {
+    let delta = mob_level as i16 - player_level as i16;
+    match delta {
+        d if d >= 4 => Color::Red,
+        1..=3       => Color::Yellow,
+        0           => Color::White,
+        -3..=-1     => Color::LightCyan,
+        -6..=-4     => Color::Blue,
+        _           => Color::Green,
+    }
+}
+
+pub fn spawn_row_style(spawn: &SpawnInfo, player_level: Option<u8>, t: &Theme) -> ratatui::style::Style {
+    match spawn.spawn_type {
+        SpawnType::Player => Style::default().fg(t.spawn_pc),
+        SpawnType::Npc => {
+            let color = player_level
+                .map(|pl| con_color(pl, spawn.level))
+                .unwrap_or(t.spawn_npc);
+            Style::default().fg(color)
+        }
+        SpawnType::Corpse     => Style::default().fg(t.spawn_corpse),
+        SpawnType::Unknown(_) => Style::default().fg(t.spawn_unknown),
+    }
 }
 
 // ─── Spawn info lines ────────────────────────────────────────────────────────
@@ -114,4 +138,44 @@ pub fn spawn_info_lines(spawn: &SpawnInfo, redact: &dyn Fn(&str) -> std::borrow:
             Span::styled(rawname, Style::default().fg(t.text_secondary)),
         ]),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn con_color_red_when_much_higher() {
+        assert_eq!(con_color(30, 34), Color::Red);
+        assert_eq!(con_color(30, 40), Color::Red);
+    }
+
+    #[test]
+    fn con_color_yellow_when_slightly_higher() {
+        assert_eq!(con_color(30, 31), Color::Yellow);
+        assert_eq!(con_color(30, 33), Color::Yellow);
+    }
+
+    #[test]
+    fn con_color_white_when_same() {
+        assert_eq!(con_color(30, 30), Color::White);
+    }
+
+    #[test]
+    fn con_color_lightcyan_when_slightly_lower() {
+        assert_eq!(con_color(30, 29), Color::LightCyan);
+        assert_eq!(con_color(30, 27), Color::LightCyan);
+    }
+
+    #[test]
+    fn con_color_blue_when_lower() {
+        assert_eq!(con_color(30, 26), Color::Blue);
+        assert_eq!(con_color(30, 24), Color::Blue);
+    }
+
+    #[test]
+    fn con_color_green_when_trivial() {
+        assert_eq!(con_color(30, 23), Color::Green);
+        assert_eq!(con_color(30, 1), Color::Green);
+    }
 }

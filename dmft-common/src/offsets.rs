@@ -325,6 +325,36 @@ pub mod player_base {
     pub const LASTNAME: usize = 0x048;
 }
 
+/// Buff slot offsets within CharacterZoneClient.
+/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h (EQ_Affect array).
+/// TODO: calibrate exact BUFF_ARRAY_OFFSET against live 20260310 client hex dump.
+pub mod buff_slots {
+    /// Total buff slots (long buffs + short buffs).
+    pub const MAX_BUFF_SLOTS: usize = 42;
+
+    /// Offset of the EQ_Affect array within CharacterZoneClient (accessed via PINST_LOCAL_PC).
+    /// TODO: verify against live client — MQ2 source suggests ~0x2BC0 for recent builds.
+    pub const BUFF_ARRAY_OFFSET: usize = 0x2BC0;
+
+    /// sizeof(EQ_Affect) per entry.
+    pub const BUFF_ENTRY_SIZE: usize = 0x28;
+
+    /// EQ_Affect::SpellID (u32 at +0x00) — 0xFFFF = empty slot.
+    pub const SPELL_ID: usize = 0x00;
+
+    /// EQ_Affect::Duration (i32 at +0x04) — remaining ticks (6 sec/tick).
+    pub const DURATION_TICKS: usize = 0x04;
+
+    /// EQ_Affect::InitialDuration (i32 at +0x08) — original duration ticks.
+    pub const INITIAL_DURATION: usize = 0x08;
+
+    /// EQ_Affect::CasterLevel (u8 at +0x14).
+    pub const CASTER_LEVEL: usize = 0x14;
+
+    /// SpellID value indicating an empty buff slot.
+    pub const EMPTY_SPELL_ID: u32 = 0xFFFF;
+}
+
 /// Offsets within CharacterZoneClient (casting state)
 pub mod character_zone {
     /// uint32_t — cast completion ETA (server timestamp when spell finishes)

@@ -166,6 +166,62 @@ impl fmt::Display for StandState {
     }
 }
 
+/// A single active buff/song slot from the CharacterZoneClient buff array.
+#[derive(Debug, Clone)]
+pub struct BuffSlot {
+    /// Spell ID (0xFFFF = empty).
+    pub spell_id: u32,
+    /// Remaining ticks (multiply by 6 for seconds). 0 = permanent.
+    pub duration_ticks: i32,
+    /// Level of the caster who applied the buff.
+    pub caster_level: u8,
+}
+
+impl BuffSlot {
+    pub fn is_empty(&self) -> bool {
+        self.spell_id == 0xFFFF || self.spell_id == 0
+    }
+
+    /// Duration in seconds.
+    pub fn duration_secs(&self) -> i32 {
+        self.duration_ticks * 6
+    }
+
+    /// Formatted duration "M:SS", "Xs", or "PERM" for permanent buffs.
+    pub fn duration_str(&self) -> String {
+        if self.duration_ticks <= 0 {
+            return "PERM".to_string();
+        }
+        let secs = self.duration_secs();
+        let m = secs / 60;
+        let s = secs % 60;
+        if m > 0 {
+            format!("{}:{:02}", m, s)
+        } else {
+            format!("{}s", s)
+        }
+    }
+}
+
+/// Active spell cast state for the local player.
+/// Read from CharacterZoneClient via PINST_LOCAL_PC.
+#[derive(Debug, Clone)]
+pub struct CastState {
+    /// Active gem slot (0-based). 0xFF = not currently casting.
+    pub spell_slot: u8,
+    /// Server timestamp when cast completes (0 = not casting).
+    pub spell_eta: u32,
+    /// Per-gem recast timestamps (15 entries, 0 = ready).
+    pub gem_etas: [u32; 15],
+}
+
+impl CastState {
+    /// True if actively casting a spell right now.
+    pub fn is_casting(&self) -> bool {
+        self.spell_slot != 0xFF && self.spell_eta != 0
+    }
+}
+
 /// Group membership info read from CGroup in memory.
 #[derive(Debug, Clone)]
 pub struct GroupInfo {
@@ -198,6 +254,10 @@ pub struct SpawnInfo {
     pub endurance_current: i32,
     pub endurance_max: u32,
     pub is_gm: bool,
+    /// Active buff slots (populated only for local player via read_buff_slots).
+    pub buff_slots: Vec<BuffSlot>,
+    /// Cast state (populated only for local player via read_cast_state).
+    pub cast_state: Option<CastState>,
 }
 
 impl SpawnInfo {
@@ -245,5 +305,58 @@ impl fmt::Display for SpawnInfo {
             self.x,
             self.z,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn buff_slot_empty_detection() {
+        let empty = BuffSlot { spell_id: 0xFFFF, duration_ticks: 0, caster_level: 0 };
+        assert!(empty.is_empty());
+        let zero_id = BuffSlot { spell_id: 0, duration_ticks: 100, caster_level: 60 };
+        assert!(zero_id.is_empty());
+        let active = BuffSlot { spell_id: 1, duration_ticks: 100, caster_level: 60 };
+        assert!(!active.is_empty());
+    }
+
+    #[test]
+    fn buff_slot_duration_str_permanent() {
+        let perm = BuffSlot { spell_id: 1, duration_ticks: 0, caster_level: 60 };
+        assert_eq!(perm.duration_str(), "PERM");
+    }
+
+    #[test]
+    fn buff_slot_duration_str_minutes() {
+        // 10 ticks * 6 sec/tick = 60 seconds = 1:00
+        let b = BuffSlot { spell_id: 1, duration_ticks: 10, caster_level: 60 };
+        assert_eq!(b.duration_str(), "1:00");
+    }
+
+    #[test]
+    fn buff_slot_duration_str_seconds_only() {
+        // 3 ticks * 6 = 18 seconds
+        let b = BuffSlot { spell_id: 1, duration_ticks: 3, caster_level: 60 };
+        assert_eq!(b.duration_str(), "18s");
+    }
+
+    #[test]
+    fn cast_state_is_casting_true() {
+        let cs = CastState { spell_slot: 0, spell_eta: 12345, gem_etas: [0; 15] };
+        assert!(cs.is_casting());
+    }
+
+    #[test]
+    fn cast_state_not_casting_when_slot_ff() {
+        let cs = CastState { spell_slot: 0xFF, spell_eta: 0, gem_etas: [0; 15] };
+        assert!(!cs.is_casting());
+    }
+
+    #[test]
+    fn cast_state_not_casting_when_eta_zero() {
+        let cs = CastState { spell_slot: 0, spell_eta: 0, gem_etas: [0; 15] };
+        assert!(!cs.is_casting());
     }
 }

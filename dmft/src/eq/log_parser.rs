@@ -1,4 +1,27 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::time::Instant;
+
+/// EQ chat channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatChannel {
+    Say,
+    Tell,
+    TellOut,
+    Group,
+    Guild,
+    Raid,
+    Shout,
+    Ooc,
+    Auction,
+}
+
+/// A parsed chat message.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChatEvent {
+    pub channel: ChatChannel,
+    pub sender: String,
+    pub message: String,
+}
 
 /// Events parsed from EQ log lines.
 #[derive(Debug, Clone, PartialEq)]
@@ -9,6 +32,7 @@ pub enum LogEvent {
     Experience { party: bool },
     Death { killed_by: String },
     ZoneEnter { zone: String },
+    Chat(ChatEvent),
 }
 
 /// Parse a single EQ log line into a `LogEvent`, if it matches a known pattern.
@@ -92,6 +116,47 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
             });
         }
 
+    // Tell out: "You told Soandso, 'message'"
+    if let Some(rest) = text.strip_prefix("You told ") {
+        if let Some(rest2) = rest.strip_suffix('\'') {
+            if let Some((target, msg)) = rest2.split_once(", '") {
+                return Some(LogEvent::Chat(ChatEvent {
+                    channel: ChatChannel::TellOut,
+                    sender: "You".to_string(),
+                    message: format!("-> {}: {}", target, msg),
+                }));
+            }
+        }
+    }
+
+    // Chat channels: pattern "Sender <verb>, 'message'"
+    if let Some(rest) = text.strip_suffix('\'') {
+        if let Some((lhs, msg)) = rest.split_once(", '") {
+            let chat = if let Some(sender) = lhs.strip_suffix(" says") {
+                Some(ChatEvent { channel: ChatChannel::Say, sender: sender.to_string(), message: msg.to_string() })
+            } else if let Some(sender) = lhs.strip_suffix(" tells you") {
+                Some(ChatEvent { channel: ChatChannel::Tell, sender: sender.to_string(), message: msg.to_string() })
+            } else if let Some(sender) = lhs.strip_suffix(" tells the group") {
+                Some(ChatEvent { channel: ChatChannel::Group, sender: sender.to_string(), message: msg.to_string() })
+            } else if let Some(sender) = lhs.strip_suffix(" says to your guild") {
+                Some(ChatEvent { channel: ChatChannel::Guild, sender: sender.to_string(), message: msg.to_string() })
+            } else if let Some(sender) = lhs.strip_suffix(" tells the raid") {
+                Some(ChatEvent { channel: ChatChannel::Raid, sender: sender.to_string(), message: msg.to_string() })
+            } else if let Some(sender) = lhs.strip_suffix(" shouts") {
+                Some(ChatEvent { channel: ChatChannel::Shout, sender: sender.to_string(), message: msg.to_string() })
+            } else if let Some(sender) = lhs.strip_suffix(" says out of character") {
+                Some(ChatEvent { channel: ChatChannel::Ooc, sender: sender.to_string(), message: msg.to_string() })
+            } else if let Some(sender) = lhs.strip_suffix(" auctions") {
+                Some(ChatEvent { channel: ChatChannel::Auction, sender: sender.to_string(), message: msg.to_string() })
+            } else {
+                None
+            };
+            if let Some(event) = chat {
+                return Some(LogEvent::Chat(event));
+            }
+        }
+    }
+
     None
 }
 
@@ -114,6 +179,8 @@ pub struct LootDatabase {
     pub total_xp_events: u64,
     /// Total deaths
     pub deaths: u32,
+    /// Timestamps of XP events for sliding-window rate calculation.
+    xp_event_times: VecDeque<Instant>,
 }
 
 impl LootDatabase {
@@ -138,11 +205,13 @@ impl LootDatabase {
             }
             LogEvent::Experience { .. } => {
                 self.total_xp_events += 1;
+                self.xp_event_times.push_back(Instant::now());
             }
             LogEvent::Death { .. } => {
                 self.deaths += 1;
             }
             LogEvent::ZoneEnter { .. } => {}
+            LogEvent::Chat(_) => {}
         }
     }
 
@@ -154,6 +223,14 @@ impl LootDatabase {
         } else {
             None
         }
+    }
+
+    /// XP events per hour within the last `window` duration.
+    pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
+        let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
+        let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;
+        let window_hours = window.as_secs_f64() / 3600.0;
+        if window_hours > 0.0 { count / window_hours } else { 0.0 }
     }
 }
 
@@ -268,8 +345,113 @@ mod tests {
     }
 
     #[test]
+    fn test_xp_rate_windowed_empty() {
+        let db = LootDatabase::new();
+        let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
+        assert_eq!(rate, 0.0);
+    }
+
+    #[test]
+    fn test_xp_rate_windowed_counts_recent() {
+        let mut db = LootDatabase::new();
+        db.process_line("You gain experience!");
+        db.process_line("You gain experience!");
+        // 2 events just now in a 15-min window → rate > 0
+        let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
+        assert!(rate > 0.0);
+    }
+
+    #[test]
+    fn test_parse_say() {
+        let line = "[Thu Mar 28 12:40:00 2026] Soandso says, 'Hello there!'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::Say,
+            sender: "Soandso".to_string(),
+            message: "Hello there!".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_parse_tell_in() {
+        let line = "[Thu Mar 28 12:40:00 2026] Soandso tells you, 'Need a rez?'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::Tell,
+            sender: "Soandso".to_string(),
+            message: "Need a rez?".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_parse_tell_out() {
+        let line = "[Thu Mar 28 12:40:00 2026] You told Soandso, 'On my way'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::TellOut,
+            sender: "You".to_string(),
+            message: "-> Soandso: On my way".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_parse_group() {
+        let line = "[Thu Mar 28 12:40:00 2026] Soandso tells the group, 'INC 3'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::Group,
+            sender: "Soandso".to_string(),
+            message: "INC 3".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_parse_guild() {
+        let line = "[Thu Mar 28 12:40:00 2026] Soandso says to your guild, 'Raid at 8pm'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::Guild,
+            sender: "Soandso".to_string(),
+            message: "Raid at 8pm".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_parse_shout() {
+        let line = "[Thu Mar 28 12:40:00 2026] Soandso shouts, 'WTS Fungi!'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::Shout,
+            sender: "Soandso".to_string(),
+            message: "WTS Fungi!".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_parse_ooc() {
+        let line = "[Thu Mar 28 12:40:00 2026] Soandso says out of character, 'Anyone need buffs?'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::Ooc,
+            sender: "Soandso".to_string(),
+            message: "Anyone need buffs?".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_parse_auction() {
+        let line = "[Thu Mar 28 12:40:00 2026] Soandso auctions, 'WTB SoW'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(event, LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::Auction,
+            sender: "Soandso".to_string(),
+            message: "WTB SoW".to_string(),
+        }));
+    }
+
+    #[test]
     fn test_parse_unrecognized_line() {
-        let line = "[Thu Mar 28 12:40:00 2026] Soandso says, 'Hello!'";
+        let line = "[Thu Mar 28 12:40:00 2026] You begin casting Cure Disease.";
         assert!(parse_log_line(line).is_none());
     }
 

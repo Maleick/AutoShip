@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use super::widgets::{hp_color, panel};
+use crate::eq::structs::BuffSlot;
 use crate::tui::app::{App, GroupDef};
 use crate::tui::app::extract_account_number;
 
@@ -136,17 +137,34 @@ fn draw_group_panel(
                     format!(" {:>3.0}%mp", player.mana_pct())
                 } else { "     -".into() };
 
-                // Buff timer placeholder — populated when DLL exposes buff data
-                let buff_timers = "  ··· ··· ···";
-
                 lines.push(Line::from(vec![
                     Span::styled(format!("{:<12}", name),          Style::default().fg(t.text_normal)),
                     Span::styled(format!("{:<4}", player.class_str()), Style::default().fg(t.text_accent)),
                     Span::styled(format!("{:>3}", player.level),   Style::default().fg(t.text_secondary)),
                     Span::styled(format!(" {:>3.0}%", hp_pct),     Style::default().fg(hp_color(hp_pct, t))),
                     Span::styled(mana_str,                          Style::default().fg(t.mana_color)),
-                    Span::styled(buff_timers,                       Style::default().fg(t.text_muted)),
                 ]));
+
+                // Buff timer row — show active buffs with durations
+                let active_buffs: Vec<&BuffSlot> = player.buff_slots
+                    .iter()
+                    .filter(|b| !b.is_empty())
+                    .take(6)
+                    .collect();
+                if !active_buffs.is_empty() {
+                    let mut buff_spans: Vec<Span<'_>> = vec![Span::raw("  ")];
+                    for b in &active_buffs {
+                        buff_spans.push(Span::styled(
+                            format!("{:04X}", b.spell_id),
+                            Style::default().fg(t.text_highlight),
+                        ));
+                        buff_spans.push(Span::styled(
+                            format!("({}) ", b.duration_str()),
+                            Style::default().fg(t.text_muted),
+                        ));
+                    }
+                    lines.push(Line::from(buff_spans));
+                }
             } else {
                 lines.push(Line::from(Span::styled(
                     format!("  PID {} (loading…)", client.pid),

@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use super::theme::{Theme, ThemeKind};
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
 use crate::config::AccountsConfig;
 use crate::eq::hvt::HvtWatchlist;
-use crate::eq::log_parser::LootDatabase;
+use crate::eq::log_parser::{ChatEvent, LootDatabase};
 use crate::eq::log_watcher::LogWatcher;
 use crate::eq::map_parser::ZoneMap;
 use crate::eq::named_db::NamedMobDatabase;
@@ -266,6 +266,8 @@ pub struct App {
     pub loot_database: LootDatabase,
     pub log_watchers: Vec<LogWatcher>,
     pub session_start: std::time::Instant,
+    /// Ring buffer of recent chat events (capped at 200).
+    pub chat_events: VecDeque<ChatEvent>,
 
     // Navigation state
     pub nav_selected: usize,
@@ -357,6 +359,7 @@ impl App {
             loot_database: LootDatabase::new(),
             log_watchers: Vec::new(),
             session_start: std::time::Instant::now(),
+            chat_events: VecDeque::with_capacity(200),
 
             nav_selected: 0,
             nav_statuses: HashMap::new(),

@@ -22,6 +22,12 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     let border_style = if is_active { t.border_active } else { t.border_dim };
 
     let filtered = app.filtered_spawns();
+
+    let player_level: Option<u8> = app
+        .active_client()
+        .and_then(|c| c.local_player.as_ref())
+        .map(|p| p.level);
+
     let client_label = app.active_client()
         .and_then(|c| c.local_player.as_ref())
         .map(|p| app.redact_name(&p.displayed_name).into_owned())
@@ -53,7 +59,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
             let style  = if is_sel {
                 Style::default().bg(t.row_selected_bg).add_modifier(Modifier::BOLD)
             } else {
-                spawn_row_style(spawn, t)
+                spawn_row_style(spawn, player_level, t)
             };
             let name = app.redact_name(&spawn.displayed_name);
             Row::new(vec![
@@ -255,8 +261,34 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             Span::styled("Zone ", Style::default().fg(t.text_muted)),
             Span::styled(&client.zone_name, Style::default().fg(t.text_normal)),
         ]),
-        Line::from(""),
     ];
+
+    // Cast state
+    if let Some(cast) = &player.cast_state {
+        if cast.is_casting() {
+            lines.push(Line::from(vec![
+                Span::styled("Casting ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("gem {} (ETA: {})", cast.spell_slot + 1, cast.spell_eta),
+                    Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+        let recast_strs: Vec<String> = cast.gem_etas
+            .iter()
+            .enumerate()
+            .filter(|(_, eta)| **eta != 0)
+            .map(|(i, eta)| format!("G{}:{}", i + 1, eta))
+            .collect();
+        if !recast_strs.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("Recast  ", Style::default().fg(t.text_muted)),
+                Span::styled(recast_strs.join(" "), Style::default().fg(t.text_accent)),
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
 
     for sprite_line in sprites::class_sprite(player.class.as_ref(), &player.stand_state, app.tick_count) {
         lines.push(sprite_line);

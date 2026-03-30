@@ -218,6 +218,10 @@ fn draw_session_stats(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     let xp_per_hour = if hours > 0.01 {
         format!("{:.0}", db.total_xp_events as f64 / hours)
     } else { "-".into() };
+    let xp_15min = {
+        let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
+        if rate > 0.01 { format!("{:.0}/hr", rate) } else { "-".into() }
+    };
 
     let total_plat = db.total_plat as f64
         + db.total_gold   as f64 / 10.0
@@ -238,7 +242,7 @@ fn draw_session_stats(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         Line::from(vec![
             Span::styled("XP  ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{} ({}/hr)", db.total_xp_events, xp_per_hour),
+                format!("{} ({}/hr  15m:{})", db.total_xp_events, xp_per_hour, xp_15min),
                 Style::default().fg(t.hp_high),
             ),
         ]),
