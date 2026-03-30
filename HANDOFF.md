@@ -1,115 +1,91 @@
-# Session Handoff — 2026-03-29 ~18:15 UTC
+# Session Handoff — 2026-03-30 ~02:10 UTC
 
 ## Start Here
 
-Read this file + check memories (`MEMORY.md`) for full project context. Initialize Serena.
-
-**Prompt to start next session:**
-```
-Please initialize Serena. Read HANDOFF.md and check memories for full context. Use TeamCreate (not background sub-agents) for any parallel work — the user wants visible agent teams in tmux splits. Run autoresearch loops on the MQ2 repository. Run peer review (GPT + Gemini) on any changed code. Run superpowers simplify and code audit. Clean up and optimize the codebase. Use agent teams for all parallel work. Then run the test_autologin.bat on frostreaver via SSH and monitor Phase 3 results.
-```
+Read this file + check memories (`MEMORY.md`) for full project context.
 
 ## Session Stats (Cumulative)
-- ~52,000+ lines across 3 crates
-- ~140 commits (~40 today across 2 sessions)
-- 637 tests passing (453 dmft + 46 dmft-common + 138 dmft-dll)
-- 0 clippy warnings
-- 2 peer review rounds completed (all findings fixed)
-- Codebase audit: both criticals fixed, all highs fixed
-- Knowledge system active with 3 confirmed rules, 4 hypotheses
+- ~54,000+ lines across 3 crates
+- ~145+ commits
+- 474+ tests passing (on Windows; macOS stub tests skipped)
+- 0 clippy errors
+- Login chain: **FULLY WORKING** — login → server select → character select → enter world
 
-## What's Done (Today — 2 Sessions)
+## What's Done (This Session — 2026-03-30)
 
-### Phase 3 Enter World — FULLY IMPLEMENTED ✅
-- Root cause: wrong CXWndManager offsets (eqmain vs eqgame)
-- SidlText lookup for CCharacterListWnd at +0x270
-- Thread safety: EnterWorld queued to game loop via atomics
-- SelectCharacter by name (CListWnd item reading)
-- Condition polling (500ms intervals, 30-60s timeouts)
-- Stale pointer fix (rescan + retry with 150-tick timeout)
+### Login Chain — FULLY WORKING ✅
+Root causes found and fixed:
+1. **eqmain vtable WndNotification at 0x110** (not 0x120 like eqgame) — eqmain::CXWnd has different vtable layout than eqgame CXWnd. This was why PLAY EVERQUEST clicks didn't work.
+2. **Password empty bug** — `mem::take` moved password before credential write. Fixed ordering.
+3. **CXWndManager offsets swapped** — eqgame count at +0x008, array at +0x010 (ArrayClass layout).
+4. **Window scan crash** — bad pointer at end of array. Fixed with early exit.
+5. **IPC pipe error loop** — missing DisconnectNamedPipe + no backoff → 8.5GB log. Fixed.
+6. **PostMessage Enter** — simulate_enter_key used SendInput (foreground only). Fixed to PostMessage.
+7. **Game loop Enter key** — sends VK_RETURN every 3s when at character select to click Enter World.
 
-### Combat — Complete ✅
-- All 16 EQ class strategies (including Bard melody twist, Ranger)
-- CampLoop FSM: camp→pull→fight→loot→return with wipe recovery
-- CampLoop wired into CombatCoordinator
-- MemberDied handling, reactive aggro transitions
-- on_kill → on_action_complete rename
-- Bard twist called after each cast (not just disengage)
-- Dead member check blocks pulling until rez
-- Loot automation stub (LootCorpse/LootAll commands)
+### Proven Working Flow:
+1. Launch EQ: `eqgame.exe patchme /login:frostreaver01`
+2. Wait 12s for login screen
+3. Inject DLL: `dmft.exe --inject`
+4. Wait 2s
+5. Send login: `dmft.exe --login frostreaver01 <password> "Firiona Vie"`
+6. DLL writes credentials via CStrRep + clicks Login via WndNotification(0x110)
+7. DLL also types password via WM_CHAR as backup
+8. Phase 2: finds PLAY EVERQUEST, vtable clicks it
+9. Phase 3: eqmain.dll unloads → character select
+10. Game loop sends Enter → enters world (memory jumps to 1GB)
 
-### Security ✅
-- Password zeroization (Zeroizing wrapper + mem::take)
-- Shared memory DACL placeholder (needs PSECURITY_DESCRIPTOR for full impl)
-- Shared memory reader uses FILE_MAP_READ
-- Tracing guard: Box::leak instead of mem::forget
+### Research Done ✅
+- Cloned macroquest, eqlib, mq-definitions repos to mq2-reference/, mq2-eqlib/, mq2-definitions/
+- Deep analysis of MQ2 AutoLogin StateMachine.cpp — complete window name map, state flow, dialog handling
+- eqmain::CXWnd vtable layout discovered in LoginFrontend.h (different from eqgame CXWnd.h)
+- CListWnd inherits CXWnd (not CSidlScreenWnd) — confirmed
+- Navmesh: MQ2Nav uses Recast/Detour with protobuf-wrapped .navmesh files
+- /stick: uses ExecuteCmd for movement (keyboard simulation), not CPhysicsInfo writes
+- Casting: CastSpell by gem slot, interrupt detection via chat message parsing
+- IPC: MQ2 uses TCP (EQBC), our shared memory approach is better for single-machine
 
 ### Code Quality ✅
-- 0 clippy warnings (down from 73)
-- 2 rounds of peer review (GPT + Gemini), all findings fixed
-- Codebase audit: 37 findings documented, criticals + highs fixed
-- Code simplification: default trait methods, dead code removed
-- Game loop hot path optimized (eliminated ~5800 String allocs/sec)
-- Widget extraction to eq/widgets.rs
-- MQ2 comparison document (docs/mq2-comparison.md)
+- IPC pipe backoff (exponential 10ms→5s)
+- read_cxstr pointer validation (rep_ptr < 0x10000)
+- Window scan early exit to prevent crashes
+- Tests gated with #[cfg(not(windows))] for null-pointer stub tests
 
-### Infrastructure ✅
-- Remote API on frostreaver:8080 with /launch-eq, /inject, /kill-eq, /restart
-- Test scripts: test_autologin.bat, test_loop.ps1, check_dll_log.ps1
-- Knowledge system: eq-internals, login-automation domains
-- Anthropic long-running app patterns documented
+## Key Offsets (NEVER CHANGE WITHOUT LIVE TEST)
+
+| Offset | Value | Context | Notes |
+|--------|-------|---------|-------|
+| CEDITBASEWND_INPUT_TEXT | 0x278 | eqmain | NOT 0x280 (eqlib says 0x280 but that's wrong for this client) |
+| CXWND_WINDOW_TEXT | 0x078 | both | Confirmed |
+| CSIDL_SCREEN_WND_SIDL_TEXT | 0x270 | both | CSidlScreenWnd only, not CListWnd |
+| CXWND_VTABLE_WND_NOTIFICATION | 0x110 | eqmain | Different from eqgame! |
+| CXWND_VTABLE_WND_NOTIFICATION | 0x120 | eqgame | Different from eqmain! |
+| CXWndManager COUNT | 0x008 | eqgame | ArrayClass: m_length first |
+| CXWndManager ARRAY | 0x010 | eqgame | ArrayClass: m_array second |
+| CXWndManager ARRAY | 0x010 | eqmain | Different layout |
+| CXWndManager COUNT | 0x018 | eqmain | Different layout |
 
 ## IMMEDIATE TODO — Next Session
 
-### 1. RUN TEST (First Priority!)
-On frostreaver desktop, double-click "Test AutoLogin" or run:
-```
-cd C:\Users\xmale\Projects\DMFT\scripts
-test_autologin.bat
-```
-Then monitor DLL log for Phase 3 results:
-```
-sshpass -p '1118' ssh maleick@frostreaver "powershell -Command \"Get-Content $env:TEMP\dmft\dmft-dll.log.2026-03-29 -Tail 50\""
-```
+### 1. Multi-Client Testing
+- Test `scripts/launch_and_login.bat` with single client
+- Create multi-account batch for 6 clients with staggered launch
+- Need additional account credentials in config
 
-### 2. Autoresearch Loop
-Continue iterating on MQ2 research:
-- Navmesh format reverse engineering
-- /stick movement implementation (CPhysicsInfo writes)
-- Cross-client health sharing (NetBots pattern)
-- Spell interrupt detection
+### 2. Character Select Improvements
+- SelectCharacter by name (currently Enter selects first/default character)
+- Use CCharacterListWnd::SelectCharacter(index) + EnterWorld() via game loop
+- Stop sending Enter once in-world
 
-### 3. Continue Audit + Cleanup
-- Run simplify on any new code
-- Run peer review on changes
-- Fix any remaining medium audit items
-- Optimize further hot paths
+### 3. Dialog Handling
+- Implement proper "character already logged in" Yes/No dialog detection
+- Use eqmain child window names: YESNO_YesButton, YESNO_NoButton
+- Need eqmain vtable offset (0x110) for these button clicks
 
-### 4. Remote API Session Fix
-The remote API must run from the user's desktop session (not scheduled task session 0) for EQ to be visible. Current workaround: user starts API manually from desktop.
-
-## Key Technical Discoveries
-
-### Confirmed Working (Login Chain)
-| Method | Status |
-|--------|--------|
-| CXStr direct write to InputText +0x278 | ✅ WORKS |
-| HeapAlloc CStrRep clone for password | ✅ WORKS |
-| WndNotification(XWM_LCLICK) via vtable | ✅ WORKS |
-| CXWndManager enumeration | ✅ WORKS |
-| SidlText window lookup at +0x270 | NEEDS LIVE TEST |
-| SelectCharacter by CListWnd name match | NEEDS LIVE TEST |
-| EnterWorld direct function call | NEEDS LIVE TEST |
-
-### Remote API Endpoints
-```
-GET  /status       — EQ process status + DLL log
-POST /launch-eq    — Start EQ with /login flag
-POST /inject       — Inject DLL into running EQ
-POST /kill-eq      — Kill all EQ processes
-POST /restart      — Git pull + restart API
-GET  /dll-log      — DLL log tail
-```
+### 4. Continue Audit + Cleanup
+- Run simplify on login chain code
+- Fix remaining clippy warnings
+- Add tests for new widget primitives
 
 ## Key File Paths
 
@@ -117,9 +93,12 @@ GET  /dll-log      — DLL log tail
 - DMFT: `C:\Users\xmale\Projects\DMFT`
 - EQ: `C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest`
 - DLL logs: `C:\Users\xmale\AppData\Local\Temp\dmft\dmft-dll.log.YYYY-MM-DD`
-- Test: `C:\Users\xmale\Projects\DMFT\scripts\test_autologin.bat`
-- API: `C:\Users\xmale\Projects\DMFT\scripts\remote_api.ps1`
-- SSH: `sshpass -p '1118' ssh maleick@frostreaver`
+- Test: `C:\Users\xmale\Projects\DMFT\scripts\launch_and_login.bat`
+- MQ2 ref: `C:\Users\xmale\Projects\DMFT\mq2-reference/`
+- eqlib ref: `C:\Users\xmale\Projects\DMFT\mq2-eqlib/`
 
-### Mac (dev)
-- DMFT: `/Users/maleick/Projects/DMFT`
+### Session Notes
+- EQ requires Console session with GPU (not RDP)
+- Use `tscon` or disconnect RDP to activate console
+- Character stuck in-world takes 5-10 min to timeout
+- `/login:` flag required to skip EULA
