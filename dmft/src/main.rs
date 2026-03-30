@@ -68,6 +68,7 @@ fn main() -> Result<()> {
     let cmd_mode = args.iter().position(|a| a == "--cmd");
     let nav_mode = args.iter().position(|a| a == "--nav");
     let navpath_mode = args.iter().position(|a| a == "--navpath");
+    let navall_mode = args.iter().position(|a| a == "--navall");
     let status_mode = args.iter().position(|a| a == "--status");
 
     if let Some(pos) = status_mode {
@@ -141,6 +142,21 @@ fn main() -> Result<()> {
             .parse()
             .context("z must be a number")?;
         run_nav_mode(pid, x, y, z)
+    } else if let Some(pos) = navall_mode {
+        // --navall <x> <y> <z> — navigate all EQ clients to coordinates
+        let x: f32 = args.get(pos + 1)
+            .context("--navall requires: --navall <x> <y> <z>")?
+            .parse()
+            .context("x must be a number")?;
+        let y: f32 = args.get(pos + 2)
+            .context("--navall requires: --navall <x> <y> <z>")?
+            .parse()
+            .context("y must be a number")?;
+        let z: f32 = args.get(pos + 3)
+            .context("--navall requires: --navall <x> <y> <z>")?
+            .parse()
+            .context("z must be a number")?;
+        run_navall_mode(x, y, z)
     } else if let Some(pos) = inject_pid_mode {
         // --inject-pid <PID> — inject into a specific process only
         let pid: u32 = args.get(pos + 1)
@@ -388,8 +404,55 @@ fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
 
-    println!("Sending NavigateTo PID {} -> ({}, {}, {})", pid, x, y, z);
+    println!("Navigating PID {} -> ({}, {}, {})", pid, x, y, z);
 
+    // 1. Read shared memory to get current position and zone
+    let waypoints = match ipc::shared::SharedStateReader::new(pid) {
+        Ok(reader) => match reader.read() {
+            Some(state) if !state.zone_short_name.is_empty() => {
+                let player = state.local_player.as_ref()
+                    .context("No player data in shared memory — character not in world?")?;
+                let from = (player.x, player.y, player.z);
+                let zone = &state.zone_short_name;
+                println!("Player at ({:.1}, {:.1}, {:.1}) in zone '{}'", from.0, from.1, from.2, zone);
+
+                // 2. Try navmesh pathfinding
+                match nav::mesh::load_zone(zone) {
+                    Ok(loaded) => {
+                        match nav::mesh::find_path(&loaded, from, (x, y, z)) {
+                            Ok(path) => {
+                                println!("Navmesh path found ({} waypoints):", path.len());
+                                for (i, (wx, wy, wz)) in path.iter().enumerate() {
+                                    println!("  [{i:>3}] ({wx:.2}, {wy:.2}, {wz:.2})");
+                                }
+                                path.iter().map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz)).collect()
+                            }
+                            Err(e) => {
+                                warn!("Navmesh path query failed: {:#} — falling back to straight line", e);
+                                println!("Navmesh path failed: {} — using straight line", e);
+                                vec![Waypoint::new(x, y, z)]
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Cannot load navmesh for zone '{}': {:#} — falling back to straight line", zone, e);
+                        println!("No navmesh for '{}': {} — using straight line", zone, e);
+                        vec![Waypoint::new(x, y, z)]
+                    }
+                }
+            }
+            _ => {
+                println!("No shared memory data — using straight line (no navmesh)");
+                vec![Waypoint::new(x, y, z)]
+            }
+        },
+        Err(e) => {
+            println!("Cannot read shared memory for PID {}: {} — using straight line", pid, e);
+            vec![Waypoint::new(x, y, z)]
+        }
+    };
+
+    // 3. Send waypoints via IPC pipe
     let pipe = ipc::pipe::CommandPipe::connect(pid)
         .context(format!("Cannot connect to PID {} — is the DLL injected?", pid))?;
 
@@ -397,13 +460,104 @@ fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     pipe.send_raw_token(&token)
         .context(format!("Failed to auth with PID {}", pid))?;
 
-    let cmd = Command::NavigateTo {
-        waypoints: vec![Waypoint::new(x, y, z)],
-    };
+    let cmd = Command::NavigateTo { waypoints };
     pipe.send_async(&cmd)
         .context(format!("Failed to send NavigateTo to PID {}", pid))?;
 
     println!("NavigateTo sent — character should start moving.");
+    Ok(())
+}
+
+/// Navigate ALL EQ clients to a destination using navmesh pathfinding.
+fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
+    use dmft_common::ipc::Command;
+    use dmft_common::nav::Waypoint;
+
+    let config = load_config()?;
+    let pids = process::memory::find_processes_by_name(&config.process_name)?;
+
+    if pids.is_empty() {
+        println!("No {} processes found.", config.process_name);
+        return Ok(());
+    }
+
+    println!("Found {} EQ client(s). Navigating all to ({}, {}, {})...", pids.len(), x, y, z);
+
+    let mut success_count = 0u32;
+    let mut fail_count = 0u32;
+
+    for &pid in &pids {
+        // Read shared memory for position + zone
+        let waypoints = match ipc::shared::SharedStateReader::new(pid) {
+            Ok(reader) => match reader.read() {
+                Some(state) if !state.zone_short_name.is_empty() => {
+                    let player = match state.local_player.as_ref() {
+                        Some(p) => p,
+                        None => {
+                            println!("  PID {}: no player data — skipping", pid);
+                            fail_count += 1;
+                            continue;
+                        }
+                    };
+                    let from = (player.x, player.y, player.z);
+                    let zone = &state.zone_short_name;
+
+                    match nav::mesh::load_zone(zone) {
+                        Ok(loaded) => {
+                            match nav::mesh::find_path(&loaded, from, (x, y, z)) {
+                                Ok(path) => {
+                                    println!("  PID {} ({}): navmesh path, {} waypoints", pid, player.name, path.len());
+                                    path.iter().map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz)).collect()
+                                }
+                                Err(e) => {
+                                    println!("  PID {} ({}): navmesh failed ({}), straight line", pid, player.name, e);
+                                    vec![Waypoint::new(x, y, z)]
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("  PID {} ({}): no mesh for '{}' ({}), straight line", pid, player.name, zone, e);
+                            vec![Waypoint::new(x, y, z)]
+                        }
+                    }
+                }
+                _ => {
+                    println!("  PID {}: no shared memory data — straight line", pid);
+                    vec![Waypoint::new(x, y, z)]
+                }
+            },
+            Err(_) => {
+                println!("  PID {}: cannot read shared memory — skipping", pid);
+                fail_count += 1;
+                continue;
+            }
+        };
+
+        // Send via IPC
+        match ipc::pipe::CommandPipe::connect(pid) {
+            Ok(pipe) => {
+                let token = generate_session_token(pid);
+                if pipe.send_raw_token(&token).is_err() {
+                    println!("  PID {}: auth failed — skipping", pid);
+                    fail_count += 1;
+                    continue;
+                }
+                let cmd = Command::NavigateTo { waypoints };
+                if let Err(e) = pipe.send_async(&cmd) {
+                    println!("  PID {}: send failed: {} — skipping", pid, e);
+                    fail_count += 1;
+                } else {
+                    success_count += 1;
+                }
+            }
+            Err(e) => {
+                println!("  PID {}: cannot connect ({})", pid, e);
+                fail_count += 1;
+            }
+        }
+    }
+
+    println!("Done: {} navigating, {} failed", success_count, fail_count);
     Ok(())
 }
 
