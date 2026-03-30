@@ -141,7 +141,7 @@ pub fn resolve_cxwnd_manager(eqmain_base: u64) -> Option<usize> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
 

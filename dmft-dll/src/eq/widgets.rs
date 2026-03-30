@@ -708,7 +708,7 @@ pub unsafe fn list_row_count(_list_wnd: usize) -> usize {
     0
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
 

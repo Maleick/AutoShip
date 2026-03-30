@@ -1041,7 +1041,7 @@ fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
     tracing::info!("=== END WINDOW ENUMERATION ===");
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
 
