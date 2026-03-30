@@ -457,6 +457,23 @@ fn on_game_tick() {
         ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
     }
 
+    // Lazy-init the navigator once we're in-world.
+    {
+        static NAV_INITIALIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !NAV_INITIALIZED.load(std::sync::atomic::Ordering::Relaxed) {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base != 0 {
+                if let Some(player_addr) = dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base) {
+                    let player_ptr = unsafe { *(player_addr as *const usize) };
+                    if player_ptr != 0 {
+                        crate::nav::init(player_ptr, std::process::id());
+                        NAV_INITIALIZED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+            }
+        }
+    }
+
     // Run navigation state machine.
     crate::nav::tick();
 

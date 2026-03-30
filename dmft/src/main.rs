@@ -66,6 +66,7 @@ fn main() -> Result<()> {
     let login_mode = args.iter().position(|a| a == "--login");
     let login_pid_mode = args.iter().position(|a| a == "--login-pid");
     let cmd_mode = args.iter().position(|a| a == "--cmd");
+    let nav_mode = args.iter().position(|a| a == "--nav");
 
     if calibrate_mode {
         run_calibrate_mode()
@@ -113,6 +114,25 @@ fn main() -> Result<()> {
             .context("--cmd requires: --cmd <pid> <command>")?
             .clone();
         run_cmd_mode(pid, &command)
+    } else if let Some(pos) = nav_mode {
+        // --nav <PID> <x> <y> <z> — navigate to coordinates
+        let pid: u32 = args.get(pos + 1)
+            .context("--nav requires: --nav <PID> <x> <y> <z>")?
+            .parse()
+            .context("PID must be a number")?;
+        let x: f32 = args.get(pos + 2)
+            .context("--nav requires: --nav <PID> <x> <y> <z>")?
+            .parse()
+            .context("x must be a number")?;
+        let y: f32 = args.get(pos + 3)
+            .context("--nav requires: --nav <PID> <x> <y> <z>")?
+            .parse()
+            .context("y must be a number")?;
+        let z: f32 = args.get(pos + 4)
+            .context("--nav requires: --nav <PID> <x> <y> <z>")?
+            .parse()
+            .context("z must be a number")?;
+        run_nav_mode(pid, x, y, z)
     } else if let Some(pos) = inject_pid_mode {
         // --inject-pid <PID> — inject into a specific process only
         let pid: u32 = args.get(pos + 1)
@@ -260,6 +280,30 @@ fn run_inject_mode() -> Result<()> {
     println!();
     println!("Run scripts\\verify_injection.bat to check injection status.");
 
+    Ok(())
+}
+
+/// Navigate mode (--nav <PID> <x> <y> <z>) — send NavigateTo to a specific client.
+fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
+    use dmft_common::ipc::Command;
+    use dmft_common::nav::Waypoint;
+
+    println!("Sending NavigateTo PID {} -> ({}, {}, {})", pid, x, y, z);
+
+    let pipe = ipc::pipe::CommandPipe::connect(pid)
+        .context(format!("Cannot connect to PID {} — is the DLL injected?", pid))?;
+
+    let token = generate_session_token(pid);
+    pipe.send_raw_token(&token)
+        .context(format!("Failed to auth with PID {}", pid))?;
+
+    let cmd = Command::NavigateTo {
+        waypoints: vec![Waypoint::new(x, y, z)],
+    };
+    pipe.send_async(&cmd)
+        .context(format!("Failed to send NavigateTo to PID {}", pid))?;
+
+    println!("NavigateTo sent — character should start moving.");
     Ok(())
 }
 

@@ -250,6 +250,7 @@ fn login_chain_phase2() {
     }
 
     // Phase 3: Poll for eqmain.dll unload (character select)
+    // Also handle "already logged in" Yes/No dialog during this phase.
     tracing::info!("Phase 3: Polling for character select...");
     for attempt in 0..120 {
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -258,7 +259,13 @@ fn login_chain_phase2() {
             tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
             return;
         }
-        // Press Enter every 3s to dismiss dialogs
+        // Check for "already logged in" dialog and click Yes
+        if attempt % 2 == 0 && eqmain_base != 0 {
+            if crate::login::widgets::click_yesno_yes(eqmain_base as usize) {
+                tracing::info!(attempt, "Phase 3: Clicked Yes on 'already logged in' dialog");
+            }
+        }
+        // Press Enter every 3s to dismiss other dialogs
         if attempt % 6 == 3 && eqmain_base != 0 {
             crate::login::widgets::simulate_enter_key(eqmain_base);
         }
