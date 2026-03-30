@@ -65,6 +65,9 @@ pub enum Command {
     /// Execute a slash command as if typed in the chat window.
     /// Uses EQ's InterpretCmd internally (e.g. "/target Camrene", "/follow").
     SlashCommand { command: String },
+    // Zone graph
+    /// Request the zone adjacency graph from ZoneGuideManagerClient.
+    QueryZoneGraph,
     // System
     Ping,
     Eject,
@@ -123,6 +126,12 @@ pub enum Response {
     },
     CombatUpdate {
         status: crate::combat::CombatStatus,
+    },
+    /// Zone adjacency graph from ZoneGuideManagerClient.
+    /// Simplified wire format: Vec of (zone_id, name, min_level, max_level, connections).
+    /// Each connection is (dest_zone_id, transfer_type, disabled).
+    ZoneGraph {
+        zones: Vec<(u16, String, i32, i32, Vec<(u16, u8, bool)>)>,
     },
 }
 

@@ -71,8 +71,15 @@ fn main() -> Result<()> {
     let navall_mode = args.iter().position(|a| a == "--navall");
     let status_mode = args.iter().position(|a| a == "--status");
     let statusall_mode = args.iter().any(|a| a == "--statusall");
+    let zones_mode = args.iter().position(|a| a == "--zones");
 
-    if statusall_mode {
+    if let Some(pos) = zones_mode {
+        let pid: u32 = args.get(pos + 1)
+            .context("--zones requires: --zones <PID>")?
+            .parse()
+            .context("PID must be a number")?;
+        return run_zones_mode(pid);
+    } else if statusall_mode {
         return run_statusall_mode();
     } else if let Some(pos) = status_mode {
         let pid: u32 = args.get(pos + 1)
@@ -323,6 +330,83 @@ fn run_inject_mode() -> Result<()> {
 }
 
 /// Status mode (--status <PID>) — read shared memory and print player state.
+/// Zones mode (--zones <PID>) — query the zone adjacency graph from an injected client.
+fn run_zones_mode(pid: u32) -> Result<()> {
+    use dmft_common::ipc::{Command, Response};
+    use dmft_common::nav::ZoneGraph;
+
+    println!("Querying zone graph from PID {}...", pid);
+
+    let pipe = ipc::pipe::CommandPipe::connect(pid)
+        .with_context(|| format!("Failed to connect to PID {}. Is the DLL injected?", pid))?;
+
+    let token = generate_session_token(pid);
+    pipe.send_raw_token(&token)
+        .context("Failed to send session token")?;
+
+    let response = pipe.send(&Command::QueryZoneGraph)
+        .context("Failed to query zone graph")?;
+
+    match response {
+        Response::ZoneGraph { zones } => {
+            // Convert wire format back to ZoneGraph for display
+            let mut graph = ZoneGraph::default();
+            for (zone_id, name, min_level, max_level, conns) in &zones {
+                let connections = conns
+                    .iter()
+                    .map(|(dest, tt, disabled)| dmft_common::nav::ZoneConnection {
+                        dest_zone_id: *dest,
+                        transfer_type: *tt,
+                        disabled: *disabled,
+                    })
+                    .collect();
+                graph.zones.insert(
+                    *zone_id,
+                    dmft_common::nav::ZoneNode {
+                        zone_id: *zone_id,
+                        name: name.clone(),
+                        min_level: *min_level,
+                        max_level: *max_level,
+                        connections,
+                    },
+                );
+            }
+
+            println!("Zone graph: {} zones", graph.zones.len());
+            println!();
+
+            // Print zones sorted by ID
+            let transfer_names = ["Zone Line", "Door", "Book", "Translocator", "Spell"];
+            for (zone_id, name, min_level, max_level, conns) in &zones {
+                let level_str = if *max_level > 0 {
+                    format!(" (lv {}-{})", min_level, max_level)
+                } else {
+                    String::new()
+                };
+                println!("[{:>3}] {}{}", zone_id, name, level_str);
+                for (dest_id, tt, disabled) in conns {
+                    let tt_name = transfer_names.get(*tt as usize).unwrap_or(&"Unknown");
+                    let dest_name = zones
+                        .iter()
+                        .find(|(id, _, _, _, _)| *id == *dest_id)
+                        .map(|(_, n, _, _, _)| n.as_str())
+                        .unwrap_or("???");
+                    let disabled_str = if *disabled { " [DISABLED]" } else { "" };
+                    println!("      -> [{:>3}] {} via {}{}", dest_id, dest_name, tt_name, disabled_str);
+                }
+            }
+        }
+        Response::Error { message } => {
+            anyhow::bail!("DLL returned error: {}", message);
+        }
+        other => {
+            anyhow::bail!("Unexpected response: {:?}", other);
+        }
+    }
+
+    Ok(())
+}
+
 fn run_status_mode(pid: u32) -> Result<()> {
     let reader = ipc::shared::SharedStateReader::new(pid)
         .context(format!("Cannot open shared memory for PID {} — is the DLL injected?", pid))?;

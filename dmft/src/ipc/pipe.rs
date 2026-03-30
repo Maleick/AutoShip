@@ -76,8 +76,8 @@ impl CommandPipe {
                 WriteFile(self.handle, Some(&data), Some(&mut written), None)?;
             }
 
-            // Read response
-            let mut buf = vec![0u8; 4096];
+            // Read response (buffer sized to MAX_MESSAGE_SIZE + length prefix)
+            let mut buf = vec![0u8; protocol::MAX_MESSAGE_SIZE as usize + 4];
             let mut bytes_read: u32 = 0;
             unsafe {
                 ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)?;

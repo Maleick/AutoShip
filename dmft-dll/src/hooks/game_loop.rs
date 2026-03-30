@@ -1010,6 +1010,19 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         Command::StopNavigation => {
             crate::nav::handle_command(crate::nav::NavCommand::Stop);
         }
+        Command::QueryZoneGraph => {
+            tracing::info!("QueryZoneGraph received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let response = unsafe { crate::nav::zone_graph::read_zone_graph(eq_base) }
+                .map(|graph| {
+                    let zones = crate::nav::zone_graph::zone_graph_to_ipc(&graph);
+                    dmft_common::ipc::Response::ZoneGraph { zones }
+                })
+                .unwrap_or_else(|| dmft_common::ipc::Response::Error {
+                    message: "Failed to read zone graph from memory".into(),
+                });
+            crate::ipc::send_response(response);
+        }
         Command::Ping => {
             tracing::info!("Ping received");
         }

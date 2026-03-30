@@ -4,6 +4,7 @@ pub mod humanize;
 pub mod state;
 pub mod stuck;
 pub mod waypoint;
+pub mod zone_graph;
 
 pub use state::Navigator;
 

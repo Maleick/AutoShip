@@ -147,6 +147,80 @@ impl<T> IndexedQueue<T> {
     }
 }
 
+// ─── Zone Graph (zone-to-zone pathfinding) ───
+
+/// A connection from one zone to another.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZoneConnection {
+    pub dest_zone_id: u16,
+    pub transfer_type: u8,
+    pub disabled: bool,
+}
+
+/// A single zone node with its connections.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZoneNode {
+    pub zone_id: u16,
+    pub name: String,
+    pub min_level: i32,
+    pub max_level: i32,
+    pub connections: Vec<ZoneConnection>,
+}
+
+/// Complete zone adjacency graph read from EQ's ZoneGuideManagerClient.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ZoneGraph {
+    pub zones: std::collections::HashMap<u16, ZoneNode>,
+}
+
+impl ZoneGraph {
+    /// BFS shortest path from one zone to another.
+    /// Returns the sequence of zone IDs to traverse (including start and end),
+    /// or `None` if no path exists.
+    pub fn find_path(&self, from_zone_id: u16, to_zone_id: u16) -> Option<Vec<u16>> {
+        if from_zone_id == to_zone_id {
+            return Some(vec![from_zone_id]);
+        }
+        if !self.zones.contains_key(&from_zone_id) || !self.zones.contains_key(&to_zone_id) {
+            return None;
+        }
+
+        use std::collections::{HashMap, VecDeque};
+
+        let mut visited: HashMap<u16, u16> = HashMap::new(); // child -> parent
+        let mut queue = VecDeque::new();
+        queue.push_back(from_zone_id);
+        visited.insert(from_zone_id, from_zone_id);
+
+        while let Some(current) = queue.pop_front() {
+            if let Some(node) = self.zones.get(&current) {
+                for conn in &node.connections {
+                    if conn.disabled {
+                        continue;
+                    }
+                    if visited.contains_key(&conn.dest_zone_id) {
+                        continue;
+                    }
+                    visited.insert(conn.dest_zone_id, current);
+                    if conn.dest_zone_id == to_zone_id {
+                        // Reconstruct path
+                        let mut path = vec![to_zone_id];
+                        let mut step = to_zone_id;
+                        while step != from_zone_id {
+                            step = visited[&step];
+                            path.push(step);
+                        }
+                        path.reverse();
+                        return Some(path);
+                    }
+                    queue.push_back(conn.dest_zone_id);
+                }
+            }
+        }
+        None
+    }
+}
+
 /// A named camp position for a specific role.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CampSpot {
@@ -266,5 +340,95 @@ mod tests {
         let b = Waypoint::new(1.0, 2.0, 2.0);
         let dist = a.distance_3d(&b);
         assert!((dist - 3.0).abs() < 1e-5);
+    }
+
+    // ─── ZoneGraph tests ───
+
+    fn make_test_graph() -> ZoneGraph {
+        // A -> B -> C, A -> D -> C (two paths from A to C)
+        let mut g = ZoneGraph::default();
+        g.zones.insert(1, ZoneNode {
+            zone_id: 1, name: "ZoneA".into(), min_level: 1, max_level: 10,
+            connections: vec![
+                ZoneConnection { dest_zone_id: 2, transfer_type: 0, disabled: false },
+                ZoneConnection { dest_zone_id: 4, transfer_type: 1, disabled: false },
+            ],
+        });
+        g.zones.insert(2, ZoneNode {
+            zone_id: 2, name: "ZoneB".into(), min_level: 10, max_level: 20,
+            connections: vec![
+                ZoneConnection { dest_zone_id: 3, transfer_type: 0, disabled: false },
+            ],
+        });
+        g.zones.insert(3, ZoneNode {
+            zone_id: 3, name: "ZoneC".into(), min_level: 20, max_level: 30,
+            connections: vec![],
+        });
+        g.zones.insert(4, ZoneNode {
+            zone_id: 4, name: "ZoneD".into(), min_level: 15, max_level: 25,
+            connections: vec![
+                ZoneConnection { dest_zone_id: 3, transfer_type: 0, disabled: false },
+            ],
+        });
+        g
+    }
+
+    #[test]
+    fn zone_graph_find_path_same_zone() {
+        let g = make_test_graph();
+        assert_eq!(g.find_path(1, 1), Some(vec![1]));
+    }
+
+    #[test]
+    fn zone_graph_find_path_direct() {
+        let g = make_test_graph();
+        let path = g.find_path(1, 2).unwrap();
+        assert_eq!(path, vec![1, 2]);
+    }
+
+    #[test]
+    fn zone_graph_find_path_multi_hop() {
+        let g = make_test_graph();
+        let path = g.find_path(1, 3).unwrap();
+        // BFS finds shortest — both A->B->C and A->D->C are 2 hops
+        assert_eq!(path.len(), 3);
+        assert_eq!(path[0], 1);
+        assert_eq!(path[2], 3);
+    }
+
+    #[test]
+    fn zone_graph_find_path_no_path() {
+        let g = make_test_graph();
+        // Zone C has no outgoing connections, can't reach A from C
+        assert!(g.find_path(3, 1).is_none());
+    }
+
+    #[test]
+    fn zone_graph_find_path_unknown_zone() {
+        let g = make_test_graph();
+        assert!(g.find_path(1, 999).is_none());
+        assert!(g.find_path(999, 1).is_none());
+    }
+
+    #[test]
+    fn zone_graph_find_path_skips_disabled() {
+        let mut g = ZoneGraph::default();
+        g.zones.insert(1, ZoneNode {
+            zone_id: 1, name: "A".into(), min_level: 0, max_level: 0,
+            connections: vec![
+                ZoneConnection { dest_zone_id: 2, transfer_type: 0, disabled: true },
+            ],
+        });
+        g.zones.insert(2, ZoneNode {
+            zone_id: 2, name: "B".into(), min_level: 0, max_level: 0,
+            connections: vec![],
+        });
+        assert!(g.find_path(1, 2).is_none());
+    }
+
+    #[test]
+    fn zone_graph_default_is_empty() {
+        let g = ZoneGraph::default();
+        assert!(g.zones.is_empty());
     }
 }

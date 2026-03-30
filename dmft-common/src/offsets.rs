@@ -114,6 +114,10 @@ pub const FREE_TARGET_CAST_SPELL: u64 = 0x1402B5740;
 /// PlayerZoneClient::ChangeHeight — change character height
 pub const CHANGE_HEIGHT: u64 = 0x14031AB80;
 
+/// ZoneGuideManagerClient singleton (preferred base)
+/// Source: eqgame.h ZoneGuideManagerClient__Instance_x
+pub const ZONE_GUIDE_MANAGER: u64 = 0x1403571F0;
+
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
 /// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would underflow).
@@ -480,6 +484,58 @@ pub mod spawn_manager {
     /// TList<PlayerClient*> — start of the player linked list
     /// The TList itself contains m_pFirstNode at offset 0x00
     pub const PLAYER_LIST: usize = 0x0010;
+}
+
+/// ZoneGuideManagerClient / ZoneGuideZone struct layout offsets.
+/// Source: mq2-eqlib/include/eqlib/game/UI.h, Containers.h
+pub mod zone_guide {
+    /// Number of zone slots in the fixed array.
+    pub const ZONE_COUNT: usize = 888;
+
+    // ─── ZoneGuideManagerBase layout ───
+    // vtable at +0x00 (8 bytes), zones array starts at +0x08
+
+    /// Offset of zones[0] within ZoneGuideManagerBase.
+    pub const ZONES_OFFSET: usize = 0x0008;
+
+    // ─── ZoneGuideZone layout (0x48 bytes each) ───
+
+    /// sizeof(ZoneGuideZone)
+    pub const ZONE_SIZE: usize = 0x48;
+
+    /// EQZoneIndex zoneId (int at +0x00)
+    pub const ZONE_ID: usize = 0x00;
+    /// CXStr name (pointer at +0x08)
+    pub const ZONE_NAME: usize = 0x08;
+    /// int continentIndex (+0x10)
+    pub const ZONE_CONTINENT: usize = 0x10;
+    /// int minLevel (+0x14)
+    pub const ZONE_MIN_LEVEL: usize = 0x14;
+    /// int maxLevel (+0x18)
+    pub const ZONE_MAX_LEVEL: usize = 0x18;
+    /// ArrayClass<ZoneGuideConnection> zoneConnections at +0x30
+    /// ArrayClass layout: m_length (int) at +0x00, m_array (ptr) at +0x08
+    pub const ZONE_CONNECTIONS_COUNT: usize = 0x30;
+    pub const ZONE_CONNECTIONS_ARRAY: usize = 0x38;
+
+    // ─── ZoneGuideConnection layout (0x14 bytes each) ───
+
+    /// sizeof(ZoneGuideConnection)
+    pub const CONNECTION_SIZE: usize = 0x14;
+
+    /// EQZoneIndex destZoneId (int at +0x00)
+    pub const CONN_DEST_ZONE_ID: usize = 0x00;
+    /// int transferTypeIndex (+0x04)
+    pub const CONN_TRANSFER_TYPE: usize = 0x04;
+    /// bool disabled (+0x10)
+    pub const CONN_DISABLED: usize = 0x10;
+
+    // ─── ZoneGuideManagerClient extends ZoneGuideManagerBase ───
+
+    /// EQZoneIndex currentZone at +0xFA40
+    pub const CURRENT_ZONE: usize = 0xFA40;
+    /// bool zoneGuideDataSet at +0xFA48
+    pub const DATA_SET: usize = 0xFA48;
 }
 
 #[cfg(test)]
