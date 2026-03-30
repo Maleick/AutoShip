@@ -198,7 +198,7 @@ pub mod eqmain {
 
     /// CXWnd vtable offset for WndNotification (eqmain.dll layout)
     /// Signature: int WndNotification(CXWnd* sender, uint32_t message, void* data)
-    pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x110;
+    pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x120; // eqlib: CXWnd::VFTable::WndNotification
 
     // ─── CXWndManager struct offsets ───
     // From MQ2: CXWndManager { /*0x008*/ ArrayClass<CXWnd*> pWindows; ... }
@@ -247,10 +247,12 @@ pub mod eqmain {
 // NOTE: These differ from eqmain.dll! eqgame.exe has CXWndManager::pWindows at +0x008,
 // while eqmain.dll has it at +0x010 (different struct layout).
 pub mod eqgame {
-    /// CXWndManager::pWindows.m_array in eqgame.exe (ArrayClass at +0x008)
-    pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x008;
     /// CXWndManager::pWindows.m_length in eqgame.exe
-    pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x010;
+    /// ArrayClass layout: m_length at +0x00, m_array at +0x08 within the ArrayClass
+    /// pWindows ArrayClass starts at CXWndManager +0x008
+    pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x008;
+    /// CXWndManager::pWindows.m_array in eqgame.exe
+    pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
 
     /// CSidlScreenWnd::SidlText (CXStr at +0x270) — the SIDL window name
     /// Used to find windows like "CharacterListWnd" by name

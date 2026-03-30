@@ -162,27 +162,15 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 "StartLogin received — running inline + delegating to FSM"
             );
 
-            // Store credentials in the FSM for later phases (server/char select)
-            // which run in the game loop after eqmain.dll unloads.
-            // The FSM needs to own the password for later phases. We pass the
-            // inner String directly — the Zeroizing wrapper on the IPC side
-            // ensures the local copy is wiped. The FSM should zeroize on Drop.
-            crate::login::start_login(
-                account_name.to_string(),
-                std::mem::take(&mut *password),
-                server_name.to_string(),
-                character_name.to_string(),
-            );
-
-            // Run credential entry inline on the IPC thread, because
-            // the game loop hook (ProcessGameEvents) doesn't fire during the
-            // login screen — eqmain.dll has its own event loop.
+            // Type password via WM_CHAR — the only reliable method.
+            // CStrRep writes update internal memory but EQ doesn't re-read
+            // the edit widget from it. WM_CHAR simulates actual keyboard input
+            // which EQ properly processes. The /login: flag pre-fills username.
             let eqmain_base = crate::login::eqmain::find_eqmain();
             if eqmain_base != 0 {
-                let wrote = crate::login::widgets::type_credentials_to_window(
-                    eqmain_base, account_name, &password,
-                );
-                tracing::info!(wrote, "Inline: type_credentials_to_window");
+                tracing::info!("Typing password via WM_CHAR + Enter (Tab to password field first)");
+                let typed = crate::login::widgets::type_password_wm_char(eqmain_base, &password);
+                tracing::info!(typed, "WM_CHAR password entry");
 
                 // Spawn thread for phase 2 (server select)
                 let srv = server_name.clone();
@@ -196,6 +184,15 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             } else {
                 tracing::warn!("Inline: eqmain.dll not loaded — FSM will handle when game loop starts");
             }
+
+            // NOW move password to FSM (after credential writing used it)
+            crate::login::start_login(
+                account_name.to_string(),
+                std::mem::take(&mut *password),
+                server_name.to_string(),
+                character_name.to_string(),
+            );
+
             true
         }
         _ => false,
@@ -249,6 +246,18 @@ fn login_chain_phase2(_server_name: String, _character_name: String) {
     let mut char_select_ready = false;
     for attempt in 0..120 {
         std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // Press Enter every ~3 seconds to dismiss blocking dialogs.
+        // MQ2 uses named child windows (YESNO_YesButton) which requires
+        // CXMLDataManager — we don't have that, so Enter key is our approach.
+        if attempt % 6 == 3 {
+            let eqmain_for_enter = crate::login::eqmain::find_eqmain();
+            if eqmain_for_enter != 0 {
+                tracing::info!(attempt, "Phase 3: Pressing Enter to dismiss potential dialog");
+                crate::login::widgets::simulate_enter_key(eqmain_for_enter);
+            }
+        }
+
         let eqmain_check = crate::login::eqmain::find_eqmain();
         if eqmain_check == 0 {
             tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
@@ -436,13 +445,14 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
 
     tracing::info!(client_id, "IPC listener thread started");
 
+    let mut consecutive_errors: u32 = 0;
+
     while IPC_RUNNING.load(Ordering::SeqCst) && !crate::SHUTTING_DOWN.load(Ordering::SeqCst) {
         match listener.receive() {
             Ok(cmd) => {
+                consecutive_errors = 0;
                 tracing::debug!(client_id, ?cmd, "Received command");
 
-                // Handle commands that must work even at the login screen
-                // (before the game loop hook is running).
                 if handle_immediate_command(&cmd) {
                     continue;
                 }
@@ -453,11 +463,16 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     }
             }
             Err(e) => {
-                // On pipe disconnect or error, reset auth and retry unless
-                // we are shutting down.
                 if IPC_RUNNING.load(Ordering::SeqCst) {
-                    tracing::warn!(client_id, error = %e, "Command listener error, resetting");
+                    consecutive_errors += 1;
+                    if consecutive_errors <= 3 {
+                        tracing::warn!(client_id, error = %e, "Command listener error, resetting");
+                    } else if consecutive_errors == 4 {
+                        tracing::warn!(client_id, consecutive_errors, "Suppressing repeated pipe errors");
+                    }
                     listener.reset_auth();
+                    let backoff_ms = std::cmp::min(10 * (1u64 << consecutive_errors.min(9)), 5000);
+                    std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
                 }
             }
         }

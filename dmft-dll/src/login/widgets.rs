@@ -420,45 +420,28 @@ pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
 pub fn simulate_enter_key(eqmain_base: u64) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::UI::Input::KeyboardAndMouse::{
-            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-            KEYEVENTF_KEYUP, VK_RETURN,
-        };
+        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
             tracing::warn!("Cannot simulate Enter — EQ HWND not resolved");
             return false;
         };
 
+        let hwnd = HWND(hwnd_val as isize);
+        const WM_KEYDOWN: u32 = 0x0100;
+        const WM_KEYUP: u32 = 0x0101;
+        const VK_RETURN: u16 = 0x0D;
+
         unsafe {
-            let down = INPUT {
-                r#type: INPUT_KEYBOARD,
-                Anonymous: INPUT_0 {
-                    ki: KEYBDINPUT {
-                        wVk: VK_RETURN,
-                        wScan: 0x1C,
-                        dwFlags: Default::default(),
-                        time: 0,
-                        dwExtraInfo: 0,
-                    },
-                },
-            };
-            let up = INPUT {
-                r#type: INPUT_KEYBOARD,
-                Anonymous: INPUT_0 {
-                    ki: KEYBDINPUT {
-                        wVk: VK_RETURN,
-                        wScan: 0x1C,
-                        dwFlags: KEYEVENTF_KEYUP,
-                        time: 0,
-                        dwExtraInfo: 0,
-                    },
-                },
-            };
-            SendInput(&[down, up], std::mem::size_of::<INPUT>() as i32);
+            // PostMessage sends directly to the HWND — works even when EQ
+            // is not the foreground window (unlike SendInput).
+            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN as usize), LPARAM(0));
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN as usize), LPARAM(0));
         }
 
-        tracing::debug!(hwnd = format!("{:#x}", hwnd_val), "Simulated Enter key via SendInput");
+        tracing::debug!(hwnd = format!("{:#x}", hwnd_val), "Simulated Enter key via PostMessage");
         true
     }
 

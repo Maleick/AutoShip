@@ -226,7 +226,7 @@ pub unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
     use dmft_common::offsets::eqmain as off;
 
     let rep_ptr = *(cxstr_addr as *const usize);
-    if rep_ptr == 0 {
+    if rep_ptr == 0 || rep_ptr < 0x10000 {
         return None;
     }
 
