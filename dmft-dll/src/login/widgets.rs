@@ -22,6 +22,26 @@ pub const OK_DIALOG: &str = "okdialog";
 pub const DBG_SPLASH: &str = "dbgsplash";
 pub const SOE_SPLASH: &str = "soesplash";
 
+// ─── MQ2 AutoLogin SIDL window names (from StateMachine.cpp) ───
+// These are CSidlScreenWnd::SidlText values, stable across patches.
+// Used for state detection: which screen is EQ showing right now?
+
+/// Login screen — the main connect/credential entry screen (eqmain context).
+pub const SIDL_CONNECT: &str = "connect";
+/// Server select screen (eqmain context).
+pub const SIDL_SERVER_SELECT: &str = "serverselect";
+/// Yes/No confirmation dialog (e.g., "already logged in — kick?").
+pub const SIDL_YES_NO_DIALOG: &str = "yesnodialog";
+/// OK dialog (error messages, server full, etc.).
+pub const SIDL_OK_DIALOG: &str = "okdialog";
+/// Character select screen (eqgame context — eqmain.dll is unloaded).
+pub const SIDL_CHARACTER_LIST_WND: &str = "CharacterListWnd";
+
+// ─── SIDL child widget names ───
+pub const SIDL_YESNO_YES_BUTTON: &str = "YESNO_YesButton";
+pub const SIDL_YESNO_NO_BUTTON: &str = "YESNO_NoButton";
+pub const SIDL_YESNO_DISPLAY: &str = "YESNO_Display";
+
 // ─── Pre-login prompt screens (from MQ2AutoLogin) ───
 // These are (parent_window_text, button_text) pairs for screens that must be
 // dismissed before reaching the login form. Matched by WindowText substring.
@@ -33,18 +53,207 @@ const PRE_LOGIN_PROMPTS: &[(&str, &str)] = &[
     ("news", "OK"),                 // News / patch notes
 ];
 
-/// Check if a named window is visible in the UI.
+/// Check if a named window is visible in the UI (by WindowText + dShow flag).
 pub fn is_window_visible(eqmain_base: u64, window_name: &str) -> bool {
     #[cfg(windows)]
     {
-        // TODO: Check CXWnd::IsVisible() or dShow flag at runtime.
-        // For now, existence in the SIDL tree means "visible".
-        find_window_by_name(eqmain_base, window_name).is_some()
+        if eqmain_base == 0 {
+            return false;
+        }
+        let Some(cxwnd_mgr) = super::eqmain::resolve_cxwnd_manager(eqmain_base) else {
+            return false;
+        };
+        unsafe { crate::eq::widgets::find_visible_window_by_name(cxwnd_mgr, window_name) }.is_some()
     }
 
     #[cfg(not(windows))]
     {
         let _ = (eqmain_base, window_name);
+        false
+    }
+}
+
+/// Check if a SIDL-named window is visible in the eqmain.dll CXWndManager.
+///
+/// Uses CSidlScreenWnd::SidlText (+0x270 in eqmain) for matching and checks
+/// the dShow visibility flag. This is the MQ2 AutoLogin approach.
+pub fn is_sidl_window_visible(eqmain_base: u64, sidl_name: &str) -> bool {
+    #[cfg(windows)]
+    {
+        find_visible_sidl_window(eqmain_base, sidl_name).is_some()
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (eqmain_base, sidl_name);
+        false
+    }
+}
+
+/// Find a visible SIDL-named window in eqmain.dll's CXWndManager.
+///
+/// Returns the CXWnd pointer if found and visible, None otherwise.
+/// Uses eqmain.dll offsets for CXWndManager and SidlText.
+pub fn find_visible_sidl_window(eqmain_base: u64, sidl_name: &str) -> Option<usize> {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain as off;
+
+        if eqmain_base == 0 {
+            return None;
+        }
+
+        let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
+
+        // eqmain.dll uses SidlText at the same offset as eqgame's CSIDL_SCREEN_WND_SIDL_TEXT
+        // (0x270), but CXWndManager layout differs (array at +0x010, count at +0x018).
+        unsafe {
+            crate::eq::widgets::find_visible_window_by_sidl_name(
+                cxwnd_mgr,
+                sidl_name,
+                dmft_common::offsets::eqgame::CSIDL_SCREEN_WND_SIDL_TEXT,
+                off::CXWNDMGR_WINDOWS_ARRAY,
+                off::CXWNDMGR_WINDOWS_COUNT,
+            )
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (eqmain_base, sidl_name);
+        None
+    }
+}
+
+/// Find a visible child window by its SIDL name within a parent window.
+///
+/// Walks the parent's child TList and checks SidlText + dShow.
+pub fn find_visible_child_by_sidl(parent_wnd: usize, sidl_name: &str) -> Option<usize> {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain as off;
+        use dmft_common::offsets::eqgame as eqg;
+
+        if parent_wnd == 0 {
+            return None;
+        }
+
+        unsafe {
+            let mut child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
+            let mut count = 0u32;
+
+            while child != 0 && count < 200 {
+                count += 1;
+
+                if crate::eq::widgets::is_visible(child) {
+                    if let Some(text) = crate::eq::widgets::read_cxstr(
+                        child + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
+                    ) {
+                        if text.eq_ignore_ascii_case(sidl_name) {
+                            return Some(child);
+                        }
+                    }
+                }
+
+                child = *((child + off::CXWND_NEXT) as *const usize);
+            }
+        }
+        None
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (parent_wnd, sidl_name);
+        None
+    }
+}
+
+/// Read the display text from a YesNo dialog's YESNO_Display child window.
+/// Returns the dialog message text, or None if not found.
+pub fn read_yesno_dialog_text(dialog_wnd: usize) -> Option<String> {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets::eqmain as off;
+        use dmft_common::offsets::eqgame as eqg;
+
+        if dialog_wnd == 0 {
+            return None;
+        }
+
+        unsafe {
+            // Find YESNO_Display child by SidlText
+            let mut child = *((dialog_wnd + off::CXWND_FIRST_NODE) as *const usize);
+            let mut count = 0u32;
+
+            while child != 0 && count < 200 {
+                count += 1;
+
+                if let Some(sidl_text) = crate::eq::widgets::read_cxstr(
+                    child + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
+                ) {
+                    if sidl_text.eq_ignore_ascii_case(SIDL_YESNO_DISPLAY) {
+                        // Read the WindowText of the display child
+                        return crate::eq::widgets::read_cxstr(child + off::CXWND_WINDOW_TEXT);
+                    }
+                }
+
+                child = *((child + off::CXWND_NEXT) as *const usize);
+            }
+        }
+        None
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = dialog_wnd;
+        None
+    }
+}
+
+/// Click the Yes button in a YesNo dialog by finding the YESNO_YesButton child.
+pub fn click_yesno_yes(dialog_wnd: usize) -> bool {
+    #[cfg(windows)]
+    {
+        if dialog_wnd == 0 {
+            return false;
+        }
+        if let Some(yes_btn) = find_visible_child_by_sidl(dialog_wnd, SIDL_YESNO_YES_BUTTON) {
+            unsafe { crate::eq::widgets::click_button_via_vtable(yes_btn); }
+            true
+        } else {
+            // Fallback: try finding by WindowText
+            unsafe {
+                if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "Yes") {
+                    crate::eq::widgets::click_button_via_vtable(btn);
+                    return true;
+                }
+            }
+            false
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = dialog_wnd;
+        false
+    }
+}
+
+/// Click the OK button in an OK dialog.
+pub fn click_ok_dialog(dialog_wnd: usize) -> bool {
+    #[cfg(windows)]
+    {
+        if dialog_wnd == 0 {
+            return false;
+        }
+        // Try clicking the dialog itself (it may be the button)
+        unsafe { crate::eq::widgets::click_button_via_vtable(dialog_wnd); }
+        true
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = dialog_wnd;
         false
     }
 }
@@ -887,5 +1096,44 @@ mod tests {
         assert_eq!(LOGIN_CONNECT_BUTTON, "LOGIN_ConnectButton");
         assert_eq!(SERVERSELECT_SERVER_LIST, "SERVERSELECT_ServerList");
         assert_eq!(CHARACTER_LIST, "Character_List");
+    }
+
+    #[test]
+    fn sidl_names_are_consistent() {
+        assert_eq!(SIDL_CONNECT, "connect");
+        assert_eq!(SIDL_SERVER_SELECT, "serverselect");
+        assert_eq!(SIDL_YES_NO_DIALOG, "yesnodialog");
+        assert_eq!(SIDL_OK_DIALOG, "okdialog");
+        assert_eq!(SIDL_CHARACTER_LIST_WND, "CharacterListWnd");
+    }
+
+    #[test]
+    fn is_sidl_window_visible_returns_false_on_macos() {
+        assert!(!is_sidl_window_visible(0, "connect"));
+    }
+
+    #[test]
+    fn find_visible_sidl_window_returns_none_on_macos() {
+        assert!(find_visible_sidl_window(0, "connect").is_none());
+    }
+
+    #[test]
+    fn find_visible_child_by_sidl_returns_none_on_macos() {
+        assert!(find_visible_child_by_sidl(0, "YESNO_YesButton").is_none());
+    }
+
+    #[test]
+    fn read_yesno_dialog_text_returns_none_on_macos() {
+        assert!(read_yesno_dialog_text(0).is_none());
+    }
+
+    #[test]
+    fn click_yesno_yes_returns_false_on_macos() {
+        assert!(!click_yesno_yes(0));
+    }
+
+    #[test]
+    fn click_ok_dialog_returns_false_on_macos() {
+        assert!(!click_ok_dialog(0));
     }
 }

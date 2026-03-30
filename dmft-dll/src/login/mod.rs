@@ -65,14 +65,22 @@ enum State {
     Idle,
     WaitForLoginScreen,
     EnteringCredentials,
+    /// Credentials submitted — waiting for EQ to process authentication.
     WaitForServerSelect,
     SelectingServer,
+    /// Server selected — waiting for transition to character select.
+    /// eqmain.dll unloads and eqgame.exe takes over.
     WaitForCharSelect,
+    /// Character select screen is up (eqgame context).
     SelectingCharacter,
     WaitForWorld,
     InWorld,
     Error(LoginError),
 }
+
+/// Throttle ticks between actions to avoid spamming EQ's UI.
+/// At ~30fps game loop, 15 ticks = ~500ms.
+const ACTION_COOLDOWN_TICKS: u32 = 15;
 
 /// Credentials stored temporarily in memory, zeroized after use.
 struct Credentials {
@@ -116,6 +124,10 @@ pub struct LoginFsm {
     state_timeout_secs: u64,
     /// Cached eqmain.dll base address (0 = not resolved yet).
     eqmain_base: u64,
+    /// Ticks since entering current state (for action throttling).
+    ticks_in_state: u32,
+    /// Whether we've performed the action for this state (prevents double-actions).
+    action_taken: bool,
 }
 
 impl LoginFsm {
@@ -131,6 +143,8 @@ impl LoginFsm {
             max_retries: 3,
             state_timeout_secs: 60,
             eqmain_base: 0,
+            ticks_in_state: 0,
+            action_taken: false,
         }
     }
 
@@ -161,6 +175,10 @@ impl LoginFsm {
     }
 
     /// Advance the FSM by one tick. Returns Some(phase) when the phase changes.
+    ///
+    /// The FSM detects which screen EQ is showing by scanning for visible SIDL
+    /// windows each tick (the MQ2 AutoLogin approach). This replaces the previous
+    /// timer-based polling that ran on a background thread.
     pub fn tick(&mut self) -> Option<LoginPhase> {
         let prev_phase = self.phase.clone();
 
@@ -169,19 +187,23 @@ impl LoginFsm {
             _ => {}
         }
 
+        self.ticks_in_state += 1;
+
         // Check for timeout
         if self.state_entered_at.elapsed().as_secs() > self.state_timeout_secs {
             self.handle_timeout();
             return self.phase_if_changed(&prev_phase);
         }
 
-        // Ensure eqmain.dll base is resolved
-        if self.eqmain_base == 0 {
-            self.eqmain_base = eqmain::find_eqmain();
-            if self.eqmain_base == 0 {
-                return None; // eqmain.dll not loaded yet
+        // Resolve eqmain.dll base on every tick — it can load/unload during login.
+        self.eqmain_base = eqmain::find_eqmain();
+
+        // Before doing state-specific work, check for dialogs that can appear
+        // at any point during login (error dialogs, "already logged in", etc.)
+        if self.eqmain_base != 0 {
+            if self.handle_dialogs() {
+                return self.phase_if_changed(&prev_phase);
             }
-            tracing::info!(base = format!("{:#x}", self.eqmain_base), "eqmain.dll resolved");
         }
 
         match self.state.clone() {
@@ -198,25 +220,91 @@ impl LoginFsm {
         self.phase_if_changed(&prev_phase)
     }
 
+    /// Handle dialogs that can appear at any login stage.
+    /// Returns true if the FSM transitioned to an error state.
+    fn handle_dialogs(&mut self) -> bool {
+        // YesNo dialog — "already logged in, kick?" → click Yes
+        if let Some(dialog_wnd) = widgets::find_visible_sidl_window(
+            self.eqmain_base,
+            widgets::SIDL_YES_NO_DIALOG,
+        ) {
+            let dialog_text = widgets::read_yesno_dialog_text(dialog_wnd)
+                .unwrap_or_default();
+            tracing::info!(text = %dialog_text, "YesNo dialog detected");
+
+            // "Already logged in" dialogs → click Yes to kick
+            if dialog_text.to_ascii_lowercase().contains("logged in")
+                || dialog_text.to_ascii_lowercase().contains("kick")
+                || dialog_text.to_ascii_lowercase().contains("already")
+            {
+                tracing::info!("Clicking YES to dismiss 'already logged in' dialog");
+                widgets::click_yesno_yes(dialog_wnd);
+                return false; // Not an error, just a dialog to dismiss
+            }
+
+            // Unknown YesNo — click Yes as a safe default
+            tracing::info!("Clicking YES on unknown YesNo dialog");
+            widgets::click_yesno_yes(dialog_wnd);
+            return false;
+        }
+
+        // OK dialog — error messages, server full, etc.
+        if let Some(dialog_wnd) = widgets::find_visible_sidl_window(
+            self.eqmain_base,
+            widgets::SIDL_OK_DIALOG,
+        ) {
+            tracing::warn!("OK dialog detected — dismissing");
+            widgets::click_ok_dialog(dialog_wnd);
+            // Don't transition to error — let the FSM detect the actual state
+            // on the next tick (e.g., back to login screen means wrong password).
+            return false;
+        }
+
+        false
+    }
+
     fn tick_wait_for_login_screen(&mut self) {
-        // Log all visible windows on first tick for calibration
-        if self.retries == 0 && self.state_entered_at.elapsed().as_millis() < 500 {
+        // Log all visible windows once for calibration
+        if self.ticks_in_state == 1 && self.eqmain_base != 0 {
             widgets::log_all_window_texts(self.eqmain_base);
         }
 
         // Dismiss splash screens and pre-login prompts (EULA, order, seizure, news)
-        widgets::dismiss_splash(self.eqmain_base);
+        if self.eqmain_base != 0 {
+            widgets::dismiss_splash(self.eqmain_base);
+        }
 
-        // Check if login screen is visible (look for LOGIN or USERNAME text)
-        if widgets::is_window_visible(self.eqmain_base, "LOGIN_ConnectButton")
-            || widgets::is_window_visible(self.eqmain_base, "USERNAME")
+        // Detect login screen by SIDL name "connect" (MQ2 AutoLogin approach)
+        if self.eqmain_base != 0
+            && widgets::is_sidl_window_visible(self.eqmain_base, widgets::SIDL_CONNECT)
         {
-            tracing::info!("Login screen detected");
+            tracing::info!("Login screen detected (SIDL: connect)");
+            self.transition(State::EnteringCredentials);
+            return;
+        }
+
+        // Fallback: detect by WindowText (for older/variant clients)
+        if self.eqmain_base != 0
+            && (widgets::is_window_visible(self.eqmain_base, "LOGIN_ConnectButton")
+                || widgets::is_window_visible(self.eqmain_base, "USERNAME"))
+        {
+            tracing::info!("Login screen detected (fallback: WindowText)");
             self.transition(State::EnteringCredentials);
         }
     }
 
     fn tick_entering_credentials(&mut self) {
+        // Only attempt credential entry once, then wait for server select
+        if self.action_taken {
+            // Already submitted credentials — check if we're now at server select
+            // (the FSM will detect this via WaitForServerSelect on next transition)
+            if self.ticks_in_state > ACTION_COOLDOWN_TICKS {
+                // Give EQ time to process, then move to waiting for server select
+                self.transition(State::WaitForServerSelect);
+            }
+            return;
+        }
+
         let Some(creds) = self.credentials.as_ref() else {
             self.transition(State::Error(LoginError::Timeout {
                 phase: "EnteringCredentials (no credentials)".into(),
@@ -224,112 +312,115 @@ impl LoginFsm {
             return;
         };
 
-        let account = creds.account_name.as_str();
-        let password = creds.password.as_str();
-
-        // Write credentials directly to EQLogin's char arrays (bypasses CXStr/SIDL)
-        if !widgets::write_login_credentials(self.eqmain_base, account, password) {
-            tracing::warn!("Failed to write credentials to EQLogin char arrays");
-            // Fallback: try the CXWndManager CXStr approach
-            if !widgets::type_credentials_to_window(self.eqmain_base, account, password) {
-                tracing::warn!("Both credential write methods failed — retrying next tick");
-                return;
-            }
-        }
-
-        // Click the Login button via vtable. The button text is "Login" (idx=130
-        // from calibration). Try exact match first, then the "connect" button.
-        let clicked = widgets::click_button(self.eqmain_base, "Login")
-            || widgets::click_button(self.eqmain_base, "LOGIN")
-            || widgets::simulate_enter_key(self.eqmain_base);
-
-        if !clicked {
-            tracing::warn!("Failed to click Login button — retrying next tick");
+        // Wait a few ticks before acting (let the screen settle)
+        if self.ticks_in_state < 5 {
             return;
         }
 
-        tracing::info!(account = %account, "Credentials written + Login clicked");
+        let account = creds.account_name.clone();
+        let password = creds.password.clone();
 
-        // Zeroize credentials
+        // Strategy 1: Write credentials to EQLogin char arrays + CXStr widgets
+        let wrote_chars = widgets::write_login_credentials(self.eqmain_base, &account, &password);
+        let wrote_cxstr = widgets::type_credentials_to_window(self.eqmain_base, &account, &password);
+
+        if !wrote_chars && !wrote_cxstr {
+            tracing::warn!("Both credential write methods failed — retrying next tick");
+            return;
+        }
+
+        tracing::info!(account = %account, "Credentials written to EQ memory");
+
+        // Strategy 2: Also type password via PostMessage as backup
+        // (CXStr writes may not be read by EQ's submit handler)
+        widgets::type_password_wm_char(self.eqmain_base, &password);
+
+        // Zeroize credentials from FSM memory
         self.credentials = None;
+        self.action_taken = true;
 
-        self.transition(State::WaitForServerSelect);
+        tracing::info!(account = %account, "Credential entry complete — waiting for server select");
     }
 
     fn tick_wait_for_server_select(&mut self) {
-        // Check for error dialogs (wrong password, account locked, etc.)
-        if let Some(error) = widgets::check_error_dialog(self.eqmain_base) {
-            self.transition(State::Error(error));
+        if self.eqmain_base == 0 {
+            // eqmain.dll unloaded — we jumped straight to character select
+            tracing::info!("eqmain.dll unloaded during server select wait — at character select");
+            self.transition(State::SelectingCharacter);
             return;
         }
 
-        // Check if server select is visible. Calibration shows:
-        // - "PLAY EVERQUEST!" (idx=35) — main action button
-        // - "SERVER SELECT" (idx=40) — header text
-        // - "Firiona Vie" (idx=42) — server name
+        // Detect server select by SIDL name "serverselect"
+        if widgets::is_sidl_window_visible(self.eqmain_base, widgets::SIDL_SERVER_SELECT) {
+            tracing::info!("Server select screen detected (SIDL: serverselect)");
+            self.transition(State::SelectingServer);
+            return;
+        }
+
+        // Fallback: detect by WindowText
         if widgets::is_window_visible(self.eqmain_base, "PLAY EVERQUEST!")
             || widgets::is_window_visible(self.eqmain_base, "SERVER SELECT")
         {
-            tracing::info!("Server select screen detected");
+            tracing::info!("Server select screen detected (fallback: WindowText)");
             self.transition(State::SelectingServer);
         }
     }
 
     fn tick_selecting_server(&mut self) {
+        if self.action_taken {
+            // Already clicked — wait for transition
+            if self.ticks_in_state > ACTION_COOLDOWN_TICKS {
+                self.transition(State::WaitForCharSelect);
+            }
+            return;
+        }
+
+        // Wait a few ticks for the screen to settle
+        if self.ticks_in_state < 5 {
+            return;
+        }
+
         // Click "PLAY EVERQUEST!" to join the default/last server.
-        // The server is usually pre-selected on the server list.
         let clicked = widgets::click_button(self.eqmain_base, "PLAY EVERQUEST!")
             || widgets::click_button(self.eqmain_base, "QUICK CONNECT TO LAST SERVER");
 
         if clicked {
             tracing::info!(server = %self.server_name, "PLAY EVERQUEST clicked");
-            self.transition(State::WaitForCharSelect);
+            self.action_taken = true;
         } else {
-            // Fallback: try the JoinServer API
-            let server_name = self.server_name.clone();
-            if !server_name.is_empty() && widgets::join_server(self.eqmain_base, &server_name) {
-                tracing::info!(server = %server_name, "Server join requested via API");
-                self.transition(State::WaitForCharSelect);
-            } else {
-                tracing::warn!("Failed to select server — retrying next tick");
+            // Fallback: try Enter key
+            if widgets::simulate_enter_key(self.eqmain_base) {
+                tracing::info!("Server select: Enter key sent as fallback");
+                self.action_taken = true;
             }
         }
     }
 
     fn tick_wait_for_char_select(&mut self) {
-        // Check for error dialogs
-        if let Some(error) = widgets::check_error_dialog(self.eqmain_base) {
-            self.transition(State::Error(error));
-            return;
-        }
-
-        // Check for "already logged in" dialog — click YES to kick
-        if widgets::is_window_visible(self.eqmain_base, "Confirmation") {
-            tracing::info!("'Already logged in' dialog detected — clicking YES");
-            widgets::click_button(self.eqmain_base, "YES");
-            return;
-        }
-
-        // Character select: eqmain.dll unloads and eqgame.exe takes over.
-        // Detect by checking if eqmain is gone or if local player pointer is set.
-        let eqmain = crate::login::eqmain::find_eqmain();
-        if eqmain == 0 {
-            // eqmain.dll unloaded = we're past login, in character select or world
+        // eqmain.dll unloads when transitioning to character select.
+        if self.eqmain_base == 0 {
             tracing::info!("eqmain.dll unloaded — transitioning to character select");
             self.transition(State::SelectingCharacter);
             return;
         }
 
-        // Also check for "Enter World" button (text may vary)
-        if widgets::is_window_visible(self.eqmain_base, "ENTER WORLD")
-            || widgets::is_window_visible(self.eqmain_base, "Enter World")
-        {
-            tracing::info!("Character select screen detected");
-            self.transition(State::SelectingCharacter);
+        // Periodically press Enter to dismiss blocking dialogs that may not have
+        // SIDL names we recognize (e.g., server messages, maintenance notices).
+        if self.ticks_in_state > 0 && self.ticks_in_state % 90 == 0 {
+            tracing::info!("Pressing Enter to dismiss potential dialog");
+            widgets::simulate_enter_key(self.eqmain_base);
         }
     }
 
     fn tick_selecting_character(&mut self) {
+        if self.action_taken {
+            // Already initiated character selection — wait for world
+            if self.ticks_in_state > ACTION_COOLDOWN_TICKS * 2 {
+                self.transition(State::WaitForWorld);
+            }
+            return;
+        }
+
         if self.character_name.is_empty() {
             tracing::error!("No character name available for character selection");
             self.transition(State::Error(LoginError::CharacterNotFound {
@@ -339,26 +430,97 @@ impl LoginFsm {
             return;
         }
 
+        // Wait for eqgame to be ready (EQ_BASE must be set)
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            return;
+        }
+
+        // Wait a couple seconds for the character select UI to fully load
+        if self.ticks_in_state < 60 {
+            return;
+        }
+
+        // Queue SelectCharacter + EnterWorld via the game loop mechanism.
+        // This is the same approach as the IPC handler's phase3_enter_world,
+        // but now driven by the FSM instead of a background thread.
         let char_name = self.character_name.clone();
-        self.do_select_character(&char_name);
+        self.do_select_character_via_game_loop(eq_base, &char_name);
     }
 
-    fn do_select_character(&mut self, character_name: &str) {
-        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    /// Queue character selection and enter world via the game loop's existing mechanism.
+    fn do_select_character_via_game_loop(&mut self, eq_base: u64, character_name: &str) {
+        // Find CCharacterListWnd by scanning eqgame.exe's CXWndManager
+        let Some(mgr_ptr_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::PINST_CXWND_MANAGER,
+            eq_base,
+        ) else {
+            tracing::warn!("Failed to rebase pinstCXWndManager");
+            return;
+        };
 
-        if widgets::select_character(self.eqmain_base, eq_base, character_name) {
-            tracing::info!(character = %character_name, "Character selected, entering world");
-            self.transition(State::WaitForWorld);
-        } else {
-            tracing::warn!(
-                character = %character_name,
-                "Character not found in list"
-            );
-            self.transition(State::Error(LoginError::CharacterNotFound {
-                expected: character_name.to_string(),
-                found: String::new(),
-            }));
-        }
+        let char_list_wnd = {
+            #[cfg(windows)]
+            {
+                use dmft_common::offsets::eqgame as eqg;
+                unsafe {
+                    let mgr = *(mgr_ptr_addr as *const usize);
+                    if mgr == 0 {
+                        tracing::warn!("CXWndManager is null");
+                        return;
+                    }
+
+                    // Use eqgame offsets to find CharacterListWnd
+                    crate::eq::widgets::find_visible_window_by_sidl_name(
+                        mgr,
+                        widgets::SIDL_CHARACTER_LIST_WND,
+                        eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
+                        eqg::CXWNDMGR_WINDOWS_ARRAY,
+                        eqg::CXWNDMGR_WINDOWS_COUNT,
+                    )
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = mgr_ptr_addr;
+                None::<usize>
+            }
+        };
+
+        let Some(wnd) = char_list_wnd else {
+            if self.ticks_in_state < 150 {
+                // Still loading — retry next tick
+                return;
+            }
+            tracing::warn!("CharacterListWnd not found after extended wait");
+            // Try fallback: /enterworld slash command
+            crate::hooks::game_loop::queue_slash_command("/enterworld".to_string());
+            self.action_taken = true;
+            return;
+        };
+
+        let Some(enter_world_addr) = dmft_common::offsets::rebase(
+            dmft_common::offsets::ENTER_WORLD,
+            eq_base,
+        ) else {
+            tracing::warn!("Failed to rebase ENTER_WORLD");
+            return;
+        };
+
+        tracing::info!(
+            wnd = format!("{:#x}", wnd),
+            character = %character_name,
+            "Queuing SelectCharacter + EnterWorld via game loop"
+        );
+
+        crate::hooks::game_loop::queue_enter_world(
+            wnd,
+            enter_world_addr,
+            character_name.to_string(),
+        );
+
+        self.action_taken = true;
+        tracing::info!(character = %character_name, "Character select + enter world queued");
     }
 
     fn tick_wait_for_world(&mut self) {
@@ -372,10 +534,17 @@ impl LoginFsm {
             dmft_common::offsets::PINST_LOCAL_PLAYER,
             eq_base,
         ) {
-            let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
-            if player_ptr != 0 {
-                tracing::info!("Local player detected — login complete!");
-                self.transition(State::InWorld);
+            #[cfg(windows)]
+            {
+                let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
+                if player_ptr != 0 {
+                    tracing::info!("Local player detected — login complete!");
+                    self.transition(State::InWorld);
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = player_ptr_addr;
             }
         }
     }
@@ -406,6 +575,8 @@ impl LoginFsm {
         self.state = new_state;
         self.state_entered_at = Instant::now();
         self.retries = 0;
+        self.ticks_in_state = 0;
+        self.action_taken = false;
 
         // Update IPC-facing phase
         self.phase = match &self.state {

@@ -505,6 +505,116 @@ pub unsafe fn xml_index(_wnd_ptr: usize) -> i32 {
     -1
 }
 
+// ─── SIDL-Based Window Finding ───
+
+/// Find a visible window by its SIDL name (CSidlScreenWnd::SidlText at +0x270).
+///
+/// This is the MQ2 AutoLogin approach: scan CXWndManager's window array, read
+/// each window's SidlText, and check the dShow visibility flag. SIDL names
+/// are stable across patches (e.g., "connect", "serverselect", "yesnodialog").
+///
+/// Works for both eqmain.dll and eqgame.exe contexts — the caller provides the
+/// correct CXWndManager pointer and specifies which offsets to use.
+///
+/// # Arguments
+/// * `cxwnd_mgr` — resolved CXWndManager pointer
+/// * `sidl_name` — SIDL name to match (case-insensitive)
+/// * `sidl_text_offset` — offset of SidlText in the window struct (differs between eqmain/eqgame)
+/// * `array_offset` — CXWndManager array offset
+/// * `count_offset` — CXWndManager count offset
+///
+/// # Returns
+/// Raw pointer to the CXWnd if found and visible, or `None`.
+///
+/// # Safety
+/// `cxwnd_mgr` must be a valid CXWndManager pointer.
+#[cfg(windows)]
+pub unsafe fn find_visible_window_by_sidl_name(
+    cxwnd_mgr: usize,
+    sidl_name: &str,
+    sidl_text_offset: usize,
+    array_offset: usize,
+    count_offset: usize,
+) -> Option<usize> {
+    if cxwnd_mgr == 0 {
+        return None;
+    }
+
+    let array_ptr = *((cxwnd_mgr + array_offset) as *const usize);
+    let count = *((cxwnd_mgr + count_offset) as *const u32);
+
+    if array_ptr == 0 || count == 0 || count > MAX_WINDOW_COUNT {
+        return None;
+    }
+
+    for i in 0..count as usize {
+        let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+        if wnd_ptr == 0 { continue; }
+
+        // Check dShow first (cheap) before reading SidlText
+        if !is_visible(wnd_ptr) { continue; }
+
+        if let Some(text) = read_cxstr(wnd_ptr + sidl_text_offset) {
+            if text.eq_ignore_ascii_case(sidl_name) {
+                return Some(wnd_ptr);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+pub unsafe fn find_visible_window_by_sidl_name(
+    _cxwnd_mgr: usize,
+    _sidl_name: &str,
+    _sidl_text_offset: usize,
+    _array_offset: usize,
+    _count_offset: usize,
+) -> Option<usize> {
+    None
+}
+
+/// Find a window by WindowText, but only if it's visible (dShow != 0).
+///
+/// Like `find_window_by_name()` but also checks the visibility flag.
+///
+/// # Safety
+/// `cxwnd_mgr` must be a valid CXWndManager pointer.
+#[cfg(windows)]
+pub unsafe fn find_visible_window_by_name(cxwnd_mgr: usize, name: &str) -> Option<usize> {
+    use dmft_common::offsets::eqmain as off;
+
+    if cxwnd_mgr == 0 {
+        return None;
+    }
+
+    let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
+    let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
+
+    if array_ptr == 0 || count == 0 || count > MAX_WINDOW_COUNT {
+        return None;
+    }
+
+    for i in 0..count as usize {
+        let wnd_ptr = *((array_ptr + i * 8) as *const usize);
+        if wnd_ptr == 0 { continue; }
+
+        if !is_visible(wnd_ptr) { continue; }
+
+        if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+            if text.eq_ignore_ascii_case(name) {
+                return Some(wnd_ptr);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+pub unsafe fn find_visible_window_by_name(_cxwnd_mgr: usize, _name: &str) -> Option<usize> {
+    None
+}
+
 // ─── CListWnd Item Reading ───
 
 /// Find a child window by SidlText (eqgame.exe offsets).
@@ -670,5 +780,15 @@ mod tests {
     #[test]
     fn list_row_count_returns_zero_on_non_windows() {
         assert_eq!(unsafe { list_row_count(0) }, 0);
+    }
+
+    #[test]
+    fn find_visible_window_by_sidl_name_returns_none_on_non_windows() {
+        assert!(unsafe { find_visible_window_by_sidl_name(0, "connect", 0x270, 0x010, 0x018) }.is_none());
+    }
+
+    #[test]
+    fn find_visible_window_by_name_returns_none_on_non_windows() {
+        assert!(unsafe { find_visible_window_by_name(0, "test") }.is_none());
     }
 }
