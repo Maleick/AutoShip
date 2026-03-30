@@ -164,12 +164,19 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 "StartLogin received — delegating to FSM (password redacted)"
             );
 
-            // Type password via WM_CHAR FIRST (before mem::take moves password).
-            // This is the proven working approach — PostMessage directly to EQ's HWND.
+            // Write credentials inline FIRST (before mem::take).
+            // Use the proven CStrRep + vtable click approach that worked at 22:04 UTC,
+            // plus WM_CHAR as backup.
             let eqmain_base = crate::login::eqmain::find_eqmain();
             if eqmain_base != 0 {
-                tracing::info!("Typing password via WM_CHAR + Enter");
-                crate::login::widgets::type_password_wm_char(eqmain_base, &password);
+                let wrote = crate::login::widgets::type_credentials_to_window(
+                    eqmain_base, account_name, &password,
+                );
+                tracing::info!(wrote, "Inline: type_credentials_to_window");
+                if wrote {
+                    tracing::info!("Also typing password via WM_CHAR for reliability");
+                    crate::login::widgets::type_password_wm_char(eqmain_base, &password);
+                }
             }
 
             // Store credentials in the FSM for character select phase.
@@ -196,28 +203,50 @@ fn handle_immediate_command(cmd: &Command) -> bool {
     }
 }
 
-/// Phase 2+3: poll for server select → character select.
-/// Uses Enter key (PostMessage) to dismiss dialogs and advance.
-/// Runs until eqmain.dll unloads, then game loop tick handles character select.
+/// Find a button by WindowText in eqmain's CXWndManager.
+fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
+    let cxwnd_mgr = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base)?;
+    unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, target_text) }
+}
+
+/// Phase 2+3: server select → character select.
+/// Uses vtable click for PLAY EVERQUEST (proven working at 22:04 UTC).
+/// Polls for eqmain.dll unload. Game loop tick handles character select.
 fn login_chain_phase2() {
-    // Phase 2: Wait for authentication, then press Enter/click PLAY EVERQUEST
+    // Phase 2: Wait for authentication, then click PLAY EVERQUEST
     tracing::info!("Phase 2: Waiting 5s for authentication...");
     std::thread::sleep(std::time::Duration::from_secs(5));
 
-    // Press Enter to submit login if needed, then poll for PLAY EVERQUEST
-    for attempt in 0..60 {
+    tracing::info!("Phase 2: Polling for PLAY EVERQUEST...");
+    let mut found = false;
+    for attempt in 0..50 {
         std::thread::sleep(std::time::Duration::from_millis(500));
         let eqmain_base = crate::login::eqmain::find_eqmain();
         if eqmain_base == 0 {
             tracing::info!(attempt, "Phase 2: eqmain.dll gone — already at char select");
             return;
         }
-
-        // Press Enter every 3s to dismiss dialogs or click default button
-        if attempt % 6 == 0 {
-            tracing::info!(attempt, "Phase 2: Pressing Enter");
+        if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
+            tracing::info!(
+                ptr = format!("{:#x}", play_btn),
+                attempt,
+                "Phase 2: Found PLAY EVERQUEST!"
+            );
+            unsafe { crate::eq::widgets::click_button_via_vtable(play_btn); }
+            // Also press Enter via PostMessage as backup
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            crate::login::widgets::simulate_enter_key(eqmain_base);
+            tracing::info!("Phase 2: PLAY EVERQUEST clicked + Enter");
+            found = true;
+            break;
+        }
+        // Press Enter every 3s to dismiss any blocking dialogs
+        if attempt % 6 == 3 {
             crate::login::widgets::simulate_enter_key(eqmain_base);
         }
+    }
+    if !found {
+        tracing::warn!("Phase 2: PLAY EVERQUEST not found after 25s");
     }
 
     // Phase 3: Poll for eqmain.dll unload (character select)
@@ -227,18 +256,14 @@ fn login_chain_phase2() {
         let eqmain_base = crate::login::eqmain::find_eqmain();
         if eqmain_base == 0 {
             tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
-            // Let the game loop FSM tick handle character selection
             return;
         }
-        // Keep pressing Enter to dismiss dialogs
-        if attempt % 6 == 3 {
-            if eqmain_base != 0 {
-                tracing::info!(attempt, "Phase 3: Pressing Enter to dismiss dialog");
-                crate::login::widgets::simulate_enter_key(eqmain_base);
-            }
+        // Press Enter every 3s to dismiss dialogs
+        if attempt % 6 == 3 && eqmain_base != 0 {
+            crate::login::widgets::simulate_enter_key(eqmain_base);
         }
     }
-    tracing::warn!("Phase 3: Timed out waiting for character select after 60s");
+    tracing::warn!("Phase 3: Timed out after 60s");
 }
 
 /// Background thread: creates a `CommandListener` and loops receiving commands

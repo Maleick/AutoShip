@@ -472,16 +472,66 @@ fn on_game_tick() {
             false
         };
 
-        if !in_world
-            && let Some(phase) = crate::login::tick()
-        {
-            crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
+        if !in_world {
+            if let Some(phase) = crate::login::tick() {
+                crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
+            }
+
+            // If not in world and game loop is running, we're at character select.
+            // Send Enter key every ~3 seconds to click the Enter World button.
+            if tick % 90 == 45 {
+                send_enter_to_eq();
+            }
         }
     }
 
     // Read game state and publish to shared memory for the orchestrator.
     read_and_publish_state(tick);
 }
+
+/// Send Enter key to this EQ process's window via PostMessage.
+/// Used at character select to click "Enter World".
+#[cfg(windows)]
+fn send_enter_to_eq() {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, PostMessageW,
+    };
+
+    let our_pid = std::process::id();
+    let mut target_hwnd: isize = 0;
+
+    unsafe extern "system" fn find_eq_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let data = &mut *(lparam.0 as *mut (u32, *mut isize));
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == data.0 && IsWindowVisible(hwnd).as_bool() {
+            *data.1 = hwnd.0;
+            return BOOL(0); // stop
+        }
+        BOOL(1)
+    }
+
+    let mut data = (our_pid, &mut target_hwnd as *mut isize);
+    unsafe {
+        let _ = EnumWindows(Some(find_eq_window), LPARAM(&mut data as *mut _ as isize));
+    }
+
+    if target_hwnd != 0 {
+        const WM_KEYDOWN: u32 = 0x0100;
+        const WM_KEYUP: u32 = 0x0101;
+        const VK_RETURN: u16 = 0x0D;
+        let hwnd = HWND(target_hwnd);
+        unsafe {
+            let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN as usize), LPARAM(0));
+            let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN as usize), LPARAM(0));
+        }
+        tracing::info!("Sent Enter key to eqgame window (character select → enter world)");
+    }
+}
+
+#[cfg(not(windows))]
+fn send_enter_to_eq() {}
 
 // ─── Game State Reading ───
 // Reads EQ memory directly (we're in-process) and publishes to shared memory.
