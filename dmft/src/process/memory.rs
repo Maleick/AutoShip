@@ -13,26 +13,31 @@ impl ProcessHandle {
     /// Open a process by PID with read access.
     #[cfg(windows)]
     pub fn open(pid: u32) -> Result<Self> {
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_VM_READ, PROCESS_QUERY_INFORMATION};
+        use windows::Win32::System::Threading::{
+            OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+        };
 
-        let handle = unsafe {
-            OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid)
-        }.context("Failed to open process")?;
+        let handle =
+            unsafe { OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid) }
+                .context("Failed to open process")?;
 
         Ok(Self { handle, pid })
     }
 
     #[cfg(not(windows))]
     pub fn open(pid: u32) -> Result<Self> {
-        tracing::warn!(pid, "ProcessHandle::open called on non-Windows platform (stub)");
+        tracing::warn!(
+            pid,
+            "ProcessHandle::open called on non-Windows platform (stub)"
+        );
         Ok(Self { pid })
     }
 
     /// Get the base address of the main executable module in the target process.
     #[cfg(windows)]
     pub fn module_base(&self) -> Result<u64> {
-        use windows::Win32::System::ProcessStatus::EnumProcessModules;
         use windows::Win32::Foundation::HMODULE;
+        use windows::Win32::System::ProcessStatus::EnumProcessModules;
 
         let mut module = HMODULE::default();
         let mut bytes_needed: u32 = 0;
@@ -43,7 +48,8 @@ impl ProcessHandle {
                 std::mem::size_of::<HMODULE>() as u32,
                 &mut bytes_needed,
             )
-        }.context("EnumProcessModules failed")?;
+        }
+        .context("EnumProcessModules failed")?;
 
         Ok(module.0 as u64)
     }
@@ -56,8 +62,8 @@ impl ProcessHandle {
     /// Read a value of type T from the process at the given address.
     #[cfg(windows)]
     pub fn read<T: Copy>(&self, address: usize) -> Result<T> {
-        use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
         use std::ptr;
+        use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 
         let mut buffer: T = unsafe { mem::zeroed() };
         let size = mem::size_of::<T>();
@@ -77,7 +83,9 @@ impl ProcessHandle {
             Ok(()) if bytes_read == size => Ok(buffer),
             Ok(()) => bail!(
                 "ReadProcessMemory at {:#x}: read {} of {} bytes",
-                address, bytes_read, size
+                address,
+                bytes_read,
+                size
             ),
             Err(e) => Err(e).context(format!("ReadProcessMemory failed at {:#x}", address)),
         }
@@ -87,7 +95,9 @@ impl ProcessHandle {
     pub fn read<T: Copy>(&self, address: usize) -> Result<T> {
         bail!(
             "Cannot read process memory on non-Windows platform (pid={}, addr={:#x}, size={})",
-            self.pid, address, mem::size_of::<T>()
+            self.pid,
+            address,
+            mem::size_of::<T>()
         )
     }
 
@@ -101,8 +111,12 @@ impl ProcessHandle {
     pub fn chase_ptr(&self, base: usize, offsets: &[usize]) -> Result<usize> {
         let mut addr = base;
         for (i, &offset) in offsets.iter().enumerate() {
-            addr = self.read_ptr(addr)
-                .with_context(|| format!("chase_ptr: failed at step {} (addr={:#x}, offset={:#x})", i, addr, offset))?;
+            addr = self.read_ptr(addr).with_context(|| {
+                format!(
+                    "chase_ptr: failed at step {} (addr={:#x}, offset={:#x})",
+                    i, addr, offset
+                )
+            })?;
             addr += offset;
         }
         Ok(addr)
@@ -124,7 +138,11 @@ impl ProcessHandle {
                 count,
                 Some(&mut bytes_read),
             )
-        }.context(format!("ReadProcessMemory (bytes) failed at {:#x}", address))?;
+        }
+        .context(format!(
+            "ReadProcessMemory (bytes) failed at {:#x}",
+            address
+        ))?;
         buffer.truncate(bytes_read);
         Ok(buffer)
     }
@@ -134,7 +152,9 @@ impl ProcessHandle {
     pub fn read_bytes(&self, address: usize, count: usize) -> Result<Vec<u8>> {
         bail!(
             "Cannot read process memory on non-Windows platform (pid={}, addr={:#x}, count={})",
-            self.pid, address, count
+            self.pid,
+            address,
+            count
         )
     }
 
@@ -155,7 +175,11 @@ impl ProcessHandle {
                     max_len,
                     Some(&mut bytes_read),
                 )
-            }.context(format!("ReadProcessMemory (string) failed at {:#x}", address))?;
+            }
+            .context(format!(
+                "ReadProcessMemory (string) failed at {:#x}",
+                address
+            ))?;
         }
 
         let end = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
@@ -174,16 +198,23 @@ impl Drop for ProcessHandle {
 /// Find all PIDs for processes matching the given name (e.g., "eqgame.exe").
 #[cfg(windows)]
 pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
-    use windows::Win32::System::ProcessStatus::{EnumProcesses, GetModuleBaseNameW};
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
     use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::ProcessStatus::{EnumProcesses, GetModuleBaseNameW};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    };
 
     let mut pids = [0u32; 4096];
     let mut bytes_returned: u32 = 0;
 
     unsafe {
-        EnumProcesses(pids.as_mut_ptr(), (pids.len() * 4) as u32, &mut bytes_returned)
-    }.context("EnumProcesses failed")?;
+        EnumProcesses(
+            pids.as_mut_ptr(),
+            (pids.len() * 4) as u32,
+            &mut bytes_returned,
+        )
+    }
+    .context("EnumProcesses failed")?;
 
     let count = bytes_returned as usize / 4;
     let name_lower = name.to_lowercase();
@@ -194,15 +225,12 @@ pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
             continue;
         }
 
-        let handle = unsafe {
-            OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid)
-        };
+        let handle =
+            unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid) };
 
         if let Ok(handle) = handle {
             let mut buf = [0u16; 260];
-            let len = unsafe {
-                GetModuleBaseNameW(handle, None, &mut buf)
-            };
+            let len = unsafe { GetModuleBaseNameW(handle, None, &mut buf) };
 
             let _ = unsafe { CloseHandle(handle) };
 
@@ -220,6 +248,9 @@ pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
 
 #[cfg(not(windows))]
 pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
-    tracing::warn!(name, "find_processes_by_name called on non-Windows platform (stub)");
+    tracing::warn!(
+        name,
+        "find_processes_by_name called on non-Windows platform (stub)"
+    );
     Ok(Vec::new())
 }

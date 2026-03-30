@@ -13,9 +13,11 @@ pub struct WindowHandle {
 /// Returns (HWND, title, PID) tuples.
 #[cfg(windows)]
 pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
-    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextW, GetWindowThreadProcessId};
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
     use std::sync::Mutex;
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextW, GetWindowThreadProcessId,
+    };
 
     let substring_lower = substring.to_lowercase();
     let results: Mutex<Vec<WindowHandle>> = Mutex::new(Vec::new());
@@ -43,15 +45,16 @@ pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
     }
 
     let data = (substring_lower, &results as *const _);
-    unsafe {
-        EnumWindows(Some(enum_callback), LPARAM(&data as *const _ as isize))
-    }.ok();
+    unsafe { EnumWindows(Some(enum_callback), LPARAM(&data as *const _ as isize)) }.ok();
 
     Ok(results.into_inner().unwrap_or_default())
 }
 
 #[cfg(not(windows))]
 pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
-    tracing::warn!(substring, "find_windows_by_title called on non-Windows platform (stub)");
+    tracing::warn!(
+        substring,
+        "find_windows_by_title called on non-Windows platform (stub)"
+    );
     Ok(Vec::new())
 }

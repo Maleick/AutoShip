@@ -1,3 +1,3 @@
 pub mod crypto;
-pub mod store;
 pub mod prompt;
+pub mod store;

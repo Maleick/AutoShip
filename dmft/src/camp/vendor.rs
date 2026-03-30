@@ -125,9 +125,7 @@ impl SellCycle {
                 cmds
             }
 
-            SellState::Selling { step: _ } => {
-                self.tick_vendor_step(seller_pid, current_tick)
-            }
+            SellState::Selling { step: _ } => self.tick_vendor_step(seller_pid, current_tick),
 
             SellState::Returning => {
                 if current_tick.saturating_sub(self.state_entered_tick) < self.config.travel_ticks {
@@ -207,7 +205,10 @@ impl SellCycle {
                 // EQ vendor sell: /itemnotify <item> leftmouseup to pick up,
                 // then /notify MerchantWnd MW_Sell_Button leftmouseup to sell
                 let cmds = vec![
-                    (seller_pid, format!("/nomodkey /itemnotify \"{item_name}\" leftmouseup")),
+                    (
+                        seller_pid,
+                        format!("/nomodkey /itemnotify \"{item_name}\" leftmouseup"),
+                    ),
                     (
                         seller_pid,
                         "/notify MerchantWnd MW_Sell_Button leftmouseup".into(),
@@ -384,9 +385,7 @@ mod tests {
             }
         ));
         assert!(cmds.iter().any(|(_, cmd)| cmd.contains("Cracked Staff")));
-        assert!(cmds
-            .iter()
-            .any(|(_, cmd)| cmd.contains("MW_Sell_Button")));
+        assert!(cmds.iter().any(|(_, cmd)| cmd.contains("MW_Sell_Button")));
 
         // Sell item 1 (Rusty Axe)
         let cmds = cycle.tick(pid, 65);
@@ -411,9 +410,7 @@ mod tests {
         // ClosingWindow -> Returning
         let cmds = cycle.tick(pid, 69);
         assert_eq!(cycle.state, SellState::Returning);
-        assert!(cmds
-            .iter()
-            .any(|(_, cmd)| cmd.contains("MW_Done_Button")));
+        assert!(cmds.iter().any(|(_, cmd)| cmd.contains("MW_Done_Button")));
 
         // Wait for return travel
         for t in 69..74 {

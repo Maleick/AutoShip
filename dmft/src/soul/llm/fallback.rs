@@ -81,22 +81,11 @@ impl TraitDrivenResponder {
             }
         } else {
             match mood {
-                MoodState::Happy | MoodState::Playful => &[
-                    "Oh, hey.",
-                    "Hail.",
-                    "Sup.",
-                ] as &[&str],
-                MoodState::Angry => &[
-                    "What.",
-                    "Busy.",
-                    "Yeah?",
-                ],
-                _ => &[
-                    "Hail.",
-                    "Hey.",
-                    "Sup.",
-                    "What do you need?",
-                ],
+                MoodState::Happy | MoodState::Playful => {
+                    &["Oh, hey.", "Hail.", "Sup."] as &[&str]
+                }
+                MoodState::Angry => &["What.", "Busy.", "Yeah?"],
+                _ => &["Hail.", "Hey.", "Sup.", "What do you need?"],
             }
         };
 
@@ -117,7 +106,12 @@ impl TraitDrivenResponder {
     }
 
     /// Generate a game event reaction.
-    fn react_to_event(&mut self, description: &str, traits: &PersonalityTraits, mood: MoodState) -> String {
+    fn react_to_event(
+        &mut self,
+        description: &str,
+        traits: &PersonalityTraits,
+        mood: MoodState,
+    ) -> String {
         // Generic reactions flavored by mood
         let reactions = event_reactions(mood, self.edginess);
         let base = self.pick(reactions);
@@ -131,7 +125,12 @@ impl TraitDrivenResponder {
     }
 
     /// Generate a combat reaction.
-    fn react_to_combat(&mut self, description: &str, traits: &PersonalityTraits, mood: MoodState) -> String {
+    fn react_to_combat(
+        &mut self,
+        description: &str,
+        traits: &PersonalityTraits,
+        mood: MoodState,
+    ) -> String {
         let reactions = combat_reactions(mood, self.edginess, traits);
         let base = self.pick(reactions);
 
@@ -206,7 +205,11 @@ impl LlmProvider for TraitDrivenResponder {
 
 // ─── Phrase tables for fallback generation ───
 
-fn idle_phrases(mood: MoodState, edginess: EdginessLevel, traits: &PersonalityTraits) -> &'static [&'static str] {
+fn idle_phrases(
+    mood: MoodState,
+    edginess: EdginessLevel,
+    traits: &PersonalityTraits,
+) -> &'static [&'static str] {
     // Delegate to personality engine's phrase tables via mood + edginess
     // These are additional idle-specific phrases beyond the personality engine's set
     match (mood, edginess) {
@@ -259,43 +262,49 @@ fn idle_phrases(mood: MoodState, edginess: EdginessLevel, traits: &PersonalityTr
                 "Stay close, everyone.",
                 "Something feels off.",
             ],
-            MoodState::Focused => &[
-                "On it.",
-                "Eyes forward.",
-                "Staying sharp.",
-                "Ready.",
-            ],
+            MoodState::Focused => &["On it.", "Eyes forward.", "Staying sharp.", "Ready."],
             MoodState::Exhausted => &[
                 "Need... coffee...",
                 "How long have we been at this?",
                 "Five more minutes...",
                 "Zzz... huh? I'm awake!",
             ],
-            _ => &[
-                "...",
-                "Hmm.",
-                "Interesting.",
-                "Right then.",
-            ],
+            _ => &["...", "Hmm.", "Interesting.", "Right then."],
         },
     }
 }
 
 fn event_reactions(mood: MoodState, _edginess: EdginessLevel) -> &'static [&'static str] {
     match mood {
-        MoodState::Excited => &["Whoa!", "Did you see that?!", "Now THAT was something!", "Amazing!"],
-        MoodState::Anxious => &["That's not good.", "Uh oh.", "Everyone okay?", "Be careful!"],
+        MoodState::Excited => &[
+            "Whoa!",
+            "Did you see that?!",
+            "Now THAT was something!",
+            "Amazing!",
+        ],
+        MoodState::Anxious => &[
+            "That's not good.",
+            "Uh oh.",
+            "Everyone okay?",
+            "Be careful!",
+        ],
         MoodState::Happy => &["Nice!", "Awesome!", "Love it!", "Sweet!"],
         MoodState::Angry => &["Figures.", "Of course.", "Just great.", "Typical."],
         _ => &["Huh.", "Interesting.", "Well then.", "Noted."],
     }
 }
 
-fn combat_reactions(mood: MoodState, edginess: EdginessLevel, traits: &PersonalityTraits) -> &'static [&'static str] {
+fn combat_reactions(
+    mood: MoodState,
+    edginess: EdginessLevel,
+    traits: &PersonalityTraits,
+) -> &'static [&'static str] {
     if traits.battle_hunger > 0.7 {
         return match edginess {
             EdginessLevel::Mild => &["For glory!", "Have at thee!", "Charge!", "To battle!"],
-            EdginessLevel::Moderate => &["Get some!", "Bring it!", "Time to work!", "Let's do this!"],
+            EdginessLevel::Moderate => {
+                &["Get some!", "Bring it!", "Time to work!", "Let's do this!"]
+            }
             EdginessLevel::Spicy => &["DIE!", "Crush them!", "Blood and thunder!", "DESTROY!"],
         };
     }
@@ -307,7 +316,6 @@ fn combat_reactions(mood: MoodState, edginess: EdginessLevel, traits: &Personali
         _ => &["Attacking.", "Got it.", "On target.", "Engaging."],
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -526,7 +534,10 @@ mod tests {
                 break;
             }
         }
-        assert!(found_catchphrase, "Catchphrase should appear in at least one of 200 attempts");
+        assert!(
+            found_catchphrase,
+            "Catchphrase should appear in at least one of 200 attempts"
+        );
     }
 
     #[test]
@@ -569,18 +580,8 @@ fn bot_chat_responses(mood: MoodState, traits: &PersonalityTraits) -> &'static [
                 "Tell me about it!",
                 "Ha! Classic.",
             ],
-            MoodState::Angry => &[
-                "Don't even start.",
-                "Not now.",
-                "Yeah yeah.",
-                "Whatever.",
-            ],
-            _ => &[
-                "Mm-hmm.",
-                "Yeah.",
-                "Fair enough.",
-                "True that.",
-            ],
+            MoodState::Angry => &["Don't even start.", "Not now.", "Yeah yeah.", "Whatever."],
+            _ => &["Mm-hmm.", "Yeah.", "Fair enough.", "True that."],
         }
     } else {
         match mood {

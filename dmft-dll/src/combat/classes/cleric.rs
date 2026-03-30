@@ -22,7 +22,11 @@ impl ClericStrategy {
         ctx.group_members
             .iter()
             .filter(|m| m.hp_pct > 0.0) // exclude dead members
-            .min_by(|a, b| a.hp_pct.partial_cmp(&b.hp_pct).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|a, b| {
+                a.hp_pct
+                    .partial_cmp(&b.hp_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|m| (m.spawn_id, m.hp_pct))
     }
 
@@ -51,18 +55,10 @@ impl ClassStrategy for ClericStrategy {
 
         if lowest_hp < 50.0 {
             // Emergency: return highest priority heal spell.
-            ctx.config
-                .spells
-                .iter()
-                .max_by_key(|s| s.priority)
-                .cloned()
+            ctx.config.spells.iter().max_by_key(|s| s.priority).cloned()
         } else if lowest_hp < 80.0 {
             // Moderate: return lower priority heal spell.
-            ctx.config
-                .spells
-                .iter()
-                .min_by_key(|s| s.priority)
-                .cloned()
+            ctx.config.spells.iter().min_by_key(|s| s.priority).cloned()
         } else {
             // Everyone is healthy, med up.
             None

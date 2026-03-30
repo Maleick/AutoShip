@@ -69,7 +69,10 @@ mod tests {
         let differs = (a.speed_factor - b.speed_factor).abs() > f32::EPSILON
             || (a.heading_wobble - b.heading_wobble).abs() > f32::EPSILON
             || (a.detour_chance - b.detour_chance).abs() > f32::EPSILON;
-        assert!(differs, "Different client IDs should produce different values");
+        assert!(
+            differs,
+            "Different client IDs should produce different values"
+        );
     }
 
     #[test]
@@ -128,8 +131,7 @@ mod tests {
         // With any non-zero wobble, consecutive calls should sometimes differ
         // (they could theoretically be equal, but with a good RNG it's unlikely)
         let c = p.wobble_heading(256.0);
-        let all_same = (a - b).abs() < f32::EPSILON
-            && (b - c).abs() < f32::EPSILON;
+        let all_same = (a - b).abs() < f32::EPSILON && (b - c).abs() < f32::EPSILON;
         assert!(!all_same, "wobble should produce varying values");
     }
 

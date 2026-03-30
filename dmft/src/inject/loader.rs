@@ -11,16 +11,15 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
     use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Foundation::WAIT_EVENT;
     use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Memory::{
         MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx,
     };
-    use windows::Win32::Foundation::WAIT_EVENT;
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, WaitForSingleObject,
-        PROCESS_CREATE_THREAD, PROCESS_VM_OPERATION, PROCESS_VM_WRITE, PROCESS_VM_READ,
-        PROCESS_QUERY_INFORMATION,
+        CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
+        PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
     };
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
     use windows::core::w;
@@ -35,8 +34,18 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     let dll_path_bytes = dll_path_wide.len() * 2; // UTF-16 byte count
 
     // Open target process
-    let process = unsafe { OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid) }
-        .context("Failed to open target process")?;
+    let process = unsafe {
+        OpenProcess(
+            PROCESS_CREATE_THREAD
+                | PROCESS_VM_OPERATION
+                | PROCESS_VM_WRITE
+                | PROCESS_VM_READ
+                | PROCESS_QUERY_INFORMATION,
+            false,
+            pid,
+        )
+    }
+    .context("Failed to open target process")?;
 
     let result = (|| -> Result<()> {
         // Allocate memory in target process for the DLL path
@@ -86,12 +95,12 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
         let thread = unsafe {
             CreateRemoteThread(
                 process,
-                None,  // default security
-                0,     // default stack size
+                None, // default security
+                0,    // default stack size
                 Some(std::mem::transmute(load_library_fn)),
                 Some(remote_buf),
-                0,     // run immediately
-                None,  // don't need thread ID
+                0,    // run immediately
+                None, // don't need thread ID
             )
         }
         .context("CreateRemoteThread failed")?;
@@ -102,7 +111,9 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
             if wait_result != WAIT_OBJECT_0 {
                 // Don't free remote_buf — safer to leak than crash the target
                 CloseHandle(thread)?;
-                anyhow::bail!("DLL injection timed out — LoadLibrary did not complete within the timeout period");
+                anyhow::bail!(
+                    "DLL injection timed out — LoadLibrary did not complete within the timeout period"
+                );
             }
             CloseHandle(thread)?;
         }
@@ -129,25 +140,23 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
 #[cfg(windows)]
 pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     use anyhow::Context;
+    use windows::Win32::Foundation::WAIT_EVENT;
     use windows::Win32::Foundation::{CloseHandle, HMODULE};
     use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Module32FirstW, Module32NextW,
-        MODULEENTRY32W, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+        CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,
+        TH32CS_SNAPMODULE32,
     };
     use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, WaitForSingleObject,
-        PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+        CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
+        PROCESS_VM_READ, WaitForSingleObject,
     };
-    use windows::Win32::Foundation::WAIT_EVENT;
-    use windows::core::{w, PCSTR};
+    use windows::core::{PCSTR, w};
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
 
     // Snapshot all modules loaded in the target process.
-    let snap = unsafe {
-        CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
-    }
-    .context("CreateToolhelp32Snapshot failed")?;
+    let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }
+        .context("CreateToolhelp32Snapshot failed")?;
 
     let dll_name_lower = dll_name.to_ascii_lowercase();
     let mut module_base = HMODULE::default();
@@ -182,7 +191,9 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
         }
     };
 
-    unsafe { let _ = CloseHandle(snap); }
+    unsafe {
+        let _ = CloseHandle(snap);
+    }
 
     if !found || module_base.is_invalid() {
         bail!("DLL '{}' not found in modules of process {}", dll_name, pid);
@@ -203,10 +214,9 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
         let kernel32 = unsafe { GetModuleHandleW(w!("kernel32.dll")) }
             .context("Failed to get kernel32 handle")?;
 
-        let free_library_addr = unsafe {
-            GetProcAddress(kernel32, PCSTR(b"FreeLibrary\0".as_ptr()))
-        }
-        .context("GetProcAddress(FreeLibrary) failed")?;
+        let free_library_addr =
+            unsafe { GetProcAddress(kernel32, PCSTR(b"FreeLibrary\0".as_ptr())) }
+                .context("GetProcAddress(FreeLibrary) failed")?;
 
         let free_library_fn: unsafe extern "system" fn(*mut core::ffi::c_void) -> u32 =
             unsafe { std::mem::transmute(free_library_addr) };
@@ -237,7 +247,9 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
         Ok(())
     })();
 
-    unsafe { let _ = CloseHandle(process); }
+    unsafe {
+        let _ = CloseHandle(process);
+    }
     result
 }
 

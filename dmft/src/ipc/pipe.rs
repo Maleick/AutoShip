@@ -4,13 +4,13 @@
 //! optionally waiting for a response. On non-Windows platforms this is a
 //! compile-only stub.
 
-use dmft_common::ipc::{Command, Response};
+use anyhow::Result;
 #[cfg(windows)]
 use dmft_common::ipc::PIPE_NAME_PREFIX;
-use dmft_common::types::ClientId;
+use dmft_common::ipc::{Command, Response};
 #[cfg(windows)]
 use dmft_common::protocol;
-use anyhow::Result;
+use dmft_common::types::ClientId;
 
 /// Sends commands to an injected DLL via named pipe.
 pub struct CommandPipe {
@@ -31,11 +31,11 @@ impl CommandPipe {
     pub fn connect(client_id: ClientId) -> Result<Self> {
         #[cfg(windows)]
         {
-            use windows::core::PCSTR;
+            use windows::Win32::Foundation::GENERIC_READ;
             use windows::Win32::Storage::FileSystem::{
                 CreateFileA, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING,
             };
-            use windows::Win32::Foundation::GENERIC_READ;
+            use windows::core::PCSTR;
 
             let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
 
@@ -51,10 +51,7 @@ impl CommandPipe {
                 )
             }?;
 
-            Ok(Self {
-                client_id,
-                handle,
-            })
+            Ok(Self { client_id, handle })
         }
 
         #[cfg(not(windows))]
@@ -84,7 +81,9 @@ impl CommandPipe {
             }
 
             let (response, _) = protocol::decode::<Response>(&buf[..bytes_read as usize])
-                .ok_or_else(|| anyhow::anyhow!("Failed to decode response from client {}", self.client_id))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Failed to decode response from client {}", self.client_id)
+                })?;
 
             Ok(response)
         }
@@ -107,7 +106,12 @@ impl CommandPipe {
 
             let mut written: u32 = 0;
             unsafe {
-                WriteFile(self.handle, Some(token.as_slice()), Some(&mut written), None)?;
+                WriteFile(
+                    self.handle,
+                    Some(token.as_slice()),
+                    Some(&mut written),
+                    None,
+                )?;
             }
             Ok(())
         }

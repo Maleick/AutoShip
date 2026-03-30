@@ -166,7 +166,14 @@ pub fn check_progression(
 mod tests {
     use super::*;
 
-    fn make_config(name: &str, zone: &str, min: u8, max: u8, next: Option<&str>, prev: Option<&str>) -> CampConfig {
+    fn make_config(
+        name: &str,
+        zone: &str,
+        min: u8,
+        max: u8,
+        next: Option<&str>,
+        prev: Option<&str>,
+    ) -> CampConfig {
         CampConfig {
             name: name.into(),
             zone: zone.into(),
@@ -196,9 +203,30 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let camps_dir = dir.path().to_path_buf();
 
-        let c1 = make_config("crescent_reach", "crescent", 1, 10, Some("crushbone_entrance"), None);
-        let c2 = make_config("crushbone_entrance", "crushbone", 5, 15, Some("unrest_yard"), Some("crescent_reach"));
-        let c3 = make_config("unrest_yard", "unrest", 15, 25, None, Some("crushbone_entrance"));
+        let c1 = make_config(
+            "crescent_reach",
+            "crescent",
+            1,
+            10,
+            Some("crushbone_entrance"),
+            None,
+        );
+        let c2 = make_config(
+            "crushbone_entrance",
+            "crushbone",
+            5,
+            15,
+            Some("unrest_yard"),
+            Some("crescent_reach"),
+        );
+        let c3 = make_config(
+            "unrest_yard",
+            "unrest",
+            15,
+            25,
+            None,
+            Some("crushbone_entrance"),
+        );
 
         write_camp_toml(&camps_dir, "crescent_reach", &c1);
         write_camp_toml(&camps_dir, "crushbone_entrance", &c2);
@@ -221,9 +249,9 @@ mod tests {
     fn test_list_by_level_sorted() {
         let (_dir, db) = test_db();
         let names = db.list_by_level();
-        assert_eq!(names[0], "crescent_reach");   // min=1
+        assert_eq!(names[0], "crescent_reach"); // min=1
         assert_eq!(names[1], "crushbone_entrance"); // min=5
-        assert_eq!(names[2], "unrest_yard");       // min=15
+        assert_eq!(names[2], "unrest_yard"); // min=15
     }
 
     #[test]

@@ -137,11 +137,7 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
     })
 }
 
-fn parse_map_file(
-    path: &Path,
-    lines: &mut Vec<MapLine>,
-    points: &mut Vec<MapPoint>,
-) -> Result<()> {
+fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoint>) -> Result<()> {
     let file = File::open(path)?;
     for line_result in BufReader::new(file).lines() {
         let raw = line_result?;
@@ -231,8 +227,7 @@ mod tests {
 
     #[test]
     fn parse_p_line_with_commas_in_label() {
-        let line =
-            "P -3710.0, -1594.5, -192.5, 128, 255, 0, 2, Gull_Skytalon_(Named,Roam)";
+        let line = "P -3710.0, -1594.5, -192.5, 128, 255, 0, 2, Gull_Skytalon_(Named,Roam)";
         let mp = parse_p_line(line).unwrap();
         assert_eq!(mp.label, "Gull Skytalon (Named,Roam)");
     }

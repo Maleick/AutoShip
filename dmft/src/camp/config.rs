@@ -47,8 +47,7 @@ impl CampConfig {
             .with_context(|| format!("Failed to create camps directory: {}", dir.display()))?;
 
         let path = dir.join(format!("{}.toml", self.name));
-        let toml_str = toml::to_string_pretty(self)
-            .context("Failed to serialize camp config")?;
+        let toml_str = toml::to_string_pretty(self).context("Failed to serialize camp config")?;
 
         std::fs::write(&path, toml_str)
             .with_context(|| format!("Failed to write camp config: {}", path.display()))?;
@@ -116,10 +115,7 @@ mod tests {
         let path = camps_dir.join("crushbone_entrance.toml");
         std::fs::write(&path, &toml_str).unwrap();
 
-        let loaded: CampConfig = toml::from_str(
-            &std::fs::read_to_string(&path).unwrap(),
-        )
-        .unwrap();
+        let loaded: CampConfig = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(loaded.name, "crushbone_entrance");
         assert_eq!(loaded.camp_center, [100.0, 200.0, 0.0]);
         assert_eq!(loaded.rest_mana_pct, 60);

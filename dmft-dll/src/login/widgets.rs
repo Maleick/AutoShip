@@ -46,11 +46,11 @@ pub const SIDL_YESNO_DISPLAY: &str = "YESNO_Display";
 // These are (parent_window_text, button_text) pairs for screens that must be
 // dismissed before reaching the login form. Matched by WindowText substring.
 const PRE_LOGIN_PROMPTS: &[(&str, &str)] = &[
-    ("EULA", "I Accept"),           // End User License Agreement
-    ("Order", "Decline"),           // OrderWindow upsell
-    ("Expansion", "Decline"),       // OrderExpansionWindow upsell
-    ("seizure", "OK"),              // Seizure / photosensitivity warning
-    ("news", "OK"),                 // News / patch notes
+    ("EULA", "I Accept"),     // End User License Agreement
+    ("Order", "Decline"),     // OrderWindow upsell
+    ("Expansion", "Decline"), // OrderExpansionWindow upsell
+    ("seizure", "OK"),        // Seizure / photosensitivity warning
+    ("news", "OK"),           // News / patch notes
 ];
 
 /// Check if a named window is visible in the UI (by WindowText + dShow flag).
@@ -131,8 +131,8 @@ pub fn find_visible_sidl_window(eqmain_base: u64, sidl_name: &str) -> Option<usi
 pub fn find_visible_child_by_sidl(parent_wnd: usize, sidl_name: &str) -> Option<usize> {
     #[cfg(windows)]
     {
-        use dmft_common::offsets::eqmain as off;
         use dmft_common::offsets::eqgame as eqg;
+        use dmft_common::offsets::eqmain as off;
 
         if parent_wnd == 0 {
             return None;
@@ -146,9 +146,9 @@ pub fn find_visible_child_by_sidl(parent_wnd: usize, sidl_name: &str) -> Option<
                 count += 1;
 
                 if crate::eq::widgets::is_visible(child) {
-                    if let Some(text) = crate::eq::widgets::read_cxstr(
-                        child + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
-                    ) {
+                    if let Some(text) =
+                        crate::eq::widgets::read_cxstr(child + eqg::CSIDL_SCREEN_WND_SIDL_TEXT)
+                    {
                         if text.eq_ignore_ascii_case(sidl_name) {
                             return Some(child);
                         }
@@ -173,8 +173,8 @@ pub fn find_visible_child_by_sidl(parent_wnd: usize, sidl_name: &str) -> Option<
 pub fn read_yesno_dialog_text(dialog_wnd: usize) -> Option<String> {
     #[cfg(windows)]
     {
-        use dmft_common::offsets::eqmain as off;
         use dmft_common::offsets::eqgame as eqg;
+        use dmft_common::offsets::eqmain as off;
 
         if dialog_wnd == 0 {
             return None;
@@ -188,9 +188,9 @@ pub fn read_yesno_dialog_text(dialog_wnd: usize) -> Option<String> {
             while child != 0 && count < 200 {
                 count += 1;
 
-                if let Some(sidl_text) = crate::eq::widgets::read_cxstr(
-                    child + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
-                ) {
+                if let Some(sidl_text) =
+                    crate::eq::widgets::read_cxstr(child + eqg::CSIDL_SCREEN_WND_SIDL_TEXT)
+                {
                     if sidl_text.eq_ignore_ascii_case(SIDL_YESNO_DISPLAY) {
                         // Read the WindowText of the display child
                         return crate::eq::widgets::read_cxstr(child + off::CXWND_WINDOW_TEXT);
@@ -218,12 +218,15 @@ pub fn click_yesno_yes(dialog_wnd: usize) -> bool {
             return false;
         }
         if let Some(yes_btn) = find_visible_child_by_sidl(dialog_wnd, SIDL_YESNO_YES_BUTTON) {
-            unsafe { crate::eq::widgets::click_button_via_vtable(yes_btn); }
+            unsafe {
+                crate::eq::widgets::click_button_via_vtable(yes_btn);
+            }
             true
         } else {
             // Fallback: try finding by WindowText
             unsafe {
-                if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "Yes") {
+                if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "Yes")
+                {
                     crate::eq::widgets::click_button_via_vtable(btn);
                     return true;
                 }
@@ -247,7 +250,9 @@ pub fn click_ok_dialog(dialog_wnd: usize) -> bool {
             return false;
         }
         // Try clicking the dialog itself (it may be the button)
-        unsafe { crate::eq::widgets::click_button_via_vtable(dialog_wnd); }
+        unsafe {
+            crate::eq::widgets::click_button_via_vtable(dialog_wnd);
+        }
         true
     }
 
@@ -290,8 +295,8 @@ fn find_child_button_by_text(parent_wnd: usize, button_text: &str) -> Option<usi
 pub fn write_login_credentials(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]
     {
-        use dmft_common::offsets::eqmain as eqmain_offsets;
         use super::eqmain;
+        use dmft_common::offsets::eqmain as eqmain_offsets;
 
         let Some(eqlogin) = eqmain::resolve_eqlogin(eqmain_base) else {
             tracing::warn!("Cannot write credentials — EQLogin not resolved");
@@ -409,9 +414,12 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
             for i in 0..count as usize {
                 let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-                if wnd_ptr == 0 { continue; }
+                if wnd_ptr == 0 {
+                    continue;
+                }
 
-                if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
+                if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT)
+                {
                     if text == "USERNAME" && prev_prev_wnd != 0 {
                         username_edit = prev_prev_wnd;
                         tracing::info!(
@@ -507,9 +515,15 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             let wrote_pw_wt = {
                 let wt_rep = *(pw_wt_addr as *const usize);
                 let it_rep = *(pw_input_addr as *const usize);
-                if wt_rep == it_rep { true } // same rep, already written
-                else if wt_rep != 0 { crate::eq::widgets::write_cxstr_inplace(pw_wt_addr, password) }
-                else { false }
+                if wt_rep == it_rep {
+                    true
+                }
+                // same rep, already written
+                else if wt_rep != 0 {
+                    crate::eq::widgets::write_cxstr_inplace(pw_wt_addr, password)
+                } else {
+                    false
+                }
             };
             tracing::info!(
                 input_text = wrote_password,
@@ -523,12 +537,16 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
 
             // Read back to verify writes took effect
-            if let Some(readback) = crate::eq::widgets::read_cxstr(username_edit + off::CEDITBASEWND_INPUT_TEXT) {
+            if let Some(readback) =
+                crate::eq::widgets::read_cxstr(username_edit + off::CEDITBASEWND_INPUT_TEXT)
+            {
                 tracing::info!(readback = %readback, "Username InputText readback");
             } else {
                 tracing::warn!("Username InputText readback: null or empty");
             }
-            if let Some(readback) = crate::eq::widgets::read_cxstr(username_edit + off::CXWND_WINDOW_TEXT) {
+            if let Some(readback) =
+                crate::eq::widgets::read_cxstr(username_edit + off::CXWND_WINDOW_TEXT)
+            {
                 tracing::info!(readback = %readback, "Username WindowText readback");
             }
 
@@ -580,7 +598,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
+        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
@@ -635,7 +653,7 @@ pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
 pub fn simulate_enter_key(eqmain_base: u64) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::Foundation::{HWND, WPARAM, LPARAM};
+        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
@@ -656,7 +674,10 @@ pub fn simulate_enter_key(eqmain_base: u64) -> bool {
             let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN as usize), LPARAM(0));
         }
 
-        tracing::debug!(hwnd = format!("{:#x}", hwnd_val), "Simulated Enter key via PostMessage");
+        tracing::debug!(
+            hwnd = format!("{:#x}", hwnd_val),
+            "Simulated Enter key via PostMessage"
+        );
         true
     }
 
@@ -711,7 +732,9 @@ pub fn dismiss_splash(eqmain_base: u64) {
             if let Some(parent_wnd) = find_window_by_text_contains(eqmain_base, parent_text) {
                 // Found a window matching the parent — now find the button
                 if let Some(button_wnd) = find_child_button_by_text(parent_wnd, button_text) {
-                    unsafe { crate::eq::widgets::click_button_via_vtable(button_wnd); }
+                    unsafe {
+                        crate::eq::widgets::click_button_via_vtable(button_wnd);
+                    }
                     tracing::info!(
                         parent = parent_text,
                         button = button_text,
@@ -719,7 +742,9 @@ pub fn dismiss_splash(eqmain_base: u64) {
                     );
                 } else {
                     // Fallback: click the parent window itself
-                    unsafe { crate::eq::widgets::click_button_via_vtable(parent_wnd); }
+                    unsafe {
+                        crate::eq::widgets::click_button_via_vtable(parent_wnd);
+                    }
                     tracing::info!(
                         parent = parent_text,
                         "Dismissed pre-login prompt (clicked parent, button not found)"
@@ -772,7 +797,9 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
             return false;
         };
 
-        let Some(join_server_addr) = eqmain_offsets::rebase(eqmain_offsets::JOIN_SERVER, eqmain_base) else {
+        let Some(join_server_addr) =
+            eqmain_offsets::rebase(eqmain_offsets::JOIN_SERVER, eqmain_base)
+        else {
             tracing::warn!("Failed to rebase JoinServer address");
             return false;
         };
@@ -811,18 +838,16 @@ pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) ->
     #[cfg(windows)]
     {
         // Character selection uses eqgame.exe functions, not eqmain.dll
-        let Some(select_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::SELECT_CHARACTER,
-            eq_base,
-        ) else {
+        let Some(select_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::SELECT_CHARACTER, eq_base)
+        else {
             tracing::warn!("Failed to rebase SELECT_CHARACTER");
             return false;
         };
 
-        let Some(enter_world_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::ENTER_WORLD,
-            eq_base,
-        ) else {
+        let Some(enter_world_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::ENTER_WORLD, eq_base)
+        else {
             tracing::warn!("Failed to rebase ENTER_WORLD");
             return false;
         };
@@ -898,26 +923,33 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
         #[cfg(windows)]
         {
             let login_client = unsafe { *(addr as *const usize) };
-            tracing::info!(login_client_ptr = format!("{:#x}", login_client), "LoginClient*");
+            tracing::info!(
+                login_client_ptr = format!("{:#x}", login_client),
+                "LoginClient*"
+            );
 
             if login_client != 0 {
                 let eqlogin_ptr = unsafe {
                     *((login_client + eqmain_offsets::LOGINCLIENT_LOGIN_DATA) as *const usize)
                 };
-                tracing::info!(eqlogin_ptr = format!("{:#x}", eqlogin_ptr), "EQLogin* (pLoginData)");
+                tracing::info!(
+                    eqlogin_ptr = format!("{:#x}", eqlogin_ptr),
+                    "EQLogin* (pLoginData)"
+                );
 
                 if eqlogin_ptr != 0 {
                     // Dump HWND
-                    let hwnd = unsafe {
-                        *((eqlogin_ptr + eqmain_offsets::EQLOGIN_HWND) as *const usize)
-                    };
+                    let hwnd =
+                        unsafe { *((eqlogin_ptr + eqmain_offsets::EQLOGIN_HWND) as *const usize) };
                     tracing::info!(hwnd = format!("{:#x}", hwnd), "EQLogin::hEQWnd");
 
                     // Dump username field (first 32 bytes)
-                    let username_addr = (eqlogin_ptr + eqmain_offsets::EQLOGIN_USERNAME) as *const u8;
+                    let username_addr =
+                        (eqlogin_ptr + eqmain_offsets::EQLOGIN_USERNAME) as *const u8;
                     let username_bytes = unsafe { std::slice::from_raw_parts(username_addr, 32) };
                     let username = String::from_utf8_lossy(
-                        &username_bytes[..username_bytes.iter().position(|&b| b == 0).unwrap_or(32)]
+                        &username_bytes
+                            [..username_bytes.iter().position(|&b| b == 0).unwrap_or(32)],
                     );
                     tracing::info!(
                         username = %username,
@@ -935,9 +967,7 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
                     );
 
                     // Dump ReturnCode
-                    let return_code = unsafe {
-                        *((eqlogin_ptr + 0x410) as *const i32)
-                    };
+                    let return_code = unsafe { *((eqlogin_ptr + 0x410) as *const i32) };
                     tracing::info!(return_code, "EQLogin::ReturnCode");
                 }
             }
@@ -946,7 +976,10 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
 
     // LoginServerAPI
     if let Some(login_api) = eqmain::resolve_login_server_api(eqmain_base) {
-        tracing::info!(login_server_api = format!("{:#x}", login_api), "LoginServerAPI*");
+        tracing::info!(
+            login_server_api = format!("{:#x}", login_api),
+            "LoginServerAPI*"
+        );
     } else {
         tracing::info!("LoginServerAPI: not resolved (null or eqmain not loaded)");
     }
@@ -966,7 +999,8 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
     }
 
     // LoginController
-    if let Some(addr) = eqmain_offsets::rebase(eqmain_offsets::PINST_LOGIN_CONTROLLER, eqmain_base) {
+    if let Some(addr) = eqmain_offsets::rebase(eqmain_offsets::PINST_LOGIN_CONTROLLER, eqmain_base)
+    {
         tracing::info!(
             pinst_login_controller_addr = format!("{:#x}", addr),
             "pinstLoginController address"
@@ -974,7 +1008,10 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
         #[cfg(windows)]
         {
             let controller_ptr = unsafe { *(addr as *const usize) };
-            tracing::info!(login_controller = format!("{:#x}", controller_ptr), "LoginController*");
+            tracing::info!(
+                login_controller = format!("{:#x}", controller_ptr),
+                "LoginController*"
+            );
         }
     }
 
@@ -988,7 +1025,11 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
                 let offset = row * 16;
                 let addr = cxwnd_mgr + offset as usize;
                 let bytes: [u8; 16] = std::ptr::read(addr as *const [u8; 16]);
-                let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                let hex: String = bytes
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 // Also interpret as usize pairs (pointers)
                 let ptr1 = *(addr as *const usize);
                 let ptr2 = *((addr + 8) as *const usize);

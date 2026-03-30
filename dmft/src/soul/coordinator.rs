@@ -60,14 +60,8 @@ impl SoulCoordinator {
     }
 
     /// Register a character with the coordinator.
-    pub fn register_character(
-        &mut self,
-        client_id: ClientId,
-        char_config: &CharacterSoulConfig,
-    ) {
-        let edginess = char_config
-            .edginess
-            .unwrap_or(self.config.edginess);
+    pub fn register_character(&mut self, client_id: ClientId, char_config: &CharacterSoulConfig) {
+        let edginess = char_config.edginess.unwrap_or(self.config.edginess);
 
         let soul = CharacterSoul {
             name: char_config.name.clone(),
@@ -87,10 +81,7 @@ impl SoulCoordinator {
 
     /// Main tick — called every 5000ms by the orchestrator.
     /// Returns commands to send to specific clients.
-    pub fn tick(
-        &mut self,
-        states: &HashMap<ClientId, GameState>,
-    ) -> Vec<(ClientId, Command)> {
+    pub fn tick(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<(ClientId, Command)> {
         if !self.config.enabled {
             return Vec::new();
         }
@@ -122,11 +113,7 @@ impl SoulCoordinator {
                 mood: soul.mood,
                 edginess: soul.edginess,
                 zone,
-                level: state
-                    .local_player
-                    .as_ref()
-                    .map(|p| p.level)
-                    .unwrap_or(1),
+                level: state.local_player.as_ref().map(|p| p.level).unwrap_or(1),
                 in_combat,
                 group_members: &group_members,
             };
@@ -195,16 +182,17 @@ impl SoulCoordinator {
                 .souls
                 .iter_mut()
                 .find(|(_, s)| s.name == request.character_name)
-                && let Ok(response) = soul.responder.generate(&request) {
-                    commands.push((
-                        cid,
-                        Command::Say {
-                            channel: dmft_common::soul::SayChannel::Say,
-                            message: response.text,
-                            target: None,
-                        },
-                    ));
-                }
+                && let Ok(response) = soul.responder.generate(&request)
+            {
+                commands.push((
+                    cid,
+                    Command::Say {
+                        channel: dmft_common::soul::SayChannel::Say,
+                        message: response.text,
+                        target: None,
+                    },
+                ));
+            }
         }
 
         commands
@@ -228,14 +216,9 @@ impl SoulCoordinator {
         };
 
         // Record the conversation
-        let _ = self.memory.record_conversation(
-            client_id,
-            player_name,
-            true,
-            channel,
-            message,
-            None,
-        );
+        let _ =
+            self.memory
+                .record_conversation(client_id, player_name, true, channel, message, None);
 
         // Capture mood before event processing for accurate memory recording
         let mood_before = soul.mood;
@@ -298,7 +281,9 @@ impl SoulCoordinator {
         };
 
         // Record memory with the mood as it was before the event changed it
-        let _ = self.memory.record(client_id, &event, mood_before, importance);
+        let _ = self
+            .memory
+            .record(client_id, &event, mood_before, importance);
     }
 
     /// Get the current mood for a character.
@@ -319,10 +304,7 @@ impl SoulCoordinator {
 
 /// Check if a client is currently in combat based on game state.
 fn is_in_combat(state: &GameState) -> bool {
-    !matches!(
-        state.combat_status,
-        dmft_common::combat::CombatStatus::Idle
-    )
+    !matches!(state.combat_status, dmft_common::combat::CombatStatus::Idle)
 }
 
 /// Extract zone name from game state (placeholder until zone tracking is added).

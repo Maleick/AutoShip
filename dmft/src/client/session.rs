@@ -63,7 +63,9 @@ impl EqSession {
             }
 
             // Cross-check: warn if the in-game character doesn't match the bound toon.
-            if let Some(ref bound) = self.bound_toon && player.displayed_name != bound.character_name {
+            if let Some(ref bound) = self.bound_toon
+                && player.displayed_name != bound.character_name
+            {
                 tracing::warn!(
                     client_id = self.client_id,
                     expected = %bound.character_name,

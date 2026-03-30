@@ -15,12 +15,18 @@ impl WarriorStrategy {
     }
 
     /// Find the nearest NPC from the nearby enemies list based on distance to player.
-    fn nearest_enemy<'a>(&self, player: &SpawnData, enemies: &'a [SpawnData]) -> Option<&'a SpawnData> {
+    fn nearest_enemy<'a>(
+        &self,
+        player: &SpawnData,
+        enemies: &'a [SpawnData],
+    ) -> Option<&'a SpawnData> {
         let player_pos = Waypoint::new(player.x, player.y, player.z);
         enemies.iter().min_by(|a, b| {
             let dist_a = player_pos.distance_2d(&Waypoint::new(a.x, a.y, a.z));
             let dist_b = player_pos.distance_2d(&Waypoint::new(b.x, b.y, b.z));
-            dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+            dist_a
+                .partial_cmp(&dist_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 }
@@ -38,11 +44,7 @@ impl ClassStrategy for WarriorStrategy {
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         // Use highest-priority taunt/aggro ability from config spells list.
         // Spells are assumed sorted or we pick the highest priority.
-        ctx.config
-            .spells
-            .iter()
-            .max_by_key(|s| s.priority)
-            .cloned()
+        ctx.config.spells.iter().max_by_key(|s| s.priority).cloned()
     }
 
     fn should_assist(&self, _ctx: &CombatContext) -> bool {

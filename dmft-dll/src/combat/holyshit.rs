@@ -107,10 +107,7 @@ mod tests {
     static DEFAULT_CONFIG: std::sync::LazyLock<CombatConfig> =
         std::sync::LazyLock::new(CombatConfig::default);
 
-    fn make_context<'a>(
-        player: &'a SpawnData,
-        target: Option<&'a SpawnData>,
-    ) -> CombatContext<'a> {
+    fn make_context<'a>(player: &'a SpawnData, target: Option<&'a SpawnData>) -> CombatContext<'a> {
         CombatContext {
             player,
             target,

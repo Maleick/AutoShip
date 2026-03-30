@@ -16,11 +16,11 @@ pub mod spawns;
 pub mod widgets;
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
-    Frame,
 };
 
 use crate::tui::app::{ActiveScreen, App};
@@ -30,7 +30,10 @@ use crate::tui::app::{ActiveScreen, App};
 /// Top-level render function — applies outer margin then dispatches to the active screen.
 pub fn draw(frame: &mut Frame, app: &App) {
     // Apply a 1-cell horizontal margin so content never touches the terminal edges.
-    let area = frame.area().inner(Margin { horizontal: 1, vertical: 0 });
+    let area = frame.area().inner(Margin {
+        horizontal: 1,
+        vertical: 0,
+    });
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -44,11 +47,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_header(frame, outer[0], app);
 
     match app.active_screen {
-        ActiveScreen::Dashboard  => dashboard::draw_dashboard(frame, outer[1], app),
-        ActiveScreen::Spawns     => spawns::draw_spawns_screen(frame, outer[1], app),
-        ActiveScreen::Character  => spawns::draw_character_screen(frame, outer[1], app),
-        ActiveScreen::Map        => map::draw_map_screen(frame, outer[1], app),
-        ActiveScreen::Groups     => groups::draw_groups_screen(frame, outer[1], app),
+        ActiveScreen::Dashboard => dashboard::draw_dashboard(frame, outer[1], app),
+        ActiveScreen::Spawns => spawns::draw_spawns_screen(frame, outer[1], app),
+        ActiveScreen::Character => spawns::draw_character_screen(frame, outer[1], app),
+        ActiveScreen::Map => map::draw_map_screen(frame, outer[1], app),
+        ActiveScreen::Groups => groups::draw_groups_screen(frame, outer[1], app),
         ActiveScreen::Navigation => navigation::draw_navigation_screen(frame, outer[1], app),
     }
 
@@ -86,7 +89,11 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let zone_str = app
         .active_client()
         .map(|c| {
-            if c.zone_name.is_empty() { "Unknown Zone".into() } else { c.zone_name.clone() }
+            if c.zone_name.is_empty() {
+                "Unknown Zone".into()
+            } else {
+                c.zone_name.clone()
+            }
         })
         .unwrap_or_else(|| "No Zone".into());
 
@@ -105,28 +112,31 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 
     // Group indicator
     let group_label = app.group_focus_label();
-    let group_style = if app.active_group.is_some() { t.header_group_active } else { t.header_group };
+    let group_style = if app.active_group.is_some() {
+        t.header_group_active
+    } else {
+        t.header_group
+    };
 
     let mut spans: Vec<Span<'_>> = vec![
         Span::styled(" FROST ", t.header_title),
         Span::styled("│", t.border_dim),
-        Span::styled(&client_str,    t.header_client_count),
-        Span::styled(" │",           t.border_dim),
-        Span::styled(&selected_str,  t.header_selected),
-        Span::styled("│ ",           t.border_dim),
+        Span::styled(&client_str, t.header_client_count),
+        Span::styled(" │", t.border_dim),
+        Span::styled(&selected_str, t.header_selected),
+        Span::styled("│ ", t.border_dim),
         Span::styled(format!(" {} ", group_label), group_style),
-        Span::styled(" │ ",          t.border_dim),
-        Span::styled(&server_str,    Style::default().fg(t.text_server)),
-        Span::styled("│ ",           t.border_dim),
+        Span::styled(" │ ", t.border_dim),
+        Span::styled(&server_str, Style::default().fg(t.text_server)),
+        Span::styled("│ ", t.border_dim),
         Span::styled(format!(" {} ", zone_str), t.header_zone),
-        Span::styled("│",            t.border_dim),
-        Span::styled("  ",           Style::default()),
+        Span::styled("│", t.border_dim),
+        Span::styled("  ", Style::default()),
     ];
     spans.extend(tabs);
 
     frame.render_widget(
-        Paragraph::new(Line::from(spans))
-            .block(widgets::panel(" Frostreaver ", t.border_dim, t)),
+        Paragraph::new(Line::from(spans)).block(widgets::panel(" Frostreaver ", t.border_dim, t)),
         area,
     );
 }
@@ -157,33 +167,42 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
     // ── Left pane ─────────────────────────────────────────────────────
     let hints: Vec<Span<'_>> = vec![
-        Span::styled("1-6", t.statusbar_key),    Span::styled(" screen  ", t.statusbar_dim),
-        Span::styled("⇧1-6", t.statusbar_key),   Span::styled(" group  ", t.statusbar_dim),
-        Span::styled("[ ]", t.statusbar_key),    Span::styled(" client  ", t.statusbar_dim),
-        Span::styled("/", t.statusbar_key),       Span::styled(" search  ", t.statusbar_dim),
-        Span::styled("f", t.statusbar_key),       Span::styled(" filter  ", t.statusbar_dim),
-        Span::styled("T", t.statusbar_key),       Span::styled(" theme  ", t.statusbar_dim),
-        Span::styled("?", t.statusbar_key),       Span::styled(" help", t.statusbar_dim),
+        Span::styled("1-6", t.statusbar_key),
+        Span::styled(" screen  ", t.statusbar_dim),
+        Span::styled("⇧1-6", t.statusbar_key),
+        Span::styled(" group  ", t.statusbar_dim),
+        Span::styled("[ ]", t.statusbar_key),
+        Span::styled(" client  ", t.statusbar_dim),
+        Span::styled("/", t.statusbar_key),
+        Span::styled(" search  ", t.statusbar_dim),
+        Span::styled("f", t.statusbar_key),
+        Span::styled(" filter  ", t.statusbar_dim),
+        Span::styled("T", t.statusbar_key),
+        Span::styled(" theme  ", t.statusbar_dim),
+        Span::styled("?", t.statusbar_key),
+        Span::styled(" help", t.statusbar_dim),
     ];
 
     let left_spans: Vec<Span<'_>> = std::iter::once(Span::raw(" "))
-        .chain(std::iter::once(Span::styled(app.status_message.as_str(), t.statusbar_message)))
+        .chain(std::iter::once(Span::styled(
+            app.status_message.as_str(),
+            t.statusbar_message,
+        )))
         .chain(std::iter::once(Span::styled("  │  ", t.statusbar_dim)))
         .chain(hints)
         .collect();
 
     frame.render_widget(
-        Paragraph::new(Line::from(left_spans))
-            .block(widgets::panel("", t.border_dim, t)),
+        Paragraph::new(Line::from(left_spans)).block(widgets::panel("", t.border_dim, t)),
         cols[0],
     );
 
     // ── Right pane: colored badges ─────────────────────────────────────
-    let mode_str   = format!("{}", app.operating_mode);
-    let mode_bg    = match mode_str.as_str() {
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_bg = match mode_str.as_str() {
         "Camp" => t.mode_camp,
         "Hunt" => t.mode_hunt,
-        _      => t.text_muted,
+        _ => t.text_muted,
     };
 
     let mut right: Vec<Span<'_>> = vec![];
@@ -191,7 +210,10 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     // Mode badge
     right.push(Span::styled(
         format!(" {} ", mode_str),
-        Style::default().fg(Color::Black).bg(mode_bg).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(Color::Black)
+            .bg(mode_bg)
+            .add_modifier(Modifier::BOLD),
     ));
     right.push(Span::raw(" "));
 
@@ -200,7 +222,10 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     if filter != "All" {
         right.push(Span::styled(
             format!(" {} ", filter),
-            Style::default().fg(Color::Black).bg(t.text_accent).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Black)
+                .bg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
         ));
         right.push(Span::raw(" "));
     }
@@ -249,10 +274,12 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
     frame.render_widget(Clear, popup_area);
 
     // Help overlay uses hardcoded dark-modern colors so it stays readable on any theme
-    let key_s  = Style::default().fg(Color::Rgb(0, 200, 210));
+    let key_s = Style::default().fg(Color::Rgb(0, 200, 210));
     let desc_s = Style::default().fg(Color::Rgb(180, 180, 190));
-    let head_s = Style::default().fg(Color::Rgb(0, 200, 210)).add_modifier(Modifier::BOLD);
-    let dim_s  = Style::default().fg(Color::Rgb(80, 85, 95));
+    let head_s = Style::default()
+        .fg(Color::Rgb(0, 200, 210))
+        .add_modifier(Modifier::BOLD);
+    let dim_s = Style::default().fg(Color::Rgb(80, 85, 95));
 
     let kv = |k: &'static str, v: &'static str| -> Line<'static> {
         Line::from(vec![
@@ -264,33 +291,33 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
     let text = vec![
         Line::from(Span::styled(" Keybindings", head_s)),
         Line::from(""),
-        kv("1-6",        "Switch screens"),
-        kv("Shift+1-6",  "Focus group G1–G6"),
-        kv("Shift+0",    "All groups"),
-        kv("[ ]",        "Cycle clients"),
-        kv("/",          "Search spawns"),
-        kv("f",          "Filter spawn type"),
-        kv("p",          "Privacy mode"),
-        kv("T",          "Cycle theme"),
-        kv(":",          "Command mode"),
-        kv("?",          "This help"),
-        kv("q",          "Quit"),
+        kv("1-6", "Switch screens"),
+        kv("Shift+1-6", "Focus group G1–G6"),
+        kv("Shift+0", "All groups"),
+        kv("[ ]", "Cycle clients"),
+        kv("/", "Search spawns"),
+        kv("f", "Filter spawn type"),
+        kv("p", "Privacy mode"),
+        kv("T", "Cycle theme"),
+        kv(":", "Command mode"),
+        kv("?", "This help"),
+        kv("q", "Quit"),
         Line::from(""),
         Line::from(Span::styled(" Commands  (:cmd)", head_s)),
         Line::from(""),
-        kv("<pid> /cmd",  "Send to PID"),
-        kv("G1-G6 /cmd",  "Send to group"),
-        kv("all /cmd",   "Broadcast"),
+        kv("<pid> /cmd", "Send to PID"),
+        kv("G1-G6 /cmd", "Send to group"),
+        kv("all /cmd", "Broadcast"),
         kv("camp <sub>", "start|stop|list|add|rm"),
-        kv("track <n>",  "Track spawn"),
-        kv("ma <name>",  "Set Main Assist"),
-        kv("mt <name>",  "Set Main Tank"),
-        kv("engage",     "Start combat"),
-        kv("disengage",  "Stop combat"),
+        kv("track <n>", "Track spawn"),
+        kv("ma <name>", "Set Main Assist"),
+        kv("mt <name>", "Set Main Tank"),
+        kv("engage", "Start combat"),
+        kv("disengage", "Stop combat"),
         kv("invite <n>", "Group invite"),
-        kv("accept",     "Accept invite"),
-        kv("mode camp",  "Camp mode"),
-        kv("mode hunt",  "Hunt mode"),
+        kv("accept", "Accept invite"),
+        kv("mode camp", "Camp mode"),
+        kv("mode hunt", "Hunt mode"),
         Line::from(""),
         Line::from(Span::styled(" Press ? or Esc to close", dim_s)),
     ];
@@ -302,7 +329,9 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
                 .border_type(BorderType::Rounded)
                 .title(Span::styled(
                     " Help ",
-                    Style::default().fg(Color::Rgb(0, 200, 210)).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Rgb(0, 200, 210))
+                        .add_modifier(Modifier::BOLD),
                 ))
                 .border_style(Style::default().fg(Color::Rgb(0, 200, 210)))
                 .style(Style::default().bg(Color::Rgb(15, 18, 24))),

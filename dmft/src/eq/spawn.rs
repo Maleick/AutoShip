@@ -25,17 +25,20 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
 
     // Diagnostic: if position looks suspicious (all near-zero) but name is valid,
     // hex-dump the region around the position offsets so we can verify them.
-    if x.abs() < 1.0 && y.abs() < 1.0 && !name.is_empty() && name != "<unreadable>" {
-        if let Ok(bytes) = proc.read_bytes(addr + 0x060, 0x50) {
-            tracing::warn!(
-                spawn_addr = format!("{:#x}", addr),
-                name = %name,
-                spawn_id,
-                x, y, z,
-                hex_0x060_to_0x0b0 = format!("{:02x?}", bytes),
-                "Position near zero — hex dump of PlayerBase 0x060..0x0b0 for offset verification"
-            );
-        }
+    if x.abs() < 1.0
+        && y.abs() < 1.0
+        && !name.is_empty()
+        && name != "<unreadable>"
+        && let Ok(bytes) = proc.read_bytes(addr + 0x060, 0x50)
+    {
+        tracing::warn!(
+            spawn_addr = format!("{:#x}", addr),
+            name = %name,
+            spawn_id,
+            x, y, z,
+            hex_0x060_to_0x0b0 = format!("{:02x?}", bytes),
+            "Position near zero — hex dump of PlayerBase 0x060..0x0b0 for offset verification"
+        );
     }
 
     let level = proc.read::<u8>(addr + player_zone::LEVEL).unwrap_or(0);
@@ -104,7 +107,8 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
         "read_local_player pointer chain"
     );
 
-    let mut spawn = read_spawn(proc, player_addr).context("Failed to read local player spawn data")?;
+    let mut spawn =
+        read_spawn(proc, player_addr).context("Failed to read local player spawn data")?;
     spawn.buff_slots = read_buff_slots(proc, eq_base);
     spawn.cast_state = read_cast_state(proc, eq_base);
     Ok(spawn)
@@ -116,7 +120,7 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     #[cfg(not(windows))]
     {
         let _ = (proc, eq_base);
-        return Vec::new();
+        Vec::new()
     }
     #[cfg(windows)]
     {
@@ -133,9 +137,15 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
         for i in 0..bs::MAX_BUFF_SLOTS {
             let slot_addr = pc_addr + bs::BUFF_ARRAY_OFFSET + i * bs::BUFF_ENTRY_SIZE;
             let spell_id = proc.read::<u32>(slot_addr + bs::SPELL_ID).unwrap_or(0xFFFF);
-            let duration_ticks = proc.read::<i32>(slot_addr + bs::DURATION_TICKS).unwrap_or(0);
+            let duration_ticks = proc
+                .read::<i32>(slot_addr + bs::DURATION_TICKS)
+                .unwrap_or(0);
             let caster_level = proc.read::<u8>(slot_addr + bs::CASTER_LEVEL).unwrap_or(0);
-            slots.push(BuffSlot { spell_id, duration_ticks, caster_level });
+            slots.push(BuffSlot {
+                spell_id,
+                duration_ticks,
+                caster_level,
+            });
         }
         slots
     }
@@ -147,22 +157,30 @@ pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> 
     #[cfg(not(windows))]
     {
         let _ = (proc, eq_base);
-        return None;
+        None
     }
     #[cfg(windows)]
     {
         use dmft_common::offsets::character_zone;
         let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
         let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
-        let spell_slot = proc.read::<u8>(pc_addr + character_zone::SPELL_SLOT).unwrap_or(0xFF);
-        let spell_eta = proc.read::<u32>(pc_addr + character_zone::SPELL_ETA).unwrap_or(0);
+        let spell_slot = proc
+            .read::<u8>(pc_addr + character_zone::SPELL_SLOT)
+            .unwrap_or(0xFF);
+        let spell_eta = proc
+            .read::<u32>(pc_addr + character_zone::SPELL_ETA)
+            .unwrap_or(0);
         let mut gem_etas = [0u32; 15];
         for (i, eta) in gem_etas.iter_mut().enumerate() {
             *eta = proc
                 .read::<u32>(pc_addr + character_zone::SPELL_GEM_ETA + i * 4)
                 .unwrap_or(0);
         }
-        Some(CastState { spell_slot, spell_eta, gem_etas })
+        Some(CastState {
+            spell_slot,
+            spell_eta,
+            gem_etas,
+        })
     }
 }
 
@@ -284,9 +302,7 @@ pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<Grou
     }
 
     // Read leader pointer and name
-    let leader_ptr = proc
-        .read_ptr(group_ptr + group::GROUP_LEADER)
-        .unwrap_or(0);
+    let leader_ptr = proc.read_ptr(group_ptr + group::GROUP_LEADER).unwrap_or(0);
     let leader_name = if leader_ptr != 0 {
         read_cxstr(proc, leader_ptr + group::MEMBER_NAME_CXSTR, 64).unwrap_or_default()
     } else {
@@ -301,8 +317,7 @@ pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<Grou
         if member_ptr == 0 {
             continue;
         }
-        let name = read_cxstr(proc, member_ptr + group::MEMBER_NAME_CXSTR, 64)
-            .unwrap_or_default();
+        let name = read_cxstr(proc, member_ptr + group::MEMBER_NAME_CXSTR, 64).unwrap_or_default();
         if !name.is_empty() {
             members.push(name);
         }

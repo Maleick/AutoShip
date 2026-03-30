@@ -9,15 +9,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
+# Set CMAKE_POLICY_VERSION_MINIMUM for the navmesh C++ FFI shim (Detour/protobuf)
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
+
 cargo build              # Debug build (works on macOS — stubs out Windows APIs)
 cargo build --release    # Release build
 cargo run                # Run TUI mode (demo mode on macOS, live on Windows)
 cargo run -- --dump      # One-shot CLI dump mode (original M1 behavior)
 cargo clippy             # Lint
 cargo fmt --check        # Check formatting
+cargo test               # Run tests
 ```
 
-The project has ~621 tests on Windows (all three crates); ~128 platform-independent tests run on macOS/Linux (Windows-only tests are behind `#[cfg(windows)]`). Run `cargo test` to execute them. The project uses Rust edition 2024.
+The project has ~686 platform-independent tests across 3 crates on macOS/Linux (481 dmft + 53 dmft-common + 152 dmft-dll); additional Windows-only tests are behind `#[cfg(windows)]`. The project uses Rust edition 2024.
 
 ## Architecture
 

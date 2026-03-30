@@ -141,9 +141,7 @@ impl LoginStateMachine {
             } else {
                 // Reset the timer for the retry
                 self.last_transition = Instant::now();
-                Some(LoginAction::Retry {
-                    after: RETRY_DELAY,
-                })
+                Some(LoginAction::Retry { after: RETRY_DELAY })
             }
         } else {
             None
@@ -170,9 +168,7 @@ impl LoginStateMachine {
                     });
                     LoginAction::Abort { reason: error }
                 } else {
-                    LoginAction::Retry {
-                        after: RETRY_DELAY,
-                    }
+                    LoginAction::Retry { after: RETRY_DELAY }
                 }
             }
 
@@ -397,7 +393,10 @@ mod tests {
             LoginAction::SelectServer { name } => {
                 assert_eq!(name, "TestServer");
             }
-            other => panic!("expected SelectServer, got {:?}", std::mem::discriminant(&other)),
+            other => panic!(
+                "expected SelectServer, got {:?}",
+                std::mem::discriminant(&other)
+            ),
         }
     }
 }

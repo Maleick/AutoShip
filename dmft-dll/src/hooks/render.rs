@@ -42,7 +42,10 @@ mod inner {
             RenderHook.initialize(target, render_detour)?;
             RenderHook.enable()?;
         }
-        tracing::info!(addr = format!("{:#x}", render_addr), "Render strobe hook installed");
+        tracing::info!(
+            addr = format!("{:#x}", render_addr),
+            "Render strobe hook installed"
+        );
         Ok(())
     }
 

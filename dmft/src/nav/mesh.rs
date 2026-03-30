@@ -1,7 +1,7 @@
 //! Navmesh loading pipeline — download from mqmesh.com, parse MQ2Nav binary format,
 //! load into Detour for pathfinding.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use flate2::read::ZlibDecoder;
 use prost::Message;
 use std::io::Read;
@@ -367,7 +367,11 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     }
     std::fs::write(&cache_path, &data)
         .with_context(|| format!("Failed to cache mesh to {}", cache_path.display()))?;
-    tracing::info!(zone = zone_short_name, bytes = data.len(), "Cached navmesh to disk");
+    tracing::info!(
+        zone = zone_short_name,
+        bytes = data.len(),
+        "Cached navmesh to disk"
+    );
 
     Ok(data)
 }
@@ -392,7 +396,12 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     let flags = u16::from_le_bytes([data[6], data[7]]);
     let compressed = (flags & FLAG_COMPRESSED) != 0;
 
-    tracing::debug!(version, compressed, total_bytes = data.len(), "Parsing navmesh header");
+    tracing::debug!(
+        version,
+        compressed,
+        total_bytes = data.len(),
+        "Parsing navmesh header"
+    );
 
     let payload_offset = if version >= 5 {
         if data.len() < 16 {
@@ -515,37 +524,44 @@ pub fn find_path(
     let start_pos = eq_to_detour(from.0, from.1, from.2);
     let end_pos = eq_to_detour(to.0, to.1, to.2);
 
-    let (start_ref, start_nearest) =
-        loaded.query.find_nearest_poly(&start_pos, &extents, &filter)?;
-    let (end_ref, end_nearest) =
-        loaded.query.find_nearest_poly(&end_pos, &extents, &filter)?;
+    let (start_ref, start_nearest) = loaded
+        .query
+        .find_nearest_poly(&start_pos, &extents, &filter)?;
+    let (end_ref, end_nearest) = loaded
+        .query
+        .find_nearest_poly(&end_pos, &extents, &filter)?;
 
     if start_ref == 0 {
         bail!(
             "Start position ({}, {}, {}) not on navmesh",
-            from.0, from.1, from.2
+            from.0,
+            from.1,
+            from.2
         );
     }
     if end_ref == 0 {
-        bail!(
-            "End position ({}, {}, {}) not on navmesh",
-            to.0, to.1, to.2
-        );
+        bail!("End position ({}, {}, {}) not on navmesh", to.0, to.1, to.2);
     }
 
-    let poly_path = loaded
-        .query
-        .find_path(start_ref, end_ref, &start_nearest, &end_nearest, &filter, 2048)?;
+    let poly_path = loaded.query.find_path(
+        start_ref,
+        end_ref,
+        &start_nearest,
+        &end_nearest,
+        &filter,
+        2048,
+    )?;
 
     if poly_path.is_empty() {
         bail!("No path found between start and end");
     }
 
-    let straight = loaded
-        .query
-        .find_straight_path(&start_nearest, &end_nearest, &poly_path, 2048)?;
+    let straight =
+        loaded
+            .query
+            .find_straight_path(&start_nearest, &end_nearest, &poly_path, 2048)?;
 
-    let waypoints: Vec<(f32, f32, f32)> = straight.iter().map(|pt| detour_to_eq(pt)).collect();
+    let waypoints: Vec<(f32, f32, f32)> = straight.iter().map(detour_to_eq).collect();
 
     Ok(waypoints)
 }

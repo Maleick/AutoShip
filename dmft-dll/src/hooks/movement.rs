@@ -122,8 +122,11 @@ impl MovementController {
             if eq_base == 0 {
                 return;
             }
-            if let Some(addr) = dmft_common::offsets::rebase(dmft_common::offsets::EXECUTE_CMD, eq_base) {
-                type ExecuteCmdFn = unsafe extern "C" fn(command: u32, key_down: i32, data: usize, target: usize);
+            if let Some(addr) =
+                dmft_common::offsets::rebase(dmft_common::offsets::EXECUTE_CMD, eq_base)
+            {
+                type ExecuteCmdFn =
+                    unsafe extern "C" fn(command: u32, key_down: i32, data: usize, target: usize);
                 unsafe {
                     let func: ExecuteCmdFn = std::mem::transmute(addr);
                     func(command, key_down as i32, 0, 0);

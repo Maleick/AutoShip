@@ -133,11 +133,12 @@ impl CampLoop {
                     );
                     // Stay at camp, don't pull until members are alive
                 } else if self.state_entered.elapsed() >= self.camp_delay
-                    && let Some(puller_id) = self.puller_id {
-                        tracing::info!("Camp loop: sending puller");
-                        commands.push((puller_id, Command::CombatEngage { target_id: 0 }));
-                        self.transition(CampState::Pulling);
-                    }
+                    && let Some(puller_id) = self.puller_id
+                {
+                    tracing::info!("Camp loop: sending puller");
+                    commands.push((puller_id, Command::CombatEngage { target_id: 0 }));
+                    self.transition(CampState::Pulling);
+                }
             }
 
             // Pulling → Fighting (mob is incoming)
@@ -192,8 +193,10 @@ impl CampLoop {
             }
 
             // Reactive combat: aggro while resting/looting/returning
-            (CampState::AtCamp | CampState::Looting | CampState::Returning,
-             CampEvent::CombatStarted) => {
+            (
+                CampState::AtCamp | CampState::Looting | CampState::Returning,
+                CampEvent::CombatStarted,
+            ) => {
                 tracing::warn!(
                     state = ?self.state,
                     "Camp loop: unexpected aggro — transitioning to fighting!"

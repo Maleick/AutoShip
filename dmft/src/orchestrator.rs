@@ -77,10 +77,11 @@ impl Orchestrator {
             }
 
             if let Some(reader) = self.state_readers.get(&pid)
-                && let Some(state) = reader.read() {
-                    self.game_states.insert(pid, state);
-                    self.state_timestamps.insert(pid, self.tick_count);
-                }
+                && let Some(state) = reader.read()
+            {
+                self.game_states.insert(pid, state);
+                self.state_timestamps.insert(pid, self.tick_count);
+            }
         }
     }
 
@@ -95,16 +96,17 @@ impl Orchestrator {
         // Staleness check: refuse to act on data older than STALE_TICK_THRESHOLD ticks
         for critical in [tank, healer] {
             if let Some(&last_update) = self.state_timestamps.get(&critical.pid)
-                && self.tick_count.saturating_sub(last_update) > STALE_TICK_THRESHOLD {
-                    tracing::warn!(
-                        pid = critical.pid,
-                        name = %critical.name,
-                        role = ?critical.role,
-                        stale_ticks = self.tick_count - last_update,
-                        "Stale game state for critical role — skipping snapshot"
-                    );
-                    return None;
-                }
+                && self.tick_count.saturating_sub(last_update) > STALE_TICK_THRESHOLD
+            {
+                tracing::warn!(
+                    pid = critical.pid,
+                    name = %critical.name,
+                    role = ?critical.role,
+                    stale_ticks = self.tick_count - last_update,
+                    "Stale game state for critical role — skipping snapshot"
+                );
+                return None;
+            }
             // No timestamp at all means we never read state — handled by get() below
         }
 
@@ -131,10 +133,14 @@ impl Orchestrator {
             .unwrap_or((None, false, None));
 
         // Collect per-member HP for death detection
-        let member_hp: Vec<(u32, i32)> = camp.members.iter()
+        let member_hp: Vec<(u32, i32)> = camp
+            .members
+            .iter()
             .filter_map(|m| {
                 self.game_states.get(&m.pid).and_then(|gs| {
-                    gs.local_player.as_ref().map(|lp| (m.pid, lp.hp_current as i32))
+                    gs.local_player
+                        .as_ref()
+                        .map(|lp| (m.pid, lp.hp_current as i32))
                 })
             })
             .collect();
@@ -232,9 +238,12 @@ impl Orchestrator {
                 self.send_slash_command(pid, command);
             }
             CampAction::CombatEngage { target_id } => {
-                self.send_ipc_command(pid, Command::CombatEngage {
-                    target_id: *target_id,
-                });
+                self.send_ipc_command(
+                    pid,
+                    Command::CombatEngage {
+                        target_id: *target_id,
+                    },
+                );
             }
             CampAction::CombatDisengage => {
                 self.send_ipc_command(pid, Command::CombatDisengage);
@@ -423,9 +432,9 @@ mod tests {
 
     #[test]
     fn test_build_camp_snapshot_with_game_state() {
-        use dmft_common::types::{GameState, SpawnData};
-        use dmft_common::nav::NavStatus;
         use dmft_common::combat::CombatStatus;
+        use dmft_common::nav::NavStatus;
+        use dmft_common::types::{GameState, SpawnData};
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -438,7 +447,10 @@ mod tests {
                 spawn_type: 0,
                 level: 60,
                 class_id: 1,
-                x: 0.0, y: 0.0, z: 0.0, heading: 0.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                heading: 0.0,
                 hp_current: hp,
                 hp_max,
                 mana_current: mana,
@@ -454,30 +466,36 @@ mod tests {
         orch.state_timestamps.insert(101, 1);
 
         // Tank at 80% HP
-        orch.game_states.insert(100, GameState {
-            client_id: 100,
-            local_player: Some(make_spawn(800, 1000, 0, 0)),
-            target: Some(make_spawn(500, 1000, 0, 0)),
-            nearby_spawns: vec![],
-            timestamp_ms: 0,
-            nav_status: NavStatus::Idle,
-            combat_status: CombatStatus::Idle,
-            zone_short_name: String::new(),
-            zone_long_name: String::new(),
-        });
+        orch.game_states.insert(
+            100,
+            GameState {
+                client_id: 100,
+                local_player: Some(make_spawn(800, 1000, 0, 0)),
+                target: Some(make_spawn(500, 1000, 0, 0)),
+                nearby_spawns: vec![],
+                timestamp_ms: 0,
+                nav_status: NavStatus::Idle,
+                combat_status: CombatStatus::Idle,
+                zone_short_name: String::new(),
+                zone_long_name: String::new(),
+            },
+        );
 
         // Healer at 60% mana
-        orch.game_states.insert(101, GameState {
-            client_id: 101,
-            local_player: Some(make_spawn(1000, 1000, 600, 1000)),
-            target: None,
-            nearby_spawns: vec![],
-            timestamp_ms: 0,
-            nav_status: NavStatus::Idle,
-            combat_status: CombatStatus::Idle,
-            zone_short_name: String::new(),
-            zone_long_name: String::new(),
-        });
+        orch.game_states.insert(
+            101,
+            GameState {
+                client_id: 101,
+                local_player: Some(make_spawn(1000, 1000, 600, 1000)),
+                target: None,
+                nearby_spawns: vec![],
+                timestamp_ms: 0,
+                nav_status: NavStatus::Idle,
+                combat_status: CombatStatus::Idle,
+                zone_short_name: String::new(),
+                zone_long_name: String::new(),
+            },
+        );
 
         let snap = orch.build_camp_snapshot().expect("should build snapshot");
         assert!((snap.tank_hp_pct - 80.0).abs() < 0.1);
@@ -502,9 +520,9 @@ mod tests {
 
     #[test]
     fn test_stale_state_returns_none_snapshot() {
-        use dmft_common::types::{GameState, SpawnData};
-        use dmft_common::nav::NavStatus;
         use dmft_common::combat::CombatStatus;
+        use dmft_common::nav::NavStatus;
+        use dmft_common::types::{GameState, SpawnData};
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -517,7 +535,10 @@ mod tests {
                 spawn_type: 0,
                 level: 60,
                 class_id: 1,
-                x: 0.0, y: 0.0, z: 0.0, heading: 0.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                heading: 0.0,
                 hp_current: hp,
                 hp_max,
                 mana_current: mana,
@@ -528,39 +549,51 @@ mod tests {
         }
 
         // Insert game states
-        orch.game_states.insert(100, GameState {
-            client_id: 100,
-            local_player: Some(make_spawn(1000, 1000, 0, 0)),
-            target: None,
-            nearby_spawns: vec![],
-            timestamp_ms: 0,
-            nav_status: NavStatus::Idle,
-            combat_status: CombatStatus::Idle,
-            zone_short_name: String::new(),
-            zone_long_name: String::new(),
-        });
-        orch.game_states.insert(101, GameState {
-            client_id: 101,
-            local_player: Some(make_spawn(1000, 1000, 1000, 1000)),
-            target: None,
-            nearby_spawns: vec![],
-            timestamp_ms: 0,
-            nav_status: NavStatus::Idle,
-            combat_status: CombatStatus::Idle,
-            zone_short_name: String::new(),
-            zone_long_name: String::new(),
-        });
+        orch.game_states.insert(
+            100,
+            GameState {
+                client_id: 100,
+                local_player: Some(make_spawn(1000, 1000, 0, 0)),
+                target: None,
+                nearby_spawns: vec![],
+                timestamp_ms: 0,
+                nav_status: NavStatus::Idle,
+                combat_status: CombatStatus::Idle,
+                zone_short_name: String::new(),
+                zone_long_name: String::new(),
+            },
+        );
+        orch.game_states.insert(
+            101,
+            GameState {
+                client_id: 101,
+                local_player: Some(make_spawn(1000, 1000, 1000, 1000)),
+                target: None,
+                nearby_spawns: vec![],
+                timestamp_ms: 0,
+                nav_status: NavStatus::Idle,
+                combat_status: CombatStatus::Idle,
+                zone_short_name: String::new(),
+                zone_long_name: String::new(),
+            },
+        );
 
         // State was updated at tick 1, current tick is 10 — stale by 9 ticks
         orch.state_timestamps.insert(100, 1);
         orch.state_timestamps.insert(101, 1);
         orch.tick_count = 10;
 
-        assert!(orch.build_camp_snapshot().is_none(), "stale state should return None");
+        assert!(
+            orch.build_camp_snapshot().is_none(),
+            "stale state should return None"
+        );
 
         // Update timestamps to be fresh — snapshot should work
         orch.state_timestamps.insert(100, 9);
         orch.state_timestamps.insert(101, 9);
-        assert!(orch.build_camp_snapshot().is_some(), "fresh state should return Some");
+        assert!(
+            orch.build_camp_snapshot().is_some(),
+            "fresh state should return Some"
+        );
     }
 }

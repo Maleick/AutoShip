@@ -33,6 +33,7 @@ pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 /// Guard against double injection. Set to true on first DLL_PROCESS_ATTACH.
 /// If a second copy is loaded (randomized DLL names bypass LoadLibrary dedup),
 /// the init thread exits immediately.
+#[cfg(windows)]
 static ALREADY_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(windows)]
@@ -73,14 +74,8 @@ mod dll_main {
                     let _ = DisableThreadLibraryCalls(module);
 
                     // Use raw CreateThread to avoid std runtime under loader lock.
-                    let _ = CreateThread(
-                        None,
-                        0,
-                        Some(init_thread),
-                        None,
-                        Default::default(),
-                        None,
-                    );
+                    let _ =
+                        CreateThread(None, 0, Some(init_thread), None, Default::default(), None);
                 }
                 TRUE
             }
@@ -132,8 +127,8 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
 /// better to run without logs than crash EQ.
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn init_tracing() {
-    use tracing_subscriber::{fmt, EnvFilter};
     use tracing_appender::rolling;
+    use tracing_subscriber::{EnvFilter, fmt};
 
     let log_dir = std::env::temp_dir().join("dmft");
     std::fs::create_dir_all(&log_dir).ok();
@@ -150,8 +145,7 @@ fn init_tracing() {
     // Box::leak is preferred over mem::forget as it makes the intent explicit.
     Box::leak(Box::new(_guard));
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     fmt()
         .with_env_filter(filter)
@@ -170,11 +164,7 @@ fn resolve_eq_base() -> u64 {
         use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 
         // GetModuleHandleW(None) returns the base of the hosting exe (eqgame.exe).
-        unsafe {
-            GetModuleHandleW(None)
-                .map(|h| h.0 as u64)
-                .unwrap_or(0)
-        }
+        unsafe { GetModuleHandleW(None).map(|h| h.0 as u64).unwrap_or(0) }
     }
 
     #[cfg(not(windows))]
@@ -197,10 +187,9 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     let main_loop_addr = eq_base as usize + main_loop_offset;
 
     // Cross-check against dmft_common offsets via rebase.
-    if let Some(expected) = dmft_common::offsets::rebase(
-        dmft_common::offsets::PROCESS_GAME_EVENTS,
-        eq_base,
-    ) {
+    if let Some(expected) =
+        dmft_common::offsets::rebase(dmft_common::offsets::PROCESS_GAME_EVENTS, eq_base)
+    {
         if main_loop_addr != expected {
             tracing::warn!(
                 computed = format!("{:#x}", main_loop_addr),
@@ -216,12 +205,14 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Install render strobe hook -- background clients skip 3D rendering.
-    if let Some(render_addr) = dmft_common::offsets::rebase(
-        dmft_common::offsets::REAL_RENDER_WORLD,
-        eq_base,
-    ) {
+    if let Some(render_addr) =
+        dmft_common::offsets::rebase(dmft_common::offsets::REAL_RENDER_WORLD, eq_base)
+    {
         if let Err(e) = hooks::render::install(render_addr) {
-            tracing::warn!("Render hook failed (continuing without render strobe): {}", e);
+            tracing::warn!(
+                "Render hook failed (continuing without render strobe): {}",
+                e
+            );
         }
     } else {
         tracing::warn!("Could not rebase REAL_RENDER_WORLD -- render strobe disabled");

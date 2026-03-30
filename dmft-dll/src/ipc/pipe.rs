@@ -3,13 +3,13 @@
 //! Creates a named pipe and listens for commands from the orchestrator.
 //! On non-Windows platforms this is a compile-only stub.
 
-use dmft_common::ipc::{Command, Response, SessionToken};
+use anyhow::Result;
 #[cfg(windows)]
 use dmft_common::ipc::PIPE_NAME_PREFIX;
-use dmft_common::types::ClientId;
+use dmft_common::ipc::{Command, Response, SessionToken};
 #[cfg(windows)]
 use dmft_common::protocol;
-use anyhow::Result;
+use dmft_common::types::ClientId;
 
 /// Listens for commands from the orchestrator via named pipe.
 pub struct CommandListener {
@@ -34,15 +34,20 @@ impl CommandListener {
     pub fn new(client_id: ClientId, token: SessionToken) -> Result<Self> {
         #[cfg(windows)]
         {
-            use windows::core::PCSTR;
-            use windows::Win32::System::Pipes::CreateNamedPipeA;
             use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
-            use windows::Win32::System::Pipes::{PIPE_TYPE_BYTE, PIPE_READMODE_BYTE, PIPE_WAIT};
-            const PIPE_ACCESS_DUPLEX: FILE_FLAGS_AND_ATTRIBUTES = FILE_FLAGS_AND_ATTRIBUTES(0x00000003);
+            use windows::Win32::System::Pipes::CreateNamedPipeA;
+            use windows::Win32::System::Pipes::{PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT};
+            use windows::core::PCSTR;
+            const PIPE_ACCESS_DUPLEX: FILE_FLAGS_AND_ATTRIBUTES =
+                FILE_FLAGS_AND_ATTRIBUTES(0x00000003);
 
             let pipe_name = format!("{}cmd_{}\0", PIPE_NAME_PREFIX, client_id);
 
-            let security_attrs = build_restrictive_security_attributes();
+            let security_setup = build_restrictive_security_attributes().map_err(|e| {
+                anyhow::anyhow!(
+                    "Pipe DACL creation failed — refusing to create pipe with default security: {e}"
+                )
+            })?;
 
             let handle = unsafe {
                 CreateNamedPipeA(
@@ -53,9 +58,10 @@ impl CommandListener {
                     4096, // out buffer
                     4096, // in buffer
                     0,    // default timeout
-                    security_attrs.as_ref().map(|sa| sa as *const _),
+                    Some(&security_setup.sa as *const _),
                 )
             }?;
+            drop(security_setup);
 
             Ok(Self {
                 client_id,
@@ -83,9 +89,9 @@ impl CommandListener {
     pub fn receive(&mut self) -> Result<Command> {
         #[cfg(windows)]
         {
-            use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
-            use windows::Win32::Storage::FileSystem::ReadFile;
             use windows::Win32::Foundation::ERROR_PIPE_CONNECTED;
+            use windows::Win32::Storage::FileSystem::ReadFile;
+            use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
 
             // Wait for client to connect. ERROR_PIPE_CONNECTED means a client
             // connected between CreateNamedPipe and ConnectNamedPipe — that's fine.
@@ -100,21 +106,26 @@ impl CommandListener {
             let mut token_buf = [0u8; 32];
             let mut token_bytes_read: u32 = 0;
             let token_result = unsafe {
-                ReadFile(self.handle, Some(&mut token_buf), Some(&mut token_bytes_read), None)
+                ReadFile(
+                    self.handle,
+                    Some(&mut token_buf),
+                    Some(&mut token_bytes_read),
+                    None,
+                )
             };
 
-            if token_result.is_err() || token_bytes_read != 32
+            if token_result.is_err()
+                || token_bytes_read != 32
                 || !constant_time_eq(&token_buf, &self.expected_token)
             {
                 tracing::error!(
                     client_id = self.client_id,
                     "Session token validation failed — dropping connection"
                 );
-                unsafe { let _ = DisconnectNamedPipe(self.handle); }
-                anyhow::bail!(
-                    "Session token mismatch for client {}",
-                    self.client_id
-                );
+                unsafe {
+                    let _ = DisconnectNamedPipe(self.handle);
+                }
+                anyhow::bail!("Session token mismatch for client {}", self.client_id);
             }
 
             tracing::debug!(client_id = self.client_id, "Pipe session authenticated");
@@ -126,16 +137,22 @@ impl CommandListener {
                 ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)?;
             }
 
-            let (cmd, _) = protocol::decode::<Command>(&buf[..bytes_read as usize])
-                .ok_or_else(|| anyhow::anyhow!("Failed to decode command for client {}", self.client_id))?;
+            let (cmd, _) =
+                protocol::decode::<Command>(&buf[..bytes_read as usize]).ok_or_else(|| {
+                    anyhow::anyhow!("Failed to decode command for client {}", self.client_id)
+                })?;
 
             if !validate_command(&cmd) {
-                unsafe { let _ = DisconnectNamedPipe(self.handle); }
+                unsafe {
+                    let _ = DisconnectNamedPipe(self.handle);
+                }
                 anyhow::bail!("Command validation failed for client {}", self.client_id);
             }
 
             // Disconnect so the pipe is ready for the next connection.
-            unsafe { let _ = DisconnectNamedPipe(self.handle); }
+            unsafe {
+                let _ = DisconnectNamedPipe(self.handle);
+            }
 
             Ok(cmd)
         }
@@ -181,9 +198,16 @@ pub fn validate_command(cmd: &Command) -> bool {
         Command::CastSpell { spell_slot, .. } => *spell_slot <= 13,
         Command::MoveTo { x, y, z } => x.is_finite() && y.is_finite() && z.is_finite(),
         Command::NavigateTo { waypoints } => waypoints.len() <= 1000,
-        Command::StartLogin { account_name, password, server_name, character_name } => {
-            account_name.len() <= 128 && password.len() <= 128
-                && server_name.len() <= 64 && character_name.len() <= 64
+        Command::StartLogin {
+            account_name,
+            password,
+            server_name,
+            character_name,
+        } => {
+            account_name.len() <= 128
+                && password.len() <= 128
+                && server_name.len() <= 64
+                && character_name.len() <= 64
         }
         _ => true,
     }
@@ -198,54 +222,102 @@ fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
     diff == 0
 }
 
-/// Build a SECURITY_ATTRIBUTES with a DACL that grants GENERIC_READ|GENERIC_WRITE
-/// only to the current user SID, denying access to other users on the system.
-///
-/// Uses the SDDL string `D:(A;;GRGW;;;CU)` which means:
-/// - D: DACL
-/// - A: Allow
-/// - GRGW: GENERIC_READ | GENERIC_WRITE
-/// - CU: CREATOR_OWNER (resolves to the creating user's SID)
-///
-/// Returns `None` if the security descriptor cannot be created (non-fatal —
-/// the pipe falls back to default security).
+/// Owns the SECURITY_ATTRIBUTES and its backing buffers (absolute security
+/// descriptor + ACL).  Both buffers must outlive any Windows API call that
+/// reads the SA, because the kernel dereferences them synchronously.
 #[cfg(windows)]
-fn build_restrictive_security_attributes() -> Option<windows::Win32::Security::SECURITY_ATTRIBUTES> {
-    use windows::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorA;
-    use windows::core::PCSTR;
+struct PipeSecuritySetup {
+    _sd_buf: Vec<u8>,
+    _acl_buf: Vec<u8>,
+    sa: windows::Win32::Security::SECURITY_ATTRIBUTES,
+}
 
-    // SDDL: DACL grants GENERIC_ALL to Authenticated Users.
-    // CO (CREATOR_OWNER) is too restrictive — blocks the orchestrator process
-    // even when running as the same user. AU (Authenticated Users) is safe for
-    // local named pipes since they're not network-accessible by default.
-    let sddl = b"D:(A;;GA;;;AU)\0";
-    let mut sd_ptr: windows::Win32::Security::PSECURITY_DESCRIPTOR =
-        windows::Win32::Security::PSECURITY_DESCRIPTOR(std::ptr::null_mut());
-
-    let ok = unsafe {
-        ConvertStringSecurityDescriptorToSecurityDescriptorA(
-            PCSTR(sddl.as_ptr()),
-            1, // SDDL_REVISION_1
-            &mut sd_ptr,
-            None,
-        )
+/// Build SECURITY_ATTRIBUTES with a DACL granting only the current user
+/// full access to the named pipe.
+///
+/// Returns `Err` on any API failure — the caller must abort pipe creation
+/// rather than falling back to a default (open) security descriptor.
+#[cfg(windows)]
+fn build_restrictive_security_attributes() -> Result<PipeSecuritySetup> {
+    use std::mem;
+    use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
+    use windows::Win32::Security::{
+        ACE_REVISION, ACL, AddAccessAllowedAce, GetLengthSid, GetTokenInformation, InitializeAcl,
+        InitializeSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
+        SECURITY_DESCRIPTOR, SetSecurityDescriptorDacl, TOKEN_QUERY, TOKEN_USER, TokenUser,
     };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
-    if ok.is_err() {
-        tracing::warn!("Failed to create restrictive DACL for pipe — using default security");
-        return None;
+    unsafe {
+        // 1. Open the current process token.
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token)
+            .map_err(|e| anyhow::anyhow!("OpenProcessToken failed: {e}"))?;
+
+        // 2. Two-pass GetTokenInformation to obtain the user SID.
+        let mut info_size = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut info_size);
+        let mut user_buf = vec![0u8; info_size as usize];
+        let result = GetTokenInformation(
+            token,
+            TokenUser,
+            Some(user_buf.as_mut_ptr() as *mut _),
+            info_size,
+            &mut info_size,
+        );
+        let _ = CloseHandle(token);
+        result.map_err(|e| anyhow::anyhow!("GetTokenInformation failed: {e}"))?;
+
+        let token_user = &*(user_buf.as_ptr() as *const TOKEN_USER);
+        let sid = token_user.User.Sid;
+
+        // 3. Build an ACL with one ACCESS_ALLOWED_ACE for the current user.
+        let sid_len = GetLengthSid(sid) as usize;
+        let ace_size = 8usize + sid_len;
+        let acl_size = mem::size_of::<ACL>() + ace_size;
+        let mut acl_buf = vec![0u8; acl_size];
+        InitializeAcl(
+            acl_buf.as_mut_ptr() as *mut ACL,
+            acl_size as u32,
+            ACE_REVISION(2),
+        )
+        .map_err(|e| anyhow::anyhow!("InitializeAcl failed: {e}"))?;
+        AddAccessAllowedAce(
+            acl_buf.as_mut_ptr() as *mut ACL,
+            ACE_REVISION(2),
+            GENERIC_ALL.0,
+            sid,
+        )
+        .map_err(|e| anyhow::anyhow!("AddAccessAllowedAce failed: {e}"))?;
+
+        // 4. Build an absolute SECURITY_DESCRIPTOR pointing to the ACL.
+        let mut sd_buf = vec![0u8; mem::size_of::<SECURITY_DESCRIPTOR>()];
+        let sd_ptr = PSECURITY_DESCRIPTOR(sd_buf.as_mut_ptr() as *mut _);
+        InitializeSecurityDescriptor(
+            sd_ptr, 1, // SECURITY_DESCRIPTOR_REVISION
+        )
+        .map_err(|e| anyhow::anyhow!("InitializeSecurityDescriptor failed: {e}"))?;
+        SetSecurityDescriptorDacl(sd_ptr, true, Some(acl_buf.as_mut_ptr() as *mut ACL), false)
+            .map_err(|e| anyhow::anyhow!("SetSecurityDescriptorDacl failed: {e}"))?;
+
+        // 5. Assemble SECURITY_ATTRIBUTES.
+        let sa = SECURITY_ATTRIBUTES {
+            nLength: mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: sd_buf.as_mut_ptr() as *mut _,
+            bInheritHandle: false.into(),
+        };
+
+        Ok(PipeSecuritySetup {
+            _sd_buf: sd_buf,
+            _acl_buf: acl_buf,
+            sa,
+        })
     }
-
-    Some(windows::Win32::Security::SECURITY_ATTRIBUTES {
-        nLength: std::mem::size_of::<windows::Win32::Security::SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: sd_ptr.0,
-        bInheritHandle: false.into(),
-    })
 }
 
 #[cfg(not(windows))]
-fn build_restrictive_security_attributes() -> Option<()> {
-    None
+fn build_restrictive_security_attributes() -> Result<()> {
+    Ok(())
 }
 
 impl Drop for CommandListener {

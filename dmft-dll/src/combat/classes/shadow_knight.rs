@@ -30,30 +30,42 @@ impl ClassStrategy for ShadowKnightStrategy {
 
         // Priority 1: Lifetap when HP is low
         if hp_pct < 60.0
-            && let Some(tap) = ctx.config.spells.iter()
-                .filter(|s| s.name.contains("Tap") || s.name.contains("tap")
-                         || s.name.contains("Leech") || s.name.contains("Drain"))
+            && let Some(tap) = ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| {
+                    s.name.contains("Tap")
+                        || s.name.contains("tap")
+                        || s.name.contains("Leech")
+                        || s.name.contains("Drain")
+                })
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned()
-            {
-                return Some(tap);
-            }
+        {
+            return Some(tap);
+        }
 
         // Priority 2: Snare on fleeing mob
         if let Some(target) = ctx.target
             && target.hp_pct() < 15.0
-                && let Some(snare) = ctx.config.spells.iter()
-                    .filter(|s| s.name.contains("Snare") || s.name.contains("Darkness"))
-                    .filter(|s| mana_pct >= s.min_mana_pct)
-                    .max_by_key(|s| s.priority)
-                    .cloned()
-                {
-                    return Some(snare);
-                }
+            && let Some(snare) = ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| s.name.contains("Snare") || s.name.contains("Darkness"))
+                .filter(|s| mana_pct >= s.min_mana_pct)
+                .max_by_key(|s| s.priority)
+                .cloned()
+        {
+            return Some(snare);
+        }
 
         // Priority 3: Disease/poison DoTs and nukes
-        ctx.config.spells.iter()
+        ctx.config
+            .spells
+            .iter()
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
             .cloned()

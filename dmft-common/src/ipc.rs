@@ -4,23 +4,38 @@ use crate::types::ClientId;
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     // Movement
-    MoveTo { x: f32, y: f32, z: f32 },
+    MoveTo {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
     StopMovement,
     // Combat
-    CastSpell { spell_slot: u8, target_id: u32 },
-    Attack { target_id: u32 },
+    CastSpell {
+        spell_slot: u8,
+        target_id: u32,
+    },
+    Attack {
+        target_id: u32,
+    },
     StopAttack,
     // Targeting
-    SetTarget { spawn_id: u32 },
+    SetTarget {
+        spawn_id: u32,
+    },
     ClearTarget,
     // Utility
     Sit,
     Stand,
     // Navigation
     /// Follow a sequence of waypoints.
-    NavigateTo { waypoints: Vec<crate::nav::Waypoint> },
+    NavigateTo {
+        waypoints: Vec<crate::nav::Waypoint>,
+    },
     /// Move to a camp spot and face heading.
-    SetCamp { spot: crate::nav::CampSpot },
+    SetCamp {
+        spot: crate::nav::CampSpot,
+    },
     /// Stop navigating, stay where you are.
     StopNavigation,
     // Login automation
@@ -38,15 +53,25 @@ pub enum Command {
         character_name: String,
     },
     // Post-login
-    JoinGroup { group_id: u32 },
+    JoinGroup {
+        group_id: u32,
+    },
     ApplyBuffs,
     ReportReady,
     // Combat
-    CombatEngage { target_id: u32 },
+    CombatEngage {
+        target_id: u32,
+    },
     CombatDisengage,
-    CombatSetAssistTarget { spawn_id: u32 },
-    CombatForceAbility { ability_id: u32 },
-    CombatEmergencyHeal { target_id: u32 },
+    CombatSetAssistTarget {
+        spawn_id: u32,
+    },
+    CombatForceAbility {
+        ability_id: u32,
+    },
+    CombatEmergencyHeal {
+        target_id: u32,
+    },
     /// Loot the nearest corpse.
     LootCorpse,
     /// Loot all items from the currently open loot window.
@@ -59,34 +84,48 @@ pub enum Command {
         target: Option<String>,
     },
     /// Perform an emote animation.
-    Emote { emote: String },
+    Emote {
+        emote: String,
+    },
     /// Execute a soul action (idle behavior, etc.).
-    SoulAction { action: crate::soul::SoulAction },
+    SoulAction {
+        action: crate::soul::SoulAction,
+    },
     /// Execute a slash command as if typed in the chat window.
     /// Uses EQ's InterpretCmd internally (e.g. "/target Camrene", "/follow").
-    SlashCommand { command: String },
+    SlashCommand {
+        command: String,
+    },
     // Zone graph
     /// Request the zone adjacency graph from ZoneGuideManagerClient.
     QueryZoneGraph,
     // System
     Ping,
     Eject,
-    SetHookState { enabled: bool },
+    SetHookState {
+        enabled: bool,
+    },
     /// Enable or disable automatic dialog acceptance (group invite, trade, etc.).
-    SetAutoAccept { enabled: bool },
+    SetAutoAccept {
+        enabled: bool,
+    },
 }
 
 impl std::fmt::Debug for Command {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::StartLogin { account_name, server_name, character_name, .. } => {
-                f.debug_struct("StartLogin")
-                    .field("account_name", account_name)
-                    .field("password", &"[REDACTED]")
-                    .field("server_name", server_name)
-                    .field("character_name", character_name)
-                    .finish()
-            }
+            Self::StartLogin {
+                account_name,
+                server_name,
+                character_name,
+                ..
+            } => f
+                .debug_struct("StartLogin")
+                .field("account_name", account_name)
+                .field("password", &"[REDACTED]")
+                .field("server_name", server_name)
+                .field("character_name", character_name)
+                .finish(),
             other => write!(f, "{}", {
                 // Fall through to derived-style output for all other variants.
                 // This uses serde_json as a quick Debug proxy since we removed derive(Debug).
@@ -131,9 +170,13 @@ pub enum Response {
     /// Simplified wire format: Vec of (zone_id, name, min_level, max_level, connections).
     /// Each connection is (dest_zone_id, transfer_type, disabled).
     ZoneGraph {
-        zones: Vec<(u16, String, i32, i32, Vec<(u16, u8, bool)>)>,
+        zones: Vec<ZoneGraphEntry>,
     },
 }
+
+/// Wire-format for a single zone entry: (zone_id, name, min_level, max_level, connections).
+/// Each connection is (dest_zone_id, transfer_type, disabled).
+pub type ZoneGraphEntry = (u16, String, i32, i32, Vec<(u16, u8, bool)>);
 
 /// Random session token generated at injection time for IPC authentication.
 /// The orchestrator writes this to shared memory; the DLL reads it and

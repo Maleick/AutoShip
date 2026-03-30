@@ -30,19 +30,28 @@ impl ClassStrategy for PaladinStrategy {
         // Priority 1: Heal group members below 50% HP
         for member in ctx.group_members {
             if member.hp_pct < 50.0
-                && let Some(heal) = ctx.config.spells.iter()
-                    .filter(|s| s.name.contains("Heal") || s.name.contains("Light")
-                             || s.name.contains("Cure"))
+                && let Some(heal) = ctx
+                    .config
+                    .spells
+                    .iter()
+                    .filter(|s| {
+                        s.name.contains("Heal")
+                            || s.name.contains("Light")
+                            || s.name.contains("Cure")
+                    })
                     .filter(|s| mana_pct >= s.min_mana_pct)
                     .max_by_key(|s| s.priority)
                     .cloned()
-                {
-                    return Some(heal);
-                }
+            {
+                return Some(heal);
+            }
         }
 
         // Priority 2: Stun (interrupt casters, generate aggro)
-        if let Some(stun) = ctx.config.spells.iter()
+        if let Some(stun) = ctx
+            .config
+            .spells
+            .iter()
             .filter(|s| s.name.contains("Stun") || s.name.contains("Force"))
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
@@ -52,7 +61,9 @@ impl ClassStrategy for PaladinStrategy {
         }
 
         // Priority 3: Highest priority spell from config
-        ctx.config.spells.iter()
+        ctx.config
+            .spells
+            .iter()
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
             .cloned()

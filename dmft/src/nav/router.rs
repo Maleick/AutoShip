@@ -20,10 +20,7 @@ pub enum TravelStep {
         caster_id: ClientId,
     },
     /// Wait for staggered entry (random delay before zoning).
-    StaggerWait {
-        min_secs: u32,
-        max_secs: u32,
-    },
+    StaggerWait { min_secs: u32, max_secs: u32 },
 }
 
 /// A complete travel plan for one character.
@@ -69,7 +66,9 @@ pub fn generate_zone_staggers(
 
     for &id in client_ids {
         // Deterministic but varied delay per character.
-        let hash = id.wrapping_mul(dmft_common::nav::KNUTH_HASH).wrapping_add(seed);
+        let hash = id
+            .wrapping_mul(dmft_common::nav::KNUTH_HASH)
+            .wrapping_add(seed);
         let delay = min_secs + (hash % (range + 1));
         result.insert(id, delay);
     }

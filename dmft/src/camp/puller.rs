@@ -220,9 +220,13 @@ mod tests {
 
     #[test]
     fn test_filters_out_corpses() {
-        let spawns = vec![
-            make_spawn(1, "an orc pawn", SpawnType::Corpse, 155.0, 255.0),
-        ];
+        let spawns = vec![make_spawn(
+            1,
+            "an orc pawn",
+            SpawnType::Corpse,
+            155.0,
+            255.0,
+        )];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
         assert_eq!(result, None);
@@ -243,9 +247,7 @@ mod tests {
 
     #[test]
     fn test_filters_out_of_range() {
-        let spawns = vec![
-            make_spawn(1, "an orc pawn", SpawnType::Npc, 9999.0, 9999.0),
-        ];
+        let spawns = vec![make_spawn(1, "an orc pawn", SpawnType::Npc, 9999.0, 9999.0)];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
         assert_eq!(result, None);

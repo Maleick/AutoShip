@@ -34,7 +34,10 @@ mod inner {
             MainLoopHook.initialize(target, main_loop_detour)?;
             MainLoopHook.enable()?;
         }
-        tracing::info!(addr = format!("{:#x}", main_loop_addr), "Game loop hook installed");
+        tracing::info!(
+            addr = format!("{:#x}", main_loop_addr),
+            "Game loop hook installed"
+        );
         Ok(())
     }
 
@@ -72,8 +75,7 @@ static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(true);
 
 /// Track tick count for throttling background checks.
-static TICK_COUNT: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
+static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Pending login button click — set by IPC thread, executed on game loop thread.
 /// Contains the CXWnd* address of the button to click, or 0 if none pending.
@@ -91,14 +93,11 @@ static PENDING_ENTER_WORLD_FN: std::sync::atomic::AtomicUsize =
 static PENDING_SELECT_CHAR_FN: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 /// Enter World sequence stage (0=idle, 1=select, 2=wait, 3=enter).
-static ENTER_WORLD_STAGE: std::sync::atomic::AtomicU32 =
-    std::sync::atomic::AtomicU32::new(0);
+static ENTER_WORLD_STAGE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 /// Tick at which to advance from stage 2→3 (wait before EnterWorld).
-static ENTER_WORLD_WAIT_UNTIL: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
+static ENTER_WORLD_WAIT_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// Retry counter for stage 3 rescan (abort after 150 ticks / ~5 seconds).
-static ENTER_WORLD_RETRIES: std::sync::atomic::AtomicU32 =
-    std::sync::atomic::AtomicU32::new(0);
+static ENTER_WORLD_RETRIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 /// Character name to select (set by IPC thread, read by game loop).
 static PENDING_CHAR_NAME: std::sync::OnceLock<std::sync::Mutex<String>> =
     std::sync::OnceLock::new();
@@ -116,9 +115,8 @@ pub fn queue_button_click(button_wnd: usize) {
 pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize, character_name: String) {
     // Also resolve SelectCharacter address
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-    let select_fn = dmft_common::offsets::rebase(
-        dmft_common::offsets::SELECT_CHARACTER, eq_base,
-    ).unwrap_or(0);
+    let select_fn =
+        dmft_common::offsets::rebase(dmft_common::offsets::SELECT_CHARACTER, eq_base).unwrap_or(0);
 
     // Store the character name for the game loop to look up.
     let name_lock = PENDING_CHAR_NAME.get_or_init(|| std::sync::Mutex::new(String::new()));
@@ -144,25 +142,30 @@ pub fn rescan_char_list_wnd() -> Option<usize> {
     use dmft_common::offsets::eqgame as eqg;
 
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-    let mgr_ptr_addr = dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_CXWND_MANAGER, eq_base,
-    )?;
+    let mgr_ptr_addr =
+        dmft_common::offsets::rebase(dmft_common::offsets::PINST_CXWND_MANAGER, eq_base)?;
 
     unsafe {
         let mgr = *(mgr_ptr_addr as *const usize);
-        if mgr == 0 { return None; }
+        if mgr == 0 {
+            return None;
+        }
 
         let array_ptr = *((mgr + eqg::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
         let count = *((mgr + eqg::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-        if array_ptr == 0 || count == 0 || count > 2000 { return None; }
+        if array_ptr == 0 || count == 0 || count > 2000 {
+            return None;
+        }
 
         for i in 0..count as usize {
             let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-            if wnd_ptr == 0 { continue; }
+            if wnd_ptr == 0 {
+                continue;
+            }
 
-            if let Some(sidl_text) = crate::eq::widgets::read_cxstr(
-                wnd_ptr + eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
-            ) {
+            if let Some(sidl_text) =
+                crate::eq::widgets::read_cxstr(wnd_ptr + eqg::CSIDL_SCREEN_WND_SIDL_TEXT)
+            {
                 if sidl_text == "CharacterListWnd" {
                     return Some(wnd_ptr);
                 }
@@ -173,7 +176,9 @@ pub fn rescan_char_list_wnd() -> Option<usize> {
 }
 
 #[cfg(not(windows))]
-pub fn rescan_char_list_wnd() -> Option<usize> { None }
+pub fn rescan_char_list_wnd() -> Option<usize> {
+    None
+}
 
 /// Find the index of a character by name in the Character_List CListWnd.
 ///
@@ -189,9 +194,9 @@ fn find_character_index(char_list_wnd: usize, character_name: &str) -> i32 {
 
     unsafe {
         // Find the "Character_List" child (CListWnd) inside CCharacterListWnd
-        let Some(list_wnd) = crate::eq::widgets::find_child_by_sidl_text(
-            char_list_wnd, "Character_List",
-        ) else {
+        let Some(list_wnd) =
+            crate::eq::widgets::find_child_by_sidl_text(char_list_wnd, "Character_List")
+        else {
             tracing::warn!("Character_List child not found — defaulting to index 0");
             return 0;
         };
@@ -225,7 +230,9 @@ fn find_character_index(char_list_wnd: usize, character_name: &str) -> i32 {
 }
 
 #[cfg(not(windows))]
-fn find_character_index(_char_list_wnd: usize, _character_name: &str) -> i32 { 0 }
+fn find_character_index(_char_list_wnd: usize, _character_name: &str) -> i32 {
+    0
+}
 
 // ─── Command Jitter Queue ───
 // Commands are not executed immediately — they sit in a pending queue
@@ -338,7 +345,9 @@ fn on_game_tick() {
 
     // Auto-accept dialogs every 30 ticks (~1 second).
     if tick % 30 == 15 {
-        unsafe { crate::dialog::check_dialogs(); }
+        unsafe {
+            crate::dialog::check_dialogs();
+        }
     }
 
     // Rename window every 100 ticks (~3 seconds) to "[DMFT] EQ - CharName (ZoneName)".
@@ -376,7 +385,8 @@ fn on_game_tick() {
         let select_fn = PENDING_SELECT_CHAR_FN.load(std::sync::atomic::Ordering::Acquire);
         if wnd != 0 && select_fn != 0 {
             // Look up character index by name (falls back to 0 if not found/empty)
-            let char_name = PENDING_CHAR_NAME.get()
+            let char_name = PENDING_CHAR_NAME
+                .get()
                 .and_then(|m| m.lock().ok())
                 .map(|n| n.clone())
                 .unwrap_or_default();
@@ -395,7 +405,10 @@ fn on_game_tick() {
                 let func: SelectCharFn = std::mem::transmute(select_fn);
                 func(wnd, index);
             }
-            tracing::info!(index, "Phase 3: SelectCharacter called — waiting 3s before EnterWorld");
+            tracing::info!(
+                index,
+                "Phase 3: SelectCharacter called — waiting 3s before EnterWorld"
+            );
             ENTER_WORLD_WAIT_UNTIL.store(tick + 90, std::sync::atomic::Ordering::Release);
             ENTER_WORLD_STAGE.store(2, std::sync::atomic::Ordering::Release);
         } else {
@@ -425,7 +438,8 @@ fn on_game_tick() {
                     ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
                     return;
                 }
-                let retries = ENTER_WORLD_RETRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let retries =
+                    ENTER_WORLD_RETRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 if retries >= 150 {
                     tracing::error!("Phase 3: rescan failed after 150 retries — aborting");
                     ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
@@ -465,16 +479,18 @@ fn on_game_tick() {
 
     // Lazy-init the navigator once we're in-world.
     {
-        static NAV_INITIALIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        static NAV_INITIALIZED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
         if !NAV_INITIALIZED.load(std::sync::atomic::Ordering::Relaxed) {
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-            if eq_base != 0 {
-                if let Some(player_addr) = dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base) {
-                    let player_ptr = unsafe { *(player_addr as *const usize) };
-                    if player_ptr != 0 {
-                        crate::nav::init(player_ptr, std::process::id());
-                        NAV_INITIALIZED.store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
+            if eq_base != 0
+                && let Some(player_addr) =
+                    dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
+            {
+                let player_ptr = unsafe { *(player_addr as *const usize) };
+                if player_ptr != 0 {
+                    crate::nav::init(player_ptr, std::process::id());
+                    NAV_INITIALIZED.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
             }
         }
@@ -503,7 +519,9 @@ fn on_game_tick() {
 
             if !in_world {
                 if let Some(phase) = crate::login::tick() {
-                    crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate { phase });
+                    crate::ipc::send_response(dmft_common::ipc::Response::LoginPhaseUpdate {
+                        phase,
+                    });
                 }
 
                 // If not in world and game loop is running, we're at character select.
@@ -671,9 +689,10 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
         use std::sync::atomic::{AtomicU64, Ordering};
         static DIAG_TICK: AtomicU64 = AtomicU64::new(0);
         let tick = DIAG_TICK.fetch_add(1, Ordering::Relaxed);
-        if x.abs() < 1.0 && y.abs() < 1.0 && tick % 300 == 0 {
+        if x.abs() < 1.0 && y.abs() < 1.0 && tick.is_multiple_of(300) {
             // Dump raw bytes from 0x060..0x0b0 to verify position offsets
-            let raw: [u8; 0x50] = unsafe { std::ptr::read((spawn_ptr + 0x060) as *const [u8; 0x50]) };
+            let raw: [u8; 0x50] =
+                unsafe { std::ptr::read((spawn_ptr + 0x060) as *const [u8; 0x50]) };
             tracing::warn!(
                 spawn_ptr = format!("{:#x}", spawn_ptr),
                 name = %name,
@@ -691,7 +710,8 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     let hp_max = unsafe { *((spawn_ptr + player_zone::HP_MAX) as *const i64) };
     let mana_current = unsafe { *((spawn_ptr + player_zone::MANA_CURRENT) as *const i32) };
     let mana_max = unsafe { *((spawn_ptr + player_zone::MANA_MAX) as *const i32) };
-    let endurance_current = unsafe { *((spawn_ptr + player_zone::ENDURANCE_CURRENT) as *const i32) };
+    let endurance_current =
+        unsafe { *((spawn_ptr + player_zone::ENDURANCE_CURRENT) as *const i32) };
     let endurance_max = unsafe { *((spawn_ptr + player_zone::ENDURANCE_MAX) as *const u32) };
 
     dmft_common::types::SpawnData {
@@ -730,10 +750,8 @@ fn read_zone_names(eq_base: u64) -> (String, String) {
 
 /// Read local player state. Returns None if not logged in.
 fn read_local_player_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
-    let player_ptr_addr = dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_LOCAL_PLAYER,
-        eq_base,
-    )?;
+    let player_ptr_addr =
+        dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)?;
     let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
     if player_ptr == 0 {
         return None;
@@ -758,10 +776,8 @@ fn read_local_player_state(eq_base: u64) -> Option<dmft_common::types::SpawnData
 
 /// Read current target state. Returns None if no target selected.
 fn read_target_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
-    let target_ptr_addr = dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_TARGET,
-        eq_base,
-    )?;
+    let target_ptr_addr =
+        dmft_common::offsets::rebase(dmft_common::offsets::PINST_TARGET, eq_base)?;
     let target_ptr = unsafe { *(target_ptr_addr as *const usize) };
     if target_ptr == 0 {
         return None;
@@ -771,19 +787,22 @@ fn read_target_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
 
 /// Walk the spawn linked list and collect spawns within `max_distance` units
 /// of the given position. Capped at 100 spawns.
-fn read_nearby_spawns(eq_base: u64, player_x: f32, player_y: f32, player_z: f32) -> Vec<dmft_common::types::SpawnData> {
+fn read_nearby_spawns(
+    eq_base: u64,
+    player_x: f32,
+    player_y: f32,
+    player_z: f32,
+) -> Vec<dmft_common::types::SpawnData> {
     use dmft_common::offsets::{player_base, spawn_manager};
 
     const MAX_NEARBY: usize = 100;
     const MAX_DISTANCE_SQ: f32 = 500.0 * 500.0;
 
-    let mgr_ptr_addr = match dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_SPAWN_MANAGER,
-        eq_base,
-    ) {
-        Some(addr) => addr,
-        None => return Vec::new(),
-    };
+    let mgr_ptr_addr =
+        match dmft_common::offsets::rebase(dmft_common::offsets::PINST_SPAWN_MANAGER, eq_base) {
+            Some(addr) => addr,
+            None => return Vec::new(),
+        };
 
     let mgr_ptr = unsafe { *(mgr_ptr_addr as *const usize) };
     if mgr_ptr == 0 {
@@ -836,8 +855,8 @@ fn current_time_ms() -> u64 {
 fn update_foreground_status() {
     #[cfg(windows)]
     {
-        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
         use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
         let fg: HWND = unsafe { GetForegroundWindow() };
         let our_pid = std::process::id();
@@ -1107,17 +1126,15 @@ fn execute_slash_command(command: &str) {
         }
 
         // Get the CEverQuest instance pointer (this).
-        let Some(eq_inst_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::PINST_CEVERQUEST,
-            eq_base,
-        ) else {
+        let Some(eq_inst_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::PINST_CEVERQUEST, eq_base)
+        else {
             tracing::error!("Failed to rebase PINST_CEVERQUEST");
             return;
         };
 
-        let eq_inst: *mut core::ffi::c_void = unsafe {
-            *(eq_inst_addr as *const *mut core::ffi::c_void)
-        };
+        let eq_inst: *mut core::ffi::c_void =
+            unsafe { *(eq_inst_addr as *const *mut core::ffi::c_void) };
 
         if eq_inst.is_null() {
             tracing::error!("CEverQuest instance pointer is null");
@@ -1125,17 +1142,15 @@ fn execute_slash_command(command: &str) {
         }
 
         // Get the local player pointer (pChar).
-        let Some(char_spawn_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::PINST_LOCAL_PLAYER,
-            eq_base,
-        ) else {
+        let Some(char_spawn_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
+        else {
             tracing::error!("Failed to rebase PINST_LOCAL_PLAYER");
             return;
         };
 
-        let player_ptr: *mut core::ffi::c_void = unsafe {
-            *(char_spawn_addr as *const *mut core::ffi::c_void)
-        };
+        let player_ptr: *mut core::ffi::c_void =
+            unsafe { *(char_spawn_addr as *const *mut core::ffi::c_void) };
 
         if player_ptr.is_null() {
             tracing::error!("Local player pointer is null — not logged in?");
@@ -1143,10 +1158,9 @@ fn execute_slash_command(command: &str) {
         }
 
         // Get InterpretCmd function address.
-        let Some(interpret_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::INTERPRET_CMD,
-            eq_base,
-        ) else {
+        let Some(interpret_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::INTERPRET_CMD, eq_base)
+        else {
             tracing::error!("Failed to rebase INTERPRET_CMD");
             return;
         };
@@ -1239,6 +1253,9 @@ mod tests {
                 break;
             }
         }
-        assert!(saw_spike, "Expected at least one hesitation spike > 10 in 10000 draws");
+        assert!(
+            saw_spike,
+            "Expected at least one hesitation spike > 10 in 10000 draws"
+        );
     }
 }

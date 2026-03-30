@@ -13,10 +13,10 @@ pub fn spawn_eq_client(
     server: &str,
     extra_args: &[String],
 ) -> Result<SpawnedProcess> {
-    use windows::Win32::System::Threading::*;
-    use windows::Win32::Foundation::*;
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Foundation::*;
+    use windows::Win32::System::Threading::*;
 
     let cmd = format!(
         "\"{}\" patchme /login:{} /server:{}{}",

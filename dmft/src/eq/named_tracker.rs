@@ -398,10 +398,7 @@ mod tests {
         let mut tracker = NamedTracker::new();
         tracker.set_zone("lowerguk");
 
-        let spawns = vec![
-            make_npc("Frenzied Ghoul", 100),
-            make_npc("King Crush", 101),
-        ];
+        let spawns = vec![make_npc("Frenzied Ghoul", 100), make_npc("King Crush", 101)];
         tracker.update(&spawns, 1);
 
         // Kill Frenzied Ghoul

@@ -76,7 +76,9 @@ pub unsafe fn find_window_by_name(cxwnd_mgr: usize, name: &str) -> Option<usize>
 
     for i in 0..count as usize {
         let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-        if wnd_ptr == 0 { continue; }
+        if wnd_ptr == 0 {
+            continue;
+        }
 
         if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
             if text.eq_ignore_ascii_case(name) {
@@ -112,7 +114,9 @@ pub unsafe fn find_window_by_text_contains(cxwnd_mgr: usize, substring: &str) ->
 
     for i in 0..count as usize {
         let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-        if wnd_ptr == 0 { continue; }
+        if wnd_ptr == 0 {
+            continue;
+        }
 
         if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
             if text.to_ascii_lowercase().contains(&needle) {
@@ -196,7 +200,9 @@ where
 
     for i in 0..count as usize {
         let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-        if wnd_ptr == 0 { continue; }
+        if wnd_ptr == 0 {
+            continue;
+        }
 
         let text = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT);
         if !callback(i, wnd_ptr, text.as_deref()) {
@@ -265,7 +271,11 @@ pub unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
 
     let alloc = *((rep_ptr + off::CSTRREP_ALLOC) as *const u32) as usize;
     if text.len() >= alloc {
-        tracing::warn!(text_len = text.len(), alloc, "CXStr buffer too small for text");
+        tracing::warn!(
+            text_len = text.len(),
+            alloc,
+            "CXStr buffer too small for text"
+        );
         return false;
     }
 
@@ -296,7 +306,7 @@ pub unsafe fn write_cxstr_inplace(_cxstr_addr: usize, _text: &str) -> bool {
 #[cfg(windows)]
 pub unsafe fn clone_cstrrep(donor_rep: usize) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
-    use windows::Win32::System::Memory::{GetProcessHeap, HeapAlloc, HEAP_ZERO_MEMORY};
+    use windows::Win32::System::Memory::{GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc};
 
     let donor_alloc = *((donor_rep + off::CSTRREP_ALLOC) as *const u32) as usize;
     let total_size = off::CSTRREP_DATA + donor_alloc.max(128);
@@ -340,7 +350,7 @@ pub unsafe fn clone_cstrrep(_donor_rep: usize) -> Option<usize> {
 #[cfg(windows)]
 pub unsafe fn alloc_cstrrep(text: &str) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
-    use windows::Win32::System::Memory::{GetProcessHeap, HeapAlloc, HEAP_ZERO_MEMORY};
+    use windows::Win32::System::Memory::{GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc};
 
     let text_len = text.len();
     let alloc_size = text_len + 64; // extra room
@@ -436,8 +446,7 @@ pub unsafe fn set_edit_text_via_vtable(edit_wnd: usize, text: &str) -> bool {
         return false;
     }
 
-    let set_window_text_ptr =
-        *((vtable + off::CXWND_VTABLE_SET_WINDOW_TEXT) as *const usize);
+    let set_window_text_ptr = *((vtable + off::CXWND_VTABLE_SET_WINDOW_TEXT) as *const usize);
     if set_window_text_ptr == 0 {
         tracing::warn!("SetWindowText function pointer is null");
         return false;
@@ -549,10 +558,14 @@ pub unsafe fn find_visible_window_by_sidl_name(
 
     for i in 0..count as usize {
         let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-        if wnd_ptr == 0 { continue; }
+        if wnd_ptr == 0 {
+            continue;
+        }
 
         // Check dShow first (cheap) before reading SidlText
-        if !is_visible(wnd_ptr) { continue; }
+        if !is_visible(wnd_ptr) {
+            continue;
+        }
 
         if let Some(text) = read_cxstr(wnd_ptr + sidl_text_offset) {
             if text.eq_ignore_ascii_case(sidl_name) {
@@ -597,9 +610,13 @@ pub unsafe fn find_visible_window_by_name(cxwnd_mgr: usize, name: &str) -> Optio
 
     for i in 0..count as usize {
         let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-        if wnd_ptr == 0 { continue; }
+        if wnd_ptr == 0 {
+            continue;
+        }
 
-        if !is_visible(wnd_ptr) { continue; }
+        if !is_visible(wnd_ptr) {
+            continue;
+        }
 
         if let Some(text) = read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT) {
             if text.eq_ignore_ascii_case(name) {
@@ -626,8 +643,8 @@ pub unsafe fn find_visible_window_by_name(_cxwnd_mgr: usize, _name: &str) -> Opt
 /// `parent_wnd` must be a valid CXWnd pointer in eqgame.exe context.
 #[cfg(windows)]
 pub unsafe fn find_child_by_sidl_text(parent_wnd: usize, sidl_name: &str) -> Option<usize> {
-    use dmft_common::offsets::eqmain as off;
     use dmft_common::offsets::eqgame as eqg;
+    use dmft_common::offsets::eqmain as off;
 
     let mut child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
     let mut count = 0u32;
@@ -749,7 +766,9 @@ mod tests {
 
     #[test]
     fn click_button_via_vtable_noop_on_non_windows() {
-        unsafe { click_button_via_vtable(0); } // should not panic
+        unsafe {
+            click_button_via_vtable(0);
+        } // should not panic
     }
 
     #[test]
@@ -784,7 +803,10 @@ mod tests {
 
     #[test]
     fn find_visible_window_by_sidl_name_returns_none_on_non_windows() {
-        assert!(unsafe { find_visible_window_by_sidl_name(0, "connect", 0x270, 0x010, 0x018) }.is_none());
+        assert!(
+            unsafe { find_visible_window_by_sidl_name(0, "connect", 0x270, 0x010, 0x018) }
+                .is_none()
+        );
     }
 
     #[test]

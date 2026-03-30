@@ -73,22 +73,22 @@ pub trait ClassStrategy: Send {
 /// Factory function — creates the right strategy for a given class.
 pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrategy> {
     match class_id {
-        1 => Box::new(WarriorStrategy::new(class_id)),       // Warrior
-        2 => Box::new(ClericStrategy::new(class_id)),        // Cleric
-        3 => Box::new(PaladinStrategy::new(class_id)),       // Paladin
-        4 => Box::new(RangerStrategy::new(class_id)),        // Ranger
+        1 => Box::new(WarriorStrategy::new(class_id)), // Warrior
+        2 => Box::new(ClericStrategy::new(class_id)),  // Cleric
+        3 => Box::new(PaladinStrategy::new(class_id)), // Paladin
+        4 => Box::new(RangerStrategy::new(class_id)),  // Ranger
         5 => Box::new(ShadowKnightStrategy::new(class_id)), // Shadow Knight
-        6 => Box::new(DruidStrategy::new(class_id)),         // Druid
-        7 => Box::new(MonkStrategy::new(class_id)),          // Monk
-        8 => Box::new(BardStrategy::new(class_id)),          // Bard
-        9 => Box::new(RogueStrategy::new(class_id)),         // Rogue
-        10 => Box::new(ShamanStrategy::new(class_id)),       // Shaman
-        11 => Box::new(NecromancerStrategy::new(class_id)),  // Necromancer
-        12 => Box::new(WizardStrategy::new(class_id)),       // Wizard
-        13 => Box::new(MagicianStrategy::new(class_id)),     // Magician
-        14 => Box::new(EnchanterStrategy::new(class_id)),    // Enchanter
-        15 => Box::new(BeastlordStrategy::new(class_id)),   // Beastlord
-        16 => Box::new(BerserkerStrategy::new(class_id)),   // Berserker
+        6 => Box::new(DruidStrategy::new(class_id)),   // Druid
+        7 => Box::new(MonkStrategy::new(class_id)),    // Monk
+        8 => Box::new(BardStrategy::new(class_id)),    // Bard
+        9 => Box::new(RogueStrategy::new(class_id)),   // Rogue
+        10 => Box::new(ShamanStrategy::new(class_id)), // Shaman
+        11 => Box::new(NecromancerStrategy::new(class_id)), // Necromancer
+        12 => Box::new(WizardStrategy::new(class_id)), // Wizard
+        13 => Box::new(MagicianStrategy::new(class_id)), // Magician
+        14 => Box::new(EnchanterStrategy::new(class_id)), // Enchanter
+        15 => Box::new(BeastlordStrategy::new(class_id)), // Beastlord
+        16 => Box::new(BerserkerStrategy::new(class_id)), // Berserker
         _ => Box::new(GenericDpsStrategy::new(class_id, config)),
     }
 }

@@ -18,8 +18,8 @@ pub enum ProcessPriority {
 /// Apply CPU affinity and process priority to a running process.
 #[cfg(windows)]
 pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
-    use windows::Win32::System::Threading::*;
     use windows::Win32::Foundation::*;
+    use windows::Win32::System::Threading::*;
 
     unsafe {
         let handle = OpenProcess(PROCESS_SET_INFORMATION, false, pid)?;
@@ -44,7 +44,11 @@ pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
 
 #[cfg(not(windows))]
 pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
-    tracing::warn!(pid, mask = config.cpu_mask, "apply_affinity not available (stub)");
+    tracing::warn!(
+        pid,
+        mask = config.cpu_mask,
+        "apply_affinity not available (stub)"
+    );
     Ok(())
 }
 
@@ -54,8 +58,8 @@ pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
 /// to enforce a hard maximum — Windows will page out memory beyond the limit.
 #[cfg(windows)]
 pub fn apply_working_set_limit(pid: u32, max_working_set_mb: u32) -> Result<()> {
-    use windows::Win32::System::Threading::*;
     use windows::Win32::Foundation::*;
+    use windows::Win32::System::Threading::*;
 
     const MIN_WORKING_SET_MB: u32 = 128;
 
@@ -63,18 +67,10 @@ pub fn apply_working_set_limit(pid: u32, max_working_set_mb: u32) -> Result<()> 
     let max_bytes = (max_working_set_mb as usize) * 1024 * 1024;
 
     unsafe {
-        let handle = OpenProcess(
-            PROCESS_SET_INFORMATION,
-            false,
-            pid,
-        )?;
+        let handle = OpenProcess(PROCESS_SET_INFORMATION, false, pid)?;
 
         // Use SetProcessWorkingSetSize (non-Ex version available in windows 0.54)
-        let result = SetProcessWorkingSetSize(
-            handle,
-            min_bytes,
-            max_bytes,
-        );
+        let result = SetProcessWorkingSetSize(handle, min_bytes, max_bytes);
 
         let _ = CloseHandle(handle);
         result?;

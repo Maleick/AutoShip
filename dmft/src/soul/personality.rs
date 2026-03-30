@@ -1,7 +1,5 @@
 use dmft_common::nav::Xorshift32;
-use dmft_common::soul::{
-    MoodState, PersonalityTraits, SoulAction, SoulEvent, SayChannel,
-};
+use dmft_common::soul::{MoodState, PersonalityTraits, SayChannel, SoulAction, SoulEvent};
 
 use crate::soul::config::EdginessLevel;
 
@@ -181,7 +179,6 @@ impl PersonalityEngine {
             target: None,
         }
     }
-
 }
 
 // ─── Emote tables ───

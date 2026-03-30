@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
-use dmft_common::types::SpawnData;
 use dmft_common::nav::Waypoint;
+use dmft_common::types::SpawnData;
 
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
@@ -27,12 +27,18 @@ impl RangerStrategy {
     }
 
     /// Find nearest enemy for targeting.
-    fn nearest_enemy<'a>(&self, player: &SpawnData, enemies: &'a [SpawnData]) -> Option<&'a SpawnData> {
+    fn nearest_enemy<'a>(
+        &self,
+        player: &SpawnData,
+        enemies: &'a [SpawnData],
+    ) -> Option<&'a SpawnData> {
         let player_pos = Waypoint::new(player.x, player.y, player.z);
         enemies.iter().min_by(|a, b| {
             let dist_a = player_pos.distance_2d(&Waypoint::new(a.x, a.y, a.z));
             let dist_b = player_pos.distance_2d(&Waypoint::new(b.x, b.y, b.z));
-            dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+            dist_a
+                .partial_cmp(&dist_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 
@@ -98,7 +104,11 @@ impl ClassStrategy for RangerStrategy {
     fn on_engage(&mut self, ctx: &CombatContext) {
         if let Some(target) = ctx.target {
             let dist = self.distance_to(ctx.player, target);
-            let stance = if dist <= self.melee_range { "melee" } else { "ranged" };
+            let stance = if dist <= self.melee_range {
+                "melee"
+            } else {
+                "ranged"
+            };
             tracing::info!(
                 target_id = target.spawn_id,
                 target_name = %target.name,

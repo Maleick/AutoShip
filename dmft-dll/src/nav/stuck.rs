@@ -151,7 +151,10 @@ mod tests {
         for _ in 0..STUCK_TICK_THRESHOLD {
             stuck = detector.check(&pos);
         }
-        assert!(stuck, "should be stuck after {STUCK_TICK_THRESHOLD} stationary ticks");
+        assert!(
+            stuck,
+            "should be stuck after {STUCK_TICK_THRESHOLD} stationary ticks"
+        );
     }
 
     #[test]

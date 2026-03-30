@@ -1,17 +1,17 @@
 //! Groups screen — dynamic grid of group panels, each showing per-slot HP/mana.
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use super::widgets::{hp_color, panel};
 use crate::eq::structs::BuffSlot;
-use crate::tui::app::{App, GroupDef};
 use crate::tui::app::extract_account_number;
+use crate::tui::app::{App, GroupDef};
 
 pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
@@ -28,17 +28,27 @@ pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &
     }
 
     let (num_rows, num_cols): (usize, usize) = match group_count {
-        1 => (1, 1), 2 => (1, 2), 3 => (1, 3), 4 => (2, 2),
-        5..=6 => (2, 3), 7..=9 => (3, 3), _ => (3, 4),
+        1 => (1, 1),
+        2 => (1, 2),
+        3 => (1, 3),
+        4 => (2, 2),
+        5..=6 => (2, 3),
+        7..=9 => (3, 3),
+        _ => (3, 4),
     };
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints((0..num_rows).map(|_| Constraint::Ratio(1, num_rows as u32)).collect::<Vec<_>>())
+        .constraints(
+            (0..num_rows)
+                .map(|_| Constraint::Ratio(1, num_rows as u32))
+                .collect::<Vec<_>>(),
+        )
         .split(area);
 
-    let col_constraints: Vec<Constraint> =
-        (0..num_cols).map(|_| Constraint::Ratio(1, num_cols as u32)).collect();
+    let col_constraints: Vec<Constraint> = (0..num_cols)
+        .map(|_| Constraint::Ratio(1, num_cols as u32))
+        .collect();
 
     let mut panel_idx = 0;
     for row in rows.iter() {
@@ -56,14 +66,26 @@ pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &
     }
 }
 
-pub fn clients_in_group<'a>(app: &'a App, group: &GroupDef) -> Vec<&'a crate::tui::app::ClientState> {
+pub fn clients_in_group<'a>(
+    app: &'a App,
+    group: &GroupDef,
+) -> Vec<&'a crate::tui::app::ClientState> {
     let (lo, hi) = group.account_range;
-    app.clients.iter().filter(|c| {
-        let name = if !c.character_name.is_empty() { &c.character_name }
-                   else if let Some(p) = &c.local_player { &p.displayed_name }
-                   else { return false; };
-        extract_account_number(name).map(|n| n >= lo && n <= hi).unwrap_or(false)
-    }).collect()
+    app.clients
+        .iter()
+        .filter(|c| {
+            let name = if !c.character_name.is_empty() {
+                &c.character_name
+            } else if let Some(p) = &c.local_player {
+                &p.displayed_name
+            } else {
+                return false;
+            };
+            extract_account_number(name)
+                .map(|n| n >= lo && n <= hi)
+                .unwrap_or(false)
+        })
+        .collect()
 }
 
 fn draw_group_panel(
@@ -73,25 +95,37 @@ fn draw_group_panel(
     group: &GroupDef,
     group_idx: usize,
 ) {
-    let t       = &app.theme;
+    let t = &app.theme;
     let members = clients_in_group(app, group);
-    let online  = members.len();
+    let online = members.len();
     let (lo, hi) = group.account_range;
-    let total   = (hi - lo + 1) as usize;
+    let total = (hi - lo + 1) as usize;
     let focused = app.active_group == Some(group_idx);
 
-    let has_dead = members.iter().any(|c| {
-        c.local_player.as_ref().is_some_and(|p| p.hp_current == 0)
-    });
+    let has_dead = members
+        .iter()
+        .any(|c| c.local_player.as_ref().is_some_and(|p| p.hp_current == 0));
 
-    let border_style = if focused       { t.border_active }
-                       else if has_dead { t.border_danger }
-                       else if online == total { t.border_primary }
-                       else if online > 0      { t.border_warn }
-                       else                    { t.border_dim };
+    let border_style = if focused {
+        t.border_active
+    } else if has_dead {
+        t.border_danger
+    } else if online == total {
+        t.border_primary
+    } else if online > 0 {
+        t.border_warn
+    } else {
+        t.border_dim
+    };
 
-    let zone  = members.first().map(|c| c.zone_name.as_str()).unwrap_or("---");
-    let title = format!(" G{} {} ({}/{}) {} ", group.id, group.name, online, total, zone);
+    let zone = members
+        .first()
+        .map(|c| c.zone_name.as_str())
+        .unwrap_or("---");
+    let title = format!(
+        " G{} {} ({}/{}) {} ",
+        group.id, group.name, online, total, zone
+    );
 
     let blk = Block::default()
         .borders(Borders::ALL)
@@ -110,43 +144,63 @@ fn draw_group_panel(
     let mut slot_map: std::collections::HashMap<u8, &crate::tui::app::ClientState> =
         std::collections::HashMap::new();
     for client in &members {
-        let name = if !client.character_name.is_empty() { &client.character_name }
-                   else if let Some(p) = &client.local_player { &p.displayed_name }
-                   else { continue; };
-        if let Some(n) = extract_account_number(name) { slot_map.insert(n, client); }
+        let name = if !client.character_name.is_empty() {
+            &client.character_name
+        } else if let Some(p) = &client.local_player {
+            &p.displayed_name
+        } else {
+            continue;
+        };
+        if let Some(n) = extract_account_number(name) {
+            slot_map.insert(n, client);
+        }
     }
 
-    let config_map: std::collections::HashMap<u8, &crate::config::AccountEntry> =
-        app.accounts_config.as_ref()
-            .map(|cfg| {
-                cfg.accounts.iter()
-                    .filter(|a| a.group == group.id as u32)
-                    .filter_map(|a| extract_account_number(&a.name).map(|n| (n, a)))
-                    .collect()
-            })
-            .unwrap_or_default();
+    let config_map: std::collections::HashMap<u8, &crate::config::AccountEntry> = app
+        .accounts_config
+        .as_ref()
+        .map(|cfg| {
+            cfg.accounts
+                .iter()
+                .filter(|a| a.group == group.id as u32)
+                .filter_map(|a| extract_account_number(&a.name).map(|n| (n, a)))
+                .collect()
+        })
+        .unwrap_or_default();
 
     let mut lines: Vec<Line<'_>> = Vec::new();
 
     for acct_num in lo..=hi {
         if let Some(client) = slot_map.get(&acct_num) {
             if let Some(player) = &client.local_player {
-                let hp_pct   = player.hp_pct();
-                let name     = app.redact_name(&player.displayed_name).into_owned();
+                let hp_pct = player.hp_pct();
+                let name = app.redact_name(&player.displayed_name).into_owned();
                 let mana_str = if player.mana_max > 0 {
                     format!(" {:>3.0}%mp", player.mana_pct())
-                } else { "     -".into() };
+                } else {
+                    "     -".into()
+                };
 
                 lines.push(Line::from(vec![
-                    Span::styled(format!("{:<12}", name),          Style::default().fg(t.text_normal)),
-                    Span::styled(format!("{:<4}", player.class_str()), Style::default().fg(t.text_accent)),
-                    Span::styled(format!("{:>3}", player.level),   Style::default().fg(t.text_secondary)),
-                    Span::styled(format!(" {:>3.0}%", hp_pct),     Style::default().fg(hp_color(hp_pct, t))),
-                    Span::styled(mana_str,                          Style::default().fg(t.mana_color)),
+                    Span::styled(format!("{:<12}", name), Style::default().fg(t.text_normal)),
+                    Span::styled(
+                        format!("{:<4}", player.class_str()),
+                        Style::default().fg(t.text_accent),
+                    ),
+                    Span::styled(
+                        format!("{:>3}", player.level),
+                        Style::default().fg(t.text_secondary),
+                    ),
+                    Span::styled(
+                        format!(" {:>3.0}%", hp_pct),
+                        Style::default().fg(hp_color(hp_pct, t)),
+                    ),
+                    Span::styled(mana_str, Style::default().fg(t.mana_color)),
                 ]));
 
                 // Buff timer row — show active buffs with durations
-                let active_buffs: Vec<&BuffSlot> = player.buff_slots
+                let active_buffs: Vec<&BuffSlot> = player
+                    .buff_slots
                     .iter()
                     .filter(|b| !b.is_empty())
                     .take(6)
@@ -172,12 +226,10 @@ fn draw_group_panel(
                 )));
             }
         } else if let Some(acct) = config_map.get(&acct_num) {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("  #{:02} {:<4} offline", acct_num, acct.class),
-                    Style::default().fg(t.text_muted),
-                ),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!("  #{:02} {:<4} offline", acct_num, acct.class),
+                Style::default().fg(t.text_muted),
+            )]));
         } else {
             lines.push(Line::from(Span::styled(
                 format!("  #{:02} ── empty ──", acct_num),
@@ -192,11 +244,14 @@ fn draw_group_panel(
     let mode_color = match mode_str.as_str() {
         "Camp" => t.mode_camp,
         "Hunt" => t.mode_hunt,
-        _      => t.text_muted,
+        _ => t.text_muted,
     };
     lines.push(Line::from(vec![
         Span::styled("  Mode: ", Style::default().fg(t.text_muted)),
-        Span::styled(mode_str, Style::default().fg(mode_color).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            mode_str,
+            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+        ),
     ]));
 
     frame.render_widget(Paragraph::new(lines), inner);

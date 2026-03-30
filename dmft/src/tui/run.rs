@@ -1,9 +1,9 @@
 use anyhow::Result;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui::prelude::CrosstermBackend;
 use std::collections::HashMap;
 use std::io;
 use std::time::{Duration, Instant};
@@ -132,7 +132,7 @@ fn scan_for_clients(app: &mut App) {
 #[cfg(windows)]
 fn scan_for_clients_live(app: &mut App) {
     use super::app::ClientState;
-    use crate::process::memory::{find_processes_by_name, ProcessHandle};
+    use crate::process::memory::{ProcessHandle, find_processes_by_name};
 
     let pids = match find_processes_by_name("eqgame.exe") {
         Ok(p) => p,
@@ -158,14 +158,20 @@ fn scan_for_clients_live(app: &mut App) {
                 // Read zone name from memory if possible
                 if let Ok(zone) = crate::eq::spawn::read_zone_name(&proc, base) {
                     client.zone_name = zone;
-                } else if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
+                } else if let Ok(windows) =
+                    crate::process::window::find_windows_by_title("EverQuest")
+                {
                     for w in &windows {
                         if w.pid == pid {
                             let (char_name, zone) = parse_title_fields(&w.title);
                             if !char_name.is_empty() {
                                 client.character_name = char_name;
                             }
-                            client.zone_name = if zone.is_empty() { String::from("Unknown") } else { zone };
+                            client.zone_name = if zone.is_empty() {
+                                String::from("Unknown")
+                            } else {
+                                zone
+                            };
                             break;
                         }
                     }
@@ -302,7 +308,11 @@ fn refresh_eq_data_live(app: &mut App) {
                             if !char_name.is_empty() {
                                 client.character_name = char_name;
                             }
-                            client.zone_name = if zone.is_empty() { String::from("Unknown") } else { zone };
+                            client.zone_name = if zone.is_empty() {
+                                String::from("Unknown")
+                            } else {
+                                zone
+                            };
                             break;
                         }
                     }
@@ -334,7 +344,8 @@ fn load_demo_data(app: &mut App) {
     // Create multiple demo clients to showcase multi-client TUI.
     // Names use trailing digits (e.g., "Frostreaver01") so they match group slots
     // via extract_account_number().
-    let demo_clients = [(
+    let demo_clients = [
+        (
             "Frostreaver01",
             1,
             "WAR",
@@ -405,7 +416,8 @@ fn load_demo_data(app: &mut App) {
             2500,
             StandState::Ducking,
             "Eastern Wastes",
-        )];
+        ),
+    ];
 
     for (i, (name, class_id, _class_str, level, hp, hp_max, mana, mana_max, stand, zone)) in
         demo_clients.iter().enumerate()

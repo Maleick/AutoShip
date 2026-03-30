@@ -45,13 +45,18 @@ impl AccountsConfig {
 
     /// Return accounts belonging to a specific group.
     pub fn accounts_for_group(&self, group_id: u32) -> Vec<&AccountEntry> {
-        self.accounts.iter().filter(|a| a.group == group_id).collect()
+        self.accounts
+            .iter()
+            .filter(|a| a.group == group_id)
+            .collect()
     }
 
     /// Find a single account by name (case-insensitive).
     pub fn find_account(&self, name: &str) -> Option<&AccountEntry> {
         let lower = name.to_lowercase();
-        self.accounts.iter().find(|a| a.name.to_lowercase() == lower)
+        self.accounts
+            .iter()
+            .find(|a| a.name.to_lowercase() == lower)
     }
 
     /// Convert an AccountEntry into the AccountInfo used by the launch system.

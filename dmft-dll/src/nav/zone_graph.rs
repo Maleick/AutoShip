@@ -4,8 +4,7 @@
 //! ZoneGuideZone entries. Each zone has a name, level range, and an ArrayClass
 //! of ZoneGuideConnection entries describing how to reach neighboring zones.
 
-use dmft_common::nav::{ZoneConnection, ZoneGraph, ZoneNode};
-use dmft_common::offsets::{self, zone_guide as zg};
+use dmft_common::nav::ZoneGraph;
 
 /// Read the complete zone graph from memory.
 ///
@@ -15,6 +14,8 @@ use dmft_common::offsets::{self, zone_guide as zg};
 #[cfg(windows)]
 pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
     use crate::eq::widgets::read_cxstr;
+    use dmft_common::nav::{ZoneConnection, ZoneNode};
+    use dmft_common::offsets::{self, zone_guide as zg};
 
     // Resolve the singleton pointer
     let mgr_ptr_addr = offsets::rebase(offsets::ZONE_GUIDE_MANAGER, eq_base)?;
@@ -42,8 +43,7 @@ pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
             continue;
         }
 
-        let name = read_cxstr(zone_addr + zg::ZONE_NAME)
-            .unwrap_or_default();
+        let name = read_cxstr(zone_addr + zg::ZONE_NAME).unwrap_or_default();
         if name.is_empty() {
             continue;
         }
@@ -99,9 +99,7 @@ pub unsafe fn read_zone_graph(_eq_base: u64) -> Option<ZoneGraph> {
 }
 
 /// Convert a ZoneGraph into the simplified IPC wire format.
-pub fn zone_graph_to_ipc(
-    graph: &ZoneGraph,
-) -> Vec<(u16, String, i32, i32, Vec<(u16, u8, bool)>)> {
+pub fn zone_graph_to_ipc(graph: &ZoneGraph) -> Vec<dmft_common::ipc::ZoneGraphEntry> {
     let mut result: Vec<_> = graph
         .zones
         .values()
@@ -111,7 +109,13 @@ pub fn zone_graph_to_ipc(
                 .iter()
                 .map(|c| (c.dest_zone_id, c.transfer_type, c.disabled))
                 .collect();
-            (node.zone_id, node.name.clone(), node.min_level, node.max_level, conns)
+            (
+                node.zone_id,
+                node.name.clone(),
+                node.min_level,
+                node.max_level,
+                conns,
+            )
         })
         .collect();
     result.sort_by_key(|(id, _, _, _, _)| *id);
@@ -121,6 +125,7 @@ pub fn zone_graph_to_ipc(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dmft_common::nav::{ZoneConnection, ZoneNode};
 
     #[test]
     fn zone_graph_to_ipc_sorts_by_id() {

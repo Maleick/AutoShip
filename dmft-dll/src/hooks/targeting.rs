@@ -90,10 +90,7 @@ impl TargetingController {
     /// Clear the current target by writing null to pinstTarget.
     pub fn clear_target(&self) -> Result<(), TargetError> {
         let pinst_addr = self.target_ptr_addr()?;
-        tracing::debug!(
-            pinst_addr = format!("{:#x}", pinst_addr),
-            "clearing target"
-        );
+        tracing::debug!(pinst_addr = format!("{:#x}", pinst_addr), "clearing target");
 
         #[cfg(windows)]
         unsafe {
@@ -119,9 +116,8 @@ impl TargetingController {
             if target_ptr == 0 {
                 return Ok(None);
             }
-            let spawn_id = std::ptr::read(
-                (target_ptr + offsets::player_base::SPAWN_ID) as *const u32,
-            );
+            let spawn_id =
+                std::ptr::read((target_ptr + offsets::player_base::SPAWN_ID) as *const u32);
             return Ok(Some(spawn_id));
         }
 
@@ -144,7 +140,10 @@ impl TargetingController {
         // 3. Filter to TYPE == NPC (1)
         // 4. Find nearest by distance, within max_range
         // 5. Call set_target_by_addr with the winner
-        tracing::debug!(max_range, "target_nearest_npc -- not yet implemented (needs spawn list walker)");
+        tracing::debug!(
+            max_range,
+            "target_nearest_npc -- not yet implemented (needs spawn list walker)"
+        );
         Ok(None)
     }
 
@@ -197,15 +196,11 @@ impl TargetingController {
             let mut count = 0u32;
 
             while current != 0 && count < MAX_SPAWNS {
-                let sid = std::ptr::read(
-                    (current + offsets::player_base::SPAWN_ID) as *const u32,
-                );
+                let sid = std::ptr::read((current + offsets::player_base::SPAWN_ID) as *const u32);
                 if sid == spawn_id {
                     return Ok(current);
                 }
-                current = std::ptr::read(
-                    (current + offsets::player_base::NEXT) as *const usize,
-                );
+                current = std::ptr::read((current + offsets::player_base::NEXT) as *const usize);
                 count += 1;
             }
 

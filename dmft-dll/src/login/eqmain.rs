@@ -90,10 +90,13 @@ pub fn resolve_eqlogin(eqmain_base: u64) -> Option<usize> {
         use dmft_common::offsets::eqmain as eqmain_offsets;
 
         let login_client = resolve_login_client(eqmain_base)?;
-        let eqlogin_ptr = unsafe {
-            *((login_client + eqmain_offsets::LOGINCLIENT_LOGIN_DATA) as *const usize)
-        };
-        if eqlogin_ptr == 0 { None } else { Some(eqlogin_ptr) }
+        let eqlogin_ptr =
+            unsafe { *((login_client + eqmain_offsets::LOGINCLIENT_LOGIN_DATA) as *const usize) };
+        if eqlogin_ptr == 0 {
+            None
+        } else {
+            Some(eqlogin_ptr)
+        }
     }
 
     #[cfg(not(windows))]
@@ -110,9 +113,7 @@ pub fn resolve_eq_hwnd(eqmain_base: u64) -> Option<usize> {
         use dmft_common::offsets::eqmain as eqmain_offsets;
 
         let eqlogin = resolve_eqlogin(eqmain_base)?;
-        let hwnd = unsafe {
-            *((eqlogin + eqmain_offsets::EQLOGIN_HWND) as *const usize)
-        };
+        let hwnd = unsafe { *((eqlogin + eqmain_offsets::EQLOGIN_HWND) as *const usize) };
         if hwnd == 0 { None } else { Some(hwnd) }
     }
 

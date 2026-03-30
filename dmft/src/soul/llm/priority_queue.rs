@@ -1,7 +1,7 @@
-use std::collections::BinaryHeap;
 use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 
-use super::{LlmRequest, LlmResponse, LlmProvider};
+use super::{LlmProvider, LlmRequest, LlmResponse};
 use anyhow::Result;
 
 /// Token budget tracking per hour.
@@ -178,9 +178,9 @@ impl LlmRequestQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soul::llm::{LlmPriority, LlmRequest, Situation};
-    use crate::soul::llm::fallback::TraitDrivenResponder;
     use crate::soul::config::EdginessLevel;
+    use crate::soul::llm::fallback::TraitDrivenResponder;
+    use crate::soul::llm::{LlmPriority, LlmRequest, Situation};
     use dmft_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
 
     fn make_request(name: &str, priority: LlmPriority) -> LlmRequest {

@@ -127,7 +127,10 @@ impl Default for SpeechStyle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SoulEvent {
     /// Character died
-    Death { zone: String, killer: Option<String> },
+    Death {
+        zone: String,
+        killer: Option<String>,
+    },
     /// Character got a notable kill
     Kill { target: String, zone: String },
     /// Received loot
@@ -139,7 +142,11 @@ pub enum SoulEvent {
     /// Witnessed something notable
     Witnessed { description: String },
     /// Mood shifted
-    MoodShift { from: MoodState, to: MoodState, reason: String },
+    MoodShift {
+        from: MoodState,
+        to: MoodState,
+        reason: String,
+    },
     /// Entered a new zone
     ZoneEnter { zone: String },
     /// Level gained

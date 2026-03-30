@@ -4,8 +4,8 @@
 //! region. Uses `OpenFileMappingW` with `FILE_MAP_READ` (read-only, least privilege).
 //! On non-Windows platforms it returns an empty stub so the project compiles.
 
-use dmft_common::types::{ClientId, GameState};
 use anyhow::Result;
+use dmft_common::types::{ClientId, GameState};
 
 /// Reads game state from shared memory for a specific client.
 pub struct SharedStateReader {
@@ -41,10 +41,8 @@ impl SharedStateReader {
         #[cfg(windows)]
         {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
+            use windows::Win32::System::Memory::{FILE_MAP_READ, MapViewOfFile, OpenFileMappingW};
             use windows::core::PCWSTR;
-            use windows::Win32::System::Memory::{
-                OpenFileMappingW, MapViewOfFile, FILE_MAP_READ,
-            };
 
             let name: Vec<u16> = format!("dmft_state_{}\0", client_id)
                 .encode_utf16()
@@ -54,13 +52,8 @@ impl SharedStateReader {
             // OpenFileMappingW (not CreateFileMappingW) ensures the orchestrator
             // can never accidentally write to shared memory; PAGE_READWRITE is
             // not needed or requested here.
-            let handle = unsafe {
-                OpenFileMappingW(
-                    FILE_MAP_READ.0,
-                    false,
-                    PCWSTR(name.as_ptr()),
-                )
-            }?;
+            let handle =
+                unsafe { OpenFileMappingW(FILE_MAP_READ.0, false, PCWSTR(name.as_ptr())) }?;
 
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_READ, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
@@ -105,9 +98,7 @@ impl SharedStateReader {
             }
 
             // 3. Read payload length
-            let len_bytes: [u8; 4] = unsafe {
-                std::ptr::read(base.add(8) as *const [u8; 4])
-            };
+            let len_bytes: [u8; 4] = unsafe { std::ptr::read(base.add(8) as *const [u8; 4]) };
             let payload_len = u32::from_le_bytes(len_bytes) as usize;
 
             if payload_len == 0 || payload_len > self._size - 12 {
@@ -127,11 +118,9 @@ impl SharedStateReader {
             }
 
             // 6. Decode only if both sequence reads match and are even
-            let (state, _): (GameState, _) = bincode::serde::decode_from_slice(
-                &payload_copy,
-                bincode::config::standard(),
-            )
-            .ok()?;
+            let (state, _): (GameState, _) =
+                bincode::serde::decode_from_slice(&payload_copy, bincode::config::standard())
+                    .ok()?;
 
             Some(state)
         }
@@ -148,8 +137,8 @@ impl Drop for SharedStateReader {
     fn drop(&mut self) {
         #[cfg(windows)]
         {
-            use windows::Win32::System::Memory::UnmapViewOfFile;
             use windows::Win32::Foundation::CloseHandle;
+            use windows::Win32::System::Memory::UnmapViewOfFile;
 
             unsafe {
                 let view = windows::Win32::System::Memory::MEMORY_MAPPED_VIEW_ADDRESS {

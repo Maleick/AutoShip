@@ -75,10 +75,7 @@ impl PostLoginSequencer {
                     tracing::info!(client_id = self.client_id, "Buffs done, no camp — ready");
                     self.phase = PostLoginPhase::Ready;
                 } else {
-                    tracing::info!(
-                        client_id = self.client_id,
-                        "Buffs done, navigating to camp"
-                    );
+                    tracing::info!(client_id = self.client_id, "Buffs done, navigating to camp");
                     self.phase = PostLoginPhase::NavigatingToCamp;
                 }
             }

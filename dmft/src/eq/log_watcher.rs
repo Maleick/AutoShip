@@ -14,9 +14,7 @@ pub struct LogWatcher {
 impl LogWatcher {
     pub fn new(path: PathBuf) -> Self {
         // Start at the end of the file so we only capture new events
-        let last_position = std::fs::metadata(&path)
-            .map(|m| m.len())
-            .unwrap_or(0);
+        let last_position = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
 
         Self {
             path,
@@ -101,10 +99,17 @@ mod tests {
 
         // Append new lines
         {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
             writeln!(f, "[Thu Mar 28 12:01:00 2026] You have slain a moss snake!").unwrap();
             writeln!(f, "[Thu Mar 28 12:01:01 2026] You gain experience!").unwrap();
-            writeln!(f, "[Thu Mar 28 12:01:02 2026] You receive 3 platinum from the corpse.").unwrap();
+            writeln!(
+                f,
+                "[Thu Mar 28 12:01:02 2026] You receive 3 platinum from the corpse."
+            )
+            .unwrap();
         }
 
         let events = watcher.poll();

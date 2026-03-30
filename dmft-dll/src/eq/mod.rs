@@ -36,10 +36,7 @@ fn get_eq_base() -> Option<u64> {
 /// Resolve the local player pointer (PlayerClient*).
 /// Returns `None` if not logged in.
 fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
-    let addr = dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_LOCAL_PLAYER,
-        eq_base,
-    )?;
+    let addr = dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)?;
 
     #[cfg(windows)]
     {
@@ -71,10 +68,8 @@ pub fn cast_spell(gem_id: u8, spell_id: i32) {
             tracing::error!("Local player not available");
             return;
         };
-        let Some(addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::CAST_SPELL,
-            eq_base,
-        ) else {
+        let Some(addr) = dmft_common::offsets::rebase(dmft_common::offsets::CAST_SPELL, eq_base)
+        else {
             tracing::error!("Failed to rebase CAST_SPELL");
             return;
         };
@@ -90,7 +85,12 @@ pub fn cast_spell(gem_id: u8, spell_id: i32) {
         );
         let func: CastSpellFn = unsafe { std::mem::transmute(addr) };
 
-        tracing::info!(gem_id, spell_id, addr = format!("{:#x}", addr), "Calling CastSpell");
+        tracing::info!(
+            gem_id,
+            spell_id,
+            addr = format!("{:#x}", addr),
+            "Calling CastSpell"
+        );
         unsafe { func(player, gem_id, spell_id, std::ptr::null_mut(), 0) };
     }
 
@@ -117,10 +117,8 @@ pub fn do_attack(attack_type: u8) {
             tracing::error!("Local player not available");
             return;
         };
-        let Some(addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::DO_ATTACK,
-            eq_base,
-        ) else {
+        let Some(addr) = dmft_common::offsets::rebase(dmft_common::offsets::DO_ATTACK, eq_base)
+        else {
             tracing::error!("Failed to rebase DO_ATTACK");
             return;
         };
@@ -133,7 +131,11 @@ pub fn do_attack(attack_type: u8) {
         );
         let func: DoAttackFn = unsafe { std::mem::transmute(addr) };
 
-        tracing::info!(attack_type, addr = format!("{:#x}", addr), "Calling DoAttack");
+        tracing::info!(
+            attack_type,
+            addr = format!("{:#x}", addr),
+            "Calling DoAttack"
+        );
         unsafe { func(player, attack_type, std::ptr::null_mut()) };
     }
 
@@ -161,10 +163,8 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
             tracing::error!("Local player not available");
             return;
         };
-        let Some(addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::USE_SKILL,
-            eq_base,
-        ) else {
+        let Some(addr) = dmft_common::offsets::rebase(dmft_common::offsets::USE_SKILL, eq_base)
+        else {
             tracing::error!("Failed to rebase USE_SKILL");
             return;
         };
@@ -207,10 +207,9 @@ pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
             tracing::error!("Local player not available");
             return;
         };
-        let Some(addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::DO_COMBAT_ABILITY,
-            eq_base,
-        ) else {
+        let Some(addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::DO_COMBAT_ABILITY, eq_base)
+        else {
             tracing::error!("Failed to rebase DO_COMBAT_ABILITY");
             return;
         };
@@ -223,7 +222,12 @@ pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
         );
         let func: DoCombatAbilityFn = unsafe { std::mem::transmute(addr) };
 
-        tracing::info!(spell_id, allow_lower_rank, addr = format!("{:#x}", addr), "Calling DoCombatAbility");
+        tracing::info!(
+            spell_id,
+            allow_lower_rank,
+            addr = format!("{:#x}", addr),
+            "Calling DoCombatAbility"
+        );
         unsafe { func(player, spell_id, allow_lower_rank) };
     }
 
@@ -247,10 +251,8 @@ pub fn execute_cmd(cmd_id: u32, active: i32) {
             tracing::error!("EQ base not set");
             return;
         };
-        let Some(addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::EXECUTE_CMD,
-            eq_base,
-        ) else {
+        let Some(addr) = dmft_common::offsets::rebase(dmft_common::offsets::EXECUTE_CMD, eq_base)
+        else {
             tracing::error!("Failed to rebase EXECUTE_CMD");
             return;
         };
@@ -266,7 +268,12 @@ pub fn execute_cmd(cmd_id: u32, active: i32) {
         );
         let func: ExecuteCmdFn = unsafe { std::mem::transmute(addr) };
 
-        tracing::info!(cmd_id, active, addr = format!("{:#x}", addr), "Calling ExecuteCmd");
+        tracing::info!(
+            cmd_id,
+            active,
+            addr = format!("{:#x}", addr),
+            "Calling ExecuteCmd"
+        );
         unsafe { func(std::ptr::null_mut(), cmd_id, active, std::ptr::null_mut()) };
     }
 
@@ -305,10 +312,9 @@ pub fn slash_command(command: &str) {
         };
 
         // Get the CEverQuest instance pointer.
-        let Some(eq_inst_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::PINST_CEVERQUEST,
-            eq_base,
-        ) else {
+        let Some(eq_inst_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::PINST_CEVERQUEST, eq_base)
+        else {
             tracing::error!("Failed to rebase PINST_CEVERQUEST");
             return;
         };
@@ -333,10 +339,9 @@ pub fn slash_command(command: &str) {
             *mut c_void, // pChar (PlayerClient*)
             *const i8,   // szCmd
         );
-        let Some(interpret_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::INTERPRET_CMD,
-            eq_base,
-        ) else {
+        let Some(interpret_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::INTERPRET_CMD, eq_base)
+        else {
             tracing::error!("Failed to rebase INTERPRET_CMD");
             return;
         };

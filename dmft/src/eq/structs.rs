@@ -314,49 +314,85 @@ mod tests {
 
     #[test]
     fn buff_slot_empty_detection() {
-        let empty = BuffSlot { spell_id: 0xFFFF, duration_ticks: 0, caster_level: 0 };
+        let empty = BuffSlot {
+            spell_id: 0xFFFF,
+            duration_ticks: 0,
+            caster_level: 0,
+        };
         assert!(empty.is_empty());
-        let zero_id = BuffSlot { spell_id: 0, duration_ticks: 100, caster_level: 60 };
+        let zero_id = BuffSlot {
+            spell_id: 0,
+            duration_ticks: 100,
+            caster_level: 60,
+        };
         assert!(zero_id.is_empty());
-        let active = BuffSlot { spell_id: 1, duration_ticks: 100, caster_level: 60 };
+        let active = BuffSlot {
+            spell_id: 1,
+            duration_ticks: 100,
+            caster_level: 60,
+        };
         assert!(!active.is_empty());
     }
 
     #[test]
     fn buff_slot_duration_str_permanent() {
-        let perm = BuffSlot { spell_id: 1, duration_ticks: 0, caster_level: 60 };
+        let perm = BuffSlot {
+            spell_id: 1,
+            duration_ticks: 0,
+            caster_level: 60,
+        };
         assert_eq!(perm.duration_str(), "PERM");
     }
 
     #[test]
     fn buff_slot_duration_str_minutes() {
         // 10 ticks * 6 sec/tick = 60 seconds = 1:00
-        let b = BuffSlot { spell_id: 1, duration_ticks: 10, caster_level: 60 };
+        let b = BuffSlot {
+            spell_id: 1,
+            duration_ticks: 10,
+            caster_level: 60,
+        };
         assert_eq!(b.duration_str(), "1:00");
     }
 
     #[test]
     fn buff_slot_duration_str_seconds_only() {
         // 3 ticks * 6 = 18 seconds
-        let b = BuffSlot { spell_id: 1, duration_ticks: 3, caster_level: 60 };
+        let b = BuffSlot {
+            spell_id: 1,
+            duration_ticks: 3,
+            caster_level: 60,
+        };
         assert_eq!(b.duration_str(), "18s");
     }
 
     #[test]
     fn cast_state_is_casting_true() {
-        let cs = CastState { spell_slot: 0, spell_eta: 12345, gem_etas: [0; 15] };
+        let cs = CastState {
+            spell_slot: 0,
+            spell_eta: 12345,
+            gem_etas: [0; 15],
+        };
         assert!(cs.is_casting());
     }
 
     #[test]
     fn cast_state_not_casting_when_slot_ff() {
-        let cs = CastState { spell_slot: 0xFF, spell_eta: 0, gem_etas: [0; 15] };
+        let cs = CastState {
+            spell_slot: 0xFF,
+            spell_eta: 0,
+            gem_etas: [0; 15],
+        };
         assert!(!cs.is_casting());
     }
 
     #[test]
     fn cast_state_not_casting_when_eta_zero() {
-        let cs = CastState { spell_slot: 0, spell_eta: 0, gem_etas: [0; 15] };
+        let cs = CastState {
+            spell_slot: 0,
+            spell_eta: 0,
+            gem_etas: [0; 15],
+        };
         assert!(!cs.is_casting());
     }
 }

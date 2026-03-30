@@ -347,29 +347,65 @@ mod tests {
     fn make_test_graph() -> ZoneGraph {
         // A -> B -> C, A -> D -> C (two paths from A to C)
         let mut g = ZoneGraph::default();
-        g.zones.insert(1, ZoneNode {
-            zone_id: 1, name: "ZoneA".into(), min_level: 1, max_level: 10,
-            connections: vec![
-                ZoneConnection { dest_zone_id: 2, transfer_type: 0, disabled: false },
-                ZoneConnection { dest_zone_id: 4, transfer_type: 1, disabled: false },
-            ],
-        });
-        g.zones.insert(2, ZoneNode {
-            zone_id: 2, name: "ZoneB".into(), min_level: 10, max_level: 20,
-            connections: vec![
-                ZoneConnection { dest_zone_id: 3, transfer_type: 0, disabled: false },
-            ],
-        });
-        g.zones.insert(3, ZoneNode {
-            zone_id: 3, name: "ZoneC".into(), min_level: 20, max_level: 30,
-            connections: vec![],
-        });
-        g.zones.insert(4, ZoneNode {
-            zone_id: 4, name: "ZoneD".into(), min_level: 15, max_level: 25,
-            connections: vec![
-                ZoneConnection { dest_zone_id: 3, transfer_type: 0, disabled: false },
-            ],
-        });
+        g.zones.insert(
+            1,
+            ZoneNode {
+                zone_id: 1,
+                name: "ZoneA".into(),
+                min_level: 1,
+                max_level: 10,
+                connections: vec![
+                    ZoneConnection {
+                        dest_zone_id: 2,
+                        transfer_type: 0,
+                        disabled: false,
+                    },
+                    ZoneConnection {
+                        dest_zone_id: 4,
+                        transfer_type: 1,
+                        disabled: false,
+                    },
+                ],
+            },
+        );
+        g.zones.insert(
+            2,
+            ZoneNode {
+                zone_id: 2,
+                name: "ZoneB".into(),
+                min_level: 10,
+                max_level: 20,
+                connections: vec![ZoneConnection {
+                    dest_zone_id: 3,
+                    transfer_type: 0,
+                    disabled: false,
+                }],
+            },
+        );
+        g.zones.insert(
+            3,
+            ZoneNode {
+                zone_id: 3,
+                name: "ZoneC".into(),
+                min_level: 20,
+                max_level: 30,
+                connections: vec![],
+            },
+        );
+        g.zones.insert(
+            4,
+            ZoneNode {
+                zone_id: 4,
+                name: "ZoneD".into(),
+                min_level: 15,
+                max_level: 25,
+                connections: vec![ZoneConnection {
+                    dest_zone_id: 3,
+                    transfer_type: 0,
+                    disabled: false,
+                }],
+            },
+        );
         g
     }
 
@@ -413,16 +449,30 @@ mod tests {
     #[test]
     fn zone_graph_find_path_skips_disabled() {
         let mut g = ZoneGraph::default();
-        g.zones.insert(1, ZoneNode {
-            zone_id: 1, name: "A".into(), min_level: 0, max_level: 0,
-            connections: vec![
-                ZoneConnection { dest_zone_id: 2, transfer_type: 0, disabled: true },
-            ],
-        });
-        g.zones.insert(2, ZoneNode {
-            zone_id: 2, name: "B".into(), min_level: 0, max_level: 0,
-            connections: vec![],
-        });
+        g.zones.insert(
+            1,
+            ZoneNode {
+                zone_id: 1,
+                name: "A".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![ZoneConnection {
+                    dest_zone_id: 2,
+                    transfer_type: 0,
+                    disabled: true,
+                }],
+            },
+        );
+        g.zones.insert(
+            2,
+            ZoneNode {
+                zone_id: 2,
+                name: "B".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![],
+            },
+        );
         assert!(g.find_path(1, 2).is_none());
     }
 

@@ -11,8 +11,8 @@ use super::gcd::GcdTracker;
 use super::holyshit::HolyShitEvaluator;
 use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
-use super::skill_cooldowns::{default_cooldown, SkillCooldownTracker};
-use super::strategy::{build_strategy, ClassStrategy, CombatContext, GroupMemberState};
+use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
+use super::strategy::{ClassStrategy, CombatContext, GroupMemberState, build_strategy};
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
@@ -24,8 +24,13 @@ const PET_CLASSES: &[u8] = &[3, 10, 11, 13]; // SK, Shaman, Necro, Mage
 /// The public-facing status uses `CombatStatus` from dmft-common.
 enum CombatState {
     Idle,
-    Engaging { target_id: u32 },
-    Casting { spell_slot: u8, ticks_remaining: u32 },
+    Engaging {
+        target_id: u32,
+    },
+    Casting {
+        spell_slot: u8,
+        ticks_remaining: u32,
+    },
     OnGcd,
     Recovering,
 }
@@ -88,12 +93,7 @@ impl Combatant {
     }
 
     /// Advance the combat FSM by one game tick.
-    pub fn tick(
-        &mut self,
-        player: &SpawnData,
-        target: Option<&SpawnData>,
-        nearby: &[SpawnData],
-    ) {
+    pub fn tick(&mut self, player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]) {
         self.tick_count += 1;
         self.gcd.tick();
         self.skill_cooldowns.tick();
@@ -160,7 +160,10 @@ impl Combatant {
 
         // Decrement cast ticks before the state check so the transition fires
         // on the correct tick (when ticks_remaining reaches 0).
-        if let CombatState::Casting { ticks_remaining, .. } = &mut self.state {
+        if let CombatState::Casting {
+            ticks_remaining, ..
+        } = &mut self.state
+        {
             *ticks_remaining = ticks_remaining.saturating_sub(1);
         }
 
@@ -180,14 +183,15 @@ impl Combatant {
                 // for mez, etc. This only influences spell targeting — it does NOT
                 // override the assist target for auto-attack.
                 if let Some(spell_target) = self.strategy.select_target(&ctx)
-                    && target.is_none_or(|t| t.spawn_id != spell_target) {
-                        tracing::debug!(
-                            spell_target,
-                            assist = ?self.assist_target,
-                            "Strategy selected different spell target"
-                        );
-                        crate::eq::slash_command(&format!("/target id {spell_target}"));
-                    }
+                    && target.is_none_or(|t| t.spawn_id != spell_target)
+                {
+                    tracing::debug!(
+                        spell_target,
+                        assist = ?self.assist_target,
+                        "Strategy selected different spell target"
+                    );
+                    crate::eq::slash_command(&format!("/target id {spell_target}"));
+                }
 
                 // Range check — don't cast if target is too far away
                 if let Some(t) = target {
@@ -229,11 +233,15 @@ impl Combatant {
                 // If strategy returns None, stay in Engaging and try next tick.
             }
 
-            CombatState::Casting { ticks_remaining, .. } => {
+            CombatState::Casting {
+                ticks_remaining, ..
+            } => {
                 // Healer heal-cancel: if lowest HP member recovered above 85%,
                 // duck to interrupt the heal and save mana.
                 if matches!(self.config.role, CombatRole::Healer) && *ticks_remaining > 5 {
-                    let all_healthy = ctx.group_members.iter()
+                    let all_healthy = ctx
+                        .group_members
+                        .iter()
                         .filter(|m| m.hp_pct > 0.0)
                         .all(|m| m.hp_pct >= 85.0);
                     if all_healthy && !ctx.group_members.is_empty() {
@@ -288,7 +296,6 @@ impl Combatant {
                 }
             }
         }
-
     }
 
     /// Return the public-facing combat status for IPC reporting.
@@ -398,11 +405,11 @@ impl Combatant {
 
         // Build the skill list for this class
         let skills: &[u32] = match class_id {
-            1 => &[73, 30],             // Warrior: taunt, kick
-            3 => &[73, 10, 30],         // Shadow Knight: taunt, bash, kick
-            7 => &[26, 38, 52, 23],     // Monk: flying kick, round kick, tiger claw, eagle strike
-            9 => &[8],                  // Rogue: backstab
-            _ => &[30],                 // Generic: kick
+            1 => &[73, 30],         // Warrior: taunt, kick
+            3 => &[73, 10, 30],     // Shadow Knight: taunt, bash, kick
+            7 => &[26, 38, 52, 23], // Monk: flying kick, round kick, tiger claw, eagle strike
+            9 => &[8],              // Rogue: backstab
+            _ => &[30],             // Generic: kick
         };
 
         // Fire each skill independently when its cooldown is ready

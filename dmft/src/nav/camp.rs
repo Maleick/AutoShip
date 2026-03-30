@@ -45,7 +45,11 @@ impl CampManager {
     /// Get the camp spot for a specific client.
     pub fn get_spot(&self, client_id: ClientId) -> Option<&CampSpot> {
         let role = self.assignments.get(&client_id)?;
-        self.active_camp.as_ref()?.spots.iter().find(|s| s.role == *role)
+        self.active_camp
+            .as_ref()?
+            .spots
+            .iter()
+            .find(|s| s.role == *role)
     }
 
     /// Clear the active camp.
@@ -62,11 +66,7 @@ impl CampManager {
 
 /// Helper: create a basic group camp with standard EQ positioning.
 /// Tank in front, healer behind, DPS spread in a semicircle.
-pub fn create_standard_camp(
-    center: Waypoint,
-    pull_heading: f32,
-    num_dps: usize,
-) -> CampDefinition {
+pub fn create_standard_camp(center: Waypoint, pull_heading: f32, num_dps: usize) -> CampDefinition {
     let mut spots = Vec::new();
 
     // Tank: 20 units in the pull direction.

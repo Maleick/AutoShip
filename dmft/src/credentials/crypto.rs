@@ -3,7 +3,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
 };
 use anyhow::Result;
-use argon2::{Argon2, Algorithm, Version, Params};
+use argon2::{Algorithm, Argon2, Params, Version};
 use rand::RngCore;
 use zeroize::Zeroizing;
 
@@ -96,7 +96,10 @@ mod tests {
         let salt_b = generate_salt();
         let key_a = derive_key("same_password", &salt_a).unwrap();
         let key_b = derive_key("same_password", &salt_b).unwrap();
-        assert_ne!(*key_a, *key_b, "different salts should produce different keys");
+        assert_ne!(
+            *key_a, *key_b,
+            "different salts should produce different keys"
+        );
     }
 
     #[test]
@@ -104,7 +107,10 @@ mod tests {
         let salt = generate_salt();
         let key_a = derive_key("password_one", &salt).unwrap();
         let key_b = derive_key("password_two", &salt).unwrap();
-        assert_ne!(*key_a, *key_b, "different passwords should produce different keys");
+        assert_ne!(
+            *key_a, *key_b,
+            "different passwords should produce different keys"
+        );
     }
 
     #[test]

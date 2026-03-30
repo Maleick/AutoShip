@@ -161,8 +161,14 @@ impl FormationManager {
         match role {
             Role::Tank | Role::Puller => (0.0, 0.0), // tank doesn't follow itself
             Role::Dps => (self.config.melee_follow_dist, self.config.melee_leash_dist),
-            Role::Healer => (self.config.healer_follow_dist, self.config.healer_leash_dist),
-            Role::CC | Role::Bard => (self.config.caster_follow_dist, self.config.caster_leash_dist),
+            Role::Healer => (
+                self.config.healer_follow_dist,
+                self.config.healer_leash_dist,
+            ),
+            Role::CC | Role::Bard => (
+                self.config.caster_follow_dist,
+                self.config.caster_leash_dist,
+            ),
         }
     }
 }
@@ -215,9 +221,10 @@ impl HuntLoop {
 
         // Non-tank members check formation every FORMATION_CHECK_INTERVAL ticks
         if self.tick.is_multiple_of(FORMATION_CHECK_INTERVAL)
-            && let Some(snap) = snapshot {
-                commands.extend(self.formation_tick(snap));
-            }
+            && let Some(snap) = snapshot
+        {
+            commands.extend(self.formation_tick(snap));
+        }
 
         match self.state.clone() {
             HuntState::Roaming => {
@@ -317,9 +324,10 @@ impl HuntLoop {
         // Emergency heal
         if let Some(snap) = snapshot
             && snap.tank_hp_pct < 20.0
-                && let Some(healer) = self.find_by_role(&Role::Healer) {
-                    commands.push((healer.pid, "/cast 1".into()));
-                }
+            && let Some(healer) = self.find_by_role(&Role::Healer)
+        {
+            commands.push((healer.pid, "/cast 1".into()));
+        }
 
         // Melee /face periodically with personality stagger
         let fight_elapsed = self.tick - started_tick;
@@ -328,7 +336,8 @@ impl HuntLoop {
                 if !matches!(member.role, Role::Tank | Role::Dps) {
                     continue;
                 }
-                let personal_elapsed = fight_elapsed.saturating_sub(member.personality.phase_offset);
+                let personal_elapsed =
+                    fight_elapsed.saturating_sub(member.personality.phase_offset);
                 let face_interval = member.personality.adjust_delay(5);
                 if personal_elapsed > 0 && personal_elapsed % face_interval == 0 {
                     commands.push((member.pid, "/face".into()));
@@ -374,9 +383,10 @@ impl HuntLoop {
 
         // Healer targets tank for heals
         if let Some(healer) = self.find_by_role(&Role::Healer)
-            && !tank_name.is_empty() {
-                commands.push((healer.pid, format!("/target {tank_name}")));
-            }
+            && !tank_name.is_empty()
+        {
+            commands.push((healer.pid, format!("/target {tank_name}")));
+        }
 
         // CC assists for caster DPS (cast instead of melee)
         for cc in self.find_all_by_role(&Role::CC) {
@@ -504,18 +514,24 @@ mod tests {
         assert!(matches!(hunt.state, HuntState::Fighting { .. }));
 
         // Tank should get /attack
-        assert!(cmds.iter().any(|(pid, cmd)| *pid == 100 && cmd == "/attack"));
+        assert!(
+            cmds.iter()
+                .any(|(pid, cmd)| *pid == 100 && cmd == "/attack")
+        );
 
         // DPS should assist tank
         let dps_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 103).collect();
-        assert!(dps_cmds
-            .iter()
-            .any(|(_, cmd)| cmd.contains("/assist Warrior01")));
+        assert!(
+            dps_cmds
+                .iter()
+                .any(|(_, cmd)| cmd.contains("/assist Warrior01"))
+        );
 
         // Healer should target tank
-        assert!(cmds
-            .iter()
-            .any(|(pid, cmd)| *pid == 101 && cmd.contains("/target Warrior01")));
+        assert!(
+            cmds.iter()
+                .any(|(pid, cmd)| *pid == 101 && cmd.contains("/target Warrior01"))
+        );
     }
 
     #[test]
@@ -597,9 +613,10 @@ mod tests {
         snap.tank_hp_pct = 15.0; // Below 20% threshold
         let cmds = hunt.tick(Some(&snap));
 
-        assert!(cmds
-            .iter()
-            .any(|(pid, cmd)| *pid == 101 && cmd == "/cast 1"));
+        assert!(
+            cmds.iter()
+                .any(|(pid, cmd)| *pid == 101 && cmd == "/cast 1")
+        );
     }
 
     // -- Formation manager tests --
@@ -664,9 +681,7 @@ mod tests {
     fn test_formation_check_runs_on_interval() {
         let mut hunt = HuntLoop::new(test_config(), test_members());
         // Put in fighting state so we can test formation ticks
-        hunt.state = HuntState::Fighting {
-            started_tick: 0,
-        };
+        hunt.state = HuntState::Fighting { started_tick: 0 };
 
         let mut snap = test_snapshot(false);
         // Put healer far away so formation commands would fire
@@ -676,7 +691,10 @@ mod tests {
         let mut got_formation_cmd = false;
         for _ in 0..FORMATION_CHECK_INTERVAL + 1 {
             let cmds = hunt.tick(Some(&snap));
-            if cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd.contains("/face")) {
+            if cmds
+                .iter()
+                .any(|(pid, cmd)| *pid == 101 && cmd.contains("/face"))
+            {
                 got_formation_cmd = true;
                 break;
             }

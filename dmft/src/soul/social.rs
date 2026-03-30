@@ -149,7 +149,8 @@ impl SocialGraph {
     pub fn should_defer(&self, from: &str, to: &str) -> bool {
         match self.get(from, to) {
             Some(rel) => {
-                rel.tags.contains(&SocialTag::Mentor) || (rel.trust > 0.8 && rel.faction_score > 500)
+                rel.tags.contains(&SocialTag::Mentor)
+                    || (rel.trust > 0.8 && rel.faction_score > 500)
             }
             None => false,
         }
@@ -437,22 +438,13 @@ mod tests {
 
     #[test]
     fn infer_communication_style_from_tags() {
-        assert_eq!(
-            infer_communication_style(&[SocialTag::Sibling]),
-            "casual"
-        );
-        assert_eq!(
-            infer_communication_style(&[SocialTag::Rival]),
-            "terse"
-        );
+        assert_eq!(infer_communication_style(&[SocialTag::Sibling]), "casual");
+        assert_eq!(infer_communication_style(&[SocialTag::Rival]), "terse");
         assert_eq!(
             infer_communication_style(&[SocialTag::Mentor]),
             "respectful"
         );
-        assert_eq!(
-            infer_communication_style(&[SocialTag::Friend]),
-            "banter"
-        );
+        assert_eq!(infer_communication_style(&[SocialTag::Friend]), "banter");
         assert_eq!(infer_communication_style(&[]), "neutral");
     }
 

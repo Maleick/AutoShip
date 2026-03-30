@@ -170,7 +170,9 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             let eqmain_base = crate::login::eqmain::find_eqmain();
             if eqmain_base != 0 {
                 let wrote = crate::login::widgets::type_credentials_to_window(
-                    eqmain_base, account_name, &password,
+                    eqmain_base,
+                    account_name,
+                    &password,
                 );
                 tracing::info!(wrote, "Inline: type_credentials_to_window");
                 if wrote {
@@ -232,7 +234,9 @@ fn login_chain_phase2() {
                 attempt,
                 "Phase 2: Found PLAY EVERQUEST!"
             );
-            unsafe { crate::eq::widgets::click_button_via_vtable(play_btn); }
+            unsafe {
+                crate::eq::widgets::click_button_via_vtable(play_btn);
+            }
             // Also press Enter via PostMessage as backup
             std::thread::sleep(std::time::Duration::from_millis(200));
             crate::login::widgets::simulate_enter_key(eqmain_base);
@@ -256,14 +260,21 @@ fn login_chain_phase2() {
         std::thread::sleep(std::time::Duration::from_millis(500));
         let eqmain_base = crate::login::eqmain::find_eqmain();
         if eqmain_base == 0 {
-            tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
+            tracing::info!(
+                attempt,
+                "Phase 3: eqmain.dll unloaded — at character select"
+            );
             return;
         }
         // Check for "already logged in" dialog and click Yes
-        if attempt % 2 == 0 && eqmain_base != 0 {
-            if crate::login::widgets::click_yesno_yes(eqmain_base as usize) {
-                tracing::info!(attempt, "Phase 3: Clicked Yes on 'already logged in' dialog");
-            }
+        if attempt % 2 == 0
+            && eqmain_base != 0
+            && crate::login::widgets::click_yesno_yes(eqmain_base as usize)
+        {
+            tracing::info!(
+                attempt,
+                "Phase 3: Clicked Yes on 'already logged in' dialog"
+            );
         }
         // Press Enter every 3s to dismiss other dialogs
         if attempt % 6 == 3 && eqmain_base != 0 {
@@ -300,9 +311,10 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                 }
 
                 if let Some(pending) = PENDING_COMMANDS.get()
-                    && let Ok(mut queue) = pending.lock() {
-                        queue.push(cmd);
-                    }
+                    && let Ok(mut queue) = pending.lock()
+                {
+                    queue.push(cmd);
+                }
             }
             Err(e) => {
                 if IPC_RUNNING.load(Ordering::SeqCst) {
@@ -310,7 +322,11 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     if consecutive_errors <= 3 {
                         tracing::warn!(client_id, error = %e, "Command listener error, resetting");
                     } else if consecutive_errors == 4 {
-                        tracing::warn!(client_id, consecutive_errors, "Suppressing repeated pipe errors");
+                        tracing::warn!(
+                            client_id,
+                            consecutive_errors,
+                            "Suppressing repeated pipe errors"
+                        );
                     }
                     listener.reset_auth();
                     let backoff_ms = std::cmp::min(10 * (1u64 << consecutive_errors.min(9)), 5000);

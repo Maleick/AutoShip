@@ -33,7 +33,11 @@ impl WaypointRecorder {
 
     /// Stop recording and return the recorded path.
     pub fn stop(&mut self) -> Vec<Waypoint> {
-        let elapsed = self.start_time.take().map(|s| s.elapsed()).unwrap_or_default();
+        let elapsed = self
+            .start_time
+            .take()
+            .map(|s| s.elapsed())
+            .unwrap_or_default();
         tracing::info!(
             waypoints = self.waypoints.len(),
             elapsed_secs = elapsed.as_secs(),
@@ -86,7 +90,12 @@ pub fn simplify_path(waypoints: &[Waypoint], epsilon: f32) -> Vec<Waypoint> {
     let mut max_dist = 0.0f32;
     let mut max_index = 0;
 
-    for (i, wp) in waypoints.iter().enumerate().skip(1).take(waypoints.len() - 2) {
+    for (i, wp) in waypoints
+        .iter()
+        .enumerate()
+        .skip(1)
+        .take(waypoints.len() - 2)
+    {
         let dist = point_line_distance_2d(wp, first, last);
         if dist > max_dist {
             max_dist = dist;
@@ -209,7 +218,11 @@ mod tests {
             .map(|i| Waypoint::new(i as f32 * 10.0, 0.0, 0.0))
             .collect();
         let simplified = simplify_path(&points, 1.0);
-        assert_eq!(simplified.len(), 2, "collinear points should reduce to 2 endpoints");
+        assert_eq!(
+            simplified.len(),
+            2,
+            "collinear points should reduce to 2 endpoints"
+        );
         assert!((simplified[0].x - 0.0).abs() < f32::EPSILON);
         assert!((simplified[1].x - 90.0).abs() < f32::EPSILON);
     }
@@ -256,8 +269,6 @@ mod tests {
         );
         // First and last should be preserved
         assert!((simplified[0].x - points[0].x).abs() < f32::EPSILON);
-        assert!(
-            (simplified.last().unwrap().x - points.last().unwrap().x).abs() < f32::EPSILON
-        );
+        assert!((simplified.last().unwrap().x - points.last().unwrap().x).abs() < f32::EPSILON);
     }
 }

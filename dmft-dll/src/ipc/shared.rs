@@ -3,8 +3,8 @@
 //! Creates a named shared memory region and publishes game state snapshots for
 //! the orchestrator to read. On non-Windows platforms this is a compile-only stub.
 
-use dmft_common::types::{ClientId, GameState};
 use anyhow::Result;
+use dmft_common::types::{ClientId, GameState};
 
 /// Writes game state to shared memory for the orchestrator to read.
 pub struct SharedStateWriter {
@@ -35,27 +35,25 @@ impl SharedStateWriter {
         #[cfg(windows)]
         {
             use dmft_common::ipc::SHARED_MEMORY_SIZE;
-            use windows::core::PCWSTR;
-            use windows::Win32::System::Memory::{
-                CreateFileMappingW, MapViewOfFile, FILE_MAP_WRITE, PAGE_READWRITE,
-            };
             use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
+            use windows::Win32::System::Memory::{
+                CreateFileMappingW, FILE_MAP_WRITE, MapViewOfFile, PAGE_READWRITE,
+            };
+            use windows::core::PCWSTR;
 
             let name: Vec<u16> = format!("dmft_state_{}\0", client_id)
                 .encode_utf16()
                 .collect();
 
             // Restrict shared memory access to the current user via an explicit DACL.
-            // Falls back to the default DACL (with a warning) if DACL setup fails.
+            // Fail closed: if DACL creation fails, abort rather than using default (open) security.
             // sa_setup must be kept alive until after CreateFileMappingW returns.
-            let sa_setup = create_current_user_security_attributes();
-            if sa_setup.is_none() {
-                tracing::warn!(
-                    client_id,
-                    "DACL creation failed — shared memory will use the default DACL"
-                );
-            }
-            let sa_ptr = sa_setup.as_ref().map(SecuritySetup::sa_ptr);
+            let sa_setup = create_current_user_security_attributes()
+                .ok_or_else(|| anyhow::anyhow!(
+                    "DACL creation failed for client {} — refusing to create shared memory with default security",
+                    client_id
+                ))?;
+            let sa_ptr = Some(sa_setup.sa_ptr());
 
             let handle = unsafe {
                 CreateFileMappingW(
@@ -171,10 +169,9 @@ fn create_current_user_security_attributes() -> Option<SecuritySetup> {
     use std::mem;
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::Security::{
-        ACE_REVISION, ACL, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
-        TOKEN_QUERY, TOKEN_USER,
-        AddAccessAllowedAce, GetLengthSid, GetTokenInformation, InitializeAcl,
-        InitializeSecurityDescriptor, SetSecurityDescriptorDacl, TokenUser,
+        ACE_REVISION, ACL, AddAccessAllowedAce, GetLengthSid, GetTokenInformation, InitializeAcl,
+        InitializeSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
+        SECURITY_DESCRIPTOR, SetSecurityDescriptorDacl, TOKEN_QUERY, TOKEN_USER, TokenUser,
     };
     use windows::Win32::System::Memory::FILE_MAP_ALL_ACCESS;
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
@@ -212,27 +209,30 @@ fn create_current_user_security_attributes() -> Option<SecuritySetup> {
             acl_buf.as_mut_ptr() as *mut ACL,
             acl_size as u32,
             ACE_REVISION(2), // ACL_REVISION = 2
-        ).ok()?;
+        )
+        .ok()?;
         AddAccessAllowedAce(
             acl_buf.as_mut_ptr() as *mut ACL,
             ACE_REVISION(2), // ACL_REVISION = 2
             FILE_MAP_ALL_ACCESS.0,
             sid,
-        ).ok()?;
+        )
+        .ok()?;
 
         // 4. Build an absolute SECURITY_DESCRIPTOR pointing to the ACL.
         let mut sd_buf = vec![0u8; mem::size_of::<SECURITY_DESCRIPTOR>()];
         let sd_ptr = PSECURITY_DESCRIPTOR(sd_buf.as_mut_ptr() as *mut _);
         InitializeSecurityDescriptor(
-            sd_ptr,
-            1, // SECURITY_DESCRIPTOR_REVISION
-        ).ok()?;
+            sd_ptr, 1, // SECURITY_DESCRIPTOR_REVISION
+        )
+        .ok()?;
         SetSecurityDescriptorDacl(
             sd_ptr,
-            true,  // bDaclPresent — our explicit DACL applies
+            true, // bDaclPresent — our explicit DACL applies
             Some(acl_buf.as_mut_ptr() as *mut ACL),
             false, // bDaclDefaulted — DACL was set explicitly, not inherited
-        ).ok()?;
+        )
+        .ok()?;
 
         // 5. Assemble SECURITY_ATTRIBUTES.
         //    lpSecurityDescriptor points into sd_buf's heap allocation, which is
@@ -243,7 +243,11 @@ fn create_current_user_security_attributes() -> Option<SecuritySetup> {
             bInheritHandle: false.into(),
         };
 
-        Some(SecuritySetup { _sd_buf: sd_buf, _acl_buf: acl_buf, sa })
+        Some(SecuritySetup {
+            _sd_buf: sd_buf,
+            _acl_buf: acl_buf,
+            sa,
+        })
     }
 }
 
@@ -251,8 +255,8 @@ impl Drop for SharedStateWriter {
     fn drop(&mut self) {
         #[cfg(windows)]
         {
-            use windows::Win32::System::Memory::UnmapViewOfFile;
             use windows::Win32::Foundation::CloseHandle;
+            use windows::Win32::System::Memory::UnmapViewOfFile;
 
             unsafe {
                 let view = windows::Win32::System::Memory::MEMORY_MAPPED_VIEW_ADDRESS {

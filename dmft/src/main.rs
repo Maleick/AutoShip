@@ -28,9 +28,9 @@ mod tui;
 
 use anyhow::{Context, Result};
 use std::path::Path;
-use tracing::{info, warn, error};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{error, info, warn};
 use tracing_appender::rolling;
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Default path for the soul memory database.
 const SOUL_DB_PATH: &str = "data/soul_memory.db";
@@ -47,8 +47,7 @@ fn main() -> Result<()> {
         .unwrap_or_else(|_| rolling::daily(&log_dir, "dmft.log"));
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     fmt()
         .with_env_filter(filter)
@@ -74,102 +73,119 @@ fn main() -> Result<()> {
     let zones_mode = args.iter().position(|a| a == "--zones");
 
     if let Some(pos) = zones_mode {
-        let pid: u32 = args.get(pos + 1)
+        let pid: u32 = args
+            .get(pos + 1)
             .context("--zones requires: --zones <PID>")?
             .parse()
             .context("PID must be a number")?;
-        return run_zones_mode(pid);
+        run_zones_mode(pid)
     } else if statusall_mode {
-        return run_statusall_mode();
+        run_statusall_mode()
     } else if let Some(pos) = status_mode {
-        let pid: u32 = args.get(pos + 1)
+        let pid: u32 = args
+            .get(pos + 1)
             .context("--status requires: --status <PID>")?
             .parse()
             .context("PID must be a number")?;
-        return run_status_mode(pid);
+        run_status_mode(pid)
     } else if calibrate_mode {
         run_calibrate_mode()
     } else if let Some(pos) = login_pid_mode {
         // --login-pid <PID> <account> <password> [server] [character]
-        let pid: u32 = args.get(pos + 1)
-            .context("--login-pid requires: --login-pid <PID> <account> <password> [server] [character]")?
+        let pid: u32 = args
+            .get(pos + 1)
+            .context(
+                "--login-pid requires: --login-pid <PID> <account> <password> [server] [character]",
+            )?
             .parse()
             .context("PID must be a number")?;
-        let account = args.get(pos + 2)
+        let account = args
+            .get(pos + 2)
             .context("--login-pid requires: --login-pid <PID> <account> <password>")?
             .clone();
-        let password = args.get(pos + 3)
+        let password = args
+            .get(pos + 3)
             .context("--login-pid requires: --login-pid <PID> <account> <password>")?
             .clone();
-        let server = args.get(pos + 4)
+        let server = args
+            .get(pos + 4)
             .cloned()
             .unwrap_or_else(|| "Firiona Vie".to_string());
-        let character = args.get(pos + 5)
-            .cloned()
-            .unwrap_or_default();
+        let character = args.get(pos + 5).cloned().unwrap_or_default();
         run_login_pid_mode(pid, &account, &password, &server, &character)
     } else if let Some(pos) = login_mode {
         // --login <account> <password> [server] [character]
-        let account = args.get(pos + 1)
+        let account = args
+            .get(pos + 1)
             .context("--login requires: --login <account> <password> [server] [character]")?
             .clone();
-        let password = args.get(pos + 2)
+        let password = args
+            .get(pos + 2)
             .context("--login requires: --login <account> <password>")?
             .clone();
-        let server = args.get(pos + 3)
+        let server = args
+            .get(pos + 3)
             .cloned()
             .unwrap_or_else(|| "Firiona Vie".to_string());
-        let character = args.get(pos + 4)
-            .cloned()
-            .unwrap_or_default();
+        let character = args.get(pos + 4).cloned().unwrap_or_default();
         run_login_mode(&account, &password, &server, &character)
     } else if let Some(pos) = cmd_mode {
         // --cmd <pid> "<slash command>"
-        let pid: u32 = args.get(pos + 1)
+        let pid: u32 = args
+            .get(pos + 1)
             .context("--cmd requires: --cmd <pid> <command>")?
             .parse()
             .context("PID must be a number")?;
-        let command = args.get(pos + 2)
+        let command = args
+            .get(pos + 2)
             .context("--cmd requires: --cmd <pid> <command>")?
             .clone();
         run_cmd_mode(pid, &command)
     } else if let Some(pos) = nav_mode {
         // --nav <PID> <x> <y> <z> — navigate to coordinates
-        let pid: u32 = args.get(pos + 1)
+        let pid: u32 = args
+            .get(pos + 1)
             .context("--nav requires: --nav <PID> <x> <y> <z>")?
             .parse()
             .context("PID must be a number")?;
-        let x: f32 = args.get(pos + 2)
+        let x: f32 = args
+            .get(pos + 2)
             .context("--nav requires: --nav <PID> <x> <y> <z>")?
             .parse()
             .context("x must be a number")?;
-        let y: f32 = args.get(pos + 3)
+        let y: f32 = args
+            .get(pos + 3)
             .context("--nav requires: --nav <PID> <x> <y> <z>")?
             .parse()
             .context("y must be a number")?;
-        let z: f32 = args.get(pos + 4)
+        let z: f32 = args
+            .get(pos + 4)
             .context("--nav requires: --nav <PID> <x> <y> <z>")?
             .parse()
             .context("z must be a number")?;
         run_nav_mode(pid, x, y, z)
     } else if let Some(pos) = navall_mode {
         // --navall <x> <y> <z> — navigate all EQ clients to coordinates
-        let x: f32 = args.get(pos + 1)
+        let x: f32 = args
+            .get(pos + 1)
             .context("--navall requires: --navall <x> <y> <z>")?
             .parse()
             .context("x must be a number")?;
-        let y: f32 = args.get(pos + 2)
+        let y: f32 = args
+            .get(pos + 2)
             .context("--navall requires: --navall <x> <y> <z>")?
             .parse()
             .context("y must be a number")?;
-        let z: f32 = args.get(pos + 3)
+        let z: f32 = args
+            .get(pos + 3)
             .context("--navall requires: --navall <x> <y> <z>")?
             .parse()
             .context("z must be a number")?;
         run_navall_mode(x, y, z)
     } else if let Some(pos) = inject_pid_mode {
         // --inject-pid <PID> — inject into a specific process only
-        let pid: u32 = args.get(pos + 1)
+        let pid: u32 = args
+            .get(pos + 1)
             .context("--inject-pid requires: --inject-pid <PID>")?
             .parse()
             .context("PID must be a number")?;
@@ -178,15 +194,40 @@ fn main() -> Result<()> {
         run_inject_mode()
     } else if let Some(pos) = navpath_mode {
         // --navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>
-        let zone = args.get(pos + 1)
+        let zone = args
+            .get(pos + 1)
             .context("--navpath requires: --navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>")?
             .clone();
-        let x1: f32 = args.get(pos + 2).context("missing x1")?.parse().context("x1 not a number")?;
-        let y1: f32 = args.get(pos + 3).context("missing y1")?.parse().context("y1 not a number")?;
-        let z1: f32 = args.get(pos + 4).context("missing z1")?.parse().context("z1 not a number")?;
-        let x2: f32 = args.get(pos + 5).context("missing x2")?.parse().context("x2 not a number")?;
-        let y2: f32 = args.get(pos + 6).context("missing y2")?.parse().context("y2 not a number")?;
-        let z2: f32 = args.get(pos + 7).context("missing z2")?.parse().context("z2 not a number")?;
+        let x1: f32 = args
+            .get(pos + 2)
+            .context("missing x1")?
+            .parse()
+            .context("x1 not a number")?;
+        let y1: f32 = args
+            .get(pos + 3)
+            .context("missing y1")?
+            .parse()
+            .context("y1 not a number")?;
+        let z1: f32 = args
+            .get(pos + 4)
+            .context("missing z1")?
+            .parse()
+            .context("z1 not a number")?;
+        let x2: f32 = args
+            .get(pos + 5)
+            .context("missing x2")?
+            .parse()
+            .context("x2 not a number")?;
+        let y2: f32 = args
+            .get(pos + 6)
+            .context("missing y2")?
+            .parse()
+            .context("y2 not a number")?;
+        let z2: f32 = args
+            .get(pos + 7)
+            .context("missing z2")?
+            .parse()
+            .context("z2 not a number")?;
         run_navpath_mode(&zone, (x1, y1, z1), (x2, y2, z2))
     } else if dump_mode {
         run_dump_mode()
@@ -219,7 +260,11 @@ fn run_tui_mode() -> Result<()> {
         }
         let count = app.clients.len();
         if count > 0 {
-            app.status_message = format!("{} EQ client{} attached", count, if count == 1 { "" } else { "s" });
+            app.status_message = format!(
+                "{} EQ client{} attached",
+                count,
+                if count == 1 { "" } else { "s" }
+            );
             app.sync_from_selected_client();
         } else {
             app.status_message = String::from("No EQ process found — scanning...");
@@ -260,7 +305,10 @@ fn run_inject_mode() -> Result<()> {
     let pids = process::memory::find_processes_by_name(&config.process_name)?;
 
     if pids.is_empty() {
-        println!("No {} processes found. Launch EQ first.", config.process_name);
+        println!(
+            "No {} processes found. Launch EQ first.",
+            config.process_name
+        );
         return Ok(());
     }
 
@@ -273,12 +321,9 @@ fn run_inject_mode() -> Result<()> {
         project_dir.join("target/debug/dmft_dll.dll"),
     ];
 
-    let source_dll = dll_candidates
-        .iter()
-        .find(|p| p.exists())
-        .ok_or_else(|| anyhow::anyhow!(
-            "Cannot find dmft_dll.dll. Run `cargo build --release` first."
-        ))?;
+    let source_dll = dll_candidates.iter().find(|p| p.exists()).ok_or_else(|| {
+        anyhow::anyhow!("Cannot find dmft_dll.dll. Run `cargo build --release` first.")
+    })?;
 
     println!("Using DLL: {}", source_dll.display());
 
@@ -344,7 +389,8 @@ fn run_zones_mode(pid: u32) -> Result<()> {
     pipe.send_raw_token(&token)
         .context("Failed to send session token")?;
 
-    let response = pipe.send(&Command::QueryZoneGraph)
+    let response = pipe
+        .send(&Command::QueryZoneGraph)
         .context("Failed to query zone graph")?;
 
     match response {
@@ -392,7 +438,10 @@ fn run_zones_mode(pid: u32) -> Result<()> {
                         .map(|(_, n, _, _, _)| n.as_str())
                         .unwrap_or("???");
                     let disabled_str = if *disabled { " [DISABLED]" } else { "" };
-                    println!("      -> [{:>3}] {} via {}{}", dest_id, dest_name, tt_name, disabled_str);
+                    println!(
+                        "      -> [{:>3}] {} via {}{}",
+                        dest_id, dest_name, tt_name, disabled_str
+                    );
                 }
             }
         }
@@ -408,8 +457,10 @@ fn run_zones_mode(pid: u32) -> Result<()> {
 }
 
 fn run_status_mode(pid: u32) -> Result<()> {
-    let reader = ipc::shared::SharedStateReader::new(pid)
-        .context(format!("Cannot open shared memory for PID {} — is the DLL injected?", pid))?;
+    let reader = ipc::shared::SharedStateReader::new(pid).context(format!(
+        "Cannot open shared memory for PID {} — is the DLL injected?",
+        pid
+    ))?;
 
     match reader.read() {
         Some(state) => {
@@ -418,8 +469,16 @@ fn run_status_mode(pid: u32) -> Result<()> {
             }
             if let Some(ref player) = state.local_player {
                 println!("Player: {} (ID: {})", player.name, player.spawn_id);
-                println!("Position: x={:.1}, y={:.1}, z={:.1} heading={:.1}", player.x, player.y, player.z, player.heading);
-                println!("HP: {}/{} ({:.0}%)", player.hp_current, player.hp_max, player.hp_pct());
+                println!(
+                    "Position: x={:.1}, y={:.1}, z={:.1} heading={:.1}",
+                    player.x, player.y, player.z, player.heading
+                );
+                println!(
+                    "HP: {}/{} ({:.0}%)",
+                    player.hp_current,
+                    player.hp_max,
+                    player.hp_pct()
+                );
                 println!("Mana: {}/{}", player.mana_current, player.mana_max);
                 println!("Level: {} Class: {}", player.level, player.class_id);
                 println!("Nav: {:?}", state.nav_status);
@@ -427,7 +486,12 @@ fn run_status_mode(pid: u32) -> Result<()> {
                 println!("No player data (not in world?)");
             }
             if let Some(ref target) = state.target {
-                println!("Target: {} (ID: {}) HP: {:.0}%", target.name, target.spawn_id, target.hp_pct());
+                println!(
+                    "Target: {} (ID: {}) HP: {:.0}%",
+                    target.name,
+                    target.spawn_id,
+                    target.hp_pct()
+                );
             }
             println!("Nearby spawns: {}", state.nearby_spawns.len());
         }
@@ -458,14 +522,15 @@ fn run_statusall_mode() -> Result<()> {
             Ok(reader) => match reader.read() {
                 Some(state) => {
                     if let Some(ref player) = state.local_player {
-                        let pos = format!(
-                            "({:.0}, {:.0}, {:.0})",
-                            player.x, player.y, player.z
-                        );
+                        let pos = format!("({:.0}, {:.0}, {:.0})", player.x, player.y, player.z);
                         let hp = format!("{:.0}%", player.hp_pct());
                         let nav = match &state.nav_status {
                             dmft_common::nav::NavStatus::Idle => "Idle".to_string(),
-                            dmft_common::nav::NavStatus::Moving { waypoint_index, waypoint_count, .. } => {
+                            dmft_common::nav::NavStatus::Moving {
+                                waypoint_index,
+                                waypoint_count,
+                                ..
+                            } => {
                                 format!("{}/{}", waypoint_index, waypoint_count)
                             }
                             dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
@@ -513,54 +578,6 @@ fn run_statusall_mode() -> Result<()> {
     Ok(())
 }
 
-/// Read zone short name and long name from EQ process memory via ReadProcessMemory.
-fn read_zone_info(pid: u32) -> Option<(String, String)> {
-    #[cfg(windows)]
-    {
-        use dmft_common::offsets::zone_info;
-
-        let proc = match process::memory::ProcessHandle::open(pid) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("Zone: cannot open process {}: {}", pid, e);
-                return None;
-            }
-        };
-
-        // Get actual module base (ASLR may relocate eqgame.exe).
-        let eq_base = proc.module_base().unwrap_or(0x140000000);
-        let zone_addr = match dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base) {
-            Some(a) => a,
-            None => {
-                eprintln!("Zone: rebase failed for INST_EQ_ZONE_INFO");
-                return None;
-            }
-        };
-
-        let short_name = match proc.read_string(zone_addr + zone_info::SHORT_NAME, 128) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Zone: read_string failed at {:#x}: {}", zone_addr, e);
-                return None;
-            }
-        };
-        let long_name = proc.read_string(zone_addr + zone_info::LONG_NAME, 128).unwrap_or_default();
-
-        if short_name.is_empty() {
-            eprintln!("Zone: short_name is empty at {:#x}", zone_addr);
-            return None;
-        }
-
-        Some((short_name, long_name))
-    }
-
-    #[cfg(not(windows))]
-    {
-        let _ = pid;
-        None
-    }
-}
-
 /// Navigate mode (--nav <PID> <x> <y> <z>) — send NavigateTo to a specific client.
 fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
@@ -572,32 +589,43 @@ fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     let waypoints = match ipc::shared::SharedStateReader::new(pid) {
         Ok(reader) => match reader.read() {
             Some(state) if !state.zone_short_name.is_empty() => {
-                let player = state.local_player.as_ref()
+                let player = state
+                    .local_player
+                    .as_ref()
                     .context("No player data in shared memory — character not in world?")?;
                 let from = (player.x, player.y, player.z);
                 let zone = &state.zone_short_name;
-                println!("Player at ({:.1}, {:.1}, {:.1}) in zone '{}'", from.0, from.1, from.2, zone);
+                println!(
+                    "Player at ({:.1}, {:.1}, {:.1}) in zone '{}'",
+                    from.0, from.1, from.2, zone
+                );
 
                 // 2. Try navmesh pathfinding
                 match nav::mesh::load_zone(zone) {
-                    Ok(loaded) => {
-                        match nav::mesh::find_path(&loaded, from, (x, y, z)) {
-                            Ok(path) => {
-                                println!("Navmesh path found ({} waypoints):", path.len());
-                                for (i, (wx, wy, wz)) in path.iter().enumerate() {
-                                    println!("  [{i:>3}] ({wx:.2}, {wy:.2}, {wz:.2})");
-                                }
-                                path.iter().map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz)).collect()
+                    Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
+                        Ok(path) => {
+                            println!("Navmesh path found ({} waypoints):", path.len());
+                            for (i, (wx, wy, wz)) in path.iter().enumerate() {
+                                println!("  [{i:>3}] ({wx:.2}, {wy:.2}, {wz:.2})");
                             }
-                            Err(e) => {
-                                warn!("Navmesh path query failed: {:#} — falling back to straight line", e);
-                                println!("Navmesh path failed: {} — using straight line", e);
-                                vec![Waypoint::new(x, y, z)]
-                            }
+                            path.iter()
+                                .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
+                                .collect()
                         }
-                    }
+                        Err(e) => {
+                            warn!(
+                                "Navmesh path query failed: {:#} — falling back to straight line",
+                                e
+                            );
+                            println!("Navmesh path failed: {} — using straight line", e);
+                            vec![Waypoint::new(x, y, z)]
+                        }
+                    },
                     Err(e) => {
-                        warn!("Cannot load navmesh for zone '{}': {:#} — falling back to straight line", zone, e);
+                        warn!(
+                            "Cannot load navmesh for zone '{}': {:#} — falling back to straight line",
+                            zone, e
+                        );
                         println!("No navmesh for '{}': {} — using straight line", zone, e);
                         vec![Waypoint::new(x, y, z)]
                     }
@@ -609,14 +637,19 @@ fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
             }
         },
         Err(e) => {
-            println!("Cannot read shared memory for PID {}: {} — using straight line", pid, e);
+            println!(
+                "Cannot read shared memory for PID {}: {} — using straight line",
+                pid, e
+            );
             vec![Waypoint::new(x, y, z)]
         }
     };
 
     // 3. Send waypoints via IPC pipe
-    let pipe = ipc::pipe::CommandPipe::connect(pid)
-        .context(format!("Cannot connect to PID {} — is the DLL injected?", pid))?;
+    let pipe = ipc::pipe::CommandPipe::connect(pid).context(format!(
+        "Cannot connect to PID {} — is the DLL injected?",
+        pid
+    ))?;
 
     let token = generate_session_token(pid);
     pipe.send_raw_token(&token)
@@ -643,7 +676,13 @@ fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
         return Ok(());
     }
 
-    println!("Found {} EQ client(s). Navigating all to ({}, {}, {})...", pids.len(), x, y, z);
+    println!(
+        "Found {} EQ client(s). Navigating all to ({}, {}, {})...",
+        pids.len(),
+        x,
+        y,
+        z
+    );
 
     let mut success_count = 0u32;
     let mut fail_count = 0u32;
@@ -665,20 +704,31 @@ fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
                     let zone = &state.zone_short_name;
 
                     match nav::mesh::load_zone(zone) {
-                        Ok(loaded) => {
-                            match nav::mesh::find_path(&loaded, from, (x, y, z)) {
-                                Ok(path) => {
-                                    println!("  PID {} ({}): navmesh path, {} waypoints", pid, player.name, path.len());
-                                    path.iter().map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz)).collect()
-                                }
-                                Err(e) => {
-                                    println!("  PID {} ({}): navmesh failed ({}), straight line", pid, player.name, e);
-                                    vec![Waypoint::new(x, y, z)]
-                                }
+                        Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
+                            Ok(path) => {
+                                println!(
+                                    "  PID {} ({}): navmesh path, {} waypoints",
+                                    pid,
+                                    player.name,
+                                    path.len()
+                                );
+                                path.iter()
+                                    .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
+                                    .collect()
                             }
-                        }
+                            Err(e) => {
+                                println!(
+                                    "  PID {} ({}): navmesh failed ({}), straight line",
+                                    pid, player.name, e
+                                );
+                                vec![Waypoint::new(x, y, z)]
+                            }
+                        },
                         Err(e) => {
-                            println!("  PID {} ({}): no mesh for '{}' ({}), straight line", pid, player.name, zone, e);
+                            println!(
+                                "  PID {} ({}): no mesh for '{}' ({}), straight line",
+                                pid, player.name, zone, e
+                            );
                             vec![Waypoint::new(x, y, z)]
                         }
                     }
@@ -733,12 +783,9 @@ fn run_inject_pid_mode(pid: u32) -> Result<()> {
         project_dir.join("target/debug/dmft_dll.dll"),
     ];
 
-    let source_dll = dll_candidates
-        .iter()
-        .find(|p| p.exists())
-        .ok_or_else(|| anyhow::anyhow!(
-            "Cannot find dmft_dll.dll. Run `cargo build --release` first."
-        ))?;
+    let source_dll = dll_candidates.iter().find(|p| p.exists()).ok_or_else(|| {
+        anyhow::anyhow!("Cannot find dmft_dll.dll. Run `cargo build --release` first.")
+    })?;
 
     // Write session token file BEFORE injection so DLL can read it during init.
     write_session_token_file(pid)?;
@@ -752,13 +799,24 @@ fn run_inject_pid_mode(pid: u32) -> Result<()> {
 }
 
 /// Login mode targeting a specific PID (--login-pid <PID> <account> <password> [server] [character]).
-fn run_login_pid_mode(pid: u32, account: &str, password: &str, server: &str, character: &str) -> Result<()> {
+fn run_login_pid_mode(
+    pid: u32,
+    account: &str,
+    password: &str,
+    server: &str,
+    character: &str,
+) -> Result<()> {
     use dmft_common::ipc::Command;
 
-    println!("Sending StartLogin to PID {} (account: {}, server: {})...", pid, account, server);
+    println!(
+        "Sending StartLogin to PID {} (account: {}, server: {})...",
+        pid, account, server
+    );
 
-    let pipe = ipc::pipe::CommandPipe::connect(pid)
-        .context(format!("Cannot connect to PID {} — is the DLL injected?", pid))?;
+    let pipe = ipc::pipe::CommandPipe::connect(pid).context(format!(
+        "Cannot connect to PID {} — is the DLL injected?",
+        pid
+    ))?;
 
     let token = generate_session_token(pid);
     pipe.send_raw_token(&token)
@@ -790,7 +848,10 @@ fn run_login_mode(account: &str, password: &str, server: &str, character: &str) 
     }
 
     for &pid in &pids {
-        println!("Sending StartLogin to PID {} (account: {}, server: {})...", pid, account, server);
+        println!(
+            "Sending StartLogin to PID {} (account: {}, server: {})...",
+            pid, account, server
+        );
 
         match ipc::pipe::CommandPipe::connect(pid) {
             Ok(pipe) => {
@@ -882,8 +943,7 @@ fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
         command: command.to_string(),
     };
 
-    pipe.send_async(&cmd)
-        .context("Failed to send command")?;
+    pipe.send_async(&cmd).context("Failed to send command")?;
 
     println!("Command sent successfully.");
 
@@ -902,11 +962,11 @@ fn write_session_token_file(pid: u32) -> Result<()> {
     let mut token = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut token);
 
-    std::fs::write(&token_path, &token)?;
+    std::fs::write(&token_path, token)?;
     // Also cache in memory for later --login-pid calls in the same process
     // (not needed — separate process invocations. Write a second copy for login to read.)
     let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
-    std::fs::write(&login_token_path, &token)?;
+    std::fs::write(&login_token_path, token)?;
 
     info!(pid, "Session token written to {}", token_path.display());
     Ok(())
@@ -919,12 +979,12 @@ fn generate_session_token(pid: u32) -> [u8; 32] {
         .join("dmft")
         .join(format!("login_token_{}.bin", pid));
 
-    if let Ok(data) = std::fs::read(&token_path) {
-        if data.len() == 32 {
-            let mut token = [0u8; 32];
-            token.copy_from_slice(&data);
-            return token;
-        }
+    if let Ok(data) = std::fs::read(&token_path)
+        && data.len() == 32
+    {
+        let mut token = [0u8; 32];
+        token.copy_from_slice(&data);
+        return token;
     }
 
     // Fallback: PID-derived (won't match DLL's random token — will fail auth)
@@ -947,9 +1007,15 @@ fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> R
     let proto = nav::mesh::parse_navmesh(&data)?;
     if let Some(ts) = &proto.tile_set {
         if let Some(p) = &ts.mesh_params {
-            let o = p.origin.as_ref().map(|v| (v.x, v.y, v.z)).unwrap_or_default();
-            println!("  Mesh params: origin=({:.1}, {:.1}, {:.1}) tile={}x{} tiles={} polys={}",
-                o.0, o.1, o.2, p.tile_width, p.tile_height, p.max_tiles, p.max_polys);
+            let o = p
+                .origin
+                .as_ref()
+                .map(|v| (v.x, v.y, v.z))
+                .unwrap_or_default();
+            println!(
+                "  Mesh params: origin=({:.1}, {:.1}, {:.1}) tile={}x{} tiles={} polys={}",
+                o.0, o.1, o.2, p.tile_width, p.tile_height, p.max_tiles, p.max_polys
+            );
         }
         println!("  Tiles: {}", ts.tiles.len());
     }
@@ -966,7 +1032,10 @@ fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> R
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.
 fn run_dump_mode() -> Result<()> {
-    info!("Frostreaver v{} — EQ Memory Reader (dump mode)", env!("CARGO_PKG_VERSION"));
+    info!(
+        "Frostreaver v{} — EQ Memory Reader (dump mode)",
+        env!("CARGO_PKG_VERSION")
+    );
 
     let config = load_config()?;
 
@@ -984,8 +1053,7 @@ fn run_dump_mode() -> Result<()> {
 
     let pid = pids[0];
     info!(pid, "Attaching to first EQ process...");
-    let proc = process::memory::ProcessHandle::open(pid)
-        .context("Failed to open EQ process")?;
+    let proc = process::memory::ProcessHandle::open(pid).context("Failed to open EQ process")?;
 
     let eq_base = get_module_base(&proc)?;
     info!(base = format!("{:#x}", eq_base), "eqgame.exe base address");
@@ -1036,18 +1104,32 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
     for (i, chunk) in bytes.chunks(16).enumerate() {
         let offset = i * 16;
         let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
-        let ascii: String = chunk.iter().map(|&b| {
-            if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' }
-        }).collect();
+        let ascii: String = chunk
+            .iter()
+            .map(|&b| {
+                if b.is_ascii_graphic() || b == b' ' {
+                    b as char
+                } else {
+                    '.'
+                }
+            })
+            .collect();
         let hex_str = if hex.len() < 16 {
             let mut s = hex.join(" ");
-            for _ in hex.len()..16 { s.push_str("   "); }
+            for _ in hex.len()..16 {
+                s.push_str("   ");
+            }
             s
         } else {
             hex.join(" ")
         };
-        lines.push(format!("  {:#010x} (+{:#04x}): {}  |{}|",
-            base_addr + offset, offset, hex_str, ascii));
+        lines.push(format!(
+            "  {:#010x} (+{:#04x}): {}  |{}|",
+            base_addr + offset,
+            offset,
+            hex_str,
+            ascii
+        ));
     }
     lines.join("\n")
 }
@@ -1065,13 +1147,22 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     // Step 1: Read SpawnManager pointer
     let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base) {
         Some(addr) => addr,
-        None => { error!("Failed to rebase pinstSpawnManager"); return; }
+        None => {
+            error!("Failed to rebase pinstSpawnManager");
+            return;
+        }
     };
     let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
         Ok(addr) => addr,
-        Err(e) => { error!("Failed to read pinstSpawnManager: {:#}", e); return; }
+        Err(e) => {
+            error!("Failed to read pinstSpawnManager: {:#}", e);
+            return;
+        }
     };
-    info!("pinstSpawnManager ptr at {:#x} -> SpawnManager at {:#x}", mgr_ptr_addr, mgr_addr);
+    info!(
+        "pinstSpawnManager ptr at {:#x} -> SpawnManager at {:#x}",
+        mgr_ptr_addr, mgr_addr
+    );
 
     if mgr_addr == 0 {
         error!("SpawnManager is null -- not in a zone?");
@@ -1089,9 +1180,16 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                 if off + 8 <= bytes.len() {
                     let val = u64::from_le_bytes(bytes[off..off + 8].try_into().unwrap());
                     let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
-                    info!("  SpawnManager+{:#04x}: {:#018x} {}",
-                        off, val,
-                        if looks_like_ptr { "<-- looks like a pointer" } else { "" });
+                    info!(
+                        "  SpawnManager+{:#04x}: {:#018x} {}",
+                        off,
+                        val,
+                        if looks_like_ptr {
+                            "<-- looks like a pointer"
+                        } else {
+                            ""
+                        }
+                    );
                 }
             }
         }
@@ -1100,8 +1198,11 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
 
     // Step 3: Read the TList at SpawnManager+PLAYER_LIST (0x10)
     let list_addr = mgr_addr + spawn_manager::PLAYER_LIST;
-    info!("--- TList at SpawnManager+{:#x} = {:#x} ---",
-        spawn_manager::PLAYER_LIST, list_addr);
+    info!(
+        "--- TList at SpawnManager+{:#x} = {:#x} ---",
+        spawn_manager::PLAYER_LIST,
+        list_addr
+    );
     match proc.read_bytes(list_addr, 16) {
         Ok(bytes) => {
             info!("\n{}", format_hex_dump(list_addr, &bytes));
@@ -1118,7 +1219,10 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     // Step 4: Read the first node pointer from TList
     let first_node = match proc.read_ptr(list_addr) {
         Ok(addr) => addr,
-        Err(e) => { error!("Failed to read first node: {:#}", e); return; }
+        Err(e) => {
+            error!("Failed to read first node: {:#}", e);
+            return;
+        }
     };
 
     if first_node == 0 {
@@ -1142,11 +1246,19 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                 if off + 8 <= bytes.len() {
                     let val = u64::from_le_bytes(bytes[off..off + 8].try_into().unwrap());
                     let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
-                    info!("  +{:#04x} ({}): {:#018x} {}",
-                        off, label, val,
-                        if looks_like_ptr { "<-- valid pointer" }
-                        else if val == 0 { "<-- NULL" }
-                        else { "" });
+                    info!(
+                        "  +{:#04x} ({}): {:#018x} {}",
+                        off,
+                        label,
+                        val,
+                        if looks_like_ptr {
+                            "<-- valid pointer"
+                        } else if val == 0 {
+                            "<-- NULL"
+                        } else {
+                            ""
+                        }
+                    );
                 }
             }
         }
@@ -1154,11 +1266,12 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     }
 
     // Step 6: Verify this IS a PlayerClient by reading the name at known offset
-    match proc.read_string(
-        first_node + dmft_common::offsets::player_base::NAME, 64,
-    ) {
-        Ok(name) => info!("  Name at +{:#x}: \"{}\"",
-            dmft_common::offsets::player_base::NAME, name),
+    match proc.read_string(first_node + dmft_common::offsets::player_base::NAME, 64) {
+        Ok(name) => info!(
+            "  Name at +{:#x}: \"{}\"",
+            dmft_common::offsets::player_base::NAME,
+            name
+        ),
         Err(e) => error!("  Failed to read name: {:#}", e),
     }
 
@@ -1174,12 +1287,14 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                         .read_string(val + dmft_common::offsets::player_base::NAME, 64)
                         .ok()
                         .filter(|n| {
-                            !n.is_empty()
-                                && n.chars().all(|c| c.is_ascii_graphic() || c == ' ')
+                            !n.is_empty() && n.chars().all(|c| c.is_ascii_graphic() || c == ' ')
                         })
                         .map(|n| format!(" -> name=\"{}\"", n))
                         .unwrap_or_default();
-                    info!("  +{:#04x}: {:#018x} <-- VALID PTR{}", offset, val, name_check);
+                    info!(
+                        "  +{:#04x}: {:#018x} <-- VALID PTR{}",
+                        offset, val, name_check
+                    );
                 } else if val == 0 {
                     info!("  +{:#04x}: NULL", offset);
                 } else {
@@ -1192,45 +1307,45 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
 
     // Step 8: If +0x08 is null, try alternative list heads in SpawnManager
     if let Ok(next_at_08) = proc.read_ptr(first_node + 0x08)
-        && next_at_08 == 0 {
-            info!("--- NEXT at +0x08 is NULL. Checking alternative SpawnManager members ---");
+        && next_at_08 == 0
+    {
+        info!("--- NEXT at +0x08 is NULL. Checking alternative SpawnManager members ---");
 
-            // Try SpawnManager+0x00 (might be a different list or vtable)
-            match proc.read_ptr(mgr_addr) {
-                Ok(alt) if alt != 0 && alt != first_node => {
-                    info!("SpawnManager+0x00 -> {:#x} (DIFFERENT from PLAYER_LIST head!)", alt);
-                    match proc.read_bytes(alt, 32) {
-                        Ok(bytes) => info!("\n{}", format_hex_dump(alt, &bytes)),
-                        Err(e) => error!("  Failed to read: {:#}", e),
-                    }
-                    match proc.read_string(
-                        alt + dmft_common::offsets::player_base::NAME, 64,
-                    ) {
-                        Ok(name) => info!("  Name: \"{}\"", name),
-                        Err(_) => info!("  (name unreadable)"),
-                    }
+        // Try SpawnManager+0x00 (might be a different list or vtable)
+        match proc.read_ptr(mgr_addr) {
+            Ok(alt) if alt != 0 && alt != first_node => {
+                info!(
+                    "SpawnManager+0x00 -> {:#x} (DIFFERENT from PLAYER_LIST head!)",
+                    alt
+                );
+                match proc.read_bytes(alt, 32) {
+                    Ok(bytes) => info!("\n{}", format_hex_dump(alt, &bytes)),
+                    Err(e) => error!("  Failed to read: {:#}", e),
                 }
-                Ok(alt) if alt == first_node => {
-                    info!("SpawnManager+0x00 -> same node as PLAYER_LIST ({:#x})", alt);
+                match proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) {
+                    Ok(name) => info!("  Name: \"{}\"", name),
+                    Err(_) => info!("  (name unreadable)"),
                 }
-                Ok(_) => info!("SpawnManager+0x00 -> NULL"),
-                Err(e) => error!("Failed to read SpawnManager+0x00: {:#}", e),
             }
-
-            // Try SpawnManager+0x08
-            match proc.read_ptr(mgr_addr + 0x08) {
-                Ok(alt) if alt != 0 => {
-                    info!("SpawnManager+0x08 -> {:#x}", alt);
-                    match proc.read_string(
-                        alt + dmft_common::offsets::player_base::NAME, 64,
-                    ) {
-                        Ok(name) => info!("  Name: \"{}\"", name),
-                        Err(_) => info!("  (name unreadable)"),
-                    }
-                }
-                _ => info!("SpawnManager+0x08 -> NULL or unreadable"),
+            Ok(alt) if alt == first_node => {
+                info!("SpawnManager+0x00 -> same node as PLAYER_LIST ({:#x})", alt);
             }
+            Ok(_) => info!("SpawnManager+0x00 -> NULL"),
+            Err(e) => error!("Failed to read SpawnManager+0x00: {:#}", e),
         }
+
+        // Try SpawnManager+0x08
+        match proc.read_ptr(mgr_addr + 0x08) {
+            Ok(alt) if alt != 0 => {
+                info!("SpawnManager+0x08 -> {:#x}", alt);
+                match proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) {
+                    Ok(name) => info!("  Name: \"{}\"", name),
+                    Err(_) => info!("  (name unreadable)"),
+                }
+            }
+            _ => info!("SpawnManager+0x08 -> NULL or unreadable"),
+        }
+    }
 
     info!("===================================================");
 }
@@ -1255,7 +1370,13 @@ fn dump_hex_region(
                 let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
                 let ascii: String = chunk
                     .iter()
-                    .map(|&b| if (0x20..=0x7e).contains(&b) { b as char } else { '.' })
+                    .map(|&b| {
+                        if (0x20..=0x7e).contains(&b) {
+                            b as char
+                        } else {
+                            '.'
+                        }
+                    })
                     .collect();
 
                 let hex_str = if hex.len() < 16 {
@@ -1271,7 +1392,10 @@ fn dump_hex_region(
                 info!("  {:#06x}: {}  |{}|", offset, hex_str, ascii);
             }
         }
-        Err(e) => error!("  Failed to read {} bytes at base+{:#x}: {:#}", count, start_offset, e),
+        Err(e) => error!(
+            "  Failed to read {} bytes at base+{:#x}: {:#}",
+            count, start_offset, e
+        ),
     }
 }
 
@@ -1287,13 +1411,15 @@ fn load_config() -> Result<config::AppConfig> {
 /// Get the base address of eqgame.exe module in the target process.
 #[cfg(windows)]
 pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
-    use windows::Win32::System::ProcessStatus::{EnumProcessModulesEx, LIST_MODULES_ALL};
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
     use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::ProcessStatus::{EnumProcessModulesEx, LIST_MODULES_ALL};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    };
 
-    let handle = unsafe {
-        OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, proc.pid)
-    }.context("Failed to open process for module enumeration")?;
+    let handle =
+        unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, proc.pid) }
+            .context("Failed to open process for module enumeration")?;
 
     let mut modules = [windows::Win32::Foundation::HMODULE::default(); 1024];
     let mut bytes_needed: u32 = 0;
@@ -1306,7 +1432,8 @@ pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
             &mut bytes_needed,
             LIST_MODULES_ALL,
         )
-    }.context("EnumProcessModulesEx failed")?;
+    }
+    .context("EnumProcessModulesEx failed")?;
 
     let base = modules[0].0 as u64;
     let _ = unsafe { CloseHandle(handle) };

@@ -89,8 +89,7 @@ impl ClassConfig {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
         }
-        let toml_str =
-            toml::to_string_pretty(self).context("Failed to serialize class config")?;
+        let toml_str = toml::to_string_pretty(self).context("Failed to serialize class config")?;
         std::fs::write(path, toml_str)
             .with_context(|| format!("Failed to write class config: {}", path.display()))?;
         Ok(())
@@ -199,7 +198,10 @@ mod tests {
             .join("config/classes");
 
         if !classes_dir.exists() {
-            panic!("config/classes directory not found at {}", classes_dir.display());
+            panic!(
+                "config/classes directory not found at {}",
+                classes_dir.display()
+            );
         }
 
         let mut count = 0;
@@ -209,11 +211,18 @@ mod tests {
             if path.extension().is_some_and(|e| e == "toml") {
                 let config = ClassConfig::load(&path)
                     .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
-                assert!(!config.class_name.is_empty(), "class_name empty in {}", path.display());
+                assert!(
+                    !config.class_name.is_empty(),
+                    "class_name empty in {}",
+                    path.display()
+                );
                 assert!(!config.role.is_empty(), "role empty in {}", path.display());
                 count += 1;
             }
         }
-        assert!(count >= 7, "Expected at least 7 class configs, found {count}");
+        assert!(
+            count >= 7,
+            "Expected at least 7 class configs, found {count}"
+        );
     }
 }

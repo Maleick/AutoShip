@@ -7,7 +7,11 @@ use crate::orchestrator::Orchestrator;
 
 /// Poll for keyboard events and update app state.
 /// Returns true if an event was handled.
-pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orchestrator) -> Result<bool> {
+pub fn handle_events(
+    app: &mut App,
+    timeout: Duration,
+    orchestrator: &mut Orchestrator,
+) -> Result<bool> {
     if !event::poll(timeout)? {
         return Ok(false);
     }
@@ -117,13 +121,34 @@ pub fn handle_events(app: &mut App, timeout: Duration, orchestrator: &mut Orches
                 return Ok(true);
             }
             // Group focus: Shift+1-6 = focus group, Shift+0 or G+Esc = aggregate
-            (KeyCode::Char('!'), _) => { app.set_active_group(Some(0)); return Ok(true); }
-            (KeyCode::Char('@'), _) => { app.set_active_group(Some(1)); return Ok(true); }
-            (KeyCode::Char('#'), _) => { app.set_active_group(Some(2)); return Ok(true); }
-            (KeyCode::Char('$'), _) => { app.set_active_group(Some(3)); return Ok(true); }
-            (KeyCode::Char('%'), _) => { app.set_active_group(Some(4)); return Ok(true); }
-            (KeyCode::Char('^'), _) => { app.set_active_group(Some(5)); return Ok(true); }
-            (KeyCode::Char(')'), _) => { app.set_active_group(None); return Ok(true); }
+            (KeyCode::Char('!'), _) => {
+                app.set_active_group(Some(0));
+                return Ok(true);
+            }
+            (KeyCode::Char('@'), _) => {
+                app.set_active_group(Some(1));
+                return Ok(true);
+            }
+            (KeyCode::Char('#'), _) => {
+                app.set_active_group(Some(2));
+                return Ok(true);
+            }
+            (KeyCode::Char('$'), _) => {
+                app.set_active_group(Some(3));
+                return Ok(true);
+            }
+            (KeyCode::Char('%'), _) => {
+                app.set_active_group(Some(4));
+                return Ok(true);
+            }
+            (KeyCode::Char('^'), _) => {
+                app.set_active_group(Some(5));
+                return Ok(true);
+            }
+            (KeyCode::Char(')'), _) => {
+                app.set_active_group(None);
+                return Ok(true);
+            }
             // Screen switching
             (KeyCode::Char('1'), _) => {
                 app.active_screen = ActiveScreen::Dashboard;

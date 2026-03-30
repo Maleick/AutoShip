@@ -25,7 +25,9 @@ impl ClassStrategy for WizardStrategy {
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         let mana_pct = ctx.player.mana_pct();
-        ctx.config.spells.iter()
+        ctx.config
+            .spells
+            .iter()
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
             .cloned()

@@ -26,12 +26,17 @@ impl BuffTracker {
 
     /// Record that a buff was cast on a member.
     pub fn record_cast(&mut self, pid: u32, buff_name: &str, tick: u64) {
-        self.last_cast
-            .insert((pid, buff_name.to_string()), tick);
+        self.last_cast.insert((pid, buff_name.to_string()), tick);
     }
 
     /// Check if a buff has expired for a member.
-    pub fn is_expired(&self, pid: u32, buff_name: &str, duration_ticks: u64, current_tick: u64) -> bool {
+    pub fn is_expired(
+        &self,
+        pid: u32,
+        buff_name: &str,
+        duration_ticks: u64,
+        current_tick: u64,
+    ) -> bool {
         match self.last_cast.get(&(pid, buff_name.to_string())) {
             Some(&last) => current_tick.saturating_sub(last) >= duration_ticks,
             None => true, // Never cast = expired
@@ -39,7 +44,13 @@ impl BuffTracker {
     }
 
     /// Ticks remaining on a buff, or 0 if expired.
-    pub fn remaining(&self, pid: u32, buff_name: &str, duration_ticks: u64, current_tick: u64) -> u64 {
+    pub fn remaining(
+        &self,
+        pid: u32,
+        buff_name: &str,
+        duration_ticks: u64,
+        current_tick: u64,
+    ) -> u64 {
         match self.last_cast.get(&(pid, buff_name.to_string())) {
             Some(&last) => duration_ticks.saturating_sub(current_tick.saturating_sub(last)),
             None => 0,
@@ -62,7 +73,11 @@ fn buff_priority(buff_name: &str) -> u8 {
     let lower = buff_name.to_lowercase();
     if lower.contains("haste") || lower.contains("speed") || lower.contains("alacrity") {
         PRIORITY_HASTE
-    } else if lower.contains("hp") || lower.contains("health") || lower.contains("symbol") || lower.contains("aegolism") {
+    } else if lower.contains("hp")
+        || lower.contains("health")
+        || lower.contains("symbol")
+        || lower.contains("aegolism")
+    {
         PRIORITY_HP
     } else if lower.contains("mana") || lower.contains("clarity") || lower.contains("kei") {
         PRIORITY_MANA_REGEN

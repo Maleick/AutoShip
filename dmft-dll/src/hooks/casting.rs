@@ -166,10 +166,7 @@ impl CastingController {
             return Err(CastError::NoBaseAddress);
         }
 
-        tracing::info!(
-            slot_id,
-            "use_item -- function address not yet resolved"
-        );
+        tracing::info!(slot_id, "use_item -- function address not yet resolved");
 
         // TODO: Once the UseItem function address is in the offset database:
         // 1. Resolve the address via rebase()

@@ -18,7 +18,11 @@ impl DruidStrategy {
         ctx.group_members
             .iter()
             .filter(|m| m.hp_pct < 100.0 && m.hp_pct > 0.0)
-            .min_by(|a, b| a.hp_pct.partial_cmp(&b.hp_pct).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|a, b| {
+                a.hp_pct
+                    .partial_cmp(&b.hp_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|m| (m.spawn_id, m.hp_pct))
     }
 }
@@ -30,9 +34,10 @@ impl ClassStrategy for DruidStrategy {
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         if let Some((heal_target, hp)) = self.lowest_hp_member(ctx)
-            && hp < 65.0 {
-                return Some(heal_target);
-            }
+            && hp < 65.0
+        {
+            return Some(heal_target);
+        }
         ctx.target.map(|t| t.spawn_id)
     }
 
@@ -41,42 +46,62 @@ impl ClassStrategy for DruidStrategy {
 
         // Priority 1: Emergency heal
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
-            && hp < 45.0 {
-                return ctx.config.spells.iter()
-                    .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
-                    .filter(|s| mana_pct >= s.min_mana_pct)
-                    .max_by_key(|s| s.priority)
-                    .cloned();
-            }
+            && hp < 45.0
+        {
+            return ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| mana_pct >= s.min_mana_pct)
+                .max_by_key(|s| s.priority)
+                .cloned();
+        }
 
         // Priority 2: Snare on low-HP mob (fleeing prevention)
         if let Some(target) = ctx.target
             && target.hp_pct() < 20.0
-                && let Some(snare) = ctx.config.spells.iter()
-                    .filter(|s| s.name.contains("Snare") || s.name.contains("snare")
-                             || s.name.contains("Ensnare"))
-                    .filter(|s| mana_pct >= s.min_mana_pct)
-                    .max_by_key(|s| s.priority)
-                    .cloned()
-                {
-                    return Some(snare);
-                }
+            && let Some(snare) = ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| {
+                    s.name.contains("Snare")
+                        || s.name.contains("snare")
+                        || s.name.contains("Ensnare")
+                })
+                .filter(|s| mana_pct >= s.min_mana_pct)
+                .max_by_key(|s| s.priority)
+                .cloned()
+        {
+            return Some(snare);
+        }
 
         // Priority 3: Heal if group member below 65%
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
-            && hp < 65.0 {
-                return ctx.config.spells.iter()
-                    .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
-                    .filter(|s| mana_pct >= s.min_mana_pct)
-                    .max_by_key(|s| s.priority)
-                    .cloned();
-            }
+            && hp < 65.0
+        {
+            return ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| mana_pct >= s.min_mana_pct)
+                .max_by_key(|s| s.priority)
+                .cloned();
+        }
 
         // Priority 4: Nuke/DoT
-        ctx.config.spells.iter()
-            .filter(|s| !s.name.contains("Heal") && !s.name.contains("heal")
-                     && !s.name.contains("Snare") && !s.name.contains("snare")
-                     && !s.name.contains("Ensnare"))
+        ctx.config
+            .spells
+            .iter()
+            .filter(|s| {
+                !s.name.contains("Heal")
+                    && !s.name.contains("heal")
+                    && !s.name.contains("Snare")
+                    && !s.name.contains("snare")
+                    && !s.name.contains("Ensnare")
+            })
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
             .cloned()

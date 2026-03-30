@@ -53,7 +53,8 @@ impl IdleScheduler {
         // Convert config seconds to ticks (soul tick = 5s by default)
         let tick_secs = config.idle_tick_secs.max(1);
         let min_ticks = (config.min_chat_interval_secs / tick_secs).max(1) as u32;
-        let max_ticks = (config.max_chat_interval_secs / tick_secs).max(min_ticks as u64 + 1u64) as u32;
+        let max_ticks =
+            (config.max_chat_interval_secs / tick_secs).max(min_ticks as u64 + 1u64) as u32;
 
         Self {
             rng: Xorshift32::from_client_id(client_id.wrapping_mul(7919)),
@@ -80,7 +81,9 @@ impl IdleScheduler {
         self.ticks_idle += 1;
 
         // If we have an active behavior, tick it down
-        if let Some(ref mut active) = self.current && active.ticks_remaining > 0 {
+        if let Some(ref mut active) = self.current
+            && active.ticks_remaining > 0
+        {
             active.ticks_remaining -= 1;
             return IdleTransition::Continue;
         }
@@ -131,20 +134,54 @@ impl IdleScheduler {
         let mood = ctx.mood;
 
         let mut weights = vec![
-            PrioritizedBehavior { behavior: IdleBehaviorType::Sit, weight: 1.0 - t.extraversion * 0.5 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::Wander, weight: t.wanderlust * 0.8 + t.extraversion * 0.2 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::Emote, weight: t.extraversion * 0.6 + t.mischief * 0.4 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::Fish, weight: t.conscientiousness * 0.7 * (1.0 - t.battle_hunger * 0.5) },
-            PrioritizedBehavior { behavior: IdleBehaviorType::Craft, weight: t.conscientiousness * 0.5 + t.openness * 0.3 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::VendorBrowse, weight: t.greed * 0.8 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::LoreChatter, weight: t.openness * 0.5 + t.piety * 0.3 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::BioBrk, weight: 0.1 + t.conscientiousness * 0.1 },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Sit,
+                weight: 1.0 - t.extraversion * 0.5,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Wander,
+                weight: t.wanderlust * 0.8 + t.extraversion * 0.2,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Emote,
+                weight: t.extraversion * 0.6 + t.mischief * 0.4,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Fish,
+                weight: t.conscientiousness * 0.7 * (1.0 - t.battle_hunger * 0.5),
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Craft,
+                weight: t.conscientiousness * 0.5 + t.openness * 0.3,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::VendorBrowse,
+                weight: t.greed * 0.8,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::LoreChatter,
+                weight: t.openness * 0.5 + t.piety * 0.3,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::BioBrk,
+                weight: 0.1 + t.conscientiousness * 0.1,
+            },
             PrioritizedBehavior {
                 behavior: IdleBehaviorType::LogOffToSleep,
-                weight: if mood == MoodState::Exhausted { 0.8 } else { 0.02 },
+                weight: if mood == MoodState::Exhausted {
+                    0.8
+                } else {
+                    0.02
+                },
             },
-            PrioritizedBehavior { behavior: IdleBehaviorType::RandomJump, weight: t.mischief * 0.6 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::Inspect, weight: t.openness * 0.4 + t.extraversion * 0.3 },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::RandomJump,
+                weight: t.mischief * 0.6,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Inspect,
+                weight: t.openness * 0.4 + t.extraversion * 0.3,
+            },
         ];
 
         // Mood modifiers
@@ -286,10 +323,10 @@ fn adjust(weights: &mut [PrioritizedBehavior], target: &IdleBehaviorType, multip
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmft_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits};
     use crate::soul::config::{EdginessLevel, SoulConfig};
     use crate::soul::llm::fallback::TraitDrivenResponder;
     use crate::soul::personality::SoulContext;
+    use dmft_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits};
 
     fn default_config() -> SoulConfig {
         SoulConfig::default()
@@ -491,9 +528,18 @@ mod tests {
         let mut scheduler = IdleScheduler::new(42, &config);
 
         let weights = vec![
-            PrioritizedBehavior { behavior: IdleBehaviorType::Sit, weight: 1.0 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::Wander, weight: 1.0 },
-            PrioritizedBehavior { behavior: IdleBehaviorType::Emote, weight: 1.0 },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Sit,
+                weight: 1.0,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Wander,
+                weight: 1.0,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Emote,
+                weight: 1.0,
+            },
         ];
 
         for _ in 0..20 {

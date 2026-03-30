@@ -62,25 +62,21 @@ pub unsafe fn check_dialogs() {
     }
 
     // Only scan when in-world (local player exists)
-    let local_player = dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_LOCAL_PLAYER,
-        eq_base,
-    )
-    .map(|addr| *(addr as *const usize))
-    .unwrap_or(0);
+    let local_player =
+        dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
+            .map(|addr| *(addr as *const usize))
+            .unwrap_or(0);
 
     if local_player == 0 {
         return;
     }
 
     // Get eqgame CXWndManager
-    let mgr_ptr_addr = match dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_CXWND_MANAGER,
-        eq_base,
-    ) {
-        Some(addr) => addr,
-        None => return,
-    };
+    let mgr_ptr_addr =
+        match dmft_common::offsets::rebase(dmft_common::offsets::PINST_CXWND_MANAGER, eq_base) {
+            Some(addr) => addr,
+            None => return,
+        };
 
     let mgr = *(mgr_ptr_addr as *const usize);
     if mgr == 0 {
@@ -154,6 +150,8 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn check_dialogs_noop_on_non_windows() {
-        unsafe { check_dialogs(); } // should not panic
+        unsafe {
+            check_dialogs();
+        } // should not panic
     }
 }

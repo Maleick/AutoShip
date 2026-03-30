@@ -1,11 +1,11 @@
 //! Spawns screen — filterable, searchable spawn list + hex dump viewer.
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Table, Wrap},
-    Frame,
 };
 
 use super::widgets::{hp_color, panel, spawn_info_lines, spawn_row_style, themed_header_row};
@@ -18,8 +18,12 @@ pub fn draw_spawns_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &
 
 pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
-    let is_active    = app.active_panel == ActivePanel::SpawnList;
-    let border_style = if is_active { t.border_active } else { t.border_dim };
+    let is_active = app.active_panel == ActivePanel::SpawnList;
+    let border_style = if is_active {
+        t.border_active
+    } else {
+        t.border_dim
+    };
 
     let filtered = app.filtered_spawns();
 
@@ -28,16 +32,29 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
         .and_then(|c| c.local_player.as_ref())
         .map(|p| p.level);
 
-    let client_label = app.active_client()
+    let client_label = app
+        .active_client()
         .and_then(|c| c.local_player.as_ref())
         .map(|p| app.redact_name(&p.displayed_name).into_owned())
         .unwrap_or_else(|| "???".into());
 
     let fl = app.spawn_type_filter.label();
     let title = if app.search_mode {
-        format!(" Spawns: {} ({}) [{}] search: \"{}\" ", client_label, filtered.len(), fl, app.spawn_filter)
+        format!(
+            " Spawns: {} ({}) [{}] search: \"{}\" ",
+            client_label,
+            filtered.len(),
+            fl,
+            app.spawn_filter
+        )
     } else if !app.spawn_filter.is_empty() {
-        format!(" Spawns: {} ({}) [{}] filter: \"{}\" ", client_label, filtered.len(), fl, app.spawn_filter)
+        format!(
+            " Spawns: {} ({}) [{}] filter: \"{}\" ",
+            client_label,
+            filtered.len(),
+            fl,
+            app.spawn_filter
+        )
     } else if app.spawn_type_filter != crate::tui::app::SpawnFilter::All {
         format!(" Spawns: {} ({}) [{}] ", client_label, filtered.len(), fl)
     } else {
@@ -46,18 +63,24 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 
     let header = themed_header_row(vec!["Type", "Name", "Cls", "Lv", "HP%", "ID"], t);
 
-    let visible_rows  = area.height.saturating_sub(3) as usize;
+    let visible_rows = area.height.saturating_sub(3) as usize;
     let scroll_offset = if visible_rows > 0 && app.spawn_selected >= visible_rows {
         app.spawn_selected - visible_rows + 1
-    } else { 0 };
+    } else {
+        0
+    };
 
-    let rows: Vec<Row> = filtered.iter().enumerate()
+    let rows: Vec<Row> = filtered
+        .iter()
+        .enumerate()
         .skip(scroll_offset)
         .take(visible_rows)
         .map(|(i, spawn)| {
             let is_sel = i == app.spawn_selected;
-            let style  = if is_sel {
-                Style::default().bg(t.row_selected_bg).add_modifier(Modifier::BOLD)
+            let style = if is_sel {
+                Style::default()
+                    .bg(t.row_selected_bg)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 spawn_row_style(spawn, player_level, t)
             };
@@ -69,18 +92,23 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
                 Cell::from(spawn.level.to_string()),
                 Cell::from(format!("{:.0}%", spawn.hp_pct())),
                 Cell::from(spawn.spawn_id.to_string()),
-            ]).style(style)
-        }).collect();
+            ])
+            .style(style)
+        })
+        .collect();
 
     frame.render_widget(
-        Table::new(rows, [
-            Constraint::Length(7),
-            Constraint::Min(20),
-            Constraint::Length(4),
-            Constraint::Length(4),
-            Constraint::Length(6),
-            Constraint::Length(8),
-        ])
+        Table::new(
+            rows,
+            [
+                Constraint::Length(7),
+                Constraint::Min(20),
+                Constraint::Length(4),
+                Constraint::Length(4),
+                Constraint::Length(6),
+                Constraint::Length(8),
+            ],
+        )
         .header(header)
         .block(panel(title.as_str(), border_style, t))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED)),
@@ -93,7 +121,15 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 pub fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let target = app.active_client().and_then(|c| c.target.as_ref());
-    draw_spawn_panel(frame, area, target, " Current Target ", t.border_danger, "No target", app);
+    draw_spawn_panel(
+        frame,
+        area,
+        target,
+        " Current Target ",
+        t.border_danger,
+        "No target",
+        app,
+    );
 }
 
 pub fn draw_spawn_panel(
@@ -105,15 +141,20 @@ pub fn draw_spawn_panel(
     empty_msg: &str,
     app: &App,
 ) {
-    let t   = &app.theme;
+    let t = &app.theme;
     let blk = panel(title, border_style, t);
 
     if let Some(info) = spawn {
         let lines = spawn_info_lines(info, &|s| app.redact_name(s), t);
-        frame.render_widget(Paragraph::new(lines).block(blk).wrap(Wrap { trim: true }), area);
+        frame.render_widget(
+            Paragraph::new(lines).block(blk).wrap(Wrap { trim: true }),
+            area,
+        );
     } else {
         frame.render_widget(
-            Paragraph::new(empty_msg).block(blk).style(Style::default().fg(t.text_muted)),
+            Paragraph::new(empty_msg)
+                .block(blk)
+                .style(Style::default().fg(t.text_muted)),
             area,
         );
     }
@@ -123,9 +164,13 @@ pub fn draw_spawn_panel(
 
 pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
-    let is_active    = app.active_panel == ActivePanel::HexDump;
-    let border_style = if is_active { t.border_warn } else { t.border_dim };
-    let blk          = panel(format!(" Hex — {} ", app.hex_label), border_style, t);
+    let is_active = app.active_panel == ActivePanel::HexDump;
+    let border_style = if is_active {
+        t.border_warn
+    } else {
+        t.border_dim
+    };
+    let blk = panel(format!(" Hex — {} ", app.hex_label), border_style, t);
 
     if app.hex_data.is_empty() {
         frame.render_widget(
@@ -141,20 +186,32 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     let lines: Vec<Line<'_>> = (0..inner_height)
         .filter_map(|row| {
             let offset = row * 16;
-            if offset >= app.hex_data.len() { return None; }
-            let addr  = app.hex_address + offset;
-            let end   = (offset + 16).min(app.hex_data.len());
+            if offset >= app.hex_data.len() {
+                return None;
+            }
+            let addr = app.hex_address + offset;
+            let end = (offset + 16).min(app.hex_data.len());
             let chunk = &app.hex_data[offset..end];
 
-            let hex_str: String   = chunk.iter().map(|b| format!("{:02x} ", b)).collect();
-            let ascii_str: String = chunk.iter().map(|&b| {
-                if b.is_ascii_graphic() || b == b' ' { b as char } else { '·' }
-            }).collect();
+            let hex_str: String = chunk.iter().map(|b| format!("{:02x} ", b)).collect();
+            let ascii_str: String = chunk
+                .iter()
+                .map(|&b| {
+                    if b.is_ascii_graphic() || b == b' ' {
+                        b as char
+                    } else {
+                        '·'
+                    }
+                })
+                .collect();
 
             Some(Line::from(vec![
                 Span::styled(format!("{:08x}", addr), Style::default().fg(t.text_muted)),
                 Span::raw("  "),
-                Span::styled(format!("{:<48}", hex_str), Style::default().fg(t.text_normal)),
+                Span::styled(
+                    format!("{:<48}", hex_str),
+                    Style::default().fg(t.text_normal),
+                ),
                 Span::raw(" "),
                 Span::styled(ascii_str, Style::default().fg(t.text_highlight)),
             ]))
@@ -191,7 +248,9 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         Some(c) => c,
         None => {
             frame.render_widget(
-                Paragraph::new("No client selected").block(blk).style(Style::default().fg(t.text_muted)),
+                Paragraph::new("No client selected")
+                    .block(blk)
+                    .style(Style::default().fg(t.text_muted)),
                 area,
             );
             return;
@@ -202,7 +261,9 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         Some(p) => p,
         None => {
             frame.render_widget(
-                Paragraph::new("Not logged in").block(blk).style(Style::default().fg(t.text_muted)),
+                Paragraph::new("Not logged in")
+                    .block(blk)
+                    .style(Style::default().fg(t.text_muted)),
                 area,
             );
             return;
@@ -212,14 +273,19 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
-    let name     = app.redact_name(&player.displayed_name).into_owned();
-    let hp_pct   = player.hp_pct();
+    let name = app.redact_name(&player.displayed_name).into_owned();
+    let hp_pct = player.hp_pct();
     let mana_pct = player.mana_pct();
     use super::widgets::stand_state_color;
 
     let mut lines: Vec<Line<'_>> = vec![
         Line::from(vec![
-            Span::styled(&name, Style::default().fg(t.text_bright).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                &name,
+                Style::default()
+                    .fg(t.text_bright)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
             Span::styled(
                 format!("{} Lv{}", player.class_str(), player.level),
@@ -241,11 +307,17 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         Line::from(vec![
             Span::styled("Mana ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{}/{} ({:.0}%)", player.mana_current, player.mana_max, mana_pct),
+                format!(
+                    "{}/{} ({:.0}%)",
+                    player.mana_current, player.mana_max, mana_pct
+                ),
                 Style::default().fg(t.mana_color),
             ),
             Span::styled(
-                format!("  End {}/{}", player.endurance_current, player.endurance_max),
+                format!(
+                    "  End {}/{}",
+                    player.endurance_current, player.endurance_max
+                ),
                 Style::default().fg(t.text_muted),
             ),
         ]),
@@ -255,7 +327,10 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
                 format!("({:.1}, {:.1}, {:.1})", player.y, player.x, player.z),
                 Style::default().fg(t.text_server),
             ),
-            Span::styled(format!("  Hdg {:.1}", player.heading), Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("  Hdg {:.1}", player.heading),
+                Style::default().fg(t.text_muted),
+            ),
         ]),
         Line::from(vec![
             Span::styled("Zone ", Style::default().fg(t.text_muted)),
@@ -270,11 +345,14 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
                 Span::styled("Casting ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     format!("gem {} (ETA: {})", cast.spell_slot + 1, cast.spell_eta),
-                    Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(t.text_highlight)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]));
         }
-        let recast_strs: Vec<String> = cast.gem_etas
+        let recast_strs: Vec<String> = cast
+            .gem_etas
             .iter()
             .enumerate()
             .filter(|(_, eta)| **eta != 0)
@@ -290,7 +368,9 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 
     lines.push(Line::from(""));
 
-    for sprite_line in sprites::class_sprite(player.class.as_ref(), &player.stand_state, app.tick_count) {
+    for sprite_line in
+        sprites::class_sprite(player.class.as_ref(), &player.stand_state, app.tick_count)
+    {
         lines.push(sprite_line);
     }
 

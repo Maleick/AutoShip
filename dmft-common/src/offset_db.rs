@@ -78,7 +78,10 @@ impl OffsetDatabase {
         pz.insert("manaCurrent".to_string(), player_zone::MANA_CURRENT);
         pz.insert("level".to_string(), player_zone::LEVEL);
         pz.insert("charClass".to_string(), player_zone::CHAR_CLASS);
-        pz.insert("enduranceCurrent".to_string(), player_zone::ENDURANCE_CURRENT);
+        pz.insert(
+            "enduranceCurrent".to_string(),
+            player_zone::ENDURANCE_CURRENT,
+        );
         pz.insert("enduranceMax".to_string(), player_zone::ENDURANCE_MAX);
         pz.insert("standState".to_string(), player_zone::STANDSTATE);
 
@@ -129,8 +132,7 @@ mod tests {
     fn json_serialization_roundtrip() {
         let db = OffsetDatabase::from_compiled_offsets();
         let json = serde_json::to_string(&db).expect("serialize failed");
-        let restored: OffsetDatabase =
-            serde_json::from_str(&json).expect("deserialize failed");
+        let restored: OffsetDatabase = serde_json::from_str(&json).expect("deserialize failed");
 
         assert_eq!(restored.client_date, db.client_date);
         assert_eq!(restored.eq_preferred_base, db.eq_preferred_base);

@@ -147,11 +147,7 @@ impl CcTracker {
     ///
     /// Each uncontrolled target gets assigned to the member with the
     /// highest-priority CC ability that isn't on cooldown.
-    pub fn assign_cc(
-        &mut self,
-        members: &mut [CcMember],
-        tick: u64,
-    ) -> Vec<(u32, String)> {
+    pub fn assign_cc(&mut self, members: &mut [CcMember], tick: u64) -> Vec<(u32, String)> {
         let mut commands = Vec::new();
 
         // Track how many targets each member is already assigned to
@@ -178,9 +174,9 @@ impl CcTracker {
                 .filter(|m| !m.cc_abilities.is_empty())
                 .filter(|m| {
                     // Must be off cooldown (simple: last_cast_tick + min cooldown <= tick)
-                    m.cc_abilities.iter().any(|a| {
-                        m.last_cast_tick + a.cooldown_ticks <= tick
-                    })
+                    m.cc_abilities
+                        .iter()
+                        .any(|a| m.last_cast_tick + a.cooldown_ticks <= tick)
                 })
                 .min_by_key(|m| {
                     let best_priority = m
@@ -236,7 +232,11 @@ impl CcTracker {
         let mut commands = Vec::new();
 
         // Mark the target as no longer charmed
-        if let Some(target) = self.targets.iter_mut().find(|t| t.spawn_id == charm_broken_spawn_id) {
+        if let Some(target) = self
+            .targets
+            .iter_mut()
+            .find(|t| t.spawn_id == charm_broken_spawn_id)
+        {
             target.cc_applied = None;
             target.assigned_to_pid = None;
         }
@@ -262,7 +262,11 @@ impl CcTracker {
             commands.push((member.pid, ability.command.clone()));
 
             // Update tracker
-            if let Some(target) = self.targets.iter_mut().find(|t| t.spawn_id == charm_broken_spawn_id) {
+            if let Some(target) = self
+                .targets
+                .iter_mut()
+                .find(|t| t.spawn_id == charm_broken_spawn_id)
+            {
                 target.cc_applied = Some(ability.cc_type);
                 target.cc_expiry_tick = tick + ability.duration_ticks;
                 target.assigned_to_pid = Some(member.pid);
@@ -275,7 +279,12 @@ impl CcTracker {
     /// Check for CCs about to expire and return re-mez/re-CC commands.
     ///
     /// `buffer_ticks`: how many ticks before expiry to start re-casting (default: 3).
-    pub fn needs_remez(&mut self, tick: u64, buffer_ticks: u64, members: &mut [CcMember]) -> Vec<(u32, String)> {
+    pub fn needs_remez(
+        &mut self,
+        tick: u64,
+        buffer_ticks: u64,
+        members: &mut [CcMember],
+    ) -> Vec<(u32, String)> {
         let mut commands = Vec::new();
 
         for target in &mut self.targets {
@@ -292,16 +301,15 @@ impl CcTracker {
                 .assigned_to_pid
                 .and_then(|pid| members.iter().find(|m| m.pid == pid))
                 .or_else(|| {
-                    members.iter().find(|m| {
-                        m.cc_abilities.iter().any(|a| a.cc_type == cc_type)
-                    })
+                    members
+                        .iter()
+                        .find(|m| m.cc_abilities.iter().any(|a| a.cc_type == cc_type))
                 });
 
             if let Some(member) = member
-                && let Some(ability) = member
-                    .cc_abilities
-                    .iter()
-                    .find(|a| a.cc_type == cc_type && member.last_cast_tick + a.cooldown_ticks <= tick)
+                && let Some(ability) = member.cc_abilities.iter().find(|a| {
+                    a.cc_type == cc_type && member.last_cast_tick + a.cooldown_ticks <= tick
+                })
             {
                 let member_pid = member.pid;
                 let duration = ability.duration_ticks;
@@ -359,7 +367,9 @@ impl CcTracker {
         }
 
         // Mark as debuffed (debuffs sent — actual landing is async)
-        if !debuffers.is_empty() && let Some(target) = self.targets.iter_mut().find(|t| t.spawn_id == target_id) {
+        if !debuffers.is_empty()
+            && let Some(target) = self.targets.iter_mut().find(|t| t.spawn_id == target_id)
+        {
             target.debuffed = true;
         }
 
@@ -368,12 +378,18 @@ impl CcTracker {
 
     /// Count of mobs currently without any CC applied.
     pub fn uncontrolled_count(&self) -> usize {
-        self.targets.iter().filter(|t| t.cc_applied.is_none()).count()
+        self.targets
+            .iter()
+            .filter(|t| t.cc_applied.is_none())
+            .count()
     }
 
     /// Count of mobs currently under CC.
     pub fn controlled_count(&self) -> usize {
-        self.targets.iter().filter(|t| t.cc_applied.is_some()).count()
+        self.targets
+            .iter()
+            .filter(|t| t.cc_applied.is_some())
+            .count()
     }
 }
 
@@ -565,10 +581,7 @@ mod tests {
     #[test]
     fn test_assign_cc_multiple_adds() {
         let mut tracker = CcTracker::new();
-        let spawns = vec![
-            (10, "orc pawn".into()),
-            (11, "orc centurion".into()),
-        ];
+        let spawns = vec![(10, "orc pawn".into()), (11, "orc centurion".into())];
         tracker.update(&spawns, None, 0);
 
         let mut members = vec![make_enchanter(100), make_paladin(101)];
@@ -760,10 +773,7 @@ mod tests {
         let tick = 10u64;
 
         // Adds show up in camp
-        let spawns = vec![
-            (10, "orc pawn".into()),
-            (11, "orc centurion".into()),
-        ];
+        let spawns = vec![(10, "orc pawn".into()), (11, "orc centurion".into())];
         tracker.update(&spawns, Some(10), tick); // 10 is assist target
 
         // Only mob 11 should be tracked (10 is being killed)

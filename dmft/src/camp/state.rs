@@ -25,7 +25,7 @@ use crate::camp::cc::{CcMember, CcTracker};
 use crate::camp::config::CampConfig;
 use crate::camp::loot::{CorpseEntry, LootConfig, LootCycle};
 use crate::camp::personality::PersonalityProfile;
-use crate::camp::recovery::{death_commands_with_roles, RecoveryTracker};
+use crate::camp::recovery::{RecoveryTracker, death_commands_with_roles};
 
 /// Events that can occur during the camp loop, triggering reactive behavior.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,10 +206,8 @@ impl CampLoop {
 
     /// Record a corpse from a recent kill, to be looted during the Loot phase.
     pub fn record_kill(&mut self, spawn_id: u32, mob_name: String) {
-        self.pending_corpses.push(CorpseEntry {
-            spawn_id,
-            mob_name,
-        });
+        self.pending_corpses
+            .push(CorpseEntry { spawn_id, mob_name });
     }
 
     /// Push an event to be processed on the next tick.
@@ -231,24 +229,22 @@ impl CampLoop {
     /// Handle a single camp event.
     fn process_event(&mut self, event: CampEvent) -> Vec<(u32, CampAction)> {
         match event {
-            CampEvent::CharmBreak { spawn_id } => {
-                CampAction::from_slash_vec(
-                    self.cc_tracker
-                        .charm_break_response(spawn_id, &self.cc_members, self.tick),
-                )
-            }
+            CampEvent::CharmBreak { spawn_id } => CampAction::from_slash_vec(
+                self.cc_tracker
+                    .charm_break_response(spawn_id, &self.cc_members, self.tick),
+            ),
             CampEvent::AddSpawned { spawn_id, name } => {
                 self.cc_tracker.add_target(spawn_id, name);
-                let mut cmds = self.cc_tracker.debuff_commands(
-                    spawn_id,
-                    &self.cc_members,
-                    self.tick,
-                );
+                let mut cmds =
+                    self.cc_tracker
+                        .debuff_commands(spawn_id, &self.cc_members, self.tick);
                 cmds.extend(self.cc_tracker.assign_cc(&mut self.cc_members, self.tick));
                 CampAction::from_slash_vec(cmds)
             }
             CampEvent::CcExpiring { spawn_id } => {
-                let all_cmds = self.cc_tracker.needs_remez(self.tick, 0, &mut self.cc_members);
+                let all_cmds = self
+                    .cc_tracker
+                    .needs_remez(self.tick, 0, &mut self.cc_members);
                 let target_cmd = format!("/target id {spawn_id}");
                 let mut result = Vec::new();
                 let mut matched = false;
@@ -287,9 +283,10 @@ impl CampLoop {
 
         // --- Recovery check: detect deaths and issue rez commands ---
         if let Some(snap) = snapshot
-            && !snap.member_hp.is_empty() {
-                self.recovery.update_hp(&snap.member_hp, self.tick);
-            }
+            && !snap.member_hp.is_empty()
+        {
+            self.recovery.update_hp(&snap.member_hp, self.tick);
+        }
 
         if self.recovery.recovery_in_progress() {
             // Build role map for rez prioritization
@@ -327,9 +324,9 @@ impl CampLoop {
 
         // Check for CCs about to expire during fighting
         if matches!(self.state, CampState::Fighting { .. }) && !self.cc_members.is_empty() {
-            let remez = self
-                .cc_tracker
-                .needs_remez(self.tick, CC_REMEZ_BUFFER, &mut self.cc_members);
+            let remez =
+                self.cc_tracker
+                    .needs_remez(self.tick, CC_REMEZ_BUFFER, &mut self.cc_members);
             commands.extend(CampAction::from_slash_vec(remez));
         }
 
@@ -339,7 +336,10 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let pull_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map(|h| h.personality.adjust_mana_threshold(self.config.pull_mana_pct as f32))
+                    .map(|h| {
+                        h.personality
+                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
+                    })
                     .unwrap_or(self.config.pull_mana_pct as f32);
                 let healer_ready = snapshot
                     .map(|s| s.healer_mana_pct >= pull_threshold)
@@ -358,9 +358,10 @@ impl CampLoop {
                 // Emergency heal if tank HP < 20%
                 if let Some(snap) = snapshot
                     && snap.tank_hp_pct < 20.0
-                        && let Some(healer) = self.find_by_role(&Role::Healer) {
-                            commands.push((healer.pid, CampAction::Slash("/cast 1".into())));
-                        }
+                    && let Some(healer) = self.find_by_role(&Role::Healer)
+                {
+                    commands.push((healer.pid, CampAction::Slash("/cast 1".into())));
+                }
 
                 // Melee characters /face periodically, staggered by personality
                 let fight_elapsed = self.tick - started_tick;
@@ -397,7 +398,11 @@ impl CampLoop {
 
                 let cycle_done = if let Some(ref mut cycle) = self.loot_cycle {
                     if let Some((pid, personality)) = looter {
-                        commands.extend(CampAction::from_slash_vec(cycle.tick(pid, self.tick, &personality)));
+                        commands.extend(CampAction::from_slash_vec(cycle.tick(
+                            pid,
+                            self.tick,
+                            &personality,
+                        )));
                     }
                     cycle.is_done()
                 } else {
@@ -414,7 +419,10 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let med_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map(|h| h.personality.adjust_mana_threshold(self.config.pull_mana_pct as f32))
+                    .map(|h| {
+                        h.personality
+                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
+                    })
                     .unwrap_or(self.config.pull_mana_pct as f32);
                 let mana_ready = snapshot
                     .map(|s| s.healer_mana_pct >= med_threshold)
@@ -492,7 +500,10 @@ impl CampLoop {
         // Tank assists puller and attacks
         if let Some(tank) = self.find_by_role(&Role::Tank) {
             if !puller_name.is_empty() {
-                commands.push((tank.pid, CampAction::Slash(format!("/assist {puller_name}"))));
+                commands.push((
+                    tank.pid,
+                    CampAction::Slash(format!("/assist {puller_name}")),
+                ));
             }
             commands.push((tank.pid, CampAction::Slash("/attack".into())));
             // Engage the Combatant FSM so class strategies activate
@@ -521,7 +532,10 @@ impl CampLoop {
         // Healer targets tank (healers don't CombatEngage — they heal)
         if let Some(healer) = self.find_by_role(&Role::Healer) {
             if !tank_name.is_empty() {
-                commands.push((healer.pid, CampAction::Slash(format!("/target {tank_name}"))));
+                commands.push((
+                    healer.pid,
+                    CampAction::Slash(format!("/target {tank_name}")),
+                ));
             }
             // Healer also gets CombatEngage so healing strategies activate
             if let Some(tid) = target_spawn_id {
@@ -661,16 +675,28 @@ mod tests {
 
         // Tank should assist puller
         let tank_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 100).collect();
-        assert!(tank_cmds.iter().any(|(_, cmd)| cmd.contains("/assist Bard01")));
+        assert!(
+            tank_cmds
+                .iter()
+                .any(|(_, cmd)| cmd.contains("/assist Bard01"))
+        );
         assert!(tank_cmds.iter().any(|(_, cmd)| cmd == "/attack"));
 
         // DPS should assist tank
         let dps_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 104).collect();
-        assert!(dps_cmds.iter().any(|(_, cmd)| cmd.contains("/assist Warrior01")));
+        assert!(
+            dps_cmds
+                .iter()
+                .any(|(_, cmd)| cmd.contains("/assist Warrior01"))
+        );
 
         // Healer should target tank
         let healer_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 101).collect();
-        assert!(healer_cmds.iter().any(|(_, cmd)| cmd.contains("/target Warrior01")));
+        assert!(
+            healer_cmds
+                .iter()
+                .any(|(_, cmd)| cmd.contains("/target Warrior01"))
+        );
     }
 
     #[test]
@@ -692,7 +718,10 @@ mod tests {
 
         // Everyone should get /attack off
         for member in test_members() {
-            assert!(cmds.iter().any(|(pid, cmd)| *pid == member.pid && cmd == "/attack off"));
+            assert!(
+                cmds.iter()
+                    .any(|(pid, cmd)| *pid == member.pid && cmd == "/attack off")
+            );
         }
 
         // LootCycle should have been created with fallback corpse from last_pull_target
@@ -773,7 +802,10 @@ mod tests {
 
         // Everyone should /stand
         for member in test_members() {
-            assert!(cmds.iter().any(|(pid, cmd)| *pid == member.pid && cmd == "/stand"));
+            assert!(
+                cmds.iter()
+                    .any(|(pid, cmd)| *pid == member.pid && cmd == "/stand")
+            );
         }
     }
 
@@ -828,7 +860,10 @@ mod tests {
         let mut camp = CampLoop::new(config, test_members());
         let cmds = camp.tick(None);
 
-        let target_cmd = cmds.iter().find(|(_, cmd)| cmd.contains("/target")).unwrap();
+        let target_cmd = cmds
+            .iter()
+            .find(|(_, cmd)| cmd.contains("/target"))
+            .unwrap();
         assert!(target_cmd.1.contains("a_mob"));
     }
 
@@ -930,7 +965,10 @@ mod tests {
         };
         let cmds = camp.tick(Some(&snap));
         // Healer (pid 101) should get emergency /cast 1
-        assert!(cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd == "/cast 1"));
+        assert!(
+            cmds.iter()
+                .any(|(pid, cmd)| *pid == 101 && cmd == "/cast 1")
+        );
         // Should still be fighting (target alive, timer not expired)
         assert!(matches!(camp.state, CampState::Fighting { .. }));
     }
@@ -986,7 +1024,9 @@ mod tests {
         // Push event for spawn_id 10 only
         camp.push_event(CampEvent::CcExpiring { spawn_id: 10 });
         // Use Fighting state so tick() doesn't add pull commands
-        camp.state = CampState::Fighting { started_tick: camp.tick };
+        camp.state = CampState::Fighting {
+            started_tick: camp.tick,
+        };
 
         let snap = CampSnapshot {
             healer_mana_pct: 80.0,
@@ -1004,7 +1044,10 @@ mod tests {
             .filter(|(_, cmd)| cmd.starts_with("/target id"))
             .collect();
         for (_, cmd) in &cc_target_cmds {
-            assert_eq!(*cmd, "/target id 10", "Should not partially match spawn_id 100");
+            assert_eq!(
+                *cmd, "/target id 10",
+                "Should not partially match spawn_id 100"
+            );
         }
     }
 }

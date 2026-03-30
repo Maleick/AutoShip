@@ -47,7 +47,10 @@ mod tests {
         let differs = a.assist_jitter_ticks != b.assist_jitter_ticks
             || a.cast_start_delay_ticks != b.cast_start_delay_ticks
             || (a.med_sit_threshold - b.med_sit_threshold).abs() > f32::EPSILON;
-        assert!(differs, "Different client IDs should produce different personalities");
+        assert!(
+            differs,
+            "Different client IDs should produce different personalities"
+        );
     }
 
     #[test]
@@ -102,7 +105,10 @@ mod tests {
         let mut personality = CombatPersonality::from_client_id(99);
         for _ in 0..100 {
             let val = personality.jitter_threshold(50.0, 5.0);
-            assert!(val >= 45.0 && val <= 55.0, "jittered value {val} out of range");
+            assert!(
+                val >= 45.0 && val <= 55.0,
+                "jittered value {val} out of range"
+            );
         }
     }
 }

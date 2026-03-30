@@ -106,9 +106,9 @@ impl CombatCoordinator {
             )
         });
 
-        let any_pulling = states.values().any(|gs| {
-            matches!(gs.combat_status, CombatStatus::Pulling { .. })
-        });
+        let any_pulling = states
+            .values()
+            .any(|gs| matches!(gs.combat_status, CombatStatus::Pulling { .. }));
 
         // Detect combat start (edge: was not in combat, now is)
         if any_in_combat && !self.prev_in_combat {
@@ -187,10 +187,7 @@ impl CombatCoordinator {
         for (i, &(spawn_id, _)) in nearby_enemies.iter().enumerate().skip(1) {
             if let Some(&enc_id) = enchanter_ids.get(i - 1) {
                 self.cc_assignments.insert(spawn_id, enc_id);
-                commands.push((
-                    enc_id,
-                    Command::CombatSetAssistTarget { spawn_id },
-                ));
+                commands.push((enc_id, Command::CombatSetAssistTarget { spawn_id }));
             }
         }
 

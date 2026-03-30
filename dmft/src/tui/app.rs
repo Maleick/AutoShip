@@ -4,7 +4,6 @@ use super::theme::{Theme, ThemeKind};
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
 use crate::config::AccountsConfig;
-use crate::eq::hvt::HvtWatchlist;
 use crate::eq::log_parser::{ChatEvent, LootDatabase};
 use crate::eq::log_watcher::LogWatcher;
 use crate::eq::map_parser::ZoneMap;
@@ -34,17 +33,6 @@ impl ActiveScreen {
             Self::Map => "Map",
             Self::Groups => "Groups",
             Self::Navigation => "Nav",
-        }
-    }
-
-    pub fn key(&self) -> char {
-        match self {
-            Self::Dashboard => '1',
-            Self::Spawns => '2',
-            Self::Character => '3',
-            Self::Map => '4',
-            Self::Groups => '5',
-            Self::Navigation => '6',
         }
     }
 
@@ -241,7 +229,6 @@ pub struct App {
 
     // Named spawn tracking
     pub named_tracker: NamedTracker,
-    pub hvt_watchlist: Option<HvtWatchlist>,
 
     // User-tracked spawns (via :track command)
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
@@ -342,8 +329,6 @@ impl App {
                     None => NamedTracker::new(),
                 }
             },
-            hvt_watchlist: HvtWatchlist::load(std::path::Path::new("config/hvt_watchlist.toml")).ok(),
-
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -354,7 +339,8 @@ impl App {
             main_tank: None,
             heal_cancel_enabled: true,
 
-            accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml")).ok(),
+            accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml"))
+                .ok(),
 
             loot_database: LootDatabase::new(),
             log_watchers: Vec::new(),
@@ -388,42 +374,49 @@ impl App {
             group_ids.retain(|&id| id > 0); // skip ungrouped (0)
 
             if !group_ids.is_empty() {
-                return group_ids.iter().map(|&id| {
-                    let accounts_in_group: Vec<&crate::config::AccountEntry> =
-                        accts.accounts.iter().filter(|a| a.group == id).collect();
+                return group_ids
+                    .iter()
+                    .map(|&id| {
+                        let accounts_in_group: Vec<&crate::config::AccountEntry> =
+                            accts.accounts.iter().filter(|a| a.group == id).collect();
 
-                    // Derive account range from actual account numbers
-                    let account_nums: Vec<u8> = accounts_in_group.iter()
-                        .filter_map(|a| extract_account_number(&a.name))
-                        .collect();
-                    let lo = account_nums.iter().copied().min().unwrap_or(1);
-                    let hi = account_nums.iter().copied().max().unwrap_or(lo);
+                        // Derive account range from actual account numbers
+                        let account_nums: Vec<u8> = accounts_in_group
+                            .iter()
+                            .filter_map(|a| extract_account_number(&a.name))
+                            .collect();
+                        let lo = account_nums.iter().copied().min().unwrap_or(1);
+                        let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
-                    let name = default_names.get((id - 1) as usize)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| format!("Group {}", id));
+                        let name = default_names
+                            .get((id - 1) as usize)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| format!("Group {}", id));
 
-                    GroupDef {
-                        id: id as u8,
-                        name,
-                        account_range: (lo, hi),
-                        default_camp: format!("Camp {}", id),
-                    }
-                }).collect();
+                        GroupDef {
+                            id: id as u8,
+                            name,
+                            account_range: (lo, hi),
+                            default_camp: format!("Camp {}", id),
+                        }
+                    })
+                    .collect();
             }
         }
 
         // Fallback: 6 groups with 6 slots each
-        (0..6).map(|i| {
-            let lo = (i * 6 + 1) as u8;
-            let hi = ((i + 1) * 6) as u8;
-            GroupDef {
-                id: (i + 1) as u8,
-                name: default_names[i].to_string(),
-                account_range: (lo, hi),
-                default_camp: format!("Camp {}", default_names[i]),
-            }
-        }).collect()
+        (0..6)
+            .map(|i| {
+                let lo = (i * 6 + 1) as u8;
+                let hi = ((i + 1) * 6) as u8;
+                GroupDef {
+                    id: (i + 1) as u8,
+                    name: default_names[i].to_string(),
+                    account_range: (lo, hi),
+                    default_camp: format!("Camp {}", default_names[i]),
+                }
+            })
+            .collect()
     }
 
     /// Rebuild group definitions from accounts config. Called when config changes.
@@ -435,7 +428,9 @@ impl App {
     /// Get the number of groups that have at least one connected client.
     #[allow(dead_code)]
     pub fn active_group_count(&self) -> usize {
-        self.groups.iter().enumerate()
+        self.groups
+            .iter()
+            .enumerate()
             .filter(|(i, _)| !self.clients_in_group_idx(*i).is_empty())
             .count()
     }
@@ -505,7 +500,8 @@ impl App {
             Some(idx) => {
                 if let Some(g) = self.groups.get(idx) {
                     // Find the zone of the first online member
-                    let zone = self.clients_in_group_idx(idx)
+                    let zone = self
+                        .clients_in_group_idx(idx)
                         .first()
                         .map(|c| c.zone_name.as_str())
                         .unwrap_or("???");
@@ -521,20 +517,23 @@ impl App {
     pub fn clients_in_group_idx(&self, group_idx: usize) -> Vec<&ClientState> {
         if let Some(group) = self.groups.get(group_idx) {
             let (lo, hi) = group.account_range;
-            self.clients.iter().filter(|c| {
-                let name = if !c.character_name.is_empty() {
-                    &c.character_name
-                } else if let Some(p) = &c.local_player {
-                    &p.displayed_name
-                } else {
-                    return false;
-                };
-                if let Some(num) = extract_account_number(name) {
-                    num >= lo && num <= hi
-                } else {
-                    false
-                }
-            }).collect()
+            self.clients
+                .iter()
+                .filter(|c| {
+                    let name = if !c.character_name.is_empty() {
+                        &c.character_name
+                    } else if let Some(p) = &c.local_player {
+                        &p.displayed_name
+                    } else {
+                        return false;
+                    };
+                    if let Some(num) = extract_account_number(name) {
+                        num >= lo && num <= hi
+                    } else {
+                        false
+                    }
+                })
+                .collect()
         } else {
             Vec::new()
         }
@@ -653,10 +652,11 @@ impl App {
         if let Some(client) = self.active_client() {
             if let Ok(proc) = ProcessHandle::open(client.pid) {
                 // Find the spawn address by walking the spawn list
-                let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
-                    Some(a) => a,
-                    None => return Vec::new(),
-                };
+                let mgr_ptr_addr =
+                    match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
+                        Some(a) => a,
+                        None => return Vec::new(),
+                    };
                 let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
                     Ok(a) if a != 0 => a,
                     _ => return Vec::new(),
@@ -665,11 +665,15 @@ impl App {
                 let list_addr = mgr_addr + offsets::spawn_manager::PLAYER_LIST;
                 let mut current = proc.read_ptr(list_addr).unwrap_or(0);
                 while current != 0 {
-                    let sid = proc.read::<u32>(current + offsets::player_base::SPAWN_ID).unwrap_or(0);
+                    let sid = proc
+                        .read::<u32>(current + offsets::player_base::SPAWN_ID)
+                        .unwrap_or(0);
                     if sid == spawn_id {
                         return proc.read_bytes(current, 0x200).unwrap_or_default();
                     }
-                    current = proc.read_ptr(current + offsets::player_base::NEXT).unwrap_or(0);
+                    current = proc
+                        .read_ptr(current + offsets::player_base::NEXT)
+                        .unwrap_or(0);
                 }
             }
         }
@@ -699,9 +703,10 @@ impl App {
         }
         for (i, client) in self.clients.iter().enumerate() {
             if let Some(player) = &client.local_player
-                && (player.displayed_name == name || player.name == name) {
-                    return std::borrow::Cow::Owned(format!("Toon-{:02}", i + 1));
-                }
+                && (player.displayed_name == name || player.name == name)
+            {
+                return std::borrow::Cow::Owned(format!("Toon-{:02}", i + 1));
+            }
         }
         std::borrow::Cow::Borrowed(name)
     }
@@ -748,9 +753,14 @@ impl App {
             } else {
                 // Subcommands + saved camp names (bare name = shortcut for start)
                 let mut sub_cmds: Vec<String> = vec![
-                    "start".into(), "stop".into(), "status".into(),
-                    "list".into(), "add".into(), "remove".into(),
-                    "next".into(), "prev".into(),
+                    "start".into(),
+                    "stop".into(),
+                    "status".into(),
+                    "list".into(),
+                    "add".into(),
+                    "remove".into(),
+                    "next".into(),
+                    "prev".into(),
                 ];
                 sub_cmds.extend(self.list_camp_names());
                 self.complete_with_candidates("camp ", rest, &sub_cmds);
@@ -770,7 +780,11 @@ impl App {
 
         // :untrack <Tab> → cycle tracked spawn names
         if let Some(rest) = prefix.strip_prefix("untrack ") {
-            let tracked_names: Vec<String> = self.tracked_spawns.values().map(|t| t.name.clone()).collect();
+            let tracked_names: Vec<String> = self
+                .tracked_spawns
+                .values()
+                .map(|t| t.name.clone())
+                .collect();
             self.complete_with_candidates("untrack ", rest, &tracked_names);
             return;
         }
@@ -828,8 +842,12 @@ impl App {
         // :all <Tab> → common slash commands
         if let Some(rest) = prefix.strip_prefix("all ") {
             let slash_cmds: Vec<String> = vec![
-                "/sit".into(), "/stand".into(), "/camp".into(),
-                "/follow".into(), "/assist".into(), "/disband".into(),
+                "/sit".into(),
+                "/stand".into(),
+                "/camp".into(),
+                "/follow".into(),
+                "/assist".into(),
+                "/disband".into(),
             ];
             self.complete_with_candidates("all ", rest, &slash_cmds);
             return;
@@ -837,21 +855,27 @@ impl App {
 
         // :G1-G6 <Tab> → common slash commands for group targeting
         let upper_prefix = prefix.to_uppercase();
-        if let Some(digit) = upper_prefix.strip_prefix('G').and_then(|s| s.chars().next())
-            && ('1'..='6').contains(&digit) && prefix.len() >= 2 {
-                let cmd_prefix_str = &prefix[..2];
-                let rest = prefix[2..].trim_start();
-                if !rest.is_empty() {
-                    let slash_cmds: Vec<String> = vec![
-                        "/sit".into(), "/stand".into(), "/camp".into(),
-                        "/follow".into(), "/assist".into(), "/disband".into(),
-                    ];
-                    self.complete_with_candidates(
-                        &format!("{} ", cmd_prefix_str), rest, &slash_cmds,
-                    );
-                    return;
-                }
+        if let Some(digit) = upper_prefix
+            .strip_prefix('G')
+            .and_then(|s| s.chars().next())
+            && ('1'..='6').contains(&digit)
+            && prefix.len() >= 2
+        {
+            let cmd_prefix_str = &prefix[..2];
+            let rest = prefix[2..].trim_start();
+            if !rest.is_empty() {
+                let slash_cmds: Vec<String> = vec![
+                    "/sit".into(),
+                    "/stand".into(),
+                    "/camp".into(),
+                    "/follow".into(),
+                    "/assist".into(),
+                    "/disband".into(),
+                ];
+                self.complete_with_candidates(&format!("{} ", cmd_prefix_str), rest, &slash_cmds);
+                return;
             }
+        }
 
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
@@ -871,8 +895,12 @@ impl App {
             "invite".into(),
             "accept".into(),
             "heal".into(),
-            "G1".into(), "G2".into(), "G3".into(),
-            "G4".into(), "G5".into(), "G6".into(),
+            "G1".into(),
+            "G2".into(),
+            "G3".into(),
+            "G4".into(),
+            "G5".into(),
+            "G6".into(),
         ];
 
         for client in &self.clients {
@@ -987,9 +1015,10 @@ impl App {
     /// Update user-tracked spawns against the current spawn list.
     pub fn update_tracked_spawns(&mut self) {
         for tracked in self.tracked_spawns.values_mut() {
-            let found = self.spawns.iter().find(|s| {
-                s.displayed_name.to_lowercase() == tracked.name.to_lowercase()
-            });
+            let found = self
+                .spawns
+                .iter()
+                .find(|s| s.displayed_name.to_lowercase() == tracked.name.to_lowercase());
             match found {
                 Some(spawn) => {
                     tracked.status = TrackedStatus::Up;
@@ -1016,9 +1045,10 @@ impl App {
         }
 
         // Check if spawn exists in current spawn list
-        let found = self.spawns.iter().find(|s| {
-            s.displayed_name.to_lowercase() == key
-        });
+        let found = self
+            .spawns
+            .iter()
+            .find(|s| s.displayed_name.to_lowercase() == key);
 
         let tracked = match found {
             Some(spawn) => TrackedSpawn {
@@ -1081,10 +1111,7 @@ impl App {
     fn parse_group_prefix<'a>(&self, input: &'a str) -> Option<(usize, &'a str)> {
         let trimmed = input.trim();
         let bytes = trimmed.as_bytes();
-        if bytes.len() >= 2
-            && (bytes[0] == b'G' || bytes[0] == b'g')
-            && bytes[1].is_ascii_digit()
-        {
+        if bytes.len() >= 2 && (bytes[0] == b'G' || bytes[0] == b'g') && bytes[1].is_ascii_digit() {
             let num = (bytes[1] - b'0') as usize;
             if (1..=6).contains(&num) {
                 let rest = trimmed[2..].trim();
@@ -1096,7 +1123,10 @@ impl App {
 
     /// Get PIDs for a specific group index (0-based).
     fn pids_for_group(&self, group_idx: usize) -> Vec<u32> {
-        self.clients_in_group_idx(group_idx).iter().map(|c| c.pid).collect()
+        self.clients_in_group_idx(group_idx)
+            .iter()
+            .map(|c| c.pid)
+            .collect()
     }
 
     /// Execute the current command buffer content.
@@ -1175,24 +1205,22 @@ impl App {
                     self.status_message = String::from("Usage: untrack <name>");
                 }
             }
-            "mode" => {
-                match parts.get(1).copied() {
-                    Some("camp") => {
-                        self.operating_mode = crate::camp::hunt::OperatingMode::Camp;
-                        self.status_message = String::from("Switched to Camp mode");
-                    }
-                    Some("hunt") => {
-                        self.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
-                        self.status_message = String::from("Switched to Hunt mode");
-                    }
-                    _ => {
-                        self.status_message = format!(
-                            "Current mode: {}. Usage: mode <camp|hunt>",
-                            self.operating_mode
-                        );
-                    }
+            "mode" => match parts.get(1).copied() {
+                Some("camp") => {
+                    self.operating_mode = crate::camp::hunt::OperatingMode::Camp;
+                    self.status_message = String::from("Switched to Camp mode");
                 }
-            }
+                Some("hunt") => {
+                    self.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
+                    self.status_message = String::from("Switched to Hunt mode");
+                }
+                _ => {
+                    self.status_message = format!(
+                        "Current mode: {}. Usage: mode <camp|hunt>",
+                        self.operating_mode
+                    );
+                }
+            },
             "ma" => {
                 if let Some(name) = parts.get(1) {
                     self.main_assist = Some(name.to_string());
@@ -1227,7 +1255,10 @@ impl App {
             }
             "engage" => {
                 let pids = self.focused_pids();
-                let target_id = parts.get(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+                let target_id = parts
+                    .get(1)
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .unwrap_or(0);
                 let mut ok = 0;
                 for pid in &pids {
                     let cmd = dmft_common::ipc::Command::CombatEngage { target_id };
@@ -1287,22 +1318,29 @@ impl App {
                     self.status_message = String::from("No active client to accept on");
                 }
             }
-            "heal" => {
-                match parts.get(1).copied() {
-                    Some("cancel") => {
-                        self.heal_cancel_enabled = !self.heal_cancel_enabled;
-                        let state = if self.heal_cancel_enabled { "ON" } else { "OFF" };
-                        tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
-                        self.status_message = format!("Heal-cancel: {}", state);
-                    }
-                    _ => {
-                        let state = if self.heal_cancel_enabled { "ON" } else { "OFF" };
-                        self.status_message = format!(
-                            "Heal-cancel is {}. Usage: heal cancel (toggles on/off)", state
-                        );
-                    }
+            "heal" => match parts.get(1).copied() {
+                Some("cancel") => {
+                    self.heal_cancel_enabled = !self.heal_cancel_enabled;
+                    let state = if self.heal_cancel_enabled {
+                        "ON"
+                    } else {
+                        "OFF"
+                    };
+                    tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
+                    self.status_message = format!("Heal-cancel: {}", state);
                 }
-            }
+                _ => {
+                    let state = if self.heal_cancel_enabled {
+                        "ON"
+                    } else {
+                        "OFF"
+                    };
+                    self.status_message = format!(
+                        "Heal-cancel is {}. Usage: heal cancel (toggles on/off)",
+                        state
+                    );
+                }
+            },
             "inject" => {
                 self.status_message = String::from("Inject requested (not yet wired)");
             }
@@ -1317,10 +1355,8 @@ impl App {
                             Err(_) => fail += 1,
                         }
                     }
-                    self.status_message = format!(
-                        "all {} → sent to {}, failed {}",
-                        slash_cmd, ok, fail
-                    );
+                    self.status_message =
+                        format!("all {} → sent to {}, failed {}", slash_cmd, ok, fail);
                 } else {
                     self.status_message = String::from("Usage: all <slash command>");
                 }
@@ -1331,17 +1367,14 @@ impl App {
                     if let Some(slash_cmd) = parts.get(1) {
                         match send_slash_command(pid, slash_cmd) {
                             Ok(()) => {
-                                self.status_message =
-                                    format!("{} → {}", pid, slash_cmd);
+                                self.status_message = format!("{} → {}", pid, slash_cmd);
                             }
                             Err(e) => {
-                                self.status_message =
-                                    format!("Error sending to {}: {}", pid, e);
+                                self.status_message = format!("Error sending to {}: {}", pid, e);
                             }
                         }
                     } else {
-                        self.status_message =
-                            format!("Usage: {} <slash command>", pid);
+                        self.status_message = format!("Usage: {} <slash command>", pid);
                     }
                 } else {
                     self.status_message = format!("Unknown command: {}", input);
@@ -1354,15 +1387,17 @@ impl App {
     fn execute_camp_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
         match args.first().copied() {
             None => {
-                self.status_message =
-                    String::from("Usage: camp <start|stop|status|list|add|remove|next|prev> [name]");
+                self.status_message = String::from(
+                    "Usage: camp <start|stop|status|list|add|remove|next|prev> [name]",
+                );
             }
             Some("start") => {
                 let camp_name = match args.get(1) {
                     Some(name) => *name,
                     None => {
-                        self.status_message =
-                            String::from("Usage: camp start <name>  (loads config/camps/<name>.toml)");
+                        self.status_message = String::from(
+                            "Usage: camp start <name>  (loads config/camps/<name>.toml)",
+                        );
                         return;
                     }
                 };
@@ -1381,8 +1416,7 @@ impl App {
                             format!("Camp '{}' started with {} members", camp_name, count);
                     }
                     Err(e) => {
-                        self.status_message =
-                            format!("Failed to load camp '{}': {}", camp_name, e);
+                        self.status_message = format!("Failed to load camp '{}': {}", camp_name, e);
                     }
                 }
             }
@@ -1460,8 +1494,7 @@ impl App {
                 let camp_name = match args.get(1) {
                     Some(name) => *name,
                     None => {
-                        self.status_message =
-                            String::from("Usage: camp remove <name>");
+                        self.status_message = String::from("Usage: camp remove <name>");
                         return;
                     }
                 };
@@ -1481,99 +1514,92 @@ impl App {
                     self.status_message = format!("Camp '{}' not found", camp_name);
                 }
             }
-            Some("next") => {
-                match &orchestrator.active_camp {
-                    None => {
-                        self.status_message = String::from("No active camp — start one first");
-                    }
-                    Some(camp) => {
-                        let current = camp.config.name.clone();
-                        match &camp.config.next_camp {
-                            Some(next_name) => match CampConfig::load(next_name) {
-                                Ok(config) => {
-                                    let members = self.build_camp_members();
-                                    if members.is_empty() {
-                                        self.status_message =
-                                            String::from("No clients connected — cannot advance camp");
-                                        return;
-                                    }
-                                    let count = members.len();
-                                    let to = config.name.clone();
-                                    orchestrator.start_camp(config, members);
-                                    self.status_message =
-                                        format!("Advanced: {} → {} ({} members)", current, to, count);
-                                }
-                                Err(e) => {
-                                    self.status_message =
-                                        format!("Failed to load next camp '{}': {}", next_name, e);
-                                }
-                            },
-                            None => {
-                                self.status_message =
-                                    format!("Camp '{}' has no next camp configured", current);
-                            }
-                        }
-                    }
+            Some("next") => match &orchestrator.active_camp {
+                None => {
+                    self.status_message = String::from("No active camp — start one first");
                 }
-            }
-            Some("prev") => {
-                match &orchestrator.active_camp {
-                    None => {
-                        self.status_message = String::from("No active camp — start one first");
-                    }
-                    Some(camp) => {
-                        let current = camp.config.name.clone();
-                        match &camp.config.prev_camp {
-                            Some(prev_name) => match CampConfig::load(prev_name) {
-                                Ok(config) => {
-                                    let members = self.build_camp_members();
-                                    if members.is_empty() {
-                                        self.status_message =
-                                            String::from("No clients connected — cannot fall back");
-                                        return;
-                                    }
-                                    let count = members.len();
-                                    let to = config.name.clone();
-                                    orchestrator.start_camp(config, members);
+                Some(camp) => {
+                    let current = camp.config.name.clone();
+                    match &camp.config.next_camp {
+                        Some(next_name) => match CampConfig::load(next_name) {
+                            Ok(config) => {
+                                let members = self.build_camp_members();
+                                if members.is_empty() {
                                     self.status_message =
-                                        format!("Fell back: {} → {} ({} members)", current, to, count);
+                                        String::from("No clients connected — cannot advance camp");
+                                    return;
                                 }
-                                Err(e) => {
-                                    self.status_message =
-                                        format!("Failed to load prev camp '{}': {}", prev_name, e);
-                                }
-                            },
-                            None => {
+                                let count = members.len();
+                                let to = config.name.clone();
+                                orchestrator.start_camp(config, members);
                                 self.status_message =
-                                    format!("Camp '{}' has no previous camp configured", current);
+                                    format!("Advanced: {} → {} ({} members)", current, to, count);
                             }
-                        }
-                    }
-                }
-            }
-            // Bare camp name — shortcut for camp start <name>
-            Some(name) => {
-                match CampConfig::load(name) {
-                    Ok(config) => {
-                        let members = self.build_camp_members();
-                        if members.is_empty() {
+                            Err(e) => {
+                                self.status_message =
+                                    format!("Failed to load next camp '{}': {}", next_name, e);
+                            }
+                        },
+                        None => {
                             self.status_message =
-                                String::from("No clients connected — cannot start camp");
-                            return;
+                                format!("Camp '{}' has no next camp configured", current);
                         }
-                        let count = members.len();
-                        orchestrator.start_camp(config, members);
-                        self.status_message =
-                            format!("Camp '{}' started with {} members", name, count);
-                    }
-                    Err(_) => {
-                        self.status_message = format!(
-                            "Unknown camp subcommand or config: '{}'. Try: start|stop|status|list|add|remove|next|prev",
-                            name
-                        );
                     }
                 }
-            }
+            },
+            Some("prev") => match &orchestrator.active_camp {
+                None => {
+                    self.status_message = String::from("No active camp — start one first");
+                }
+                Some(camp) => {
+                    let current = camp.config.name.clone();
+                    match &camp.config.prev_camp {
+                        Some(prev_name) => match CampConfig::load(prev_name) {
+                            Ok(config) => {
+                                let members = self.build_camp_members();
+                                if members.is_empty() {
+                                    self.status_message =
+                                        String::from("No clients connected — cannot fall back");
+                                    return;
+                                }
+                                let count = members.len();
+                                let to = config.name.clone();
+                                orchestrator.start_camp(config, members);
+                                self.status_message =
+                                    format!("Fell back: {} → {} ({} members)", current, to, count);
+                            }
+                            Err(e) => {
+                                self.status_message =
+                                    format!("Failed to load prev camp '{}': {}", prev_name, e);
+                            }
+                        },
+                        None => {
+                            self.status_message =
+                                format!("Camp '{}' has no previous camp configured", current);
+                        }
+                    }
+                }
+            },
+            // Bare camp name — shortcut for camp start <name>
+            Some(name) => match CampConfig::load(name) {
+                Ok(config) => {
+                    let members = self.build_camp_members();
+                    if members.is_empty() {
+                        self.status_message =
+                            String::from("No clients connected — cannot start camp");
+                        return;
+                    }
+                    let count = members.len();
+                    orchestrator.start_camp(config, members);
+                    self.status_message = format!("Camp '{}' started with {} members", name, count);
+                }
+                Err(_) => {
+                    self.status_message = format!(
+                        "Unknown camp subcommand or config: '{}'. Try: start|stop|status|list|add|remove|next|prev",
+                        name
+                    );
+                }
+            },
         }
     }
 
@@ -1650,8 +1676,11 @@ impl App {
             // :login G<n> — launch accounts in a specific group
             Some(arg) if arg.starts_with('G') || arg.starts_with('g') => {
                 if let Ok(group_id) = arg[1..].parse::<u32>() {
-                    let group_accounts: Vec<_> =
-                        accounts.accounts_for_group(group_id).into_iter().cloned().collect();
+                    let group_accounts: Vec<_> = accounts
+                        .accounts_for_group(group_id)
+                        .into_iter()
+                        .cloned()
+                        .collect();
                     if group_accounts.is_empty() {
                         self.status_message =
                             format!("No accounts configured for group {}", group_id);
@@ -1678,8 +1707,7 @@ impl App {
     fn execute_track_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {
-                self.status_message =
-                    String::from("Usage: track <name> | track list");
+                self.status_message = String::from("Usage: track <name> | track list");
             }
             Some("list") => {
                 if self.tracked_spawns.is_empty() {
@@ -1818,8 +1846,26 @@ fn generate_demo_hex_data(name: &str, spawn_id: u32) -> Vec<u8> {
     data
 }
 
-/// Generate a PID-derived session token for IPC auth.
+/// Load the disk-based session token for IPC auth.
+/// The token was written by --inject-pid (via write_session_token_file) before DLL injection.
 fn generate_session_token(pid: u32) -> [u8; 32] {
+    let token_path = std::env::temp_dir()
+        .join("dmft")
+        .join(format!("token_{}.bin", pid));
+
+    if let Ok(data) = std::fs::read(&token_path)
+        && data.len() == 32
+    {
+        let mut token = [0u8; 32];
+        token.copy_from_slice(&data);
+        return token;
+    }
+
+    // Fallback: PID-derived (won't match DLL's random token — will fail auth)
+    tracing::warn!(
+        pid,
+        "No session token file found for TUI — auth will likely fail"
+    );
     let pid_bytes = pid.to_le_bytes();
     let mut token = [0u8; 32];
     for (i, byte) in token.iter_mut().enumerate() {
@@ -1831,7 +1877,11 @@ fn generate_session_token(pid: u32) -> [u8; 32] {
 /// Extract account number from a character name or window title.
 /// Looks for trailing digits (e.g., "frostreaver05" → 5).
 pub fn extract_account_number(name: &str) -> Option<u8> {
-    let digits: String = name.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = name
+        .chars()
+        .rev()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
     if digits.is_empty() {
         return None;
     }
@@ -1842,9 +1892,12 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
 /// Send a slash command to a specific PID via named pipe.
 fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
     use dmft_common::ipc::Command;
-    send_ipc_command(pid, &Command::SlashCommand {
-        command: command.to_string(),
-    })
+    send_ipc_command(
+        pid,
+        &Command::SlashCommand {
+            command: command.to_string(),
+        },
+    )
 }
 
 fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result<()> {

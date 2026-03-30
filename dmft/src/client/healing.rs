@@ -68,8 +68,10 @@ impl HealthMonitor {
 
     /// Whether this client should be restarted.
     pub fn should_restart(&self) -> bool {
-        matches!(self.health, ClientHealth::Crashed | ClientHealth::Unresponsive { .. })
-            && self.restart_count < self.max_restarts
+        matches!(
+            self.health,
+            ClientHealth::Crashed | ClientHealth::Unresponsive { .. }
+        ) && self.restart_count < self.max_restarts
     }
 
     /// Record that a restart was initiated.

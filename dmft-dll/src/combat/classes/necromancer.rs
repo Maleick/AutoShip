@@ -29,21 +29,36 @@ impl ClassStrategy for NecromancerStrategy {
 
         // Priority 1: Lifetap when HP is low (self-sustain)
         if hp_pct < 50.0
-            && let Some(tap) = ctx.config.spells.iter()
-                .filter(|s| s.name.contains("Tap") || s.name.contains("tap")
-                         || s.name.contains("Drain") || s.name.contains("Leech"))
+            && let Some(tap) = ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| {
+                    s.name.contains("Tap")
+                        || s.name.contains("tap")
+                        || s.name.contains("Drain")
+                        || s.name.contains("Leech")
+                })
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned()
-            {
-                return Some(tap);
-            }
+        {
+            return Some(tap);
+        }
 
         // Priority 2: DoTs (necro's bread and butter)
-        if let Some(dot) = ctx.config.spells.iter()
-            .filter(|s| s.name.contains("Venom") || s.name.contains("Poison")
-                     || s.name.contains("Darkness") || s.name.contains("Plague")
-                     || s.name.contains("Disease") || s.name.contains("Fire"))
+        if let Some(dot) = ctx
+            .config
+            .spells
+            .iter()
+            .filter(|s| {
+                s.name.contains("Venom")
+                    || s.name.contains("Poison")
+                    || s.name.contains("Darkness")
+                    || s.name.contains("Plague")
+                    || s.name.contains("Disease")
+                    || s.name.contains("Fire")
+            })
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
             .cloned()
@@ -52,7 +67,9 @@ impl ClassStrategy for NecromancerStrategy {
         }
 
         // Priority 3: Any available spell
-        ctx.config.spells.iter()
+        ctx.config
+            .spells
+            .iter()
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
             .cloned()

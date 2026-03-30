@@ -69,8 +69,9 @@ Frostreaver reads live game state from EQ client memory, injects a DLL for direc
 ### Anti-Detection
 
 - **CSPRNG session tokens** (not PID-derived)
-- **Randomized IPC names** (session GUID, not static "dmft\_")
+- **Randomized DLL staging names** (CSPRNG filename, not static)
 - **Restrictive pipe DACL** (current user only)
+- **Note:** IPC pipe names currently use a static `dmft_` prefix (randomized session-GUID names are planned)
 - **Human-like command jitter** (triangle distribution + hesitation spikes)
 - **Per-character personality profiles** (reaction speed, aggression, discipline variation)
 - **GM flag detection** (alerts on GM spawns)
@@ -121,7 +122,7 @@ DLL executes InterpretCmd with human-like jitter delay
 ```bash
 cargo build              # Debug build
 cargo run                # TUI with demo data
-cargo test               # Run all 621 tests
+cargo test               # Run all 686 tests
 cargo clippy             # Lint
 ```
 

@@ -4,7 +4,7 @@ use crate::launcher::spawner;
 use dmft_common::login::{AccountInfo, LoginError};
 use dmft_common::types::ClientId;
 use rand::Rng;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -15,6 +15,8 @@ pub struct LaunchCoordinator {
     launch_queue: VecDeque<(ClientId, AccountInfo)>,
     active_logins: Vec<LoginStateMachine>,
     failure_window: VecDeque<(Instant, ClientId)>,
+    /// Per-client earliest retry time, honoring backoff from LoginAction::Retry.
+    retry_not_before: HashMap<ClientId, Instant>,
     paused: bool,
     last_launch: Option<Instant>,
     next_stagger: Duration,
@@ -22,16 +24,27 @@ pub struct LaunchCoordinator {
 
 #[derive(Debug)]
 pub enum CoordinatorEvent {
-    ClientLaunched { client_id: ClientId, pid: u32 },
-    ClientReady { client_id: ClientId },
-    ClientFailed { client_id: ClientId, error: LoginError },
-    AllPaused { reason: String },
+    ClientLaunched {
+        client_id: ClientId,
+        pid: u32,
+    },
+    ClientReady {
+        client_id: ClientId,
+    },
+    ClientFailed {
+        client_id: ClientId,
+        error: LoginError,
+    },
+    AllPaused {
+        reason: String,
+    },
     AllReady,
 }
 
 impl LaunchCoordinator {
     pub fn new(config: LaunchConfig, retry: RetryConfig, server: ServerConfig) -> Self {
-        let next_stagger = compute_stagger_between(config.stagger_min_secs, config.stagger_max_secs);
+        let next_stagger =
+            compute_stagger_between(config.stagger_min_secs, config.stagger_max_secs);
         Self {
             config,
             retry_config: retry,
@@ -39,6 +52,7 @@ impl LaunchCoordinator {
             launch_queue: VecDeque::new(),
             active_logins: Vec::new(),
             failure_window: VecDeque::new(),
+            retry_not_before: HashMap::new(),
             paused: false,
             last_launch: None,
             next_stagger,
@@ -61,6 +75,7 @@ impl LaunchCoordinator {
         if self.should_launch_next()
             && let Some((client_id, account)) = self.launch_queue.pop_front()
         {
+            self.retry_not_before.remove(&client_id);
             let eq_path = Path::new(&self.config.eq_path);
             match spawner::spawn_eq_client(
                 eq_path,
@@ -93,10 +108,7 @@ impl LaunchCoordinator {
                             reason: "Mass failure threshold reached during spawn".to_string(),
                         });
                     }
-                    events.push(CoordinatorEvent::ClientFailed {
-                        client_id,
-                        error,
-                    });
+                    events.push(CoordinatorEvent::ClientFailed { client_id, error });
                 }
             }
         }
@@ -108,8 +120,10 @@ impl LaunchCoordinator {
             if let Some(action) = self.active_logins[i].tick() {
                 let client_id = self.active_logins[i].client_id;
                 match action {
-                    LoginAction::Retry { after: _ } => {
+                    LoginAction::Retry { after } => {
                         let sm = self.active_logins.remove(i);
+                        self.retry_not_before
+                            .insert(sm.client_id, Instant::now() + after);
                         retry_queue.push((sm.client_id, sm.account_info));
                         // Don't increment i since we removed the element
                         continue;
@@ -151,9 +165,10 @@ impl LaunchCoordinator {
             && self.active_logins.iter().all(|sm| sm.is_terminal())
         {
             // Only emit AllReady if all finished successfully (Ready state)
-            let all_ready = self.active_logins.iter().all(|sm| {
-                matches!(sm.phase, dmft_common::login::LoginPhase::Ready)
-            });
+            let all_ready = self
+                .active_logins
+                .iter()
+                .all(|sm| matches!(sm.phase, dmft_common::login::LoginPhase::Ready));
             if all_ready {
                 events.push(CoordinatorEvent::AllReady);
             }
@@ -163,15 +178,26 @@ impl LaunchCoordinator {
     }
 
     pub fn report_login_event(&mut self, client_id: ClientId, event: LoginEvent) {
-        if let Some(sm) = self.active_logins.iter_mut().find(|sm| sm.client_id == client_id) {
+        if let Some(sm) = self
+            .active_logins
+            .iter_mut()
+            .find(|sm| sm.client_id == client_id)
+        {
             let action = sm.advance(event);
             match action {
-                LoginAction::Retry { after: _ } => {
+                LoginAction::Retry { after } => {
                     // Find and remove this SM, re-enqueue with reset attempts
-                    if let Some(idx) = self.active_logins.iter().position(|s| s.client_id == client_id) {
+                    if let Some(idx) = self
+                        .active_logins
+                        .iter()
+                        .position(|s| s.client_id == client_id)
+                    {
                         let mut sm = self.active_logins.remove(idx);
                         sm.attempts = 0;
-                        self.launch_queue.push_front((sm.client_id, sm.account_info));
+                        self.retry_not_before
+                            .insert(sm.client_id, Instant::now() + after);
+                        self.launch_queue
+                            .push_front((sm.client_id, sm.account_info));
                     }
                 }
                 LoginAction::Abort { reason } => {
@@ -205,7 +231,10 @@ impl LaunchCoordinator {
     }
 
     pub fn active_count(&self) -> usize {
-        self.active_logins.iter().filter(|sm| !sm.is_terminal()).count()
+        self.active_logins
+            .iter()
+            .filter(|sm| !sm.is_terminal())
+            .count()
     }
 
     fn should_launch_next(&self) -> bool {
@@ -220,7 +249,18 @@ impl LaunchCoordinator {
         }
 
         // Check stagger timing
-        if let Some(last) = self.last_launch && last.elapsed() < self.next_stagger {
+        if let Some(last) = self.last_launch
+            && last.elapsed() < self.next_stagger
+        {
+            return false;
+        }
+
+        // Honor retry backoff: if the front-of-queue client has a not-before
+        // timestamp that hasn't elapsed yet, don't launch.
+        if let Some(&(client_id, _)) = self.launch_queue.front()
+            && let Some(&not_before) = self.retry_not_before.get(&client_id)
+            && Instant::now() < not_before
+        {
             return false;
         }
 
@@ -391,7 +431,9 @@ mod tests {
         coord.enqueue(42, test_account("stub_acct"));
 
         let events = coord.tick();
-        let has_failed = events.iter().any(|e| matches!(e, CoordinatorEvent::ClientFailed { client_id: 42, .. }));
+        let has_failed = events
+            .iter()
+            .any(|e| matches!(e, CoordinatorEvent::ClientFailed { client_id: 42, .. }));
         assert!(has_failed, "expected ClientFailed event for client 42");
         assert_eq!(coord.pending_count(), 0, "failed client should be dequeued");
     }

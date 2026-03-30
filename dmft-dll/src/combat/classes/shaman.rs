@@ -25,7 +25,11 @@ impl ShamanStrategy {
         ctx.group_members
             .iter()
             .filter(|m| m.hp_pct < 100.0 && m.hp_pct > 0.0)
-            .min_by(|a, b| a.hp_pct.partial_cmp(&b.hp_pct).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|a, b| {
+                a.hp_pct
+                    .partial_cmp(&b.hp_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|m| (m.spawn_id, m.hp_pct))
     }
 }
@@ -38,9 +42,10 @@ impl ClassStrategy for ShamanStrategy {
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         // If someone needs healing, target them
         if let Some((heal_target, hp)) = self.lowest_hp_member(ctx)
-            && hp < 70.0 {
-                return Some(heal_target);
-            }
+            && hp < 70.0
+        {
+            return Some(heal_target);
+        }
         // Otherwise target the mob (for slow/DoT)
         ctx.target.map(|t| t.spawn_id)
     }
@@ -50,40 +55,60 @@ impl ClassStrategy for ShamanStrategy {
 
         // Priority 1: Emergency heal (group member below 40%)
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
-            && hp < 40.0 {
-                return ctx.config.spells.iter()
-                    .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
-                    .filter(|s| mana_pct >= s.min_mana_pct)
-                    .max_by_key(|s| s.priority)
-                    .cloned();
-            }
+            && hp < 40.0
+        {
+            return ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| mana_pct >= s.min_mana_pct)
+                .max_by_key(|s| s.priority)
+                .cloned();
+        }
 
         // Priority 2: Slow on unslowed target
         if !self.target_slowed
-            && let Some(slow) = ctx.config.spells.iter()
-                .filter(|s| s.name.contains("Slow") || s.name.contains("slow") || s.name.contains("Turgur"))
+            && let Some(slow) = ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| {
+                    s.name.contains("Slow") || s.name.contains("slow") || s.name.contains("Turgur")
+                })
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned()
-            {
-                return Some(slow);
-            }
+        {
+            return Some(slow);
+        }
 
         // Priority 3: Heal if anyone below 70%
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
-            && hp < 70.0 {
-                return ctx.config.spells.iter()
-                    .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
-                    .filter(|s| mana_pct >= s.min_mana_pct)
-                    .max_by_key(|s| s.priority)
-                    .cloned();
-            }
+            && hp < 70.0
+        {
+            return ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| mana_pct >= s.min_mana_pct)
+                .max_by_key(|s| s.priority)
+                .cloned();
+        }
 
         // Priority 4: DoT / nuke (exclude heals, slows, and debuffs)
-        ctx.config.spells.iter()
-            .filter(|s| !s.name.contains("Heal") && !s.name.contains("heal")
-                     && !s.name.contains("Slow") && !s.name.contains("slow")
-                     && !s.name.contains("Turgur") && !s.name.contains("Malo"))
+        ctx.config
+            .spells
+            .iter()
+            .filter(|s| {
+                !s.name.contains("Heal")
+                    && !s.name.contains("heal")
+                    && !s.name.contains("Slow")
+                    && !s.name.contains("slow")
+                    && !s.name.contains("Turgur")
+                    && !s.name.contains("Malo")
+            })
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
             .cloned()
@@ -126,8 +151,8 @@ impl ClassStrategy for ShamanStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmft_common::combat::{CombatConfig, AssistMode};
     use crate::combat::strategy::GroupMemberState;
+    use dmft_common::combat::{AssistMode, CombatConfig};
 
     fn test_config_with_spells() -> CombatConfig {
         CombatConfig {
@@ -211,9 +236,12 @@ mod tests {
             mana_max: 100,
             ..Default::default()
         };
-        let members = vec![
-            GroupMemberState { spawn_id: 1, hp_pct: 30.0, mana_pct: 50.0, class_id: 1 },
-        ];
+        let members = vec![GroupMemberState {
+            spawn_id: 1,
+            hp_pct: 30.0,
+            mana_pct: 50.0,
+            class_id: 1,
+        }];
         let ctx = CombatContext {
             player: &player,
             target: None,

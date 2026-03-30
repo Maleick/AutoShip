@@ -36,11 +36,8 @@ pub fn decode<T: DeserializeOwned>(data: &[u8]) -> Option<(T, usize)> {
     if data.len() < 4 + len {
         return None;
     }
-    let (msg, _) = bincode::serde::decode_from_slice(
-        &data[4..4 + len],
-        bincode::config::standard(),
-    )
-    .ok()?;
+    let (msg, _) =
+        bincode::serde::decode_from_slice(&data[4..4 + len], bincode::config::standard()).ok()?;
     Some((msg, 4 + len))
 }
 
@@ -55,8 +52,7 @@ mod tests {
     fn command_roundtrip_ping() {
         let cmd = Command::Ping;
         let encoded = encode(&cmd).expect("encode failed");
-        let (decoded, consumed): (Command, usize) =
-            decode(&encoded).expect("decode failed");
+        let (decoded, consumed): (Command, usize) = decode(&encoded).expect("decode failed");
         assert_eq!(consumed, encoded.len());
         assert!(matches!(decoded, Command::Ping));
     }
@@ -64,10 +60,7 @@ mod tests {
     #[test]
     fn command_roundtrip_navigate_to() {
         let cmd = Command::NavigateTo {
-            waypoints: vec![
-                Waypoint::new(1.0, 2.0, 3.0),
-                Waypoint::new(4.0, 5.0, 6.0),
-            ],
+            waypoints: vec![Waypoint::new(1.0, 2.0, 3.0), Waypoint::new(4.0, 5.0, 6.0)],
         };
         let encoded = encode(&cmd).expect("encode failed");
         let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
@@ -118,7 +111,9 @@ mod tests {
         let encoded = encode(&cmd).expect("encode failed");
         let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
         if let Command::Say {
-            channel, message, target,
+            channel,
+            message,
+            target,
         } = decoded
         {
             assert_eq!(channel, SayChannel::Group);

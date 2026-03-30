@@ -211,10 +211,8 @@ impl LoginFsm {
 
         // Before doing state-specific work, check for dialogs that can appear
         // at any point during login (error dialogs, "already logged in", etc.)
-        if self.eqmain_base != 0 {
-            if self.handle_dialogs() {
-                return self.phase_if_changed(&prev_phase);
-            }
+        if self.eqmain_base != 0 && self.handle_dialogs() {
+            return self.phase_if_changed(&prev_phase);
         }
 
         match self.state.clone() {
@@ -235,12 +233,10 @@ impl LoginFsm {
     /// Returns true if the FSM transitioned to an error state.
     fn handle_dialogs(&mut self) -> bool {
         // YesNo dialog — "already logged in, kick?" → click Yes
-        if let Some(dialog_wnd) = widgets::find_visible_sidl_window(
-            self.eqmain_base,
-            widgets::SIDL_YES_NO_DIALOG,
-        ) {
-            let dialog_text = widgets::read_yesno_dialog_text(dialog_wnd)
-                .unwrap_or_default();
+        if let Some(dialog_wnd) =
+            widgets::find_visible_sidl_window(self.eqmain_base, widgets::SIDL_YES_NO_DIALOG)
+        {
+            let dialog_text = widgets::read_yesno_dialog_text(dialog_wnd).unwrap_or_default();
             tracing::info!(text = %dialog_text, "YesNo dialog detected");
 
             // "Already logged in" dialogs → click Yes to kick
@@ -260,10 +256,9 @@ impl LoginFsm {
         }
 
         // OK dialog — error messages, server full, etc.
-        if let Some(dialog_wnd) = widgets::find_visible_sidl_window(
-            self.eqmain_base,
-            widgets::SIDL_OK_DIALOG,
-        ) {
+        if let Some(dialog_wnd) =
+            widgets::find_visible_sidl_window(self.eqmain_base, widgets::SIDL_OK_DIALOG)
+        {
             tracing::warn!("OK dialog detected — dismissing");
             widgets::click_ok_dialog(dialog_wnd);
             // Don't transition to error — let the FSM detect the actual state
@@ -275,7 +270,9 @@ impl LoginFsm {
     }
 
     fn tick_wait_for_login_screen(&mut self) {
-        if self.eqmain_base == 0 { return; }
+        if self.eqmain_base == 0 {
+            return;
+        }
 
         // Use the proven type_credentials_to_window approach that was working
         // before the FSM rewrite. It scans for USERNAME/PASSWORD labels and
@@ -295,7 +292,6 @@ impl LoginFsm {
                     widgets::type_password_wm_char(self.eqmain_base, &creds.password);
                     self.action_taken = true;
                     self.transition(State::WaitForServerSelect);
-                    return;
                 }
             }
         }
@@ -330,7 +326,8 @@ impl LoginFsm {
 
         // Strategy 1: Write credentials to EQLogin char arrays + CXStr widgets
         let wrote_chars = widgets::write_login_credentials(self.eqmain_base, &account, &password);
-        let wrote_cxstr = widgets::type_credentials_to_window(self.eqmain_base, &account, &password);
+        let wrote_cxstr =
+            widgets::type_credentials_to_window(self.eqmain_base, &account, &password);
 
         if !wrote_chars && !wrote_cxstr {
             tracing::warn!("Both credential write methods failed — retrying next tick");
@@ -414,7 +411,7 @@ impl LoginFsm {
 
         // Periodically press Enter to dismiss blocking dialogs that may not have
         // SIDL names we recognize (e.g., server messages, maintenance notices).
-        if self.ticks_in_state > 0 && self.ticks_in_state % 90 == 0 {
+        if self.ticks_in_state > 0 && self.ticks_in_state.is_multiple_of(90) {
             tracing::info!("Pressing Enter to dismiss potential dialog");
             widgets::simulate_enter_key(self.eqmain_base);
         }
@@ -477,10 +474,9 @@ impl LoginFsm {
             return;
         };
 
-        let Some(enter_world_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::ENTER_WORLD,
-            eq_base,
-        ) else {
+        let Some(enter_world_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::ENTER_WORLD, eq_base)
+        else {
             tracing::warn!("Failed to rebase ENTER_WORLD");
             return;
         };
@@ -508,10 +504,9 @@ impl LoginFsm {
             return;
         }
 
-        if let Some(player_ptr_addr) = dmft_common::offsets::rebase(
-            dmft_common::offsets::PINST_LOCAL_PLAYER,
-            eq_base,
-        ) {
+        if let Some(player_ptr_addr) =
+            dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
+        {
             #[cfg(windows)]
             {
                 let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
@@ -565,9 +560,7 @@ impl LoginFsm {
             State::WaitForCharSelect | State::SelectingCharacter => LoginPhase::CharacterSelecting,
             State::WaitForWorld => LoginPhase::Zoning,
             State::InWorld => LoginPhase::InWorld,
-            State::Error(e) => LoginPhase::Failed {
-                reason: e.clone(),
-            },
+            State::Error(e) => LoginPhase::Failed { reason: e.clone() },
         };
     }
 
@@ -715,7 +708,10 @@ mod tests {
 
         // Third timeout — error
         fsm.handle_timeout();
-        assert!(matches!(fsm.state, State::Error(LoginError::Timeout { .. })));
+        assert!(matches!(
+            fsm.state,
+            State::Error(LoginError::Timeout { .. })
+        ));
     }
 
     #[test]

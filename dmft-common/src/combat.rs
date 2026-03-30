@@ -145,7 +145,10 @@ mod tests {
     fn combat_status_all_variants_constructible() {
         let _idle = CombatStatus::Idle;
         let _engaging = CombatStatus::Engaging { target_id: 1 };
-        let _casting = CombatStatus::Casting { spell_slot: 0, target_id: 1 };
+        let _casting = CombatStatus::Casting {
+            spell_slot: 0,
+            target_id: 1,
+        };
         let _gcd = CombatStatus::OnGcd;
         let _pulling = CombatStatus::Pulling { target_id: 1 };
         let _recovering = CombatStatus::Recovering;

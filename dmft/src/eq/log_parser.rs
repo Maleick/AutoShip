@@ -26,12 +26,28 @@ pub struct ChatEvent {
 /// Events parsed from EQ log lines.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LogEvent {
-    Loot { character: String, item: String },
-    Kill { mob: String },
-    Money { plat: u32, gold: u32, silver: u32, copper: u32 },
-    Experience { party: bool },
-    Death { killed_by: String },
-    ZoneEnter { zone: String },
+    Loot {
+        character: String,
+        item: String,
+    },
+    Kill {
+        mob: String,
+    },
+    Money {
+        plat: u32,
+        gold: u32,
+        silver: u32,
+        copper: u32,
+    },
+    Experience {
+        party: bool,
+    },
+    Death {
+        killed_by: String,
+    },
+    ZoneEnter {
+        zone: String,
+    },
     Chat(ChatEvent),
 }
 
@@ -49,28 +65,31 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
 
     // --You have looted a Rusty Short Sword.--
     if let Some(rest) = text.strip_prefix("--You have looted a ")
-        && let Some(item) = rest.strip_suffix(".--") {
-            return Some(LogEvent::Loot {
-                character: String::new(),
-                item: item.to_string(),
-            });
-        }
+        && let Some(item) = rest.strip_suffix(".--")
+    {
+        return Some(LogEvent::Loot {
+            character: String::new(),
+            item: item.to_string(),
+        });
+    }
 
     // You have slain a moss snake!
     if let Some(rest) = text.strip_prefix("You have slain ")
-        && let Some(mob) = rest.strip_suffix('!') {
-            return Some(LogEvent::Kill {
-                mob: mob.to_string(),
-            });
-        }
+        && let Some(mob) = rest.strip_suffix('!')
+    {
+        return Some(LogEvent::Kill {
+            mob: mob.to_string(),
+        });
+    }
 
     // You have been slain by a moss snake!
     if let Some(rest) = text.strip_prefix("You have been slain by ")
-        && let Some(killed_by) = rest.strip_suffix('!') {
-            return Some(LogEvent::Death {
-                killed_by: killed_by.to_string(),
-            });
-        }
+        && let Some(killed_by) = rest.strip_suffix('!')
+    {
+        return Some(LogEvent::Death {
+            killed_by: killed_by.to_string(),
+        });
+    }
 
     // You receive 5 platinum, 3 gold, 2 silver and 1 copper from the corpse.
     if text.starts_with("You receive ") && text.contains(" from the corpse") {
@@ -85,19 +104,25 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
                 continue;
             }
             if let Ok(amount) = word.parse::<u32>()
-                && let Some(currency) = words.get(i + 1) {
-                    let currency = currency.trim_matches(|c: char| !c.is_alphabetic());
-                    match currency {
-                        "platinum" => plat = amount,
-                        "gold" => gold = amount,
-                        "silver" => silver = amount,
-                        "copper" => copper = amount,
-                        _ => {}
-                    }
+                && let Some(currency) = words.get(i + 1)
+            {
+                let currency = currency.trim_matches(|c: char| !c.is_alphabetic());
+                match currency {
+                    "platinum" => plat = amount,
+                    "gold" => gold = amount,
+                    "silver" => silver = amount,
+                    "copper" => copper = amount,
+                    _ => {}
                 }
+            }
         }
 
-        return Some(LogEvent::Money { plat, gold, silver, copper });
+        return Some(LogEvent::Money {
+            plat,
+            gold,
+            silver,
+            copper,
+        });
     }
 
     // You gain experience! / You gain party experience!
@@ -110,50 +135,80 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
 
     // You have entered West Freeport.
     if let Some(rest) = text.strip_prefix("You have entered ")
-        && let Some(zone) = rest.strip_suffix('.') {
-            return Some(LogEvent::ZoneEnter {
-                zone: zone.to_string(),
-            });
-        }
+        && let Some(zone) = rest.strip_suffix('.')
+    {
+        return Some(LogEvent::ZoneEnter {
+            zone: zone.to_string(),
+        });
+    }
 
     // Tell out: "You told Soandso, 'message'"
-    if let Some(rest) = text.strip_prefix("You told ") {
-        if let Some(rest2) = rest.strip_suffix('\'') {
-            if let Some((target, msg)) = rest2.split_once(", '") {
-                return Some(LogEvent::Chat(ChatEvent {
-                    channel: ChatChannel::TellOut,
-                    sender: "You".to_string(),
-                    message: format!("-> {}: {}", target, msg),
-                }));
-            }
-        }
+    if let Some(rest) = text.strip_prefix("You told ")
+        && let Some(rest2) = rest.strip_suffix('\'')
+        && let Some((target, msg)) = rest2.split_once(", '")
+    {
+        return Some(LogEvent::Chat(ChatEvent {
+            channel: ChatChannel::TellOut,
+            sender: "You".to_string(),
+            message: format!("-> {}: {}", target, msg),
+        }));
     }
 
     // Chat channels: pattern "Sender <verb>, 'message'"
-    if let Some(rest) = text.strip_suffix('\'') {
-        if let Some((lhs, msg)) = rest.split_once(", '") {
-            let chat = if let Some(sender) = lhs.strip_suffix(" says") {
-                Some(ChatEvent { channel: ChatChannel::Say, sender: sender.to_string(), message: msg.to_string() })
-            } else if let Some(sender) = lhs.strip_suffix(" tells you") {
-                Some(ChatEvent { channel: ChatChannel::Tell, sender: sender.to_string(), message: msg.to_string() })
-            } else if let Some(sender) = lhs.strip_suffix(" tells the group") {
-                Some(ChatEvent { channel: ChatChannel::Group, sender: sender.to_string(), message: msg.to_string() })
-            } else if let Some(sender) = lhs.strip_suffix(" says to your guild") {
-                Some(ChatEvent { channel: ChatChannel::Guild, sender: sender.to_string(), message: msg.to_string() })
-            } else if let Some(sender) = lhs.strip_suffix(" tells the raid") {
-                Some(ChatEvent { channel: ChatChannel::Raid, sender: sender.to_string(), message: msg.to_string() })
-            } else if let Some(sender) = lhs.strip_suffix(" shouts") {
-                Some(ChatEvent { channel: ChatChannel::Shout, sender: sender.to_string(), message: msg.to_string() })
-            } else if let Some(sender) = lhs.strip_suffix(" says out of character") {
-                Some(ChatEvent { channel: ChatChannel::Ooc, sender: sender.to_string(), message: msg.to_string() })
-            } else if let Some(sender) = lhs.strip_suffix(" auctions") {
-                Some(ChatEvent { channel: ChatChannel::Auction, sender: sender.to_string(), message: msg.to_string() })
-            } else {
-                None
-            };
-            if let Some(event) = chat {
-                return Some(LogEvent::Chat(event));
-            }
+    if let Some(rest) = text.strip_suffix('\'')
+        && let Some((lhs, msg)) = rest.split_once(", '")
+    {
+        let chat = if let Some(sender) = lhs.strip_suffix(" says") {
+            Some(ChatEvent {
+                channel: ChatChannel::Say,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        } else if let Some(sender) = lhs.strip_suffix(" tells you") {
+            Some(ChatEvent {
+                channel: ChatChannel::Tell,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        } else if let Some(sender) = lhs.strip_suffix(" tells the group") {
+            Some(ChatEvent {
+                channel: ChatChannel::Group,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        } else if let Some(sender) = lhs.strip_suffix(" says to your guild") {
+            Some(ChatEvent {
+                channel: ChatChannel::Guild,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        } else if let Some(sender) = lhs.strip_suffix(" tells the raid") {
+            Some(ChatEvent {
+                channel: ChatChannel::Raid,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        } else if let Some(sender) = lhs.strip_suffix(" shouts") {
+            Some(ChatEvent {
+                channel: ChatChannel::Shout,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        } else if let Some(sender) = lhs.strip_suffix(" says out of character") {
+            Some(ChatEvent {
+                channel: ChatChannel::Ooc,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        } else {
+            lhs.strip_suffix(" auctions").map(|sender| ChatEvent {
+                channel: ChatChannel::Auction,
+                sender: sender.to_string(),
+                message: msg.to_string(),
+            })
+        };
+        if let Some(event) = chat.map(LogEvent::Chat) {
+            return Some(event);
         }
     }
 
@@ -197,7 +252,12 @@ impl LootDatabase {
             LogEvent::Kill { mob } => {
                 *self.kills.entry(mob.clone()).or_insert(0) += 1;
             }
-            LogEvent::Money { plat, gold, silver, copper } => {
+            LogEvent::Money {
+                plat,
+                gold,
+                silver,
+                copper,
+            } => {
                 self.total_plat += *plat as u64;
                 self.total_gold += *gold as u64;
                 self.total_silver += *silver as u64;
@@ -230,7 +290,11 @@ impl LootDatabase {
         let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
         let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;
         let window_hours = window.as_secs_f64() / 3600.0;
-        if window_hours > 0.0 { count / window_hours } else { 0.0 }
+        if window_hours > 0.0 {
+            count / window_hours
+        } else {
+            0.0
+        }
     }
 }
 
@@ -365,88 +429,112 @@ mod tests {
     fn test_parse_say() {
         let line = "[Thu Mar 28 12:40:00 2026] Soandso says, 'Hello there!'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::Say,
-            sender: "Soandso".to_string(),
-            message: "Hello there!".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Say,
+                sender: "Soandso".to_string(),
+                message: "Hello there!".to_string(),
+            })
+        );
     }
 
     #[test]
     fn test_parse_tell_in() {
         let line = "[Thu Mar 28 12:40:00 2026] Soandso tells you, 'Need a rez?'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::Tell,
-            sender: "Soandso".to_string(),
-            message: "Need a rez?".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Tell,
+                sender: "Soandso".to_string(),
+                message: "Need a rez?".to_string(),
+            })
+        );
     }
 
     #[test]
     fn test_parse_tell_out() {
         let line = "[Thu Mar 28 12:40:00 2026] You told Soandso, 'On my way'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::TellOut,
-            sender: "You".to_string(),
-            message: "-> Soandso: On my way".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::TellOut,
+                sender: "You".to_string(),
+                message: "-> Soandso: On my way".to_string(),
+            })
+        );
     }
 
     #[test]
     fn test_parse_group() {
         let line = "[Thu Mar 28 12:40:00 2026] Soandso tells the group, 'INC 3'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::Group,
-            sender: "Soandso".to_string(),
-            message: "INC 3".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Group,
+                sender: "Soandso".to_string(),
+                message: "INC 3".to_string(),
+            })
+        );
     }
 
     #[test]
     fn test_parse_guild() {
         let line = "[Thu Mar 28 12:40:00 2026] Soandso says to your guild, 'Raid at 8pm'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::Guild,
-            sender: "Soandso".to_string(),
-            message: "Raid at 8pm".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Guild,
+                sender: "Soandso".to_string(),
+                message: "Raid at 8pm".to_string(),
+            })
+        );
     }
 
     #[test]
     fn test_parse_shout() {
         let line = "[Thu Mar 28 12:40:00 2026] Soandso shouts, 'WTS Fungi!'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::Shout,
-            sender: "Soandso".to_string(),
-            message: "WTS Fungi!".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Shout,
+                sender: "Soandso".to_string(),
+                message: "WTS Fungi!".to_string(),
+            })
+        );
     }
 
     #[test]
     fn test_parse_ooc() {
         let line = "[Thu Mar 28 12:40:00 2026] Soandso says out of character, 'Anyone need buffs?'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::Ooc,
-            sender: "Soandso".to_string(),
-            message: "Anyone need buffs?".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Ooc,
+                sender: "Soandso".to_string(),
+                message: "Anyone need buffs?".to_string(),
+            })
+        );
     }
 
     #[test]
     fn test_parse_auction() {
         let line = "[Thu Mar 28 12:40:00 2026] Soandso auctions, 'WTB SoW'";
         let event = parse_log_line(line).unwrap();
-        assert_eq!(event, LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::Auction,
-            sender: "Soandso".to_string(),
-            message: "WTB SoW".to_string(),
-        }));
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Auction,
+                sender: "Soandso".to_string(),
+                message: "WTB SoW".to_string(),
+            })
+        );
     }
 
     #[test]

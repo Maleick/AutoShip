@@ -174,11 +174,7 @@ mod tests {
 
     #[test]
     fn test_fighting_face_commands_all_melee() {
-        let members = vec![
-            (100, Role::Tank),
-            (101, Role::Dps),
-            (102, Role::Dps),
-        ];
+        let members = vec![(100, Role::Tank), (101, Role::Dps), (102, Role::Dps)];
         let cmds = fighting_face_commands(&members);
         assert_eq!(cmds.len(), 3);
     }
@@ -221,18 +217,17 @@ mod tests {
     fn test_behind_target_offset_distance() {
         let (bx, by) = behind_target_position(0.0, 0.0, 0.0, 10.0);
         let dist = distance_2d(0.0, 0.0, bx, by);
-        assert!((dist - 10.0).abs() < 0.1, "distance should be ~10, got {dist}");
+        assert!(
+            (dist - 10.0).abs() < 0.1,
+            "distance should be ~10, got {dist}"
+        );
     }
 
     #[test]
     fn test_rogue_positioning_already_behind() {
         // Player is already at the behind position
         let (behind_x, behind_y) = behind_target_position(100.0, 200.0, 0.0, BACKSTAB_OFFSET);
-        let cmds = rogue_positioning_commands(
-            (behind_x, behind_y),
-            (100.0, 200.0),
-            0.0,
-        );
+        let cmds = rogue_positioning_commands((behind_x, behind_y), (100.0, 200.0), 0.0);
         assert_eq!(cmds, vec!["/face"]);
     }
 

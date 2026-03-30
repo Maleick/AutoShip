@@ -107,8 +107,7 @@ impl MemoryStore {
         importance: f32,
     ) -> Result<i64> {
         let event_type = event_type_label(event);
-        let event_json =
-            serde_json::to_string(event).context("Failed to serialize SoulEvent")?;
+        let event_json = serde_json::to_string(event).context("Failed to serialize SoulEvent")?;
         let zone = event_zone(event);
         let mood_str = format!("{:?}", mood);
 
@@ -160,7 +159,10 @@ impl MemoryStore {
         )?;
 
         let rows = stmt
-            .query_map(params![character_id, pattern, limit as i64], MemoryRow::from_row)?
+            .query_map(
+                params![character_id, pattern, limit as i64],
+                MemoryRow::from_row,
+            )?
             .collect::<std::result::Result<Vec<_>, _>>()
             .context("Failed to search memories")?;
 
@@ -206,7 +208,10 @@ impl MemoryStore {
         )?;
 
         let rows = stmt
-            .query_map(params![character_id, limit as i64], ConversationRow::from_row)?
+            .query_map(
+                params![character_id, limit as i64],
+                ConversationRow::from_row,
+            )?
             .collect::<std::result::Result<Vec<_>, _>>()
             .context("Failed to read conversations")?;
 
@@ -299,11 +304,13 @@ impl MemoryStore {
         memory_id: i64,
         description: &str,
     ) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO shared_references (character_a, character_b, memory_id, description)
+        self.conn
+            .execute(
+                "INSERT INTO shared_references (character_a, character_b, memory_id, description)
              VALUES (?1, ?2, ?3, ?4)",
-            params![character_a, character_b, memory_id, description],
-        ).context("Failed to record shared reference")?;
+                params![character_a, character_b, memory_id, description],
+            )
+            .context("Failed to record shared reference")?;
 
         Ok(())
     }
@@ -320,29 +327,31 @@ impl MemoryStore {
     /// Typical half-life: if tick is every 30 min, decay_factor ≈ 0.99 gives
     /// half-life of ~69 ticks (~34.5 hours).
     pub fn decay_tick(&self, character_id: ClientId, decay_factor: f32) -> Result<usize> {
-        let rows = self.conn.execute(
-            "UPDATE memories
+        let rows = self
+            .conn
+            .execute(
+                "UPDATE memories
              SET importance = importance * ?1
              WHERE character_id = ?2 AND decayed = 0",
-            params![decay_factor, character_id],
-        ).context("Failed to decay memories")?;
+                params![decay_factor, character_id],
+            )
+            .context("Failed to decay memories")?;
 
         Ok(rows)
     }
 
     /// Mark memories with importance below threshold as decayed (soft delete).
     /// Returns the number of memories pruned.
-    pub fn prune_low_importance(
-        &self,
-        character_id: ClientId,
-        threshold: f32,
-    ) -> Result<usize> {
-        let rows = self.conn.execute(
-            "UPDATE memories
+    pub fn prune_low_importance(&self, character_id: ClientId, threshold: f32) -> Result<usize> {
+        let rows = self
+            .conn
+            .execute(
+                "UPDATE memories
              SET decayed = 1
              WHERE character_id = ?1 AND decayed = 0 AND importance < ?2",
-            params![character_id, threshold],
-        ).context("Failed to prune low-importance memories")?;
+                params![character_id, threshold],
+            )
+            .context("Failed to prune low-importance memories")?;
 
         Ok(rows)
     }
@@ -351,12 +360,14 @@ impl MemoryStore {
     /// Called when recall_about() finds matching memories — each recall
     /// reinforces the memory, making it resist decay longer.
     pub fn rehearse(&self, memory_id: i64, boost: f32) -> Result<()> {
-        self.conn.execute(
-            "UPDATE memories
+        self.conn
+            .execute(
+                "UPDATE memories
              SET importance = MIN(importance + ?1, 10.0)
              WHERE id = ?2 AND decayed = 0",
-            params![boost, memory_id],
-        ).context("Failed to rehearse memory")?;
+                params![boost, memory_id],
+            )
+            .context("Failed to rehearse memory")?;
 
         Ok(())
     }
@@ -598,13 +609,23 @@ mod tests {
     fn recall_about_filters_by_subject() {
         let store = open_memory_store();
         store
-            .record(1, &kill_event("gnoll", "blackburrow"), MoodState::Neutral, 1.0)
+            .record(
+                1,
+                &kill_event("gnoll", "blackburrow"),
+                MoodState::Neutral,
+                1.0,
+            )
             .unwrap();
         store
             .record(1, &kill_event("orc", "crushbone"), MoodState::Angry, 1.0)
             .unwrap();
         store
-            .record(1, &loot_event("sword", "blackburrow"), MoodState::Happy, 1.0)
+            .record(
+                1,
+                &loot_event("sword", "blackburrow"),
+                MoodState::Happy,
+                1.0,
+            )
             .unwrap();
 
         // Search by zone name
@@ -620,7 +641,12 @@ mod tests {
     fn recall_about_triggers_rehearsal() {
         let store = open_memory_store();
         let id = store
-            .record(1, &kill_event("gnoll", "blackburrow"), MoodState::Neutral, 1.0)
+            .record(
+                1,
+                &kill_event("gnoll", "blackburrow"),
+                MoodState::Neutral,
+                1.0,
+            )
             .unwrap();
 
         // Recall about "gnoll" should boost importance by 0.1
@@ -754,9 +780,7 @@ mod tests {
     fn memory_row_event_deserializes() {
         let store = open_memory_store();
         let original = kill_event("a_gnoll", "blackburrow");
-        store
-            .record(1, &original, MoodState::Neutral, 1.0)
-            .unwrap();
+        store.record(1, &original, MoodState::Neutral, 1.0).unwrap();
 
         let memories = store.recall_recent(1, 1).unwrap();
         let deserialized = memories[0].event().unwrap();
@@ -783,9 +807,7 @@ mod tests {
             "level_up"
         );
         assert_eq!(
-            event_type_label(&SoulEvent::GroupWipe {
-                zone: "".into()
-            }),
+            event_type_label(&SoulEvent::GroupWipe { zone: "".into() }),
             "group_wipe"
         );
     }

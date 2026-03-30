@@ -5,7 +5,7 @@
 //! characters have visibly different timing patterns to avoid synchronized
 //! bot-like behavior.
 
-use dmft_common::nav::{Xorshift32, KNUTH_HASH};
+use dmft_common::nav::{KNUTH_HASH, Xorshift32};
 
 /// Per-character behavioral profile that shapes timing and thresholds.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -96,12 +96,22 @@ mod tests {
         let all_same = p1.reaction_speed == p2.reaction_speed
             && p1.aggression == p2.aggression
             && p1.phase_offset == p2.phase_offset;
-        assert!(!all_same, "Different names should produce different profiles");
+        assert!(
+            !all_same,
+            "Different names should produce different profiles"
+        );
     }
 
     #[test]
     fn test_reaction_speed_bounds() {
-        for name in &["Warrior01", "Cleric01", "Enchanter01", "Bard01", "Ranger01", "Ranger02"] {
+        for name in &[
+            "Warrior01",
+            "Cleric01",
+            "Enchanter01",
+            "Bard01",
+            "Ranger01",
+            "Ranger02",
+        ] {
             let p = PersonalityProfile::generate(name);
             assert!(
                 (0.7..=1.5).contains(&p.reaction_speed),
@@ -153,7 +163,14 @@ mod tests {
 
     #[test]
     fn test_phase_offset_bounds() {
-        for name in &["Warrior01", "Cleric01", "Enchanter01", "Bard01", "Ranger01", "Ranger02"] {
+        for name in &[
+            "Warrior01",
+            "Cleric01",
+            "Enchanter01",
+            "Bard01",
+            "Ranger01",
+            "Ranger02",
+        ] {
             let p = PersonalityProfile::generate(name);
             assert!(
                 p.phase_offset <= 30,

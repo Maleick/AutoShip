@@ -11,7 +11,7 @@ pub mod necromancer;
 pub mod paladin;
 pub mod ranger;
 pub mod rogue;
-pub mod shaman;
 pub mod shadow_knight;
+pub mod shaman;
 pub mod warrior;
 pub mod wizard;

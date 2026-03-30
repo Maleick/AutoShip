@@ -25,9 +25,7 @@ pub enum Situation {
         channel: String,
     },
     /// Reacting to a game event
-    GameEvent {
-        description: String,
-    },
+    GameEvent { description: String },
     /// Idle chatter / flavor text
     IdleChatter,
     /// Reacting to another bot character
@@ -36,9 +34,7 @@ pub enum Situation {
         message: String,
     },
     /// Combat reaction (kill, death, loot)
-    CombatReaction {
-        description: String,
-    },
+    CombatReaction { description: String },
 }
 
 /// Request to generate text via LLM or fallback.
