@@ -242,6 +242,8 @@ mod tests {
             hp_pct: 30.0,
             mana_pct: 50.0,
             class_id: 1,
+            is_dead: false,
+            name: "Warrior".into(),
         }];
         let ctx = CombatContext {
             player: &player,

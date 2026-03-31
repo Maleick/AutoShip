@@ -322,6 +322,34 @@ impl Orchestrator {
         }
     }
 
+    /// Eject the DLL from a client and clean up its tracked state.
+    /// Sends an Eject IPC command, then removes the client from all maps.
+    pub fn eject_client(&mut self, pid: u32) {
+        let name = self
+            .client_names
+            .get(&pid)
+            .map(|s| s.as_str())
+            .unwrap_or("?")
+            .to_string();
+        tracing::info!(pid, name = %name, "Ejecting client");
+
+        // Best-effort eject command — pipe may already be dead
+        self.send_ipc_command(pid, Command::Eject);
+        self.remove_client(pid);
+    }
+
+    /// Remove a client from all tracked state (does NOT send any IPC).
+    pub fn remove_client(&mut self, pid: u32) {
+        self.client_pids.retain(|&p| p != pid);
+        self.client_names.remove(&pid);
+        self.game_states.remove(&pid);
+        self.state_readers.remove(&pid);
+        self.session_tokens.remove(&pid);
+        self.state_timestamps.remove(&pid);
+        self.pipe_pool.remove(&pid);
+        tracing::info!(pid, "Client removed from orchestrator");
+    }
+
     /// Send a single slash command to a client via named pipe.
     fn send_slash_command(&mut self, pid: u32, command: &str) {
         let name = self

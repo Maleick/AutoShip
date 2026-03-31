@@ -36,6 +36,10 @@ pub struct GroupMemberState {
     pub hp_pct: f32,
     pub mana_pct: f32,
     pub class_id: u8,
+    /// True if this member is dead (corpse present, needs resurrection).
+    pub is_dead: bool,
+    /// Character name, used for corpse targeting during resurrection.
+    pub name: String,
 }
 
 /// The core seam between generic combat framework and per-class logic.

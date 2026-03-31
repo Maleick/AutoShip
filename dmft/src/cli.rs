@@ -71,6 +71,9 @@ pub(crate) fn run_tui_mode() -> Result<()> {
         }
     }
 
+    // Initialize Discord integration if webhook URL is configured
+    app.init_discord(&config.discord);
+
     let orchestrator = orchestrator::Orchestrator::new();
     tui::run::run_tui(app, orchestrator)
 }

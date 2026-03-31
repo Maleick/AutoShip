@@ -26,6 +26,7 @@ mod orchestrator;
 mod process;
 #[allow(dead_code)] // M5/M6: Soul Engine — scaffolding for LLM personalities, social graph
 mod soul;
+mod discord;
 mod tui;
 
 use anyhow::{Context, Result};

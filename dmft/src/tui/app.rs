@@ -228,6 +228,10 @@ pub struct App {
     // Theme
     pub theme_kind: ThemeKind,
     pub theme: Theme,
+
+    // Discord integration
+    pub discord_webhook: Option<crate::discord::webhook::WebhookSender>,
+    pub discord_bridge: Option<crate::discord::bridge::TuiBridge>,
 }
 
 /// Navigation status for a single client.
@@ -307,6 +311,31 @@ impl App {
 
             theme_kind: ThemeKind::DarkModern,
             theme: ThemeKind::DarkModern.build(),
+
+            discord_webhook: None,
+            discord_bridge: None,
+        }
+    }
+
+    /// Initialize Discord integration from config.
+    pub fn init_discord(&mut self, config: &crate::config::DiscordConfig) {
+        if !config.webhook_url.is_empty() {
+            tracing::info!("Discord webhook enabled");
+            self.discord_webhook = Some(
+                crate::discord::webhook::WebhookSender::new(config.webhook_url.clone()),
+            );
+        }
+    }
+
+    /// Send a Discord alert if webhook is configured.
+    #[allow(dead_code)] // Called from alert sites as they're wired up
+    pub fn discord_alert(&self, title: &str, message: &str, level: crate::discord::webhook::AlertLevel) {
+        if let Some(ref webhook) = self.discord_webhook {
+            webhook.send(crate::discord::webhook::DiscordAlert {
+                title: title.to_string(),
+                message: message.to_string(),
+                level,
+            });
         }
     }
 
@@ -525,6 +554,14 @@ impl App {
     /// Get PIDs of clients in the focused group (or all if aggregate).
     pub fn focused_pids(&self) -> Vec<u32> {
         self.visible_clients().iter().map(|c| c.pid).collect()
+    }
+
+    /// Send an IPC command to all focused clients, returning the success count.
+    fn send_ipc_to_focused(&self, cmd: &dmft_common::ipc::Command) -> usize {
+        self.focused_pids()
+            .iter()
+            .filter(|pid| send_ipc_command(**pid, cmd).is_ok())
+            .count()
     }
 
     /// Returns `true` if any connected client has live `GroupInfo` data.
@@ -897,25 +934,13 @@ impl App {
             return;
         }
 
-        // :ma <Tab> → character names
-        if let Some(rest) = prefix.strip_prefix("ma ") {
-            let names = self.list_character_names();
-            self.complete_with_candidates("ma ", rest, &names);
-            return;
-        }
-
-        // :mt <Tab> → character names
-        if let Some(rest) = prefix.strip_prefix("mt ") {
-            let names = self.list_character_names();
-            self.complete_with_candidates("mt ", rest, &names);
-            return;
-        }
-
-        // :invite <Tab> → character names
-        if let Some(rest) = prefix.strip_prefix("invite ") {
-            let names = self.list_character_names();
-            self.complete_with_candidates("invite ", rest, &names);
-            return;
+        // :ma / :mt / :invite <Tab> → character names
+        for cmd in &["ma ", "mt ", "invite "] {
+            if let Some(rest) = prefix.strip_prefix(cmd) {
+                let names = self.list_character_names();
+                self.complete_with_candidates(cmd, rest, &names);
+                return;
+            }
         }
 
         // :heal <Tab> → cancel
@@ -925,16 +950,14 @@ impl App {
             return;
         }
 
+        // Common slash commands shared by :all and :G1-G6 completions
+        let slash_cmds: Vec<String> = ["/sit", "/stand", "/camp", "/follow", "/assist", "/disband"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+
         // :all <Tab> → common slash commands
         if let Some(rest) = prefix.strip_prefix("all ") {
-            let slash_cmds: Vec<String> = vec![
-                "/sit".into(),
-                "/stand".into(),
-                "/camp".into(),
-                "/follow".into(),
-                "/assist".into(),
-                "/disband".into(),
-            ];
             self.complete_with_candidates("all ", rest, &slash_cmds);
             return;
         }
@@ -950,17 +973,32 @@ impl App {
             let cmd_prefix_str = &prefix[..2];
             let rest = prefix[2..].trim_start();
             if !rest.is_empty() {
-                let slash_cmds: Vec<String> = vec![
-                    "/sit".into(),
-                    "/stand".into(),
-                    "/camp".into(),
-                    "/follow".into(),
-                    "/assist".into(),
-                    "/disband".into(),
-                ];
                 self.complete_with_candidates(&format!("{} ", cmd_prefix_str), rest, &slash_cmds);
                 return;
             }
+        }
+
+        // :stop <Tab> → "all" + connected client character names
+        if let Some(rest) = prefix.strip_prefix("stop ") {
+            let mut names: Vec<String> = vec!["all".into()];
+            names.extend(self.clients.iter().map(|c| c.character_name.clone()));
+            self.complete_with_candidates("stop ", rest, &names);
+            return;
+        }
+
+        // :restart <Tab> → "all" + client names (connected + configured accounts)
+        if let Some(rest) = prefix.strip_prefix("restart ") {
+            let mut names: Vec<String> = vec!["all".into()];
+            names.extend(self.clients.iter().map(|c| c.character_name.clone()));
+            if let Some(cfg) = &self.accounts_config {
+                for acct in &cfg.accounts {
+                    if !names.iter().any(|n| n.eq_ignore_ascii_case(&acct.character)) {
+                        names.push(acct.character.clone());
+                    }
+                }
+            }
+            self.complete_with_candidates("restart ", rest, &names);
+            return;
         }
 
         // :nav <Tab> → zone short names from cached meshes + saved camps
@@ -979,6 +1017,9 @@ impl App {
             "camp".into(),
             "nav".into(),
             "login".into(),
+            "launch".into(),
+            "stop".into(),
+            "restart".into(),
             "mode".into(),
             "all".into(),
             "inject".into(),
@@ -1090,8 +1131,8 @@ impl App {
     /// Returns zone short names like "permafrost", "eastwastes", etc.
     fn list_available_zones(&self) -> Vec<String> {
         let mesh_dir = std::path::Path::new("data/meshes");
-        match std::fs::read_dir(mesh_dir) {
-            Ok(entries) => entries
+        if let Ok(entries) = std::fs::read_dir(mesh_dir) {
+            return entries
                 .filter_map(|e| e.ok())
                 .filter_map(|e| {
                     let path = e.path();
@@ -1103,27 +1144,24 @@ impl App {
                         None
                     }
                 })
-                .collect(),
-            Err(_) => {
-                // Also try known TLP zone names as fallback
-                vec![
-                    "permafrost".into(), "eastwastes".into(), "greatdivide".into(),
-                    "iceclad".into(), "thurgadina".into(), "thurgadinb".into(),
-                    "velketor".into(), "kael".into(), "skyshrine".into(),
-                    "westwastes".into(), "sirens".into(), "cobaltscale".into(),
-                    "templeveeshan".into(), "sleeper".into(), "necropolis".into(),
-                    "crystal".into(), "wakening".into(), "frozenshadow".into(),
-                    "gukbottom".into(), "guktop".into(), "mistmoore".into(),
-                    "unrest".into(), "crushbone".into(), "blackburrow".into(),
-                    "soldungb".into(), "soldunga".into(), "lavastorm".into(),
-                    "nektulos".into(), "commonlands".into(), "freeporteast".into(),
-                    "freportnorth".into(), "freeportwest".into(), "northkarana".into(),
-                    "southkarana".into(), "eastkarana".into(), "westkarana".into(),
-                    "highkeep".into(), "rivervale".into(), "misty".into(),
-                    "everfrost".into(), "halas".into(), "qeynos".into(),
-                ]
-            }
+                .collect();
         }
+
+        // Fallback: known TLP zone short names
+        const FALLBACK_ZONES: &[&str] = &[
+            "permafrost", "eastwastes", "greatdivide", "iceclad",
+            "thurgadina", "thurgadinb", "velketor", "kael",
+            "skyshrine", "westwastes", "sirens", "cobaltscale",
+            "templeveeshan", "sleeper", "necropolis", "crystal",
+            "wakening", "frozenshadow", "gukbottom", "guktop",
+            "mistmoore", "unrest", "crushbone", "blackburrow",
+            "soldungb", "soldunga", "lavastorm", "nektulos",
+            "commonlands", "freeporteast", "freportnorth", "freeportwest",
+            "northkarana", "southkarana", "eastkarana", "westkarana",
+            "highkeep", "rivervale", "misty", "everfrost",
+            "halas", "qeynos",
+        ];
+        FALLBACK_ZONES.iter().map(|s| (*s).to_string()).collect()
     }
 
     /// List all spawn display names in the current zone.
@@ -1334,27 +1372,16 @@ impl App {
             }
             "nav" => {
                 if let Some(destination) = parts.get(1) {
-                    let pids = self.focused_pids();
-                    if pids.is_empty() {
+                    let cmd = dmft_common::ipc::Command::SlashCommand {
+                        command: format!("/nav to {}", destination),
+                    };
+                    let ok = self.send_ipc_to_focused(&cmd);
+                    if ok == 0 {
                         self.status_message = String::from("No clients connected for navigation");
                     } else {
-                        // For now, send a slash command to move to zone.
-                        // Full navmesh pathfinding is handled by the DLL's Navigator FSM
-                        // when it receives a NavigateTo command with waypoints.
-                        let mut ok = 0;
-                        for pid in &pids {
-                            // Use SlashCommand to issue /nav to <destination>
-                            let cmd = dmft_common::ipc::Command::SlashCommand {
-                                command: format!("/nav to {}", destination),
-                            };
-                            if send_ipc_command(*pid, &cmd).is_ok() {
-                                ok += 1;
-                            }
-                        }
                         tracing::info!(destination, sent = ok, "Navigation command sent");
                         self.status_message =
                             format!("Nav → {} (sent to {} clients)", destination, ok);
-                        // Switch to Navigation screen
                         self.active_screen = ActiveScreen::Navigation;
                     }
                 } else {
@@ -1364,14 +1391,7 @@ impl App {
                 }
             }
             "loot" => {
-                let pids = self.focused_pids();
-                let mut ok = 0;
-                for pid in &pids {
-                    let cmd = dmft_common::ipc::Command::LootCorpse;
-                    if send_ipc_command(*pid, &cmd).is_ok() {
-                        ok += 1;
-                    }
-                }
+                let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
                 self.status_message = format!("Loot → sent to {} clients", ok);
             }
             "status" => {
@@ -1386,8 +1406,14 @@ impl App {
                     self.status_message = format!("{} client(s) connected", client_count);
                 }
             }
-            "login" => {
+            "login" | "launch" => {
                 self.execute_login_command(&parts[1..]);
+            }
+            "stop" => {
+                self.execute_stop_command(&parts[1..], orchestrator);
+            }
+            "restart" => {
+                self.execute_restart_command(&parts[1..], orchestrator);
             }
             "track" => {
                 self.execute_track_command(&parts[1..]);
@@ -1451,30 +1477,18 @@ impl App {
                 }
             }
             "engage" => {
-                let pids = self.focused_pids();
                 let target_id = parts
                     .get(1)
                     .and_then(|s| s.parse::<u32>().ok())
                     .unwrap_or(0);
-                let mut ok = 0;
-                for pid in &pids {
-                    let cmd = dmft_common::ipc::Command::CombatEngage { target_id };
-                    if send_ipc_command(*pid, &cmd).is_ok() {
-                        ok += 1;
-                    }
-                }
+                let ok = self
+                    .send_ipc_to_focused(&dmft_common::ipc::Command::CombatEngage { target_id });
                 tracing::info!(target_id, sent = ok, "Combat engage sent");
                 self.status_message = format!("Engage → {} clients (target_id={})", ok, target_id);
             }
             "disengage" => {
-                let pids = self.focused_pids();
-                let mut ok = 0;
-                for pid in &pids {
-                    let cmd = dmft_common::ipc::Command::CombatDisengage;
-                    if send_ipc_command(*pid, &cmd).is_ok() {
-                        ok += 1;
-                    }
-                }
+                let ok =
+                    self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
                 self.status_message = format!("Disengage → {} clients", ok);
             }
@@ -1895,6 +1909,81 @@ impl App {
                     self.enqueue_account_launches(std::slice::from_ref(entry));
                 } else {
                     self.status_message = format!("Account '{}' not found in config", name);
+                }
+            }
+        }
+    }
+
+    /// Handle `stop <name|all>` — eject DLL and remove client.
+    ///
+    ///   stop all         — eject all connected clients
+    ///   stop <name>      — eject a single client by character name
+    fn execute_stop_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        match args.first().copied() {
+            None => {
+                self.status_message =
+                    String::from("Usage: stop <name|all>  (ejects DLL from client)");
+            }
+            Some("all") => {
+                let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                let count = pids.len();
+                for pid in pids {
+                    orchestrator.eject_client(pid);
+                }
+                self.status_message = format!("Ejected {} client(s)", count);
+            }
+            Some(name) => {
+                if let Some(client) = self.clients.iter().find(|c| {
+                    c.character_name.eq_ignore_ascii_case(name)
+                }) {
+                    let pid = client.pid;
+                    let char_name = client.character_name.clone();
+                    orchestrator.eject_client(pid);
+                    self.status_message = format!("Ejected {} (PID {})", char_name, pid);
+                } else {
+                    self.status_message = format!("Client '{}' not found", name);
+                }
+            }
+        }
+    }
+
+    /// Handle `restart <name|all>` — eject then re-launch via login automation.
+    ///
+    ///   restart all         — restart all clients
+    ///   restart <name>      — restart a single client
+    fn execute_restart_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        match args.first().copied() {
+            None => {
+                self.status_message =
+                    String::from("Usage: restart <name|all>  (ejects DLL then re-launches)");
+            }
+            Some("all") => {
+                // Eject all first
+                let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                let count = pids.len();
+                for pid in &pids {
+                    orchestrator.eject_client(*pid);
+                }
+                // Then re-launch all
+                self.execute_login_command(&["all"]);
+                self.status_message =
+                    format!("Restarting {} client(s) — ejected, re-launching...", count);
+            }
+            Some(name) => {
+                // Eject the specific client
+                if let Some(client) = self.clients.iter().find(|c| {
+                    c.character_name.eq_ignore_ascii_case(name)
+                }) {
+                    let pid = client.pid;
+                    let char_name = client.character_name.clone();
+                    orchestrator.eject_client(pid);
+                    // Re-launch via login
+                    self.execute_login_command(&[name]);
+                    self.status_message =
+                        format!("Restarting {} (PID {}) — ejected, re-launching...", char_name, pid);
+                } else {
+                    // Maybe the client isn't connected but the account exists — just launch
+                    self.execute_login_command(&[name]);
                 }
             }
         }
