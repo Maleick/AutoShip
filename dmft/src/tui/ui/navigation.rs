@@ -132,6 +132,80 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         ]));
     }
 
+    // ── Group Nav summary ──────────────────────────────────────────────
+    if app.has_live_group_data() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Group Nav",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+
+        let (live_groups, _) = app.build_live_groups();
+        for group in &live_groups {
+            let mut navigating = 0u32;
+            let mut arrived = 0u32;
+            let mut idle = 0u32;
+            let mut dest: Option<&str> = None;
+            let mut all_same_dest = true;
+
+            for member_name in &group.member_names {
+                if let Some(client) = app.find_client_by_name(member_name) {
+                    if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
+                        match nav.status.as_str() {
+                            "Navigating" => navigating += 1,
+                            "Arrived" => arrived += 1,
+                            _ => idle += 1,
+                        }
+                        if !nav.destination.is_empty() && nav.destination != "\u{2014}" {
+                            match dest {
+                                None => dest = Some(nav.destination.as_str()),
+                                Some(d) if d != nav.destination => all_same_dest = false,
+                                _ => {}
+                            }
+                        }
+                    } else {
+                        idle += 1;
+                    }
+                }
+            }
+
+            let dest_str = if all_same_dest {
+                dest.unwrap_or("\u{2014}")
+            } else {
+                "mixed"
+            };
+
+            let leader_display = app.redact_name(&group.leader);
+            let status_color = if navigating > 0 {
+                t.text_highlight
+            } else if arrived > 0 {
+                t.hp_high
+            } else {
+                t.text_muted
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("  {:<12}", leader_display),
+                    Style::default().fg(t.text_normal),
+                ),
+                Span::styled(
+                    format!("{}nav {}arr {}idl", navigating, arrived, idle),
+                    Style::default().fg(status_color),
+                ),
+            ]));
+            if dest_str != "\u{2014}" {
+                lines.push(Line::from(vec![
+                    Span::styled("    -> ", Style::default().fg(t.text_muted)),
+                    Span::styled(dest_str, Style::default().fg(t.text_accent)),
+                ]));
+            }
+        }
+    }
+
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "Nav Commands",

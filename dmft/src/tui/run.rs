@@ -202,8 +202,9 @@ fn scan_for_clients_live(app: &mut App) {
         app.status_message = String::from("No EQ process found — scanning...");
     }
 
-    // Sync legacy fields
+    // Sync legacy fields and reload map for current client
     app.sync_from_selected_client();
+    app.reload_map_for_selected_client();
 }
 
 /// Parse character name and zone name from the DLL-renamed window title.
@@ -248,6 +249,10 @@ fn refresh_eq_data(app: &mut App) {
     #[cfg(windows)]
     {
         refresh_eq_data_live(app);
+        // If no EQ processes found, load demo data so TUI is testable on Windows too
+        if app.clients.is_empty() {
+            load_demo_data(app);
+        }
     }
 
     #[cfg(not(windows))]
@@ -328,10 +333,12 @@ fn refresh_eq_data_live(app: &mut App) {
 
     // Sync selected client data to legacy fields
     app.sync_from_selected_client();
+
+    // Reload map if the selected client's zone changed (or map not yet loaded)
+    app.reload_map_for_selected_client();
 }
 
-/// Demo data for testing the TUI on macOS without a live EQ process.
-#[cfg(not(windows))]
+/// Demo data for testing the TUI without a live EQ process.
 fn load_demo_data(app: &mut App) {
     use super::app::ClientState;
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
@@ -344,7 +351,8 @@ fn load_demo_data(app: &mut App) {
     //
     // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state, zone)
     // Melee classes have mana 0. Caster/hybrid mana is class-appropriate.
-    let demo_clients: &[(&str, u8, u8, u32, u32, u32, u32, StandState, &str)] = &[
+    type DemoClient<'a> = (&'a str, u8, u8, i64, i64, i32, i32, StandState, &'a str);
+    let demo_clients: &[DemoClient<'_>] = &[
         // ── Group 1: Permafrost ──────────────────────────────────────
         (
             "Frostreaver01",
@@ -831,14 +839,35 @@ fn load_demo_data(app: &mut App) {
         }
     }
 
+    // ── Populate live group info so the Groups screen uses dynamic grouping ──
+    {
+        use crate::eq::structs::GroupInfo;
+
+        let group1_members: Vec<String> = (0..6).map(|i| demo_clients[i].0.to_string()).collect();
+        let group2_members: Vec<String> = (6..12).map(|i| demo_clients[i].0.to_string()).collect();
+        let group3_members: Vec<String> = (12..18).map(|i| demo_clients[i].0.to_string()).collect();
+
+        for (i, client) in app.clients.iter_mut().enumerate() {
+            let (leader, members) = if i < 6 {
+                ("Frostreaver01", &group1_members)
+            } else if i < 12 {
+                ("Shadowveil07", &group2_members)
+            } else {
+                ("Holyblade13", &group3_members)
+            };
+            client.group_info = Some(GroupInfo {
+                leader_name: leader.to_string(),
+                members: members.clone(),
+                member_count: members.len() as u8,
+            });
+        }
+    }
+
     // Sync selected client to legacy fields
     app.sync_from_selected_client();
 
-    // Load zone map for the first client's zone
-    if !app.clients.is_empty() {
-        let zone = zone_to_short_name(&app.clients[0].zone_name);
-        app.load_zone_map(&zone);
-    }
+    // Load zone map for the selected client's zone
+    app.reload_map_for_selected_client();
 }
 
 /// Helper to build a Vec<SpawnInfo> from a compact tuple list.
@@ -889,8 +918,7 @@ fn make_demo_spawns(
 /// Convert a zone display name (long name from zoneHeader) to its EQ short name
 /// for Brewall map file lookup. Handles both display names ("West Freeport") and
 /// short names that are already correct ("freportw").
-#[allow(dead_code)]
-fn zone_to_short_name(zone_name: &str) -> String {
+pub(super) fn zone_to_short_name(zone_name: &str) -> String {
     let lower = zone_name.to_lowercase();
     match lower.as_str() {
         // Classic zones

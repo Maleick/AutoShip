@@ -1,4 +1,7 @@
 //! Groups screen — dynamic grid of group panels, each showing per-slot HP/mana.
+//!
+//! Prefers live EQ group membership data (from `ClientState.group_info`) when
+//! available, falling back to config-based account-range grouping otherwise.
 
 use ratatui::{
     Frame,
@@ -11,9 +14,281 @@ use ratatui::{
 use super::widgets::{hp_color, panel};
 use crate::eq::structs::BuffSlot;
 use crate::tui::app::extract_account_number;
-use crate::tui::app::{App, GroupDef};
+use crate::tui::app::{App, ClientState, GroupDef, LiveGroup};
 
 pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    if app.has_live_group_data() {
+        draw_live_groups_screen(frame, area, app);
+    } else {
+        draw_config_groups_screen(frame, area, app);
+    }
+}
+
+// ── Live group rendering (from EQ GroupInfo) ─────────────────────────────────
+
+fn draw_live_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let (live_groups, ungrouped) = app.build_live_groups();
+
+    let total_panels = live_groups.len() + if ungrouped.is_empty() { 0 } else { 1 };
+
+    if total_panels == 0 {
+        frame.render_widget(
+            Paragraph::new("No group data available")
+                .block(panel(" Groups ", t.border_dim, t))
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
+    }
+
+    let (num_rows, num_cols) = grid_dims(total_panels);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            (0..num_rows)
+                .map(|_| Constraint::Ratio(1, num_rows as u32))
+                .collect::<Vec<_>>(),
+        )
+        .split(area);
+
+    let col_constraints: Vec<Constraint> = (0..num_cols)
+        .map(|_| Constraint::Ratio(1, num_cols as u32))
+        .collect();
+
+    let mut panel_idx = 0;
+    for row in rows.iter() {
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(col_constraints.clone())
+            .split(*row);
+
+        for col in cols.iter() {
+            if panel_idx < live_groups.len() {
+                draw_live_group_panel(frame, *col, app, &live_groups[panel_idx], panel_idx);
+            } else if panel_idx == live_groups.len() && !ungrouped.is_empty() {
+                draw_ungrouped_panel(frame, *col, app, &ungrouped);
+            }
+            panel_idx += 1;
+        }
+    }
+}
+
+fn draw_live_group_panel(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &App,
+    group: &LiveGroup,
+    group_idx: usize,
+) {
+    let t = &app.theme;
+    let focused = app.active_group == Some(group_idx);
+
+    // Collect connected clients for each member
+    let connected: Vec<(&str, Option<&ClientState>)> = group
+        .member_names
+        .iter()
+        .map(|name| (name.as_str(), app.find_client_by_name(name)))
+        .collect();
+
+    let online = connected.iter().filter(|(_, c)| c.is_some()).count();
+    let total = group.member_names.len();
+
+    let has_dead = connected.iter().any(|(_, c)| {
+        c.and_then(|c| c.local_player.as_ref())
+            .is_some_and(|p| p.hp_current == 0)
+    });
+
+    let border_style = if focused {
+        t.border_active
+    } else if has_dead {
+        t.border_danger
+    } else if online == total {
+        t.border_primary
+    } else if online > 0 {
+        t.border_warn
+    } else {
+        t.border_dim
+    };
+
+    let leader_display = app.redact_name(&group.leader);
+    let title = format!(" {} ({}/{}) {} ", leader_display, online, total, group.zone);
+
+    let blk = Block::default()
+        .borders(Borders::ALL)
+        .border_type(t.border_type)
+        .title(title.as_str())
+        .border_style(if focused {
+            border_style.add_modifier(Modifier::BOLD)
+        } else {
+            border_style
+        });
+
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    for (name, client_opt) in &connected {
+        if let Some(client) = client_opt {
+            if let Some(player) = &client.local_player {
+                let hp_pct = player.hp_pct();
+                let display_name = app.redact_name(&player.displayed_name).into_owned();
+                let is_leader = *name == group.leader;
+                let mana_str = if player.mana_max > 0 {
+                    format!(" {:>3.0}%mp", player.mana_pct())
+                } else {
+                    "     -".into()
+                };
+
+                let name_style = if is_leader {
+                    Style::default()
+                        .fg(t.text_highlight)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(t.text_normal)
+                };
+
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        if is_leader { "*" } else { " " },
+                        Style::default().fg(t.text_accent),
+                    ),
+                    Span::styled(format!("{:<12}", display_name), name_style),
+                    Span::styled(
+                        format!("{:<4}", player.class_str()),
+                        Style::default().fg(t.text_accent),
+                    ),
+                    Span::styled(
+                        format!("{:>3}", player.level),
+                        Style::default().fg(t.text_secondary),
+                    ),
+                    Span::styled(
+                        format!(" {:>3.0}%", hp_pct),
+                        Style::default().fg(hp_color(hp_pct, t)),
+                    ),
+                    Span::styled(mana_str, Style::default().fg(t.mana_color)),
+                ]));
+
+                // Buff timer row
+                let active_buffs: Vec<&BuffSlot> = player
+                    .buff_slots
+                    .iter()
+                    .filter(|b| !b.is_empty())
+                    .take(6)
+                    .collect();
+                if !active_buffs.is_empty() {
+                    let mut buff_spans: Vec<Span<'_>> = vec![Span::raw("  ")];
+                    for b in &active_buffs {
+                        buff_spans.push(Span::styled(
+                            format!("{:04X}", b.spell_id),
+                            Style::default().fg(t.text_highlight),
+                        ));
+                        buff_spans.push(Span::styled(
+                            format!("({}) ", b.duration_str()),
+                            Style::default().fg(t.text_muted),
+                        ));
+                    }
+                    lines.push(Line::from(buff_spans));
+                }
+            } else {
+                lines.push(Line::from(Span::styled(
+                    format!("  PID {} (loading…)", client.pid),
+                    Style::default().fg(t.text_muted),
+                )));
+            }
+        } else {
+            // Member not connected
+            let display_name = app.redact_name(name).into_owned();
+            lines.push(Line::from(vec![Span::styled(
+                format!("  {:<12} offline", display_name),
+                Style::default().fg(t.text_muted),
+            )]));
+        }
+    }
+
+    // Operating mode indicator
+    lines.push(Line::from(""));
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_color = match mode_str.as_str() {
+        "Camp" => t.mode_camp,
+        "Hunt" => t.mode_hunt,
+        _ => t.text_muted,
+    };
+    lines.push(Line::from(vec![
+        Span::styled("  Mode: ", Style::default().fg(t.text_muted)),
+        Span::styled(
+            mode_str,
+            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+        ),
+    ]));
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn draw_ungrouped_panel(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &App,
+    ungrouped_indices: &[usize],
+) {
+    let t = &app.theme;
+    let ungrouped_title = format!(" Ungrouped ({}) ", ungrouped_indices.len());
+    let blk = Block::default()
+        .borders(Borders::ALL)
+        .border_type(t.border_type)
+        .title(ungrouped_title.as_str())
+        .border_style(t.border_dim);
+
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    let mut lines: Vec<Line<'_>> = Vec::new();
+    for &idx in ungrouped_indices {
+        if let Some(client) = app.clients.get(idx) {
+            let name = if let Some(p) = &client.local_player {
+                app.redact_name(&p.displayed_name).into_owned()
+            } else if !client.character_name.is_empty() {
+                app.redact_name(&client.character_name).into_owned()
+            } else {
+                format!("PID {}", client.pid)
+            };
+
+            if let Some(player) = &client.local_player {
+                let hp_pct = player.hp_pct();
+                let mana_str = if player.mana_max > 0 {
+                    format!(" {:>3.0}%mp", player.mana_pct())
+                } else {
+                    "     -".into()
+                };
+                lines.push(Line::from(vec![
+                    Span::styled(format!(" {:<12}", name), Style::default().fg(t.text_normal)),
+                    Span::styled(
+                        format!("{:<4}", player.class_str()),
+                        Style::default().fg(t.text_accent),
+                    ),
+                    Span::styled(
+                        format!(" {:>3.0}%", hp_pct),
+                        Style::default().fg(hp_color(hp_pct, t)),
+                    ),
+                    Span::styled(mana_str, Style::default().fg(t.mana_color)),
+                ]));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    format!("  {} (loading…)", name),
+                    Style::default().fg(t.text_muted),
+                )));
+            }
+        }
+    }
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+// ── Config-based group rendering (fallback) ──────────────────────────────────
+
+fn draw_config_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let group_count = app.groups.len();
 
@@ -27,15 +302,7 @@ pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &
         return;
     }
 
-    let (num_rows, num_cols): (usize, usize) = match group_count {
-        1 => (1, 1),
-        2 => (1, 2),
-        3 => (1, 3),
-        4 => (2, 2),
-        5..=6 => (2, 3),
-        7..=9 => (3, 3),
-        _ => (3, 4),
-    };
+    let (num_rows, num_cols) = grid_dims(group_count);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -59,7 +326,7 @@ pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &
 
         for col in cols.iter() {
             if panel_idx < group_count {
-                draw_group_panel(frame, *col, app, &app.groups[panel_idx], panel_idx);
+                draw_config_group_panel(frame, *col, app, &app.groups[panel_idx], panel_idx);
             }
             panel_idx += 1;
         }
@@ -88,7 +355,7 @@ pub fn clients_in_group<'a>(
         .collect()
 }
 
-fn draw_group_panel(
+fn draw_config_group_panel(
     frame: &mut Frame,
     area: ratatui::layout::Rect,
     app: &App,
@@ -255,4 +522,20 @@ fn draw_group_panel(
     ]));
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+// ── Shared helpers ───────────────────────────────────────────────────────────
+
+/// Choose grid rows/cols for a given number of panels.
+fn grid_dims(panel_count: usize) -> (usize, usize) {
+    match panel_count {
+        0 => (1, 1),
+        1 => (1, 1),
+        2 => (1, 2),
+        3 => (1, 3),
+        4 => (2, 2),
+        5..=6 => (2, 3),
+        7..=9 => (3, 3),
+        _ => (3, 4),
+    }
 }

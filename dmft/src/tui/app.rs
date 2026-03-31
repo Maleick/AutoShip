@@ -165,17 +165,45 @@ impl HexDumpState {
 /// State for the Map screen.
 pub struct MapScreenState {
     pub zone_map: Option<ZoneMap>,
-    #[allow(dead_code)]
     pub map_dir: std::path::PathBuf,
+    /// The zone short name currently loaded, used to avoid redundant reloads.
+    pub loaded_zone: String,
 }
 
 impl MapScreenState {
     pub fn new() -> Self {
+        let map_dir = resolve_map_dir();
         Self {
             zone_map: None,
-            map_dir: std::path::PathBuf::from("config/maps"),
+            map_dir,
+            loaded_zone: String::new(),
         }
     }
+}
+
+/// Resolve the map directory to an absolute path.
+/// Tries CWD-relative `config/maps` first, then falls back to exe-relative.
+fn resolve_map_dir() -> std::path::PathBuf {
+    let relative = std::path::PathBuf::from("config/maps");
+    if relative.is_dir() {
+        if let Ok(abs) = relative.canonicalize() {
+            return abs;
+        }
+        return relative;
+    }
+
+    // Try relative to the executable
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        let exe_relative = exe_dir.join("config/maps");
+        if exe_relative.is_dir() {
+            return exe_relative;
+        }
+    }
+
+    tracing::warn!("Map directory 'config/maps' not found relative to CWD or executable");
+    relative
 }
 
 /// State for the Navigation screen.
@@ -222,6 +250,17 @@ pub struct GroupDef {
     pub default_camp: String,
 }
 
+/// A group built dynamically from live EQ `GroupInfo` data.
+#[derive(Debug, Clone)]
+pub struct LiveGroup {
+    /// Group leader name.
+    pub leader: String,
+    /// Member names and their connected `ClientState` index (if any).
+    pub member_names: Vec<String>,
+    /// Zone the leader (or majority of members) is in.
+    pub zone: String,
+}
+
 /// Per-client state for each attached EQ process.
 #[derive(Debug, Clone)]
 pub struct ClientState {
@@ -234,7 +273,6 @@ pub struct ClientState {
     /// Character name parsed from the DLL-renamed window title.
     pub character_name: String,
     /// Group membership info for this client.
-    #[allow(dead_code)]
     pub group_info: Option<GroupInfo>,
     /// Status message specific to this client.
     pub client_status: String,
@@ -526,6 +564,7 @@ impl App {
             self.selected_client = (self.selected_client + 1) % self.clients.len();
             self.sync_from_selected_client();
             self.spawns_state.table_state.select(Some(0));
+            self.reload_map_for_selected_client();
         }
     }
 
@@ -539,6 +578,7 @@ impl App {
             }
             self.sync_from_selected_client();
             self.spawns_state.table_state.select(Some(0));
+            self.reload_map_for_selected_client();
         }
     }
 
@@ -614,6 +654,97 @@ impl App {
     /// Get PIDs of clients in the focused group (or all if aggregate).
     pub fn focused_pids(&self) -> Vec<u32> {
         self.visible_clients().iter().map(|c| c.pid).collect()
+    }
+
+    /// Returns `true` if any connected client has live `GroupInfo` data.
+    pub fn has_live_group_data(&self) -> bool {
+        self.clients.iter().any(|c| c.group_info.is_some())
+    }
+
+    /// Build dynamic group list from live EQ group membership.
+    /// Groups clients by `leader_name` — same leader means same group.
+    /// Returns an ordered list of `LiveGroup` plus a list of ungrouped client indices.
+    pub fn build_live_groups(&self) -> (Vec<LiveGroup>, Vec<usize>) {
+        let mut groups_map: HashMap<String, LiveGroup> = HashMap::new();
+        let mut grouped_indices: std::collections::HashSet<usize> =
+            std::collections::HashSet::new();
+
+        for (idx, client) in self.clients.iter().enumerate() {
+            if let Some(gi) = &client.group_info {
+                if gi.leader_name.is_empty() {
+                    continue;
+                }
+                grouped_indices.insert(idx);
+
+                let entry = groups_map
+                    .entry(gi.leader_name.clone())
+                    .or_insert_with(|| LiveGroup {
+                        leader: gi.leader_name.clone(),
+                        member_names: Vec::new(),
+                        zone: client.zone_name.clone(),
+                    });
+
+                // Merge member names from this client's perspective
+                for member in &gi.members {
+                    if !member.is_empty() && !entry.member_names.contains(member) {
+                        entry.member_names.push(member.clone());
+                    }
+                }
+            }
+        }
+
+        // Ensure leader is first in member list
+        for group in groups_map.values_mut() {
+            if let Some(pos) = group.member_names.iter().position(|n| n == &group.leader) {
+                group.member_names.swap(0, pos);
+            }
+        }
+
+        // Collect ungrouped clients (those not mentioned in any group)
+        let all_grouped_names: std::collections::HashSet<&str> = groups_map
+            .values()
+            .flat_map(|g| g.member_names.iter().map(|s| s.as_str()))
+            .collect();
+
+        let ungrouped: Vec<usize> = self
+            .clients
+            .iter()
+            .enumerate()
+            .filter(|(idx, c)| {
+                if grouped_indices.contains(idx) {
+                    return false;
+                }
+                let name = if !c.character_name.is_empty() {
+                    c.character_name.as_str()
+                } else if let Some(p) = &c.local_player {
+                    p.displayed_name.as_str()
+                } else {
+                    return true;
+                };
+                !all_grouped_names.contains(name)
+            })
+            .map(|(idx, _)| idx)
+            .collect();
+
+        // Sort groups by leader name for stable ordering
+        let mut groups: Vec<LiveGroup> = groups_map.into_values().collect();
+        groups.sort_by(|a, b| a.leader.cmp(&b.leader));
+
+        (groups, ungrouped)
+    }
+
+    /// Find a client by character name (case-insensitive).
+    pub fn find_client_by_name(&self, name: &str) -> Option<&ClientState> {
+        let lower = name.to_lowercase();
+        self.clients.iter().find(|c| {
+            if !c.character_name.is_empty() {
+                return c.character_name.to_lowercase() == lower;
+            }
+            if let Some(p) = &c.local_player {
+                return p.displayed_name.to_lowercase() == lower;
+            }
+            false
+        })
     }
 
     pub fn filtered_spawns(&self) -> Vec<&SpawnInfo> {
@@ -1164,8 +1295,11 @@ impl App {
     }
 
     /// Load the zone map for the given zone short name from the map directory.
-    #[allow(dead_code)]
     pub fn load_zone_map(&mut self, zone_short_name: &str) {
+        // Skip if already loaded for this zone
+        if self.map_state.loaded_zone == zone_short_name {
+            return;
+        }
         match crate::eq::map_parser::load_zone_map(&self.map_state.map_dir, zone_short_name) {
             Ok(map) if !map.lines.is_empty() => {
                 tracing::info!(
@@ -1174,16 +1308,28 @@ impl App {
                     points = map.points.len(),
                     "Loaded zone map"
                 );
+                self.map_state.loaded_zone = zone_short_name.to_string();
                 self.map_state.zone_map = Some(map);
             }
             Ok(_) => {
                 tracing::debug!(zone = zone_short_name, "No map data found for zone");
+                self.map_state.loaded_zone = zone_short_name.to_string();
                 self.map_state.zone_map = None;
             }
             Err(e) => {
                 tracing::warn!(zone = zone_short_name, error = %e, "Failed to load zone map");
+                self.map_state.loaded_zone = zone_short_name.to_string();
                 self.map_state.zone_map = None;
             }
+        }
+    }
+
+    /// Reload the zone map for the currently selected client's zone.
+    /// Called after switching clients or when a zone change is detected.
+    pub fn reload_map_for_selected_client(&mut self) {
+        if let Some(client) = self.clients.get(self.selected_client) {
+            let zone = super::run::zone_to_short_name(&client.zone_name);
+            self.load_zone_map(&zone);
         }
     }
 
