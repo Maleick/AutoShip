@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use dmft::camp::config::CampConfig;
 use dmft::camp::state::{
-    CampAction, CampLoop, CampMember, CampSnapshot, CampState, Role,
+    CampAction, CampLoop, CampMember, CampSnapshot, CampState, PULL_DURATION, Role,
 };
 use dmft::config::{LaunchConfig, RetryConfig, ServerConfig};
 use dmft::launcher::coordinator::LaunchCoordinator;
@@ -253,7 +253,16 @@ fn coordinator_tick_attempts_launch_from_queue() {
     // coordinator dequeues and attempts to launch.
     let events = coord.tick();
     assert!(!events.is_empty(), "tick should produce events when clients are queued");
-    assert!(coord.pending_count() < 2, "at least one client should be dequeued");
+    assert_eq!(coord.pending_count(), 1, "exactly one client should be dequeued per tick");
+    // Verify the event is a launch attempt (ClientLaunched or ClientFailed)
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            dmft::launcher::coordinator::CoordinatorEvent::ClientFailed { .. }
+                | dmft::launcher::coordinator::CoordinatorEvent::ClientLaunched { .. }
+        )),
+        "tick should produce a launch-related event"
+    );
 }
 
 #[test]
@@ -399,6 +408,49 @@ fn post_login_with_waypoints_generates_navigate() {
     assert!(seq.is_ready());
 }
 
+#[test]
+fn post_login_joining_group_phase_produces_apply_buffs() {
+    let mut seq = PostLoginSequencer::new(1, 42, vec![]);
+    let state = make_game_state();
+
+    // NotStarted -> next_command returns JoinGroup
+    let cmd = seq.next_command(&state);
+    assert!(
+        matches!(cmd, Some(Command::JoinGroup { group_id: 42 })),
+        "NotStarted phase should produce JoinGroup, got {cmd:?}"
+    );
+
+    // Mark the JoinGroup command as dispatched -> transitions to JoiningGroup
+    seq.mark_dispatched();
+    assert!(
+        matches!(seq.phase(), dmft::client::session::PostLoginPhase::JoiningGroup),
+        "phase should be JoiningGroup after dispatch, got {:?}",
+        seq.phase()
+    );
+
+    // JoiningGroup -> next_command returns ApplyBuffs (waiting for confirmation)
+    let cmd = seq.next_command(&state);
+    assert!(
+        matches!(cmd, Some(Command::ApplyBuffs)),
+        "JoiningGroup phase should produce ApplyBuffs, got {cmd:?}"
+    );
+
+    // GroupJoined event -> transitions to Buffing
+    seq.advance(PostLoginEvent::GroupJoined);
+    assert!(
+        matches!(seq.phase(), dmft::client::session::PostLoginPhase::Buffing),
+        "phase should be Buffing after GroupJoined event, got {:?}",
+        seq.phase()
+    );
+
+    // Buffing with no waypoints -> ReportReady
+    let cmd = seq.next_command(&state);
+    assert!(
+        matches!(cmd, Some(Command::ReportReady)),
+        "Buffing phase with no waypoints should produce ReportReady, got {cmd:?}"
+    );
+}
+
 // ============================================================================
 // Test 5: Camp loop — Idle -> Pulling -> Fighting -> Looting -> Medding -> Idle
 // ============================================================================
@@ -416,8 +468,8 @@ fn camp_loop_full_cycle_with_snapshot() {
     assert!(puller_cmds.iter().any(|(_, cmd)| cmd.contains("/target")));
     assert!(puller_cmds.iter().any(|(_, cmd)| cmd == "/attack"));
 
-    // Advance through pull duration (5 ticks)
-    for _ in 0..4 {
+    // Advance through pull duration (PULL_DURATION - 1 remaining ticks)
+    for _ in 0..PULL_DURATION - 1 {
         let cmds = camp.tick(None);
         assert!(matches!(camp.state, CampState::Pulling { .. }));
         // No transition commands during pull wait
@@ -428,7 +480,7 @@ fn camp_loop_full_cycle_with_snapshot() {
         assert!(non_autoinv.is_empty());
     }
 
-    // Tick 6: Pulling -> Fighting
+    // Final pull tick: Pulling -> Fighting
     let cmds = camp.tick(None);
     assert!(matches!(camp.state, CampState::Fighting { .. }));
     // Tank should get /assist and /attack
@@ -497,7 +549,7 @@ fn camp_loop_emergency_heal_on_low_tank_hp() {
 
     // Drive to Fighting state
     camp.tick(None); // Idle -> Pulling
-    for _ in 0..4 {
+    for _ in 0..PULL_DURATION - 1 {
         camp.tick(None);
     }
     camp.tick(None); // Pulling -> Fighting
@@ -709,7 +761,7 @@ fn camp_snapshot_driven_fight_to_loot_on_target_death() {
 
     // Drive to fighting state
     camp.tick(None); // Idle -> Pulling
-    for _ in 0..4 {
+    for _ in 0..PULL_DURATION - 1 {
         camp.tick(None);
     }
     camp.tick(None); // Pulling -> Fighting

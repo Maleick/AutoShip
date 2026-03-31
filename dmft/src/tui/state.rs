@@ -163,7 +163,8 @@ impl CommandBarState {
             // Group broadcast + slash: "all /sit", "G1 /follow" → keep 2
             // Single meaningful arg: "ma Warrior", "mt Tank" → keep 2
             Some("all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6") => 2,
-            Some("ma" | "mt" | "engage" | "mode" | "login" | "nav" | "track") => 2,
+            Some("ma" | "mt" | "mode" | "login" | "nav" | "track") => 2,
+            Some("engage") => 1,
             // Camp/CH subcommands: "camp start permafrost" → keep all 3, "ch start 1234,5678 3.0" → keep 2
             Some("camp") => 3,
             Some("ch") => 2,
@@ -202,7 +203,7 @@ mod tests {
         state.record_command("ma Warrior");
         state.record_command("engage 100");
         assert_eq!(state.command_frequency.get("ma Warrior"), Some(&2));
-        assert_eq!(state.command_frequency.get("engage 100"), Some(&1));
+        assert_eq!(state.command_frequency.get("engage"), Some(&1));
     }
 
     #[test]
@@ -248,6 +249,6 @@ mod tests {
     #[test]
     fn normalize_command_with_target() {
         assert_eq!(CommandBarState::normalize_command("ma Warrior"), "ma Warrior");
-        assert_eq!(CommandBarState::normalize_command("engage 100"), "engage 100");
+        assert_eq!(CommandBarState::normalize_command("engage 100"), "engage");
     }
 }

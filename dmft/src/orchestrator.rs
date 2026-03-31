@@ -303,13 +303,22 @@ impl Orchestrator {
 
     /// Tick the sell cycle if active and camp is in Idle or Medding state.
     fn tick_sell_cycle(&mut self) -> Vec<(u32, String)> {
-        let camp = match &self.active_camp {
-            Some(c) => c,
+        // Capture both values in a single borrow of active_camp
+        let (in_downtime, seller_pid) = match &self.active_camp {
+            Some(camp) => {
+                let downtime =
+                    matches!(camp.state, CampState::Idle | CampState::Medding { .. });
+                let pid = camp
+                    .members
+                    .iter()
+                    .find(|m| m.role == Role::Dps)
+                    .or(camp.members.first())
+                    .map(|m| m.pid);
+                (downtime, pid)
+            }
             None => return Vec::new(),
         };
 
-        // Only tick sell cycle during downtime
-        let in_downtime = matches!(camp.state, CampState::Idle | CampState::Medding { .. });
         if !in_downtime {
             return Vec::new();
         }
@@ -328,15 +337,6 @@ impl Orchestrator {
         if sell_cycle.state == SellState::NotNeeded {
             return Vec::new();
         }
-
-        // Use first DPS member as seller, or first member as fallback
-        let seller_pid = self.active_camp.as_ref().and_then(|camp| {
-            camp.members
-                .iter()
-                .find(|m| m.role == Role::Dps)
-                .or(camp.members.first())
-                .map(|m| m.pid)
-        });
 
         match seller_pid {
             Some(pid) => sell_cycle.tick(pid, self.tick_count),

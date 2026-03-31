@@ -63,6 +63,14 @@ impl PostLoginSequencer {
         }
     }
 
+    /// Mark that the current phase's command was dispatched.
+    /// Advances NotStarted -> JoiningGroup after the JoinGroup command is sent.
+    pub fn mark_dispatched(&mut self) {
+        if matches!(self.phase, PostLoginPhase::NotStarted) {
+            self.phase = PostLoginPhase::JoiningGroup;
+        }
+    }
+
     /// Advance the sequencer based on an event.
     pub fn advance(&mut self, event: PostLoginEvent) {
         match event {

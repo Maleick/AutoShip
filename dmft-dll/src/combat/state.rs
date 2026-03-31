@@ -331,7 +331,7 @@ impl Combatant {
                         player,
                         target,
                         nearby_enemies: nearby,
-                        group_members: &[],
+                        group_members: &self.group_members,
                         config: &self.config,
                         tick: self.tick_count,
                         in_combat: true,

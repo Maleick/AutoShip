@@ -154,7 +154,7 @@ impl CampMember {
 }
 
 /// Timer durations (in ticks) for each phase.
-const PULL_DURATION: u64 = 5;
+pub const PULL_DURATION: u64 = 5;
 const FIGHT_DURATION: u64 = 15;
 const LOOT_DURATION: u64 = 3;
 const MED_DURATION: u64 = 10;

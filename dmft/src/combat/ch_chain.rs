@@ -68,10 +68,21 @@ impl ChChain {
         }
     }
 
+    /// Start (or restart) the chain from the beginning.
+    /// Resets frame counter and rotation index to zero.
+    /// Use `resume()` instead if you need to re-activate without losing position
+    /// (e.g., substituting a dead cleric mid-rotation).
     pub fn start(&mut self) {
         self.active = true;
         self.frame_count = 0;
         self.current_index = 0;
+    }
+
+    /// Resume the chain without resetting position or timing.
+    /// Use this when substituting a dead cleric mid-rotation — the chain
+    /// continues from wherever it left off rather than restarting from scratch.
+    pub fn resume(&mut self) {
+        self.active = true;
     }
 
     pub fn stop(&mut self) {
@@ -319,6 +330,40 @@ mod tests {
         // Restart resets to beginning
         chain.start();
         assert_eq!(chain.tick(), Some(1));
+    }
+
+    #[test]
+    fn resume_preserves_position_while_start_resets() {
+        let mut chain = ChChain::new(vec![1, 2, 3], 1.0, 1, 1);
+        chain.start();
+
+        // Advance past first two members
+        assert_eq!(chain.tick(), Some(1)); // frame 0, index -> 1
+        for _ in 0..19 {
+            chain.tick();
+        }
+        assert_eq!(chain.tick(), Some(2)); // frame 20, index -> 2
+
+        let saved_frame = chain.frame_count;
+
+        // Stop then resume — position and timing preserved
+        chain.stop();
+        assert!(!chain.is_active());
+        chain.resume();
+        assert!(chain.is_active());
+        assert_eq!(chain.frame_count, saved_frame);
+
+        // Next fire should be member 3 (index 2), not member 1
+        for _ in 0..19 {
+            chain.tick();
+        }
+        assert_eq!(chain.tick(), Some(3));
+
+        // Now compare with start() — resets everything
+        chain.stop();
+        chain.start();
+        assert_eq!(chain.frame_count, 0);
+        assert_eq!(chain.tick(), Some(1)); // back to member 1
     }
 
     #[test]

@@ -118,7 +118,7 @@ impl ClassStrategy for DruidStrategy {
                 .config
                 .spells
                 .iter()
-                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| s.name.to_lowercase().contains("heal"))
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned();
@@ -132,9 +132,8 @@ impl ClassStrategy for DruidStrategy {
                 .spells
                 .iter()
                 .filter(|s| {
-                    s.name.contains("Snare")
-                        || s.name.contains("snare")
-                        || s.name.contains("Ensnare")
+                    let name = s.name.to_lowercase();
+                    name.contains("snare") || name.contains("ensnare")
                 })
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
@@ -151,7 +150,7 @@ impl ClassStrategy for DruidStrategy {
                 .config
                 .spells
                 .iter()
-                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| s.name.to_lowercase().contains("heal"))
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned();
