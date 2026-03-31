@@ -227,6 +227,18 @@ pub fn handle_events(
                 }
                 return Ok(true);
             }
+            // F1-F9: Execute favorite commands (most frequently used)
+            (KeyCode::F(n), _) if (1..=9).contains(&n) => {
+                let idx = (n - 1) as usize;
+                if let Some(cmd) = app.cmd_state.get_favorite(idx).map(|s| s.to_string()) {
+                    app.cmd_state.command_buffer = cmd;
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                } else {
+                    app.status_message = format!("F{}: no favorite assigned (use commands to build frequency)", n);
+                }
+                return Ok(true);
+            }
             _ => {}
         }
 

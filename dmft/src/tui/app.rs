@@ -963,10 +963,21 @@ impl App {
             }
         }
 
+        // :nav <Tab> → zone short names from cached meshes + saved camps
+        if let Some(rest) = prefix.strip_prefix("nav ") {
+            let mut zone_names = self.list_available_zones();
+            zone_names.extend(self.list_camp_names());
+            zone_names.sort();
+            zone_names.dedup();
+            self.complete_with_candidates("nav ", rest, &zone_names);
+            return;
+        }
+
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
             "help".into(),
             "camp".into(),
+            "nav".into(),
             "login".into(),
             "mode".into(),
             "all".into(),
@@ -981,6 +992,7 @@ impl App {
             "invite".into(),
             "accept".into(),
             "heal".into(),
+            "loot".into(),
             "G1".into(),
             "G2".into(),
             "G3".into(),
@@ -1071,6 +1083,46 @@ impl App {
                 })
                 .collect(),
             Err(_) => Vec::new(),
+        }
+    }
+
+    /// List available zone names from cached navmesh files.
+    /// Returns zone short names like "permafrost", "eastwastes", etc.
+    fn list_available_zones(&self) -> Vec<String> {
+        let mesh_dir = std::path::Path::new("data/meshes");
+        match std::fs::read_dir(mesh_dir) {
+            Ok(entries) => entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let path = e.path();
+                    if path.extension().is_some_and(|ext| ext == "navmesh") {
+                        path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            Err(_) => {
+                // Also try known TLP zone names as fallback
+                vec![
+                    "permafrost".into(), "eastwastes".into(), "greatdivide".into(),
+                    "iceclad".into(), "thurgadina".into(), "thurgadinb".into(),
+                    "velketor".into(), "kael".into(), "skyshrine".into(),
+                    "westwastes".into(), "sirens".into(), "cobaltscale".into(),
+                    "templeveeshan".into(), "sleeper".into(), "necropolis".into(),
+                    "crystal".into(), "wakening".into(), "frozenshadow".into(),
+                    "gukbottom".into(), "guktop".into(), "mistmoore".into(),
+                    "unrest".into(), "crushbone".into(), "blackburrow".into(),
+                    "soldungb".into(), "soldunga".into(), "lavastorm".into(),
+                    "nektulos".into(), "commonlands".into(), "freeporteast".into(),
+                    "freportnorth".into(), "freeportwest".into(), "northkarana".into(),
+                    "southkarana".into(), "eastkarana".into(), "westkarana".into(),
+                    "highkeep".into(), "rivervale".into(), "misty".into(),
+                    "everfrost".into(), "halas".into(), "qeynos".into(),
+                ]
+            }
         }
     }
 
@@ -1238,8 +1290,9 @@ impl App {
             return;
         }
 
-        // Save to history
+        // Save to history and track frequency for favorites
         self.cmd_state.command_history.push(input.clone());
+        self.cmd_state.record_command(&input);
 
         // Check for group prefix: :G1 /sit, :G2 camp start, etc.
         if let Some((group_idx, rest)) = self.parse_group_prefix(&input) {
@@ -1278,6 +1331,48 @@ impl App {
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
+            }
+            "nav" => {
+                if let Some(destination) = parts.get(1) {
+                    let pids = self.focused_pids();
+                    if pids.is_empty() {
+                        self.status_message = String::from("No clients connected for navigation");
+                    } else {
+                        // For now, send a slash command to move to zone.
+                        // Full navmesh pathfinding is handled by the DLL's Navigator FSM
+                        // when it receives a NavigateTo command with waypoints.
+                        let mut ok = 0;
+                        for pid in &pids {
+                            // Use SlashCommand to issue /nav to <destination>
+                            let cmd = dmft_common::ipc::Command::SlashCommand {
+                                command: format!("/nav to {}", destination),
+                            };
+                            if send_ipc_command(*pid, &cmd).is_ok() {
+                                ok += 1;
+                            }
+                        }
+                        tracing::info!(destination, sent = ok, "Navigation command sent");
+                        self.status_message =
+                            format!("Nav → {} (sent to {} clients)", destination, ok);
+                        // Switch to Navigation screen
+                        self.active_screen = ActiveScreen::Navigation;
+                    }
+                } else {
+                    self.status_message = String::from(
+                        "Usage: nav <zone|camp_name>  (Tab for zone autocomplete)",
+                    );
+                }
+            }
+            "loot" => {
+                let pids = self.focused_pids();
+                let mut ok = 0;
+                for pid in &pids {
+                    let cmd = dmft_common::ipc::Command::LootCorpse;
+                    if send_ipc_command(*pid, &cmd).is_ok() {
+                        ok += 1;
+                    }
+                }
+                self.status_message = format!("Loot → sent to {} clients", ok);
             }
             "status" => {
                 let client_count = self.clients.len();
