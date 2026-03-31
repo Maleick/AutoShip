@@ -422,7 +422,8 @@ impl Combatant {
         let role = self.strategy.role();
         if matches!(role, CombatRole::MainTank | CombatRole::OffTank) {
             crate::eq::use_skill(73, None); // skill 73 = taunt
-            self.skill_cooldowns.consume(73, super::skill_cooldowns::skill_timers::TAUNT.1);
+            self.skill_cooldowns
+                .consume(73, super::skill_cooldowns::skill_timers::TAUNT.1);
             tracing::info!("Tank: immediate taunt on engage");
         }
 
@@ -564,7 +565,8 @@ impl Combatant {
                 "Firing discipline"
             );
             crate::eq::do_combat_ability(disc.spell_id, true);
-            self.disc_cooldowns.insert(disc.spell_id, disc.cooldown_ticks);
+            self.disc_cooldowns
+                .insert(disc.spell_id, disc.cooldown_ticks);
 
             // Only one disc per tick
             return;

@@ -54,11 +54,17 @@ impl ClassStrategy for ShamanStrategy {
         let mana_pct = ctx.player.mana_pct();
 
         // Priority 0: Cure detrimental effects (shaman is the premier curer)
-        let has_afflicted = ctx.group_members.iter().any(|m| m.has_detrimental && !m.is_dead);
+        let has_afflicted = ctx
+            .group_members
+            .iter()
+            .any(|m| m.has_detrimental && !m.is_dead);
         if has_afflicted {
             if let Some(cure) = ctx.config.spells.iter().find(|s| {
                 let name = s.name.to_lowercase();
-                name.contains("cure") || name.contains("purify") || name.contains("remove") || name.contains("counteract")
+                name.contains("cure")
+                    || name.contains("purify")
+                    || name.contains("remove")
+                    || name.contains("counteract")
             }) {
                 if mana_pct >= cure.min_mana_pct {
                     return Some(cure.clone());

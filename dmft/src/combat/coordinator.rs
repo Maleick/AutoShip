@@ -92,12 +92,7 @@ impl CombatCoordinator {
             if let Some(cleric_pid) = chain.tick() {
                 let target_id = chain.target_id();
                 let spell_slot = chain.spell_slot();
-                tracing::info!(
-                    cleric_pid,
-                    target_id,
-                    spell_slot,
-                    "CH chain: firing cleric"
-                );
+                tracing::info!(cleric_pid, target_id, spell_slot, "CH chain: firing cleric");
                 // Target the tank, then cast CH
                 commands.push((
                     cleric_pid,

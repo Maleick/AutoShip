@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "dmft"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "dmft-common"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -587,7 +587,7 @@ dependencies = [
 
 [[package]]
 name = "dmft-dll"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "bincode",

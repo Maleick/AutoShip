@@ -162,10 +162,10 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: ratatui::layout::Rect, app: &
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(6),     // Group health (flexible, gets leftover)
-                Constraint::Length(7),   // Combat status (mode/MA/MT + heal-cancel + CH chain)
-                Constraint::Min(8),     // Session stats (flexible)
-                Constraint::Length(6),   // Server info
+                Constraint::Min(6),    // Group health (flexible, gets leftover)
+                Constraint::Length(7), // Combat status (mode/MA/MT + heal-cancel + CH chain)
+                Constraint::Min(8),    // Session stats (flexible)
+                Constraint::Length(6), // Server info
             ])
             .split(area)
     } else {
@@ -298,14 +298,8 @@ fn draw_combat_status(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         _ => t.text_muted,
     };
 
-    let ma_str = app
-        .main_assist
-        .as_deref()
-        .unwrap_or("—");
-    let mt_str = app
-        .main_tank
-        .as_deref()
-        .unwrap_or("—");
+    let ma_str = app.main_assist.as_deref().unwrap_or("—");
+    let mt_str = app.main_tank.as_deref().unwrap_or("—");
 
     let mut lines = vec![
         Line::from(vec![

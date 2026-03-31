@@ -74,7 +74,10 @@ pub struct BotBridge {
 #[allow(dead_code)] // Public API — used by Discord bot integration
 impl BotBridge {
     /// Send a command to the TUI for execution.
-    pub fn send_command(&self, command: BridgeCommand) -> Result<(), mpsc::SendError<BridgeCommand>> {
+    pub fn send_command(
+        &self,
+        command: BridgeCommand,
+    ) -> Result<(), mpsc::SendError<BridgeCommand>> {
         self.cmd_tx.send(command)
     }
 

@@ -625,12 +625,7 @@ pub fn run_login_pid_mode(
 }
 
 /// Login mode (--login <account> <password> [server] [character]) — send StartLogin to all injected EQ clients.
-pub fn run_login_mode(
-    account: &str,
-    password: &str,
-    server: &str,
-    character: &str,
-) -> Result<()> {
+pub fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
     let config = load_config()?;
@@ -747,11 +742,7 @@ pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 }
 
 /// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
-pub fn run_navpath_mode(
-    zone: &str,
-    from: (f32, f32, f32),
-    to: (f32, f32, f32),
-) -> Result<()> {
+pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> Result<()> {
     info!("Navpath mode: zone={zone} from={from:?} to={to:?}");
     println!("Loading navmesh for zone '{zone}'...");
 

@@ -268,7 +268,10 @@ pub fn draw_character_screen(frame: &mut Frame, area: ratatui::layout::Rect, app
         let (left_pct, right_pct) = if narrow { (60, 40) } else { (45, 55) };
         Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(left_pct), Constraint::Percentage(right_pct)])
+            .constraints([
+                Constraint::Percentage(left_pct),
+                Constraint::Percentage(right_pct),
+            ])
             .split(area)
     };
 

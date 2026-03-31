@@ -334,15 +334,20 @@ impl App {
     pub fn init_discord(&mut self, config: &crate::config::DiscordConfig) {
         if !config.webhook_url.is_empty() {
             tracing::info!("Discord webhook enabled");
-            self.discord_webhook = Some(
-                crate::discord::webhook::WebhookSender::new(config.webhook_url.clone()),
-            );
+            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::new(
+                config.webhook_url.clone(),
+            ));
         }
     }
 
     /// Send a Discord alert if webhook is configured.
     #[allow(dead_code)] // Called from alert sites as they're wired up
-    pub fn discord_alert(&self, title: &str, message: &str, level: crate::discord::webhook::AlertLevel) {
+    pub fn discord_alert(
+        &self,
+        title: &str,
+        message: &str,
+        level: crate::discord::webhook::AlertLevel,
+    ) {
         if let Some(ref webhook) = self.discord_webhook {
             webhook.send(crate::discord::webhook::DiscordAlert {
                 title: title.to_string(),
@@ -441,12 +446,16 @@ impl App {
     /// Sync CH chain status from orchestrator into cached display state.
     pub fn sync_ch_chain_status(&mut self, orchestrator: &Orchestrator) {
         self.ch_chain_status = if orchestrator.combat.ch_chain_active() {
-            orchestrator.combat.ch_chain.as_ref().map(|chain| ChChainStatus {
-                members: chain.members().len(),
-                interval_secs: chain.interval_secs(),
-                is_adaptive: chain.is_adaptive(),
-                target_id: chain.target_id(),
-            })
+            orchestrator
+                .combat
+                .ch_chain
+                .as_ref()
+                .map(|chain| ChChainStatus {
+                    members: chain.members().len(),
+                    interval_secs: chain.interval_secs(),
+                    is_adaptive: chain.is_adaptive(),
+                    target_id: chain.target_id(),
+                })
         } else {
             None
         };
@@ -1034,7 +1043,10 @@ impl App {
             names.extend(self.clients.iter().map(|c| c.character_name.clone()));
             if let Some(cfg) = &self.accounts_config {
                 for acct in &cfg.accounts {
-                    if !names.iter().any(|n| n.eq_ignore_ascii_case(&acct.character)) {
+                    if !names
+                        .iter()
+                        .any(|n| n.eq_ignore_ascii_case(&acct.character))
+                    {
                         names.push(acct.character.clone());
                     }
                 }
@@ -1192,17 +1204,48 @@ impl App {
 
         // Fallback: known TLP zone short names
         const FALLBACK_ZONES: &[&str] = &[
-            "permafrost", "eastwastes", "greatdivide", "iceclad",
-            "thurgadina", "thurgadinb", "velketor", "kael",
-            "skyshrine", "westwastes", "sirens", "cobaltscale",
-            "templeveeshan", "sleeper", "necropolis", "crystal",
-            "wakening", "frozenshadow", "gukbottom", "guktop",
-            "mistmoore", "unrest", "crushbone", "blackburrow",
-            "soldungb", "soldunga", "lavastorm", "nektulos",
-            "commonlands", "freeporteast", "freportnorth", "freeportwest",
-            "northkarana", "southkarana", "eastkarana", "westkarana",
-            "highkeep", "rivervale", "misty", "everfrost",
-            "halas", "qeynos",
+            "permafrost",
+            "eastwastes",
+            "greatdivide",
+            "iceclad",
+            "thurgadina",
+            "thurgadinb",
+            "velketor",
+            "kael",
+            "skyshrine",
+            "westwastes",
+            "sirens",
+            "cobaltscale",
+            "templeveeshan",
+            "sleeper",
+            "necropolis",
+            "crystal",
+            "wakening",
+            "frozenshadow",
+            "gukbottom",
+            "guktop",
+            "mistmoore",
+            "unrest",
+            "crushbone",
+            "blackburrow",
+            "soldungb",
+            "soldunga",
+            "lavastorm",
+            "nektulos",
+            "commonlands",
+            "freeporteast",
+            "freportnorth",
+            "freeportwest",
+            "northkarana",
+            "southkarana",
+            "eastkarana",
+            "westkarana",
+            "highkeep",
+            "rivervale",
+            "misty",
+            "everfrost",
+            "halas",
+            "qeynos",
         ];
         FALLBACK_ZONES.iter().map(|s| (*s).to_string()).collect()
     }
@@ -1428,9 +1471,8 @@ impl App {
                         self.active_screen = ActiveScreen::Navigation;
                     }
                 } else {
-                    self.status_message = String::from(
-                        "Usage: nav <zone|camp_name>  (Tab for zone autocomplete)",
-                    );
+                    self.status_message =
+                        String::from("Usage: nav <zone|camp_name>  (Tab for zone autocomplete)");
                 }
             }
             "loot" => {
@@ -1530,8 +1572,7 @@ impl App {
                 self.status_message = format!("Engage → {} clients (target_id={})", ok, target_id);
             }
             "disengage" => {
-                let ok =
-                    self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
+                let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
                 self.status_message = format!("Disengage → {} clients", ok);
             }
@@ -1877,7 +1918,11 @@ impl App {
                     let chain = orchestrator.combat.ch_chain.as_ref().unwrap();
                     let members = chain.members().len();
                     let interval = chain.interval_secs();
-                    let adaptive = if chain.is_adaptive() { "adaptive" } else { "fixed" };
+                    let adaptive = if chain.is_adaptive() {
+                        "adaptive"
+                    } else {
+                        "fixed"
+                    };
                     let target = chain.target_id();
                     self.status_message = format!(
                         "CH chain: {} clerics, {:.1}s interval ({}), target={}",
@@ -1908,18 +1953,9 @@ impl App {
                     self.status_message = String::from("No valid PIDs. Use comma-separated PIDs.");
                     return;
                 }
-                let interval: f32 = args
-                    .get(2)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(3.0);
-                let target_id: u32 = args
-                    .get(3)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
-                let spell_slot: u8 = args
-                    .get(4)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(1);
+                let interval: f32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(3.0);
+                let target_id: u32 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+                let spell_slot: u8 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(1);
 
                 orchestrator
                     .combat
@@ -1956,7 +1992,8 @@ impl App {
                             tracing::info!(pid, "Cleric added to CH chain");
                             self.status_message = format!("Added PID {} to CH chain", pid);
                         } else {
-                            self.status_message = String::from("No CH chain is running. Use: ch start");
+                            self.status_message =
+                                String::from("No CH chain is running. Use: ch start");
                         }
                     } else {
                         self.status_message = String::from("Invalid PID. Usage: ch add <pid>");
@@ -1993,7 +2030,8 @@ impl App {
                             self.status_message = String::from("No CH chain is running");
                         }
                     } else {
-                        self.status_message = String::from("Invalid seconds. Usage: ch interval <seconds>");
+                        self.status_message =
+                            String::from("Invalid seconds. Usage: ch interval <seconds>");
                     }
                 } else {
                     self.status_message = String::from("Usage: ch interval <seconds>");
@@ -2156,9 +2194,11 @@ impl App {
                 self.status_message = format!("Ejected {} client(s)", count);
             }
             Some(name) => {
-                if let Some(client) = self.clients.iter().find(|c| {
-                    c.character_name.eq_ignore_ascii_case(name)
-                }) {
+                if let Some(client) = self
+                    .clients
+                    .iter()
+                    .find(|c| c.character_name.eq_ignore_ascii_case(name))
+                {
                     let pid = client.pid;
                     let char_name = client.character_name.clone();
                     orchestrator.eject_client(pid);
@@ -2194,16 +2234,20 @@ impl App {
             }
             Some(name) => {
                 // Eject the specific client
-                if let Some(client) = self.clients.iter().find(|c| {
-                    c.character_name.eq_ignore_ascii_case(name)
-                }) {
+                if let Some(client) = self
+                    .clients
+                    .iter()
+                    .find(|c| c.character_name.eq_ignore_ascii_case(name))
+                {
                     let pid = client.pid;
                     let char_name = client.character_name.clone();
                     orchestrator.eject_client(pid);
                     // Re-launch via login
                     self.execute_login_command(&[name]);
-                    self.status_message =
-                        format!("Restarting {} (PID {}) — ejected, re-launching...", char_name, pid);
+                    self.status_message = format!(
+                        "Restarting {} (PID {}) — ejected, re-launching...",
+                        char_name, pid
+                    );
                 } else {
                     // Maybe the client isn't connected but the account exists — just launch
                     self.execute_login_command(&[name]);

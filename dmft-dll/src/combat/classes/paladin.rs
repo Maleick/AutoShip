@@ -88,7 +88,10 @@ impl ClassStrategy for PaladinStrategy {
         }
 
         // Priority 2: Cure disease/poison on afflicted group member
-        let has_afflicted = ctx.group_members.iter().any(|m| !m.is_dead && m.has_detrimental);
+        let has_afflicted = ctx
+            .group_members
+            .iter()
+            .any(|m| !m.is_dead && m.has_detrimental);
         if has_afflicted {
             if let Some(cure) = ctx
                 .config
@@ -259,7 +262,11 @@ mod tests {
         }
     }
 
-    fn make_member(spawn_id: u32, hp_pct: f32, has_detrimental: bool) -> crate::combat::strategy::GroupMemberState {
+    fn make_member(
+        spawn_id: u32,
+        hp_pct: f32,
+        has_detrimental: bool,
+    ) -> crate::combat::strategy::GroupMemberState {
         crate::combat::strategy::GroupMemberState {
             spawn_id,
             hp_pct,

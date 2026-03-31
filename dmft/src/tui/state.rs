@@ -209,9 +209,15 @@ mod tests {
     #[test]
     fn favorites_sorted_by_frequency() {
         let mut state = CommandBarState::new();
-        for _ in 0..5 { state.record_command("ma Warrior"); }
-        for _ in 0..3 { state.record_command("all /sit"); }
-        for _ in 0..1 { state.record_command("status"); }
+        for _ in 0..5 {
+            state.record_command("ma Warrior");
+        }
+        for _ in 0..3 {
+            state.record_command("all /sit");
+        }
+        for _ in 0..1 {
+            state.record_command("status");
+        }
         assert_eq!(state.favorites[0], "ma Warrior");
         assert_eq!(state.favorites[1], "all /sit");
         assert_eq!(state.favorites[2], "status");
@@ -235,7 +241,10 @@ mod tests {
     #[test]
     fn normalize_preserves_group_slash_commands() {
         assert_eq!(CommandBarState::normalize_command("all /sit"), "all /sit");
-        assert_eq!(CommandBarState::normalize_command("G1 /follow"), "G1 /follow");
+        assert_eq!(
+            CommandBarState::normalize_command("G1 /follow"),
+            "G1 /follow"
+        );
     }
 
     #[test]
@@ -248,7 +257,10 @@ mod tests {
 
     #[test]
     fn normalize_command_with_target() {
-        assert_eq!(CommandBarState::normalize_command("ma Warrior"), "ma Warrior");
+        assert_eq!(
+            CommandBarState::normalize_command("ma Warrior"),
+            "ma Warrior"
+        );
         assert_eq!(CommandBarState::normalize_command("engage 100"), "engage");
     }
 }

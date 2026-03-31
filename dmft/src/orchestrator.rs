@@ -55,7 +55,6 @@ pub struct Orchestrator {
     pipe_pool: HashMap<u32, CommandPipe>,
 
     // --- Integration fields ---
-
     /// Current operating mode: Camp (stationary) or Hunt (roaming).
     pub operating_mode: OperatingMode,
     /// Active hunt loop (used when operating_mode == Hunt).
@@ -241,13 +240,22 @@ impl Orchestrator {
         // Tick the main camp loop
         let mut commands = match self.active_camp.as_mut() {
             Some(camp) => camp.tick(snapshot.as_ref()),
-            None => return sell_cmds.into_iter().map(|(pid, cmd)| (pid, CampAction::Slash(cmd))).collect(),
+            None => {
+                return sell_cmds
+                    .into_iter()
+                    .map(|(pid, cmd)| (pid, CampAction::Slash(cmd)))
+                    .collect();
+            }
         };
 
         // Append sell cycle commands (only during Idle/Medding — the sell cycle
         // itself returns empty when not active)
         if !sell_cmds.is_empty() {
-            commands.extend(sell_cmds.into_iter().map(|(pid, cmd)| (pid, CampAction::Slash(cmd))));
+            commands.extend(
+                sell_cmds
+                    .into_iter()
+                    .map(|(pid, cmd)| (pid, CampAction::Slash(cmd))),
+            );
         }
 
         commands
@@ -282,7 +290,9 @@ impl Orchestrator {
             .iter()
             .filter_map(|m| {
                 self.game_states.get(&m.pid).and_then(|gs| {
-                    gs.local_player.as_ref().map(|lp| (m.pid, Pos2D::new(lp.x, lp.y)))
+                    gs.local_player
+                        .as_ref()
+                        .map(|lp| (m.pid, Pos2D::new(lp.x, lp.y)))
                 })
             })
             .collect();
@@ -306,8 +316,7 @@ impl Orchestrator {
         // Capture both values in a single borrow of active_camp
         let (in_downtime, seller_pid) = match &self.active_camp {
             Some(camp) => {
-                let downtime =
-                    matches!(camp.state, CampState::Idle | CampState::Medding { .. });
+                let downtime = matches!(camp.state, CampState::Idle | CampState::Medding { .. });
                 let pid = camp
                     .members
                     .iter()
@@ -360,9 +369,9 @@ impl Orchestrator {
             .members
             .iter()
             .filter_map(|m| {
-                self.game_states.get(&m.pid).and_then(|gs| {
-                    gs.local_player.as_ref().map(|lp| lp.level as f32)
-                })
+                self.game_states
+                    .get(&m.pid)
+                    .and_then(|gs| gs.local_player.as_ref().map(|lp| lp.level as f32))
             })
             .collect();
 
@@ -1144,7 +1153,10 @@ mod tests {
             sc.start_sell(0);
         }
         let status = orch.camp_status();
-        assert!(status.contains("[selling]"), "Status should show selling indicator");
+        assert!(
+            status.contains("[selling]"),
+            "Status should show selling indicator"
+        );
     }
 
     // --- Task 3: Buff rebuffing (tested via state.rs, verify integration) ---
@@ -1191,7 +1203,7 @@ mod tests {
 
     #[test]
     fn test_charm_break_detection() {
-        use crate::camp::cc::{CcType, CcTarget};
+        use crate::camp::cc::{CcTarget, CcType};
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -1223,7 +1235,9 @@ mod tests {
         // Should have pushed a CharmBreak event
         let events = &orch.active_camp.as_ref().unwrap().pending_events;
         assert!(
-            events.iter().any(|e| matches!(e, CampEvent::CharmBreak { spawn_id: 42 })),
+            events
+                .iter()
+                .any(|e| matches!(e, CampEvent::CharmBreak { spawn_id: 42 })),
             "Should detect charm break"
         );
     }
@@ -1250,36 +1264,57 @@ mod tests {
             spawn_type: 1, // NPC
             level: 10,
             class_id: 1,
-            x: 0.0, y: 0.0, z: 0.0, heading: 0.0,
-            hp_current: 1000, hp_max: 1000,
-            mana_current: 0, mana_max: 0,
-            endurance_current: 100, endurance_max: 100,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 1000,
+            hp_max: 1000,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 100,
+            endurance_max: 100,
         };
-        orch.game_states.insert(100, GameState {
-            client_id: 100,
-            local_player: Some(SpawnData {
-                spawn_id: 1, name: "Tank".into(), displayed_name: "Tank".into(),
-                spawn_type: 0, level: 60, class_id: 1,
-                x: 0.0, y: 0.0, z: 0.0, heading: 0.0,
-                hp_current: 1000, hp_max: 1000,
-                mana_current: 0, mana_max: 0,
-                endurance_current: 100, endurance_max: 100,
-            }),
-            target: None,
-            nearby_spawns: vec![new_npc],
-            timestamp_ms: 0,
-            nav_status: NavStatus::Idle,
-            combat_status: CombatStatus::Idle,
-            zone_short_name: String::new(),
-            zone_long_name: String::new(),
-        });
+        orch.game_states.insert(
+            100,
+            GameState {
+                client_id: 100,
+                local_player: Some(SpawnData {
+                    spawn_id: 1,
+                    name: "Tank".into(),
+                    displayed_name: "Tank".into(),
+                    spawn_type: 0,
+                    level: 60,
+                    class_id: 1,
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    heading: 0.0,
+                    hp_current: 1000,
+                    hp_max: 1000,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 100,
+                    endurance_max: 100,
+                }),
+                target: None,
+                nearby_spawns: vec![new_npc],
+                timestamp_ms: 0,
+                nav_status: NavStatus::Idle,
+                combat_status: CombatStatus::Idle,
+                zone_short_name: String::new(),
+                zone_long_name: String::new(),
+            },
+        );
 
         // First call: records spawns as prev
         orch.produce_camp_events(&None);
         // Clear any events from first detection (first time seeing spawn 99)
         let events = &orch.active_camp.as_ref().unwrap().pending_events;
         assert!(
-            events.iter().any(|e| matches!(e, CampEvent::AddSpawned { spawn_id: 99, .. })),
+            events
+                .iter()
+                .any(|e| matches!(e, CampEvent::AddSpawned { spawn_id: 99, .. })),
             "Should detect new add"
         );
     }
@@ -1309,7 +1344,9 @@ mod tests {
 
         let events = &orch.active_camp.as_ref().unwrap().pending_events;
         assert!(
-            events.iter().any(|e| matches!(e, CampEvent::CcExpiring { spawn_id: 55 })),
+            events
+                .iter()
+                .any(|e| matches!(e, CampEvent::CcExpiring { spawn_id: 55 })),
             "Should detect CC about to expire"
         );
     }

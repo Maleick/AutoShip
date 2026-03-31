@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)]
+
 // --- Modules wired through orchestrator/TUI, not referenced directly in main ---
 #[allow(dead_code)] // M4: camp loop state machine, driven by orchestrator
 pub mod camp;
@@ -12,6 +14,8 @@ pub mod credentials;
 pub mod launcher;
 
 // --- Modules used in main.rs; dead_code on non-Windows from platform stubs ---
+#[allow(dead_code)]
+pub mod discord;
 #[allow(dead_code)] // M1: EQ data layer — some fields/functions are scaffolding for future features
 pub mod eq;
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -25,8 +29,6 @@ pub mod orchestrator;
 pub mod process;
 #[allow(dead_code)] // M5/M6: Soul Engine — scaffolding for LLM personalities, social graph
 pub mod soul;
-#[allow(dead_code)]
-pub mod discord;
 pub mod tui;
 
 pub mod cli;

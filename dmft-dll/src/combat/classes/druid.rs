@@ -51,7 +51,11 @@ impl DruidStrategy {
             .map(|m| m.name.as_str())
     }
 
-    fn find_spell_by_category<'a>(&self, spells: &'a [SpellEntry], keywords: &[&str]) -> Option<&'a SpellEntry> {
+    fn find_spell_by_category<'a>(
+        &self,
+        spells: &'a [SpellEntry],
+        keywords: &[&str],
+    ) -> Option<&'a SpellEntry> {
         spells.iter().find(|s| {
             let name = s.name.to_lowercase();
             keywords.iter().any(|kw| name.contains(kw))
@@ -68,7 +72,9 @@ impl ClassStrategy for DruidStrategy {
         // Rez targeting: don't override target — rez spell selection handles corpse targeting
         if !ctx.in_combat
             && self.dead_member(ctx).is_some()
-            && self.find_spell_by_category(&ctx.config.spells, &["resurrect", "rez", "reviviscence"]).is_some()
+            && self
+                .find_spell_by_category(&ctx.config.spells, &["resurrect", "rez", "reviviscence"])
+                .is_some()
         {
             return None;
         }
@@ -87,7 +93,10 @@ impl ClassStrategy for DruidStrategy {
         // Priority 0: Resurrect dead group members (out of combat only)
         if !ctx.in_combat {
             if self.dead_member(ctx).is_some() {
-                if let Some(rez) = self.find_spell_by_category(&ctx.config.spells, &["resurrect", "rez", "reviviscence"]) {
+                if let Some(rez) = self.find_spell_by_category(
+                    &ctx.config.spells,
+                    &["resurrect", "rez", "reviviscence"],
+                ) {
                     if mana_pct >= rez.min_mana_pct {
                         return Some(rez.clone());
                     }
@@ -96,7 +105,10 @@ impl ClassStrategy for DruidStrategy {
         }
 
         // Priority 1: Cure detrimental effects
-        let has_afflicted = ctx.group_members.iter().any(|m| !m.is_dead && m.has_detrimental);
+        let has_afflicted = ctx
+            .group_members
+            .iter()
+            .any(|m| !m.is_dead && m.has_detrimental);
         if has_afflicted {
             if let Some(cure) = self.find_spell_by_category(
                 &ctx.config.spells,
@@ -262,7 +274,7 @@ mod tests {
         let player = dmft_common::types::SpawnData::default();
         let members = vec![
             make_member(1, 0.0, true),   // dead
-            make_member(2, 40.0, false),  // alive, hurt
+            make_member(2, 40.0, false), // alive, hurt
         ];
         let config = dmft_common::combat::CombatConfig::default();
         let ctx = CombatContext {

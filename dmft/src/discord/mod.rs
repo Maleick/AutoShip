@@ -9,5 +9,5 @@
 //! The webhook layer works immediately with just a URL in config.
 //! The command bridge is designed for a future `serenity`-based bot.
 
-pub mod webhook;
 pub mod bridge;
+pub mod webhook;

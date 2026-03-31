@@ -138,13 +138,19 @@ fn login_enter_world_navigate_pipeline() {
     let action = login.advance(LoginEvent::CredentialsSent);
     match &action {
         LoginAction::SelectServer { name } => assert_eq!(name, "TestServer"),
-        other => panic!("expected SelectServer, got {:?}", std::mem::discriminant(other)),
+        other => panic!(
+            "expected SelectServer, got {:?}",
+            std::mem::discriminant(other)
+        ),
     }
 
     let action = login.advance(LoginEvent::ServerSelected);
     match &action {
         LoginAction::SelectCharacter { name } => assert_eq!(name, "Frostreaver"),
-        other => panic!("expected SelectCharacter, got {:?}", std::mem::discriminant(other)),
+        other => panic!(
+            "expected SelectCharacter, got {:?}",
+            std::mem::discriminant(other)
+        ),
     }
 
     let action = login.advance(LoginEvent::CharacterSelected);
@@ -196,7 +202,10 @@ fn login_enter_world_navigate_pipeline() {
 
     // -- Phase 3: Travel plan verification --
     let steps = vec![
-        TravelStep::StaggerWait { min_secs: 5, max_secs: 5 },
+        TravelStep::StaggerWait {
+            min_secs: 5,
+            max_secs: 5,
+        },
         TravelStep::WalkTo {
             waypoints: vec![Waypoint::new(100.0, 200.0, 0.0)],
         },
@@ -209,7 +218,10 @@ fn login_enter_world_navigate_pipeline() {
 
     // Verify traversal through each step
     assert!(!plan.is_complete());
-    assert!(matches!(plan.current(), Some(TravelStep::StaggerWait { .. })));
+    assert!(matches!(
+        plan.current(),
+        Some(TravelStep::StaggerWait { .. })
+    ));
 
     assert!(plan.advance());
     assert!(matches!(plan.current(), Some(TravelStep::WalkTo { .. })));
@@ -252,8 +264,15 @@ fn coordinator_tick_attempts_launch_from_queue() {
     // On Windows without a real EQ install, it also fails. Either way, the
     // coordinator dequeues and attempts to launch.
     let events = coord.tick();
-    assert!(!events.is_empty(), "tick should produce events when clients are queued");
-    assert_eq!(coord.pending_count(), 1, "exactly one client should be dequeued per tick");
+    assert!(
+        !events.is_empty(),
+        "tick should produce events when clients are queued"
+    );
+    assert_eq!(
+        coord.pending_count(),
+        1,
+        "exactly one client should be dequeued per tick"
+    );
     // Verify the event is a launch attempt (ClientLaunched or ClientFailed)
     assert!(
         events.iter().any(|e| matches!(
@@ -423,7 +442,10 @@ fn post_login_joining_group_phase_produces_apply_buffs() {
     // Mark the JoinGroup command as dispatched -> transitions to JoiningGroup
     seq.mark_dispatched();
     assert!(
-        matches!(seq.phase(), dmft::client::session::PostLoginPhase::JoiningGroup),
+        matches!(
+            seq.phase(),
+            dmft::client::session::PostLoginPhase::JoiningGroup
+        ),
         "phase should be JoiningGroup after dispatch, got {:?}",
         seq.phase()
     );
@@ -485,14 +507,26 @@ fn camp_loop_full_cycle_with_snapshot() {
     assert!(matches!(camp.state, CampState::Fighting { .. }));
     // Tank should get /assist and /attack
     let tank_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 100).collect();
-    assert!(tank_cmds.iter().any(|(_, cmd)| cmd.contains("/assist Bard01")));
+    assert!(
+        tank_cmds
+            .iter()
+            .any(|(_, cmd)| cmd.contains("/assist Bard01"))
+    );
     assert!(tank_cmds.iter().any(|(_, cmd)| cmd == "/attack"));
     // DPS should assist tank
     let dps_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 104).collect();
-    assert!(dps_cmds.iter().any(|(_, cmd)| cmd.contains("/assist Warrior01")));
+    assert!(
+        dps_cmds
+            .iter()
+            .any(|(_, cmd)| cmd.contains("/assist Warrior01"))
+    );
     // Healer should target tank
     let healer_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 101).collect();
-    assert!(healer_cmds.iter().any(|(_, cmd)| cmd.contains("/target Warrior01")));
+    assert!(
+        healer_cmds
+            .iter()
+            .any(|(_, cmd)| cmd.contains("/target Warrior01"))
+    );
 
     // Use snapshot to signal target dead -> immediate transition to Looting
     let dead_snapshot = CampSnapshot {
@@ -506,8 +540,14 @@ fn camp_loop_full_cycle_with_snapshot() {
     let cmds = camp.tick(Some(&dead_snapshot));
     assert!(matches!(camp.state, CampState::Looting { .. }));
     // Everyone should get /attack off and CombatDisengage
-    assert!(cmds.iter().any(|(pid, cmd)| *pid == 100 && cmd == "/attack off"));
-    assert!(cmds.iter().any(|(_, cmd)| matches!(cmd, CampAction::CombatDisengage)));
+    assert!(
+        cmds.iter()
+            .any(|(pid, cmd)| *pid == 100 && cmd == "/attack off")
+    );
+    assert!(
+        cmds.iter()
+            .any(|(_, cmd)| matches!(cmd, CampAction::CombatDisengage))
+    );
 
     // Looting -> Medding: loot cycle has multi-tick delays per corpse.
     // Tick until the looting phase completes and we transition to Medding.
@@ -647,7 +687,10 @@ fn zone_stagger_delays_are_deterministic() {
 #[test]
 fn travel_plan_with_zone_transitions() {
     let steps = vec![
-        TravelStep::StaggerWait { min_secs: 3, max_secs: 10 },
+        TravelStep::StaggerWait {
+            min_secs: 3,
+            max_secs: 10,
+        },
         TravelStep::WalkTo {
             waypoints: vec![Waypoint::new(0.0, 0.0, 0.0), Waypoint::new(100.0, 0.0, 0.0)],
         },
@@ -655,7 +698,10 @@ fn travel_plan_with_zone_transitions() {
             zone_name: "nro".to_string(),
             zone_line_pos: Waypoint::new(200.0, 0.0, 0.0),
         },
-        TravelStep::StaggerWait { min_secs: 5, max_secs: 15 },
+        TravelStep::StaggerWait {
+            min_secs: 5,
+            max_secs: 15,
+        },
         TravelStep::WalkTo {
             waypoints: vec![Waypoint::new(0.0, 50.0, 0.0)],
         },
@@ -674,10 +720,7 @@ fn travel_plan_with_zone_transitions() {
         match plan.current() {
             Some(TravelStep::ZoneTo { zone_name, .. }) => {
                 zone_transitions += 1;
-                assert!(
-                    !zone_name.is_empty(),
-                    "zone name should not be empty"
-                );
+                assert!(!zone_name.is_empty(), "zone name should not be empty");
             }
             Some(TravelStep::StaggerWait { min_secs, max_secs }) => {
                 stagger_waits += 1;

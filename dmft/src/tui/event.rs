@@ -235,7 +235,10 @@ pub fn handle_events(
                     app.execute_command(orchestrator);
                     app.cmd_state.command_buffer.clear();
                 } else {
-                    app.status_message = format!("F{}: no favorite assigned (use commands to build frequency)", n);
+                    app.status_message = format!(
+                        "F{}: no favorite assigned (use commands to build frequency)",
+                        n
+                    );
                 }
                 return Ok(true);
             }
@@ -243,7 +246,13 @@ pub fn handle_events(
         }
 
         // Quick action keybinds (only when not in search/command mode, and only on relevant screens)
-        if matches!(app.active_screen, ActiveScreen::Dashboard | ActiveScreen::Character | ActiveScreen::Spawns | ActiveScreen::Groups) {
+        if matches!(
+            app.active_screen,
+            ActiveScreen::Dashboard
+                | ActiveScreen::Character
+                | ActiveScreen::Spawns
+                | ActiveScreen::Groups
+        ) {
             match key.code {
                 // r = repeat last command
                 KeyCode::Char('r') => {

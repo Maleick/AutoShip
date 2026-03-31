@@ -130,8 +130,7 @@ impl ClassStrategy for ClericStrategy {
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         // Priority 1: Dead group member for rez — signal to the FSM that we need
         // corpse targeting.
-        if !ctx.in_combat && self.dead_member(ctx).is_some() && self.find_rez_spell(ctx).is_some()
-        {
+        if !ctx.in_combat && self.dead_member(ctx).is_some() && self.find_rez_spell(ctx).is_some() {
             return None; // don't override target — rez spell selection handles it
         }
 
@@ -337,10 +336,7 @@ mod tests {
             ..Default::default()
         };
         let members = vec![make_member(10, 20.0, false)]; // below EMERGENCY_HP
-        let spells = vec![
-            heal_spell("Minor Heal", 1),
-            heal_spell("Complete Heal", 10),
-        ];
+        let spells = vec![heal_spell("Minor Heal", 1), heal_spell("Complete Heal", 10)];
         let config = make_config(&spells);
         let ctx = CombatContext {
             player: &player,
@@ -366,10 +362,7 @@ mod tests {
             ..Default::default()
         };
         let members = vec![make_member(10, 50.0, false)]; // between EMERGENCY and MODERATE
-        let spells = vec![
-            heal_spell("Minor Heal", 1),
-            heal_spell("Complete Heal", 10),
-        ];
+        let spells = vec![heal_spell("Minor Heal", 1), heal_spell("Complete Heal", 10)];
         let config = make_config(&spells);
         let ctx = CombatContext {
             player: &player,
@@ -458,7 +451,7 @@ mod tests {
             ..Default::default()
         };
         let members = vec![
-            make_member(10, 0.0, true),  // dead
+            make_member(10, 0.0, true),   // dead
             make_member(11, 80.0, false), // alive
         ];
         let spells = vec![
@@ -497,7 +490,7 @@ mod tests {
             ..Default::default()
         };
         let members = vec![
-            make_member(10, 0.0, true),  // dead
+            make_member(10, 0.0, true),   // dead
             make_member(11, 25.0, false), // alive but critical
         ];
         let spells = vec![
@@ -611,7 +604,7 @@ mod tests {
             ..Default::default()
         };
         let members = vec![
-            make_member(10, 0.0, true),  // dead — should be skipped
+            make_member(10, 0.0, true),   // dead — should be skipped
             make_member(11, 50.0, false), // alive, hurt
         ];
         let config = dmft_common::combat::CombatConfig::default();
