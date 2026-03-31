@@ -189,6 +189,105 @@ mod tests {
         );
     }
 
+    #[test]
+    fn effective_duration_explicit() {
+        let ability = ClassAbility {
+            name: "Haste".into(),
+            command: "/cast 1".into(),
+            cooldown_secs: 10.0,
+            priority: 1,
+            condition: None,
+            duration_secs: Some(300.0),
+        };
+        assert!((ability.effective_duration_secs() - 300.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn effective_duration_falls_back_to_cooldown() {
+        let ability = ClassAbility {
+            name: "Taunt".into(),
+            command: "/taunt".into(),
+            cooldown_secs: 8.0,
+            priority: 1,
+            condition: None,
+            duration_secs: None,
+        };
+        assert!((ability.effective_duration_secs() - 8.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn cc_ability_roundtrip() {
+        let cc = CcAbilityConfig {
+            name: "Mesmerize".into(),
+            cc_type: "mez".into(),
+            command: "/cast 4".into(),
+            cooldown_secs: 3.0,
+            duration_secs: 18.0,
+            priority: 1,
+        };
+        let toml_str = toml::to_string(&cc).unwrap();
+        let loaded: CcAbilityConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(loaded.name, "Mesmerize");
+        assert_eq!(loaded.cc_type, "mez");
+        assert!((loaded.duration_secs - 18.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn debuff_ability_roundtrip() {
+        let debuff = DebuffAbilityConfig {
+            name: "Tashani".into(),
+            command: "/cast 5".into(),
+            cooldown_secs: 2.5,
+            order: 1,
+        };
+        let toml_str = toml::to_string(&debuff).unwrap();
+        let loaded: DebuffAbilityConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(loaded.name, "Tashani");
+        assert_eq!(loaded.order, 1);
+    }
+
+    #[test]
+    fn class_config_with_all_fields() {
+        let toml_str = r#"
+            class_name = "enchanter"
+            role = "cc"
+            rest_command = "/sit"
+            twist_interval_secs = 3.0
+
+            [[combat_abilities]]
+            name = "Nuke"
+            command = "/cast 1"
+            cooldown_secs = 5.0
+            priority = 2
+
+            [[cc_abilities]]
+            name = "Mez"
+            cc_type = "mez"
+            command = "/cast 4"
+            cooldown_secs = 3.0
+            duration_secs = 18.0
+            priority = 1
+
+            [[debuff_abilities]]
+            name = "Tash"
+            command = "/cast 5"
+            cooldown_secs = 2.5
+            order = 1
+        "#;
+        let config: ClassConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.class_name, "enchanter");
+        assert_eq!(config.combat_abilities.len(), 1);
+        assert_eq!(config.cc_abilities.len(), 1);
+        assert_eq!(config.debuff_abilities.len(), 1);
+        assert!((config.twist_interval_secs.unwrap() - 3.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn load_nonexistent_file_returns_error() {
+        let result = ClassConfig::load(Path::new("/nonexistent/path.toml"));
+        assert!(result.is_err());
+    }
+
     /// Validate all shipped class TOML files parse correctly.
     #[test]
     fn test_all_shipped_configs_parse() {

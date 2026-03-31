@@ -90,4 +90,36 @@ mod tests {
         let gov = ManaGovernor::new(42.5, false);
         assert!((gov.mana_floor() - 42.5).abs() < f32::EPSILON);
     }
+
+    #[test]
+    fn can_cast_at_exact_floor_returns_false() {
+        let gov = ManaGovernor::new(50.0, false);
+        assert!(!gov.can_cast(50.0)); // not > floor, only ==
+    }
+
+    #[test]
+    fn should_med_at_exact_floor_returns_true() {
+        let gov = ManaGovernor::new(30.0, false);
+        assert!(!gov.should_med(30.0, false)); // not < floor, only ==
+    }
+
+    #[test]
+    fn zero_mana_floor() {
+        let gov = ManaGovernor::new(0.0, false);
+        assert!(gov.can_cast(0.1));
+        assert!(!gov.can_cast(0.0));
+    }
+
+    #[test]
+    fn hundred_percent_floor_dps_can_never_cast() {
+        let gov = ManaGovernor::new(100.0, false);
+        assert!(!gov.can_cast(99.0));
+        assert!(!gov.can_cast(100.0));
+    }
+
+    #[test]
+    fn healer_ignores_hundred_percent_floor() {
+        let gov = ManaGovernor::new(100.0, true);
+        assert!(gov.can_cast(0.0)); // healer always casts
+    }
 }

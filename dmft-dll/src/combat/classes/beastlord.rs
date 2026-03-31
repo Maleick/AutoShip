@@ -55,12 +55,145 @@ impl ClassStrategy for BeastlordStrategy {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
+    use dmft_common::combat::{CombatConfig, SpellEntry};
+    use dmft_common::types::SpawnData;
+
+    static DEFAULT_CONFIG: std::sync::LazyLock<CombatConfig> =
+        std::sync::LazyLock::new(CombatConfig::default);
+
+    fn make_ctx<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        enemies: &'a [SpawnData],
+        in_combat: bool,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: enemies,
+            group_members: &[],
+            config: &DEFAULT_CONFIG,
+            tick: 0,
+            in_combat,
+        }
+    }
+
+    #[test]
+    fn beastlord_class_id() {
+        let bl = BeastlordStrategy::new(15);
+        assert_eq!(bl.class_id(), 15);
+    }
 
     #[test]
     fn beastlord_role_is_melee_dps() {
         let bl = BeastlordStrategy::new(15);
         assert!(matches!(bl.role(), CombatRole::DpsMelee));
+    }
+
+    #[test]
+    fn beastlord_aoe_threshold() {
+        let bl = BeastlordStrategy::new(15);
+        assert_eq!(bl.aoe_threshold(), 3);
+    }
+
+    #[test]
+    fn beastlord_should_assist() {
+        let bl = BeastlordStrategy::new(15);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[], false);
+        assert!(bl.should_assist(&ctx));
+    }
+
+    #[test]
+    fn select_target_in_combat_uses_assist() {
+        let bl = BeastlordStrategy::new(15);
+        let player = SpawnData::default();
+        let target = SpawnData {
+            spawn_id: 77,
+            ..SpawnData::default()
+        };
+        let ctx = make_ctx(&player, Some(&target), &[], true);
+        assert_eq!(bl.select_target(&ctx), Some(77));
+    }
+
+    #[test]
+    fn select_target_out_of_combat_uses_nearest() {
+        let bl = BeastlordStrategy::new(15);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let enemies = vec![
+            SpawnData {
+                spawn_id: 1,
+                x: 200.0,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 2,
+                x: 25.0,
+                ..SpawnData::default()
+            },
+        ];
+        let ctx = make_ctx(&player, None, &enemies, false);
+        assert_eq!(bl.select_target(&ctx), Some(2));
+    }
+
+    #[test]
+    fn select_target_out_of_combat_no_enemies() {
+        let bl = BeastlordStrategy::new(15);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[], false);
+        assert!(bl.select_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn select_spell_highest_priority() {
+        let bl = BeastlordStrategy::new(15);
+        let player = SpawnData::default();
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "Slow".into(),
+                    slot: 1,
+                    spell_id: 1,
+                    priority: 10,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "PetHeal".into(),
+                    slot: 2,
+                    spell_id: 2,
+                    priority: 5,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        let spell = bl.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Slow");
+    }
+
+    #[test]
+    fn select_spell_none_when_empty() {
+        let bl = BeastlordStrategy::new(15);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[], false);
+        assert!(bl.select_spell(&ctx).is_none());
     }
 }

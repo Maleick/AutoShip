@@ -281,4 +281,175 @@ mod tests {
         assert!(map.lines.is_empty());
         assert!(map.points.is_empty());
     }
+
+    #[test]
+    fn map_bounds_empty() {
+        let bounds = MapBounds::empty();
+        assert_eq!(bounds.min_x, f32::MAX);
+        assert_eq!(bounds.max_x, f32::MIN);
+    }
+
+    #[test]
+    fn map_bounds_expand_first_point() {
+        let mut bounds = MapBounds::empty();
+        bounds.expand(10.0, 20.0);
+        assert!((bounds.min_x - 10.0).abs() < f32::EPSILON);
+        assert!((bounds.max_x - 10.0).abs() < f32::EPSILON);
+        assert!((bounds.min_y - 20.0).abs() < f32::EPSILON);
+        assert!((bounds.max_y - 20.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_bounds_expand_multiple_points() {
+        let mut bounds = MapBounds::empty();
+        bounds.expand(-100.0, -50.0);
+        bounds.expand(200.0, 150.0);
+        bounds.expand(0.0, 0.0);
+        assert!((bounds.min_x - (-100.0)).abs() < f32::EPSILON);
+        assert!((bounds.max_x - 200.0).abs() < f32::EPSILON);
+        assert!((bounds.min_y - (-50.0)).abs() < f32::EPSILON);
+        assert!((bounds.max_y - 150.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_bounds_width_and_height() {
+        let mut bounds = MapBounds::empty();
+        bounds.expand(-50.0, -30.0);
+        bounds.expand(50.0, 70.0);
+        assert!((bounds.width() - 100.0).abs() < f32::EPSILON);
+        assert!((bounds.height() - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_bounds_width_minimum_is_one() {
+        let mut bounds = MapBounds::empty();
+        bounds.expand(5.0, 10.0);
+        // Same point, width/height would be 0, but max(1.0) applies
+        assert!((bounds.width() - 1.0).abs() < f32::EPSILON);
+        assert!((bounds.height() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_bounds_center() {
+        let mut bounds = MapBounds::empty();
+        bounds.expand(-100.0, -50.0);
+        bounds.expand(100.0, 50.0);
+        assert!((bounds.center_x()).abs() < f32::EPSILON);
+        assert!((bounds.center_y()).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_bounds_center_offset() {
+        let mut bounds = MapBounds::empty();
+        bounds.expand(100.0, 200.0);
+        bounds.expand(200.0, 400.0);
+        assert!((bounds.center_x() - 150.0).abs() < f32::EPSILON);
+        assert!((bounds.center_y() - 300.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parse_l_line_with_negative_coords() {
+        let line = "L -100.5, -200.3, -50.0, 100.5, 200.3, 50.0, 0, 128, 255";
+        let ml = parse_l_line(line).unwrap();
+        assert!((ml.x1 - (-100.5)).abs() < 0.01);
+        assert!((ml.y2 - 200.3).abs() < 0.01);
+        assert_eq!(ml.r, 0);
+    }
+
+    #[test]
+    fn parse_l_line_too_few_fields() {
+        assert!(parse_l_line("L 1, 2, 3, 4, 5").is_none());
+    }
+
+    #[test]
+    fn parse_l_line_invalid_number() {
+        assert!(parse_l_line("L abc, 2, 3, 4, 5, 6, 7, 8, 9").is_none());
+    }
+
+    #[test]
+    fn parse_p_line_too_few_fields() {
+        assert!(parse_p_line("P 1, 2, 3, 4, 5").is_none());
+    }
+
+    #[test]
+    fn parse_p_line_invalid_number() {
+        assert!(parse_p_line("P abc, 2, 3, 4, 5, 6, 7, label").is_none());
+    }
+
+    #[test]
+    fn load_zone_map_ignores_comments_and_blanks() {
+        let dir = tempfile::tempdir().unwrap();
+        let map_path = dir.path().join("testzone.txt");
+        let mut f = File::create(&map_path).unwrap();
+        writeln!(f, "# This is a comment").unwrap();
+        writeln!(f).unwrap(); // blank line
+        writeln!(f, "L 0, 0, 0, 100, 0, 0, 255, 255, 255").unwrap();
+        writeln!(f, "# Another comment").unwrap();
+        writeln!(f, "L 0, 0, 0, 0, 100, 0, 128, 128, 128").unwrap();
+        drop(f);
+
+        let map = load_zone_map(dir.path(), "testzone").unwrap();
+        assert_eq!(map.lines.len(), 2);
+    }
+
+    #[test]
+    fn load_zone_map_empty_map_gets_default_bounds() {
+        let dir = tempfile::tempdir().unwrap();
+        let map = load_zone_map(dir.path(), "nonexistent").unwrap();
+        assert!((map.bounds.min_x - (-100.0)).abs() < f32::EPSILON);
+        assert!((map.bounds.max_x - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn load_zone_map_case_insensitive() {
+        let dir = tempfile::tempdir().unwrap();
+        let map_path = dir.path().join("myzone.txt");
+        let mut f = File::create(&map_path).unwrap();
+        writeln!(f, "L 0, 0, 0, 50, 50, 0, 255, 255, 255").unwrap();
+        drop(f);
+
+        // Zone name with uppercase should load lowercase file
+        let map = load_zone_map(dir.path(), "MyZone").unwrap();
+        assert_eq!(map.lines.len(), 1);
+    }
+
+    #[test]
+    fn map_line_struct_fields() {
+        let line = MapLine {
+            x1: 1.0,
+            y1: 2.0,
+            z1: 3.0,
+            x2: 4.0,
+            y2: 5.0,
+            z2: 6.0,
+            r: 255,
+            g: 128,
+            b: 0,
+        };
+        assert!((line.z2 - 6.0).abs() < f32::EPSILON);
+        assert_eq!(line.g, 128);
+    }
+
+    #[test]
+    fn map_point_struct_fields() {
+        let point = MapPoint {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            r: 255,
+            g: 0,
+            b: 128,
+            size: 3,
+            label: "Test Point".into(),
+        };
+        assert_eq!(point.label, "Test Point");
+        assert_eq!(point.size, 3);
+    }
+
+    #[test]
+    fn zone_map_name_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let map = load_zone_map(dir.path(), "Crushbone").unwrap();
+        assert_eq!(map.name, "Crushbone");
+    }
 }

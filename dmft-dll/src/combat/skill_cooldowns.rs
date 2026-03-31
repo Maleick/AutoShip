@@ -143,4 +143,54 @@ mod tests {
         assert_eq!(default_cooldown(73), Some(120)); // taunt
         assert_eq!(default_cooldown(999), None); // unknown
     }
+
+    #[test]
+    fn default_cooldown_all_known() {
+        assert_eq!(default_cooldown(8), Some(200)); // backstab
+        assert_eq!(default_cooldown(26), Some(140)); // flying kick
+        assert_eq!(default_cooldown(38), Some(140)); // round kick
+        assert_eq!(default_cooldown(52), Some(120)); // tiger claw
+        assert_eq!(default_cooldown(23), Some(120)); // eagle strike
+    }
+
+    #[test]
+    fn tick_with_no_cooldowns_is_noop() {
+        let mut tracker = SkillCooldownTracker::new();
+        tracker.tick(); // should not panic
+        assert!(tracker.is_ready(1));
+    }
+
+    #[test]
+    fn multiple_skills_tracked_independently() {
+        let mut tracker = SkillCooldownTracker::new();
+        tracker.consume(1, 10);
+        tracker.consume(2, 20);
+
+        for _ in 0..10 {
+            tracker.tick();
+        }
+        assert!(tracker.is_ready(1));
+        assert!(!tracker.is_ready(2));
+
+        for _ in 0..10 {
+            tracker.tick();
+        }
+        assert!(tracker.is_ready(2));
+    }
+
+    #[test]
+    fn consume_zero_cooldown_stays_ready() {
+        let mut tracker = SkillCooldownTracker::new();
+        tracker.consume(1, 0);
+        assert!(tracker.is_ready(1));
+    }
+
+    #[test]
+    fn saturating_sub_prevents_underflow() {
+        let mut tracker = SkillCooldownTracker::new();
+        tracker.consume(1, 1);
+        tracker.tick(); // goes to 0
+        tracker.tick(); // should stay at 0, not underflow
+        assert!(tracker.is_ready(1));
+    }
 }

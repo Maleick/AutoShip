@@ -152,4 +152,250 @@ mod tests {
         };
         assert!(druid.should_assist(&ctx));
     }
+
+    #[test]
+    fn druid_aoe_threshold() {
+        let druid = DruidStrategy::new(6);
+        assert_eq!(druid.aoe_threshold(), 3);
+    }
+
+    #[test]
+    fn druid_emergency_heal_below_45() {
+        let druid = DruidStrategy::new(6);
+        let mut player = dmft_common::types::SpawnData::default();
+        player.mana_current = 8000;
+        player.mana_max = 10000;
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![
+                dmft_common::combat::SpellEntry {
+                    slot: 1,
+                    spell_id: 100,
+                    name: "Greater Healing".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+                dmft_common::combat::SpellEntry {
+                    slot: 2,
+                    spell_id: 200,
+                    name: "Starfire".into(),
+                    min_mana_pct: 10.0,
+                    priority: 15,
+                    is_aoe: false,
+                },
+            ],
+            ..dmft_common::combat::CombatConfig::default()
+        };
+        let group = vec![crate::combat::strategy::GroupMemberState {
+            spawn_id: 1,
+            hp_pct: 30.0,
+            mana_pct: 100.0,
+            class_id: 1,
+        }];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &group,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Greater Healing");
+    }
+
+    #[test]
+    fn druid_snare_on_fleeing_mob() {
+        let druid = DruidStrategy::new(6);
+        let mut player = dmft_common::types::SpawnData::default();
+        player.mana_current = 8000;
+        player.mana_max = 10000;
+        let mut target = dmft_common::types::SpawnData::default();
+        target.hp_current = 1000;
+        target.hp_max = 10000; // 10% HP
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![
+                dmft_common::combat::SpellEntry {
+                    slot: 1,
+                    spell_id: 100,
+                    name: "Ensnare".into(),
+                    min_mana_pct: 10.0,
+                    priority: 8,
+                    is_aoe: false,
+                },
+                dmft_common::combat::SpellEntry {
+                    slot: 2,
+                    spell_id: 200,
+                    name: "Starfire".into(),
+                    min_mana_pct: 10.0,
+                    priority: 15,
+                    is_aoe: false,
+                },
+            ],
+            ..dmft_common::combat::CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Ensnare");
+    }
+
+    #[test]
+    fn druid_heal_between_45_and_65() {
+        let druid = DruidStrategy::new(6);
+        let mut player = dmft_common::types::SpawnData::default();
+        player.mana_current = 8000;
+        player.mana_max = 10000;
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![
+                dmft_common::combat::SpellEntry {
+                    slot: 1,
+                    spell_id: 100,
+                    name: "Greater Healing".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+                dmft_common::combat::SpellEntry {
+                    slot: 2,
+                    spell_id: 200,
+                    name: "Starfire".into(),
+                    min_mana_pct: 10.0,
+                    priority: 15,
+                    is_aoe: false,
+                },
+            ],
+            ..dmft_common::combat::CombatConfig::default()
+        };
+        let group = vec![crate::combat::strategy::GroupMemberState {
+            spawn_id: 1,
+            hp_pct: 55.0,
+            mana_pct: 100.0,
+            class_id: 1,
+        }];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &group,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Greater Healing");
+    }
+
+    #[test]
+    fn druid_nukes_when_group_healthy() {
+        let druid = DruidStrategy::new(6);
+        let mut player = dmft_common::types::SpawnData::default();
+        player.mana_current = 8000;
+        player.mana_max = 10000;
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![
+                dmft_common::combat::SpellEntry {
+                    slot: 1,
+                    spell_id: 100,
+                    name: "Greater Healing".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+                dmft_common::combat::SpellEntry {
+                    slot: 2,
+                    spell_id: 200,
+                    name: "Starfire".into(),
+                    min_mana_pct: 10.0,
+                    priority: 15,
+                    is_aoe: false,
+                },
+            ],
+            ..dmft_common::combat::CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Starfire");
+    }
+
+    #[test]
+    fn druid_select_target_heal_when_low() {
+        let druid = DruidStrategy::new(6);
+        let config = dmft_common::combat::CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let target = dmft_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let group = vec![crate::combat::strategy::GroupMemberState {
+            spawn_id: 42,
+            hp_pct: 40.0,
+            mana_pct: 100.0,
+            class_id: 1,
+        }];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &group,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        assert_eq!(druid.select_target(&ctx), Some(42)); // heal target, not mob
+    }
+
+    #[test]
+    fn druid_select_target_mob_when_healthy() {
+        let druid = DruidStrategy::new(6);
+        let config = dmft_common::combat::CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let target = dmft_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        assert_eq!(druid.select_target(&ctx), Some(99)); // mob target
+    }
+
+    #[test]
+    fn druid_no_spells_returns_none() {
+        let druid = DruidStrategy::new(6);
+        let player = dmft_common::types::SpawnData::default();
+        let config = dmft_common::combat::CombatConfig::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        assert!(druid.select_spell(&ctx).is_none());
+    }
 }

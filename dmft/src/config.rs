@@ -319,6 +319,55 @@ character = "Foo"
     }
 
     #[test]
+    fn app_config_defaults() {
+        let cfg = AppConfig::default_config();
+        assert_eq!(cfg.process_name, "eqgame.exe");
+        assert_eq!(cfg.max_spawns, 2048);
+        assert!(cfg.group.is_empty());
+    }
+
+    #[test]
+    fn launch_config_defaults() {
+        let cfg = LaunchConfig::default();
+        assert_eq!(cfg.stagger_min_secs, 3);
+        assert_eq!(cfg.stagger_max_secs, 15);
+        assert_eq!(cfg.max_concurrent_launches, 3);
+        assert_eq!(cfg.max_working_set_mb, 800);
+        assert!(cfg.launch_args.is_empty());
+    }
+
+    #[test]
+    fn server_config_defaults() {
+        let cfg = ServerConfig::default();
+        assert_eq!(cfg.name, "Firiona Vie");
+        assert!(cfg.status_url.is_none());
+        assert_eq!(cfg.status_check_timeout_secs, 10);
+    }
+
+    #[test]
+    fn retry_config_defaults() {
+        let cfg = RetryConfig::default();
+        assert_eq!(cfg.max_retries, 3);
+        assert_eq!(cfg.base_backoff_secs, 30);
+        assert_eq!(cfg.mass_failure_threshold, 5);
+        assert_eq!(cfg.mass_failure_window_secs, 60);
+    }
+
+    #[test]
+    fn app_config_minimal_toml() {
+        let toml_str = r#"
+            process_name = "test.exe"
+            max_spawns = 100
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.process_name, "test.exe");
+        assert_eq!(cfg.max_spawns, 100);
+        // Defaults for nested configs
+        assert!(cfg.group.is_empty());
+        assert_eq!(cfg.server.name, "Firiona Vie");
+    }
+
+    #[test]
     fn load_real_accounts_toml() {
         let path = std::path::Path::new("config/accounts.toml");
         if path.exists() {

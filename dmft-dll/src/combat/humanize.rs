@@ -111,4 +111,38 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn jitter_threshold_zero_variance() {
+        let mut personality = CombatPersonality::from_client_id(1);
+        for _ in 0..20 {
+            let val = personality.jitter_threshold(100.0, 0.0);
+            assert!((val - 100.0).abs() < f32::EPSILON);
+        }
+    }
+
+    #[test]
+    fn client_id_zero_works() {
+        let p = CombatPersonality::from_client_id(0);
+        assert!(p.assist_jitter_ticks <= 5);
+        assert!(p.cast_start_delay_ticks <= 3);
+    }
+
+    #[test]
+    fn client_id_u32_max_works() {
+        let p = CombatPersonality::from_client_id(u32::MAX);
+        assert!(p.assist_jitter_ticks <= 5);
+        assert!(p.cast_start_delay_ticks <= 3);
+        assert!(p.med_sit_threshold >= 0.20 && p.med_sit_threshold <= 0.35);
+    }
+
+    #[test]
+    fn next_assist_delay_produces_varied_values() {
+        let mut personality = CombatPersonality::from_client_id(42);
+        if personality.assist_jitter_ticks > 0 {
+            let values: Vec<u8> = (0..50).map(|_| personality.next_assist_delay()).collect();
+            let has_variation = values.windows(2).any(|w| w[0] != w[1]);
+            assert!(has_variation, "assist delays should vary");
+        }
+    }
 }

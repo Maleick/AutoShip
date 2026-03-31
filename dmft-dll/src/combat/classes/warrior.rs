@@ -43,3 +43,134 @@ impl ClassStrategy for WarriorStrategy {
         CombatRole::MainTank
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod tests {
+    use super::*;
+    use dmft_common::combat::{CombatConfig, SpellEntry};
+    use dmft_common::types::SpawnData;
+
+    static DEFAULT_CONFIG: std::sync::LazyLock<CombatConfig> =
+        std::sync::LazyLock::new(CombatConfig::default);
+
+    fn make_ctx<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        enemies: &'a [SpawnData],
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: enemies,
+            group_members: &[],
+            config: &DEFAULT_CONFIG,
+            tick: 0,
+            in_combat: true,
+        }
+    }
+
+    #[test]
+    fn warrior_class_id() {
+        let w = WarriorStrategy::new(1);
+        assert_eq!(w.class_id(), 1);
+    }
+
+    #[test]
+    fn warrior_role_is_main_tank() {
+        let w = WarriorStrategy::new(1);
+        assert_eq!(w.role(), CombatRole::MainTank);
+    }
+
+    #[test]
+    fn warrior_aoe_threshold() {
+        let w = WarriorStrategy::new(1);
+        assert_eq!(w.aoe_threshold(), 2);
+    }
+
+    #[test]
+    fn warrior_does_not_assist() {
+        let w = WarriorStrategy::new(1);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[]);
+        assert!(!w.should_assist(&ctx));
+    }
+
+    #[test]
+    fn select_target_nearest_enemy() {
+        let w = WarriorStrategy::new(1);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let enemies = vec![
+            SpawnData {
+                spawn_id: 1,
+                x: 100.0,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 2,
+                x: 20.0,
+                ..SpawnData::default()
+            },
+        ];
+        let ctx = make_ctx(&player, None, &enemies);
+        assert_eq!(w.select_target(&ctx), Some(2));
+    }
+
+    #[test]
+    fn select_target_no_enemies() {
+        let w = WarriorStrategy::new(1);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[]);
+        assert!(w.select_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn select_spell_highest_priority() {
+        let w = WarriorStrategy::new(1);
+        let player = SpawnData::default();
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "Taunt".into(),
+                    slot: 1,
+                    spell_id: 1,
+                    priority: 10,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "Bash".into(),
+                    slot: 2,
+                    spell_id: 2,
+                    priority: 5,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = w.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Taunt");
+    }
+
+    #[test]
+    fn select_spell_none_when_empty() {
+        let w = WarriorStrategy::new(1);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[]);
+        assert!(w.select_spell(&ctx).is_none());
+    }
+}

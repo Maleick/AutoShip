@@ -297,4 +297,125 @@ mod tests {
         let spell = best_spell_by_mana(&ctx).unwrap();
         assert_eq!(spell.name, "High"); // highest priority that we can afford
     }
+
+    #[test]
+    fn best_spell_by_mana_none_when_empty() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        assert!(best_spell_by_mana(&ctx).is_none());
+    }
+
+    #[test]
+    fn best_spell_by_mana_none_when_all_too_expensive() {
+        let mut player = SpawnData::default();
+        player.mana_current = 100;
+        player.mana_max = 10000; // 1% mana
+        let config = CombatConfig {
+            spells: vec![SpellEntry {
+                name: "Nuke".into(),
+                slot: 1,
+                spell_id: 1,
+                priority: 10,
+                min_mana_pct: 50.0,
+                is_aoe: false,
+            }],
+            ..CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        assert!(best_spell_by_mana(&ctx).is_none());
+    }
+
+    #[test]
+    fn nearest_enemy_diagonal_distances() {
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let enemies = vec![
+            SpawnData {
+                spawn_id: 1,
+                x: 70.0,
+                y: 70.0, // distance ~99
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 2,
+                x: 50.0,
+                y: 50.0, // distance ~71
+                ..SpawnData::default()
+            },
+        ];
+        let closest = nearest_enemy(&player, &enemies).unwrap();
+        assert_eq!(closest.spawn_id, 2);
+    }
+
+    #[test]
+    fn nearest_enemy_single() {
+        let player = SpawnData::default();
+        let enemies = vec![SpawnData {
+            spawn_id: 42,
+            x: 10.0,
+            ..SpawnData::default()
+        }];
+        assert_eq!(nearest_enemy(&player, &enemies).unwrap().spawn_id, 42);
+    }
+
+    #[test]
+    fn build_strategy_boundary_class_ids() {
+        let config = CombatConfig::default();
+        // Class ID 0 should use generic
+        let s = build_strategy(0, &config);
+        assert_eq!(s.class_id(), 0);
+        // Class ID 255 should use generic
+        let s = build_strategy(255, &config);
+        assert_eq!(s.class_id(), 255);
+    }
+
+    #[test]
+    fn build_strategy_roles_correct() {
+        use dmft_common::combat::CombatRole;
+        let config = CombatConfig::default();
+
+        assert_eq!(build_strategy(1, &config).role(), CombatRole::MainTank); // Warrior
+        assert_eq!(build_strategy(2, &config).role(), CombatRole::Healer); // Cleric
+        assert_eq!(build_strategy(3, &config).role(), CombatRole::OffTank); // Paladin
+        assert_eq!(build_strategy(4, &config).role(), CombatRole::DpsRanged); // Ranger
+        assert_eq!(build_strategy(5, &config).role(), CombatRole::OffTank); // SK
+        assert_eq!(build_strategy(6, &config).role(), CombatRole::Healer); // Druid
+        assert_eq!(build_strategy(7, &config).role(), CombatRole::DpsMelee); // Monk
+        assert_eq!(build_strategy(9, &config).role(), CombatRole::DpsMelee); // Rogue
+        assert_eq!(build_strategy(12, &config).role(), CombatRole::DpsRanged); // Wizard
+        assert_eq!(build_strategy(13, &config).role(), CombatRole::DpsRanged); // Magician
+        assert_eq!(build_strategy(16, &config).role(), CombatRole::DpsMelee); // Berserker
+    }
+
+    #[test]
+    fn group_member_state_debug() {
+        let gms = GroupMemberState {
+            spawn_id: 1,
+            hp_pct: 75.0,
+            mana_pct: 50.0,
+            class_id: 2,
+        };
+        let debug = format!("{gms:?}");
+        assert!(debug.contains("spawn_id: 1"));
+    }
 }

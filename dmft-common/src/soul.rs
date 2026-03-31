@@ -253,4 +253,176 @@ mod tests {
         assert_eq!(SayChannel::Say, SayChannel::Say);
         assert_ne!(SayChannel::Say, SayChannel::Group);
     }
+
+    #[test]
+    fn default_half_returns_half() {
+        assert!((default_half() - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn default_one_returns_one() {
+        assert!((default_one() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn idle_behavior_type_all_variants() {
+        let variants = [
+            IdleBehaviorType::Sit,
+            IdleBehaviorType::Wander,
+            IdleBehaviorType::Emote,
+            IdleBehaviorType::Fish,
+            IdleBehaviorType::Craft,
+            IdleBehaviorType::VendorBrowse,
+            IdleBehaviorType::LoreChatter,
+            IdleBehaviorType::BioBrk,
+            IdleBehaviorType::LogOffToSleep,
+            IdleBehaviorType::RandomJump,
+            IdleBehaviorType::Inspect,
+        ];
+        assert_eq!(variants.len(), 11);
+        // Verify distinctness
+        for (i, a) in variants.iter().enumerate() {
+            for (j, b) in variants.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn say_channel_all_variants() {
+        let channels = [
+            SayChannel::Say,
+            SayChannel::Shout,
+            SayChannel::Ooc,
+            SayChannel::Guild,
+            SayChannel::Group,
+            SayChannel::Tell,
+            SayChannel::Auction,
+        ];
+        assert_eq!(channels.len(), 7);
+    }
+
+    #[test]
+    fn soul_event_death_construction() {
+        let event = SoulEvent::Death {
+            zone: "nektulos".into(),
+            killer: Some("a_shadow_wolf".into()),
+        };
+        if let SoulEvent::Death { zone, killer } = event {
+            assert_eq!(zone, "nektulos");
+            assert_eq!(killer, Some("a_shadow_wolf".into()));
+        } else {
+            panic!("expected Death");
+        }
+    }
+
+    #[test]
+    fn soul_event_death_no_killer() {
+        let event = SoulEvent::Death {
+            zone: "lava".into(),
+            killer: None,
+        };
+        if let SoulEvent::Death { killer, .. } = event {
+            assert!(killer.is_none());
+        }
+    }
+
+    #[test]
+    fn soul_event_mood_shift() {
+        let event = SoulEvent::MoodShift {
+            from: MoodState::Neutral,
+            to: MoodState::Angry,
+            reason: "got ganked".into(),
+        };
+        if let SoulEvent::MoodShift { from, to, reason } = event {
+            assert_eq!(from, MoodState::Neutral);
+            assert_eq!(to, MoodState::Angry);
+            assert_eq!(reason, "got ganked");
+        }
+    }
+
+    #[test]
+    fn soul_event_level_up() {
+        let event = SoulEvent::LevelUp { new_level: 60 };
+        if let SoulEvent::LevelUp { new_level } = event {
+            assert_eq!(new_level, 60);
+        }
+    }
+
+    #[test]
+    fn soul_action_say_construction() {
+        let action = SoulAction::Say {
+            channel: SayChannel::Group,
+            message: "inc!".into(),
+            target: None,
+        };
+        if let SoulAction::Say {
+            channel,
+            message,
+            target,
+        } = action
+        {
+            assert_eq!(channel, SayChannel::Group);
+            assert_eq!(message, "inc!");
+            assert!(target.is_none());
+        }
+    }
+
+    #[test]
+    fn soul_action_tell_has_target() {
+        let action = SoulAction::Say {
+            channel: SayChannel::Tell,
+            message: "hello".into(),
+            target: Some("Legolas".into()),
+        };
+        if let SoulAction::Say { target, .. } = action {
+            assert_eq!(target, Some("Legolas".into()));
+        }
+    }
+
+    #[test]
+    fn soul_action_idle_behavior() {
+        let action = SoulAction::StartIdle {
+            behavior: IdleBehaviorType::Fish,
+        };
+        if let SoulAction::StartIdle { behavior } = action {
+            assert_eq!(behavior, IdleBehaviorType::Fish);
+        }
+    }
+
+    #[test]
+    fn speech_style_serde_defaults() {
+        // Deserialize with missing optional fields to test serde defaults
+        let json = r#"{"vocabulary_level": 0.8}"#;
+        let style: SpeechStyle = serde_json::from_str(json).expect("deserialize");
+        assert!((style.vocabulary_level - 0.8).abs() < f32::EPSILON);
+        // Missing fields should get defaults
+        assert!((style.emote_frequency - 0.5).abs() < f32::EPSILON);
+        assert!((style.typing_speed - 1.0).abs() < f32::EPSILON);
+        assert!(style.catchphrases.is_empty());
+    }
+
+    #[test]
+    fn personality_traits_serialization_roundtrip() {
+        let traits = PersonalityTraits {
+            openness: 0.9,
+            conscientiousness: 0.1,
+            extraversion: 0.7,
+            agreeableness: 0.3,
+            neuroticism: 0.5,
+            battle_hunger: 0.8,
+            piety: 0.2,
+            greed: 0.6,
+            wanderlust: 0.4,
+            loyalty: 0.95,
+            mischief: 0.05,
+        };
+        let json = serde_json::to_string(&traits).expect("serialize");
+        let restored: PersonalityTraits = serde_json::from_str(&json).expect("deserialize");
+        assert!((restored.openness - 0.9).abs() < f32::EPSILON);
+        assert!((restored.loyalty - 0.95).abs() < f32::EPSILON);
+        assert!((restored.mischief - 0.05).abs() < f32::EPSILON);
+    }
 }

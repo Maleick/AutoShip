@@ -47,8 +47,27 @@ impl ClassStrategy for MagicianStrategy {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
+    use dmft_common::combat::CombatConfig;
+    use dmft_common::types::SpawnData;
+
+    fn make_ctx<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        config: &'a CombatConfig,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat: false,
+        }
+    }
 
     #[test]
     fn mage_class_id() {
@@ -60,5 +79,83 @@ mod tests {
     fn mage_role_is_ranged_dps() {
         let mage = MagicianStrategy::new(13);
         assert_eq!(mage.role(), CombatRole::DpsRanged);
+    }
+
+    #[test]
+    fn mage_aoe_threshold() {
+        let mage = MagicianStrategy::new(13);
+        assert_eq!(mage.aoe_threshold(), 3);
+    }
+
+    #[test]
+    fn mage_should_assist() {
+        let mage = MagicianStrategy::new(13);
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &config);
+        assert!(mage.should_assist(&ctx));
+    }
+
+    #[test]
+    fn select_target_returns_target_id() {
+        let mage = MagicianStrategy::new(13);
+        let player = SpawnData::default();
+        let target = SpawnData {
+            spawn_id: 88,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, Some(&target), &config);
+        assert_eq!(mage.select_target(&ctx), Some(88));
+    }
+
+    #[test]
+    fn select_target_none_without_target() {
+        let mage = MagicianStrategy::new(13);
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &config);
+        assert!(mage.select_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn select_spell_filters_by_mana() {
+        let mage = MagicianStrategy::new(13);
+        let mut player = SpawnData::default();
+        player.mana_current = 3000;
+        player.mana_max = 10000; // 30%
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "BoltOfFire".into(),
+                    slot: 1,
+                    spell_id: 1,
+                    priority: 5,
+                    min_mana_pct: 10.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "ManaBlaze".into(),
+                    slot: 2,
+                    spell_id: 2,
+                    priority: 15,
+                    min_mana_pct: 50.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = make_ctx(&player, None, &config);
+        let spell = mage.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "BoltOfFire"); // ManaBlaze too expensive at 30%
+    }
+
+    #[test]
+    fn select_spell_none_when_empty() {
+        let mage = MagicianStrategy::new(13);
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &config);
+        assert!(mage.select_spell(&ctx).is_none());
     }
 }

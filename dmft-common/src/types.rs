@@ -135,4 +135,106 @@ mod tests {
         let spawn = make_spawn(50, -10, 0, 0);
         assert!((spawn.hp_pct() - 100.0).abs() < f32::EPSILON);
     }
+
+    #[test]
+    fn hp_pct_zero_hp_with_positive_max() {
+        let spawn = make_spawn(0, 1000, 0, 0);
+        assert!((spawn.hp_pct()).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mana_pct_negative_mana_max_returns_100() {
+        let spawn = make_spawn(100, 100, 50, -10);
+        assert!((spawn.mana_pct() - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mana_pct_zero_mana_with_positive_max() {
+        let spawn = make_spawn(100, 100, 0, 1000);
+        assert!((spawn.mana_pct()).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn spawn_data_default() {
+        let spawn = SpawnData::default();
+        assert_eq!(spawn.spawn_id, 0);
+        assert_eq!(spawn.name, "");
+        assert_eq!(spawn.level, 0);
+        assert!((spawn.x).abs() < f32::EPSILON);
+        assert_eq!(spawn.hp_current, 0);
+        assert_eq!(spawn.hp_max, 0);
+    }
+
+    #[test]
+    fn hook_status_all_variants() {
+        let variants = vec![
+            HookStatus::NotInjected,
+            HookStatus::Injecting,
+            HookStatus::Injected,
+            HookStatus::HooksActive,
+            HookStatus::Error("test error".into()),
+            HookStatus::Ejecting,
+        ];
+        assert_eq!(variants.len(), 6);
+        // Verify debug output works
+        for v in &variants {
+            let _ = format!("{:?}", v);
+        }
+    }
+
+    #[test]
+    fn hook_status_error_carries_message() {
+        let status = HookStatus::Error("something broke".into());
+        if let HookStatus::Error(msg) = status {
+            assert_eq!(msg, "something broke");
+        } else {
+            panic!("expected Error");
+        }
+    }
+
+    #[test]
+    fn hook_status_serialization_roundtrip() {
+        let statuses = vec![
+            HookStatus::NotInjected,
+            HookStatus::HooksActive,
+            HookStatus::Error("test".into()),
+        ];
+        for s in &statuses {
+            let json = serde_json::to_string(s).expect("serialize");
+            let restored: HookStatus = serde_json::from_str(&json).expect("deserialize");
+            let _ = format!("{:?}", restored);
+        }
+    }
+
+    #[test]
+    fn game_state_serialization_roundtrip() {
+        let gs = GameState {
+            client_id: 42,
+            local_player: Some(make_spawn(1000, 1000, 500, 500)),
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 12345,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "qey2hh1".into(),
+            zone_long_name: "Queynos Hills".into(),
+        };
+        let json = serde_json::to_string(&gs).expect("serialize");
+        let restored: GameState = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.client_id, 42);
+        assert!(restored.local_player.is_some());
+        assert!(restored.target.is_none());
+        assert_eq!(restored.zone_short_name, "qey2hh1");
+    }
+
+    #[test]
+    fn spawn_data_endurance_fields() {
+        let spawn = SpawnData {
+            endurance_current: -50, // Can be negative
+            endurance_max: 100,
+            ..SpawnData::default()
+        };
+        assert_eq!(spawn.endurance_current, -50);
+        assert_eq!(spawn.endurance_max, 100);
+    }
 }

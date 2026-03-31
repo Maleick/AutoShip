@@ -163,4 +163,154 @@ mod tests {
         );
         assert!(db.get_player_base_offset("nonexistent").is_none());
     }
+
+    #[test]
+    fn save_and_load_roundtrip() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let dir = std::env::temp_dir().join("dmft_test_offset_db");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_offsets.json");
+
+        db.save_to_file(&path).expect("save failed");
+        let loaded = OffsetDatabase::load_from_file(&path).expect("load failed");
+
+        assert_eq!(loaded.client_date, db.client_date);
+        assert_eq!(loaded.eq_preferred_base, db.eq_preferred_base);
+        assert_eq!(
+            loaded.get_global("pinstLocalPlayer"),
+            db.get_global("pinstLocalPlayer")
+        );
+        assert_eq!(
+            loaded.get_player_base_offset("x"),
+            db.get_player_base_offset("x")
+        );
+        assert_eq!(
+            loaded.get_player_zone_offset("hpMax"),
+            db.get_player_zone_offset("hpMax")
+        );
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_from_nonexistent_file_returns_error() {
+        let path = std::path::Path::new("/tmp/dmft_nonexistent_12345.json");
+        let result = OffsetDatabase::load_from_file(path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_from_invalid_json_returns_error() {
+        let dir = std::env::temp_dir().join("dmft_test_invalid_json");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bad.json");
+        std::fs::write(&path, "not valid json{{{").unwrap();
+
+        let result = OffsetDatabase::load_from_file(&path);
+        assert!(result.is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn get_global_returns_none_for_missing_key() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_global("does_not_exist").is_none());
+    }
+
+    #[test]
+    fn get_player_zone_offset_returns_none_for_missing_key() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_player_zone_offset("does_not_exist").is_none());
+    }
+
+    #[test]
+    fn rebase_with_zero_actual_base() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let addr = db.get_global("pinstLocalPlayer").unwrap();
+        let result = db.rebase(addr, 0);
+        let expected_offset = addr - db.eq_preferred_base;
+        assert_eq!(result, Some(expected_offset as usize));
+    }
+
+    #[test]
+    fn rebase_preferred_base_itself_returns_actual_base() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let actual_base: u64 = 0x7FF600000000;
+        let result = db.rebase(db.eq_preferred_base, actual_base);
+        assert_eq!(result, Some(actual_base as usize));
+    }
+
+    #[test]
+    fn from_compiled_offsets_has_all_expected_globals() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let expected_globals = [
+            "pinstLocalPlayer",
+            "pinstControlledPlayer",
+            "pinstTarget",
+            "pinstSpawnManager",
+            "pinstLocalPC",
+            "pinstSpellManager",
+            "pinstCDisplay",
+            "pinstCEverQuest",
+        ];
+        for key in &expected_globals {
+            assert!(db.get_global(key).is_some(), "missing global: {}", key);
+        }
+        assert_eq!(db.globals.len(), expected_globals.len());
+    }
+
+    #[test]
+    fn from_compiled_offsets_has_all_player_base_keys() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let expected = [
+            "next",
+            "prev",
+            "y",
+            "x",
+            "z",
+            "heading",
+            "speedCurrent",
+            "speedRun",
+            "speedHeading",
+            "name",
+            "displayedName",
+            "type",
+            "spawnId",
+            "lastName",
+        ];
+        for key in &expected {
+            assert!(
+                db.get_player_base_offset(key).is_some(),
+                "missing player_base: {}",
+                key
+            );
+        }
+        assert_eq!(db.player_base.len(), expected.len());
+    }
+
+    #[test]
+    fn from_compiled_offsets_has_all_player_zone_keys() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let expected = [
+            "hpMax",
+            "hpCurrent",
+            "manaMax",
+            "manaCurrent",
+            "level",
+            "charClass",
+            "enduranceCurrent",
+            "enduranceMax",
+            "standState",
+        ];
+        for key in &expected {
+            assert!(
+                db.get_player_zone_offset(key).is_some(),
+                "missing player_zone: {}",
+                key
+            );
+        }
+        assert_eq!(db.player_zone.len(), expected.len());
+    }
 }

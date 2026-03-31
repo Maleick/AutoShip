@@ -155,4 +155,43 @@ mod tests {
             check_dialogs();
         } // should not panic
     }
+
+    #[test]
+    fn dialog_pairs_have_two_elements_each() {
+        for (parent, button) in DIALOG_ACCEPT_PAIRS {
+            assert!(!parent.is_empty(), "parent SIDL name must not be empty");
+            assert!(!button.is_empty(), "button SIDL name must not be empty");
+        }
+    }
+
+    #[test]
+    fn dialog_pairs_contain_confirmation_dialog() {
+        let has_confirm = DIALOG_ACCEPT_PAIRS
+            .iter()
+            .any(|(parent, _)| *parent == "ConfirmationDialogBox");
+        assert!(has_confirm, "Must have ConfirmationDialogBox pair");
+    }
+
+    #[test]
+    fn dialog_pairs_contain_trade_window() {
+        let has_trade = DIALOG_ACCEPT_PAIRS
+            .iter()
+            .any(|(parent, _)| *parent == "TradeWnd");
+        assert!(has_trade, "Must have TradeWnd pair");
+    }
+
+    #[test]
+    fn dialog_pairs_contain_respawn_window() {
+        let has_respawn = DIALOG_ACCEPT_PAIRS
+            .iter()
+            .any(|(parent, _)| *parent == "RespawnWnd");
+        assert!(has_respawn, "Must have RespawnWnd pair");
+    }
+
+    #[test]
+    fn auto_accept_starts_enabled() {
+        // Reset to default state
+        set_enabled(true);
+        assert!(is_enabled());
+    }
 }

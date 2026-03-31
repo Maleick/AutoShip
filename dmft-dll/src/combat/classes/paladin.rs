@@ -129,4 +129,143 @@ mod tests {
         let pal = PaladinStrategy::new(3);
         assert_eq!(pal.aoe_threshold(), 2);
     }
+
+    #[test]
+    fn paladin_heal_priority_when_group_low_hp() {
+        let pal = PaladinStrategy::new(3);
+        let mut player = dmft_common::types::SpawnData::default();
+        player.mana_current = 5000;
+        player.mana_max = 10000;
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![
+                dmft_common::combat::SpellEntry {
+                    slot: 1,
+                    spell_id: 100,
+                    name: "Holy Light".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+                dmft_common::combat::SpellEntry {
+                    slot: 2,
+                    spell_id: 200,
+                    name: "Stun of Valor".into(),
+                    min_mana_pct: 10.0,
+                    priority: 5,
+                    is_aoe: false,
+                },
+            ],
+            ..dmft_common::combat::CombatConfig::default()
+        };
+        let group = vec![crate::combat::strategy::GroupMemberState {
+            spawn_id: 1,
+            hp_pct: 30.0, // below 50%
+            mana_pct: 100.0,
+            class_id: 1,
+        }];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &group,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = pal.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Holy Light"); // heal priority
+    }
+
+    #[test]
+    fn paladin_stun_when_group_healthy() {
+        let pal = PaladinStrategy::new(3);
+        let mut player = dmft_common::types::SpawnData::default();
+        player.mana_current = 5000;
+        player.mana_max = 10000;
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![
+                dmft_common::combat::SpellEntry {
+                    slot: 1,
+                    spell_id: 100,
+                    name: "Holy Light".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+                dmft_common::combat::SpellEntry {
+                    slot: 2,
+                    spell_id: 200,
+                    name: "Stun".into(),
+                    min_mana_pct: 10.0,
+                    priority: 5,
+                    is_aoe: false,
+                },
+            ],
+            ..dmft_common::combat::CombatConfig::default()
+        };
+        let group = vec![crate::combat::strategy::GroupMemberState {
+            spawn_id: 1,
+            hp_pct: 90.0, // healthy
+            mana_pct: 100.0,
+            class_id: 1,
+        }];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &group,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = pal.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Stun"); // stun priority when no one needs healing
+    }
+
+    #[test]
+    fn paladin_fallback_to_any_spell() {
+        let pal = PaladinStrategy::new(3);
+        let mut player = dmft_common::types::SpawnData::default();
+        player.mana_current = 5000;
+        player.mana_max = 10000;
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![dmft_common::combat::SpellEntry {
+                slot: 1,
+                spell_id: 300,
+                name: "Undead Nuke".into(),
+                min_mana_pct: 10.0,
+                priority: 3,
+                is_aoe: false,
+            }],
+            ..dmft_common::combat::CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        let spell = pal.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Undead Nuke"); // fallback
+    }
+
+    #[test]
+    fn paladin_no_spells_returns_none() {
+        let pal = PaladinStrategy::new(3);
+        let player = dmft_common::types::SpawnData::default();
+        let config = dmft_common::combat::CombatConfig::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        assert!(pal.select_spell(&ctx).is_none());
+    }
 }

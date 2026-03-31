@@ -141,4 +141,50 @@ mod tests {
             assert_eq!(a.cpu_mask & 1, 0);
         }
     }
+
+    #[test]
+    fn compute_affinity_wraps_around_cpus() {
+        let assignments = compute_affinity_assignments(10, 4); // 10 clients, 4 CPUs
+        assert_eq!(assignments.len(), 10);
+        // With 4 CPUs, available = 3 (skip CPU 0). Clients wrap: CPU 1,2,3,1,2,3,...
+        assert_eq!(assignments[0].cpu_mask, 1 << 1); // CPU 1
+        assert_eq!(assignments[1].cpu_mask, 1 << 2); // CPU 2
+        assert_eq!(assignments[2].cpu_mask, 1 << 3); // CPU 3
+        assert_eq!(assignments[3].cpu_mask, 1 << 1); // wrap to CPU 1
+    }
+
+    #[test]
+    fn compute_affinity_single_cpu() {
+        // Only 1 CPU total — available_cpus = 1, but skip CPU 0 → CPU 1
+        let assignments = compute_affinity_assignments(3, 1);
+        assert_eq!(assignments.len(), 3);
+        // When total_cpus=1, available_cpus=1, index = (i%1)+1 = 1
+        for a in &assignments {
+            assert_eq!(a.cpu_mask, 1 << 1);
+        }
+    }
+
+    #[test]
+    fn compute_affinity_zero_clients() {
+        let assignments = compute_affinity_assignments(0, 8);
+        assert!(assignments.is_empty());
+    }
+
+    #[test]
+    fn compute_affinity_all_below_normal_priority() {
+        let assignments = compute_affinity_assignments(5, 8);
+        for a in &assignments {
+            assert!(matches!(a.priority, ProcessPriority::BelowNormal));
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn apply_affinity_stub_returns_ok() {
+        let config = AffinityConfig {
+            cpu_mask: 0b10,
+            priority: ProcessPriority::Normal,
+        };
+        assert!(apply_affinity(1234, &config).is_ok());
+    }
 }

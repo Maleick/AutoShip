@@ -55,12 +55,145 @@ impl ClassStrategy for BerserkerStrategy {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
+    use dmft_common::combat::{CombatConfig, SpellEntry};
+    use dmft_common::types::SpawnData;
+
+    static DEFAULT_CONFIG: std::sync::LazyLock<CombatConfig> =
+        std::sync::LazyLock::new(CombatConfig::default);
+
+    fn make_ctx<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        enemies: &'a [SpawnData],
+        in_combat: bool,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: enemies,
+            group_members: &[],
+            config: &DEFAULT_CONFIG,
+            tick: 0,
+            in_combat,
+        }
+    }
+
+    #[test]
+    fn berserker_class_id() {
+        let ber = BerserkerStrategy::new(16);
+        assert_eq!(ber.class_id(), 16);
+    }
 
     #[test]
     fn berserker_role_is_melee_dps() {
         let ber = BerserkerStrategy::new(16);
         assert!(matches!(ber.role(), CombatRole::DpsMelee));
+    }
+
+    #[test]
+    fn berserker_aoe_threshold() {
+        let ber = BerserkerStrategy::new(16);
+        assert_eq!(ber.aoe_threshold(), 2);
+    }
+
+    #[test]
+    fn berserker_should_assist() {
+        let ber = BerserkerStrategy::new(16);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[], false);
+        assert!(ber.should_assist(&ctx));
+    }
+
+    #[test]
+    fn select_target_in_combat_uses_assist() {
+        let ber = BerserkerStrategy::new(16);
+        let player = SpawnData::default();
+        let target = SpawnData {
+            spawn_id: 42,
+            ..SpawnData::default()
+        };
+        let ctx = make_ctx(&player, Some(&target), &[], true);
+        assert_eq!(ber.select_target(&ctx), Some(42));
+    }
+
+    #[test]
+    fn select_target_out_of_combat_uses_nearest_enemy() {
+        let ber = BerserkerStrategy::new(16);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let enemies = vec![
+            SpawnData {
+                spawn_id: 1,
+                x: 100.0,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 2,
+                x: 10.0,
+                ..SpawnData::default()
+            },
+        ];
+        let ctx = make_ctx(&player, None, &enemies, false);
+        assert_eq!(ber.select_target(&ctx), Some(2));
+    }
+
+    #[test]
+    fn select_target_out_of_combat_no_enemies() {
+        let ber = BerserkerStrategy::new(16);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[], false);
+        assert!(ber.select_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn select_spell_highest_priority() {
+        let ber = BerserkerStrategy::new(16);
+        let player = SpawnData::default();
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "Frenzy".into(),
+                    slot: 1,
+                    spell_id: 1,
+                    priority: 10,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "Rage".into(),
+                    slot: 2,
+                    spell_id: 2,
+                    priority: 5,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        let spell = ber.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Frenzy");
+    }
+
+    #[test]
+    fn select_spell_none_when_empty() {
+        let ber = BerserkerStrategy::new(16);
+        let player = SpawnData::default();
+        let ctx = make_ctx(&player, None, &[], false);
+        assert!(ber.select_spell(&ctx).is_none());
     }
 }

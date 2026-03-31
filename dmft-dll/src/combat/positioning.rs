@@ -241,4 +241,96 @@ mod tests {
         let dist = ((behind.x - target.x).powi(2) + (behind.y - target.y).powi(2)).sqrt();
         assert!((dist - 8.0).abs() < 0.1); // Should be ~8 units away
     }
+
+    #[test]
+    fn behind_target_east_facing() {
+        let target = make_target(50.0, 50.0, 128.0); // facing east
+        let behind = behind_target(&target);
+        let dist = ((behind.x - target.x).powi(2) + (behind.y - target.y).powi(2)).sqrt();
+        assert!((dist - 8.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn behind_target_south_facing() {
+        let target = make_target(50.0, 50.0, 256.0); // facing south
+        let behind = behind_target(&target);
+        let dist = ((behind.x - target.x).powi(2) + (behind.y - target.y).powi(2)).sqrt();
+        assert!((dist - 8.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn melee_range_exact_boundary() {
+        let player = make_player(0.0, 0.0);
+        let target = make_target(MELEE_RANGE, 0.0, 0.0);
+        assert!(is_in_melee_range(&player, &target));
+    }
+
+    #[test]
+    fn melee_range_just_outside() {
+        let player = make_player(0.0, 0.0);
+        let target = make_target(MELEE_RANGE + 0.1, 0.0, 0.0);
+        assert!(!is_in_melee_range(&player, &target));
+    }
+
+    #[test]
+    fn same_position_is_in_melee_range() {
+        let player = make_player(50.0, 50.0);
+        let target = make_target(50.0, 50.0, 0.0);
+        assert!(is_in_melee_range(&player, &target));
+    }
+
+    #[test]
+    fn non_rogue_in_melee_range_is_none() {
+        let player = make_player(10.0, 0.0);
+        let target = make_target(10.0, 5.0, 0.0);
+        let action = check_melee_position(&player, &target, false, None);
+        assert_eq!(action, PositionAction::None);
+    }
+
+    #[test]
+    fn camp_drift_within_limit_not_returned() {
+        let player = make_player(50.0, 0.0);
+        let target = make_target(55.0, 0.0, 0.0);
+        let camp = Waypoint::new(0.0, 0.0, 0.0);
+        // 50 < MAX_CAMP_DRIFT (100), should check melee not camp
+        let action = check_melee_position(&player, &target, false, Some(&camp));
+        assert_eq!(action, PositionAction::None);
+    }
+
+    #[test]
+    fn aoe_avoidance_empty_enemies() {
+        let player = make_player(0.0, 0.0);
+        assert!(check_aoe_avoidance(&player, &[], 3).is_none());
+    }
+
+    #[test]
+    fn aoe_avoidance_escape_direction_away_from_center() {
+        let player = make_player(5.0, 0.0);
+        let enemies = vec![
+            make_target(0.0, 0.0, 0.0),
+            make_target(0.0, 10.0, 0.0),
+            make_target(0.0, -10.0, 0.0),
+        ];
+        let escape = check_aoe_avoidance(&player, &enemies, 3).unwrap();
+        // Center of mass is (0, 0). Player at (5, 0). Escape should be further right.
+        assert!(escape.x > player.x);
+    }
+
+    #[test]
+    fn distance_2d_ignores_z() {
+        let a = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            ..SpawnData::default()
+        };
+        let b = SpawnData {
+            x: 3.0,
+            y: 4.0,
+            z: 100.0,
+            ..SpawnData::default()
+        };
+        let dist = distance_2d(&a, &b);
+        assert!((dist - 5.0).abs() < 0.01);
+    }
 }

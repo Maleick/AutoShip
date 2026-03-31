@@ -504,4 +504,144 @@ mod tests {
         assert_eq!(state.label(), "???");
         assert!(!state.sprite().is_empty());
     }
+
+    fn make_spawn_info(class_id: u8) -> SpawnInfo {
+        SpawnInfo {
+            name: "TestPlayer".into(),
+            displayed_name: "TestPlayer".into(),
+            lastname: String::new(),
+            spawn_id: 1,
+            spawn_type: SpawnType::Player,
+            level: 60,
+            class_id,
+            class: EqClass::from_id(class_id),
+            stand_state: StandState::Standing,
+            x: 100.0,
+            y: 200.0,
+            z: 10.0,
+            heading: 0.0,
+            hp_current: 7500,
+            hp_max: 10000,
+            mana_current: 3000,
+            mana_max: 5000,
+            endurance_current: 100,
+            endurance_max: 100,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: Vec::new(),
+            cast_state: None,
+        }
+    }
+
+    #[test]
+    fn spawn_info_hp_pct() {
+        let s = make_spawn_info(1);
+        assert!((s.hp_pct() - 75.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn spawn_info_hp_pct_zero_max() {
+        let mut s = make_spawn_info(1);
+        s.hp_max = 0;
+        assert!((s.hp_pct() - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn spawn_info_mana_pct() {
+        let s = make_spawn_info(2);
+        assert!((s.mana_pct() - 60.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn spawn_info_mana_pct_zero_max() {
+        let mut s = make_spawn_info(1);
+        s.mana_max = 0;
+        assert!((s.mana_pct() - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn spawn_info_class_str_known() {
+        let s = make_spawn_info(1);
+        assert_eq!(s.class_str(), "WAR");
+    }
+
+    #[test]
+    fn spawn_info_class_str_unknown() {
+        let s = make_spawn_info(99);
+        assert_eq!(s.class_str(), "?c99?");
+    }
+
+    #[test]
+    fn spawn_info_race_names() {
+        let mut s = make_spawn_info(1);
+        s.race_id = 1;
+        assert_eq!(s.race_name(), "Human");
+        s.race_id = 9;
+        assert_eq!(s.race_name(), "Troll");
+        s.race_id = 128;
+        assert_eq!(s.race_name(), "Iksar");
+        s.race_id = 0;
+        assert_eq!(s.race_name(), "Unknown");
+        s.race_id = 9999;
+        assert_eq!(s.race_name(), "R9999");
+    }
+
+    #[test]
+    fn spawn_info_display() {
+        let s = make_spawn_info(2);
+        let display = format!("{s}");
+        assert!(display.contains("TestPlayer"));
+        assert!(display.contains("CLR"));
+        assert!(display.contains("Lv60"));
+    }
+
+    #[test]
+    fn eq_class_display() {
+        let c = EqClass::Warrior;
+        assert_eq!(format!("{c}"), "WAR");
+    }
+
+    #[test]
+    fn spawn_type_display() {
+        assert_eq!(format!("{}", SpawnType::Player), "PC");
+        assert_eq!(format!("{}", SpawnType::Npc), "NPC");
+        assert_eq!(format!("{}", SpawnType::Corpse), "Corpse");
+        assert_eq!(format!("{}", SpawnType::Unknown(5)), "Unknown(5)");
+    }
+
+    #[test]
+    fn stand_state_display() {
+        assert_eq!(format!("{}", StandState::Standing), "Stand");
+        assert_eq!(format!("{}", StandState::Dead), "DEAD");
+    }
+
+    #[test]
+    fn buff_slot_duration_secs() {
+        let b = BuffSlot {
+            spell_id: 1,
+            duration_ticks: 5,
+            caster_level: 60,
+        };
+        assert_eq!(b.duration_secs(), 30);
+    }
+
+    #[test]
+    fn buff_slot_negative_duration_is_perm() {
+        let b = BuffSlot {
+            spell_id: 1,
+            duration_ticks: -1,
+            caster_level: 60,
+        };
+        assert_eq!(b.duration_str(), "PERM");
+    }
+
+    #[test]
+    fn cast_state_slot_nonff_but_eta_zero_not_casting() {
+        let cs = CastState {
+            spell_slot: 5,
+            spell_eta: 0,
+            gem_etas: [0; 15],
+        };
+        assert!(!cs.is_casting());
+    }
 }
