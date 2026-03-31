@@ -157,35 +157,20 @@ impl CommandBarState {
     fn normalize_command(cmd: &str) -> String {
         let trimmed = cmd.trim();
         let parts: Vec<&str> = trimmed.splitn(3, ' ').collect();
-        match parts.first().copied() {
-            // Commands where the full string (with args) is the identity
-            Some("all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6") => {
-                // Keep the full command (e.g., "all /sit", "G1 /follow")
-                if parts.len() >= 2 {
-                    format!("{} {}", parts[0], parts[1])
-                } else {
-                    parts[0].to_string()
-                }
-            }
-            // Camp subcommands: track "camp start <name>"
-            Some("camp") => {
-                if parts.len() >= 3 {
-                    format!("{} {} {}", parts[0], parts[1], parts[2])
-                } else {
-                    trimmed.to_string()
-                }
-            }
-            // Commands with a single meaningful arg: "ma Warrior", "mt Tank"
-            Some("ma" | "mt" | "engage" | "mode" | "login") => {
-                if parts.len() >= 2 {
-                    format!("{} {}", parts[0], parts[1])
-                } else {
-                    parts[0].to_string()
-                }
-            }
+
+        // Determine how many tokens to keep based on the command keyword.
+        let token_count = match parts.first().copied() {
+            // Group broadcast + slash: "all /sit", "G1 /follow" → keep 2
+            // Single meaningful arg: "ma Warrior", "mt Tank" → keep 2
+            Some("all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6") => 2,
+            Some("ma" | "mt" | "engage" | "mode" | "login") => 2,
+            // Camp subcommands: "camp start permafrost" → keep all 3
+            Some("camp") => 3,
             // Everything else: just the base command
-            _ => trimmed.to_string(),
-        }
+            _ => return trimmed.to_string(),
+        };
+
+        parts[..parts.len().min(token_count)].join(" ")
     }
 
     /// Recalculate the top-9 favorites from frequency data.
