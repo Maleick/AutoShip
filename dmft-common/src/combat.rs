@@ -339,7 +339,7 @@ mod tests {
         for status in &statuses {
             let json = serde_json::to_string(status).expect("serialize");
             let restored: CombatStatus = serde_json::from_str(&json).expect("deserialize");
-            let _ = format!("{:?}", restored);
+            assert_eq!(*status, restored);
         }
     }
 }
