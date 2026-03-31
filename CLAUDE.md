@@ -83,7 +83,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **M2** (complete): DLL injection, internal function hooking, IPC, self-healing monitor
 - **M2.5** (complete): Login automation — credential store, process spawner, login FSM, launch coordinator
 - **M3** (complete): Navigation — waypoint pathfinding, Navigator FSM, humanization, stuck detection, zone router
-- **M4** (complete): Combat automation — ClassStrategy trait, 18 classes, HolyShit system, puller FSM, combat coordinator
+- **M4** (complete): Combat automation — ClassStrategy trait, 17 classes, HolyShit system, puller FSM, combat coordinator
 - **M5** (complete): Soul Engine — LLM personalities, persistent memory, idle behavior, social dynamics
 - **M6** (next): LLM Character AI — API integration (Gemini/Claude), in-game chat responses
 - **M7**: Learning/RL — behavioral cloning, RL fine-tuning
