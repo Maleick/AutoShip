@@ -147,9 +147,14 @@ impl ClassStrategy for ShamanStrategy {
         }
     }
 
-    fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        self.target_slowed = false;
-        self.last_target_id = 0;
+    fn on_action_complete(&mut self, ctx: &CombatContext) {
+        // Only reset slow tracking when out of combat (target died / disengage).
+        // During combat, on_engage handles new-target resets. Resetting here
+        // unconditionally caused the shaman to re-cast slow every GCD cycle.
+        if !ctx.in_combat {
+            self.target_slowed = false;
+            self.last_target_id = 0;
+        }
     }
 
     fn aoe_threshold(&self) -> u8 {

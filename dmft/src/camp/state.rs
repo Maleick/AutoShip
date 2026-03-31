@@ -449,6 +449,10 @@ impl CampLoop {
                     if buff_cmds.is_empty() {
                         self.transition_to_idle(&mut commands);
                     } else {
+                        // Stand up before buffing (members are seated from medding)
+                        for member in &self.members {
+                            commands.push((member.pid, CampAction::Slash("/stand".into())));
+                        }
                         // Transition to Buffing and emit the buff commands
                         commands.extend(CampAction::from_slash_vec(buff_cmds));
                         self.state = CampState::Buffing {

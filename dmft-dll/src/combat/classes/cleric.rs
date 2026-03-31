@@ -17,8 +17,8 @@ const MODERATE_HP: f32 = 65.0;
 /// Priority order (MQ2-style cascade):
 /// 0. CH chain override (when active, cast Complete Heal on chain target)
 /// 1. Resurrect dead group members (out of combat)
-/// 2. Cure detrimental effects (poison/disease/curse)
-/// 3. Emergency heal (group member < 30% HP)
+/// 2. Emergency heal (group member < 30% HP)
+/// 3. Cure detrimental effects (poison/disease/curse)
 /// 4. Moderate heal (group member < 65% HP)
 /// 5. Out-of-combat: group buffs
 /// 6. Med (sit for mana regen)
@@ -168,9 +168,23 @@ impl ClassStrategy for ClericStrategy {
             }
         }
 
-        // Priority 2: Cure detrimental effects (poison/disease/curse)
-        // Curing is higher priority than healing — removing the damage source
-        // is more mana-efficient than healing through it.
+        // Priority 2: Emergency heal — highest priority spell.
+        // Emergency heal MUST fire before cure: if a group member is at 10% HP
+        // with a detrimental, healing them is more urgent than curing the DoT.
+        if let Some((_, lowest_hp)) = self.lowest_hp_member(ctx) {
+            if lowest_hp < EMERGENCY_HP {
+                return ctx
+                    .config
+                    .spells
+                    .iter()
+                    .filter(|s| !is_rez_spell(s) && !is_buff_spell(s) && !is_cure_spell(s))
+                    .filter(|s| mana_pct >= s.min_mana_pct)
+                    .max_by_key(|s| s.priority)
+                    .cloned();
+            }
+        }
+
+        // Priority 3: Cure detrimental effects (poison/disease/curse)
         if self.afflicted_member(ctx).is_some() {
             if let Some(cure) = self.find_cure_spell(ctx) {
                 tracing::info!(spell = %cure.name, "Cleric: curing detrimental");
@@ -179,18 +193,6 @@ impl ClassStrategy for ClericStrategy {
         }
 
         let (_, lowest_hp) = self.lowest_hp_member(ctx)?;
-
-        // Priority 3: Emergency heal — highest priority spell
-        if lowest_hp < EMERGENCY_HP {
-            return ctx
-                .config
-                .spells
-                .iter()
-                .filter(|s| !is_rez_spell(s) && !is_buff_spell(s) && !is_cure_spell(s))
-                .filter(|s| mana_pct >= s.min_mana_pct)
-                .max_by_key(|s| s.priority)
-                .cloned();
-        }
 
         // Priority 4: Moderate heal — lower priority (efficient) spell
         if lowest_hp < MODERATE_HP {
@@ -702,11 +704,10 @@ mod tests {
             ch_chain_slot: None,
         };
 
-        // Cure fires first in priority cascade (before emergency check),
-        // so cure wins when member has detrimental — removing damage source
-        // is the correct MQ2 behavior.
+        // Emergency heal fires before cure — keeping the member alive is
+        // more urgent than removing the damage source when HP is critical.
         let spell = cleric.select_spell(&ctx).unwrap();
-        assert_eq!(spell.name, "Cure Disease");
+        assert_eq!(spell.name, "Complete Heal");
     }
 
     #[test]

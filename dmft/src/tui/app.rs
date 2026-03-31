@@ -1405,7 +1405,7 @@ impl App {
             return;
         }
 
-        let parts: Vec<&str> = input.splitn(3, ' ').collect();
+        let parts: Vec<&str> = input.split(' ').collect();
         match parts[0] {
             "help" => {
                 self.help_visible = true;

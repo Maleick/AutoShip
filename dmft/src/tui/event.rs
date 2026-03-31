@@ -242,41 +242,43 @@ pub fn handle_events(
             _ => {}
         }
 
-        // Quick action keybinds (only when not in search/command mode)
-        match key.code {
-            // r = repeat last command
-            KeyCode::Char('r') => {
-                if let Some(last) = app.cmd_state.command_history.last().cloned() {
-                    app.cmd_state.command_buffer = last;
+        // Quick action keybinds (only when not in search/command mode, and only on relevant screens)
+        if matches!(app.active_screen, ActiveScreen::Dashboard | ActiveScreen::Character | ActiveScreen::Spawns | ActiveScreen::Groups) {
+            match key.code {
+                // r = repeat last command
+                KeyCode::Char('r') => {
+                    if let Some(last) = app.cmd_state.command_history.last().cloned() {
+                        app.cmd_state.command_buffer = last;
+                        app.execute_command(orchestrator);
+                        app.cmd_state.command_buffer.clear();
+                    } else {
+                        app.status_message = "No command history to repeat".into();
+                    }
+                    return Ok(true);
+                }
+                // e = engage selected target
+                KeyCode::Char('e') => {
+                    app.cmd_state.command_buffer = "engage".into();
                     app.execute_command(orchestrator);
                     app.cmd_state.command_buffer.clear();
-                } else {
-                    app.status_message = "No command history to repeat".into();
+                    return Ok(true);
                 }
-                return Ok(true);
+                // d = disengage
+                KeyCode::Char('d') => {
+                    app.cmd_state.command_buffer = "disengage".into();
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                    return Ok(true);
+                }
+                // l = loot
+                KeyCode::Char('l') => {
+                    app.cmd_state.command_buffer = "loot".into();
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                    return Ok(true);
+                }
+                _ => {}
             }
-            // e = engage selected target
-            KeyCode::Char('e') => {
-                app.cmd_state.command_buffer = "engage".into();
-                app.execute_command(orchestrator);
-                app.cmd_state.command_buffer.clear();
-                return Ok(true);
-            }
-            // d = disengage
-            KeyCode::Char('d') => {
-                app.cmd_state.command_buffer = "disengage".into();
-                app.execute_command(orchestrator);
-                app.cmd_state.command_buffer.clear();
-                return Ok(true);
-            }
-            // l = loot
-            KeyCode::Char('l') => {
-                app.cmd_state.command_buffer = "loot".into();
-                app.execute_command(orchestrator);
-                app.cmd_state.command_buffer.clear();
-                return Ok(true);
-            }
-            _ => {}
         }
 
         // Map-screen keybindings: +/- adjust Z-depth filter

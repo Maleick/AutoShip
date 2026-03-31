@@ -69,7 +69,11 @@ impl ClassStrategy for PaladinStrategy {
         let mana_pct = ctx.player.mana_pct();
 
         // Priority 1: Stun (interrupt casters, generate aggro)
-        if ctx.in_combat {
+        // Skip stun if a group member needs healing — select_target will have
+        // returned a friendly heal target, so casting a hostile stun on them
+        // makes no sense and causes a stun/heal oscillation loop.
+        let needs_heal = self.lowest_hp_member(ctx).is_some_and(|(_, hp)| hp < 60.0);
+        if ctx.in_combat && !needs_heal {
             if let Some(stun) = ctx
                 .config
                 .spells

@@ -14,13 +14,13 @@ const SNARE_HP: f32 = 20.0;
 /// Druid strategy: hybrid healer/nuker/snarer with resurrection and buff support.
 ///
 /// Priority order (MQ2-style cascade):
-/// 1. Resurrect dead group members (out of combat, if rez spell available)
-/// 2. Cure detrimental effects (poison/disease/curse)
-/// 3. Emergency heal (< 45% HP)
-/// 4. Snare on fleeing mobs (< 20% HP)
-/// 5. Moderate heal (< 65% HP)
-/// 6. Nuke/DoT
-/// 7. Out-of-combat: group buffs (regen, DS, resist)
+/// 0. Resurrect dead group members (out of combat, if rez spell available)
+/// 1. Cure detrimental effects (poison/disease/curse)
+/// 2. Emergency heal (< 45% HP)
+/// 3. Snare on fleeing mobs (< 20% HP)
+/// 4. Moderate heal (< 65% HP)
+/// 5. Nuke/DoT
+/// 6. Out-of-combat: group buffs (regen, DS, resist)
 ///
 /// EQ class ID: 6
 pub struct DruidStrategy {
@@ -112,6 +112,8 @@ impl ClassStrategy for DruidStrategy {
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
             && hp < EMERGENCY_HP
         {
+            // Even if no heal spell is configured, do NOT fall through to snare
+            // when a group member is critically low. Return the heal or None.
             return ctx
                 .config
                 .spells
@@ -122,7 +124,7 @@ impl ClassStrategy for DruidStrategy {
                 .cloned();
         }
 
-        // Priority 2: Snare on low-HP mob (fleeing prevention)
+        // Priority 3: Snare on low-HP mob (fleeing prevention)
         if let Some(target) = ctx.target
             && target.hp_pct() < SNARE_HP
             && let Some(snare) = ctx
@@ -141,7 +143,7 @@ impl ClassStrategy for DruidStrategy {
             return Some(snare);
         }
 
-        // Priority 3: Heal if group member below moderate threshold
+        // Priority 4: Heal if group member below moderate threshold
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
             && hp < MODERATE_HP
         {
@@ -155,7 +157,7 @@ impl ClassStrategy for DruidStrategy {
                 .cloned();
         }
 
-        // Priority 4: Nuke/DoT (in combat)
+        // Priority 5: Nuke/DoT (in combat)
         if ctx.in_combat {
             return ctx
                 .config
@@ -178,7 +180,7 @@ impl ClassStrategy for DruidStrategy {
                 .cloned();
         }
 
-        // Priority 5: Out-of-combat buffs (regen, damage shield, resist buffs)
+        // Priority 6: Out-of-combat buffs (regen, damage shield, resist buffs)
         ctx.config
             .spells
             .iter()

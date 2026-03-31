@@ -173,6 +173,13 @@ impl Combatant {
 
         // --- HolyShit evaluation (always runs first) ---
         if let Some(action) = self.holyshit.evaluate(&ctx) {
+            // If HolyShit fires while we're mid-cast, notify the strategy that
+            // the current cast was interrupted so class-specific state gets cleaned
+            // up (e.g., bard melody index, cleric rez_pending).
+            if matches!(self.state, CombatState::Casting { .. }) {
+                self.strategy.on_action_complete(&ctx);
+            }
+
             match action {
                 HolyShitAction::CastSpell(slot) => {
                     tracing::warn!(slot, "HolyShit: casting emergency spell");

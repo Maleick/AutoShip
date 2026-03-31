@@ -187,7 +187,7 @@ impl Orchestrator {
                 self.game_states.get(&m.pid).and_then(|gs| {
                     gs.local_player
                         .as_ref()
-                        .map(|lp| (m.pid, lp.hp_current as i32))
+                        .map(|lp| (m.pid, lp.hp_current.clamp(0, i32::MAX as i64) as i32))
                 })
             })
             .collect();
@@ -530,6 +530,7 @@ impl Orchestrator {
         if self.active_hunt.is_some() {
             tracing::info!("Stopping hunt loop");
             self.active_hunt = None;
+            self.operating_mode = OperatingMode::Camp;
         }
     }
 

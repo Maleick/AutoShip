@@ -32,12 +32,13 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     let t = &app.theme;
     let visible = app.visible_clients();
     let title = match app.active_group {
-        Some(idx) => format!(
-            " G{} {} ({}) ",
-            app.groups[idx].id,
-            app.groups[idx].name,
-            visible.len()
-        ),
+        Some(idx) => {
+            if let Some(g) = app.groups.get(idx) {
+                format!(" G{} {} ({}) ", g.id, g.name, visible.len())
+            } else {
+                format!(" Group {} ({}) ", idx + 1, visible.len())
+            }
+        }
         None => format!(" Characters ({}) ", app.clients.len()),
     };
 
