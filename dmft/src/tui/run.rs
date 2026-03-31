@@ -151,39 +151,37 @@ fn scan_for_clients_live(app: &mut App) {
             continue;
         }
 
-        if let Ok(proc) = ProcessHandle::open(pid) {
-            if let Ok(base) = crate::get_module_base(&proc) {
-                let mut client = ClientState::new(pid, base);
+        if let Ok(proc) = ProcessHandle::open(pid)
+            && let Ok(base) = crate::get_module_base(&proc)
+        {
+            let mut client = ClientState::new(pid, base);
 
-                // Read zone name from memory if possible
-                if let Ok(zone) = crate::eq::spawn::read_zone_name(&proc, base) {
-                    client.zone_name = zone;
-                } else if let Ok(windows) =
-                    crate::process::window::find_windows_by_title("EverQuest")
-                {
-                    for w in &windows {
-                        if w.pid == pid {
-                            let (char_name, zone) = parse_title_fields(&w.title);
-                            if !char_name.is_empty() {
-                                client.character_name = char_name;
-                            }
-                            client.zone_name = if zone.is_empty() {
-                                String::from("Unknown")
-                            } else {
-                                zone
-                            };
-                            break;
+            // Read zone name from memory if possible
+            if let Ok(zone) = crate::eq::spawn::read_zone_name(&proc, base) {
+                client.zone_name = zone;
+            } else if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
+                for w in &windows {
+                    if w.pid == pid {
+                        let (char_name, zone) = parse_title_fields(&w.title);
+                        if !char_name.is_empty() {
+                            client.character_name = char_name;
                         }
+                        client.zone_name = if zone.is_empty() {
+                            String::from("Unknown")
+                        } else {
+                            zone
+                        };
+                        break;
                     }
                 }
-
-                tracing::info!(
-                    pid,
-                    base = format!("{:#x}", base),
-                    "Attached to new EQ client"
-                );
-                app.clients.push(client);
             }
+
+            tracing::info!(
+                pid,
+                base = format!("{:#x}", base),
+                "Attached to new EQ client"
+            );
+            app.clients.push(client);
         }
     }
 
@@ -217,8 +215,7 @@ fn parse_title_fields(title: &str) -> (String, String) {
     let title = title.strip_prefix("[DMFT] ").unwrap_or(title);
 
     // New DLL format: "EQ - CharName (ZoneName)"
-    if title.starts_with("EQ - ") {
-        let rest = &title[5..]; // after "EQ - "
+    if let Some(rest) = title.strip_prefix("EQ - ") {
         if let Some(paren_start) = rest.rfind('(') {
             let char_name = rest[..paren_start].trim().to_string();
             let zone = rest[paren_start + 1..]
@@ -341,85 +338,217 @@ fn load_demo_data(app: &mut App) {
 
     app.status_message = String::from("DEMO MODE — no EQ process");
 
-    // Create multiple demo clients to showcase multi-client TUI.
+    // 18 demo clients across 3 groups, covering all 16 EQ classes.
     // Names use trailing digits (e.g., "Frostreaver01") so they match group slots
     // via extract_account_number().
-    let demo_clients = [
+    //
+    // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state, zone)
+    // Melee classes have mana 0. Caster/hybrid mana is class-appropriate.
+    let demo_clients: &[(&str, u8, u8, u32, u32, u32, u32, StandState, &str)] = &[
+        // ── Group 1: Permafrost ──────────────────────────────────────
         (
             "Frostreaver01",
             1,
-            "WAR",
             60,
-            8500,
+            9500,
             10000,
             0,
             0,
             StandState::Standing,
             "Permafrost",
-        ),
+        ), // WAR
         (
             "Iceweaver02",
+            2,
+            60,
+            5300,
+            6000,
+            5400,
+            7500,
+            StandState::Standing,
+            "Permafrost",
+        ), // CLR
+        (
+            "Coldchain03",
             14,
-            "ENC",
             60,
             3200,
             4000,
-            3800,
-            4000,
+            4200,
+            6000,
             StandState::Standing,
             "Permafrost",
-        ),
+        ), // ENC
         (
-            "Coldchain03",
-            2,
-            "CLR",
+            "Frostsong04",
+            8,
             60,
-            5500,
-            6000,
-            3500,
-            4500,
+            7200,
+            8000,
+            0,
+            0,
+            StandState::Standing,
+            "Permafrost",
+        ), // BRD
+        (
+            "Tundrablade05",
+            4,
+            60,
+            6600,
+            8000,
+            1800,
+            2500,
+            StandState::Standing,
+            "Permafrost",
+        ), // RNG
+        (
+            "Glacierstrike06",
+            12,
+            59,
+            2800,
+            3800,
+            5600,
+            8000,
             StandState::Sitting,
             "Permafrost",
-        ),
+        ), // WIZ
+        // ── Group 2: Eastern Wastes ──────────────────────────────────
         (
-            "Glacialmend07",
-            10,
-            "SHM",
+            "Shadowveil07",
+            5,
             58,
-            4800,
+            7000,
+            10000,
+            3200,
+            5000,
+            StandState::Standing,
+            "Eastern Wastes",
+        ), // SK
+        (
+            "Spiritcaller08",
+            10,
+            58,
+            4400,
             5200,
-            2800,
-            3600,
+            4600,
+            6000,
             StandState::Standing,
             "Eastern Wastes",
-        ),
+        ), // SHM
         (
-            "Frostbolt08",
-            12,
-            "WIZ",
-            59,
-            3000,
-            3800,
-            4000,
-            5000,
-            StandState::Standing,
-            "Eastern Wastes",
-        ),
-        (
-            "Tundrastalker09",
-            4,
-            "RNG",
+            "Verdantleaf09",
+            6,
             57,
-            5000,
+            3800,
+            4200,
+            4800,
+            7000,
+            StandState::Standing,
+            "Eastern Wastes",
+        ), // DRU
+        (
+            "Nightblade10",
+            9,
+            59,
             5800,
-            2000,
-            2500,
+            9000,
+            0,
+            0,
             StandState::Ducking,
             "Eastern Wastes",
-        ),
+        ), // ROG
+        (
+            "Soulreaper11",
+            11,
+            58,
+            3400,
+            4000,
+            5000,
+            7000,
+            StandState::Standing,
+            "Eastern Wastes",
+        ), // NEC
+        (
+            "Petmaster12",
+            13,
+            57,
+            3000,
+            3800,
+            5200,
+            7500,
+            StandState::Standing,
+            "Eastern Wastes",
+        ), // MAG
+        // ── Group 3: Great Divide ────────────────────────────────────
+        (
+            "Holyblade13",
+            3,
+            60,
+            7600,
+            9000,
+            2800,
+            4500,
+            StandState::Standing,
+            "Great Divide",
+        ), // PAL
+        (
+            "Swiftfist14",
+            7,
+            60,
+            6500,
+            9000,
+            0,
+            0,
+            StandState::Standing,
+            "Great Divide",
+        ), // MNK
+        (
+            "Beastkin15",
+            15,
+            57,
+            5600,
+            7000,
+            2600,
+            4000,
+            StandState::Standing,
+            "Great Divide",
+        ), // BST
+        (
+            "Ragecleave16",
+            16,
+            58,
+            6200,
+            9000,
+            0,
+            0,
+            StandState::Standing,
+            "Great Divide",
+        ), // BER
+        (
+            "Frostmend17",
+            2,
+            60,
+            5700,
+            6000,
+            6000,
+            7500,
+            StandState::Sitting,
+            "Great Divide",
+        ), // CLR (2nd)
+        (
+            "Glacialsurge18",
+            12,
+            59,
+            3100,
+            3800,
+            5800,
+            8000,
+            StandState::Feigned,
+            "Great Divide",
+        ), // WIZ (2nd)
     ];
 
-    for (i, (name, class_id, _class_str, level, hp, hp_max, mana, mana_max, stand, zone)) in
+    for (i, &(name, class_id, level, hp, hp_max, mana, mana_max, ref stand, zone)) in
         demo_clients.iter().enumerate()
     {
         let mut client = ClientState::new(1000 + i as u32, 0x140000000);
@@ -428,15 +557,15 @@ fn load_demo_data(app: &mut App) {
             name: name.to_string(),
             displayed_name: name.to_string(),
             lastname: String::new(),
-            level: *level,
-            class_id: *class_id,
-            class: crate::eq::structs::EqClass::from_id(*class_id),
+            level,
+            class_id,
+            class: crate::eq::structs::EqClass::from_id(class_id),
             stand_state: *stand,
             spawn_type: SpawnType::Player,
-            hp_current: *hp,
-            hp_max: *hp_max,
-            mana_current: *mana,
-            mana_max: *mana_max,
+            hp_current: hp,
+            hp_max,
+            mana_current: mana,
+            mana_max,
             endurance_current: 150,
             endurance_max: 200,
             x: 1234.5 + (i as f32 * 100.0),
@@ -449,23 +578,35 @@ fn load_demo_data(app: &mut App) {
             cast_state: None,
         });
         client.character_name = name.to_string();
-        client.client_status = format!("Demo client: {}", name);
+        client.client_status = format!("Connected: {}", name);
         app.clients.push(client);
     }
 
-    // Build spawns for first client (Frostreaver in Permafrost)
-    let demo_spawns = vec![
+    // ── Spawns for each zone ─────────────────────────────────────────────────
+    // Each group's clients share a spawn list appropriate to their zone.
+
+    let permafrost_spawns = make_demo_spawns(&[
+        // PCs in zone
         (
             "Frostreaver01",
             60,
             1,
             SpawnType::Player,
-            8500,
+            9500,
             10000,
             StandState::Standing,
         ),
         (
             "Iceweaver02",
+            60,
+            2,
+            SpawnType::Player,
+            5300,
+            6000,
+            StandState::Standing,
+        ),
+        (
+            "Coldchain03",
             60,
             14,
             SpawnType::Player,
@@ -473,14 +614,15 @@ fn load_demo_data(app: &mut App) {
             4000,
             StandState::Standing,
         ),
+        // NPCs
         (
-            "Coldchain03",
+            "Lady Vox",
             60,
-            2,
-            SpawnType::Player,
-            5500,
-            6000,
-            StandState::Sitting,
+            0,
+            SpawnType::Npc,
+            250000,
+            320000,
+            StandState::Standing,
         ),
         (
             "a frost giant",
@@ -501,22 +643,13 @@ fn load_demo_data(app: &mut App) {
             StandState::Standing,
         ),
         (
-            "Lady Vox",
-            60,
+            "an ice bone skeleton",
+            48,
             0,
             SpawnType::Npc,
-            250000,
-            320000,
+            4200,
+            5000,
             StandState::Standing,
-        ),
-        (
-            "a frost giant's corpse",
-            55,
-            0,
-            SpawnType::Corpse,
-            0,
-            15000,
-            StandState::Dead,
         ),
         (
             "Trader Mikhail",
@@ -528,59 +661,174 @@ fn load_demo_data(app: &mut App) {
             StandState::Standing,
         ),
         (
+            "a frost giant's corpse",
+            55,
+            0,
+            SpawnType::Corpse,
+            0,
+            15000,
+            StandState::Dead,
+        ),
+    ]);
+
+    let eastwastes_spawns = make_demo_spawns(&[
+        (
+            "Shadowveil07",
+            58,
+            5,
+            SpawnType::Player,
+            7000,
+            10000,
+            StandState::Standing,
+        ),
+        (
+            "Spiritcaller08",
+            58,
+            10,
+            SpawnType::Player,
+            4400,
+            5200,
+            StandState::Standing,
+        ),
+        (
+            "Nightblade10",
+            59,
+            9,
+            SpawnType::Player,
+            5800,
+            9000,
+            StandState::Ducking,
+        ),
+        (
+            "a Kael warrior",
+            56,
+            0,
+            SpawnType::Npc,
+            14000,
+            18000,
+            StandState::Standing,
+        ),
+        (
+            "a tundra kodiak",
+            50,
+            0,
+            SpawnType::Npc,
+            6000,
+            7000,
+            StandState::Standing,
+        ),
+        (
             "a dire wolf",
             48,
             0,
             SpawnType::Npc,
-            6000,
-            7200,
+            5000,
+            6200,
             StandState::Standing,
         ),
         (
-            "Velketor",
+            "Wuoshi",
+            60,
+            0,
+            SpawnType::Npc,
+            200000,
+            280000,
+            StandState::Standing,
+        ),
+        (
+            "a walrus's corpse",
+            45,
+            0,
+            SpawnType::Corpse,
+            0,
+            4000,
+            StandState::Dead,
+        ),
+    ]);
+
+    let greatdivide_spawns = make_demo_spawns(&[
+        (
+            "Holyblade13",
+            60,
+            3,
+            SpawnType::Player,
+            7600,
+            9000,
+            StandState::Standing,
+        ),
+        (
+            "Swiftfist14",
+            60,
+            7,
+            SpawnType::Player,
+            6500,
+            9000,
+            StandState::Standing,
+        ),
+        (
+            "Ragecleave16",
+            58,
+            16,
+            SpawnType::Player,
+            6200,
+            9000,
+            StandState::Standing,
+        ),
+        (
+            "a Coldain warrior",
+            52,
+            0,
+            SpawnType::Npc,
+            8000,
+            9500,
+            StandState::Standing,
+        ),
+        (
+            "a frost giant scout",
+            54,
+            0,
+            SpawnType::Npc,
+            11000,
+            14000,
+            StandState::Standing,
+        ),
+        (
+            "a velium hound",
+            46,
+            0,
+            SpawnType::Npc,
+            4500,
+            5000,
+            StandState::Standing,
+        ),
+        (
+            "Garudon",
             60,
             0,
             SpawnType::Npc,
             180000,
-            200000,
+            220000,
             StandState::Standing,
         ),
-    ];
+        (
+            "a Coldain's corpse",
+            50,
+            0,
+            SpawnType::Corpse,
+            0,
+            8000,
+            StandState::Dead,
+        ),
+    ]);
 
-    let spawns: Vec<SpawnInfo> = demo_spawns
-        .into_iter()
-        .enumerate()
-        .map(
-            |(i, (name, level, class, stype, hp, hp_max, stand))| SpawnInfo {
-                name: name.to_string(),
-                displayed_name: name.to_string(),
-                lastname: String::new(),
-                level,
-                class_id: class,
-                class: crate::eq::structs::EqClass::from_id(class),
-                stand_state: stand,
-                spawn_type: stype,
-                hp_current: hp,
-                hp_max,
-                mana_current: if class > 0 { 3000 } else { 0 },
-                mana_max: if class > 0 { 4000 } else { 0 },
-                endurance_current: 150,
-                endurance_max: 200,
-                x: 1234.5 + (i as f32 * 10.0),
-                y: -567.8 + (i as f32 * 5.0),
-                z: 12.0,
-                heading: 0.0,
-                spawn_id: i as u32 + 1,
-                is_gm: false,
-                buff_slots: Vec::new(),
-                cast_state: None,
-            },
-        )
-        .collect();
-
-    // Assign spawns to the first client
-    if !app.clients.is_empty() {
-        app.clients[0].spawns = spawns;
+    // Assign spawns to clients by zone
+    for client in &mut app.clients {
+        match client.zone_name.as_str() {
+            "Permafrost" => client.spawns = permafrost_spawns.clone(),
+            "Eastern Wastes" => client.spawns = eastwastes_spawns.clone(),
+            "Great Divide" => client.spawns = greatdivide_spawns.clone(),
+            _ => {}
+        }
     }
 
     // Sync selected client to legacy fields
@@ -593,9 +841,55 @@ fn load_demo_data(app: &mut App) {
     }
 }
 
+/// Helper to build a Vec<SpawnInfo> from a compact tuple list.
+#[allow(dead_code)]
+fn make_demo_spawns(
+    data: &[(
+        &str,
+        u8,
+        u8,
+        crate::eq::structs::SpawnType,
+        i64,
+        i64,
+        crate::eq::structs::StandState,
+    )],
+) -> Vec<crate::eq::structs::SpawnInfo> {
+    use crate::eq::structs::SpawnInfo;
+    data.iter()
+        .enumerate()
+        .map(
+            |(i, (name, level, class, stype, hp, hp_max, stand))| SpawnInfo {
+                name: name.to_string(),
+                displayed_name: name.to_string(),
+                lastname: String::new(),
+                level: *level,
+                class_id: *class,
+                class: crate::eq::structs::EqClass::from_id(*class),
+                stand_state: *stand,
+                spawn_type: *stype,
+                hp_current: *hp,
+                hp_max: *hp_max,
+                mana_current: if *class > 0 { 3000 } else { 0 },
+                mana_max: if *class > 0 { 4000 } else { 0 },
+                endurance_current: 150,
+                endurance_max: 200,
+                x: 1234.5 + (i as f32 * 10.0),
+                y: -567.8 + (i as f32 * 5.0),
+                z: 12.0,
+                heading: 0.0,
+                spawn_id: 100 + i as u32,
+                is_gm: false,
+                buff_slots: Vec::new(),
+                cast_state: None,
+            },
+        )
+        .collect()
+}
+
 /// Convert a zone display name (long name from zoneHeader) to its EQ short name
 /// for Brewall map file lookup. Handles both display names ("West Freeport") and
 /// short names that are already correct ("freportw").
+#[allow(dead_code)]
 fn zone_to_short_name(zone_name: &str) -> String {
     let lower = zone_name.to_lowercase();
     match lower.as_str() {

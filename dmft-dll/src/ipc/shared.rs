@@ -41,10 +41,12 @@ impl SharedStateWriter {
             };
             use windows::core::PCWSTR;
 
-            let name: Vec<u16> =
-                format!("{}\0", dmft_common::ipc::shared_memory_name(session_id, client_id))
-                    .encode_utf16()
-                    .collect();
+            let name: Vec<u16> = format!(
+                "{}\0",
+                dmft_common::ipc::shared_memory_name(session_id, client_id)
+            )
+            .encode_utf16()
+            .collect();
 
             // Restrict shared memory access to the current user via an explicit DACL.
             // Fail closed: if DACL creation fails, abort rather than using default (open) security.

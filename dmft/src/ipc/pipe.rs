@@ -40,7 +40,7 @@ impl CommandPipe {
             let handle = unsafe {
                 CreateFileA(
                     PCSTR(pipe_name.as_ptr()),
-                    (GENERIC_READ.0 | windows::Win32::Foundation::GENERIC_WRITE.0).into(),
+                    GENERIC_READ.0 | windows::Win32::Foundation::GENERIC_WRITE.0,
                     windows::Win32::Storage::FileSystem::FILE_SHARE_NONE,
                     None,
                     OPEN_EXISTING,

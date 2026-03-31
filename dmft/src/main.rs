@@ -249,12 +249,12 @@ fn run_tui_mode() -> Result<()> {
     {
         if let Ok(pids) = process::memory::find_processes_by_name(&config.process_name) {
             for &pid in &pids {
-                if let Ok(proc) = process::memory::ProcessHandle::open(pid) {
-                    if let Ok(base) = get_module_base(&proc) {
-                        let client = tui::app::ClientState::new(pid, base);
-                        info!(pid, base = format!("{:#x}", base), "Attached to EQ client");
-                        app.clients.push(client);
-                    }
+                if let Ok(proc) = process::memory::ProcessHandle::open(pid)
+                    && let Ok(base) = get_module_base(&proc)
+                {
+                    let client = tui::app::ClientState::new(pid, base);
+                    info!(pid, base = format!("{:#x}", base), "Attached to EQ client");
+                    app.clients.push(client);
                 }
             }
         }

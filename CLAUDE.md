@@ -9,8 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-# Set CMAKE_POLICY_VERSION_MINIMUM for the navmesh C++ FFI shim (Detour/protobuf)
-export CMAKE_POLICY_VERSION_MINIMUM=3.5
+# CMAKE_POLICY_VERSION_MINIMUM is set automatically via .cargo/config.toml
 
 cargo build              # Debug build (works on macOS — stubs out Windows APIs)
 cargo build --release    # Release build

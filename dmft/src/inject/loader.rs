@@ -97,7 +97,7 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
                 process,
                 None, // default security
                 0,    // default stack size
-                Some(std::mem::transmute(load_library_fn)),
+                Some(load_library_fn),
                 Some(remote_buf),
                 0,    // run immediately
                 None, // don't need thread ID
@@ -151,7 +151,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
         CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
         PROCESS_VM_READ, WaitForSingleObject,
     };
-    use windows::core::{PCSTR, w};
+    use windows::core::w;
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
 
     // Snapshot all modules loaded in the target process.
@@ -215,7 +215,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
             .context("Failed to get kernel32 handle")?;
 
         let free_library_addr =
-            unsafe { GetProcAddress(kernel32, PCSTR(b"FreeLibrary\0".as_ptr())) }
+            unsafe { GetProcAddress(kernel32, windows::core::s!("FreeLibrary")) }
                 .context("GetProcAddress(FreeLibrary) failed")?;
 
         let free_library_fn: unsafe extern "system" fn(*mut core::ffi::c_void) -> u32 =
@@ -227,7 +227,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
                 process,
                 None,
                 0,
-                Some(std::mem::transmute(free_library_fn)),
+                Some(free_library_fn),
                 Some(module_base.0 as *const _),
                 0,
                 None,

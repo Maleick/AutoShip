@@ -395,4 +395,87 @@ mod tests {
         };
         assert!(!cs.is_casting());
     }
+
+    #[test]
+    fn eq_class_all_16_from_id_round_trip() {
+        let expected = [
+            (1, "WAR"),
+            (2, "CLR"),
+            (3, "PAL"),
+            (4, "RNG"),
+            (5, "SK"),
+            (6, "DRU"),
+            (7, "MNK"),
+            (8, "BRD"),
+            (9, "ROG"),
+            (10, "SHM"),
+            (11, "NEC"),
+            (12, "WIZ"),
+            (13, "MAG"),
+            (14, "ENC"),
+            (15, "BST"),
+            (16, "BER"),
+        ];
+        for (id, short) in expected {
+            let class =
+                EqClass::from_id(id).unwrap_or_else(|| panic!("from_id({}) returned None", id));
+            assert_eq!(
+                class.short_name(),
+                short,
+                "class id {} short_name mismatch",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn eq_class_from_id_invalid_returns_none() {
+        assert!(EqClass::from_id(0).is_none());
+        assert!(EqClass::from_id(17).is_none());
+        assert!(EqClass::from_id(255).is_none());
+    }
+
+    #[test]
+    fn spawn_type_known_values() {
+        assert_eq!(SpawnType::from_id(0), SpawnType::Player);
+        assert_eq!(SpawnType::from_id(1), SpawnType::Npc);
+        assert_eq!(SpawnType::from_id(2), SpawnType::Corpse);
+        assert_eq!(SpawnType::from_id(3), SpawnType::Corpse);
+    }
+
+    #[test]
+    fn spawn_type_unknown_values() {
+        assert_eq!(SpawnType::from_id(4), SpawnType::Unknown(4));
+        assert_eq!(SpawnType::from_id(99), SpawnType::Unknown(99));
+    }
+
+    #[test]
+    fn stand_state_all_known_values() {
+        let expected = [
+            (0, "Stand"),
+            (1, "Frozen"),
+            (2, "Loot"),
+            (3, "Sit"),
+            (4, "Duck"),
+            (110, "FD"),
+            (111, "DEAD"),
+        ];
+        for (id, label) in expected {
+            let state = StandState::from_id(id);
+            assert_eq!(state.label(), label, "StandState id {} label mismatch", id);
+            assert!(
+                !state.sprite().is_empty(),
+                "StandState id {} has empty sprite",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn stand_state_unknown() {
+        let state = StandState::from_id(50);
+        assert_eq!(state, StandState::Unknown(50));
+        assert_eq!(state.label(), "???");
+        assert!(!state.sprite().is_empty());
+    }
 }

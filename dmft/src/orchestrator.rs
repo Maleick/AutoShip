@@ -68,8 +68,10 @@ impl Orchestrator {
         for &pid in &self.client_pids {
             // Lazily create readers
             if let std::collections::hash_map::Entry::Vacant(e) = self.state_readers.entry(pid) {
-                let session_id = self.session_tokens.get(&pid)
-                    .map(|t| dmft_common::ipc::session_id_from_token(t))
+                let session_id = self
+                    .session_tokens
+                    .get(&pid)
+                    .map(dmft_common::ipc::session_id_from_token)
                     .unwrap_or(0);
                 match SharedStateReader::new(pid, session_id) {
                     Ok(reader) => {

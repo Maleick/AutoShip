@@ -62,7 +62,6 @@ impl ProcessHandle {
     /// Read a value of type T from the process at the given address.
     #[cfg(windows)]
     pub fn read<T: Copy>(&self, address: usize) -> Result<T> {
-        use std::ptr;
         use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 
         let mut buffer: T = unsafe { mem::zeroed() };

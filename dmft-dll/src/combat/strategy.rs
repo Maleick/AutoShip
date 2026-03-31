@@ -70,7 +70,7 @@ pub trait ClassStrategy: Send {
     fn role(&self) -> CombatRole;
 }
 
-/// Factory function — creates the right strategy for a given class.
+/// Factory function -- creates the right strategy for a given class.
 pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrategy> {
     match class_id {
         1 => Box::new(WarriorStrategy::new(class_id)), // Warrior
@@ -90,5 +90,34 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
         15 => Box::new(BeastlordStrategy::new(class_id)), // Beastlord
         16 => Box::new(BerserkerStrategy::new(class_id)), // Berserker
         _ => Box::new(GenericDpsStrategy::new(class_id, config)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_strategy_all_16_classes() {
+        let config = CombatConfig::default();
+        for id in 1..=16u8 {
+            let strategy = build_strategy(id, &config);
+            assert_eq!(
+                strategy.class_id(),
+                id,
+                "build_strategy({}) returned class_id {}",
+                id,
+                strategy.class_id()
+            );
+            // Just verify role() doesn't panic
+            let _role = strategy.role();
+        }
+    }
+
+    #[test]
+    fn build_strategy_unknown_class_uses_generic() {
+        let config = CombatConfig::default();
+        let strategy = build_strategy(99, &config);
+        assert_eq!(strategy.class_id(), 99);
     }
 }

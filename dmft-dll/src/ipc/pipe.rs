@@ -142,9 +142,8 @@ impl CommandListener {
             // Read the next command from the connected pipe.
             let mut buf = vec![0u8; 4096];
             let mut bytes_read: u32 = 0;
-            let read_result = unsafe {
-                ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)
-            };
+            let read_result =
+                unsafe { ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None) };
 
             if let Err(e) = read_result {
                 // Orchestrator disconnected — reset for next connection.

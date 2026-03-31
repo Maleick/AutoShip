@@ -31,8 +31,10 @@ pub fn spawn_eq_client(
     );
 
     let mut cmd_wide: Vec<u16> = OsString::from(&cmd).encode_wide().chain(Some(0)).collect();
-    let mut si = STARTUPINFOW::default();
-    si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+    let si = STARTUPINFOW {
+        cb: std::mem::size_of::<STARTUPINFOW>() as u32,
+        ..Default::default()
+    };
     let mut pi = PROCESS_INFORMATION::default();
 
     // ACCEPTED RISK (security-H3): Account name is visible in process command line
