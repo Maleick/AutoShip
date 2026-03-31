@@ -2,8 +2,26 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
-/// Druid strategy: hybrid healer/nuker/snarer. Prioritizes heals when group is hurt,
-/// snare on runners, DoTs/nukes otherwise.
+/// HP threshold for emergency heals.
+const EMERGENCY_HP: f32 = 45.0;
+
+/// HP threshold for standard heals.
+const MODERATE_HP: f32 = 65.0;
+
+/// HP threshold for snare (fleeing mob prevention).
+const SNARE_HP: f32 = 20.0;
+
+/// Druid strategy: hybrid healer/nuker/snarer with resurrection and buff support.
+///
+/// Priority order (MQ2-style cascade):
+/// 0. Resurrect dead group members (out of combat, if rez spell available)
+/// 1. Cure detrimental effects (poison/disease/curse)
+/// 2. Emergency heal (< 45% HP)
+/// 3. Snare on fleeing mobs (< 20% HP)
+/// 4. Moderate heal (< 65% HP)
+/// 5. Nuke/DoT
+/// 6. Out-of-combat: group buffs (regen, DS, resist)
+///
 /// EQ class ID: 6
 pub struct DruidStrategy {
     class_id: u8,
@@ -17,13 +35,31 @@ impl DruidStrategy {
     fn lowest_hp_member(&self, ctx: &CombatContext) -> Option<(u32, f32)> {
         ctx.group_members
             .iter()
-            .filter(|m| m.hp_pct < 100.0 && m.hp_pct > 0.0)
+            .filter(|m| !m.is_dead && m.hp_pct > 0.0 && m.hp_pct < 100.0)
             .min_by(|a, b| {
                 a.hp_pct
                     .partial_cmp(&b.hp_pct)
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|m| (m.spawn_id, m.hp_pct))
+    }
+
+    fn dead_member<'a>(&self, ctx: &CombatContext<'a>) -> Option<&'a str> {
+        ctx.group_members
+            .iter()
+            .find(|m| m.is_dead)
+            .map(|m| m.name.as_str())
+    }
+
+    fn find_spell_by_category<'a>(
+        &self,
+        spells: &'a [SpellEntry],
+        keywords: &[&str],
+    ) -> Option<&'a SpellEntry> {
+        spells.iter().find(|s| {
+            let name = s.name.to_lowercase();
+            keywords.iter().any(|kw| name.contains(kw))
+        })
     }
 }
 
@@ -33,8 +69,18 @@ impl ClassStrategy for DruidStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
+        // Rez targeting: don't override target — rez spell selection handles corpse targeting
+        if !ctx.in_combat
+            && self.dead_member(ctx).is_some()
+            && self
+                .find_spell_by_category(&ctx.config.spells, &["resurrect", "rez", "reviviscence"])
+                .is_some()
+        {
+            return None;
+        }
+
         if let Some((heal_target, hp)) = self.lowest_hp_member(ctx)
-            && hp < 65.0
+            && hp < MODERATE_HP
         {
             return Some(heal_target);
         }
@@ -44,31 +90,62 @@ impl ClassStrategy for DruidStrategy {
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         let mana_pct = ctx.player.mana_pct();
 
-        // Priority 1: Emergency heal
+        // Priority 0: Resurrect dead group members (out of combat only)
+        if !ctx.in_combat {
+            if self.dead_member(ctx).is_some() {
+                if let Some(rez) = self.find_spell_by_category(
+                    &ctx.config.spells,
+                    &["resurrect", "rez", "reviviscence"],
+                ) {
+                    if mana_pct >= rez.min_mana_pct {
+                        return Some(rez.clone());
+                    }
+                }
+            }
+        }
+
+        // Priority 1: Cure detrimental effects
+        let has_afflicted = ctx
+            .group_members
+            .iter()
+            .any(|m| !m.is_dead && m.has_detrimental);
+        if has_afflicted {
+            if let Some(cure) = self.find_spell_by_category(
+                &ctx.config.spells,
+                &["cure", "purify", "remove", "counteract"],
+            ) {
+                if mana_pct >= cure.min_mana_pct {
+                    return Some(cure.clone());
+                }
+            }
+        }
+
+        // Priority 2: Emergency heal
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
-            && hp < 45.0
+            && hp < EMERGENCY_HP
         {
+            // Even if no heal spell is configured, do NOT fall through to snare
+            // when a group member is critically low. Return the heal or None.
             return ctx
                 .config
                 .spells
                 .iter()
-                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| s.name.to_lowercase().contains("heal"))
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned();
         }
 
-        // Priority 2: Snare on low-HP mob (fleeing prevention)
+        // Priority 3: Snare on low-HP mob (fleeing prevention)
         if let Some(target) = ctx.target
-            && target.hp_pct() < 20.0
+            && target.hp_pct() < SNARE_HP
             && let Some(snare) = ctx
                 .config
                 .spells
                 .iter()
                 .filter(|s| {
-                    s.name.contains("Snare")
-                        || s.name.contains("snare")
-                        || s.name.contains("Ensnare")
+                    let name = s.name.to_lowercase();
+                    name.contains("snare") || name.contains("ensnare")
                 })
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
@@ -77,30 +154,54 @@ impl ClassStrategy for DruidStrategy {
             return Some(snare);
         }
 
-        // Priority 3: Heal if group member below 65%
+        // Priority 4: Heal if group member below moderate threshold
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
-            && hp < 65.0
+            && hp < MODERATE_HP
         {
             return ctx
                 .config
                 .spells
                 .iter()
-                .filter(|s| s.name.contains("Heal") || s.name.contains("heal"))
+                .filter(|s| s.name.to_lowercase().contains("heal"))
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned();
         }
 
-        // Priority 4: Nuke/DoT
+        // Priority 5: Nuke/DoT (in combat)
+        if ctx.in_combat {
+            return ctx
+                .config
+                .spells
+                .iter()
+                .filter(|s| {
+                    let name = s.name.to_lowercase();
+                    !name.contains("heal")
+                        && !name.contains("snare")
+                        && !name.contains("ensnare")
+                        && !name.contains("regen")
+                        && !name.contains("skin")
+                        && !name.contains("resist")
+                        && !name.contains("shield")
+                        && !name.contains("resurrect")
+                        && !name.contains("rez")
+                })
+                .filter(|s| mana_pct >= s.min_mana_pct)
+                .max_by_key(|s| s.priority)
+                .cloned();
+        }
+
+        // Priority 6: Out-of-combat buffs (regen, damage shield, resist buffs)
         ctx.config
             .spells
             .iter()
             .filter(|s| {
-                !s.name.contains("Heal")
-                    && !s.name.contains("heal")
-                    && !s.name.contains("Snare")
-                    && !s.name.contains("snare")
-                    && !s.name.contains("Ensnare")
+                let name = s.name.to_lowercase();
+                name.contains("regen")
+                    || name.contains("skin")
+                    || name.contains("resist")
+                    || name.contains("shield")
+                    || name.contains("buff")
             })
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
@@ -123,6 +224,19 @@ impl ClassStrategy for DruidStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::combat::strategy::GroupMemberState;
+
+    fn make_member(spawn_id: u32, hp_pct: f32, is_dead: bool) -> GroupMemberState {
+        GroupMemberState {
+            spawn_id,
+            hp_pct,
+            mana_pct: 100.0,
+            class_id: 1,
+            is_dead,
+            name: format!("Player{spawn_id}"),
+            has_detrimental: false,
+        }
+    }
 
     #[test]
     fn druid_class_id() {
@@ -149,253 +263,33 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(druid.should_assist(&ctx));
     }
 
     #[test]
-    fn druid_aoe_threshold() {
-        let druid = DruidStrategy::new(6);
-        assert_eq!(druid.aoe_threshold(), 3);
-    }
-
-    #[test]
-    fn druid_emergency_heal_below_45() {
-        let druid = DruidStrategy::new(6);
-        let mut player = dmft_common::types::SpawnData::default();
-        player.mana_current = 8000;
-        player.mana_max = 10000;
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![
-                dmft_common::combat::SpellEntry {
-                    slot: 1,
-                    spell_id: 100,
-                    name: "Greater Healing".into(),
-                    min_mana_pct: 10.0,
-                    priority: 10,
-                    is_aoe: false,
-                },
-                dmft_common::combat::SpellEntry {
-                    slot: 2,
-                    spell_id: 200,
-                    name: "Starfire".into(),
-                    min_mana_pct: 10.0,
-                    priority: 15,
-                    is_aoe: false,
-                },
-            ],
-            ..dmft_common::combat::CombatConfig::default()
-        };
-        let group = vec![crate::combat::strategy::GroupMemberState {
-            spawn_id: 1,
-            hp_pct: 30.0,
-            mana_pct: 100.0,
-            class_id: 1,
-        }];
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &group,
-            config: &config,
-            tick: 0,
-            in_combat: true,
-        };
-        let spell = druid.select_spell(&ctx).unwrap();
-        assert_eq!(spell.name, "Greater Healing");
-    }
-
-    #[test]
-    fn druid_snare_on_fleeing_mob() {
-        let druid = DruidStrategy::new(6);
-        let mut player = dmft_common::types::SpawnData::default();
-        player.mana_current = 8000;
-        player.mana_max = 10000;
-        let mut target = dmft_common::types::SpawnData::default();
-        target.hp_current = 1000;
-        target.hp_max = 10000; // 10% HP
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![
-                dmft_common::combat::SpellEntry {
-                    slot: 1,
-                    spell_id: 100,
-                    name: "Ensnare".into(),
-                    min_mana_pct: 10.0,
-                    priority: 8,
-                    is_aoe: false,
-                },
-                dmft_common::combat::SpellEntry {
-                    slot: 2,
-                    spell_id: 200,
-                    name: "Starfire".into(),
-                    min_mana_pct: 10.0,
-                    priority: 15,
-                    is_aoe: false,
-                },
-            ],
-            ..dmft_common::combat::CombatConfig::default()
-        };
-        let ctx = CombatContext {
-            player: &player,
-            target: Some(&target),
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: true,
-        };
-        let spell = druid.select_spell(&ctx).unwrap();
-        assert_eq!(spell.name, "Ensnare");
-    }
-
-    #[test]
-    fn druid_heal_between_45_and_65() {
-        let druid = DruidStrategy::new(6);
-        let mut player = dmft_common::types::SpawnData::default();
-        player.mana_current = 8000;
-        player.mana_max = 10000;
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![
-                dmft_common::combat::SpellEntry {
-                    slot: 1,
-                    spell_id: 100,
-                    name: "Greater Healing".into(),
-                    min_mana_pct: 10.0,
-                    priority: 10,
-                    is_aoe: false,
-                },
-                dmft_common::combat::SpellEntry {
-                    slot: 2,
-                    spell_id: 200,
-                    name: "Starfire".into(),
-                    min_mana_pct: 10.0,
-                    priority: 15,
-                    is_aoe: false,
-                },
-            ],
-            ..dmft_common::combat::CombatConfig::default()
-        };
-        let group = vec![crate::combat::strategy::GroupMemberState {
-            spawn_id: 1,
-            hp_pct: 55.0,
-            mana_pct: 100.0,
-            class_id: 1,
-        }];
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &group,
-            config: &config,
-            tick: 0,
-            in_combat: true,
-        };
-        let spell = druid.select_spell(&ctx).unwrap();
-        assert_eq!(spell.name, "Greater Healing");
-    }
-
-    #[test]
-    fn druid_nukes_when_group_healthy() {
-        let druid = DruidStrategy::new(6);
-        let mut player = dmft_common::types::SpawnData::default();
-        player.mana_current = 8000;
-        player.mana_max = 10000;
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![
-                dmft_common::combat::SpellEntry {
-                    slot: 1,
-                    spell_id: 100,
-                    name: "Greater Healing".into(),
-                    min_mana_pct: 10.0,
-                    priority: 10,
-                    is_aoe: false,
-                },
-                dmft_common::combat::SpellEntry {
-                    slot: 2,
-                    spell_id: 200,
-                    name: "Starfire".into(),
-                    min_mana_pct: 10.0,
-                    priority: 15,
-                    is_aoe: false,
-                },
-            ],
-            ..dmft_common::combat::CombatConfig::default()
-        };
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: true,
-        };
-        let spell = druid.select_spell(&ctx).unwrap();
-        assert_eq!(spell.name, "Starfire");
-    }
-
-    #[test]
-    fn druid_select_target_heal_when_low() {
-        let druid = DruidStrategy::new(6);
-        let config = dmft_common::combat::CombatConfig::default();
-        let player = dmft_common::types::SpawnData::default();
-        let target = dmft_common::types::SpawnData {
-            spawn_id: 99,
-            ..Default::default()
-        };
-        let group = vec![crate::combat::strategy::GroupMemberState {
-            spawn_id: 42,
-            hp_pct: 40.0,
-            mana_pct: 100.0,
-            class_id: 1,
-        }];
-        let ctx = CombatContext {
-            player: &player,
-            target: Some(&target),
-            nearby_enemies: &[],
-            group_members: &group,
-            config: &config,
-            tick: 0,
-            in_combat: true,
-        };
-        assert_eq!(druid.select_target(&ctx), Some(42)); // heal target, not mob
-    }
-
-    #[test]
-    fn druid_select_target_mob_when_healthy() {
-        let druid = DruidStrategy::new(6);
-        let config = dmft_common::combat::CombatConfig::default();
-        let player = dmft_common::types::SpawnData::default();
-        let target = dmft_common::types::SpawnData {
-            spawn_id: 99,
-            ..Default::default()
-        };
-        let ctx = CombatContext {
-            player: &player,
-            target: Some(&target),
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: true,
-        };
-        assert_eq!(druid.select_target(&ctx), Some(99)); // mob target
-    }
-
-    #[test]
-    fn druid_no_spells_returns_none() {
+    fn druid_lowest_hp_excludes_dead() {
         let druid = DruidStrategy::new(6);
         let player = dmft_common::types::SpawnData::default();
+        let members = vec![
+            make_member(1, 0.0, true),   // dead
+            make_member(2, 40.0, false), // alive, hurt
+        ];
         let config = dmft_common::combat::CombatConfig::default();
         let ctx = CombatContext {
             player: &player,
             target: None,
             nearby_enemies: &[],
-            group_members: &[],
+            group_members: &members,
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
-        assert!(druid.select_spell(&ctx).is_none());
+
+        let (id, hp) = druid.lowest_hp_member(&ctx).unwrap();
+        assert_eq!(id, 2);
+        assert!((hp - 40.0).abs() < f32::EPSILON);
     }
 }

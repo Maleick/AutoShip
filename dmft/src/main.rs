@@ -1,41 +1,8 @@
-// --- Modules wired through orchestrator/TUI, not referenced directly in main ---
-#[allow(dead_code)] // M4: camp loop state machine, driven by orchestrator
-mod camp;
-mod cli;
-#[allow(dead_code)] // M2: multi-client sessions, self-healing monitor
-mod client;
-#[allow(dead_code)] // M4: combat automation, class strategies
-mod combat;
-mod config;
-#[allow(dead_code)] // M2.5: encrypted credential store
-mod credentials;
-#[allow(dead_code)] // M2.5: login automation, process spawner
-mod launcher;
-
-// --- Modules used in main.rs; dead_code on non-Windows from platform stubs ---
-#[allow(dead_code)] // M1: EQ data layer — some fields/functions are scaffolding for future features
-mod eq;
-#[cfg_attr(not(windows), allow(dead_code))]
-mod inject;
-#[cfg_attr(not(windows), allow(dead_code))]
-mod ipc;
-#[allow(dead_code)] // M3+: nav routing, camp management, waypoint recording — scaffolding
-mod nav;
-mod orchestrator;
-#[cfg_attr(not(windows), allow(dead_code))]
-mod process;
-#[allow(dead_code)] // M5/M6: Soul Engine — scaffolding for LLM personalities, social graph
-mod soul;
-mod tui;
+use dmft::cli;
 
 use anyhow::{Context, Result};
-#[cfg(not(windows))]
-use tracing::warn;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt};
-
-/// Default path for the soul memory database.
-const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
 fn main() -> Result<()> {
     // Set up file logging — must be done before anything else.
@@ -230,43 +197,4 @@ fn main() -> Result<()> {
     } else {
         cli::run_tui_mode()
     }
-}
-
-/// Get the base address of eqgame.exe module in the target process.
-#[cfg(windows)]
-pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::ProcessStatus::{EnumProcessModulesEx, LIST_MODULES_ALL};
-    use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
-    };
-
-    let handle =
-        unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, proc.pid) }
-            .context("Failed to open process for module enumeration")?;
-
-    let mut modules = [windows::Win32::Foundation::HMODULE::default(); 1024];
-    let mut bytes_needed: u32 = 0;
-
-    unsafe {
-        EnumProcessModulesEx(
-            handle,
-            modules.as_mut_ptr(),
-            std::mem::size_of_val(&modules) as u32,
-            &mut bytes_needed,
-            LIST_MODULES_ALL,
-        )
-    }
-    .context("EnumProcessModulesEx failed")?;
-
-    let base = modules[0].0 as u64;
-    let _ = unsafe { CloseHandle(handle) };
-
-    Ok(base)
-}
-
-#[cfg(not(windows))]
-pub fn get_module_base(_proc: &process::memory::ProcessHandle) -> Result<u64> {
-    warn!("Using preferred base address (non-Windows stub)");
-    Ok(dmft_common::offsets::EQ_PREFERRED_BASE)
 }

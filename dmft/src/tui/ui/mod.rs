@@ -110,10 +110,10 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
         tabs.push(Span::raw(" "));
     }
 
-    // Group indicator
+    // Group indicator — bold + accent when focused to make it prominent
     let group_label = app.group_focus_label();
     let group_style = if app.active_group.is_some() {
-        t.header_group_active
+        t.header_group_active.add_modifier(Modifier::BOLD)
     } else {
         t.header_group
     };
@@ -252,12 +252,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     ));
 
     frame.render_widget(
-        Paragraph::new(Line::from(right)).block(
-            Block::default()
-                .borders(Borders::RIGHT | Borders::TOP | Borders::BOTTOM)
-                .border_type(t.border_type)
-                .border_style(t.border_dim),
-        ),
+        Paragraph::new(Line::from(right)).block(widgets::panel("", t.border_dim, t)),
         cols[1],
     );
 }
@@ -266,11 +261,12 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
 fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    let popup_w = 50u16;
-    let popup_h = 36u16;
+    // Scale to terminal: 60% width (min 40, max 60), 80% height (min 20, max 40)
+    let popup_w = (area.width * 60 / 100).clamp(40.min(area.width), 60.min(area.width));
+    let popup_h = (area.height * 80 / 100).clamp(20.min(area.height), 40.min(area.height));
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
-    let popup_area = Rect::new(x, y, popup_w.min(area.width), popup_h.min(area.height));
+    let popup_area = Rect::new(x, y, popup_w, popup_h);
 
     frame.render_widget(Clear, popup_area);
 
@@ -316,6 +312,15 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("accept", "Accept invite"),
         kv("mode camp", "Camp mode"),
         kv("mode hunt", "Hunt mode"),
+        Line::from(""),
+        Line::from(Span::styled(" CH Chain", head_s)),
+        Line::from(""),
+        kv("ch start", "<pids> <interval>"),
+        kv("ch stop", "Stop CH chain"),
+        kv("ch add <pid>", "Add cleric"),
+        kv("ch rm <pid>", "Remove cleric"),
+        kv("ch interval", "<seconds>"),
+        kv("ch adaptive", "on|off"),
         Line::from(""),
         Line::from(Span::styled(" Press ? or Esc to close", dim_s)),
     ];

@@ -14,6 +14,17 @@ use crate::tui::app::App;
 use crate::tui::theme::Theme;
 
 pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Narrow terminals: collapse to 2-panel (map + spawn list) instead of 3-panel
+    if area.width < 100 {
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(area);
+        draw_map_view(frame, cols[0], app);
+        draw_map_spawn_list(frame, cols[1], app);
+        return;
+    }
+
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -375,9 +386,19 @@ fn draw_map_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     let blk = panel(" Spawn Positions ", t.border_dim, t);
     let header = themed_header_row(vec!["T", "Name", "Y", "X", "Z"], t);
 
+    let player_z = app.local_player.as_ref().map(|p| p.z);
+    let z_range = app.map_state.z_filter_range;
+
     let rows: Vec<Row> = app
         .spawns
         .iter()
+        .filter(|spawn| {
+            // Match the Z-filter applied to the map canvas
+            match player_z {
+                Some(pz) => (spawn.z - pz).abs() <= z_range,
+                None => true,
+            }
+        })
         .map(|spawn| {
             let name = app.redact_name(&spawn.displayed_name).into_owned();
             let color = spawn_type_color(&spawn.spawn_type, t);

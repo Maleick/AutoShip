@@ -26,10 +26,10 @@ jobs:
   windows:
     name: Windows (build only)
     runs-on: windows-latest
-    env:
-      LIBCLANG_PATH: "C:/Program Files/LLVM/bin"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: choco install cmake llvm -y
+      - uses: lukka/get-cmake@latest
       - run: cargo build --release
+        env:
+          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"

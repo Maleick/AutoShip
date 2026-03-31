@@ -19,7 +19,7 @@ use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
 
-/// Read-only snapshot of combat-relevant state, passed to strategy methods each tick.
+/// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
 pub struct CombatContext<'a> {
     pub player: &'a SpawnData,
     pub target: Option<&'a SpawnData>,
@@ -28,6 +28,10 @@ pub struct CombatContext<'a> {
     pub config: &'a CombatConfig,
     pub tick: u32,
     pub in_combat: bool,
+    /// When a CH chain is active, this is the spell slot the cleric should cast.
+    /// The cleric strategy defers its normal priority cascade and casts CH instead
+    /// when this is `Some`. Set by the orchestrator when it's this cleric's turn.
+    pub ch_chain_slot: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +40,13 @@ pub struct GroupMemberState {
     pub hp_pct: f32,
     pub mana_pct: f32,
     pub class_id: u8,
+    /// True if this member is dead (corpse present, needs resurrection).
+    pub is_dead: bool,
+    /// Character name, used for corpse targeting during resurrection.
+    pub name: String,
+    /// True if this member has a detrimental effect (poison, disease, curse)
+    /// that should be cured. Set by the orchestrator from buff window parsing.
+    pub has_detrimental: bool,
 }
 
 /// The core seam between generic combat framework and per-class logic.
@@ -230,6 +241,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert_eq!(assist_target(&ctx), Some(42));
     }
@@ -246,6 +258,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(assist_target(&ctx).is_none());
     }
@@ -293,6 +306,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         let spell = best_spell_by_mana(&ctx).unwrap();
         assert_eq!(spell.name, "High"); // highest priority that we can afford

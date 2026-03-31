@@ -100,7 +100,8 @@ impl Combatant {
         }
     }
 
-    /// Advance the combat FSM by one game tick.
+    /// Advance the combat FSM by one frame (~50ms, ~20/sec).
+    /// Note: an EQ "game tick" is 6 seconds (~120 frames); this runs every frame.
     pub fn tick(&mut self, player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]) {
         self.tick_count += 1;
         self.gcd.tick();
@@ -130,6 +131,7 @@ impl Combatant {
                 config: &self.config,
                 tick: self.tick_count,
                 in_combat: false,
+                ch_chain_slot: None,
             };
             self.strategy.on_action_complete(&cleanup_ctx);
             crate::eq::toggle_auto_attack(false);
@@ -160,6 +162,7 @@ impl Combatant {
             config: &self.config,
             tick: self.tick_count,
             in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
+            ch_chain_slot: None,
         };
 
         // --- Call on_engage when first entering Engaging state ---
@@ -170,6 +173,13 @@ impl Combatant {
 
         // --- HolyShit evaluation (always runs first) ---
         if let Some(action) = self.holyshit.evaluate(&ctx) {
+            // If HolyShit fires while we're mid-cast, notify the strategy that
+            // the current cast was interrupted so class-specific state gets cleaned
+            // up (e.g., bard melody index, cleric rez_pending).
+            if matches!(self.state, CombatState::Casting { .. }) {
+                self.strategy.on_action_complete(&ctx);
+            }
+
             match action {
                 HolyShitAction::CastSpell(slot) => {
                     tracing::warn!(slot, "HolyShit: casting emergency spell");
@@ -207,6 +217,7 @@ impl Combatant {
                         config: &self.config,
                         tick: self.tick_count,
                         in_combat: false,
+                        ch_chain_slot: None,
                     };
                     self.strategy.on_action_complete(&flee_ctx);
                     self.assist_target = None;
@@ -320,10 +331,11 @@ impl Combatant {
                         player,
                         target,
                         nearby_enemies: nearby,
-                        group_members: &[],
+                        group_members: &self.group_members,
                         config: &self.config,
                         tick: self.tick_count,
                         in_combat: true,
+                        ch_chain_slot: None,
                     };
                     self.strategy.on_action_complete(&ctx);
                     self.state = CombatState::OnGcd;
@@ -439,6 +451,7 @@ impl Combatant {
             config: &self.config,
             tick: self.tick_count,
             in_combat: false,
+            ch_chain_slot: None,
         };
         self.strategy.on_action_complete(&ctx);
 

@@ -139,6 +139,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert!(bard.select_spell(&ctx).is_none());
     }
@@ -167,6 +168,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         bard.on_engage(&ctx);
         assert!(bard.melody_active);
@@ -187,6 +189,7 @@ mod tests {
             config: &config,
             tick: 100,
             in_combat: false, // Combat ended
+            ch_chain_slot: None,
         };
         bard.on_action_complete(&ctx);
         assert!(!bard.melody_active);
@@ -207,6 +210,7 @@ mod tests {
             config: &config,
             tick: 100,
             in_combat: true,
+            ch_chain_slot: None,
         };
         bard.on_action_complete(&ctx);
         assert!(bard.melody_active); // Still active during combat
@@ -230,6 +234,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         bard.on_engage(&ctx);
         // melody_active should remain false — no /melody command issued
@@ -269,6 +274,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         bard.on_engage(&engage_ctx);
         assert!(
@@ -285,6 +291,7 @@ mod tests {
             config: &config,
             tick: 50,
             in_combat: false,
+            ch_chain_slot: None,
         };
         bard.on_action_complete(&disengage_ctx);
         assert!(

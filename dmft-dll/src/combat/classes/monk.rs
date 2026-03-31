@@ -97,9 +97,18 @@ mod tests {
     #[test]
     fn monk_should_assist() {
         let monk = MonkStrategy::new(7);
-        let config = CombatConfig::default();
-        let player = SpawnData::default();
-        let ctx = make_ctx(&player, None, &config, false);
+        let config = test_config();
+        let player = dmft_common::types::SpawnData::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+        };
         assert!(monk.should_assist(&ctx));
     }
 

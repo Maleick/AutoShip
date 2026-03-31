@@ -104,6 +104,38 @@ pub struct AppConfig {
     /// Soul Engine configuration
     #[serde(default)]
     pub soul: SoulConfig,
+
+    /// Discord integration configuration
+    #[serde(default)]
+    pub discord: DiscordConfig,
+}
+
+/// Discord webhook and bot configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct DiscordConfig {
+    /// Discord webhook URL for outbound alerts. Empty = disabled.
+    pub webhook_url: String,
+    /// Whether to send alerts for HVT (high-value target) detections.
+    pub alert_hvt: bool,
+    /// Whether to send alerts for client crashes/disconnects.
+    pub alert_crashes: bool,
+    /// Whether to send alerts for mass login failures.
+    pub alert_mass_failures: bool,
+    /// Whether to send status updates (camp started, login complete).
+    pub alert_status: bool,
+}
+
+impl Default for DiscordConfig {
+    fn default() -> Self {
+        Self {
+            webhook_url: String::new(),
+            alert_hvt: true,
+            alert_crashes: true,
+            alert_mass_failures: true,
+            alert_status: false,
+        }
+    }
 }
 
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
@@ -216,6 +248,7 @@ impl AppConfig {
             server: ServerConfig::default(),
             retry: RetryConfig::default(),
             soul: SoulConfig::default(),
+            discord: DiscordConfig::default(),
         }
     }
 }

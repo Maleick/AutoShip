@@ -1,7 +1,14 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
+use crate::camp::cc::CcType;
 use crate::camp::config::CampConfig;
-use crate::camp::state::{CampAction, CampLoop, CampMember, CampSnapshot, CampState, Role};
+use crate::camp::hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D};
+use crate::camp::progression::{CampDatabase, CampProgressionEvent, check_progression};
+use crate::camp::state::{
+    CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role,
+};
+use crate::camp::vendor::{SellCycle, SellState, VendorConfig};
+use crate::combat::coordinator::CombatCoordinator;
 use crate::ipc::pipe::CommandPipe;
 use crate::ipc::shared::SharedStateReader;
 use dmft_common::ipc::{Command, SessionToken};
@@ -21,11 +28,18 @@ fn generate_session_token() -> SessionToken {
 /// `build_camp_snapshot` refuses to produce a snapshot.
 const STALE_TICK_THRESHOLD: u64 = 3;
 
+/// How often (in ticks) to check camp progression for level-based advances.
+const PROGRESSION_CHECK_INTERVAL: u64 = 50;
+
+/// Ticks before CC expiry to push a CcExpiring event.
+const CC_EXPIRY_BUFFER: u64 = 3;
+
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
 pub struct Orchestrator {
     pub client_pids: Vec<u32>,
     pub client_names: HashMap<u32, String>,
     pub active_camp: Option<CampLoop>,
+    pub combat: CombatCoordinator,
     pub tick_count: u64,
     /// Commands dispatched this tick (for status display).
     pub last_dispatched: Vec<(u32, CampAction)>,
@@ -39,6 +53,22 @@ pub struct Orchestrator {
     state_timestamps: HashMap<u32, u64>,
     /// Persistent pipe connections per client PID (one long-lived pipe per client).
     pipe_pool: HashMap<u32, CommandPipe>,
+
+    // --- Integration fields ---
+    /// Current operating mode: Camp (stationary) or Hunt (roaming).
+    pub operating_mode: OperatingMode,
+    /// Active hunt loop (used when operating_mode == Hunt).
+    pub active_hunt: Option<HuntLoop>,
+    /// Vendor sell cycle (ticked during camp Idle/Medding).
+    pub sell_cycle: Option<SellCycle>,
+    /// Camp progression database for level-based camp advancement.
+    pub camp_db: Option<CampDatabase>,
+    /// Suggested camp from progression check (for TUI display).
+    pub suggested_camp: Option<String>,
+    /// Previous CC state snapshot for charm break detection (spawn_id -> CcType).
+    prev_cc_state: HashMap<u32, CcType>,
+    /// Previous nearby spawn IDs for add detection.
+    prev_nearby_spawns: HashMap<u32, String>,
 }
 
 impl Orchestrator {
@@ -47,6 +77,7 @@ impl Orchestrator {
             client_pids: Vec::new(),
             client_names: HashMap::new(),
             active_camp: None,
+            combat: CombatCoordinator::new(),
             tick_count: 0,
             last_dispatched: Vec::new(),
             game_states: HashMap::new(),
@@ -54,6 +85,13 @@ impl Orchestrator {
             session_tokens: HashMap::new(),
             state_timestamps: HashMap::new(),
             pipe_pool: HashMap::new(),
+            operating_mode: OperatingMode::Camp,
+            active_hunt: None,
+            sell_cycle: None,
+            camp_db: None,
+            suggested_camp: None,
+            prev_cc_state: HashMap::new(),
+            prev_nearby_spawns: HashMap::new(),
         }
     }
 
@@ -148,7 +186,7 @@ impl Orchestrator {
                 self.game_states.get(&m.pid).and_then(|gs| {
                     gs.local_player
                         .as_ref()
-                        .map(|lp| (m.pid, lp.hp_current as i32))
+                        .map(|lp| (m.pid, lp.hp_current.clamp(0, i32::MAX as i64) as i32))
                 })
             })
             .collect();
@@ -163,18 +201,17 @@ impl Orchestrator {
         })
     }
 
-    /// Advance the camp loop (if active), collect commands, and send via IPC.
+    /// Advance the camp/hunt loop (if active), collect commands, and send via IPC.
     /// Returns the number of commands dispatched.
     pub fn tick(&mut self) -> usize {
         self.tick_count += 1;
         self.last_dispatched.clear();
 
         self.poll_game_states();
-        let snapshot = self.build_camp_snapshot();
 
-        let commands = match self.active_camp.as_mut() {
-            Some(camp) => camp.tick(snapshot.as_ref()),
-            None => return 0,
+        let commands = match self.operating_mode {
+            OperatingMode::Camp => self.tick_camp(),
+            OperatingMode::Hunt => self.tick_hunt(),
         };
 
         let count = commands.len();
@@ -183,6 +220,289 @@ impl Orchestrator {
         }
         self.last_dispatched = commands;
         count
+    }
+
+    /// Tick the camp loop, including sell cycle, progression checks, and event production.
+    fn tick_camp(&mut self) -> Vec<(u32, CampAction)> {
+        let snapshot = self.build_camp_snapshot();
+
+        // --- Task 5: Event production (charm breaks, adds, CC expiry) ---
+        self.produce_camp_events(&snapshot);
+
+        // --- Task 2: Vendor sell cycle ---
+        let sell_cmds = self.tick_sell_cycle();
+
+        // --- Task 4: Camp progression auto-advance ---
+        if self.tick_count.is_multiple_of(PROGRESSION_CHECK_INTERVAL) {
+            self.check_camp_progression();
+        }
+
+        // Tick the main camp loop
+        let mut commands = match self.active_camp.as_mut() {
+            Some(camp) => camp.tick(snapshot.as_ref()),
+            None => {
+                return sell_cmds
+                    .into_iter()
+                    .map(|(pid, cmd)| (pid, CampAction::Slash(cmd)))
+                    .collect();
+            }
+        };
+
+        // Append sell cycle commands (only during Idle/Medding — the sell cycle
+        // itself returns empty when not active)
+        if !sell_cmds.is_empty() {
+            commands.extend(
+                sell_cmds
+                    .into_iter()
+                    .map(|(pid, cmd)| (pid, CampAction::Slash(cmd))),
+            );
+        }
+
+        commands
+    }
+
+    /// Tick the hunt loop.
+    fn tick_hunt(&mut self) -> Vec<(u32, CampAction)> {
+        let hunt_snapshot = self.build_hunt_snapshot();
+        match self.active_hunt.as_mut() {
+            Some(hunt) => {
+                let slash_cmds = hunt.tick(hunt_snapshot.as_ref());
+                CampAction::from_slash_vec(slash_cmds)
+            }
+            None => Vec::new(),
+        }
+    }
+
+    /// Build a `HuntSnapshot` from live game state for the hunt loop.
+    fn build_hunt_snapshot(&self) -> Option<HuntSnapshot> {
+        let hunt = self.active_hunt.as_ref()?;
+        let tank = hunt.members.iter().find(|m| m.role == Role::Tank)?;
+        let healer = hunt.members.iter().find(|m| m.role == Role::Healer)?;
+
+        let tank_state = self.game_states.get(&tank.pid)?;
+        let healer_state = self.game_states.get(&healer.pid)?;
+
+        let tank_lp = tank_state.local_player.as_ref()?;
+        let healer_lp = healer_state.local_player.as_ref()?;
+
+        let member_positions: Vec<(u32, Pos2D)> = hunt
+            .members
+            .iter()
+            .filter_map(|m| {
+                self.game_states.get(&m.pid).and_then(|gs| {
+                    gs.local_player
+                        .as_ref()
+                        .map(|lp| (m.pid, Pos2D::new(lp.x, lp.y)))
+                })
+            })
+            .collect();
+
+        let target_is_dead = tank_state
+            .target
+            .as_ref()
+            .is_some_and(|t| t.hp_current <= 0);
+
+        Some(HuntSnapshot {
+            tank_pos: Pos2D::new(tank_lp.x, tank_lp.y),
+            member_positions,
+            target_is_dead,
+            tank_hp_pct: tank_lp.hp_pct(),
+            healer_mana_pct: healer_lp.mana_pct(),
+        })
+    }
+
+    /// Tick the sell cycle if active and camp is in Idle or Medding state.
+    fn tick_sell_cycle(&mut self) -> Vec<(u32, String)> {
+        // Capture both values in a single borrow of active_camp
+        let (in_downtime, seller_pid) = match &self.active_camp {
+            Some(camp) => {
+                let downtime = matches!(camp.state, CampState::Idle | CampState::Medding { .. });
+                let pid = camp
+                    .members
+                    .iter()
+                    .find(|m| m.role == Role::Dps)
+                    .or(camp.members.first())
+                    .map(|m| m.pid);
+                (downtime, pid)
+            }
+            None => return Vec::new(),
+        };
+
+        if !in_downtime {
+            return Vec::new();
+        }
+
+        let sell_cycle = match &mut self.sell_cycle {
+            Some(sc) => sc,
+            None => return Vec::new(),
+        };
+
+        // Check if we need to start a sell cycle
+        if sell_cycle.needs_sell(self.tick_count) {
+            sell_cycle.start_sell(self.tick_count);
+        }
+
+        // Only tick if actually selling
+        if sell_cycle.state == SellState::NotNeeded {
+            return Vec::new();
+        }
+
+        match seller_pid {
+            Some(pid) => sell_cycle.tick(pid, self.tick_count),
+            None => Vec::new(),
+        }
+    }
+
+    /// Check camp progression and set `suggested_camp` if the group has outleveled.
+    fn check_camp_progression(&mut self) {
+        let camp = match &self.active_camp {
+            Some(c) => c,
+            None => return,
+        };
+        let db = match &self.camp_db {
+            Some(db) => db,
+            None => return,
+        };
+
+        // Calculate average level from game states of camp members
+        let levels: Vec<f32> = camp
+            .members
+            .iter()
+            .filter_map(|m| {
+                self.game_states
+                    .get(&m.pid)
+                    .and_then(|gs| gs.local_player.as_ref().map(|lp| lp.level as f32))
+            })
+            .collect();
+
+        if levels.is_empty() {
+            return;
+        }
+
+        let avg_level = levels.iter().sum::<f32>() / levels.len() as f32;
+
+        match check_progression(&camp.config, avg_level, db) {
+            Some(CampProgressionEvent::AdvanceToNext { to_camp, .. }) => {
+                if self.suggested_camp.as_deref() != Some(&to_camp) {
+                    tracing::info!(
+                        avg_level,
+                        to_camp = %to_camp,
+                        "Camp progression: suggesting advance"
+                    );
+                    self.suggested_camp = Some(to_camp);
+                }
+            }
+            Some(CampProgressionEvent::FallbackToPrev { to_camp, .. }) => {
+                if self.suggested_camp.as_deref() != Some(&to_camp) {
+                    tracing::info!(
+                        avg_level,
+                        to_camp = %to_camp,
+                        "Camp progression: suggesting fallback"
+                    );
+                    self.suggested_camp = Some(to_camp);
+                }
+            }
+            Some(CampProgressionEvent::EndOfChain { .. }) => {
+                // No suggestion — end of chain
+            }
+            None => {
+                // In range — clear any stale suggestion
+                self.suggested_camp = None;
+            }
+        }
+    }
+
+    /// Produce camp events by comparing current state to previous tick state.
+    /// Detects charm breaks, new adds, and expiring CC.
+    fn produce_camp_events(&mut self, _snapshot: &Option<CampSnapshot>) {
+        let camp = match &self.active_camp {
+            Some(c) => c,
+            None => return,
+        };
+
+        // Only produce events during active combat phases
+        if !matches!(
+            camp.state,
+            CampState::Fighting { .. } | CampState::Pulling { .. }
+        ) {
+            self.prev_cc_state.clear();
+            self.prev_nearby_spawns.clear();
+            return;
+        }
+
+        // --- Charm break detection ---
+        let current_cc: HashMap<u32, CcType> = camp
+            .cc_tracker
+            .targets
+            .iter()
+            .filter_map(|t| t.cc_applied.map(|cc| (t.spawn_id, cc)))
+            .collect();
+
+        for (spawn_id, prev_cc) in &self.prev_cc_state {
+            if *prev_cc == CcType::Charm && !current_cc.contains_key(spawn_id) {
+                // Charm was on this mob last tick but isn't now
+                if let Some(camp) = &mut self.active_camp {
+                    camp.push_event(CampEvent::CharmBreak {
+                        spawn_id: *spawn_id,
+                    });
+                }
+            }
+        }
+        self.prev_cc_state = current_cc;
+
+        // --- Add detection: new NPCs within camp radius ---
+        // Use the tank's nearby_spawns as the source
+        let camp = match &self.active_camp {
+            Some(c) => c,
+            None => return,
+        };
+        let tank = camp.members.iter().find(|m| m.role == Role::Tank);
+        if let Some(tank) = tank
+            && let Some(gs) = self.game_states.get(&tank.pid)
+        {
+            let current_nearby: HashMap<u32, String> = gs
+                .nearby_spawns
+                .iter()
+                .filter(|s| s.spawn_type == 1) // NPCs only
+                .map(|s| (s.spawn_id, s.name.clone()))
+                .collect();
+
+            for (spawn_id, name) in &current_nearby {
+                if !self.prev_nearby_spawns.contains_key(spawn_id)
+                    && let Some(camp) = &mut self.active_camp
+                {
+                    camp.push_event(CampEvent::AddSpawned {
+                        spawn_id: *spawn_id,
+                        name: name.clone(),
+                    });
+                }
+            }
+            self.prev_nearby_spawns = current_nearby;
+        }
+
+        // --- CC expiry detection ---
+        let camp = match &self.active_camp {
+            Some(c) => c,
+            None => return,
+        };
+        let tick = camp.tick;
+        let expiring: Vec<u32> = camp
+            .cc_tracker
+            .targets
+            .iter()
+            .filter(|t| {
+                t.cc_applied.is_some()
+                    && t.cc_expiry_tick > tick
+                    && t.cc_expiry_tick.saturating_sub(tick) <= CC_EXPIRY_BUFFER
+            })
+            .map(|t| t.spawn_id)
+            .collect();
+
+        for spawn_id in expiring {
+            if let Some(camp) = &mut self.active_camp {
+                camp.push_event(CampEvent::CcExpiring { spawn_id });
+            }
+        }
     }
 
     /// Start a camp loop with the given config and members.
@@ -203,27 +523,101 @@ impl Orchestrator {
         }
     }
 
-    /// Return the current camp state for display.
-    pub fn camp_status(&self) -> String {
-        match &self.active_camp {
-            None => "No active camp".into(),
-            Some(camp) => {
-                let state = match &camp.state {
-                    CampState::Idle => "Idle",
-                    CampState::Pulling { .. } => "Pulling",
-                    CampState::Fighting { .. } => "Fighting",
-                    CampState::Looting { .. } => "Looting",
-                    CampState::Medding { .. } => "Medding",
-                    CampState::Buffing { .. } => "Buffing",
-                };
-                format!(
-                    "Camp '{}' — {} — tick {} — {} members",
-                    camp.config.name,
-                    state,
-                    camp.tick,
-                    camp.members.len()
-                )
+    /// Start a hunt loop with the given config and members.
+    pub fn start_hunt(&mut self, config: CampConfig, members: Vec<CampMember>) {
+        tracing::info!(
+            config = %config.name,
+            members = members.len(),
+            "Starting hunt loop"
+        );
+        self.active_hunt = Some(HuntLoop::new(config, members));
+        self.operating_mode = OperatingMode::Hunt;
+    }
+
+    /// Stop the current hunt loop.
+    pub fn stop_hunt(&mut self) {
+        if self.active_hunt.is_some() {
+            tracing::info!("Stopping hunt loop");
+            self.active_hunt = None;
+            self.operating_mode = OperatingMode::Camp;
+        }
+    }
+
+    /// Set the operating mode (Camp or Hunt).
+    pub fn set_operating_mode(&mut self, mode: OperatingMode) {
+        tracing::info!(?mode, "Switching operating mode");
+        self.operating_mode = mode;
+    }
+
+    /// Activate a vendor sell cycle with the given config.
+    pub fn start_sell_cycle(&mut self, config: VendorConfig) {
+        tracing::info!(vendor = %config.vendor_name, "Configuring sell cycle");
+        self.sell_cycle = Some(SellCycle::new(config));
+    }
+
+    /// Load the camp progression database from disk.
+    pub fn load_camp_database(&mut self) {
+        match CampDatabase::load() {
+            Ok(db) => {
+                tracing::info!(camps = db.len(), "Loaded camp progression database");
+                self.camp_db = Some(db);
             }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to load camp database");
+            }
+        }
+    }
+
+    /// Return the current camp/hunt state for display.
+    pub fn camp_status(&self) -> String {
+        match self.operating_mode {
+            OperatingMode::Hunt => match &self.active_hunt {
+                None => "Hunt mode — no active hunt".into(),
+                Some(hunt) => {
+                    let state = match &hunt.state {
+                        crate::camp::hunt::HuntState::Roaming => "Roaming",
+                        crate::camp::hunt::HuntState::Engaging { .. } => "Engaging",
+                        crate::camp::hunt::HuntState::Fighting { .. } => "Fighting",
+                        crate::camp::hunt::HuntState::Looting { .. } => "Looting",
+                    };
+                    format!(
+                        "Hunt '{}' — {} — tick {} — {} members",
+                        hunt.config.name,
+                        state,
+                        hunt.tick,
+                        hunt.members.len()
+                    )
+                }
+            },
+            OperatingMode::Camp => match &self.active_camp {
+                None => "No active camp".into(),
+                Some(camp) => {
+                    let state = match &camp.state {
+                        CampState::Idle => "Idle",
+                        CampState::Pulling { .. } => "Pulling",
+                        CampState::Fighting { .. } => "Fighting",
+                        CampState::Looting { .. } => "Looting",
+                        CampState::Medding { .. } => "Medding",
+                        CampState::Buffing { .. } => "Buffing",
+                    };
+                    let mut status = format!(
+                        "Camp '{}' — {} — tick {} — {} members",
+                        camp.config.name,
+                        state,
+                        camp.tick,
+                        camp.members.len()
+                    );
+                    if let Some(ref suggestion) = self.suggested_camp {
+                        status.push_str(&format!(" [suggest: {suggestion}]"));
+                    }
+                    if let Some(ref sc) = self.sell_cycle
+                        && sc.state != SellState::NotNeeded
+                    {
+                        status.push_str(" [selling]");
+                    }
+                    status
+                }
+            },
         }
     }
 
@@ -320,6 +714,34 @@ impl Orchestrator {
                 self.pipe_pool.remove(&pid);
             }
         }
+    }
+
+    /// Eject the DLL from a client and clean up its tracked state.
+    /// Sends an Eject IPC command, then removes the client from all maps.
+    pub fn eject_client(&mut self, pid: u32) {
+        let name = self
+            .client_names
+            .get(&pid)
+            .map(|s| s.as_str())
+            .unwrap_or("?")
+            .to_string();
+        tracing::info!(pid, name = %name, "Ejecting client");
+
+        // Best-effort eject command — pipe may already be dead
+        self.send_ipc_command(pid, Command::Eject);
+        self.remove_client(pid);
+    }
+
+    /// Remove a client from all tracked state (does NOT send any IPC).
+    pub fn remove_client(&mut self, pid: u32) {
+        self.client_pids.retain(|&p| p != pid);
+        self.client_names.remove(&pid);
+        self.game_states.remove(&pid);
+        self.state_readers.remove(&pid);
+        self.session_tokens.remove(&pid);
+        self.state_timestamps.remove(&pid);
+        self.pipe_pool.remove(&pid);
+        tracing::info!(pid, "Client removed from orchestrator");
     }
 
     /// Send a single slash command to a client via named pipe.
@@ -620,6 +1042,312 @@ mod tests {
         assert!(
             orch.build_camp_snapshot().is_some(),
             "fresh state should return Some"
+        );
+    }
+
+    // --- Task 1: Hunt mode toggle ---
+
+    #[test]
+    fn test_hunt_mode_toggle() {
+        let mut orch = Orchestrator::new();
+        assert_eq!(orch.operating_mode, OperatingMode::Camp);
+
+        orch.set_operating_mode(OperatingMode::Hunt);
+        assert_eq!(orch.operating_mode, OperatingMode::Hunt);
+
+        // Tick in hunt mode with no active hunt returns 0
+        assert_eq!(orch.tick(), 0);
+    }
+
+    #[test]
+    fn test_start_hunt_sets_mode() {
+        let mut orch = Orchestrator::new();
+        orch.start_hunt(test_config(), test_members());
+        assert_eq!(orch.operating_mode, OperatingMode::Hunt);
+        assert!(orch.active_hunt.is_some());
+    }
+
+    #[test]
+    fn test_hunt_tick_generates_commands() {
+        let mut orch = Orchestrator::new();
+        orch.start_hunt(test_config(), test_members());
+        // First tick transitions Roaming -> Engaging
+        let count = orch.tick();
+        assert!(count > 0);
+    }
+
+    #[test]
+    fn test_camp_status_hunt_mode() {
+        let mut orch = Orchestrator::new();
+        orch.start_hunt(test_config(), test_members());
+        let status = orch.camp_status();
+        assert!(status.contains("Hunt"));
+    }
+
+    #[test]
+    fn test_camp_mode_tick_still_works() {
+        let mut orch = Orchestrator::new();
+        orch.set_operating_mode(OperatingMode::Camp);
+        orch.start_camp(test_config(), test_members());
+        let count = orch.tick();
+        assert!(count > 0, "Camp mode tick should still produce commands");
+    }
+
+    // --- Task 2: Vendor sell cycle ---
+
+    #[test]
+    fn test_sell_cycle_integration() {
+        let mut orch = Orchestrator::new();
+        let vendor_config = VendorConfig {
+            vendor_name: "Merchant_Leah".into(),
+            sell_interval_ticks: 10,
+            keep_items: vec![],
+            travel_ticks: 2,
+            sellable_items: vec![],
+            sell_step_delay: 1,
+            return_spell: None,
+        };
+        orch.start_sell_cycle(vendor_config);
+        assert!(orch.sell_cycle.is_some());
+    }
+
+    #[test]
+    fn test_sell_cycle_only_during_downtime() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        let vendor_config = VendorConfig {
+            vendor_name: "Merchant_Leah".into(),
+            sell_interval_ticks: 1, // trigger immediately
+            keep_items: vec![],
+            travel_ticks: 1,
+            sellable_items: vec![],
+            sell_step_delay: 1,
+            return_spell: None,
+        };
+        orch.start_sell_cycle(vendor_config);
+
+        // First tick goes Idle -> Pulling, sell cycle should not interfere
+        orch.tick();
+        // Camp should be in Pulling state, sell cycle should still be NotNeeded
+        // (it only triggers during Idle/Medding)
+        assert!(orch.active_camp.is_some());
+    }
+
+    #[test]
+    fn test_sell_cycle_status_display() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        let vendor_config = VendorConfig {
+            vendor_name: "Merchant_Leah".into(),
+            sell_interval_ticks: 10,
+            keep_items: vec![],
+            travel_ticks: 2,
+            sellable_items: vec![],
+            sell_step_delay: 1,
+            return_spell: None,
+        };
+        orch.start_sell_cycle(vendor_config);
+
+        // Manually trigger selling state to check display
+        if let Some(ref mut sc) = orch.sell_cycle {
+            sc.start_sell(0);
+        }
+        let status = orch.camp_status();
+        assert!(
+            status.contains("[selling]"),
+            "Status should show selling indicator"
+        );
+    }
+
+    // --- Task 3: Buff rebuffing (tested via state.rs, verify integration) ---
+
+    #[test]
+    fn test_camp_loop_has_buff_tracker() {
+        let camp = CampLoop::new(test_config(), test_members());
+        assert!(camp.buff_tracker.last_cast.is_empty());
+        assert!(camp.class_configs.is_empty());
+    }
+
+    // --- Task 4: Camp progression ---
+
+    #[test]
+    fn test_progression_suggested_camp() {
+        let mut orch = Orchestrator::new();
+        // No camp DB loaded — no suggestion
+        orch.check_camp_progression();
+        assert!(orch.suggested_camp.is_none());
+    }
+
+    #[test]
+    fn test_progression_status_display() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        orch.suggested_camp = Some("unrest_yard".into());
+        let status = orch.camp_status();
+        assert!(status.contains("[suggest: unrest_yard]"));
+    }
+
+    // --- Task 5: Event production ---
+
+    #[test]
+    fn test_event_production_only_during_combat() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        // Camp starts in Idle — no events should be produced
+        orch.produce_camp_events(&None);
+        assert!(
+            orch.active_camp.as_ref().unwrap().pending_events.is_empty(),
+            "No events during Idle"
+        );
+    }
+
+    #[test]
+    fn test_charm_break_detection() {
+        use crate::camp::cc::{CcTarget, CcType};
+
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+
+        // Set camp to Fighting state
+        if let Some(ref mut camp) = orch.active_camp {
+            camp.state = CampState::Fighting { started_tick: 1 };
+            // Add a charmed mob to CC tracker
+            camp.cc_tracker.targets.push(CcTarget {
+                spawn_id: 42,
+                name: "charmed pet".into(),
+                cc_applied: Some(CcType::Charm),
+                cc_expiry_tick: 100,
+                assigned_to_pid: Some(102),
+                debuffed: false,
+            });
+        }
+
+        // Record previous state with charm active
+        orch.prev_cc_state.insert(42, CcType::Charm);
+
+        // Now remove the charm (simulating a charm break)
+        if let Some(ref mut camp) = orch.active_camp {
+            camp.cc_tracker.targets[0].cc_applied = None;
+        }
+
+        orch.produce_camp_events(&None);
+
+        // Should have pushed a CharmBreak event
+        let events = &orch.active_camp.as_ref().unwrap().pending_events;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, CampEvent::CharmBreak { spawn_id: 42 })),
+            "Should detect charm break"
+        );
+    }
+
+    #[test]
+    fn test_add_detection() {
+        use dmft_common::combat::CombatStatus;
+        use dmft_common::nav::NavStatus;
+        use dmft_common::types::{GameState, SpawnData};
+
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+
+        // Set camp to Fighting state
+        if let Some(ref mut camp) = orch.active_camp {
+            camp.state = CampState::Fighting { started_tick: 1 };
+        }
+
+        // Insert game state with nearby spawns for the tank (pid 100)
+        let new_npc = SpawnData {
+            spawn_id: 99,
+            name: "an orc centurion".into(),
+            displayed_name: "an orc centurion".into(),
+            spawn_type: 1, // NPC
+            level: 10,
+            class_id: 1,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 1000,
+            hp_max: 1000,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 100,
+            endurance_max: 100,
+        };
+        orch.game_states.insert(
+            100,
+            GameState {
+                client_id: 100,
+                local_player: Some(SpawnData {
+                    spawn_id: 1,
+                    name: "Tank".into(),
+                    displayed_name: "Tank".into(),
+                    spawn_type: 0,
+                    level: 60,
+                    class_id: 1,
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    heading: 0.0,
+                    hp_current: 1000,
+                    hp_max: 1000,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 100,
+                    endurance_max: 100,
+                }),
+                target: None,
+                nearby_spawns: vec![new_npc],
+                timestamp_ms: 0,
+                nav_status: NavStatus::Idle,
+                combat_status: CombatStatus::Idle,
+                zone_short_name: String::new(),
+                zone_long_name: String::new(),
+            },
+        );
+
+        // First call: records spawns as prev
+        orch.produce_camp_events(&None);
+        // Clear any events from first detection (first time seeing spawn 99)
+        let events = &orch.active_camp.as_ref().unwrap().pending_events;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, CampEvent::AddSpawned { spawn_id: 99, .. })),
+            "Should detect new add"
+        );
+    }
+
+    #[test]
+    fn test_cc_expiry_detection() {
+        use crate::camp::cc::CcTarget;
+
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+
+        // Set camp to Fighting state with a mezzed mob about to expire
+        if let Some(ref mut camp) = orch.active_camp {
+            camp.state = CampState::Fighting { started_tick: 1 };
+            camp.tick = 18; // Current tick
+            camp.cc_tracker.targets.push(CcTarget {
+                spawn_id: 55,
+                name: "mezzed orc".into(),
+                cc_applied: Some(CcType::Mez),
+                cc_expiry_tick: 20, // 2 ticks away, within CC_EXPIRY_BUFFER (3)
+                assigned_to_pid: Some(102),
+                debuffed: false,
+            });
+        }
+
+        orch.produce_camp_events(&None);
+
+        let events = &orch.active_camp.as_ref().unwrap().pending_events;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, CampEvent::CcExpiring { spawn_id: 55 })),
+            "Should detect CC about to expire"
         );
     }
 }

@@ -12,9 +12,14 @@ use super::widgets::{hp_color, panel, stand_state_color, themed_header_row};
 use crate::tui::app::App;
 
 pub fn draw_dashboard(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Adaptive split: narrow terminals (< 100 cols) get 70/30, wide terminals get 60/40
+    let (grid_pct, sidebar_pct) = if area.width < 100 { (70, 30) } else { (60, 40) };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([
+            Constraint::Percentage(grid_pct),
+            Constraint::Percentage(sidebar_pct),
+        ])
         .split(area);
 
     draw_dashboard_grid(frame, cols[0], app);
@@ -27,12 +32,13 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     let t = &app.theme;
     let visible = app.visible_clients();
     let title = match app.active_group {
-        Some(idx) => format!(
-            " G{} {} ({}) ",
-            app.groups[idx].id,
-            app.groups[idx].name,
-            visible.len()
-        ),
+        Some(idx) => {
+            if let Some(g) = app.groups.get(idx) {
+                format!(" G{} {} ({}) ", g.id, g.name, visible.len())
+            } else {
+                format!(" Group {} ({}) ", idx + 1, visible.len())
+            }
+        }
         None => format!(" Characters ({}) ", app.clients.len()),
     };
 
@@ -99,10 +105,23 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
                 ])
                 .style(row_style)
             } else {
+                // Show client_status when player data isn't loaded yet (or errored)
+                let status_label = if client.client_status.is_empty() {
+                    format!("PID {}", client.pid)
+                } else {
+                    client.client_status.clone()
+                };
+                let status_color = if client.client_status.contains("error")
+                    || client.client_status.contains("Lost")
+                {
+                    t.hp_low
+                } else {
+                    t.text_muted
+                };
                 Row::new(vec![
                     ratatui::widgets::Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                    ratatui::widgets::Cell::from(format!("PID {}", client.pid))
-                        .style(Style::default().fg(t.text_muted)),
+                    ratatui::widgets::Cell::from(status_label)
+                        .style(Style::default().fg(status_color)),
                     ratatui::widgets::Cell::from("-"),
                     ratatui::widgets::Cell::from("-"),
                     ratatui::widgets::Cell::from("-"),
@@ -137,18 +156,39 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 fn draw_dashboard_sidebar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(8),
-            Constraint::Length(12),
-            Constraint::Length(6),
-        ])
-        .split(area);
+    // Adaptive sidebar: tall terminals show 4 panels, short terminals collapse server info
+    let show_combat = area.height >= 24;
+    let chunks = if show_combat {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(6),    // Group health (flexible, gets leftover)
+                Constraint::Length(7), // Combat status (mode/MA/MT + heal-cancel + CH chain)
+                Constraint::Min(8),    // Session stats (flexible)
+                Constraint::Length(6), // Server info
+            ])
+            .split(area)
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(6),
+                Constraint::Min(8),
+                Constraint::Length(4),
+            ])
+            .split(area)
+    };
 
-    draw_group_health_gauges(frame, chunks[0], app);
-    draw_session_stats(frame, chunks[1], app);
-    draw_server_info(frame, chunks[2], app);
+    if show_combat {
+        draw_group_health_gauges(frame, chunks[0], app);
+        draw_combat_status(frame, chunks[1], app);
+        draw_session_stats(frame, chunks[2], app);
+        draw_server_info(frame, chunks[3], app);
+    } else {
+        draw_group_health_gauges(frame, chunks[0], app);
+        draw_session_stats(frame, chunks[1], app);
+        draw_server_info(frame, chunks[2], app);
+    }
 }
 
 /// HP bars using ratatui's `Gauge` widget — one per visible character.
@@ -227,15 +267,84 @@ fn draw_group_health_gauges(frame: &mut Frame, area: ratatui::layout::Rect, app:
 
             frame.render_widget(gauge, gauge_area);
         } else {
+            let label = if client.client_status.is_empty() {
+                format!("  PID {} …", client.pid)
+            } else {
+                format!("  {}", client.client_status)
+            };
+            let color = if client.client_status.contains("error")
+                || client.client_status.contains("Lost")
+            {
+                t.hp_low
+            } else {
+                t.text_muted
+            };
             frame.render_widget(
-                Paragraph::new(Span::styled(
-                    format!("  PID {} …", client.pid),
-                    Style::default().fg(t.text_muted),
-                )),
+                Paragraph::new(Span::styled(label, Style::default().fg(color))),
                 row,
             );
         }
     }
+}
+
+/// Combat status summary — MA/MT, operating mode, CH chain status.
+fn draw_combat_status(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_color = match mode_str.as_str() {
+        "Camp" => t.mode_camp,
+        "Hunt" => t.mode_hunt,
+        _ => t.text_muted,
+    };
+
+    let ma_str = app.main_assist.as_deref().unwrap_or("—");
+    let mt_str = app.main_tank.as_deref().unwrap_or("—");
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("Mode ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                &mode_str,
+                Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  MA ", Style::default().fg(t.text_muted)),
+            Span::styled(ma_str, Style::default().fg(t.text_highlight)),
+        ]),
+        Line::from(vec![
+            Span::styled("MT   ", Style::default().fg(t.text_muted)),
+            Span::styled(mt_str, Style::default().fg(t.text_highlight)),
+            Span::styled("  HlCx ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                if app.heal_cancel_enabled { "ON" } else { "off" },
+                Style::default().fg(if app.heal_cancel_enabled {
+                    t.hp_high
+                } else {
+                    t.text_muted
+                }),
+            ),
+        ]),
+    ];
+
+    // CH chain status line (only when active)
+    if let Some(ch) = &app.ch_chain_status {
+        let adaptive_str = if ch.is_adaptive { "adaptive" } else { "fixed" };
+        lines.push(Line::from(vec![
+            Span::styled("CH   ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!(
+                    "{}× {:.1}s {} tgt={}",
+                    ch.members, ch.interval_secs, adaptive_str, ch.target_id
+                ),
+                Style::default().fg(t.text_highlight),
+            ),
+        ]));
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines).block(panel(" Combat ", t.border_active, t)),
+        area,
+    );
 }
 
 fn draw_session_stats(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

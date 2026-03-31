@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: lukka/get-cmake@latest
+
+      - name: Build release binaries
+        run: cargo build --release
+        env:
+          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p release
+          cp target/release/dmft.exe release/
+          cp target/release/dmft_dll.dll release/ 2>/dev/null || true
+          echo "Frostreaver ${{ github.ref_name }}" > release/VERSION.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') }}

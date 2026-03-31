@@ -121,6 +121,38 @@ fn run_loop(
             last_log_poll = Instant::now();
         }
 
+        // Poll Discord bridge for inbound commands.
+        // Collect commands first to avoid borrow conflict with app mutation.
+        let discord_cmds: Vec<_> = app
+            .discord_bridge
+            .as_ref()
+            .map(|b| {
+                let mut cmds = Vec::new();
+                while let Some(cmd) = b.poll() {
+                    cmds.push(cmd);
+                }
+                cmds
+            })
+            .unwrap_or_default();
+        for cmd in discord_cmds {
+            tracing::info!(
+                sender = %cmd.sender,
+                command = %cmd.command,
+                "Discord command received"
+            );
+            let channel_id = cmd.channel_id.clone();
+            app.cmd_state.command_buffer = cmd.command;
+            app.execute_command(orchestrator);
+            let response = app.status_message.clone();
+            if let Some(ref bridge) = app.discord_bridge {
+                bridge.respond(crate::discord::bridge::BridgeResponse {
+                    message: response,
+                    channel_id,
+                });
+            }
+            app.cmd_state.command_buffer.clear();
+        }
+
         // Soul Engine tick (every 5 seconds)
         if last_soul_tick.elapsed() >= SOUL_TICK_INTERVAL {
             tick_soul_engine(app);

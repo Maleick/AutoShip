@@ -146,6 +146,15 @@ pub struct LiveGroup {
     pub zone: String,
 }
 
+/// Cached CH chain status for TUI display (avoids reaching into Orchestrator).
+#[derive(Clone, Debug)]
+pub struct ChChainStatus {
+    pub members: usize,
+    pub interval_secs: f32,
+    pub is_adaptive: bool,
+    pub target_id: u32,
+}
+
 /// Application state for the TUI debugger.
 pub struct App {
     pub running: bool,
@@ -213,6 +222,9 @@ pub struct App {
     // Heal-cancel toggle (cleric duck on high HP during cast)
     pub heal_cancel_enabled: bool,
 
+    /// Cached CH chain status (updated each tick from Orchestrator).
+    pub ch_chain_status: Option<ChChainStatus>,
+
     // Account config for login automation
     pub accounts_config: Option<AccountsConfig>,
 
@@ -228,6 +240,10 @@ pub struct App {
     // Theme
     pub theme_kind: ThemeKind,
     pub theme: Theme,
+
+    // Discord integration
+    pub discord_webhook: Option<crate::discord::webhook::WebhookSender>,
+    pub discord_bridge: Option<crate::discord::bridge::TuiBridge>,
 }
 
 /// Navigation status for a single client.
@@ -294,6 +310,7 @@ impl App {
             main_assist: None,
             main_tank: None,
             heal_cancel_enabled: true,
+            ch_chain_status: None,
 
             accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml"))
                 .ok(),
@@ -307,6 +324,36 @@ impl App {
 
             theme_kind: ThemeKind::DarkModern,
             theme: ThemeKind::DarkModern.build(),
+
+            discord_webhook: None,
+            discord_bridge: None,
+        }
+    }
+
+    /// Initialize Discord integration from config.
+    pub fn init_discord(&mut self, config: &crate::config::DiscordConfig) {
+        if !config.webhook_url.is_empty() {
+            tracing::info!("Discord webhook enabled");
+            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::new(
+                config.webhook_url.clone(),
+            ));
+        }
+    }
+
+    /// Send a Discord alert if webhook is configured.
+    #[allow(dead_code)] // Called from alert sites as they're wired up
+    pub fn discord_alert(
+        &self,
+        title: &str,
+        message: &str,
+        level: crate::discord::webhook::AlertLevel,
+    ) {
+        if let Some(ref webhook) = self.discord_webhook {
+            webhook.send(crate::discord::webhook::DiscordAlert {
+                title: title.to_string(),
+                message: message.to_string(),
+                level,
+            });
         }
     }
 
@@ -394,6 +441,24 @@ impl App {
             self.target = None;
             self.spawns.clear();
         }
+    }
+
+    /// Sync CH chain status from orchestrator into cached display state.
+    pub fn sync_ch_chain_status(&mut self, orchestrator: &Orchestrator) {
+        self.ch_chain_status = if orchestrator.combat.ch_chain_active() {
+            orchestrator
+                .combat
+                .ch_chain
+                .as_ref()
+                .map(|chain| ChChainStatus {
+                    members: chain.members().len(),
+                    interval_secs: chain.interval_secs(),
+                    is_adaptive: chain.is_adaptive(),
+                    target_id: chain.target_id(),
+                })
+        } else {
+            None
+        };
     }
 
     /// Cycle to the next client.
@@ -525,6 +590,14 @@ impl App {
     /// Get PIDs of clients in the focused group (or all if aggregate).
     pub fn focused_pids(&self) -> Vec<u32> {
         self.visible_clients().iter().map(|c| c.pid).collect()
+    }
+
+    /// Send an IPC command to all focused clients, returning the success count.
+    fn send_ipc_to_focused(&self, cmd: &dmft_common::ipc::Command) -> usize {
+        self.focused_pids()
+            .iter()
+            .filter(|pid| send_ipc_command(**pid, cmd).is_ok())
+            .count()
     }
 
     /// Returns `true` if any connected client has live `GroupInfo` data.
@@ -897,25 +970,13 @@ impl App {
             return;
         }
 
-        // :ma <Tab> → character names
-        if let Some(rest) = prefix.strip_prefix("ma ") {
-            let names = self.list_character_names();
-            self.complete_with_candidates("ma ", rest, &names);
-            return;
-        }
-
-        // :mt <Tab> → character names
-        if let Some(rest) = prefix.strip_prefix("mt ") {
-            let names = self.list_character_names();
-            self.complete_with_candidates("mt ", rest, &names);
-            return;
-        }
-
-        // :invite <Tab> → character names
-        if let Some(rest) = prefix.strip_prefix("invite ") {
-            let names = self.list_character_names();
-            self.complete_with_candidates("invite ", rest, &names);
-            return;
+        // :ma / :mt / :invite <Tab> → character names
+        for cmd in &["ma ", "mt ", "invite "] {
+            if let Some(rest) = prefix.strip_prefix(cmd) {
+                let names = self.list_character_names();
+                self.complete_with_candidates(cmd, rest, &names);
+                return;
+            }
         }
 
         // :heal <Tab> → cancel
@@ -925,16 +986,29 @@ impl App {
             return;
         }
 
+        // :ch <Tab> → CH chain subcommands
+        if let Some(rest) = prefix.strip_prefix("ch ") {
+            let subs: Vec<String> = vec![
+                "start".into(),
+                "stop".into(),
+                "status".into(),
+                "add".into(),
+                "rm".into(),
+                "interval".into(),
+                "adaptive".into(),
+            ];
+            self.complete_with_candidates("ch ", rest, &subs);
+            return;
+        }
+
+        // Common slash commands shared by :all and :G1-G6 completions
+        let slash_cmds: Vec<String> = ["/sit", "/stand", "/camp", "/follow", "/assist", "/disband"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+
         // :all <Tab> → common slash commands
         if let Some(rest) = prefix.strip_prefix("all ") {
-            let slash_cmds: Vec<String> = vec![
-                "/sit".into(),
-                "/stand".into(),
-                "/camp".into(),
-                "/follow".into(),
-                "/assist".into(),
-                "/disband".into(),
-            ];
             self.complete_with_candidates("all ", rest, &slash_cmds);
             return;
         }
@@ -950,24 +1024,56 @@ impl App {
             let cmd_prefix_str = &prefix[..2];
             let rest = prefix[2..].trim_start();
             if !rest.is_empty() {
-                let slash_cmds: Vec<String> = vec![
-                    "/sit".into(),
-                    "/stand".into(),
-                    "/camp".into(),
-                    "/follow".into(),
-                    "/assist".into(),
-                    "/disband".into(),
-                ];
                 self.complete_with_candidates(&format!("{} ", cmd_prefix_str), rest, &slash_cmds);
                 return;
             }
+        }
+
+        // :stop <Tab> → "all" + connected client character names
+        if let Some(rest) = prefix.strip_prefix("stop ") {
+            let mut names: Vec<String> = vec!["all".into()];
+            names.extend(self.clients.iter().map(|c| c.character_name.clone()));
+            self.complete_with_candidates("stop ", rest, &names);
+            return;
+        }
+
+        // :restart <Tab> → "all" + client names (connected + configured accounts)
+        if let Some(rest) = prefix.strip_prefix("restart ") {
+            let mut names: Vec<String> = vec!["all".into()];
+            names.extend(self.clients.iter().map(|c| c.character_name.clone()));
+            if let Some(cfg) = &self.accounts_config {
+                for acct in &cfg.accounts {
+                    if !names
+                        .iter()
+                        .any(|n| n.eq_ignore_ascii_case(&acct.character))
+                    {
+                        names.push(acct.character.clone());
+                    }
+                }
+            }
+            self.complete_with_candidates("restart ", rest, &names);
+            return;
+        }
+
+        // :nav <Tab> → zone short names from cached meshes + saved camps
+        if let Some(rest) = prefix.strip_prefix("nav ") {
+            let mut zone_names = self.list_available_zones();
+            zone_names.extend(self.list_camp_names());
+            zone_names.sort();
+            zone_names.dedup();
+            self.complete_with_candidates("nav ", rest, &zone_names);
+            return;
         }
 
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
             "help".into(),
             "camp".into(),
+            "nav".into(),
             "login".into(),
+            "launch".into(),
+            "stop".into(),
+            "restart".into(),
             "mode".into(),
             "all".into(),
             "inject".into(),
@@ -981,6 +1087,8 @@ impl App {
             "invite".into(),
             "accept".into(),
             "heal".into(),
+            "ch".into(),
+            "loot".into(),
             "G1".into(),
             "G2".into(),
             "G3".into(),
@@ -1072,6 +1180,74 @@ impl App {
                 .collect(),
             Err(_) => Vec::new(),
         }
+    }
+
+    /// List available zone names from cached navmesh files.
+    /// Returns zone short names like "permafrost", "eastwastes", etc.
+    fn list_available_zones(&self) -> Vec<String> {
+        let mesh_dir = std::path::Path::new("data/meshes");
+        if let Ok(entries) = std::fs::read_dir(mesh_dir) {
+            return entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let path = e.path();
+                    if path.extension().is_some_and(|ext| ext == "navmesh") {
+                        path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+        }
+
+        // Fallback: known TLP zone short names
+        const FALLBACK_ZONES: &[&str] = &[
+            "permafrost",
+            "eastwastes",
+            "greatdivide",
+            "iceclad",
+            "thurgadina",
+            "thurgadinb",
+            "velketor",
+            "kael",
+            "skyshrine",
+            "westwastes",
+            "sirens",
+            "cobaltscale",
+            "templeveeshan",
+            "sleeper",
+            "necropolis",
+            "crystal",
+            "wakening",
+            "frozenshadow",
+            "gukbottom",
+            "guktop",
+            "mistmoore",
+            "unrest",
+            "crushbone",
+            "blackburrow",
+            "soldungb",
+            "soldunga",
+            "lavastorm",
+            "nektulos",
+            "commonlands",
+            "freeporteast",
+            "freportnorth",
+            "freeportwest",
+            "northkarana",
+            "southkarana",
+            "eastkarana",
+            "westkarana",
+            "highkeep",
+            "rivervale",
+            "misty",
+            "everfrost",
+            "halas",
+            "qeynos",
+        ];
+        FALLBACK_ZONES.iter().map(|s| (*s).to_string()).collect()
     }
 
     /// List all spawn display names in the current zone.
@@ -1238,8 +1414,9 @@ impl App {
             return;
         }
 
-        // Save to history
+        // Save to history and track frequency for favorites
         self.cmd_state.command_history.push(input.clone());
+        self.cmd_state.record_command(&input);
 
         // Check for group prefix: :G1 /sit, :G2 camp start, etc.
         if let Some((group_idx, rest)) = self.parse_group_prefix(&input) {
@@ -1271,13 +1448,36 @@ impl App {
             return;
         }
 
-        let parts: Vec<&str> = input.splitn(3, ' ').collect();
+        let parts: Vec<&str> = input.split(' ').collect();
         match parts[0] {
             "help" => {
                 self.help_visible = true;
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
+            }
+            "nav" => {
+                if let Some(destination) = parts.get(1) {
+                    let cmd = dmft_common::ipc::Command::SlashCommand {
+                        command: format!("/nav to {}", destination),
+                    };
+                    let ok = self.send_ipc_to_focused(&cmd);
+                    if ok == 0 {
+                        self.status_message = String::from("No clients connected for navigation");
+                    } else {
+                        tracing::info!(destination, sent = ok, "Navigation command sent");
+                        self.status_message =
+                            format!("Nav → {} (sent to {} clients)", destination, ok);
+                        self.active_screen = ActiveScreen::Navigation;
+                    }
+                } else {
+                    self.status_message =
+                        String::from("Usage: nav <zone|camp_name>  (Tab for zone autocomplete)");
+                }
+            }
+            "loot" => {
+                let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
+                self.status_message = format!("Loot → sent to {} clients", ok);
             }
             "status" => {
                 let client_count = self.clients.len();
@@ -1291,8 +1491,14 @@ impl App {
                     self.status_message = format!("{} client(s) connected", client_count);
                 }
             }
-            "login" => {
+            "login" | "launch" => {
                 self.execute_login_command(&parts[1..]);
+            }
+            "stop" => {
+                self.execute_stop_command(&parts[1..], orchestrator);
+            }
+            "restart" => {
+                self.execute_restart_command(&parts[1..], orchestrator);
             }
             "track" => {
                 self.execute_track_command(&parts[1..]);
@@ -1356,30 +1562,17 @@ impl App {
                 }
             }
             "engage" => {
-                let pids = self.focused_pids();
                 let target_id = parts
                     .get(1)
                     .and_then(|s| s.parse::<u32>().ok())
                     .unwrap_or(0);
-                let mut ok = 0;
-                for pid in &pids {
-                    let cmd = dmft_common::ipc::Command::CombatEngage { target_id };
-                    if send_ipc_command(*pid, &cmd).is_ok() {
-                        ok += 1;
-                    }
-                }
+                let ok = self
+                    .send_ipc_to_focused(&dmft_common::ipc::Command::CombatEngage { target_id });
                 tracing::info!(target_id, sent = ok, "Combat engage sent");
                 self.status_message = format!("Engage → {} clients (target_id={})", ok, target_id);
             }
             "disengage" => {
-                let pids = self.focused_pids();
-                let mut ok = 0;
-                for pid in &pids {
-                    let cmd = dmft_common::ipc::Command::CombatDisengage;
-                    if send_ipc_command(*pid, &cmd).is_ok() {
-                        ok += 1;
-                    }
-                }
+                let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
                 self.status_message = format!("Disengage → {} clients", ok);
             }
@@ -1443,6 +1636,9 @@ impl App {
                     );
                 }
             },
+            "ch" => {
+                self.execute_ch_command(&parts[1..], orchestrator);
+            }
             "inject" => {
                 self.status_message = String::from("Inject requested (not yet wired)");
             }
@@ -1705,6 +1901,180 @@ impl App {
         }
     }
 
+    /// Handle `ch <subcommand>` — CH chain management from the command bar.
+    ///
+    /// Subcommands:
+    ///   ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
+    ///   ch stop                  — Stop the running CH chain
+    ///   ch add <pid>             — Add a cleric to the chain
+    ///   ch rm <pid>              — Remove a cleric from the chain
+    ///   ch interval <seconds>    — Set the interval between casts
+    ///   ch adaptive on|off       — Toggle adaptive timing mode
+    ///   ch status                — Show current chain status
+    fn execute_ch_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        match args.first().copied() {
+            None | Some("status") => {
+                if orchestrator.combat.ch_chain_active() {
+                    let chain = orchestrator.combat.ch_chain.as_ref().unwrap();
+                    let members = chain.members().len();
+                    let interval = chain.interval_secs();
+                    let adaptive = if chain.is_adaptive() {
+                        "adaptive"
+                    } else {
+                        "fixed"
+                    };
+                    let target = chain.target_id();
+                    self.status_message = format!(
+                        "CH chain: {} clerics, {:.1}s interval ({}), target={}",
+                        members, interval, adaptive, target
+                    );
+                } else {
+                    self.status_message = String::from(
+                        "No CH chain active. Usage: ch start <pid1,pid2,...> <interval> <target_id>",
+                    );
+                }
+            }
+            Some("start") => {
+                // ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
+                let pids_str = match args.get(1) {
+                    Some(s) => s,
+                    None => {
+                        self.status_message = String::from(
+                            "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
+                        );
+                        return;
+                    }
+                };
+                let pids: Vec<u32> = pids_str
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<u32>().ok())
+                    .collect();
+                if pids.is_empty() {
+                    self.status_message = String::from("No valid PIDs. Use comma-separated PIDs.");
+                    return;
+                }
+                let interval: f32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(3.0);
+                let target_id: u32 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+                let spell_slot: u8 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(1);
+
+                orchestrator
+                    .combat
+                    .start_ch_chain(pids.clone(), interval, target_id, spell_slot);
+                tracing::info!(
+                    pids = ?pids,
+                    interval,
+                    target_id,
+                    spell_slot,
+                    "CH chain started from TUI"
+                );
+                self.status_message = format!(
+                    "CH chain started: {} clerics, {:.1}s interval, target={}, slot={}",
+                    pids.len(),
+                    interval,
+                    target_id,
+                    spell_slot
+                );
+            }
+            Some("stop") => {
+                if orchestrator.combat.ch_chain_active() {
+                    orchestrator.combat.stop_ch_chain();
+                    tracing::info!("CH chain stopped from TUI");
+                    self.status_message = String::from("CH chain stopped");
+                } else {
+                    self.status_message = String::from("No CH chain is running");
+                }
+            }
+            Some("add") => {
+                if let Some(pid_str) = args.get(1) {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if orchestrator.combat.ch_chain_active() {
+                            orchestrator.combat.ch_chain_add(pid);
+                            tracing::info!(pid, "Cleric added to CH chain");
+                            self.status_message = format!("Added PID {} to CH chain", pid);
+                        } else {
+                            self.status_message =
+                                String::from("No CH chain is running. Use: ch start");
+                        }
+                    } else {
+                        self.status_message = String::from("Invalid PID. Usage: ch add <pid>");
+                    }
+                } else {
+                    self.status_message = String::from("Usage: ch add <pid>");
+                }
+            }
+            Some("rm" | "remove") => {
+                if let Some(pid_str) = args.get(1) {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if orchestrator.combat.ch_chain_active() {
+                            orchestrator.combat.ch_chain_remove(pid);
+                            tracing::info!(pid, "Cleric removed from CH chain");
+                            self.status_message = format!("Removed PID {} from CH chain", pid);
+                        } else {
+                            self.status_message = String::from("No CH chain is running");
+                        }
+                    } else {
+                        self.status_message = String::from("Invalid PID. Usage: ch rm <pid>");
+                    }
+                } else {
+                    self.status_message = String::from("Usage: ch rm <pid>");
+                }
+            }
+            Some("interval") => {
+                if let Some(secs_str) = args.get(1) {
+                    if let Ok(secs) = secs_str.parse::<f32>() {
+                        if orchestrator.combat.ch_chain_active() {
+                            orchestrator.combat.ch_chain_set_interval(secs);
+                            tracing::info!(interval = secs, "CH chain interval updated");
+                            self.status_message = format!("CH chain interval set to {:.1}s", secs);
+                        } else {
+                            self.status_message = String::from("No CH chain is running");
+                        }
+                    } else {
+                        self.status_message =
+                            String::from("Invalid seconds. Usage: ch interval <seconds>");
+                    }
+                } else {
+                    self.status_message = String::from("Usage: ch interval <seconds>");
+                }
+            }
+            Some("adaptive") => match args.get(1).copied() {
+                Some("on" | "true" | "1") => {
+                    if orchestrator.combat.ch_chain_active() {
+                        if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                            chain.set_adaptive(true);
+                            tracing::info!("CH chain adaptive mode enabled");
+                            self.status_message = String::from("CH chain: adaptive timing ON");
+                        }
+                    } else {
+                        self.status_message = String::from("No CH chain is running");
+                    }
+                }
+                Some("off" | "false" | "0") => {
+                    if orchestrator.combat.ch_chain_active() {
+                        if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                            chain.set_adaptive(false);
+                            tracing::info!("CH chain adaptive mode disabled");
+                            self.status_message = String::from("CH chain: adaptive timing OFF");
+                        }
+                    } else {
+                        self.status_message = String::from("No CH chain is running");
+                    }
+                }
+                _ => {
+                    self.status_message = String::from("Usage: ch adaptive <on|off>");
+                }
+            },
+            Some(sub) => {
+                self.status_message = format!(
+                    "Unknown CH subcommand: {}. Use: start|stop|add|rm|interval|adaptive|status",
+                    sub
+                );
+            }
+        }
+        // Sync cached display state after any CH chain mutation
+        self.sync_ch_chain_status(orchestrator);
+    }
+
     /// Handle `login <subcommand>` from the command bar.
     ///
     /// Subcommands:
@@ -1800,6 +2170,87 @@ impl App {
                     self.enqueue_account_launches(std::slice::from_ref(entry));
                 } else {
                     self.status_message = format!("Account '{}' not found in config", name);
+                }
+            }
+        }
+    }
+
+    /// Handle `stop <name|all>` — eject DLL and remove client.
+    ///
+    ///   stop all         — eject all connected clients
+    ///   stop <name>      — eject a single client by character name
+    fn execute_stop_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        match args.first().copied() {
+            None => {
+                self.status_message =
+                    String::from("Usage: stop <name|all>  (ejects DLL from client)");
+            }
+            Some("all") => {
+                let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                let count = pids.len();
+                for pid in pids {
+                    orchestrator.eject_client(pid);
+                }
+                self.status_message = format!("Ejected {} client(s)", count);
+            }
+            Some(name) => {
+                if let Some(client) = self
+                    .clients
+                    .iter()
+                    .find(|c| c.character_name.eq_ignore_ascii_case(name))
+                {
+                    let pid = client.pid;
+                    let char_name = client.character_name.clone();
+                    orchestrator.eject_client(pid);
+                    self.status_message = format!("Ejected {} (PID {})", char_name, pid);
+                } else {
+                    self.status_message = format!("Client '{}' not found", name);
+                }
+            }
+        }
+    }
+
+    /// Handle `restart <name|all>` — eject then re-launch via login automation.
+    ///
+    ///   restart all         — restart all clients
+    ///   restart <name>      — restart a single client
+    fn execute_restart_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        match args.first().copied() {
+            None => {
+                self.status_message =
+                    String::from("Usage: restart <name|all>  (ejects DLL then re-launches)");
+            }
+            Some("all") => {
+                // Eject all first
+                let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                let count = pids.len();
+                for pid in &pids {
+                    orchestrator.eject_client(*pid);
+                }
+                // Then re-launch all
+                self.execute_login_command(&["all"]);
+                self.status_message =
+                    format!("Restarting {} client(s) — ejected, re-launching...", count);
+            }
+            Some(name) => {
+                // Eject the specific client
+                if let Some(client) = self
+                    .clients
+                    .iter()
+                    .find(|c| c.character_name.eq_ignore_ascii_case(name))
+                {
+                    let pid = client.pid;
+                    let char_name = client.character_name.clone();
+                    orchestrator.eject_client(pid);
+                    // Re-launch via login
+                    self.execute_login_command(&[name]);
+                    self.status_message = format!(
+                        "Restarting {} (PID {}) — ejected, re-launching...",
+                        char_name, pid
+                    );
+                } else {
+                    // Maybe the client isn't connected but the account exists — just launch
+                    self.execute_login_command(&[name]);
                 }
             }
         }

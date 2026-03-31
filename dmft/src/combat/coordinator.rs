@@ -4,6 +4,7 @@ use dmft_common::types::{ClientId, GameState};
 use std::collections::HashMap;
 
 use super::camp_loop::{CampEvent, CampLoop, CampState};
+use super::ch_chain::ChChain;
 
 pub struct CombatCoordinator {
     assist_target: Option<u32>,
@@ -14,6 +15,8 @@ pub struct CombatCoordinator {
     prev_in_combat: bool,
     /// Track which clients were dead last tick.
     prev_dead: HashMap<ClientId, bool>,
+    /// Complete Heal chain coordinator — rotates CH casts across clerics.
+    pub ch_chain: Option<ChChain>,
 }
 
 impl CombatCoordinator {
@@ -25,6 +28,7 @@ impl CombatCoordinator {
             camp_loop: CampLoop::new(),
             prev_in_combat: false,
             prev_dead: HashMap::new(),
+            ch_chain: None,
         }
     }
 
@@ -74,7 +78,39 @@ impl CombatCoordinator {
             }
         }
 
-        // 2. Camp loop integration — detect state changes and feed events
+        // 2. CH chain — feed tank HP for adaptive mode, then tick rotation
+        if let Some(ref mut chain) = self.ch_chain {
+            // Feed tank HP to adaptive timer
+            if chain.is_adaptive()
+                && let Some(tank_id) = self.main_tank_id
+                && let Some(tank_state) = states.get(&tank_id)
+                && let Some(ref lp) = tank_state.local_player
+            {
+                chain.update_tank_hp(lp.hp_pct());
+            }
+
+            if let Some(cleric_pid) = chain.tick() {
+                let target_id = chain.target_id();
+                let spell_slot = chain.spell_slot();
+                tracing::info!(cleric_pid, target_id, spell_slot, "CH chain: firing cleric");
+                // Target the tank, then cast CH
+                commands.push((
+                    cleric_pid,
+                    Command::SetTarget {
+                        spawn_id: target_id,
+                    },
+                ));
+                commands.push((
+                    cleric_pid,
+                    Command::CastSpell {
+                        spell_slot,
+                        target_id,
+                    },
+                ));
+            }
+        }
+
+        // 3. Camp loop integration — detect state changes and feed events
         if self.camp_loop.is_active() {
             let camp_events = self.detect_camp_events(states);
             for event in camp_events {
@@ -172,6 +208,66 @@ impl CombatCoordinator {
             Some(target.spawn_id)
         } else {
             None
+        }
+    }
+
+    // --- CH Chain management ---
+
+    /// Start a Complete Heal chain with the given clerics.
+    /// `interval_secs` is the time between each cleric's CH start.
+    /// `target_id` is the spawn ID of the tank to heal.
+    /// `spell_slot` is the gem slot for Complete Heal (1-indexed).
+    pub fn start_ch_chain(
+        &mut self,
+        cleric_pids: Vec<u32>,
+        interval_secs: f32,
+        target_id: u32,
+        spell_slot: u8,
+    ) {
+        let mut chain = ChChain::new(cleric_pids, interval_secs, target_id, spell_slot);
+        chain.start();
+        tracing::info!(
+            members = chain.members().len(),
+            interval_secs,
+            target_id,
+            spell_slot,
+            "CH chain started"
+        );
+        self.ch_chain = Some(chain);
+    }
+
+    /// Stop the active CH chain.
+    pub fn stop_ch_chain(&mut self) {
+        if let Some(ref mut chain) = self.ch_chain {
+            chain.stop();
+            tracing::info!("CH chain stopped");
+        }
+        self.ch_chain = None;
+    }
+
+    /// Whether a CH chain is currently active.
+    pub fn ch_chain_active(&self) -> bool {
+        self.ch_chain.as_ref().is_some_and(|c| c.is_active())
+    }
+
+    /// Add a cleric to the active CH chain.
+    pub fn ch_chain_add(&mut self, pid: u32) {
+        if let Some(ref mut chain) = self.ch_chain {
+            chain.add_member(pid);
+        }
+    }
+
+    /// Remove a cleric from the active CH chain.
+    pub fn ch_chain_remove(&mut self, pid: u32) {
+        if let Some(ref mut chain) = self.ch_chain {
+            chain.remove_member(pid);
+        }
+    }
+
+    /// Set the CH chain interval (seconds between each cast).
+    pub fn ch_chain_set_interval(&mut self, secs: f32) {
+        if let Some(ref mut chain) = self.ch_chain {
+            chain.set_interval(secs);
         }
     }
 
@@ -341,5 +437,71 @@ mod tests {
 
         let commands = coord.decide_cc_assignments(&enemies, &enchanters);
         assert!(commands.is_empty(), "No adds to CC");
+    }
+
+    // --- CH Chain tests ---
+
+    #[test]
+    fn ch_chain_start_and_stop() {
+        let mut coord = CombatCoordinator::new();
+        assert!(!coord.ch_chain_active());
+
+        coord.start_ch_chain(vec![10, 20, 30], 3.0, 1, 8);
+        assert!(coord.ch_chain_active());
+
+        coord.stop_ch_chain();
+        assert!(!coord.ch_chain_active());
+    }
+
+    #[test]
+    fn ch_chain_fires_cast_commands() {
+        let mut coord = CombatCoordinator::new();
+        coord.start_ch_chain(vec![10, 20], 1.0, 99, 8);
+
+        let states: HashMap<ClientId, GameState> = HashMap::new();
+
+        // First tick fires cleric 10 (frame 0)
+        let cmds = coord.tick(&states);
+        assert_eq!(cmds.len(), 2, "Should have SetTarget + CastSpell");
+        assert_eq!(cmds[0].0, 10);
+        match &cmds[0].1 {
+            Command::SetTarget { spawn_id } => assert_eq!(*spawn_id, 99),
+            _ => panic!("Expected SetTarget, got {:?}", cmds[0].1),
+        }
+        match &cmds[1].1 {
+            Command::CastSpell {
+                spell_slot,
+                target_id,
+            } => {
+                assert_eq!(*spell_slot, 8);
+                assert_eq!(*target_id, 99);
+            }
+            _ => panic!("Expected CastSpell, got {:?}", cmds[1].1),
+        }
+
+        // Next 19 ticks produce no CH commands
+        for _ in 1..20 {
+            let cmds = coord.tick(&states);
+            assert!(cmds.is_empty());
+        }
+
+        // Frame 20 fires cleric 20
+        let cmds = coord.tick(&states);
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].0, 20);
+    }
+
+    #[test]
+    fn ch_chain_add_remove_members() {
+        let mut coord = CombatCoordinator::new();
+        coord.start_ch_chain(vec![10, 20], 1.0, 99, 8);
+        coord.ch_chain_add(30);
+        coord.ch_chain_remove(10);
+
+        let states: HashMap<ClientId, GameState> = HashMap::new();
+
+        // First tick fires first remaining member (20)
+        let cmds = coord.tick(&states);
+        assert_eq!(cmds[0].0, 20);
     }
 }

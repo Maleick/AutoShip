@@ -15,7 +15,7 @@ use crate::tui;
 use crate::{SOUL_DB_PATH, get_module_base};
 
 /// TUI mode — the default. Shows ShowEQ-inspired live dashboard.
-pub(crate) fn run_tui_mode() -> Result<()> {
+pub fn run_tui_mode() -> Result<()> {
     let mut app = tui::app::App::new();
     let config = load_config()?;
 
@@ -71,12 +71,15 @@ pub(crate) fn run_tui_mode() -> Result<()> {
         }
     }
 
+    // Initialize Discord integration if webhook URL is configured
+    app.init_discord(&config.discord);
+
     let orchestrator = orchestrator::Orchestrator::new();
     tui::run::run_tui(app, orchestrator)
 }
 
 /// Inject mode (--inject) — find eqgame.exe processes and inject dmft_dll.dll into each.
-pub(crate) fn run_inject_mode() -> Result<()> {
+pub fn run_inject_mode() -> Result<()> {
     info!("DMFT inject mode — finding EQ processes...");
 
     let config = load_config()?;
@@ -153,7 +156,7 @@ pub(crate) fn run_inject_mode() -> Result<()> {
 }
 
 /// Zones mode (--zones <PID>) — query the zone adjacency graph from an injected client.
-pub(crate) fn run_zones_mode(pid: u32) -> Result<()> {
+pub fn run_zones_mode(pid: u32) -> Result<()> {
     use dmft_common::ipc::{Command, Response};
     use dmft_common::nav::ZoneGraph;
 
@@ -235,7 +238,7 @@ pub(crate) fn run_zones_mode(pid: u32) -> Result<()> {
 }
 
 /// Status mode (--status <PID>) — read shared memory and print player state.
-pub(crate) fn run_status_mode(pid: u32) -> Result<()> {
+pub fn run_status_mode(pid: u32) -> Result<()> {
     let token = generate_session_token(pid);
     let session_id = dmft_common::ipc::session_id_from_token(&token);
     let reader = ipc::shared::SharedStateReader::new(pid, session_id).context(format!(
@@ -284,7 +287,7 @@ pub(crate) fn run_status_mode(pid: u32) -> Result<()> {
 }
 
 /// Status-all mode (--statusall) — read shared memory for all EQ clients and print a summary table.
-pub(crate) fn run_statusall_mode() -> Result<()> {
+pub fn run_statusall_mode() -> Result<()> {
     let pids = process::memory::find_processes_by_name("eqgame.exe")?;
 
     if pids.is_empty() {
@@ -362,7 +365,7 @@ pub(crate) fn run_statusall_mode() -> Result<()> {
 }
 
 /// Navigate mode (--nav <PID> <x> <y> <z>) — send NavigateTo to a specific client.
-pub(crate) fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
+pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
 
@@ -448,7 +451,7 @@ pub(crate) fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
 }
 
 /// Navigate ALL EQ clients to a destination using navmesh pathfinding.
-pub(crate) fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
+pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
 
@@ -559,7 +562,7 @@ pub(crate) fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
 }
 
 /// Inject mode targeting a specific PID (--inject-pid <PID>).
-pub(crate) fn run_inject_pid_mode(pid: u32) -> Result<()> {
+pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     info!(pid, "DMFT inject-pid mode — targeting single process");
 
     let project_dir = std::env::current_dir().unwrap_or_default();
@@ -584,7 +587,7 @@ pub(crate) fn run_inject_pid_mode(pid: u32) -> Result<()> {
 }
 
 /// Login mode targeting a specific PID (--login-pid <PID> <account> <password> [server] [character]).
-pub(crate) fn run_login_pid_mode(
+pub fn run_login_pid_mode(
     pid: u32,
     account: &str,
     password: &str,
@@ -622,12 +625,7 @@ pub(crate) fn run_login_pid_mode(
 }
 
 /// Login mode (--login <account> <password> [server] [character]) — send StartLogin to all injected EQ clients.
-pub(crate) fn run_login_mode(
-    account: &str,
-    password: &str,
-    server: &str,
-    character: &str,
-) -> Result<()> {
+pub fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
     let config = load_config()?;
@@ -676,7 +674,7 @@ pub(crate) fn run_login_mode(
 }
 
 /// Calibrate mode (--calibrate) — find all EQ processes and send calibrate_login to each.
-pub(crate) fn run_calibrate_mode() -> Result<()> {
+pub fn run_calibrate_mode() -> Result<()> {
     use dmft_common::ipc::Command;
 
     let config = load_config()?;
@@ -717,7 +715,7 @@ pub(crate) fn run_calibrate_mode() -> Result<()> {
 }
 
 /// Command mode (--cmd <pid> <command>) — send a slash command to an injected client.
-pub(crate) fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
+pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
     println!("Sending command to PID {}: {}", pid, command);
@@ -744,11 +742,7 @@ pub(crate) fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 }
 
 /// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
-pub(crate) fn run_navpath_mode(
-    zone: &str,
-    from: (f32, f32, f32),
-    to: (f32, f32, f32),
-) -> Result<()> {
+pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> Result<()> {
     info!("Navpath mode: zone={zone} from={from:?} to={to:?}");
     println!("Loading navmesh for zone '{zone}'...");
 
@@ -781,7 +775,7 @@ pub(crate) fn run_navpath_mode(
 }
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.
-pub(crate) fn run_dump_mode() -> Result<()> {
+pub fn run_dump_mode() -> Result<()> {
     info!(
         "Frostreaver v{} — EQ Memory Reader (dump mode)",
         env!("CARGO_PKG_VERSION")
@@ -852,7 +846,7 @@ pub(crate) fn run_dump_mode() -> Result<()> {
 
 /// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
 /// Must be called BEFORE injection.
-pub(crate) fn write_session_token_file(pid: u32) -> Result<()> {
+pub fn write_session_token_file(pid: u32) -> Result<()> {
     let token_dir = std::env::temp_dir().join("dmft");
     std::fs::create_dir_all(&token_dir)?;
     let token_path = token_dir.join(format!("token_{}.bin", pid));
@@ -873,7 +867,7 @@ pub(crate) fn write_session_token_file(pid: u32) -> Result<()> {
 
 /// Read the session token for authenticating with an already-injected DLL.
 /// The token was written by --inject-pid before injection.
-pub(crate) fn generate_session_token(pid: u32) -> [u8; 32] {
+pub fn generate_session_token(pid: u32) -> [u8; 32] {
     let token_path = std::env::temp_dir()
         .join("dmft")
         .join(format!("login_token_{}.bin", pid));
@@ -1202,7 +1196,7 @@ fn dump_hex_region(
     }
 }
 
-pub(crate) fn load_config() -> Result<config::AppConfig> {
+pub fn load_config() -> Result<config::AppConfig> {
     let config_path = Path::new("config/frostreaver.toml");
     if config_path.exists() {
         config::AppConfig::load(config_path).context("Failed to load configuration")

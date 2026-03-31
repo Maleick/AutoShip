@@ -1,6 +1,6 @@
 [package]
 name = "dmft"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2024"
 description = "External process memory reader for EverQuest (Frostreaver TLP 36-box)"
 
@@ -24,7 +24,7 @@ rand = "0.8"
 zeroize = { version = "1", features = ["alloc"] }
 prost = "0.13"
 flate2 = "1"
-reqwest = { version = "0.12", features = ["blocking"] }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 recastnavigation-sys = { version = "1.0.3", features = ["detour_large_nav_meshes"] }
 
 [build-dependencies]

@@ -227,7 +227,67 @@ pub fn handle_events(
                 }
                 return Ok(true);
             }
+            // F1-F9: Execute favorite commands (most frequently used)
+            (KeyCode::F(n), _) if (1..=9).contains(&n) => {
+                let idx = (n - 1) as usize;
+                if let Some(cmd) = app.cmd_state.get_favorite(idx).map(|s| s.to_string()) {
+                    app.cmd_state.command_buffer = cmd;
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                } else {
+                    app.status_message = format!(
+                        "F{}: no favorite assigned (use commands to build frequency)",
+                        n
+                    );
+                }
+                return Ok(true);
+            }
             _ => {}
+        }
+
+        // Quick action keybinds (only when not in search/command mode, and only on relevant screens)
+        if matches!(
+            app.active_screen,
+            ActiveScreen::Dashboard
+                | ActiveScreen::Character
+                | ActiveScreen::Spawns
+                | ActiveScreen::Groups
+        ) {
+            match key.code {
+                // r = repeat last command
+                KeyCode::Char('r') => {
+                    if let Some(last) = app.cmd_state.command_history.last().cloned() {
+                        app.cmd_state.command_buffer = last;
+                        app.execute_command(orchestrator);
+                        app.cmd_state.command_buffer.clear();
+                    } else {
+                        app.status_message = "No command history to repeat".into();
+                    }
+                    return Ok(true);
+                }
+                // e = engage selected target
+                KeyCode::Char('e') => {
+                    app.cmd_state.command_buffer = "engage".into();
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                    return Ok(true);
+                }
+                // d = disengage
+                KeyCode::Char('d') => {
+                    app.cmd_state.command_buffer = "disengage".into();
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                    return Ok(true);
+                }
+                // l = loot
+                KeyCode::Char('l') => {
+                    app.cmd_state.command_buffer = "loot".into();
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                    return Ok(true);
+                }
+                _ => {}
+            }
         }
 
         // Map-screen keybindings: +/- adjust Z-depth filter
@@ -266,8 +326,8 @@ pub fn handle_events(
         {
             match app.active_panel {
                 ActivePanel::SpawnList => match key.code {
-                    KeyCode::Down => app.spawn_list_down(),
-                    KeyCode::Up => app.spawn_list_up(),
+                    KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
+                    KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
                     KeyCode::PageDown => app.spawn_list_page_down(),
                     KeyCode::PageUp => app.spawn_list_page_up(),
                     KeyCode::Home => app.spawns_state.table_state.select(Some(0)),

@@ -53,6 +53,25 @@ impl ClassStrategy for ShamanStrategy {
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         let mana_pct = ctx.player.mana_pct();
 
+        // Priority 0: Cure detrimental effects (shaman is the premier curer)
+        let has_afflicted = ctx
+            .group_members
+            .iter()
+            .any(|m| m.has_detrimental && !m.is_dead);
+        if has_afflicted {
+            if let Some(cure) = ctx.config.spells.iter().find(|s| {
+                let name = s.name.to_lowercase();
+                name.contains("cure")
+                    || name.contains("purify")
+                    || name.contains("remove")
+                    || name.contains("counteract")
+            }) {
+                if mana_pct >= cure.min_mana_pct {
+                    return Some(cure.clone());
+                }
+            }
+        }
+
         // Priority 1: Emergency heal (group member below 40%)
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
             && hp < 40.0
@@ -134,9 +153,14 @@ impl ClassStrategy for ShamanStrategy {
         }
     }
 
-    fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        self.target_slowed = false;
-        self.last_target_id = 0;
+    fn on_action_complete(&mut self, ctx: &CombatContext) {
+        // Only reset slow tracking when out of combat (target died / disengage).
+        // During combat, on_engage handles new-target resets. Resetting here
+        // unconditionally caused the shaman to re-cast slow every GCD cycle.
+        if !ctx.in_combat {
+            self.target_slowed = false;
+            self.last_target_id = 0;
+        }
     }
 
     fn aoe_threshold(&self) -> u8 {
@@ -221,6 +245,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -242,6 +267,9 @@ mod tests {
             hp_pct: 30.0,
             mana_pct: 50.0,
             class_id: 1,
+            is_dead: false,
+            name: "Warrior".into(),
+            has_detrimental: false,
         }];
         let ctx = CombatContext {
             player: &player,
@@ -251,6 +279,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -275,6 +304,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());

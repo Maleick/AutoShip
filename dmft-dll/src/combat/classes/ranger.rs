@@ -174,8 +174,17 @@ mod tests {
     fn ranger_assists_ma() {
         let ranger = RangerStrategy::new(4);
         let player = SpawnData::default();
-        let config = CombatConfig::default();
-        let ctx = make_ctx(&player, None, &[], &config, false);
+        let config = dmft_common::combat::CombatConfig::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+        };
         assert!(ranger.should_assist(&ctx));
     }
 
