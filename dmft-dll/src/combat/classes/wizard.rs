@@ -3,7 +3,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
 /// Wizard strategy: pure nuke DPS. Highest priority spell available, mana-aware.
-/// EQ class ID: 5
+/// EQ class ID: 12
 pub struct WizardStrategy {
     class_id: u8,
 }
@@ -52,13 +52,13 @@ mod tests {
 
     #[test]
     fn wizard_class_id() {
-        let wiz = WizardStrategy::new(5);
-        assert_eq!(wiz.class_id(), 5);
+        let wiz = WizardStrategy::new(12);
+        assert_eq!(wiz.class_id(), 12);
     }
 
     #[test]
     fn wizard_role_is_ranged_dps() {
-        let wiz = WizardStrategy::new(5);
+        let wiz = WizardStrategy::new(12);
         assert_eq!(wiz.role(), CombatRole::DpsRanged);
     }
 }

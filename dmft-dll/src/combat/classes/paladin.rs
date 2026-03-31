@@ -3,7 +3,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Paladin strategy: off-tank + healer hybrid, stuns, heals, undead nukes.
-/// EQ class ID: 4
+/// EQ class ID: 3
 pub struct PaladinStrategy {
     class_id: u8,
 }
@@ -95,19 +95,19 @@ mod tests {
 
     #[test]
     fn paladin_class_id() {
-        let pal = PaladinStrategy::new(4);
-        assert_eq!(pal.class_id(), 4);
+        let pal = PaladinStrategy::new(3);
+        assert_eq!(pal.class_id(), 3);
     }
 
     #[test]
     fn paladin_role_is_off_tank() {
-        let pal = PaladinStrategy::new(4);
+        let pal = PaladinStrategy::new(3);
         assert_eq!(pal.role(), CombatRole::OffTank);
     }
 
     #[test]
     fn paladin_does_not_assist() {
-        let pal = PaladinStrategy::new(4);
+        let pal = PaladinStrategy::new(3);
         let config = dmft_common::combat::CombatConfig::default();
         let player = dmft_common::types::SpawnData::default();
         let ctx = CombatContext {
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn paladin_aoe_threshold() {
-        let pal = PaladinStrategy::new(4);
+        let pal = PaladinStrategy::new(3);
         assert_eq!(pal.aoe_threshold(), 2);
     }
 }

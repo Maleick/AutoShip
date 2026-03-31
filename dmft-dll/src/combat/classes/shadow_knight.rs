@@ -3,7 +3,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Shadow Knight strategy: off-tank with lifetap DPS, disease/poison DoTs, snare.
-/// EQ class ID: 3
+/// EQ class ID: 5
 pub struct ShadowKnightStrategy {
     class_id: u8,
 }
@@ -97,19 +97,19 @@ mod tests {
 
     #[test]
     fn sk_class_id() {
-        let sk = ShadowKnightStrategy::new(3);
-        assert_eq!(sk.class_id(), 3);
+        let sk = ShadowKnightStrategy::new(5);
+        assert_eq!(sk.class_id(), 5);
     }
 
     #[test]
     fn sk_role_is_off_tank() {
-        let sk = ShadowKnightStrategy::new(3);
+        let sk = ShadowKnightStrategy::new(5);
         assert_eq!(sk.role(), CombatRole::OffTank);
     }
 
     #[test]
     fn sk_does_not_assist() {
-        let sk = ShadowKnightStrategy::new(3);
+        let sk = ShadowKnightStrategy::new(5);
         let config = dmft_common::combat::CombatConfig::default();
         let player = dmft_common::types::SpawnData::default();
         let ctx = CombatContext {
