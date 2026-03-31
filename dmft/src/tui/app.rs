@@ -538,22 +538,6 @@ impl App {
             .collect()
     }
 
-    /// Rebuild group definitions from accounts config. Called when config changes.
-    #[allow(dead_code)]
-    pub fn rebuild_groups_from_config(&mut self) {
-        self.groups = Self::build_default_groups();
-    }
-
-    /// Get the number of groups that have at least one connected client.
-    #[allow(dead_code)]
-    pub fn active_group_count(&self) -> usize {
-        self.groups
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| !self.clients_in_group_idx(*i).is_empty())
-            .count()
-    }
-
     /// Get the currently selected client, if any.
     pub fn active_client(&self) -> Option<&ClientState> {
         self.clients.get(self.selected_client)
@@ -601,9 +585,18 @@ impl App {
     }
 
     /// Focus on a specific group (0-indexed). Pass None to return to aggregate view.
+    /// When live group data is available, validates against live group count;
+    /// otherwise validates against config group count.
     pub fn set_active_group(&mut self, group: Option<usize>) {
         if let Some(idx) = group {
-            if idx < self.groups.len() {
+            if self.has_live_group_data() {
+                let (live_groups, _) = self.build_live_groups();
+                if idx < live_groups.len() {
+                    self.active_group = Some(idx);
+                    self.status_message =
+                        format!("Viewing: {} ({})", live_groups[idx].leader, live_groups[idx].zone);
+                }
+            } else if idx < self.groups.len() {
                 self.active_group = Some(idx);
                 let g = &self.groups[idx];
                 self.status_message = format!("Viewing: G{} {}", g.id, g.name);
@@ -619,7 +612,14 @@ impl App {
         match self.active_group {
             None => String::from("All Groups"),
             Some(idx) => {
-                if let Some(g) = self.groups.get(idx) {
+                if self.has_live_group_data() {
+                    let (live_groups, _) = self.build_live_groups();
+                    if let Some(lg) = live_groups.get(idx) {
+                        format!("{} ({})", lg.leader, lg.zone)
+                    } else {
+                        String::from("All Groups")
+                    }
+                } else if let Some(g) = self.groups.get(idx) {
                     // Find the zone of the first online member
                     let zone = self
                         .clients_in_group_idx(idx)
@@ -662,10 +662,25 @@ impl App {
 
     /// Get clients visible under the current group focus.
     /// Returns all clients if aggregate view, or only the focused group's clients.
+    /// When live group data is available, filters by live group membership.
     pub fn visible_clients(&self) -> Vec<&ClientState> {
         match self.active_group {
             None => self.clients.iter().collect(),
-            Some(idx) => self.clients_in_group_idx(idx),
+            Some(idx) => {
+                if self.has_live_group_data() {
+                    let (live_groups, _) = self.build_live_groups();
+                    if let Some(lg) = live_groups.get(idx) {
+                        lg.member_names
+                            .iter()
+                            .filter_map(|name| self.find_client_by_name(name))
+                            .collect()
+                    } else {
+                        self.clients.iter().collect()
+                    }
+                } else {
+                    self.clients_in_group_idx(idx)
+                }
+            }
         }
     }
 
@@ -818,18 +833,22 @@ impl App {
     }
 
     pub fn spawn_list_page_down(&mut self) {
+        // TODO: make page size dynamic based on terminal height when available
+        const PAGE_SIZE: usize = 25;
         let max = self.filtered_spawns().len().saturating_sub(1);
         let current = self.spawn_selected();
         self.spawns_state
             .table_state
-            .select(Some((current + 20).min(max)));
+            .select(Some((current + PAGE_SIZE).min(max)));
     }
 
     pub fn spawn_list_page_up(&mut self) {
+        // TODO: make page size dynamic based on terminal height when available
+        const PAGE_SIZE: usize = 25;
         let current = self.spawn_selected();
         self.spawns_state
             .table_state
-            .select(Some(current.saturating_sub(20)));
+            .select(Some(current.saturating_sub(PAGE_SIZE)));
     }
 
     /// Convenience accessor for the current spawn selection index.

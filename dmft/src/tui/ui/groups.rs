@@ -15,6 +15,98 @@ use super::widgets::{hp_color, panel};
 use crate::eq::structs::BuffSlot;
 use crate::tui::app::extract_account_number;
 use crate::tui::app::{App, ClientState, GroupDef, LiveGroup};
+use crate::tui::theme::Theme;
+
+// ── Shared member-row helpers ───────────────────────────────────────────────
+
+/// Build a member info line for a connected player.
+fn member_line<'a>(
+    player: &crate::eq::structs::SpawnInfo,
+    is_leader: bool,
+    display_name: String,
+    t: &Theme,
+) -> Line<'a> {
+    let hp_pct = player.hp_pct();
+    let mana_str = if player.mana_max > 0 {
+        format!(" {:>3.0}%mp", player.mana_pct())
+    } else {
+        "     -".into()
+    };
+
+    let name_style = if is_leader {
+        Style::default()
+            .fg(t.text_highlight)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(t.text_normal)
+    };
+
+    let leader_marker = if is_leader { "*" } else { " " };
+
+    Line::from(vec![
+        Span::styled(leader_marker, Style::default().fg(t.text_accent)),
+        Span::styled(format!("{:<12}", display_name), name_style),
+        Span::styled(
+            format!("{:<4}", player.class_str()),
+            Style::default().fg(t.text_accent),
+        ),
+        Span::styled(
+            format!("{:>3}", player.level),
+            Style::default().fg(t.text_secondary),
+        ),
+        Span::styled(
+            format!(" {:>3.0}%", hp_pct),
+            Style::default().fg(hp_color(hp_pct, t)),
+        ),
+        Span::styled(mana_str, Style::default().fg(t.mana_color)),
+    ])
+}
+
+/// Build a buff timer row for a player (returns None if no active buffs).
+fn buff_line<'a>(player: &crate::eq::structs::SpawnInfo, t: &Theme) -> Option<Line<'a>> {
+    let active_buffs: Vec<&BuffSlot> = player
+        .buff_slots
+        .iter()
+        .filter(|b| !b.is_empty())
+        .take(6)
+        .collect();
+    if active_buffs.is_empty() {
+        return None;
+    }
+    let mut buff_spans: Vec<Span<'_>> = vec![Span::raw("  ")];
+    for b in &active_buffs {
+        buff_spans.push(Span::styled(
+            format!("{:04X}", b.spell_id),
+            Style::default().fg(t.text_highlight),
+        ));
+        buff_spans.push(Span::styled(
+            format!("({}) ", b.duration_str()),
+            Style::default().fg(t.text_muted),
+        ));
+    }
+    Some(Line::from(buff_spans))
+}
+
+/// Build the operating mode indicator lines.
+fn mode_lines<'a>(app: &App) -> Vec<Line<'a>> {
+    let t = &app.theme;
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_color = match mode_str.as_str() {
+        "Camp" => t.mode_camp,
+        "Hunt" => t.mode_hunt,
+        _ => t.text_muted,
+    };
+    vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Mode: ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                mode_str,
+                Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+    ]
+}
 
 pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     if app.has_live_group_data() {
@@ -128,69 +220,28 @@ fn draw_live_group_panel(
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
+    let max_lines = inner.height as usize;
+    // Reserve 2 lines for the mode indicator at the bottom
+    let member_budget = max_lines.saturating_sub(2);
+    // If panel is very tight, skip buff rows to fit more members
+    let show_buffs = member_budget > connected.len();
+
     let mut lines: Vec<Line<'_>> = Vec::new();
 
     for (name, client_opt) in &connected {
+        if lines.len() >= member_budget {
+            break;
+        }
         if let Some(client) = client_opt {
             if let Some(player) = &client.local_player {
-                let hp_pct = player.hp_pct();
                 let display_name = app.redact_name(&player.displayed_name).into_owned();
                 let is_leader = *name == group.leader;
-                let mana_str = if player.mana_max > 0 {
-                    format!(" {:>3.0}%mp", player.mana_pct())
-                } else {
-                    "     -".into()
-                };
 
-                let name_style = if is_leader {
-                    Style::default()
-                        .fg(t.text_highlight)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(t.text_normal)
-                };
+                lines.push(member_line(player, is_leader, display_name, t));
 
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        if is_leader { "*" } else { " " },
-                        Style::default().fg(t.text_accent),
-                    ),
-                    Span::styled(format!("{:<12}", display_name), name_style),
-                    Span::styled(
-                        format!("{:<4}", player.class_str()),
-                        Style::default().fg(t.text_accent),
-                    ),
-                    Span::styled(
-                        format!("{:>3}", player.level),
-                        Style::default().fg(t.text_secondary),
-                    ),
-                    Span::styled(
-                        format!(" {:>3.0}%", hp_pct),
-                        Style::default().fg(hp_color(hp_pct, t)),
-                    ),
-                    Span::styled(mana_str, Style::default().fg(t.mana_color)),
-                ]));
-
-                // Buff timer row
-                let active_buffs: Vec<&BuffSlot> = player
-                    .buff_slots
-                    .iter()
-                    .filter(|b| !b.is_empty())
-                    .take(6)
-                    .collect();
-                if !active_buffs.is_empty() {
-                    let mut buff_spans: Vec<Span<'_>> = vec![Span::raw("  ")];
-                    for b in &active_buffs {
-                        buff_spans.push(Span::styled(
-                            format!("{:04X}", b.spell_id),
-                            Style::default().fg(t.text_highlight),
-                        ));
-                        buff_spans.push(Span::styled(
-                            format!("({}) ", b.duration_str()),
-                            Style::default().fg(t.text_muted),
-                        ));
-                    }
-                    lines.push(Line::from(buff_spans));
+                if show_buffs && lines.len() < member_budget
+                    && let Some(bl) = buff_line(player, t) {
+                        lines.push(bl);
                 }
             } else {
                 lines.push(Line::from(Span::styled(
@@ -208,21 +259,10 @@ fn draw_live_group_panel(
         }
     }
 
-    // Operating mode indicator
-    lines.push(Line::from(""));
-    let mode_str = format!("{}", app.operating_mode);
-    let mode_color = match mode_str.as_str() {
-        "Camp" => t.mode_camp,
-        "Hunt" => t.mode_hunt,
-        _ => t.text_muted,
-    };
-    lines.push(Line::from(vec![
-        Span::styled("  Mode: ", Style::default().fg(t.text_muted)),
-        Span::styled(
-            mode_str,
-            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
-        ),
-    ]));
+    // Operating mode indicator (only if space remains)
+    if lines.len() + 2 <= max_lines {
+        lines.extend(mode_lines(app));
+    }
 
     frame.render_widget(Paragraph::new(lines), inner);
 }
@@ -435,56 +475,28 @@ fn draw_config_group_panel(
         })
         .unwrap_or_default();
 
+    let max_lines = inner.height as usize;
+    let slot_count = (hi - lo + 1) as usize;
+    // Reserve 2 lines for the mode indicator at the bottom
+    let member_budget = max_lines.saturating_sub(2);
+    // If panel is very tight, skip buff rows to fit more members
+    let show_buffs = member_budget > slot_count;
+
     let mut lines: Vec<Line<'_>> = Vec::new();
 
     for acct_num in lo..=hi {
+        if lines.len() >= member_budget {
+            break;
+        }
         if let Some(client) = slot_map.get(&acct_num) {
             if let Some(player) = &client.local_player {
-                let hp_pct = player.hp_pct();
                 let name = app.redact_name(&player.displayed_name).into_owned();
-                let mana_str = if player.mana_max > 0 {
-                    format!(" {:>3.0}%mp", player.mana_pct())
-                } else {
-                    "     -".into()
-                };
+                // Config groups don't have a leader concept per se; no leader marker
+                lines.push(member_line(player, false, name, t));
 
-                lines.push(Line::from(vec![
-                    Span::styled(format!("{:<12}", name), Style::default().fg(t.text_normal)),
-                    Span::styled(
-                        format!("{:<4}", player.class_str()),
-                        Style::default().fg(t.text_accent),
-                    ),
-                    Span::styled(
-                        format!("{:>3}", player.level),
-                        Style::default().fg(t.text_secondary),
-                    ),
-                    Span::styled(
-                        format!(" {:>3.0}%", hp_pct),
-                        Style::default().fg(hp_color(hp_pct, t)),
-                    ),
-                    Span::styled(mana_str, Style::default().fg(t.mana_color)),
-                ]));
-
-                // Buff timer row — show active buffs with durations
-                let active_buffs: Vec<&BuffSlot> = player
-                    .buff_slots
-                    .iter()
-                    .filter(|b| !b.is_empty())
-                    .take(6)
-                    .collect();
-                if !active_buffs.is_empty() {
-                    let mut buff_spans: Vec<Span<'_>> = vec![Span::raw("  ")];
-                    for b in &active_buffs {
-                        buff_spans.push(Span::styled(
-                            format!("{:04X}", b.spell_id),
-                            Style::default().fg(t.text_highlight),
-                        ));
-                        buff_spans.push(Span::styled(
-                            format!("({}) ", b.duration_str()),
-                            Style::default().fg(t.text_muted),
-                        ));
-                    }
-                    lines.push(Line::from(buff_spans));
+                if show_buffs && lines.len() < member_budget
+                    && let Some(bl) = buff_line(player, t) {
+                        lines.push(bl);
                 }
             } else {
                 lines.push(Line::from(Span::styled(
@@ -505,21 +517,10 @@ fn draw_config_group_panel(
         }
     }
 
-    // Operating mode indicator
-    lines.push(Line::from(""));
-    let mode_str = format!("{}", app.operating_mode);
-    let mode_color = match mode_str.as_str() {
-        "Camp" => t.mode_camp,
-        "Hunt" => t.mode_hunt,
-        _ => t.text_muted,
-    };
-    lines.push(Line::from(vec![
-        Span::styled("  Mode: ", Style::default().fg(t.text_muted)),
-        Span::styled(
-            mode_str,
-            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
-        ),
-    ]));
+    // Operating mode indicator (only if space remains)
+    if lines.len() + 2 <= max_lines {
+        lines.extend(mode_lines(app));
+    }
 
     frame.render_widget(Paragraph::new(lines), inner);
 }
@@ -536,6 +537,57 @@ fn grid_dims(panel_count: usize) -> (usize, usize) {
         4 => (2, 2),
         5..=6 => (2, 3),
         7..=9 => (3, 3),
-        _ => (3, 4),
+        10..=12 => (3, 4),
+        _ => {
+            // Dynamically calculate for >12 panels
+            let cols = (panel_count as f64).sqrt().ceil() as usize;
+            let rows = panel_count.div_ceil(cols);
+            (rows, cols)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grid_dims_zero_groups() {
+        assert_eq!(grid_dims(0), (1, 1));
+    }
+
+    #[test]
+    fn grid_dims_one_group() {
+        assert_eq!(grid_dims(1), (1, 1));
+    }
+
+    #[test]
+    fn grid_dims_six_groups() {
+        assert_eq!(grid_dims(6), (2, 3));
+    }
+
+    #[test]
+    fn grid_dims_large_count_does_not_panic() {
+        // 13+ groups use dynamic formula: cols=ceil(sqrt(n)), rows=ceil(n/cols)
+        let (rows, cols) = grid_dims(13);
+        assert!(rows > 0 && cols > 0);
+        assert_eq!((rows, cols), (4, 4)); // ceil(sqrt(13))=4, ceil(13/4)=4
+
+        // Even very large values should be fine.
+        let (rows, cols) = grid_dims(100);
+        assert!(rows > 0 && cols > 0);
+        assert_eq!((rows, cols), (10, 10)); // ceil(sqrt(100))=10, ceil(100/10)=10
+    }
+
+    #[test]
+    fn grid_dims_all_breakpoints() {
+        assert_eq!(grid_dims(2), (1, 2));
+        assert_eq!(grid_dims(3), (1, 3));
+        assert_eq!(grid_dims(4), (2, 2));
+        assert_eq!(grid_dims(5), (2, 3));
+        assert_eq!(grid_dims(7), (3, 3));
+        assert_eq!(grid_dims(8), (3, 3));
+        assert_eq!(grid_dims(9), (3, 3));
+        assert_eq!(grid_dims(10), (3, 4));
     }
 }

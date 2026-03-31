@@ -175,7 +175,7 @@ pub fn handle_events(
                 app.active_screen = ActiveScreen::Navigation;
                 return Ok(true);
             }
-            (KeyCode::Tab, _) => {
+            (KeyCode::Tab, _) if app.active_screen == ActiveScreen::Character => {
                 app.toggle_panel();
                 return Ok(true);
             }
@@ -245,26 +245,46 @@ pub fn handle_events(
             }
         }
 
-        // Panel-specific keybindings (apply on Spawns and Character screens)
-        match app.active_panel {
-            ActivePanel::SpawnList => match key.code {
-                KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
-                KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
-                KeyCode::PageDown => app.spawn_list_page_down(),
-                KeyCode::PageUp => app.spawn_list_page_up(),
-                KeyCode::Home => app.spawns_state.table_state.select(Some(0)),
-                KeyCode::End => {
-                    let max = app.filtered_spawns().len().saturating_sub(1);
-                    app.spawns_state.table_state.select(Some(max));
+        // Navigation screen keybindings: j/k navigate the character list
+        if app.active_screen == ActiveScreen::Navigation {
+            match key.code {
+                KeyCode::Down | KeyCode::Char('j') => {
+                    let max = app.visible_clients().len().saturating_sub(1);
+                    if app.nav_state.nav_selected < max {
+                        app.nav_state.nav_selected += 1;
+                    }
                 }
-                KeyCode::Enter => app.inspect_selected_spawn(),
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.nav_state.nav_selected = app.nav_state.nav_selected.saturating_sub(1);
+                }
                 _ => {}
-            },
-            ActivePanel::HexDump => match key.code {
-                KeyCode::Down | KeyCode::Char('j') => app.hex_scroll_down(),
-                KeyCode::Up | KeyCode::Char('k') => app.hex_scroll_up(),
-                _ => {}
-            },
+            }
+        }
+
+        // Panel-specific keybindings (only on Spawns and Character screens)
+        if app.active_screen == ActiveScreen::Spawns
+            || app.active_screen == ActiveScreen::Character
+        {
+            match app.active_panel {
+                ActivePanel::SpawnList => match key.code {
+                    KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
+                    KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
+                    KeyCode::PageDown => app.spawn_list_page_down(),
+                    KeyCode::PageUp => app.spawn_list_page_up(),
+                    KeyCode::Home => app.spawns_state.table_state.select(Some(0)),
+                    KeyCode::End => {
+                        let max = app.filtered_spawns().len().saturating_sub(1);
+                        app.spawns_state.table_state.select(Some(max));
+                    }
+                    KeyCode::Enter => app.inspect_selected_spawn(),
+                    _ => {}
+                },
+                ActivePanel::HexDump => match key.code {
+                    KeyCode::Down | KeyCode::Char('j') => app.hex_scroll_down(),
+                    KeyCode::Up | KeyCode::Char('k') => app.hex_scroll_up(),
+                    _ => {}
+                },
+            }
         }
     }
 

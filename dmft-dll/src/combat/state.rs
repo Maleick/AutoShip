@@ -150,6 +150,18 @@ impl Combatant {
                 }
                 HolyShitAction::Flee => {
                     tracing::warn!("HolyShit: FLEE — disengaging and requesting flee movement");
+                    // Notify strategy of combat end so class-specific cleanup runs
+                    // (e.g., bard stops /melody).
+                    let flee_ctx = CombatContext {
+                        player,
+                        target,
+                        nearby_enemies: nearby,
+                        group_members: &self.group_members,
+                        config: &self.config,
+                        tick: self.tick_count,
+                        in_combat: false,
+                    };
+                    self.strategy.on_action_complete(&flee_ctx);
                     self.assist_target = None;
                     self.flee_requested = true;
                     self.state = CombatState::Idle;

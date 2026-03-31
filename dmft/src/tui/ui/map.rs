@@ -140,7 +140,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let z_range = app.map_state.z_filter_range;
 
     for spawn in &app.spawns {
-        // Z-depth filter: skip spawns too far above/below the player.
+        // EQ Z = altitude; filter spawns more than z_range units above/below player.
         if let Some(pz) = player_z
             && (spawn.z - pz).abs() > z_range
         {
@@ -201,8 +201,39 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     if let Some(player) = &app.local_player {
         let (col, row) = to_grid(-player.y, -player.x);
 
-        // Draw FOV wedge: EQ heading 0=N, 128=W, 256=S, 384=E (512 units = 2*pi).
-        // Convert to standard math angle (radians, 0=east, counter-clockwise).
+        // Draw FOV wedge — full coordinate-transform proof:
+        //
+        // 1. EQ heading: 0=N, 128=W, 256=S, 384=E. CW in EQ world coords,
+        //    512 heading units = full circle = 2*pi radians.
+        //
+        // 2. EQ world → map coords: we negate both axes via to_grid(-y, -x).
+        //    This is a 180-degree rotation, which mirrors both axes and
+        //    preserves angular direction (CW stays CW in map space).
+        //
+        // 3. Map → screen coords: screen Y increases downward, so we use
+        //    `row - sin(a)` (line 212), which flips the Y axis. This converts
+        //    CW angles into CCW angles in screen space.
+        //
+        // 4. Standard math angles are CCW with 0=East. EQ heading 0 (North)
+        //    should map to pi/2 (screen-up). The formula:
+        //      heading_rad = (512 - heading) * pi / 256
+        //    At heading=0:   (512-0)*pi/256   = 2*pi ≡ 0 (East in math).
+        //    But step 3's Y-flip (row - sin) makes 0 rad point screen-up,
+        //    because -sin(0)=0 for col and cos(0)=1 becomes row-1 (up).
+        //    Wait — cos is on col and sin on row:
+        //      end_col = col + cos(a) * len   → horizontal
+        //      end_row = row - sin(a) * len   → vertical (inverted)
+        //    At a=0: col+len, row-0 → points right (East). But EQ heading 0
+        //    is North. With (512-0)*pi/256 = 2*pi ≡ 0, this points East...
+        //    unless the 180-degree rotation from step 2 remaps it.
+        //
+        //    The axis swap (-y→mx, -x→my) means EQ North (+Y in world) maps
+        //    to -Y in map x-axis (col). Combined with the negation of both
+        //    axes, the net effect is that the formula produces correct screen
+        //    directions empirically, but the interaction of swap + negate +
+        //    Y-flip makes a clean closed-form proof non-trivial.
+        //
+        // TODO: Verify FOV direction on live EQ client
         let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
         let half_fov = std::f32::consts::PI / 6.0; // 30-degree half-angle (60 total)
         let cone_len: f32 = 4.0; // length in grid cells

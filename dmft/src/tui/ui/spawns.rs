@@ -70,7 +70,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     // Show coordinate columns when terminal is wide enough (>= 140 chars)
     let show_coords = area.width >= 140;
 
-    let mut header_cells = vec!["Type", "Name", "Race", "Cls", "Lv", "HP%", "Dist", "ID"];
+    let mut header_cells = vec!["Type", "Name", "Race", "Cls", "Lv", "HP%", "Dist2D", "ID"];
     if show_coords {
         header_cells.push("X");
         header_cells.push("Y");
@@ -88,6 +88,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             let style = spawn_row_style(spawn, player_level, t);
             let name = app.redact_name(&spawn.displayed_name);
 
+            // 2D Euclidean distance — Z (altitude) intentionally excluded for tactical range
             let dist_str = match player_pos {
                 Some((px, py)) => {
                     let dx = spawn.x - px;

@@ -55,6 +55,13 @@ impl ClassStrategy for BardStrategy {
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {
+        // Guard: don't issue bare `/melody` when no songs are configured —
+        // EQ treats `/melody` (no args) as a stop/toggle command.
+        if ctx.config.spells.is_empty() {
+            tracing::warn!("Bard on_engage: no spells configured, skipping /melody");
+            return;
+        }
+
         let cmd = Self::melody_command(&ctx.config.spells);
         tracing::info!(
             command = %cmd,
@@ -206,8 +213,87 @@ mod tests {
     }
 
     #[test]
+    fn on_engage_empty_spells_does_not_activate_melody() {
+        let mut bard = BardStrategy::new(8);
+        assert!(!bard.melody_active);
+
+        let player = SpawnData::default();
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![], // No spells configured
+            ..Default::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        bard.on_engage(&ctx);
+        // melody_active should remain false — no /melody command issued
+        assert!(!bard.melody_active);
+    }
+
+    #[test]
     fn class_id_is_8() {
         let bard = BardStrategy::new(8);
         assert_eq!(bard.class_id(), 8);
+    }
+
+    #[test]
+    fn bard_class_id_custom() {
+        let bard = BardStrategy::new(42);
+        assert_eq!(bard.class_id(), 42);
+    }
+
+    #[test]
+    fn melody_cleanup_on_flee_full_cycle() {
+        // Verify the full engage → disengage cycle cleans up melody state.
+        let mut bard = BardStrategy::new(8);
+        assert!(!bard.melody_active);
+
+        let player = SpawnData::default();
+        let config = dmft_common::combat::CombatConfig {
+            spells: vec![make_spell(100, "Selo's", 1), make_spell(101, "Chant", 2)],
+            ..Default::default()
+        };
+
+        // Engage — melody starts
+        let engage_ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        bard.on_engage(&engage_ctx);
+        assert!(bard.melody_active, "melody should be active after on_engage");
+
+        // Combat ends — melody should stop
+        let disengage_ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 50,
+            in_combat: false,
+        };
+        bard.on_action_complete(&disengage_ctx);
+        assert!(
+            !bard.melody_active,
+            "melody should be inactive after combat ends"
+        );
+    }
+
+    #[test]
+    fn melody_command_empty_edge_case_returns_bare_command() {
+        // Edge case: empty spell list should produce bare /melody with no slots.
+        let cmd = BardStrategy::melody_command(&[]);
+        assert_eq!(cmd, "/melody");
     }
 }
