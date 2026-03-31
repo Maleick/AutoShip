@@ -1,10 +1,12 @@
 pub mod aggro;
 pub mod classes;
+pub mod dot_tracker;
 pub mod gcd;
 pub mod holyshit;
 pub mod humanize;
 pub mod loot;
 pub mod mana;
+pub mod mez_queue;
 pub mod positioning;
 pub mod skill_cooldowns;
 pub mod state;

@@ -3,6 +3,11 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
 /// Enchanter strategy: crowd control, mezzes off-targets, nukes when only one enemy.
+///
+/// When multiple enemies are present, the enchanter picks the first unmezzed
+/// off-target for CC.  "Unmezzed" is approximated by skipping the primary
+/// assist target (index 0 in `nearby_enemies`) and choosing the next mob.
+/// Future: integrate with `MezQueue` for proper expiry-aware target selection.
 pub struct EnchanterStrategy {
     class_id: u8,
 }
@@ -20,10 +25,22 @@ impl ClassStrategy for EnchanterStrategy {
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         if ctx.nearby_enemies.len() > 1 {
-            // Target the second NPC (off-target) for mez.
-            ctx.nearby_enemies.get(1).map(|s| s.spawn_id)
+            // The main-assist target is typically the first enemy in the list.
+            // Pick the first off-target that is NOT the current target (avoid
+            // re-targeting something the group is already burning down).
+            let current_target_id = ctx.target.map(|t| t.spawn_id);
+            let off_target = ctx
+                .nearby_enemies
+                .iter()
+                .skip(1) // skip primary assist target
+                .find(|s| Some(s.spawn_id) != current_target_id);
+
+            // Fall back to the 2nd mob if all off-targets happen to match current target.
+            off_target
+                .or_else(|| ctx.nearby_enemies.get(1))
+                .map(|s| s.spawn_id)
         } else {
-            // Single target — use current target.
+            // Single target — use current target for nuking.
             ctx.target.map(|t| t.spawn_id)
         }
     }

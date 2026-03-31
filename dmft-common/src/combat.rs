@@ -78,11 +78,27 @@ pub enum HolyShitAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisciplineEntry {
+    pub name: String,
+    pub spell_id: i32,
+    pub priority: u8,
+    /// Cooldown in game ticks (~20 ticks/sec). Disciplines have long reuse timers.
+    pub cooldown_ticks: u32,
+    /// Minimum HP % to use this disc (e.g., Defensive only when < 50% HP)
+    pub min_hp_pct: f32,
+    /// Maximum HP % (e.g., don't waste Defensive at full HP)
+    pub max_hp_pct: f32,
+    /// Minimum endurance % required
+    pub min_endurance_pct: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CombatConfig {
     pub role: CombatRole,
     pub pull_method: Option<PullMethod>,
     pub assist_mode: AssistMode,
     pub spells: Vec<SpellEntry>,
+    pub disciplines: Vec<DisciplineEntry>,
     pub holyshit_rules: Vec<HolyShitCondition>,
     pub mana_floor: f32,
     pub aoe_threshold: u8,
@@ -95,6 +111,7 @@ impl Default for CombatConfig {
             pull_method: None,
             assist_mode: AssistMode::AssistTrain,
             spells: Vec::new(),
+            disciplines: Vec::new(),
             holyshit_rules: Vec::new(),
             mana_floor: 20.0,
             aoe_threshold: 3,
@@ -136,6 +153,7 @@ mod tests {
         assert!(config.pull_method.is_none());
         assert!(matches!(config.assist_mode, AssistMode::AssistTrain));
         assert!(config.spells.is_empty());
+        assert!(config.disciplines.is_empty());
         assert!(config.holyshit_rules.is_empty());
         assert!((config.mana_floor - 20.0).abs() < f32::EPSILON);
         assert_eq!(config.aoe_threshold, 3);

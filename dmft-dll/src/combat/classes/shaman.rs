@@ -188,6 +188,7 @@ mod tests {
                 },
             ],
             holyshit_rules: vec![],
+            disciplines: vec![],
         }
     }
 

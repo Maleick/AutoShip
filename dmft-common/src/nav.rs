@@ -33,7 +33,7 @@ impl Xorshift32 {
 }
 
 /// A single point in 3D space with optional metadata.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Waypoint {
     pub x: f32,
     pub y: f32,
