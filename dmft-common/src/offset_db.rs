@@ -174,20 +174,7 @@ mod tests {
         db.save_to_file(&path).expect("save failed");
         let loaded = OffsetDatabase::load_from_file(&path).expect("load failed");
 
-        assert_eq!(loaded.client_date, db.client_date);
-        assert_eq!(loaded.eq_preferred_base, db.eq_preferred_base);
-        assert_eq!(
-            loaded.get_global("pinstLocalPlayer"),
-            db.get_global("pinstLocalPlayer")
-        );
-        assert_eq!(
-            loaded.get_player_base_offset("x"),
-            db.get_player_base_offset("x")
-        );
-        assert_eq!(
-            loaded.get_player_zone_offset("hpMax"),
-            db.get_player_zone_offset("hpMax")
-        );
+        assert_eq!(loaded, db);
 
         // Cleanup
         let _ = std::fs::remove_dir_all(&dir);
