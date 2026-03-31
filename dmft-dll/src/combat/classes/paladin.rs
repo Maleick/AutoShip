@@ -20,7 +20,6 @@ impl PaladinStrategy {
     pub fn new(class_id: u8) -> Self {
         Self { class_id }
     }
-
 }
 
 fn is_cure_spell(s: &SpellEntry) -> bool {

@@ -20,7 +20,6 @@ impl ShamanStrategy {
             last_target_id: 0,
         }
     }
-
 }
 
 impl ClassStrategy for ShamanStrategy {

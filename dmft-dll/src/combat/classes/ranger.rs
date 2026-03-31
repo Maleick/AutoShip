@@ -51,8 +51,7 @@ impl ClassStrategy for RangerStrategy {
         if ctx.in_combat {
             ctx.target.map(|t| t.spawn_id)
         } else {
-            strategy::nearest_enemy(ctx.player, ctx.nearby_enemies)
-                .map(|s| s.spawn_id)
+            strategy::nearest_enemy(ctx.player, ctx.nearby_enemies).map(|s| s.spawn_id)
         }
     }
 
