@@ -21,11 +21,14 @@
 //! rez commands. It is checked every tick before the main state match — if recovery is in
 //! progress, pulling is paused until all members are alive.
 
+use crate::camp::buffs::{BuffTracker, check_buffs};
 use crate::camp::cc::{CcMember, CcTracker};
+use crate::camp::class_config::ClassConfig;
 use crate::camp::config::CampConfig;
 use crate::camp::loot::{CorpseEntry, LootConfig, LootCycle};
 use crate::camp::personality::PersonalityProfile;
 use crate::camp::recovery::{RecoveryTracker, death_commands_with_roles};
+use std::collections::HashMap;
 
 /// Events that can occur during the camp loop, triggering reactive behavior.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,6 +184,10 @@ pub struct CampLoop {
     pub recovery: RecoveryTracker,
     /// Spell gem number used for resurrection (e.g., 5 for cleric rez in gem 5).
     pub rez_gem: u8,
+    /// Buff duration tracker for rebuff scheduling.
+    pub buff_tracker: BuffTracker,
+    /// Class configs keyed by role string (e.g., "healer", "cc").
+    pub class_configs: HashMap<String, ClassConfig>,
 }
 
 impl CampLoop {
@@ -201,6 +208,8 @@ impl CampLoop {
             pending_corpses: Vec::new(),
             recovery: RecoveryTracker::new(&recovery_members),
             rez_gem: 5,
+            buff_tracker: BuffTracker::new(),
+            class_configs: HashMap::new(),
         }
     }
 
@@ -429,7 +438,23 @@ impl CampLoop {
                     .unwrap_or(false);
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
                 if mana_ready || timer_expired {
-                    self.transition_to_idle(&mut commands);
+                    // Check if any buffs need refreshing before going idle
+                    let buff_cmds = check_buffs(
+                        &self.buff_tracker,
+                        &self.members,
+                        &self.class_configs,
+                        self.tick,
+                        &CampState::Idle, // Check as if idle (both Idle and Medding are valid)
+                    );
+                    if buff_cmds.is_empty() {
+                        self.transition_to_idle(&mut commands);
+                    } else {
+                        // Transition to Buffing and emit the buff commands
+                        commands.extend(CampAction::from_slash_vec(buff_cmds));
+                        self.state = CampState::Buffing {
+                            started_tick: self.tick,
+                        };
+                    }
                 }
             }
             CampState::Buffing { started_tick } => {
@@ -1049,5 +1074,124 @@ mod tests {
                 "Should not partially match spawn_id 100"
             );
         }
+    }
+
+    // --- Task 3: Buff rebuffing activation ---
+
+    #[test]
+    fn test_medding_to_buffing_when_buffs_needed() {
+        use crate::camp::class_config::{ClassAbility, ClassConfig};
+
+        let mut camp = CampLoop::new(test_config(), test_members());
+        // Put camp in Medding state
+        camp.state = CampState::Medding { started_tick: 0 };
+        camp.tick = MED_DURATION; // Past the med timer
+
+        // Configure class configs with a buff ability for the healer
+        camp.class_configs.insert(
+            "healer".into(),
+            ClassConfig {
+                class_name: "cleric".into(),
+                role: "healer".into(),
+                combat_abilities: vec![],
+                buff_abilities: vec![ClassAbility {
+                    name: "Symbol of Naltron".into(),
+                    command: "/cast 4".into(),
+                    cooldown_secs: 200.0,
+                    priority: 1,
+                    condition: None,
+                    duration_secs: None,
+                }],
+                emergency_abilities: vec![],
+                cc_abilities: vec![],
+                debuff_abilities: vec![],
+                rest_command: "/sit".into(),
+                twist_interval_secs: None,
+            },
+        );
+
+        // Tick with no snapshot (timer-based fallback)
+        let cmds = camp.tick(None);
+
+        // Should transition to Buffing (buffs are needed — never cast)
+        assert!(
+            matches!(camp.state, CampState::Buffing { .. }),
+            "Should transition to Buffing when buffs are needed, got {:?}",
+            camp.state
+        );
+        // Should have buff commands
+        assert!(
+            cmds.iter().any(|(_, cmd)| cmd.contains("/cast 4")),
+            "Should have buff cast command"
+        );
+    }
+
+    #[test]
+    fn test_medding_to_idle_when_no_buffs_needed() {
+        use crate::camp::class_config::ClassConfig;
+
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Medding { started_tick: 0 };
+        camp.tick = MED_DURATION;
+
+        // No class configs -> no buffs to check -> go straight to Idle
+        let _cmds = camp.tick(None);
+        assert_eq!(camp.state, CampState::Idle);
+    }
+
+    #[test]
+    fn test_medding_to_idle_when_buffs_recently_cast() {
+        use crate::camp::class_config::{ClassAbility, ClassConfig};
+
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Medding { started_tick: 0 };
+        camp.tick = MED_DURATION;
+
+        camp.class_configs.insert(
+            "healer".into(),
+            ClassConfig {
+                class_name: "cleric".into(),
+                role: "healer".into(),
+                combat_abilities: vec![],
+                buff_abilities: vec![ClassAbility {
+                    name: "Symbol of Naltron".into(),
+                    command: "/cast 4".into(),
+                    cooldown_secs: 200.0,
+                    priority: 1,
+                    condition: None,
+                    duration_secs: None,
+                }],
+                emergency_abilities: vec![],
+                cc_abilities: vec![],
+                debuff_abilities: vec![],
+                rest_command: "/sit".into(),
+                twist_interval_secs: None,
+            },
+        );
+
+        // Record all buffs as recently cast for all members
+        for member in &camp.members {
+            camp.buff_tracker
+                .record_cast(member.pid, "Symbol of Naltron", camp.tick);
+        }
+
+        let _cmds = camp.tick(None);
+        assert_eq!(
+            camp.state,
+            CampState::Idle,
+            "Should go straight to Idle when all buffs are fresh"
+        );
+    }
+
+    #[test]
+    fn test_buffing_to_idle_after_timer() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Buffing { started_tick: 0 };
+        camp.tick = BUFF_DURATION;
+
+        let cmds = camp.tick(None);
+        assert_eq!(camp.state, CampState::Idle);
+        // Should have /stand commands
+        assert!(cmds.iter().any(|(_, cmd)| cmd == "/stand"));
     }
 }
