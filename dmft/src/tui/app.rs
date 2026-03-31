@@ -712,10 +712,10 @@ impl App {
                 if self.spawns_state.spawn_filter.is_empty() {
                     return true;
                 }
-                let filter = self.spawns_state.spawn_filter.to_lowercase();
-                s.displayed_name.to_lowercase().contains(&filter)
-                    || s.class_str().to_lowercase().contains(&filter)
-                    || s.spawn_type.to_string().to_lowercase().contains(&filter)
+                let filter = self.spawns_state.spawn_filter.to_ascii_lowercase();
+                ascii_icontains(&s.displayed_name, &filter)
+                    || ascii_icontains(&s.class_str(), &filter)
+                    || ascii_icontains(s.spawn_type.as_str(), &filter)
             })
             .collect()
     }
@@ -2462,4 +2462,17 @@ fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result
     pipe.send_raw_token(&token)?;
     pipe.send_async(cmd)?;
     Ok(())
+}
+
+/// Case-insensitive substring search for ASCII strings, without heap allocation.
+/// `needle` is expected to be already lowercased.
+fn ascii_icontains(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    let n = needle.as_bytes();
+    haystack
+        .as_bytes()
+        .windows(n.len())
+        .any(|w| w.eq_ignore_ascii_case(n))
 }

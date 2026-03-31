@@ -76,9 +76,9 @@ impl NamedMobDatabase {
                 let zone_file: ZoneFile = toml::from_str(&content)
                     .with_context(|| format!("Failed to parse {}", path.display()))?;
 
-                let zone_key = zone_file.zone.to_lowercase();
+                let zone_key = zone_file.zone.to_ascii_lowercase();
                 for mob in zone_file.named {
-                    let name_key = mob.name.to_lowercase();
+                    let name_key = mob.name.to_ascii_lowercase();
                     by_zone
                         .entry(zone_key.clone())
                         .or_default()
@@ -94,13 +94,13 @@ impl NamedMobDatabase {
     /// Look up a named mob by zone and name (case-insensitive).
     pub fn get(&self, zone: &str, name: &str) -> Option<&NamedMobEntry> {
         self.entries
-            .get(&(zone.to_lowercase(), name.to_lowercase()))
+            .get(&(zone.to_ascii_lowercase(), name.to_ascii_lowercase()))
     }
 
     /// Get all named mobs for a zone.
     pub fn for_zone(&self, zone: &str) -> &[NamedMobEntry] {
         self.by_zone
-            .get(&zone.to_lowercase())
+            .get(&zone.to_ascii_lowercase())
             .map(|v| v.as_slice())
             .unwrap_or(&[])
     }

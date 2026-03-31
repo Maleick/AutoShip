@@ -8,8 +8,6 @@ use ratatui::{
     widgets::{Cell, Paragraph, Row, Table, Wrap},
 };
 
-use dmft_common::nav::Waypoint;
-
 use super::widgets::{hp_color, panel, spawn_info_lines, spawn_row_style, themed_header_row};
 use crate::eq::structs::SpawnInfo;
 use crate::tui::app::{ActivePanel, App};
@@ -93,8 +91,8 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             // 2D Euclidean distance — Z (altitude) intentionally excluded for tactical range
             let dist_str = match player_pos {
                 Some((px, py)) => {
-                    let dist = Waypoint::new(spawn.x, spawn.y, 0.0)
-                        .distance_2d(&Waypoint::new(px, py, 0.0));
+                    let dist =
+                        ((spawn.x - px).powi(2) + (spawn.y - py).powi(2)).sqrt();
                     format!("{:.0}", dist)
                 }
                 None => String::from("-"),

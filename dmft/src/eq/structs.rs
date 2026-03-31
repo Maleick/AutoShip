@@ -92,6 +92,17 @@ impl SpawnType {
             other => Self::Unknown(other),
         }
     }
+
+    /// Return a static string label suitable for display and filtering.
+    /// Avoids a heap allocation compared to `to_string()`.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Player => "PC",
+            Self::Npc => "NPC",
+            Self::Corpse => "Corpse",
+            Self::Unknown(_) => "Unknown",
+        }
+    }
 }
 
 impl fmt::Display for SpawnType {
