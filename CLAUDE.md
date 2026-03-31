@@ -18,123 +18,91 @@ cargo run                # Run TUI mode (demo mode on macOS, live on Windows)
 cargo run -- --dump      # One-shot CLI dump mode (original M1 behavior)
 cargo clippy             # Lint
 cargo fmt --check        # Check formatting
-cargo test               # Run tests
+cargo test               # Run tests (macOS runs platform-independent subset)
 ```
 
-The project has ~686 platform-independent tests across 3 crates on macOS/Linux (481 dmft + 53 dmft-common + 152 dmft-dll); additional Windows-only tests are behind `#[cfg(windows)]`. The project uses Rust edition 2024.
+~698 platform-independent tests across 3 crates (481 dmft + 65 dmft-common + 152 dmft-dll). Additional Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024.
 
 ## Architecture
 
-### Two runtime modes
+### Runtime modes
 
-- **TUI mode** (default): ratatui-based live dashboard with spawn list, player/target panels, hex dump viewer
+- **TUI mode** (default): ratatui-based live dashboard with spawn list, player/target panels, hex dump, map, navigation, group views
 - **Dump mode** (`--dump`): one-shot CLI output of player, target, and spawn data
 
 ### Cross-platform strategy
 
 All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. The TUI runs on macOS with demo data (`dmft/src/tui/run.rs:load_demo_data`), making UI development possible without a live EQ client.
 
-### Module structure (dmft orchestrator — M1)
+### Module map
 
-- **`dmft/src/process/`** — OS-level process interaction
-  - `memory.rs`: `ProcessHandle` (open, read, read_ptr, chase_ptr, read_string), `find_processes_by_name`
-  - `window.rs`: `find_windows_by_title` — window enumeration for client discovery
-- **`dmft/src/eq/`** — EverQuest-specific data layer
-  - `structs.rs`: `SpawnInfo`, `EqClass`, `SpawnType` — high-level data types (not repr(C); built by reading individual fields)
-  - `spawn.rs`: `read_spawn`, `read_local_player`, `read_target`, `read_all_spawns` — spawn linked list traversal
-- **`dmft/src/tui/`** — Terminal UI (ratatui + crossterm)
-  - `app.rs`: `App` state struct, filtering, navigation
-  - `ui.rs`: Panel rendering (header, player, target, hex dump, spawn list table)
-  - `run.rs`: Event loop, terminal setup/teardown, data refresh, demo data
-  - `event.rs`: Keyboard input handling
-- **`dmft/src/config.rs`** — TOML config loading (`config/frostreaver.toml`): process name, max spawns, group/toon definitions
+**`dmft/` — Orchestrator (external process)**
 
-### Key patterns
+| Module            | Purpose                                                                                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `process/`        | OS-level process interaction — open, read memory, find processes/windows                                                                            |
+| `eq/`             | EverQuest data layer — spawn structs, spawn linked list traversal                                                                                   |
+| `tui/`            | Terminal UI — app state, event handling, theme, sprites; `ui/` subdir has per-panel renderers (dashboard, groups, map, navigation, spawns, widgets) |
+| `config.rs`       | TOML config loading (`config/frostreaver.toml`)                                                                                                     |
+| `inject/`         | DLL injection and staging                                                                                                                           |
+| `ipc/`            | Named pipe server + shared memory setup                                                                                                             |
+| `client/`         | Multi-client management — sessions, self-healing monitor, CPU affinity                                                                              |
+| `nav/`            | Waypoint recording (RDP simplification), camp management, zone routing                                                                              |
+| `combat/`         | Assist target broadcasting, CC assignment, spell database                                                                                           |
+| `camp/`           | Camp loop state machine — buffs, CC, class config, hunt mode, loot, positioning, progression, puller, recovery, vendor                              |
+| `orchestrator.rs` | Wires camp loop state machine to IPC command delivery                                                                                               |
+| `launcher/`       | Login automation — per-client login FSM, staggered launch, process spawner, post-login sequencer                                                    |
+| `credentials/`    | Encrypted credential store — Argon2id + AES-256-GCM, SQLite backend                                                                                 |
+| `soul/`           | Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics                                                 |
 
-- **Offset rebasing**: All EQ pointers in `dmft-common/src/offsets.rs` are absolute preferred-base addresses. Use `offsets::rebase(preferred_addr, actual_base)` to convert to runtime addresses. This file also contains EQ internal function addresses (CastSpell, DoAttack, ExecuteCmd, etc.) used for direct function calls from the injected DLL.
-- **Spawn linked list**: Spawns are a `TList<PlayerClient*>` accessed via SpawnManager. `read_all_spawns` walks `NEXT` pointers with a max-count safety limit.
-- **Field-by-field reads**: `SpawnInfo` is populated by individual `proc.read::<T>(addr + OFFSET)` calls, not by reading a C struct wholesale. This is intentional — field offsets come from MQ2 headers and may not be contiguous.
-- **File-based tracing**: Both the orchestrator (`dmft`) and DLL (`dmft-dll`) use `tracing` + `tracing-appender` for file-based structured logging.
+**`dmft-dll/` — Injected DLL (cdylib)**
 
-### Reference material
+| Module      | Purpose                                                                                                                                                           |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hooks/`    | Game loop hooks — ProcessGameEvents, movement, casting, targeting                                                                                                 |
+| `eq/`       | EQ function bindings — UI widget primitives (CXWndManager, CXStr, button click via vtable)                                                                        |
+| `ipc/`      | Shared memory + named pipe client                                                                                                                                 |
+| `nav/`      | Navigator FSM, stuck detection, movement humanization, waypoint queue                                                                                             |
+| `combat/`   | Combatant FSM, ClassStrategy trait, 18 class implementations, HolyShit conditions, GCD tracker, mana governor, puller FSM, aggro detection, loot, skill cooldowns |
+| `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                             |
+| `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                |
 
-`mq2-reference/` contains a MacroQuest2 source clone used for extracting struct offsets and pointer addresses. It is gitignored and not part of the build. The offsets in `dmft-common/src/offsets.rs` are derived from `mq2-reference/src/eqlib/include/eqlib/offsets/eqgame.h` and `PlayerClient.h`.
+**`dmft-common/` — Shared types**
 
-### Milestone context
+| Module                                       | Purpose                                                                                                                                         |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `offsets.rs`                                 | EQ memory addresses + struct field offsets + internal function addresses. All preferred-base (`0x140000000`), rebased at runtime via `rebase()` |
+| `offset_db.rs`                               | Hot-updatable offset database (JSON)                                                                                                            |
+| `ipc.rs`                                     | Command/Response enums for all IPC channels                                                                                                     |
+| `nav.rs`, `combat.rs`, `login.rs`, `soul.rs` | Domain-specific shared types                                                                                                                    |
+| `protocol.rs`, `types.rs`                    | Wire protocol and common type definitions                                                                                                       |
 
-The project follows a milestone-based plan:
+### Milestones
 
 - **M1** (complete): External memory reading + TUI dashboard
-- **M2** (complete): DLL injection into eqgame.exe + internal function hooking (Rust cdylib), IPC (shared memory + named pipes), self-healing monitor, multi-client session manager
-- **M2.5** (complete): Login automation — credential store (SQLite + AES-GCM + Argon2), process spawner, login state machine, launch coordinator with stagger, post-login sequencer, CPU affinity manager, hot-updatable offset database
-- **M3** (complete): Navigation — waypoint-based pathfinding, Navigator FSM, movement humanization, stuck detection with escalating recovery, waypoint recorder, camp positioning, zone router
-- **M4** (complete): Combat automation — ClassStrategy trait with per-class implementations (warrior/cleric/enchanter/generic DPS), HolyShit conditional ability system, GCD tracker, mana governor, puller FSM, aggro detection, combat coordinator
-- **M5** (complete): Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics
+- **M2** (complete): DLL injection, internal function hooking, IPC, self-healing monitor
+- **M2.5** (complete): Login automation — credential store, process spawner, login FSM, launch coordinator
+- **M3** (complete): Navigation — waypoint pathfinding, Navigator FSM, humanization, stuck detection, zone router
+- **M4** (complete): Combat automation — ClassStrategy trait, 18 classes, HolyShit system, puller FSM, combat coordinator
+- **M5** (complete): Soul Engine — LLM personalities, persistent memory, idle behavior, social dynamics
 - **M6** (next): LLM Character AI — API integration (Gemini/Claude), in-game chat responses
-- **M7**: Learning/RL — behavioral cloning, RL fine-tuning, auto-research loops
-- **M8**: Economy — vendor automation, EC tunnel trading, Bazaar, price tracking
+- **M7**: Learning/RL — behavioral cloning, RL fine-tuning
+- **M8**: Economy — vendor automation, EC tunnel trading, Bazaar
 
-The control approach uses DLL injection (like MacroQuest) rather than PostMessage — this enables calling internal EQ functions directly, accessing the navigation mesh for pathfinding, and writing to game memory. The MQ2 reference source (`mq2-reference/`) is used both for struct offsets and as architectural reference for hooking patterns.
+## Patterns & Conventions
 
-### Module structure (dmft-common — shared types)
+- **Offset rebasing**: All EQ pointers in `offsets.rs` are absolute preferred-base addresses. Use `offsets::rebase(preferred_addr, actual_base)` to convert to runtime addresses.
+- **Spawn linked list**: `TList<PlayerClient*>` via SpawnManager. `read_all_spawns` walks `NEXT` pointers with a max-count safety limit.
+- **Field-by-field reads**: `SpawnInfo` is populated by individual `proc.read::<T>(addr + OFFSET)` calls, not by reading a C struct wholesale. This is intentional — field offsets from MQ2 headers may not be contiguous.
+- **Logging**: `tracing` + `tracing-appender` for file-based structured logging. Never `println!` or `log` crate.
+- **Platform gates**: All OS APIs behind `#[cfg(windows)]` with macOS/Linux stubs. Never use `#[cfg(target_os)]` directly — use `#[cfg(windows)]` / `#[cfg(not(windows))]`.
+- **DLL injection approach**: Custom Rust DLL (like MacroQuest) rather than PostMessage — enables direct EQ function calls, navmesh access, and game memory writes.
+- **Tests**: Unit tests in-file (`#[cfg(test)]`), all platform-independent. Run on macOS; Windows-only tests gated behind `#[cfg(windows)]`.
 
-- **`dmft-common/src/`** — Shared types across all crates
-  - `offsets.rs`: EQ memory addresses, struct field offsets, and internal function addresses (CastSpell, DoAttack, ExecuteCmd, etc.). All preferred-base (`0x140000000`), rebased at runtime via `rebase()`
-  - `offset_db.rs`: Hot-updatable offset database (JSON load/save)
-  - `nav.rs`: Waypoint, NavStatus, CampSpot, IndexedQueue<T>, Xorshift32 PRNG, KNUTH_HASH
-  - `combat.rs`: CombatStatus, CombatRole, ClassStrategy types, HolyShit conditions, SpellEntry
-  - `login.rs`: LoginPhase, LoginError, AccountInfo
-  - `soul.rs`: Soul Engine shared types
-  - `ipc.rs`: Command/Response enums for all IPC (nav + combat + login)
-  - `protocol.rs`: Wire protocol types
-  - `types.rs`: Common shared type definitions
+## Gotchas
 
-### Module structure (dmft-dll — injected DLL, M2-M4)
-
-- **`dmft-dll/src/hooks/`** — Game loop hooks
-  - `game_loop.rs`: Main game loop hook (ProcessGameEvents), `movement.rs`: Movement hooks
-  - `casting.rs`: Spell casting hooks, `targeting.rs`: Target selection hooks
-- **`dmft-dll/src/eq/`** — EQ function bindings for direct calls from DLL
-  - `widgets.rs`: Shared UI widget primitives (CXWndManager scan, CXStr read/write, button click via vtable, window find)
-- **`dmft-dll/src/ipc/`** — DLL-side IPC (shared memory + named pipes)
-  - `shared.rs`: Shared memory access, `pipe.rs`: Named pipe client
-- **`dmft-dll/src/nav/`** — DLL-side navigation engine
-  - `state.rs`: Navigator FSM, `mod.rs`: global singleton + tick integration
-  - `stuck.rs`: StuckDetector, `humanize.rs`: MovementPersonality, `waypoint.rs`: WaypointQueue
-- **`dmft-dll/src/combat/`** — DLL-side combat engine
-  - `state.rs`: Combatant FSM, `strategy.rs`: ClassStrategy trait + CombatContext
-  - `classes/`: warrior, cleric, enchanter, generic_dps implementations
-  - `holyshit.rs`: conditional ability evaluator, `gcd.rs`: GCD tracker, `mana.rs`: ManaGovernor
-  - `puller.rs`: pull cycle FSM, `aggro.rs`: heading-based aggro detection
-  - `positioning.rs`: Combat positioning, `humanize.rs`: Combat action humanization
-- **`dmft-dll/src/login/`** — Login automation (DLL-side)
-  - `mod.rs`: Login state machine integration, `eqmain.rs`: eqmain.dll discovery and pointer resolution
-  - `widgets.rs`: Login-specific UI widget helpers (credential entry, splash dismiss, SIDL window names)
-
-### Module structure (dmft orchestrator — M2-M4)
-
-- **`dmft/src/inject/`** — DLL injection
-  - `loader.rs`: DLL injector, `dll_prep.rs`: DLL preparation/staging
-- **`dmft/src/ipc/`** — Orchestrator-side IPC
-  - `pipe.rs`: Named pipe server, `shared.rs`: Shared memory setup
-- **`dmft/src/client/`** — Multi-client management
-  - `manager.rs`: Client manager, `session.rs`: Session tracking
-  - `healing.rs`: Self-healing monitor, `affinity.rs`: CPU affinity manager
-- **`dmft/src/nav/`** — Orchestrator-side navigation
-  - `recorder.rs`: WaypointRecorder + RDP simplification, `camp.rs`: CampManager, `router.rs`: zone routing
-- **`dmft/src/combat/`** — Orchestrator-side combat coordination
-  - `coordinator.rs`: assist target broadcasting, CC assignment, `spell_db.rs`: static spell data
-- **`dmft/src/launcher/`** — Login automation (M2.5)
-  - `login_sm.rs`: per-client login FSM, `coordinator.rs`: staggered launch orchestration
-  - `spawner.rs`: CreateProcessW wrapper, `post_login.rs`: group→buff→camp sequencer
-- **`dmft/src/credentials/`** — Encrypted credential store (M2.5)
-  - `crypto.rs`: Argon2id + AES-256-GCM, `store.rs`: SQLite backend, `prompt.rs`: master password
-
-### Module structure (dmft orchestrator — M5 Soul Engine)
-
-- **`dmft/src/soul/`** — LLM-driven character AI
-  - `personality.rs`: Character personality definitions, `memory.rs`: Persistent character memory
-  - `coordinator.rs`: Soul Engine coordinator, `social.rs`: Social dynamics between characters
-  - `idle.rs`: Idle behavior generation, `config.rs`: Soul Engine configuration
-  - `llm/`: LLM integration — `priority_queue.rs`: Request prioritization, `fallback.rs`: Fallback behavior
-- **`dmft-common/src/soul.rs`** — Shared Soul Engine types
+- **CMAKE env var**: Must `export CMAKE_POLICY_VERSION_MINIMUM=3.5` before building — the navmesh C++ FFI shim (Detour/protobuf) requires it.
+- **macOS stubs**: `#[cfg(not(windows))]` stubs return dummy data. Some code paths are unreachable on macOS — don't chase bugs in stub implementations.
+- **Offset addresses are not pointers**: Values in `offsets.rs` are preferred-base hex addresses, not ready-to-use pointers. Always `rebase()` before use.
+- **MQ2 reference is external**: `mq2-reference/` is gitignored and not part of the build. It's a MacroQuest2 source clone used only for extracting struct offsets. Derived offsets live in `dmft-common/src/offsets.rs`.
+- **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
