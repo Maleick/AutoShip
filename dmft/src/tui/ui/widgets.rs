@@ -73,15 +73,15 @@ pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
 
 /// EQ con color — level delta from player perspective.
 /// delta = mob_level - player_level
-pub fn con_color(player_level: u8, mob_level: u8) -> Color {
+pub fn con_color(player_level: u8, mob_level: u8, t: &Theme) -> Color {
     let delta = mob_level as i16 - player_level as i16;
     match delta {
-        d if d >= 4 => Color::Red,
-        1..=3 => Color::Yellow,
-        0 => Color::White,
-        -3..=-1 => Color::LightCyan,
-        -6..=-4 => Color::Blue,
-        _ => Color::Green,
+        d if d >= 4 => t.con_red,
+        1..=3 => t.con_yellow,
+        0 => t.con_white,
+        -3..=-1 => t.con_light_blue,
+        -6..=-4 => t.con_blue,
+        _ => t.con_green,
     }
 }
 
@@ -94,7 +94,7 @@ pub fn spawn_row_style(
         SpawnType::Player => Style::default().fg(t.spawn_pc),
         SpawnType::Npc => {
             let color = player_level
-                .map(|pl| con_color(pl, spawn.level))
+                .map(|pl| con_color(pl, spawn.level, t))
                 .unwrap_or(t.spawn_npc);
             Style::default().fg(color)
         }
@@ -173,39 +173,46 @@ pub fn spawn_info_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::theme::dark_modern;
 
     #[test]
     fn con_color_red_when_much_higher() {
-        assert_eq!(con_color(30, 34), Color::Red);
-        assert_eq!(con_color(30, 40), Color::Red);
+        let t = dark_modern();
+        assert_eq!(con_color(30, 34, &t), t.con_red);
+        assert_eq!(con_color(30, 40, &t), t.con_red);
     }
 
     #[test]
     fn con_color_yellow_when_slightly_higher() {
-        assert_eq!(con_color(30, 31), Color::Yellow);
-        assert_eq!(con_color(30, 33), Color::Yellow);
+        let t = dark_modern();
+        assert_eq!(con_color(30, 31, &t), t.con_yellow);
+        assert_eq!(con_color(30, 33, &t), t.con_yellow);
     }
 
     #[test]
     fn con_color_white_when_same() {
-        assert_eq!(con_color(30, 30), Color::White);
+        let t = dark_modern();
+        assert_eq!(con_color(30, 30, &t), t.con_white);
     }
 
     #[test]
     fn con_color_lightcyan_when_slightly_lower() {
-        assert_eq!(con_color(30, 29), Color::LightCyan);
-        assert_eq!(con_color(30, 27), Color::LightCyan);
+        let t = dark_modern();
+        assert_eq!(con_color(30, 29, &t), t.con_light_blue);
+        assert_eq!(con_color(30, 27, &t), t.con_light_blue);
     }
 
     #[test]
     fn con_color_blue_when_lower() {
-        assert_eq!(con_color(30, 26), Color::Blue);
-        assert_eq!(con_color(30, 24), Color::Blue);
+        let t = dark_modern();
+        assert_eq!(con_color(30, 26, &t), t.con_blue);
+        assert_eq!(con_color(30, 24, &t), t.con_blue);
     }
 
     #[test]
     fn con_color_green_when_trivial() {
-        assert_eq!(con_color(30, 23), Color::Green);
-        assert_eq!(con_color(30, 1), Color::Green);
+        let t = dark_modern();
+        assert_eq!(con_color(30, 23, &t), t.con_green);
+        assert_eq!(con_color(30, 1, &t), t.con_green);
     }
 }

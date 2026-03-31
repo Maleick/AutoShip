@@ -103,6 +103,22 @@ pub struct Theme {
     pub header_zone: Style,
     pub header_group: Style,
     pub header_group_active: Style,
+
+    // ── Help overlay ─────────────────────────────────────────────────
+    pub help_key: Style,
+    pub help_desc: Style,
+    pub help_heading: Style,
+    pub help_dim: Style,
+    pub help_bg: Color,
+    pub help_border: Style,
+
+    // ── Con colors (level-relative mob difficulty) ────────────────────
+    pub con_red: Color,
+    pub con_yellow: Color,
+    pub con_white: Color,
+    pub con_light_blue: Color,
+    pub con_blue: Color,
+    pub con_green: Color,
 }
 
 // ─── Dark Modern ────────────────────────────────────────────────────────────
@@ -192,6 +208,20 @@ pub fn dark_modern() -> Theme {
         header_zone: Style::default().fg(white),
         header_group: Style::default().fg(dim),
         header_group_active: Style::default().fg(accent).add_modifier(Modifier::BOLD),
+
+        help_key: Style::default().fg(accent),
+        help_desc: Style::default().fg(Color::Rgb(180, 180, 190)),
+        help_heading: Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        help_dim: Style::default().fg(dim),
+        help_bg: Color::Rgb(15, 18, 24),
+        help_border: Style::default().fg(accent),
+
+        con_red: Color::Red,
+        con_yellow: Color::Yellow,
+        con_white: Color::White,
+        con_light_blue: Color::LightCyan,
+        con_blue: Color::Blue,
+        con_green: Color::Green,
     }
 }
 
@@ -278,6 +308,127 @@ pub fn classic() -> Theme {
         header_group_active: Style::default()
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD),
+
+        help_key: Style::default().fg(Color::Cyan),
+        help_desc: Style::default().fg(Color::Gray),
+        help_heading: Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+        help_dim: Style::default().fg(Color::DarkGray),
+        help_bg: Color::Black,
+        help_border: Style::default().fg(Color::Cyan),
+
+        con_red: Color::Red,
+        con_yellow: Color::Yellow,
+        con_white: Color::White,
+        con_light_blue: Color::LightCyan,
+        con_blue: Color::Blue,
+        con_green: Color::Green,
+    }
+}
+
+// ─── Dracula ────────────────────────────────────────────────────────────────
+
+/// Dracula color scheme — dark purples, pinks, and vivid accents.
+/// Based on https://draculatheme.com/contribute#color-palette
+pub fn dracula() -> Theme {
+    let bg = Color::Rgb(40, 42, 54); // #282a36
+    let fg = Color::Rgb(248, 248, 242); // #f8f8f2
+    let selection = Color::Rgb(68, 71, 90); // #44475a
+    let comment = Color::Rgb(98, 114, 164); // #6272a4
+    let cyan = Color::Rgb(139, 233, 253); // #8be9fd
+    let green = Color::Rgb(80, 250, 123); // #50fa7b
+    let orange = Color::Rgb(255, 184, 108); // #ffb86c
+    let pink = Color::Rgb(255, 121, 198); // #ff79c6
+    let purple = Color::Rgb(189, 147, 249); // #bd93f9
+    let red = Color::Rgb(255, 85, 85); // #ff5555
+    let yellow = Color::Rgb(241, 250, 140); // #f1fa8c
+
+    Theme {
+        border_type: BorderType::Rounded,
+
+        border_dim: Style::default().fg(comment),
+        border_primary: Style::default().fg(purple),
+        border_active: Style::default().fg(pink),
+        border_warn: Style::default().fg(orange),
+        border_danger: Style::default().fg(red),
+        border_server: Style::default().fg(cyan),
+
+        tab_active: Style::default()
+            .fg(bg)
+            .bg(purple)
+            .add_modifier(Modifier::BOLD),
+        tab_inactive: Style::default().fg(comment),
+
+        text_bright: fg,
+        text_normal: fg,
+        text_secondary: Color::Rgb(190, 190, 200),
+        text_muted: comment,
+        text_accent: purple,
+        text_highlight: yellow,
+        text_server: cyan,
+
+        hp_high: green,
+        hp_mid: orange,
+        hp_low: red,
+        mana_color: cyan,
+        bar_empty: selection,
+
+        spawn_pc: green,
+        spawn_npc: fg,
+        spawn_named: yellow,
+        spawn_corpse: comment,
+        spawn_unknown: red,
+
+        table_header: Style::default().fg(pink).add_modifier(Modifier::BOLD),
+        row_selected_bg: selection,
+
+        state_dead: red,
+        state_sitting: yellow,
+        state_feigned: orange,
+        state_frozen: cyan,
+        state_normal: green,
+
+        mode_camp: green,
+        mode_hunt: orange,
+
+        statusbar_message: Style::default().fg(yellow).add_modifier(Modifier::BOLD),
+        statusbar_key: Style::default().fg(purple),
+        statusbar_dim: Style::default().fg(comment),
+        statusbar_cmd: Style::default().fg(pink).add_modifier(Modifier::BOLD),
+        statusbar_badge: Style::default()
+            .fg(bg)
+            .bg(purple)
+            .add_modifier(Modifier::BOLD),
+
+        map_you: pink,
+        map_pc: green,
+        map_npc: fg,
+        map_named: yellow,
+        map_dead_named: red,
+        map_corpse: comment,
+        map_lines: selection,
+
+        header_title: Style::default().fg(purple).add_modifier(Modifier::BOLD),
+        header_client_count: Style::default().fg(pink).add_modifier(Modifier::BOLD),
+        header_selected: Style::default().fg(green).add_modifier(Modifier::BOLD),
+        header_zone: Style::default().fg(fg),
+        header_group: Style::default().fg(comment),
+        header_group_active: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+
+        help_key: Style::default().fg(pink),
+        help_desc: Style::default().fg(fg),
+        help_heading: Style::default().fg(pink).add_modifier(Modifier::BOLD),
+        help_dim: Style::default().fg(comment),
+        help_bg: bg,
+        help_border: Style::default().fg(purple),
+
+        con_red: red,
+        con_yellow: yellow,
+        con_white: fg,
+        con_light_blue: cyan,
+        con_blue: purple,
+        con_green: green,
     }
 }
 
@@ -289,12 +440,14 @@ pub enum ThemeKind {
     #[default]
     DarkModern,
     Classic,
+    Dracula,
 }
 
 impl ThemeKind {
     pub fn next(self) -> Self {
         match self {
-            Self::DarkModern => Self::Classic,
+            Self::DarkModern => Self::Dracula,
+            Self::Dracula => Self::Classic,
             Self::Classic => Self::DarkModern,
         }
     }
@@ -303,6 +456,7 @@ impl ThemeKind {
         match self {
             Self::DarkModern => "Dark",
             Self::Classic => "Classic",
+            Self::Dracula => "Dracula",
         }
     }
 
@@ -310,6 +464,7 @@ impl ThemeKind {
         match self {
             Self::DarkModern => dark_modern(),
             Self::Classic => classic(),
+            Self::Dracula => dracula(),
         }
     }
 }

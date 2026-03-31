@@ -20,7 +20,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
 use crate::tui::app::{ActiveScreen, App};
@@ -58,7 +58,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_status_bar(frame, outer[2], app);
 
     if app.help_visible {
-        draw_help_overlay(frame, frame.area());
+        draw_help_overlay(frame, frame.area(), app);
     }
 }
 
@@ -147,10 +147,10 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
 
     // Command mode: full-width input line
-    if app.command_mode {
+    if app.cmd_state.command_mode {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                format!(": {}_", app.command_buffer),
+                format!(": {}_", app.cmd_state.command_buffer),
                 t.statusbar_cmd,
             )))
             .block(widgets::panel("", t.border_active, t)),
@@ -218,7 +218,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     right.push(Span::raw(" "));
 
     // Filter badge (only when non-default)
-    let filter = app.spawn_type_filter.label();
+    let filter = app.spawns_state.spawn_type_filter.label();
     if filter != "All" {
         right.push(Span::styled(
             format!(" {} ", filter),
@@ -264,7 +264,8 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
 // ─── Help overlay ─────────────────────────────────────────────────────────────
 
-fn draw_help_overlay(frame: &mut Frame, area: Rect) {
+fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
     let popup_w = 50u16;
     let popup_h = 36u16;
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
@@ -273,13 +274,10 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
 
     frame.render_widget(Clear, popup_area);
 
-    // Help overlay uses hardcoded dark-modern colors so it stays readable on any theme
-    let key_s = Style::default().fg(Color::Rgb(0, 200, 210));
-    let desc_s = Style::default().fg(Color::Rgb(180, 180, 190));
-    let head_s = Style::default()
-        .fg(Color::Rgb(0, 200, 210))
-        .add_modifier(Modifier::BOLD);
-    let dim_s = Style::default().fg(Color::Rgb(80, 85, 95));
+    let key_s = t.help_key;
+    let desc_s = t.help_desc;
+    let head_s = t.help_heading;
+    let dim_s = t.help_dim;
 
     let kv = |k: &'static str, v: &'static str| -> Line<'static> {
         Line::from(vec![
@@ -326,15 +324,10 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
         Paragraph::new(text).block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .title(Span::styled(
-                    " Help ",
-                    Style::default()
-                        .fg(Color::Rgb(0, 200, 210))
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .border_style(Style::default().fg(Color::Rgb(0, 200, 210)))
-                .style(Style::default().bg(Color::Rgb(15, 18, 24))),
+                .border_type(t.border_type)
+                .title(Span::styled(" Help ", t.help_heading))
+                .border_style(t.help_border)
+                .style(Style::default().bg(t.help_bg)),
         ),
         popup_area,
     );
