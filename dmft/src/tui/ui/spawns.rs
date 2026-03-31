@@ -12,11 +12,11 @@ use super::widgets::{hp_color, panel, spawn_info_lines, spawn_row_style, themed_
 use crate::eq::structs::SpawnInfo;
 use crate::tui::app::{ActivePanel, App};
 
-pub fn draw_spawns_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+pub fn draw_spawns_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     draw_spawn_list(frame, area, app);
 }
 
-pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let t = &app.theme;
     let is_active = app.active_panel == ActivePanel::SpawnList;
     let border_style = if is_active {
@@ -38,24 +38,24 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
         .map(|p| app.redact_name(&p.displayed_name).into_owned())
         .unwrap_or_else(|| "???".into());
 
-    let fl = app.spawn_type_filter.label();
-    let title = if app.search_mode {
+    let fl = app.spawns_state.spawn_type_filter.label();
+    let title = if app.spawns_state.search_mode {
         format!(
             " Spawns: {} ({}) [{}] search: \"{}\" ",
             client_label,
             filtered.len(),
             fl,
-            app.spawn_filter
+            app.spawns_state.spawn_filter
         )
-    } else if !app.spawn_filter.is_empty() {
+    } else if !app.spawns_state.spawn_filter.is_empty() {
         format!(
             " Spawns: {} ({}) [{}] filter: \"{}\" ",
             client_label,
             filtered.len(),
             fl,
-            app.spawn_filter
+            app.spawns_state.spawn_filter
         )
-    } else if app.spawn_type_filter != crate::tui::app::SpawnFilter::All {
+    } else if app.spawns_state.spawn_type_filter != crate::tui::app::SpawnFilter::All {
         format!(" Spawns: {} ({}) [{}] ", client_label, filtered.len(), fl)
     } else {
         format!(" Spawns: {} ({}) ", client_label, filtered.len())
@@ -63,27 +63,14 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 
     let header = themed_header_row(vec!["Type", "Name", "Cls", "Lv", "HP%", "ID"], t);
 
-    let visible_rows = area.height.saturating_sub(3) as usize;
-    let scroll_offset = if visible_rows > 0 && app.spawn_selected >= visible_rows {
-        app.spawn_selected - visible_rows + 1
-    } else {
-        0
-    };
+    let highlight_style = Style::default()
+        .bg(t.row_selected_bg)
+        .add_modifier(Modifier::BOLD);
 
     let rows: Vec<Row> = filtered
         .iter()
-        .enumerate()
-        .skip(scroll_offset)
-        .take(visible_rows)
-        .map(|(i, spawn)| {
-            let is_sel = i == app.spawn_selected;
-            let style = if is_sel {
-                Style::default()
-                    .bg(t.row_selected_bg)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                spawn_row_style(spawn, player_level, t)
-            };
+        .map(|spawn| {
+            let style = spawn_row_style(spawn, player_level, t);
             let name = app.redact_name(&spawn.displayed_name);
             Row::new(vec![
                 Cell::from(spawn.spawn_type.to_string()),
@@ -97,23 +84,22 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
         })
         .collect();
 
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(7),
-                Constraint::Min(20),
-                Constraint::Length(4),
-                Constraint::Length(4),
-                Constraint::Length(6),
-                Constraint::Length(8),
-            ],
-        )
-        .header(header)
-        .block(panel(title.as_str(), border_style, t))
-        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED)),
-        area,
-    );
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(7),
+            Constraint::Min(20),
+            Constraint::Length(4),
+            Constraint::Length(4),
+            Constraint::Length(6),
+            Constraint::Length(8),
+        ],
+    )
+    .header(header)
+    .block(panel(title.as_str(), border_style, t))
+    .row_highlight_style(highlight_style);
+
+    frame.render_stateful_widget(table, area, &mut app.spawns_state.table_state);
 }
 
 // ─── Target / spawn panels (used from character screen) ─────────────────────
@@ -170,9 +156,13 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     } else {
         t.border_dim
     };
-    let blk = panel(format!(" Hex — {} ", app.hex_label), border_style, t);
+    let blk = panel(
+        format!(" Hex — {} ", app.hex_state.hex_label),
+        border_style,
+        t,
+    );
 
-    if app.hex_data.is_empty() {
+    if app.hex_state.hex_data.is_empty() {
         frame.render_widget(
             Paragraph::new("Select a spawn and press Enter to inspect memory")
                 .block(blk)
@@ -186,12 +176,12 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     let lines: Vec<Line<'_>> = (0..inner_height)
         .filter_map(|row| {
             let offset = row * 16;
-            if offset >= app.hex_data.len() {
+            if offset >= app.hex_state.hex_data.len() {
                 return None;
             }
-            let addr = app.hex_address + offset;
-            let end = (offset + 16).min(app.hex_data.len());
-            let chunk = &app.hex_data[offset..end];
+            let addr = app.hex_state.hex_address + offset;
+            let end = (offset + 16).min(app.hex_state.hex_data.len());
+            let chunk = &app.hex_state.hex_data[offset..end];
 
             let hex_str: String = chunk.iter().map(|b| format!("{:02x} ", b)).collect();
             let ascii_str: String = chunk

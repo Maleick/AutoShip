@@ -1,5 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
+use ratatui::widgets::TableState;
+
 use super::theme::{Theme, ThemeKind};
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
@@ -120,6 +122,96 @@ pub struct TrackedSpawn {
     pub last_z: f32,
 }
 
+// ─── Per-screen state sub-structs ────────────────────────────────────────────
+
+/// State for the Spawns screen — selection, filtering, and search.
+pub struct SpawnsScreenState {
+    pub table_state: TableState,
+    pub spawn_filter: String,
+    pub spawn_type_filter: SpawnFilter,
+    pub search_mode: bool,
+}
+
+impl SpawnsScreenState {
+    pub fn new() -> Self {
+        let mut table_state = TableState::default();
+        table_state.select(Some(0));
+        Self {
+            table_state,
+            spawn_filter: String::new(),
+            spawn_type_filter: SpawnFilter::All,
+            search_mode: false,
+        }
+    }
+}
+
+/// State for the hex dump viewer panel.
+pub struct HexDumpState {
+    pub hex_address: usize,
+    pub hex_data: Vec<u8>,
+    pub hex_label: String,
+}
+
+impl HexDumpState {
+    pub fn new() -> Self {
+        Self {
+            hex_address: 0,
+            hex_data: Vec::new(),
+            hex_label: String::from("No address selected"),
+        }
+    }
+}
+
+/// State for the Map screen.
+pub struct MapScreenState {
+    pub zone_map: Option<ZoneMap>,
+    #[allow(dead_code)]
+    pub map_dir: std::path::PathBuf,
+}
+
+impl MapScreenState {
+    pub fn new() -> Self {
+        Self {
+            zone_map: None,
+            map_dir: std::path::PathBuf::from("config/maps"),
+        }
+    }
+}
+
+/// State for the Navigation screen.
+pub struct NavigationScreenState {
+    pub nav_selected: usize,
+    pub nav_statuses: HashMap<u32, NavClientStatus>,
+}
+
+impl NavigationScreenState {
+    pub fn new() -> Self {
+        Self {
+            nav_selected: 0,
+            nav_statuses: HashMap::new(),
+        }
+    }
+}
+
+/// State for the command bar (: mode).
+pub struct CommandBarState {
+    pub command_mode: bool,
+    pub command_buffer: String,
+    pub command_history: Vec<String>,
+    pub command_history_idx: Option<usize>,
+}
+
+impl CommandBarState {
+    pub fn new() -> Self {
+        Self {
+            command_mode: false,
+            command_buffer: String::new(),
+            command_history: Vec::new(),
+            command_history_idx: None,
+        }
+    }
+}
+
 /// Definition for a logical group of accounts.
 #[derive(Debug, Clone)]
 pub struct GroupDef {
@@ -190,18 +282,9 @@ pub struct App {
     pub status_message: String,
     pub tick_count: u64,
 
-    // Spawn list state
-    #[allow(dead_code)]
-    pub spawn_scroll: usize,
-    pub spawn_selected: usize,
-    pub spawn_filter: String,
-    pub spawn_type_filter: SpawnFilter,
-    pub search_mode: bool,
-
-    // Hex dump state
-    pub hex_address: usize,
-    pub hex_data: Vec<u8>,
-    pub hex_label: String,
+    // Per-screen state
+    pub spawns_state: SpawnsScreenState,
+    pub hex_state: HexDumpState,
 
     // Refresh timing
     pub refresh_rate_ms: u64,
@@ -214,18 +297,12 @@ pub struct App {
     pub soul_coordinator: Option<SoulCoordinator>,
     pub soul_tick_counter: u64,
 
-    // Zone map data
-    pub zone_map: Option<ZoneMap>,
-    pub map_dir: std::path::PathBuf,
+    pub map_state: MapScreenState,
 
     // Privacy mode — hides own character names and server for screenshots
     pub privacy_mode: bool,
 
-    // Command bar state (: mode)
-    pub command_mode: bool,
-    pub command_buffer: String,
-    pub command_history: Vec<String>,
-    pub command_history_idx: Option<usize>,
+    pub cmd_state: CommandBarState,
 
     // Named spawn tracking
     pub named_tracker: NamedTracker,
@@ -256,9 +333,7 @@ pub struct App {
     /// Ring buffer of recent chat events (capped at 200).
     pub chat_events: VecDeque<ChatEvent>,
 
-    // Navigation state
-    pub nav_selected: usize,
-    pub nav_statuses: HashMap<u32, NavClientStatus>,
+    pub nav_state: NavigationScreenState,
 
     // Theme
     pub theme_kind: ThemeKind,
@@ -294,15 +369,8 @@ impl App {
             status_message: String::from("Waiting for EQ process..."),
             tick_count: 0,
 
-            spawn_scroll: 0,
-            spawn_selected: 0,
-            spawn_filter: String::new(),
-            spawn_type_filter: SpawnFilter::All,
-            search_mode: false,
-
-            hex_address: 0,
-            hex_data: Vec::new(),
-            hex_label: String::from("No address selected"),
+            spawns_state: SpawnsScreenState::new(),
+            hex_state: HexDumpState::new(),
 
             refresh_rate_ms: 250,
 
@@ -312,15 +380,11 @@ impl App {
             soul_coordinator: None,
             soul_tick_counter: 0,
 
-            zone_map: None,
-            map_dir: std::path::PathBuf::from("config/maps"),
+            map_state: MapScreenState::new(),
 
             privacy_mode: false,
 
-            command_mode: false,
-            command_buffer: String::new(),
-            command_history: Vec::new(),
-            command_history_idx: None,
+            cmd_state: CommandBarState::new(),
 
             named_tracker: {
                 let db = NamedMobDatabase::load(std::path::Path::new("config/named_mobs")).ok();
@@ -347,8 +411,7 @@ impl App {
             session_start: std::time::Instant::now(),
             chat_events: VecDeque::with_capacity(200),
 
-            nav_selected: 0,
-            nav_statuses: HashMap::new(),
+            nav_state: NavigationScreenState::new(),
 
             theme_kind: ThemeKind::DarkModern,
             theme: ThemeKind::DarkModern.build(),
@@ -462,7 +525,7 @@ impl App {
         if !self.clients.is_empty() {
             self.selected_client = (self.selected_client + 1) % self.clients.len();
             self.sync_from_selected_client();
-            self.spawn_selected = 0;
+            self.spawns_state.table_state.select(Some(0));
         }
     }
 
@@ -475,7 +538,7 @@ impl App {
                 self.selected_client -= 1;
             }
             self.sync_from_selected_client();
-            self.spawn_selected = 0;
+            self.spawns_state.table_state.select(Some(0));
         }
     }
 
@@ -558,7 +621,7 @@ impl App {
             .iter()
             .filter(|s| {
                 // Type filter
-                match self.spawn_type_filter {
+                match self.spawns_state.spawn_type_filter {
                     SpawnFilter::All => true,
                     SpawnFilter::Pc => s.spawn_type == SpawnType::Player,
                     SpawnFilter::Npc => s.spawn_type == SpawnType::Npc,
@@ -571,10 +634,10 @@ impl App {
             })
             .filter(|s| {
                 // Text search filter
-                if self.spawn_filter.is_empty() {
+                if self.spawns_state.spawn_filter.is_empty() {
                     return true;
                 }
-                let filter = self.spawn_filter.to_lowercase();
+                let filter = self.spawns_state.spawn_filter.to_lowercase();
                 s.displayed_name.to_lowercase().contains(&filter)
                     || s.class_str().to_lowercase().contains(&filter)
                     || s.spawn_type.to_string().to_lowercase().contains(&filter)
@@ -583,62 +646,80 @@ impl App {
     }
 
     pub fn cycle_spawn_filter(&mut self) {
-        self.spawn_type_filter = self.spawn_type_filter.next();
-        self.spawn_selected = 0;
-        self.status_message = format!("Filter: {}", self.spawn_type_filter.label());
+        self.spawns_state.spawn_type_filter = self.spawns_state.spawn_type_filter.next();
+        self.spawns_state.table_state.select(Some(0));
+        self.status_message = format!("Filter: {}", self.spawns_state.spawn_type_filter.label());
     }
 
     pub fn spawn_list_down(&mut self) {
-        let max = self.filtered_spawns().len().saturating_sub(1);
-        if self.spawn_selected < max {
-            self.spawn_selected += 1;
+        let count = self.filtered_spawns().len();
+        self.spawns_state.table_state.select_next();
+        // Clamp to last item
+        if let Some(sel) = self.spawns_state.table_state.selected()
+            && sel >= count
+        {
+            self.spawns_state
+                .table_state
+                .select(Some(count.saturating_sub(1)));
         }
     }
 
     pub fn spawn_list_up(&mut self) {
-        self.spawn_selected = self.spawn_selected.saturating_sub(1);
+        self.spawns_state.table_state.select_previous();
     }
 
     pub fn spawn_list_page_down(&mut self) {
         let max = self.filtered_spawns().len().saturating_sub(1);
-        self.spawn_selected = (self.spawn_selected + 20).min(max);
+        let current = self.spawn_selected();
+        self.spawns_state
+            .table_state
+            .select(Some((current + 20).min(max)));
     }
 
     pub fn spawn_list_page_up(&mut self) {
-        self.spawn_selected = self.spawn_selected.saturating_sub(20);
+        let current = self.spawn_selected();
+        self.spawns_state
+            .table_state
+            .select(Some(current.saturating_sub(20)));
+    }
+
+    /// Convenience accessor for the current spawn selection index.
+    pub fn spawn_selected(&self) -> usize {
+        self.spawns_state.table_state.selected().unwrap_or(0)
     }
 
     pub fn hex_scroll_down(&mut self) {
-        self.hex_address = self.hex_address.wrapping_add(0x100);
+        self.hex_state.hex_address = self.hex_state.hex_address.wrapping_add(0x100);
     }
 
     pub fn hex_scroll_up(&mut self) {
-        self.hex_address = self.hex_address.wrapping_sub(0x100);
+        self.hex_state.hex_address = self.hex_state.hex_address.wrapping_sub(0x100);
     }
 
     /// Set the hex dump to view a specific spawn's raw memory.
     pub fn inspect_selected_spawn(&mut self) {
         // Extract data from the borrow before mutating self
+        let sel = self.spawn_selected();
         let info: Option<(String, u32, usize)> = {
             let filtered = self.filtered_spawns();
             filtered
-                .get(self.spawn_selected)
-                .map(|s| (s.displayed_name.clone(), s.spawn_id, self.spawn_selected))
+                .get(sel)
+                .map(|s| (s.displayed_name.clone(), s.spawn_id, sel))
         };
         if let Some((name, id, _idx)) = info {
-            self.hex_label = format!("Raw memory: {} (ID {})", name, id);
+            self.hex_state.hex_label = format!("Raw memory: {} (ID {})", name, id);
             self.status_message = format!("Inspecting: {}", name);
 
             // On Windows, read real spawn memory; on macOS, generate demo hex data
             #[cfg(windows)]
             {
-                self.hex_data = self.read_spawn_hex_data(id);
-                self.hex_address = 0;
+                self.hex_state.hex_data = self.read_spawn_hex_data(id);
+                self.hex_state.hex_address = 0;
             }
             #[cfg(not(windows))]
             {
-                self.hex_data = generate_demo_hex_data(&name, id);
-                self.hex_address = 0x1000;
+                self.hex_state.hex_data = generate_demo_hex_data(&name, id);
+                self.hex_state.hex_address = 0x1000;
             }
         }
     }
@@ -649,41 +730,40 @@ impl App {
         use crate::process::memory::ProcessHandle;
         use dmft_common::offsets;
 
-        if let Some(client) = self.active_client() {
-            if let Ok(proc) = ProcessHandle::open(client.pid) {
-                // Find the spawn address by walking the spawn list
-                let mgr_ptr_addr =
-                    match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
-                        Some(a) => a,
-                        None => return Vec::new(),
-                    };
-                let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
-                    Ok(a) if a != 0 => a,
-                    _ => return Vec::new(),
-                };
+        if let Some(client) = self.active_client()
+            && let Ok(proc) = ProcessHandle::open(client.pid)
+        {
+            // Find the spawn address by walking the spawn list
+            let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
+                Some(a) => a,
+                None => return Vec::new(),
+            };
+            let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
+                Ok(a) if a != 0 => a,
+                _ => return Vec::new(),
+            };
 
-                let list_addr = mgr_addr + offsets::spawn_manager::PLAYER_LIST;
-                let mut current = proc.read_ptr(list_addr).unwrap_or(0);
-                while current != 0 {
-                    let sid = proc
-                        .read::<u32>(current + offsets::player_base::SPAWN_ID)
-                        .unwrap_or(0);
-                    if sid == spawn_id {
-                        return proc.read_bytes(current, 0x200).unwrap_or_default();
-                    }
-                    current = proc
-                        .read_ptr(current + offsets::player_base::NEXT)
-                        .unwrap_or(0);
+            let list_addr = mgr_addr + offsets::spawn_manager::PLAYER_LIST;
+            let mut current = proc.read_ptr(list_addr).unwrap_or(0);
+            while current != 0 {
+                let sid = proc
+                    .read::<u32>(current + offsets::player_base::SPAWN_ID)
+                    .unwrap_or(0);
+                if sid == spawn_id {
+                    return proc.read_bytes(current, 0x200).unwrap_or_default();
                 }
+                current = proc
+                    .read_ptr(current + offsets::player_base::NEXT)
+                    .unwrap_or(0);
             }
         }
         Vec::new()
     }
 
     pub fn clear_filter(&mut self) {
-        self.spawn_filter.clear();
-        self.search_mode = false;
-        self.spawn_selected = 0;
+        self.spawns_state.spawn_filter.clear();
+        self.spawns_state.search_mode = false;
+        self.spawns_state.table_state.select(Some(0));
     }
 
     pub fn toggle_privacy(&mut self) {
@@ -731,7 +811,7 @@ impl App {
     /// Supports multi-level completion: first tab completes command name,
     /// subsequent tabs complete context-specific arguments.
     pub fn complete_command(&mut self) {
-        let buf = self.command_buffer.clone();
+        let buf = self.cmd_state.command_buffer.clone();
         let prefix = buf.trim_start();
 
         // --- Argument-level completion (command already typed + space) ---
@@ -934,7 +1014,7 @@ impl App {
                 } else {
                     name.to_string()
                 };
-                self.command_buffer = format!("{}{} ", cmd_prefix, formatted);
+                self.cmd_state.command_buffer = format!("{}{} ", cmd_prefix, formatted);
             }
             _ => {
                 // Complete common prefix
@@ -953,7 +1033,7 @@ impl App {
 
                 if common_len > search.len() {
                     let common = &matches[0][..common_len];
-                    self.command_buffer = format!("{}{}", cmd_prefix, common);
+                    self.cmd_state.command_buffer = format!("{}{}", cmd_prefix, common);
                 }
                 // Show available options (truncate if too many)
                 let display: Vec<&str> = matches.iter().take(10).map(|s| s.as_str()).collect();
@@ -1084,8 +1164,9 @@ impl App {
     }
 
     /// Load the zone map for the given zone short name from the map directory.
+    #[allow(dead_code)]
     pub fn load_zone_map(&mut self, zone_short_name: &str) {
-        match crate::eq::map_parser::load_zone_map(&self.map_dir, zone_short_name) {
+        match crate::eq::map_parser::load_zone_map(&self.map_state.map_dir, zone_short_name) {
             Ok(map) if !map.lines.is_empty() => {
                 tracing::info!(
                     zone = zone_short_name,
@@ -1093,15 +1174,15 @@ impl App {
                     points = map.points.len(),
                     "Loaded zone map"
                 );
-                self.zone_map = Some(map);
+                self.map_state.zone_map = Some(map);
             }
             Ok(_) => {
                 tracing::debug!(zone = zone_short_name, "No map data found for zone");
-                self.zone_map = None;
+                self.map_state.zone_map = None;
             }
             Err(e) => {
                 tracing::warn!(zone = zone_short_name, error = %e, "Failed to load zone map");
-                self.zone_map = None;
+                self.map_state.zone_map = None;
             }
         }
     }
@@ -1131,13 +1212,13 @@ impl App {
 
     /// Execute the current command buffer content.
     pub fn execute_command(&mut self, orchestrator: &mut Orchestrator) {
-        let input = self.command_buffer.trim().to_string();
+        let input = self.cmd_state.command_buffer.trim().to_string();
         if input.is_empty() {
             return;
         }
 
         // Save to history
-        self.command_history.push(input.clone());
+        self.cmd_state.command_history.push(input.clone());
 
         // Check for group prefix: :G1 /sit, :G2 camp start, etc.
         if let Some((group_idx, rest)) = self.parse_group_prefix(&input) {

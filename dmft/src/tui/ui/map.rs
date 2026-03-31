@@ -38,6 +38,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .map(|c| c.zone_name.as_str())
         .unwrap_or("Unknown");
     let map_info = app
+        .map_state
         .zone_map
         .as_ref()
         .map(|m| {
@@ -62,7 +63,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let mut grid: Vec<Vec<(char, Color)>> = vec![vec![(' ', t.map_lines); w]; h];
 
-    let (center_x, center_y, scale_x, scale_y) = if let Some(map) = &app.zone_map {
+    let (center_x, center_y, scale_x, scale_y) = if let Some(map) = &app.map_state.zone_map {
         let (cx, cy) = if let Some(player) = &app.local_player {
             (-player.y, -player.x)
         } else {
@@ -101,7 +102,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         (col, row)
     };
 
-    if let Some(map) = &app.zone_map {
+    if let Some(map) = &app.map_state.zone_map {
         for ml in &map.lines {
             let (c1, r1) = to_grid(ml.x1, ml.y1);
             let (c2, r2) = to_grid(ml.x2, ml.y2);

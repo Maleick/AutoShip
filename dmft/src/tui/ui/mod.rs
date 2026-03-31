@@ -28,7 +28,7 @@ use crate::tui::app::{ActiveScreen, App};
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 /// Top-level render function — applies outer margin then dispatches to the active screen.
-pub fn draw(frame: &mut Frame, app: &App) {
+pub fn draw(frame: &mut Frame, app: &mut App) {
     // Apply a 1-cell horizontal margin so content never touches the terminal edges.
     let area = frame.area().inner(Margin {
         horizontal: 1,

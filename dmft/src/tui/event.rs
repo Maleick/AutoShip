@@ -24,44 +24,45 @@ pub fn handle_events(
         }
 
         // Command mode (: prefix) — checked first
-        if app.command_mode {
+        if app.cmd_state.command_mode {
             match key.code {
                 KeyCode::Esc => {
-                    app.command_mode = false;
-                    app.command_buffer.clear();
+                    app.cmd_state.command_mode = false;
+                    app.cmd_state.command_buffer.clear();
                     return Ok(true);
                 }
                 KeyCode::Enter => {
-                    app.command_mode = false;
-                    app.command_history_idx = None;
+                    app.cmd_state.command_mode = false;
+                    app.cmd_state.command_history_idx = None;
                     app.execute_command(orchestrator);
-                    app.command_buffer.clear();
+                    app.cmd_state.command_buffer.clear();
                     return Ok(true);
                 }
                 KeyCode::Backspace => {
-                    app.command_buffer.pop();
+                    app.cmd_state.command_buffer.pop();
                     return Ok(true);
                 }
                 KeyCode::Up => {
-                    if !app.command_history.is_empty() {
-                        let idx = match app.command_history_idx {
+                    if !app.cmd_state.command_history.is_empty() {
+                        let idx = match app.cmd_state.command_history_idx {
                             Some(i) => i.saturating_sub(1),
-                            None => app.command_history.len() - 1,
+                            None => app.cmd_state.command_history.len() - 1,
                         };
-                        app.command_history_idx = Some(idx);
-                        app.command_buffer = app.command_history[idx].clone();
+                        app.cmd_state.command_history_idx = Some(idx);
+                        app.cmd_state.command_buffer = app.cmd_state.command_history[idx].clone();
                     }
                     return Ok(true);
                 }
                 KeyCode::Down => {
-                    if let Some(idx) = app.command_history_idx {
-                        if idx + 1 < app.command_history.len() {
+                    if let Some(idx) = app.cmd_state.command_history_idx {
+                        if idx + 1 < app.cmd_state.command_history.len() {
                             let next = idx + 1;
-                            app.command_history_idx = Some(next);
-                            app.command_buffer = app.command_history[next].clone();
+                            app.cmd_state.command_history_idx = Some(next);
+                            app.cmd_state.command_buffer =
+                                app.cmd_state.command_history[next].clone();
                         } else {
-                            app.command_history_idx = None;
-                            app.command_buffer.clear();
+                            app.cmd_state.command_history_idx = None;
+                            app.cmd_state.command_buffer.clear();
                         }
                     }
                     return Ok(true);
@@ -71,7 +72,7 @@ pub fn handle_events(
                     return Ok(true);
                 }
                 KeyCode::Char(c) => {
-                    app.command_buffer.push(c);
+                    app.cmd_state.command_buffer.push(c);
                     return Ok(true);
                 }
                 _ => return Ok(false),
@@ -90,24 +91,24 @@ pub fn handle_events(
         }
 
         // When in search mode, capture text input
-        if app.search_mode {
+        if app.spawns_state.search_mode {
             match key.code {
                 KeyCode::Esc => {
-                    app.search_mode = false;
+                    app.spawns_state.search_mode = false;
                     return Ok(true);
                 }
                 KeyCode::Enter => {
-                    app.search_mode = false;
+                    app.spawns_state.search_mode = false;
                     return Ok(true);
                 }
                 KeyCode::Backspace => {
-                    app.spawn_filter.pop();
-                    app.spawn_selected = 0;
+                    app.spawns_state.spawn_filter.pop();
+                    app.spawns_state.table_state.select(Some(0));
                     return Ok(true);
                 }
                 KeyCode::Char(c) => {
-                    app.spawn_filter.push(c);
-                    app.spawn_selected = 0;
+                    app.spawns_state.spawn_filter.push(c);
+                    app.spawns_state.table_state.select(Some(0));
                     return Ok(true);
                 }
                 _ => return Ok(false),
@@ -196,14 +197,14 @@ pub fn handle_events(
                 return Ok(true);
             }
             (KeyCode::Char(':'), _) => {
-                app.command_mode = true;
-                app.command_buffer.clear();
-                app.command_history_idx = None;
+                app.cmd_state.command_mode = true;
+                app.cmd_state.command_buffer.clear();
+                app.cmd_state.command_history_idx = None;
                 return Ok(true);
             }
             (KeyCode::Char('/'), _) => {
-                app.search_mode = true;
-                app.spawn_filter.clear();
+                app.spawns_state.search_mode = true;
+                app.spawns_state.spawn_filter.clear();
                 // Switch to Spawns screen if not already there
                 if app.active_screen != ActiveScreen::Spawns {
                     app.active_screen = ActiveScreen::Spawns;
@@ -236,10 +237,10 @@ pub fn handle_events(
                 KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
                 KeyCode::PageDown => app.spawn_list_page_down(),
                 KeyCode::PageUp => app.spawn_list_page_up(),
-                KeyCode::Home => app.spawn_selected = 0,
+                KeyCode::Home => app.spawns_state.table_state.select(Some(0)),
                 KeyCode::End => {
                     let max = app.filtered_spawns().len().saturating_sub(1);
-                    app.spawn_selected = max;
+                    app.spawns_state.table_state.select(Some(max));
                 }
                 KeyCode::Enter => app.inspect_selected_spawn(),
                 _ => {}

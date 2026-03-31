@@ -36,7 +36,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             .iter()
             .enumerate()
             .map(|(i, client)| {
-                let is_sel = i == app.nav_selected;
+                let is_sel = i == app.nav_state.nav_selected;
                 let marker = if is_sel { "▶" } else { " " };
                 let name = client
                     .local_player
@@ -44,7 +44,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                     .map(|p| app.redact_name(&p.displayed_name).into_owned())
                     .unwrap_or_else(|| format!("PID {}", client.pid));
 
-                let nav = app.nav_statuses.get(&client.pid);
+                let nav = app.nav_state.nav_statuses.get(&client.pid);
                 let status = nav.map(|s| s.status.as_str()).unwrap_or("Idle");
                 let dest = nav.map(|s| s.destination.as_str()).unwrap_or("—");
 
