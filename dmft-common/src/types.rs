@@ -221,10 +221,7 @@ mod tests {
         };
         let json = serde_json::to_string(&gs).expect("serialize");
         let restored: GameState = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(restored.client_id, 42);
-        assert!(restored.local_player.is_some());
-        assert!(restored.target.is_none());
-        assert_eq!(restored.zone_short_name, "qey2hh1");
+        assert_eq!(restored, gs);
     }
 
     #[test]
