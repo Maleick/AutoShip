@@ -202,7 +202,7 @@ mod tests {
         for s in &statuses {
             let json = serde_json::to_string(s).expect("serialize");
             let restored: HookStatus = serde_json::from_str(&json).expect("deserialize");
-            let _ = format!("{:?}", restored);
+            assert_eq!(*s, restored);
         }
     }
 
