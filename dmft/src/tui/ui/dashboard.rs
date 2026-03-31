@@ -1,48 +1,55 @@
-//! Dashboard screen — character grid + sidebar with HP gauges, session stats, server info.
+//! Overview screen — fleet grid with collapsible operational sections.
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Gauge, Paragraph, Row, Table},
+    widgets::{Gauge, Paragraph, Row, Table, Wrap},
 };
 
 use super::widgets::{hp_color, panel, stand_state_color, themed_header_row};
-use crate::tui::app::App;
+use crate::tui::app::{ActivePanel, App};
 
-pub fn draw_dashboard(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    // Adaptive split: narrow terminals (< 100 cols) get 70/30, wide terminals get 60/40
-    let (grid_pct, sidebar_pct) = if area.width < 100 { (70, 30) } else { (60, 40) };
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(grid_pct),
-            Constraint::Percentage(sidebar_pct),
-        ])
-        .split(area);
+pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
+    let chunks = if area.width < 110 {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+            .split(area)
+    } else {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(64), Constraint::Percentage(36)])
+            .split(area)
+    };
 
-    draw_dashboard_grid(frame, cols[0], app);
-    draw_dashboard_sidebar(frame, cols[1], app);
+    draw_dashboard_grid(frame, chunks[0], app);
+    draw_dashboard_sidebar(frame, chunks[1], app);
 }
 
 // ─── Character grid ──────────────────────────────────────────────────────────
 
-fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let visible = app.visible_clients();
     let title = match app.active_group {
         Some(idx) => {
             if let Some(g) = app.groups.get(idx) {
-                format!(" G{} {} ({}) ", g.id, g.name, visible.len())
+                format!(" Fleet — G{} {} ({}) ", g.id, g.name, visible.len())
             } else {
-                format!(" Group {} ({}) ", idx + 1, visible.len())
+                format!(" Fleet — Group {} ({}) ", idx + 1, visible.len())
             }
         }
-        None => format!(" Characters ({}) ", app.clients.len()),
+        None => format!(" Fleet ({}) ", app.clients.len()),
     };
 
-    let blk = panel(title.as_str(), t.border_primary, t);
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewRoster) {
+        t.border_active
+    } else {
+        t.border_primary
+    };
+    let blk = panel(title.as_str(), border_style, t);
 
     if visible.is_empty() {
         frame.render_widget(
@@ -105,7 +112,6 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
                 ])
                 .style(row_style)
             } else {
-                // Show client_status when player data isn't loaded yet (or errored)
                 let status_label = if client.client_status.is_empty() {
                     format!("PID {}", client.pid)
                 } else {
@@ -137,14 +143,14 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
         Table::new(
             rows,
             [
-                Constraint::Length(2), // marker
-                Constraint::Min(14),   // Name
-                Constraint::Length(4), // Class
-                Constraint::Length(3), // Level
-                Constraint::Length(5), // HP%
-                Constraint::Length(5), // MP%
-                Constraint::Length(8), // State
-                Constraint::Min(12),   // Zone
+                Constraint::Length(2),
+                Constraint::Min(14),
+                Constraint::Length(4),
+                Constraint::Length(3),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(8),
+                Constraint::Min(12),
             ],
         )
         .header(header)
@@ -155,59 +161,133 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
-fn draw_dashboard_sidebar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    // Adaptive sidebar: tall terminals show 4 panels, short terminals collapse server info
-    let show_combat = area.height >= 24;
-    let chunks = if show_combat {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(6),    // Group health (flexible, gets leftover)
-                Constraint::Length(7), // Combat status (mode/MA/MT + heal-cancel + CH chain)
-                Constraint::Min(8),    // Session stats (flexible)
-                Constraint::Length(6), // Server info
-            ])
-            .split(area)
-    } else {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(6),
-                Constraint::Min(8),
-                Constraint::Length(4),
-            ])
-            .split(area)
-    };
+#[derive(Clone, Copy)]
+enum OverviewSectionKind {
+    Groups,
+    Filters,
+    Combat,
+    Session,
+}
 
-    if show_combat {
-        draw_group_health_gauges(frame, chunks[0], app);
-        draw_combat_status(frame, chunks[1], app);
-        draw_session_stats(frame, chunks[2], app);
-        draw_server_info(frame, chunks[3], app);
-    } else {
-        draw_group_health_gauges(frame, chunks[0], app);
-        draw_session_stats(frame, chunks[1], app);
-        draw_server_info(frame, chunks[2], app);
+fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
+    let sections = overview_sections(app);
+    if sections.is_empty() {
+        return;
+    }
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            sections
+                .iter()
+                .map(|(_, constraint)| *constraint)
+                .collect::<Vec<_>>(),
+        )
+        .split(area);
+
+    for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
+        match section {
+            OverviewSectionKind::Groups => {
+                draw_group_health_gauges(frame, *chunk, app, app.overview_state.groups_collapsed)
+            }
+            OverviewSectionKind::Filters => {
+                draw_filter_summary(frame, *chunk, app, app.overview_state.filters_collapsed)
+            }
+            OverviewSectionKind::Combat => {
+                draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed)
+            }
+            OverviewSectionKind::Session => {
+                draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed)
+            }
+        }
+    }
+}
+
+fn overview_sections(app: &App) -> Vec<(OverviewSectionKind, Constraint)> {
+    let mut sections = Vec::new();
+
+    if app.overview_state.show_groups {
+        sections.push((
+            OverviewSectionKind::Groups,
+            if app.overview_state.groups_collapsed {
+                Constraint::Length(3)
+            } else {
+                Constraint::Min(7)
+            },
+        ));
+    }
+
+    if app.overview_state.show_filters {
+        sections.push((
+            OverviewSectionKind::Filters,
+            if app.overview_state.filters_collapsed {
+                Constraint::Length(3)
+            } else {
+                Constraint::Length(6)
+            },
+        ));
+    }
+
+    sections.push((
+        OverviewSectionKind::Combat,
+        if app.overview_state.combat_collapsed {
+            Constraint::Length(3)
+        } else {
+            Constraint::Length(7)
+        },
+    ));
+    sections.push((
+        OverviewSectionKind::Session,
+        if app.overview_state.session_collapsed {
+            Constraint::Length(3)
+        } else {
+            Constraint::Min(9)
+        },
+    ));
+
+    sections
+}
+
+fn section_title(label: &str, key_hint: Option<&str>, collapsed: bool) -> String {
+    let icon = if collapsed { "▶" } else { "▼" };
+    match key_hint {
+        Some(key) => format!(" {} [{}] {} ", label, key, icon),
+        None => format!(" {} {} ", label, icon),
     }
 }
 
 /// HP bars using ratatui's `Gauge` widget — one per visible character.
-fn draw_group_health_gauges(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+fn draw_group_health_gauges(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
-    let blk = panel(" Group Health ", t.border_warn, t);
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewGroups) {
+        t.border_active
+    } else {
+        t.border_warn
+    };
+    let title = section_title("Groups", Some("g"), collapsed);
+    let blk = panel(title.as_str(), border_style, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
     let visible = app.visible_clients();
-    if visible.is_empty() {
+    if collapsed {
+        let summary = format!("{} visible | {}", visible.len(), app.group_focus_label());
+        frame.render_widget(
+            Paragraph::new(summary).style(Style::default().fg(t.text_muted)),
+            inner,
+        );
+        return;
+    }
+
+    if visible.is_empty() || inner.height == 0 {
+        frame.render_widget(
+            Paragraph::new("No characters connected").style(Style::default().fg(t.text_muted)),
+            inner,
+        );
         return;
     }
 
     let n = visible.len().min(inner.height as usize);
-    if n == 0 {
-        return;
-    }
-
     let row_heights: Vec<Constraint> = (0..n).map(|_| Constraint::Length(1)).collect();
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -232,14 +312,13 @@ fn draw_group_health_gauges(frame: &mut Frame, area: ratatui::layout::Rect, app:
             let name = app.redact_name(&player.displayed_name).into_owned();
             let color = hp_color(hp_pct, t);
 
-            // Selection indicator prefix (1 char)
-            let marker_area = ratatui::layout::Rect {
+            let marker_area = Rect {
                 x: row.x,
                 y: row.y,
                 width: 2,
                 height: 1,
             };
-            let gauge_area = ratatui::layout::Rect {
+            let gauge_area = Rect {
                 x: row.x + 2,
                 y: row.y,
                 width: row.width.saturating_sub(2),
@@ -287,9 +366,82 @@ fn draw_group_health_gauges(frame: &mut Frame, area: ratatui::layout::Rect, app:
     }
 }
 
-/// Combat status summary — MA/MT, operating mode, CH chain status.
-fn draw_combat_status(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+fn draw_filter_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewFilters) {
+        t.border_active
+    } else {
+        t.border_dim
+    };
+    let title = section_title("Filters", Some("v"), collapsed);
+    let blk = panel(title.as_str(), border_style, t);
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    let search = if app.spawns_state.spawn_filter.is_empty() {
+        String::from("none")
+    } else {
+        app.spawns_state.spawn_filter.clone()
+    };
+
+    let lines = if collapsed {
+        vec![Line::from(vec![
+            Span::styled(
+                format!("{} ", app.spawns_state.spawn_type_filter.label()),
+                Style::default()
+                    .fg(t.text_accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("| {} | Z ±{:.0}", search, app.map_state.z_filter_range),
+                t.text_muted,
+            ),
+        ])]
+    } else {
+        vec![
+            Line::from(vec![
+                Span::styled("Type   ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    app.spawns_state.spawn_type_filter.label(),
+                    Style::default()
+                        .fg(t.text_accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Search ", Style::default().fg(t.text_muted)),
+                Span::styled(search, Style::default().fg(t.text_normal)),
+            ]),
+            Line::from(vec![
+                Span::styled("Z slice", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!(" ±{:.0}", app.map_state.z_filter_range),
+                    Style::default().fg(t.text_highlight),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("/", Style::default().fg(t.text_accent)),
+                Span::styled(" search  ", Style::default().fg(t.text_muted)),
+                Span::styled("f", Style::default().fg(t.text_accent)),
+                Span::styled(" type  ", Style::default().fg(t.text_muted)),
+                Span::styled("+/-", Style::default().fg(t.text_accent)),
+                Span::styled(" depth", Style::default().fg(t.text_muted)),
+            ]),
+        ]
+    };
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
+}
+
+/// Combat status summary — MA/MT, operating mode, CH chain status.
+fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewCombat) {
+        t.border_active
+    } else {
+        t.border_server
+    };
+    let title = section_title("Combat", None, collapsed);
 
     let mode_str = format!("{}", app.operating_mode);
     let mode_color = match mode_str.as_str() {
@@ -301,54 +453,75 @@ fn draw_combat_status(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     let ma_str = app.main_assist.as_deref().unwrap_or("—");
     let mt_str = app.main_tank.as_deref().unwrap_or("—");
 
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Mode ", Style::default().fg(t.text_muted)),
+    let lines = if collapsed {
+        vec![Line::from(vec![
             Span::styled(
                 &mode_str,
                 Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
             ),
-            Span::styled("  MA ", Style::default().fg(t.text_muted)),
+            Span::styled("  |  MA ", Style::default().fg(t.text_muted)),
             Span::styled(ma_str, Style::default().fg(t.text_highlight)),
-        ]),
-        Line::from(vec![
-            Span::styled("MT   ", Style::default().fg(t.text_muted)),
+            Span::styled("  |  MT ", Style::default().fg(t.text_muted)),
             Span::styled(mt_str, Style::default().fg(t.text_highlight)),
-            Span::styled("  HlCx ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                if app.heal_cancel_enabled { "ON" } else { "off" },
-                Style::default().fg(if app.heal_cancel_enabled {
-                    t.hp_high
-                } else {
-                    t.text_muted
-                }),
-            ),
-        ]),
-    ];
-
-    // CH chain status line (only when active)
-    if let Some(ch) = &app.ch_chain_status {
-        let adaptive_str = if ch.is_adaptive { "adaptive" } else { "fixed" };
-        lines.push(Line::from(vec![
-            Span::styled("CH   ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!(
-                    "{}× {:.1}s {} tgt={}",
-                    ch.members, ch.interval_secs, adaptive_str, ch.target_id
+        ])]
+    } else {
+        let mut lines = vec![
+            Line::from(vec![
+                Span::styled("Mode ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    &mode_str,
+                    Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
                 ),
-                Style::default().fg(t.text_highlight),
-            ),
-        ]));
-    }
+                Span::styled("  MA ", Style::default().fg(t.text_muted)),
+                Span::styled(ma_str, Style::default().fg(t.text_highlight)),
+            ]),
+            Line::from(vec![
+                Span::styled("MT   ", Style::default().fg(t.text_muted)),
+                Span::styled(mt_str, Style::default().fg(t.text_highlight)),
+                Span::styled("  HlCx ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    if app.heal_cancel_enabled { "ON" } else { "off" },
+                    Style::default().fg(if app.heal_cancel_enabled {
+                        t.hp_high
+                    } else {
+                        t.text_muted
+                    }),
+                ),
+            ]),
+        ];
+
+        if let Some(ch) = &app.ch_chain_status {
+            let adaptive_str = if ch.is_adaptive { "adaptive" } else { "fixed" };
+            lines.push(Line::from(vec![
+                Span::styled("CH   ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!(
+                        "{}× {:.1}s {} tgt={}",
+                        ch.members, ch.interval_secs, adaptive_str, ch.target_id
+                    ),
+                    Style::default().fg(t.text_highlight),
+                ),
+            ]));
+        }
+
+        lines
+    };
 
     frame.render_widget(
-        Paragraph::new(lines).block(panel(" Combat ", t.border_active, t)),
+        Paragraph::new(lines).block(panel(title.as_str(), border_style, t)),
         area,
     );
 }
 
-fn draw_session_stats(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewSession) {
+        t.border_active
+    } else {
+        t.border_primary
+    };
+    let title = section_title("Session", None, collapsed);
+
     let db = &app.loot_database;
     let elapsed = app.session_start.elapsed();
     let hours = elapsed.as_secs() as f64 / 3600.0;
@@ -388,98 +561,100 @@ fn draw_session_stats(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 
     let mut top_items: Vec<(&String, &u32)> = db.items.iter().collect();
     top_items.sort_by(|a, b| b.1.cmp(a.1));
-    top_items.truncate(5);
+    top_items.truncate(3);
 
-    let mut lines: Vec<Line<'_>> = vec![
-        Line::from(vec![
-            Span::styled("⏱ ", Style::default().fg(t.text_accent)),
+    let lines = if collapsed {
+        vec![Line::from(vec![
             Span::styled(&duration_str, Style::default().fg(t.text_accent)),
-        ]),
-        Line::from(vec![
-            Span::styled("XP  ", Style::default().fg(t.text_muted)),
+            Span::styled("  |  XP ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!(
-                    "{} ({}/hr  15m:{})",
-                    db.total_xp_events, xp_per_hour, xp_15min
-                ),
+                db.total_xp_events.to_string(),
                 Style::default().fg(t.hp_high),
             ),
-        ]),
-        Line::from(vec![
-            Span::styled("Pp  ", Style::default().fg(t.text_muted)),
+            Span::styled("  |  P ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{:.0} ({}/hr)", total_plat, plat_per_hour),
+                format!("{:.0}", total_plat),
                 Style::default().fg(t.text_highlight),
             ),
-        ]),
-        Line::from(vec![
-            Span::styled("☠   ", Style::default().fg(t.text_muted)),
-            Span::styled(total_kills.to_string(), Style::default().fg(t.hp_low)),
-            Span::styled("  Deaths: ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                db.deaths.to_string(),
-                Style::default().fg(if db.deaths > 0 {
-                    t.hp_low
-                } else {
-                    t.text_muted
-                }),
-            ),
-        ]),
-    ];
-
-    if !top_items.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "── Loot ──",
-            Style::default().fg(t.text_muted),
-        )));
-        for (name, count) in &top_items {
-            let label: String = name.chars().take(18).collect();
-            lines.push(Line::from(vec![
-                Span::raw(" "),
+        ])]
+    } else {
+        let mut lines: Vec<Line<'_>> = vec![
+            Line::from(vec![
+                Span::styled("⏱ ", Style::default().fg(t.text_accent)),
+                Span::styled(&duration_str, Style::default().fg(t.text_accent)),
+            ]),
+            Line::from(vec![
+                Span::styled("XP  ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    format!("{}× ", count),
+                    format!(
+                        "{} ({}/hr  15m:{})",
+                        db.total_xp_events, xp_per_hour, xp_15min
+                    ),
+                    Style::default().fg(t.hp_high),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Pp  ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{:.0} ({}/hr)", total_plat, plat_per_hour),
                     Style::default().fg(t.text_highlight),
                 ),
-                Span::styled(label, Style::default().fg(t.text_secondary)),
-            ]));
+            ]),
+            Line::from(vec![
+                Span::styled("☠   ", Style::default().fg(t.text_muted)),
+                Span::styled(total_kills.to_string(), Style::default().fg(t.hp_low)),
+                Span::styled("  Deaths: ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    db.deaths.to_string(),
+                    Style::default().fg(if db.deaths > 0 {
+                        t.hp_low
+                    } else {
+                        t.text_muted
+                    }),
+                ),
+            ]),
+        ];
+
+        if !top_items.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "── Loot ──",
+                Style::default().fg(t.text_muted),
+            )));
+            for (name, count) in &top_items {
+                let label: String = name.chars().take(18).collect();
+                lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("{}× ", count),
+                        Style::default().fg(t.text_highlight),
+                    ),
+                    Span::styled(label, Style::default().fg(t.text_secondary)),
+                ]));
+            }
         }
-    }
 
-    frame.render_widget(
-        Paragraph::new(lines).block(panel(" Session ", t.border_primary, t)),
-        area,
-    );
-}
-
-fn draw_server_info(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let t = &app.theme;
-    let lines = vec![
-        Line::from(vec![
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
             Span::styled("Server  ", Style::default().fg(t.text_muted)),
             Span::styled(app.display_server(), Style::default().fg(t.text_server)),
-        ]),
-        Line::from(vec![
-            Span::styled("Clients ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.clients.len().to_string(),
-                Style::default().fg(t.text_highlight),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Refresh ", Style::default().fg(t.text_muted)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("Theme   ", Style::default().fg(t.text_muted)),
+            Span::styled(app.theme_kind.label(), Style::default().fg(t.text_accent)),
+            Span::styled("  Refresh ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{}ms", app.refresh_rate_ms),
                 Style::default().fg(t.text_accent),
             ),
-        ]),
-        Line::from(vec![
-            Span::styled("Theme   ", Style::default().fg(t.text_muted)),
-            Span::styled(app.theme_kind.label(), Style::default().fg(t.text_accent)),
-        ]),
-    ];
+        ]));
+
+        lines
+    };
 
     frame.render_widget(
-        Paragraph::new(lines).block(panel(" Server ", t.border_server, t)),
+        Paragraph::new(lines)
+            .block(panel(title.as_str(), border_style, t))
+            .wrap(Wrap { trim: true }),
         area,
     );
 }

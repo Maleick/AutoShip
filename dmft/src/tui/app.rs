@@ -15,47 +15,44 @@ use crate::soul::coordinator::SoulCoordinator;
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
 pub use super::state::{
-    CommandBarState, HexDumpState, MapScreenState, NavigationScreenState, SpawnsScreenState,
+    CommandBarState, HexDumpState, MapScreenState, NavigationScreenState, OverviewScreenState,
+    SpawnsScreenState, TacticalScreenState,
 };
 
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveScreen {
-    Dashboard,
-    Spawns,
-    Character,
-    Map,
-    Groups,
-    Navigation,
+    Overview,
+    Tactical,
+    Inspect,
 }
 
 impl ActiveScreen {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Dashboard => "Dashboard",
-            Self::Spawns => "Spawns",
-            Self::Character => "Character",
-            Self::Map => "Map",
-            Self::Groups => "Groups",
-            Self::Navigation => "Nav",
+            Self::Overview => "Overview",
+            Self::Tactical => "Tactical",
+            Self::Inspect => "Inspect",
         }
     }
 
-    pub const ALL: [ActiveScreen; 6] = [
-        Self::Dashboard,
-        Self::Spawns,
-        Self::Character,
-        Self::Map,
-        Self::Groups,
-        Self::Navigation,
-    ];
+    pub const ALL: [ActiveScreen; 3] = [Self::Overview, Self::Tactical, Self::Inspect];
 }
 
 /// Which panel is currently focused for keyboard input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivePanel {
-    SpawnList,
-    HexDump,
+    OverviewRoster,
+    OverviewGroups,
+    OverviewFilters,
+    OverviewCombat,
+    OverviewSession,
+    TacticalMap,
+    TacticalSpawns,
+    TacticalNamed,
+    TacticalNavigation,
+    InspectSpawns,
+    InspectHexDump,
 }
 
 /// Spawn type filter for the spawn list.
@@ -182,6 +179,7 @@ pub struct App {
     pub tick_count: u64,
 
     // Per-screen state
+    pub overview_state: OverviewScreenState,
     pub spawns_state: SpawnsScreenState,
     pub hex_state: HexDumpState,
 
@@ -197,6 +195,7 @@ pub struct App {
     pub soul_tick_counter: u64,
 
     pub map_state: MapScreenState,
+    pub tactical_state: TacticalScreenState,
 
     // Privacy mode — hides own character names and server for screenshots
     pub privacy_mode: bool,
@@ -261,8 +260,8 @@ impl App {
     pub fn new() -> Self {
         Self {
             running: true,
-            active_screen: ActiveScreen::Dashboard,
-            active_panel: ActivePanel::SpawnList,
+            active_screen: ActiveScreen::Overview,
+            active_panel: ActivePanel::OverviewRoster,
 
             clients: Vec::new(),
             selected_client: 0,
@@ -277,6 +276,7 @@ impl App {
             status_message: String::from("Waiting for EQ process..."),
             tick_count: 0,
 
+            overview_state: OverviewScreenState::new(),
             spawns_state: SpawnsScreenState::new(),
             hex_state: HexDumpState::new(),
 
@@ -289,6 +289,7 @@ impl App {
             soul_tick_counter: 0,
 
             map_state: MapScreenState::new(),
+            tactical_state: TacticalScreenState::new(),
 
             privacy_mode: false,
 
@@ -361,6 +362,135 @@ impl App {
     pub fn cycle_theme(&mut self) {
         self.theme_kind = self.theme_kind.next();
         self.theme = self.theme_kind.build();
+    }
+
+    fn default_panel_for_screen(screen: ActiveScreen) -> ActivePanel {
+        match screen {
+            ActiveScreen::Overview => ActivePanel::OverviewRoster,
+            ActiveScreen::Tactical => ActivePanel::TacticalSpawns,
+            ActiveScreen::Inspect => ActivePanel::InspectSpawns,
+        }
+    }
+
+    fn visible_panels(&self) -> Vec<ActivePanel> {
+        match self.active_screen {
+            ActiveScreen::Overview => {
+                let mut panels = vec![ActivePanel::OverviewRoster];
+                if self.overview_state.show_groups {
+                    panels.push(ActivePanel::OverviewGroups);
+                }
+                if self.overview_state.show_filters {
+                    panels.push(ActivePanel::OverviewFilters);
+                }
+                panels.push(ActivePanel::OverviewCombat);
+                panels.push(ActivePanel::OverviewSession);
+                panels
+            }
+            ActiveScreen::Tactical => {
+                let mut panels = vec![ActivePanel::TacticalMap, ActivePanel::TacticalSpawns];
+                if self.tactical_state.show_named {
+                    panels.push(ActivePanel::TacticalNamed);
+                }
+                if self.tactical_state.show_navigation {
+                    panels.push(ActivePanel::TacticalNavigation);
+                }
+                panels
+            }
+            ActiveScreen::Inspect => {
+                vec![ActivePanel::InspectSpawns, ActivePanel::InspectHexDump]
+            }
+        }
+    }
+
+    pub fn is_panel_focused(&self, panel: ActivePanel) -> bool {
+        self.active_panel == panel
+    }
+
+    pub fn set_active_screen(&mut self, screen: ActiveScreen) {
+        self.active_screen = screen;
+        self.active_panel = Self::default_panel_for_screen(screen);
+        self.ensure_panel_focus();
+    }
+
+    pub fn ensure_panel_focus(&mut self) {
+        let visible = self.visible_panels();
+        if !visible.contains(&self.active_panel)
+            && let Some(panel) = visible.first().copied()
+        {
+            self.active_panel = panel;
+        }
+    }
+
+    pub fn toggle_panel(&mut self) {
+        let visible = self.visible_panels();
+        if visible.is_empty() {
+            return;
+        }
+
+        let current = visible
+            .iter()
+            .position(|panel| *panel == self.active_panel)
+            .unwrap_or(0);
+        self.active_panel = visible[(current + 1) % visible.len()];
+    }
+
+    pub fn toggle_groups_visibility(&mut self) {
+        self.overview_state.show_groups = !self.overview_state.show_groups;
+        if self.overview_state.show_groups {
+            self.active_panel = ActivePanel::OverviewGroups;
+            self.status_message = String::from("Overview: group section shown");
+        } else {
+            self.status_message = String::from("Overview: group section hidden");
+        }
+        self.ensure_panel_focus();
+    }
+
+    pub fn toggle_filters_visibility(&mut self) {
+        self.overview_state.show_filters = !self.overview_state.show_filters;
+        if self.overview_state.show_filters {
+            self.active_panel = ActivePanel::OverviewFilters;
+            self.status_message = String::from("Overview: filter section shown");
+        } else {
+            self.status_message = String::from("Overview: filter section hidden");
+        }
+        self.ensure_panel_focus();
+    }
+
+    pub fn toggle_focused_section(&mut self) {
+        let state = match self.active_panel {
+            ActivePanel::OverviewGroups => {
+                self.overview_state.groups_collapsed = !self.overview_state.groups_collapsed;
+                Some(("Groups", self.overview_state.groups_collapsed))
+            }
+            ActivePanel::OverviewFilters => {
+                self.overview_state.filters_collapsed = !self.overview_state.filters_collapsed;
+                Some(("Filters", self.overview_state.filters_collapsed))
+            }
+            ActivePanel::OverviewCombat => {
+                self.overview_state.combat_collapsed = !self.overview_state.combat_collapsed;
+                Some(("Combat", self.overview_state.combat_collapsed))
+            }
+            ActivePanel::OverviewSession => {
+                self.overview_state.session_collapsed = !self.overview_state.session_collapsed;
+                Some(("Session", self.overview_state.session_collapsed))
+            }
+            ActivePanel::TacticalNamed => {
+                self.tactical_state.named_collapsed = !self.tactical_state.named_collapsed;
+                Some(("Named", self.tactical_state.named_collapsed))
+            }
+            ActivePanel::TacticalNavigation => {
+                self.tactical_state.navigation_collapsed =
+                    !self.tactical_state.navigation_collapsed;
+                Some(("Navigation", self.tactical_state.navigation_collapsed))
+            }
+            _ => None,
+        };
+
+        self.status_message = match state {
+            Some((label, true)) => format!("{label}: collapsed"),
+            Some((label, false)) => format!("{label}: expanded"),
+            None => String::from("Focused pane does not collapse"),
+        };
     }
 
     /// Build default group definitions. If accounts config exists, derives groups
@@ -800,6 +930,9 @@ impl App {
                 self.hex_state.hex_data = generate_demo_hex_data(&name, id);
                 self.hex_state.hex_address = 0x1000;
             }
+
+            self.set_active_screen(ActiveScreen::Inspect);
+            self.active_panel = ActivePanel::InspectHexDump;
         }
     }
 
@@ -877,13 +1010,6 @@ impl App {
         } else {
             &self.server_name
         }
-    }
-
-    pub fn toggle_panel(&mut self) {
-        self.active_panel = match self.active_panel {
-            ActivePanel::SpawnList => ActivePanel::HexDump,
-            ActivePanel::HexDump => ActivePanel::SpawnList,
-        };
     }
 
     /// Tab-complete the current command buffer.
@@ -1468,7 +1594,10 @@ impl App {
                         tracing::info!(destination, sent = ok, "Navigation command sent");
                         self.status_message =
                             format!("Nav → {} (sent to {} clients)", destination, ok);
-                        self.active_screen = ActiveScreen::Navigation;
+                        self.set_active_screen(ActiveScreen::Tactical);
+                        if self.tactical_state.show_navigation {
+                            self.active_panel = ActivePanel::TacticalNavigation;
+                        }
                     }
                 } else {
                     self.status_message =

@@ -122,7 +122,11 @@ impl Combatant {
 
         // Periodically prune expired DoT entries to prevent unbounded growth.
         // Every 120 ticks (~6 seconds at 20 ticks/sec).
-        if self.tick_count.wrapping_add(self.client_id).is_multiple_of(120) {
+        if self
+            .tick_count
+            .wrapping_add(self.client_id)
+            .is_multiple_of(120)
+        {
             self.dot_tracker.prune_expired(self.tick_count);
         }
 

@@ -17,13 +17,10 @@ pub fn handle_events(
     }
 
     if let Event::Key(key) = event::read()? {
-        // Only handle key press events, not repeat or release.
-        // This prevents toggles (like privacy mode) from bouncing.
         if key.kind != KeyEventKind::Press {
             return Ok(false);
         }
 
-        // Command mode (: prefix) — checked first
         if app.cmd_state.command_mode {
             match key.code {
                 KeyCode::Esc => {
@@ -79,18 +76,14 @@ pub fn handle_events(
             }
         }
 
-        // Help overlay — dismiss with ? or Esc
         if app.help_visible {
             match key.code {
-                KeyCode::Char('?') | KeyCode::Esc => {
-                    app.help_visible = false;
-                }
+                KeyCode::Char('?') | KeyCode::Esc => app.help_visible = false,
                 _ => {}
             }
             return Ok(true);
         }
 
-        // When in search mode, capture text input
         if app.spawns_state.search_mode {
             match key.code {
                 KeyCode::Esc => {
@@ -115,13 +108,11 @@ pub fn handle_events(
             }
         }
 
-        // Global keybindings
         match (key.code, key.modifiers) {
             (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('q'), _) => {
                 app.running = false;
                 return Ok(true);
             }
-            // Group focus: Shift+1-6 = focus group, Shift+0 or G+Esc = aggregate
             (KeyCode::Char('!'), _) => {
                 app.set_active_group(Some(0));
                 return Ok(true);
@@ -150,36 +141,22 @@ pub fn handle_events(
                 app.set_active_group(None);
                 return Ok(true);
             }
-            // Screen switching
             (KeyCode::Char('1'), _) => {
-                app.active_screen = ActiveScreen::Dashboard;
+                app.set_active_screen(ActiveScreen::Overview);
                 return Ok(true);
             }
             (KeyCode::Char('2'), _) => {
-                app.active_screen = ActiveScreen::Spawns;
+                app.set_active_screen(ActiveScreen::Tactical);
                 return Ok(true);
             }
             (KeyCode::Char('3'), _) => {
-                app.active_screen = ActiveScreen::Character;
+                app.set_active_screen(ActiveScreen::Inspect);
                 return Ok(true);
             }
-            (KeyCode::Char('4'), _) => {
-                app.active_screen = ActiveScreen::Map;
-                return Ok(true);
-            }
-            (KeyCode::Char('5'), _) => {
-                app.active_screen = ActiveScreen::Groups;
-                return Ok(true);
-            }
-            (KeyCode::Char('6'), _) => {
-                app.active_screen = ActiveScreen::Navigation;
-                return Ok(true);
-            }
-            (KeyCode::Tab, _) if app.active_screen == ActiveScreen::Character => {
+            (KeyCode::Tab, _) => {
                 app.toggle_panel();
                 return Ok(true);
             }
-            // Client switching: ] = next client, [ = previous client
             (KeyCode::Char(']'), _) => {
                 app.next_client();
                 return Ok(true);
@@ -205,14 +182,24 @@ pub fn handle_events(
             (KeyCode::Char('/'), _) => {
                 app.spawns_state.search_mode = true;
                 app.spawns_state.spawn_filter.clear();
-                // Switch to Spawns screen if not already there
-                if app.active_screen != ActiveScreen::Spawns {
-                    app.active_screen = ActiveScreen::Spawns;
-                }
+                app.set_active_screen(ActiveScreen::Tactical);
+                app.active_panel = ActivePanel::TacticalSpawns;
                 return Ok(true);
             }
             (KeyCode::Char('f'), _) => {
                 app.cycle_spawn_filter();
+                return Ok(true);
+            }
+            (KeyCode::Char('g'), _) if app.active_screen == ActiveScreen::Overview => {
+                app.toggle_groups_visibility();
+                return Ok(true);
+            }
+            (KeyCode::Char('v'), _) if app.active_screen == ActiveScreen::Overview => {
+                app.toggle_filters_visibility();
+                return Ok(true);
+            }
+            (KeyCode::Char('z'), _) => {
+                app.toggle_focused_section();
                 return Ok(true);
             }
             (KeyCode::Char('T'), _) => {
@@ -227,7 +214,6 @@ pub fn handle_events(
                 }
                 return Ok(true);
             }
-            // F1-F9: Execute favorite commands (most frequently used)
             (KeyCode::F(n), _) if (1..=9).contains(&n) => {
                 let idx = (n - 1) as usize;
                 if let Some(cmd) = app.cmd_state.get_favorite(idx).map(|s| s.to_string()) {
@@ -245,16 +231,11 @@ pub fn handle_events(
             _ => {}
         }
 
-        // Quick action keybinds (only when not in search/command mode, and only on relevant screens)
         if matches!(
             app.active_screen,
-            ActiveScreen::Dashboard
-                | ActiveScreen::Character
-                | ActiveScreen::Spawns
-                | ActiveScreen::Groups
+            ActiveScreen::Overview | ActiveScreen::Tactical | ActiveScreen::Inspect
         ) {
             match key.code {
-                // r = repeat last command
                 KeyCode::Char('r') => {
                     if let Some(last) = app.cmd_state.command_history.last().cloned() {
                         app.cmd_state.command_buffer = last;
@@ -265,21 +246,18 @@ pub fn handle_events(
                     }
                     return Ok(true);
                 }
-                // e = engage selected target
                 KeyCode::Char('e') => {
                     app.cmd_state.command_buffer = "engage".into();
                     app.execute_command(orchestrator);
                     app.cmd_state.command_buffer.clear();
                     return Ok(true);
                 }
-                // d = disengage
                 KeyCode::Char('d') => {
                     app.cmd_state.command_buffer = "disengage".into();
                     app.execute_command(orchestrator);
                     app.cmd_state.command_buffer.clear();
                     return Ok(true);
                 }
-                // l = loot
                 KeyCode::Char('l') => {
                     app.cmd_state.command_buffer = "loot".into();
                     app.execute_command(orchestrator);
@@ -290,8 +268,7 @@ pub fn handle_events(
             }
         }
 
-        // Map-screen keybindings: +/- adjust Z-depth filter
-        if app.active_screen == ActiveScreen::Map {
+        if app.active_screen == ActiveScreen::Tactical {
             match key.code {
                 KeyCode::Char('+') | KeyCode::Char('=') => {
                     app.map_state.increase_z_filter();
@@ -305,45 +282,37 @@ pub fn handle_events(
             }
         }
 
-        // Navigation screen keybindings: arrows navigate the character list
-        if app.active_screen == ActiveScreen::Navigation {
-            match key.code {
-                KeyCode::Down => {
-                    let max = app.visible_clients().len().saturating_sub(1);
-                    if app.nav_state.nav_selected < max {
-                        app.nav_state.nav_selected += 1;
-                    }
+        match app.active_panel {
+            ActivePanel::OverviewRoster => match key.code {
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.next_client();
+                    return Ok(true);
                 }
-                KeyCode::Up => {
-                    app.nav_state.nav_selected = app.nav_state.nav_selected.saturating_sub(1);
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.prev_client();
+                    return Ok(true);
                 }
                 _ => {}
-            }
-        }
-
-        // Panel-specific keybindings (only on Spawns and Character screens)
-        if app.active_screen == ActiveScreen::Spawns || app.active_screen == ActiveScreen::Character
-        {
-            match app.active_panel {
-                ActivePanel::SpawnList => match key.code {
-                    KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
-                    KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
-                    KeyCode::PageDown => app.spawn_list_page_down(),
-                    KeyCode::PageUp => app.spawn_list_page_up(),
-                    KeyCode::Home => app.spawns_state.table_state.select(Some(0)),
-                    KeyCode::End => {
-                        let max = app.filtered_spawns().len().saturating_sub(1);
-                        app.spawns_state.table_state.select(Some(max));
-                    }
-                    KeyCode::Enter => app.inspect_selected_spawn(),
-                    _ => {}
-                },
-                ActivePanel::HexDump => match key.code {
-                    KeyCode::Down => app.hex_scroll_down(),
-                    KeyCode::Up => app.hex_scroll_up(),
-                    _ => {}
-                },
-            }
+            },
+            ActivePanel::TacticalSpawns | ActivePanel::InspectSpawns => match key.code {
+                KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
+                KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
+                KeyCode::PageDown => app.spawn_list_page_down(),
+                KeyCode::PageUp => app.spawn_list_page_up(),
+                KeyCode::Home => app.spawns_state.table_state.select(Some(0)),
+                KeyCode::End => {
+                    let max = app.filtered_spawns().len().saturating_sub(1);
+                    app.spawns_state.table_state.select(Some(max));
+                }
+                KeyCode::Enter => app.inspect_selected_spawn(),
+                _ => {}
+            },
+            ActivePanel::InspectHexDump => match key.code {
+                KeyCode::Down => app.hex_scroll_down(),
+                KeyCode::Up => app.hex_scroll_up(),
+                _ => {}
+            },
+            _ => {}
         }
     }
 

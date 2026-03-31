@@ -1,0 +1,18 @@
+{
+  "features": [
+    {
+      "id": "composite-tui",
+      "name": "Composite TUI redesign",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "Overview screen shows collapsible sections and supports group/filter toggles",
+        "Tactical screen combines map and spawn list on one screen",
+        "Inspect screen combines player, target, hex dump, and spawn list",
+        "cargo fmt --check",
+        "cargo clippy -- -D warnings",
+        "cargo test"
+      ],
+      "notes": "Started on feat/composite-tui from master. Replacing the 6-screen model with Overview, Tactical, and Inspect while preserving existing renderers where practical."
+    }
+  ]
+}

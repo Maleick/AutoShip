@@ -18,7 +18,10 @@ pub fn draw_spawns_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &
 
 pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let t = &app.theme;
-    let is_active = app.active_panel == ActivePanel::SpawnList;
+    let is_active = matches!(
+        app.active_panel,
+        ActivePanel::TacticalSpawns | ActivePanel::InspectSpawns
+    );
     let border_style = if is_active {
         t.border_active
     } else {
@@ -91,8 +94,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             // 2D Euclidean distance — Z (altitude) intentionally excluded for tactical range
             let dist_str = match player_pos {
                 Some((px, py)) => {
-                    let dist =
-                        ((spawn.x - px).powi(2) + (spawn.y - py).powi(2)).sqrt();
+                    let dist = ((spawn.x - px).powi(2) + (spawn.y - py).powi(2)).sqrt();
                     format!("{:.0}", dist)
                 }
                 None => String::from("-"),
@@ -189,7 +191,7 @@ pub fn draw_spawn_panel(
 
 pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
-    let is_active = app.active_panel == ActivePanel::HexDump;
+    let is_active = app.active_panel == ActivePanel::InspectHexDump;
     let border_style = if is_active {
         t.border_warn
     } else {
@@ -252,39 +254,47 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 
 // ─── Character screen layout ─────────────────────────────────────────────────
 
-pub fn draw_character_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let hex_empty = app.hex_state.hex_data.is_empty();
-    let narrow = area.width < 100;
-
-    // Adaptive horizontal split: favor character panel on narrow terminals,
-    // give full width when hex dump has no data to show.
-    let cols = if hex_empty {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(100)])
-            .split(area)
-    } else {
-        let (left_pct, right_pct) = if narrow { (60, 40) } else { (45, 55) };
-        Layout::default()
-            .direction(Direction::Horizontal)
+pub fn draw_character_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    if area.width < 110 {
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(left_pct),
-                Constraint::Percentage(right_pct),
+                Constraint::Length(18),
+                Constraint::Min(10),
+                Constraint::Min(10),
             ])
-            .split(area)
-    };
+            .split(area);
+
+        let top = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+            .split(rows[0]);
+
+        draw_player_detail(frame, top[0], app);
+        draw_target_panel(frame, top[1], app);
+        draw_hex_panel(frame, rows[1], app);
+        draw_spawn_list(frame, rows[2], app);
+        return;
+    }
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(area);
 
     let left = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(8)])
+        .constraints([
+            Constraint::Length(10),
+            Constraint::Length(8),
+            Constraint::Min(10),
+        ])
         .split(cols[0]);
 
     draw_player_detail(frame, left[0], app);
     draw_target_panel(frame, left[1], app);
-
-    if !hex_empty {
-        draw_hex_panel(frame, cols[1], app);
-    }
+    draw_hex_panel(frame, left[2], app);
+    draw_spawn_list(frame, cols[1], app);
 }
 
 fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

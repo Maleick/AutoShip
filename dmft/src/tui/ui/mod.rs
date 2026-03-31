@@ -47,12 +47,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_header(frame, outer[0], app);
 
     match app.active_screen {
-        ActiveScreen::Dashboard => dashboard::draw_dashboard(frame, outer[1], app),
-        ActiveScreen::Spawns => spawns::draw_spawns_screen(frame, outer[1], app),
-        ActiveScreen::Character => spawns::draw_character_screen(frame, outer[1], app),
-        ActiveScreen::Map => map::draw_map_screen(frame, outer[1], app),
-        ActiveScreen::Groups => groups::draw_groups_screen(frame, outer[1], app),
-        ActiveScreen::Navigation => navigation::draw_navigation_screen(frame, outer[1], app),
+        ActiveScreen::Overview => dashboard::draw_dashboard(frame, outer[1], app),
+        ActiveScreen::Tactical => map::draw_map_screen(frame, outer[1], app),
+        ActiveScreen::Inspect => spawns::draw_character_screen(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -167,16 +164,24 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
     // ── Left pane ─────────────────────────────────────────────────────
     let hints: Vec<Span<'_>> = vec![
-        Span::styled("1-6", t.statusbar_key),
+        Span::styled("1-3", t.statusbar_key),
         Span::styled(" screen  ", t.statusbar_dim),
         Span::styled("⇧1-6", t.statusbar_key),
         Span::styled(" group  ", t.statusbar_dim),
+        Span::styled("Tab", t.statusbar_key),
+        Span::styled(" pane  ", t.statusbar_dim),
         Span::styled("[ ]", t.statusbar_key),
         Span::styled(" client  ", t.statusbar_dim),
+        Span::styled("g/v", t.statusbar_key),
+        Span::styled(" sections  ", t.statusbar_dim),
+        Span::styled("z", t.statusbar_key),
+        Span::styled(" collapse  ", t.statusbar_dim),
         Span::styled("/", t.statusbar_key),
         Span::styled(" search  ", t.statusbar_dim),
         Span::styled("f", t.statusbar_key),
         Span::styled(" filter  ", t.statusbar_dim),
+        Span::styled("+/-", t.statusbar_key),
+        Span::styled(" depth  ", t.statusbar_dim),
         Span::styled("T", t.statusbar_key),
         Span::styled(" theme  ", t.statusbar_dim),
         Span::styled("?", t.statusbar_key),
@@ -285,12 +290,17 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let text = vec![
         Line::from(Span::styled(" Keybindings", head_s)),
         Line::from(""),
-        kv("1-6", "Switch screens"),
+        kv("1-3", "Overview, Tactical, Inspect"),
         kv("Shift+1-6", "Focus group G1–G6"),
         kv("Shift+0", "All groups"),
+        kv("Tab", "Cycle focused pane"),
         kv("[ ]", "Cycle clients"),
         kv("/", "Search spawns"),
         kv("f", "Filter spawn type"),
+        kv("g", "Toggle group section"),
+        kv("v", "Toggle filter section"),
+        kv("z", "Collapse focused section"),
+        kv("+/-", "Adjust Tactical Z slice"),
         kv("p", "Privacy mode"),
         kv("T", "Cycle theme"),
         kv(":", "Command mode"),

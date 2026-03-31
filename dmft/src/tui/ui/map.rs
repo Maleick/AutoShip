@@ -8,35 +8,58 @@ use ratatui::{
     widgets::{Paragraph, Row, Table},
 };
 
-use super::widgets::{panel, spawn_type_color, themed_header_row};
+use super::{
+    spawns,
+    widgets::{panel, themed_header_row},
+};
 use crate::eq::structs::SpawnType;
-use crate::tui::app::App;
+use crate::tui::app::{ActivePanel, App};
 use crate::tui::theme::Theme;
 
-pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    // Narrow terminals: collapse to 2-panel (map + spawn list) instead of 3-panel
+pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     if area.width < 100 {
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
+            .split(area);
+        let bottom = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(rows[1]);
+        draw_map_view(frame, rows[0], app);
+        spawns::draw_spawn_list(frame, bottom[0], app);
+        draw_tactical_sidebar(frame, bottom[1], app);
+        return;
+    }
+
+    if area.width < 140 {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
             .split(area);
+        let right = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(cols[1]);
+
         draw_map_view(frame, cols[0], app);
-        draw_map_spawn_list(frame, cols[1], app);
+        spawns::draw_spawn_list(frame, right[0], app);
+        draw_tactical_sidebar(frame, right[1], app);
         return;
     }
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(55),
-            Constraint::Percentage(25),
+            Constraint::Percentage(48),
+            Constraint::Percentage(32),
             Constraint::Percentage(20),
         ])
         .split(area);
 
     draw_map_view(frame, cols[0], app);
-    draw_map_spawn_list(frame, cols[1], app);
-    draw_named_tracker_panel(frame, cols[2], app);
+    spawns::draw_spawn_list(frame, cols[1], app);
+    draw_tactical_sidebar(frame, cols[2], app);
 }
 
 // ─── Map view ────────────────────────────────────────────────────────────────
@@ -69,7 +92,12 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             )
         });
 
-    let blk = panel(map_info.as_str(), t.border_active, t);
+    let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
+        t.border_active
+    } else {
+        t.border_dim
+    };
+    let blk = panel(map_info.as_str(), border_style, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
@@ -149,6 +177,10 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let player_z = app.local_player.as_ref().map(|p| p.z);
     let z_range = app.map_state.z_filter_range;
+    let selected_spawn_id = app
+        .filtered_spawns()
+        .get(app.spawn_selected())
+        .map(|spawn| spawn.spawn_id);
 
     for spawn in &app.spawns {
         // EQ Z = altitude; filter spawns more than z_range units above/below player.
@@ -161,19 +193,23 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let my = -spawn.x;
         let (col, row) = to_grid(mx, my);
         if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
-            let (ch, color) = match spawn.spawn_type {
-                SpawnType::Player => ('@', t.map_pc),
-                SpawnType::Npc => {
-                    if !spawn.displayed_name.starts_with("a ")
-                        && !spawn.displayed_name.starts_with("an ")
-                    {
-                        ('!', t.map_named)
-                    } else {
-                        ('·', t.map_npc)
+            let (ch, color) = if Some(spawn.spawn_id) == selected_spawn_id {
+                ('◎', t.text_highlight)
+            } else {
+                match spawn.spawn_type {
+                    SpawnType::Player => ('@', t.map_pc),
+                    SpawnType::Npc => {
+                        if !spawn.displayed_name.starts_with("a ")
+                            && !spawn.displayed_name.starts_with("an ")
+                        {
+                            ('!', t.map_named)
+                        } else {
+                            ('·', t.map_npc)
+                        }
                     }
+                    SpawnType::Corpse => ('.', t.map_corpse),
+                    SpawnType::Unknown(_) => ('?', t.spawn_unknown),
                 }
-                SpawnType::Corpse => ('.', t.map_corpse),
-                SpawnType::Unknown(_) => ('?', t.spawn_unknown),
             };
             grid[row as usize][col as usize] = (ch, color);
         }
@@ -379,65 +415,81 @@ fn line_char(x0: i32, y0: i32, x1: i32, y1: i32) -> char {
     }
 }
 
-// ─── Spawn position list ─────────────────────────────────────────────────────
+// ─── Tactical side rail ──────────────────────────────────────────────────────
 
-fn draw_map_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let t = &app.theme;
-    let blk = panel(" Spawn Positions ", t.border_dim, t);
-    let header = themed_header_row(vec!["T", "Name", "Y", "X", "Z"], t);
-
-    let player_z = app.local_player.as_ref().map(|p| p.z);
-    let z_range = app.map_state.z_filter_range;
-
-    let rows: Vec<Row> = app
-        .spawns
-        .iter()
-        .filter(|spawn| {
-            // Match the Z-filter applied to the map canvas
-            match player_z {
-                Some(pz) => (spawn.z - pz).abs() <= z_range,
-                None => true,
-            }
-        })
-        .map(|spawn| {
-            let name = app.redact_name(&spawn.displayed_name).into_owned();
-            let color = spawn_type_color(&spawn.spawn_type, t);
-            Row::new(vec![
-                ratatui::widgets::Cell::from(match spawn.spawn_type {
-                    SpawnType::Player => "@",
-                    SpawnType::Npc => "·",
-                    SpawnType::Corpse => ".",
-                    SpawnType::Unknown(_) => "?",
-                }),
-                ratatui::widgets::Cell::from(name),
-                ratatui::widgets::Cell::from(format!("{:.0}", spawn.y)),
-                ratatui::widgets::Cell::from(format!("{:.0}", spawn.x)),
-                ratatui::widgets::Cell::from(format!("{:.0}", spawn.z)),
-            ])
-            .style(Style::default().fg(color))
-        })
-        .collect();
-
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(2),
-                Constraint::Min(14),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(5),
-            ],
-        )
-        .header(header)
-        .block(blk),
-        area,
-    );
+#[derive(Clone, Copy)]
+enum TacticalSectionKind {
+    Named,
+    Navigation,
 }
 
-// ─── Named tracker panel ─────────────────────────────────────────────────────
+fn draw_tactical_sidebar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let sections = tactical_sections(app);
+    if sections.is_empty() {
+        return;
+    }
 
-fn draw_named_tracker_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            sections
+                .iter()
+                .map(|(_, constraint)| *constraint)
+                .collect::<Vec<_>>(),
+        )
+        .split(area);
+
+    for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
+        match section {
+            TacticalSectionKind::Named => {
+                draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed)
+            }
+            TacticalSectionKind::Navigation => {
+                draw_navigation_summary(frame, *chunk, app, app.tactical_state.navigation_collapsed)
+            }
+        }
+    }
+}
+
+fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
+    let mut sections = Vec::new();
+
+    if app.tactical_state.show_named {
+        sections.push((
+            TacticalSectionKind::Named,
+            if app.tactical_state.named_collapsed {
+                Constraint::Length(3)
+            } else {
+                Constraint::Min(8)
+            },
+        ));
+    }
+
+    if app.tactical_state.show_navigation {
+        sections.push((
+            TacticalSectionKind::Navigation,
+            if app.tactical_state.navigation_collapsed {
+                Constraint::Length(3)
+            } else {
+                Constraint::Min(6)
+            },
+        ));
+    }
+
+    sections
+}
+
+fn tactical_section_title(label: &str, collapsed: bool) -> String {
+    let icon = if collapsed { "▶" } else { "▼" };
+    format!(" {} {} ", label, icon)
+}
+
+fn draw_named_tracker_panel(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &App,
+    collapsed: bool,
+) {
     let t = &app.theme;
     let named = app.named_tracker.tracked_spawns();
     let n_alive = named.iter().filter(|s| s.is_alive).count();
@@ -447,8 +499,37 @@ fn draw_named_tracker_panel(frame: &mut Frame, area: ratatui::layout::Rect, app:
         .filter(|t| t.status == crate::tui::app::TrackedStatus::Up)
         .count();
 
+    let border_style = if app.is_panel_focused(ActivePanel::TacticalNamed) {
+        t.border_active
+    } else {
+        t.border_warn
+    };
+
+    if collapsed {
+        let title = tactical_section_title("Named", true);
+        let summary = format!("{} named up | {} tracked up", n_alive, u_up);
+        frame.render_widget(
+            Paragraph::new(summary)
+                .block(panel(title.as_str(), border_style, t))
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
+    }
+
     let has_user = !u_tracked.is_empty();
     let has_named = !named.is_empty();
+
+    if !has_user && !has_named {
+        let title = tactical_section_title("Named", false);
+        frame.render_widget(
+            Paragraph::new("No named or tracked spawns")
+                .block(panel(title.as_str(), border_style, t))
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
+    }
 
     let (named_area, user_area) = if has_user && has_named {
         let ch = Layout::default()
@@ -463,8 +544,13 @@ fn draw_named_tracker_panel(frame: &mut Frame, area: ratatui::layout::Rect, app:
     };
 
     if let Some(na) = named_area {
-        let title = format!(" Named ({} up / {}) ", n_alive, named.len());
-        let blk = panel(title.as_str(), t.border_warn, t);
+        let title = format!(
+            " {} ({} up / {}) ",
+            tactical_section_title("Named", false).trim(),
+            n_alive,
+            named.len()
+        );
+        let blk = panel(title.as_str(), border_style, t);
 
         if named.is_empty() {
             frame.render_widget(
@@ -564,4 +650,127 @@ fn draw_named_tracker_panel(frame: &mut Frame, area: ratatui::layout::Rect, app:
             ua,
         );
     }
+}
+
+fn draw_navigation_summary(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &App,
+    collapsed: bool,
+) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::TacticalNavigation) {
+        t.border_active
+    } else {
+        t.border_server
+    };
+    let title = tactical_section_title("Navigation", collapsed);
+
+    let visible = app.visible_clients();
+    let navigating = visible
+        .iter()
+        .filter(|client| {
+            app.nav_state
+                .nav_statuses
+                .get(&client.pid)
+                .is_some_and(|nav| nav.status == "Navigating")
+        })
+        .count();
+    let arrived = visible
+        .iter()
+        .filter(|client| {
+            app.nav_state
+                .nav_statuses
+                .get(&client.pid)
+                .is_some_and(|nav| nav.status == "Arrived")
+        })
+        .count();
+    let stuck = visible
+        .iter()
+        .filter(|client| {
+            app.nav_state
+                .nav_statuses
+                .get(&client.pid)
+                .is_some_and(|nav| nav.status == "Stuck")
+        })
+        .count();
+    let idle = visible.len().saturating_sub(navigating + arrived + stuck);
+
+    if collapsed {
+        let summary = format!("{} nav | {} arr | {} idle", navigating, arrived, idle);
+        frame.render_widget(
+            Paragraph::new(summary)
+                .block(panel(title.as_str(), border_style, t))
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
+    }
+
+    let selected_name = app
+        .active_client()
+        .and_then(|client| client.local_player.as_ref())
+        .map(|player| app.redact_name(&player.displayed_name).into_owned())
+        .unwrap_or_else(|| String::from("No client"));
+
+    let selected_nav = app
+        .active_client()
+        .and_then(|client| app.nav_state.nav_statuses.get(&client.pid));
+    let selected_status = selected_nav
+        .map(|nav| nav.status.as_str())
+        .unwrap_or("Idle");
+    let selected_dest = selected_nav
+        .map(|nav| nav.destination.as_str())
+        .unwrap_or("—");
+    let selected_waypoints = selected_nav.map(|nav| nav.waypoints.len()).unwrap_or(0);
+
+    let status_color = match selected_status {
+        "Navigating" => t.text_highlight,
+        "Arrived" => t.hp_high,
+        "Stuck" => t.hp_low,
+        _ => t.text_muted,
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("Selected ", Style::default().fg(t.text_muted)),
+            Span::styled(selected_name, Style::default().fg(t.text_normal)),
+        ]),
+        Line::from(vec![
+            Span::styled("Status   ", Style::default().fg(t.text_muted)),
+            Span::styled(selected_status, Style::default().fg(status_color)),
+        ]),
+        Line::from(vec![
+            Span::styled("Dest     ", Style::default().fg(t.text_muted)),
+            Span::styled(selected_dest, Style::default().fg(t.text_accent)),
+        ]),
+        Line::from(vec![
+            Span::styled("Waypts   ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                selected_waypoints.to_string(),
+                Style::default().fg(t.text_highlight),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Fleet    ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{} nav", navigating),
+                Style::default().fg(t.text_highlight),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(format!("{} arr", arrived), Style::default().fg(t.hp_high)),
+            Span::styled("  ", Style::default()),
+            Span::styled(format!("{} idle", idle), Style::default().fg(t.text_muted)),
+        ]),
+        Line::from(vec![
+            Span::styled(":nav ", Style::default().fg(t.text_accent)),
+            Span::styled("<zone>", Style::default().fg(t.text_normal)),
+        ]),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(lines).block(panel(title.as_str(), border_style, t)),
+        area,
+    );
 }

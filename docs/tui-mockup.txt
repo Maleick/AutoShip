@@ -1,69 +1,113 @@
+FROSTREAVER TUI TARGET
+======================
 
- ╔══════════════════════════════════════════════════════════════════════════════════╗
- ║  EQ Memory Debugger                                                            ║
- ║  ⚡ FROSTREAVER │ PID:12345 Base:0x140000000 │ Gandalf (Enchanter) Lv60 │ T:1247║
- ╚══════════════════════════════════════════════════════════════════════════════════╝
- ┌─ Local Player (green border) ──────┐┌─ Spawn List (247 in zone) ──────────────────┐
- │                                    ││                                              │
- │  Name:  Gandalf                    ││  ID    Name                  Lv  Class  Dist │
- │  Class: Enchanter    Level: 60     ││  ──── ────────────────────── ──  ─────  ──── │
- │  HP:    ████████████████░░░░  85%  ││  1042 a goblin warrior      55  WAR    23m   │
- │  Mana:  ████████████░░░░░░░░  62%  ││  1043 a dark elf priest     57  CLR    31m   │
- │  End:   ██████████████████░░  92%  ││ >1044 Thorin                60  WAR     5m < │
- │  Pos:   125.3, -340.1, 12.0       ││  1045 a goblin scout        53  ROG    42m   │
- │                                    ││  1046 a goblin king         60  WAR    55m   │
- ├─ Current Target (red border) ──────┤│  1047 a goblin shaman       54  SHM    48m   │
- │                                    ││  1048 Legolas                60  RNG    12m   │
- │  Name:  a goblin warrior           ││  1049 a goblin warlord      58  WAR    61m   │
- │  Type:  NPC           Level: 55    ││  1050 a fire beetle         10  WAR    70m   │
- │  HP:    █████░░░░░░░░░░░░░░░  23%  ││  1051 a goblin guard        52  WAR    35m   │
- │  Pos:   130.1, -335.2, 12.0       ││  1052 Gimli                 60  WAR     8m   │
- │  ID:    1042                       ││  1053 a goblin mystic       56  ENC    44m   │
- │                                    ││  1054 a goblin captain      59  WAR    38m   │
- ├─ Hex Dump ─────────────────────────┤│  1055 a goblin sentry       51  WAR    66m   │
- │                                    ││                                              │
- │  0000: 47 61 6E 64 61 6C 66 00   ││  Filter: [All Types]  Sort: [Distance]       │
- │  0008: 00 00 00 00 45 6E 63 68   ││                                              │
- │  0010: 61 6E 74 65 72 00 00 00   ││  PC: 3  NPC: 212  Corpse: 32                 │
- │  0018: 3C 00 55 01 A8 61 00 00   ││                                              │
- │                                    ││                                              │
- └────────────────────────────────────┘└──────────────────────────────────────────────┘
- ╔══════════════════════════════════════════════════════════════════════════════════╗
- ║  ↑↓ Navigate │ Tab: Switch Panel │ F: Filter │ /: Search │ Q: Quit │ Demo Mode ║
- ╚══════════════════════════════════════════════════════════════════════════════════╝
+This mockup reflects the composite 3-screen model:
+- Overview: fleet command center with collapsible sections
+- Tactical: map + spawn list + named/nav rail on one screen
+- Inspect: player + target + hex + live spawn list
 
- LAYOUT:
- ┌──────────────────────────────────────────────────────────────────────┐
- │                        HEADER (3 rows)                              │
- │          Process info, character name, tick counter                  │
- ├────────────────────────────┬─────────────────────────────────────────┤
- │   LEFT COLUMN (40%)       │      RIGHT COLUMN (60%)                 │
- │                            │                                         │
- │  ┌──────────────────────┐ │  ┌───────────────────────────────────┐  │
- │  │  Player Panel (8h)   │ │  │                                   │  │
- │  │  Name, Class, Level  │ │  │         Spawn List Table          │  │
- │  │  HP/Mana/End bars    │ │  │                                   │  │
- │  │  XYZ coordinates     │ │  │    ID | Name | Lv | Class | Dist  │  │
- │  │  Green border        │ │  │    ── | ──── | ── | ───── | ──── │  │
- │  ├──────────────────────┤ │  │    Scrollable, filterable          │  │
- │  │  Target Panel (8h)   │ │  │    Arrow keys to navigate          │  │
- │  │  Same as player      │ │  │    Highlighted row = selected      │  │
- │  │  Red border           │ │  │                                   │  │
- │  │  "No target" if none │ │  │    Shows PC/NPC/Corpse counts      │  │
- │  ├──────────────────────┤ │  │                                   │  │
- │  │  Hex Dump (flex)     │ │  │    60% of screen width             │  │
- │  │  Raw memory bytes    │ │  │                                   │  │
- │  │  For offset debugging│ │  │                                   │  │
- │  └──────────────────────┘ │  └───────────────────────────────────┘  │
- ├────────────────────────────┴─────────────────────────────────────────┤
- │                       STATUS BAR (3 rows)                            │
- │              Keybindings, mode indicator, filters                    │
- └──────────────────────────────────────────────────────────────────────┘
 
- COLORS:
-   Header:       Cyan title, Yellow PID, Green character name
-   Player Panel: Green border, HP bar (green>75%, yellow>25%, red<25%)
-   Target Panel: Red border, same HP coloring
-   Spawn List:   White text, cyan header, highlighted row
-   Hex Dump:     Gray text on dark background
-   Status Bar:   Gray text with keybinding hints
+SCREEN 1 — OVERVIEW
+-------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FROST │ 36x EQ │ [12/36] Toon-12 │ All Groups │ [Hidden Server] │ Overview │
+├──────────────────────────────────────────────┬───────────────────────────────┤
+│ Fleet (36)                                  │ ▼ Groups [g]                  │
+│ ┌──────────────────────────────────────────┐ │ ▶ Toon-01 █████████████  92% │
+│ │ ▶ Name        Cls Lv HP% MP% State Zone │ │   Toon-02 ████████░░░░  63% │
+│ │   Toon-01     ENC 60 92  88  Stand CR   │ │   Toon-03 ███░░░░░░░░  21% │
+│ │   Toon-02     CLR 60 63  77  Sit   CR   │ │   Toon-04 ███████████  97% │
+│ │   Toon-03     WAR 60 21   -  Combat MM  │ │                               │
+│ │   Toon-04     MAG 60 97  84  Stand MM   │ ├───────────────────────────────┤
+│ │   ...                                      │ ▼ Filters [v]                 │
+│ └──────────────────────────────────────────┘ │ Type: Named                  │
+│                                              │ Search: "goblin"             │
+│                                              │ Z slice: ±50                 │
+│                                              │ / search  f type  +/- depth  │
+│                                              ├───────────────────────────────┤
+│                                              │ ▼ Combat                      │
+│                                              │ Mode Hunt  MA Toon-03         │
+│                                              │ MT Toon-03  HlCx ON          │
+│                                              │ CH 4x 2.5s adaptive tgt=1042 │
+│                                              ├───────────────────────────────┤
+│                                              │ ▼ Session                     │
+│                                              │ 02:14:19                      │
+│                                              │ XP 443 (198/hr 15m:221/hr)   │
+│                                              │ Pp 73 (32.4/hr)  Kills 119   │
+│                                              │ Server Hidden  Theme Dark     │
+└──────────────────────────────────────────────┴───────────────────────────────┘
+│ 1-3 screen │ Tab pane │ g/v sections │ z collapse │ [ ] client │ ? help     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Behavior:
+- `g` toggles the Groups section on and off.
+- `v` toggles the Filters section on and off.
+- `z` collapses or expands the currently focused sidebar section.
+- `Tab` cycles the focus between Fleet, Groups, Filters, Combat, and Session.
+
+
+SCREEN 2 — TACTICAL
+-------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FROST │ 36x EQ │ [12/36] Toon-12 │ G2 Bravo │ [Hidden Server] │ Tactical   │
+├───────────────────────────────┬─────────────────────────┬──────────────────┤
+│ Map: crushbone | Z filter ±50 │ Spawns: Toon-12 (247)   │ ▼ Named           │
+│                               │ [Named] search:"goblin" │ Frenzied   UP  -- │
+│      .........                │ Type Name        Lv Dist │ Emperor   down 04 │
+│   ...◎....!..                │ >NPC  goblin cap 59  38  │ Tracked 2 up / 4  │
+│  ..◆....@....                 │  NPC  goblin war 55  23  ├──────────────────┤
+│  ..../path....                │  PC   Toon-03    60   5  │ ▼ Navigation      │
+│ ....★........                 │  NPC  goblin sh  54  48  │ Selected Toon-12  │
+│                               │  ...                    │ Status Navigating │
+│                               │                         │ Dest  zone_line   │
+│                               │                         │ Fleet 6 nav 2 arr │
+└───────────────────────────────┴─────────────────────────┴──────────────────┘
+│ 1-3 screen │ Tab pane │ / search │ f filter │ +/- depth │ Enter inspect    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Behavior:
+- The spawn list and map are always visible together.
+- The selected spawn is marked on the map with `◎`.
+- The selected character remains marked with `◆`.
+- The navigation rail can be collapsed with `z` when it has focus.
+- `Enter` on a spawn switches to Inspect and populates the hex dump.
+
+
+SCREEN 3 — INSPECT
+------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FROST │ 36x EQ │ [12/36] Toon-12 │ G2 Bravo │ [Hidden Server] │ Inspect    │
+├───────────────────────────────┬──────────────────────────────────────────────┤
+│ Selected Character            │ Spawns: Toon-12 (247)                        │
+│ Toon-12  ENC Lv60 [Stand]     │ [Named] search:"goblin"                     │
+│ HP  4120/4480 (92%)           │ Type Name             Race Cls Lv HP Dist ID │
+│ Mana 3800/4300 (88%)          │ >NPC  goblin captain Gob  WAR 59 71  38 1054 │
+│ Pos (-340.1,125.3,12.0)       │  NPC  goblin warlord Gob  WAR 58 23  61 1049 │
+├───────────────────────────────┤  PC   Toon-03         HUM  WAR 60 97   5 2044 │
+│ Current Target                │  ...                                         │
+│ goblin captain  NPC Lv59      │                                              │
+│ HP 71%  Pos (-335.2,130.1,12) │                                              │
+├───────────────────────────────┤                                              │
+│ Hex — Raw memory: goblin ...  │                                              │
+│ 0000  67 6F 62 6C 69 6E ...   │                                              │
+│ 0010  3B 00 59 01 ...         │                                              │
+│ 0020  ...                     │                                              │
+└───────────────────────────────┴──────────────────────────────────────────────┘
+│ 1-3 screen │ Tab pane │ Enter inspect │ Up/Down hex │ / search │ ? help     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Behavior:
+- The original debugger workflow stays intact, but the spawn list remains visible.
+- `Tab` cycles between the spawn list and the hex dump.
+- `Enter` refreshes the selected spawn inspection data.
+
+
+CONSOLIDATION NOTES
+-------------------
+- Old Dashboard + Groups -> Overview
+- Old Map + Spawns + Navigation -> Tactical
+- Old Character + Hex + live spawn list -> Inspect
+- Group and filter context stays visible without forcing extra screen changes.

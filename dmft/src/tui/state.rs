@@ -77,6 +77,48 @@ impl MapScreenState {
     }
 }
 
+/// State for the composite Overview screen.
+pub struct OverviewScreenState {
+    pub show_groups: bool,
+    pub show_filters: bool,
+    pub groups_collapsed: bool,
+    pub filters_collapsed: bool,
+    pub combat_collapsed: bool,
+    pub session_collapsed: bool,
+}
+
+impl OverviewScreenState {
+    pub fn new() -> Self {
+        Self {
+            show_groups: true,
+            show_filters: true,
+            groups_collapsed: false,
+            filters_collapsed: false,
+            combat_collapsed: false,
+            session_collapsed: false,
+        }
+    }
+}
+
+/// State for the composite Tactical screen.
+pub struct TacticalScreenState {
+    pub show_named: bool,
+    pub show_navigation: bool,
+    pub named_collapsed: bool,
+    pub navigation_collapsed: bool,
+}
+
+impl TacticalScreenState {
+    pub fn new() -> Self {
+        Self {
+            show_named: true,
+            show_navigation: true,
+            named_collapsed: false,
+            navigation_collapsed: false,
+        }
+    }
+}
+
 /// Resolve the map directory to an absolute path.
 /// Tries CWD-relative `config/maps` first, then falls back to exe-relative.
 fn resolve_map_dir() -> std::path::PathBuf {
