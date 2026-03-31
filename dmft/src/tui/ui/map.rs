@@ -17,14 +17,18 @@ use crate::tui::app::{ActivePanel, App};
 use crate::tui::theme::Theme;
 
 pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    let sidebar_height = tactical_sidebar_height(app);
+
     if area.width < 100 {
         let rows = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
+            .constraints([Constraint::Min(11), Constraint::Length(sidebar_height + 10)])
             .split(area);
+        let rail_width = ((area.width as f32) * 0.28).round() as u16;
+        let rail_width = rail_width.clamp(20, area.width.saturating_sub(26));
         let bottom = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .constraints([Constraint::Min(24), Constraint::Length(rail_width)])
             .split(rows[1]);
         draw_map_view(frame, rows[0], app);
         spawns::draw_spawn_list(frame, bottom[0], app);
@@ -33,13 +37,14 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     }
 
     if area.width < 140 {
+        let right_width = if area.width >= 126 { 52 } else { 46 };
         let cols = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+            .constraints([Constraint::Min(40), Constraint::Length(right_width)])
             .split(area);
         let right = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .constraints([Constraint::Min(10), Constraint::Length(sidebar_height)])
             .split(cols[1]);
 
         draw_map_view(frame, cols[0], app);
@@ -48,12 +53,14 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         return;
     }
 
+    let sidebar_width = if area.width >= 180 { 30 } else { 26 };
+    let spawn_width = if area.width >= 170 { 52 } else { 46 };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(48),
-            Constraint::Percentage(32),
-            Constraint::Percentage(20),
+            Constraint::Min(46),
+            Constraint::Length(spawn_width),
+            Constraint::Length(sidebar_width),
         ])
         .split(area);
 
@@ -481,28 +488,57 @@ fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
     let mut sections = Vec::new();
 
     if app.tactical_state.show_named {
+        let named_rows = app.named_tracker.tracked_spawns().len().min(4) as u16;
+        let user_rows = app.tracked_spawns.len().min(4) as u16;
+        let named_height = if named_rows > 0 { named_rows + 3 } else { 4 };
+        let tracked_height = if user_rows > 0 { user_rows + 3 } else { 0 };
+        let combined_height = if tracked_height > 0 {
+            (named_height + tracked_height).min(15)
+        } else {
+            named_height.min(10)
+        };
         sections.push((
             TacticalSectionKind::Named,
             if app.tactical_state.named_collapsed {
                 Constraint::Length(3)
             } else {
-                Constraint::Min(8)
+                Constraint::Length(combined_height.max(5))
             },
         ));
     }
 
     if app.tactical_state.show_navigation {
+        let nav_height = if app
+            .active_client()
+            .and_then(|client| app.nav_state.nav_statuses.get(&client.pid))
+            .is_some()
+        {
+            8
+        } else {
+            6
+        };
         sections.push((
             TacticalSectionKind::Navigation,
             if app.tactical_state.navigation_collapsed {
                 Constraint::Length(3)
             } else {
-                Constraint::Min(6)
+                Constraint::Length(nav_height)
             },
         ));
     }
 
     sections
+}
+
+fn tactical_sidebar_height(app: &App) -> u16 {
+    tactical_sections(app)
+        .iter()
+        .map(|(_, constraint)| match constraint {
+            Constraint::Length(height) | Constraint::Min(height) => *height,
+            _ => 3,
+        })
+        .sum::<u16>()
+        .max(6)
 }
 
 fn tactical_section_title(label: &str, collapsed: bool) -> String {
