@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// HP threshold above which clerics should cancel current heal (duck to interrupt).
 /// Prevents wasting mana on a heal when the target is already healthy.
@@ -24,30 +24,11 @@ const MODERATE_HP: f32 = 65.0;
 /// 6. Med (sit for mana regen)
 pub struct ClericStrategy {
     class_id: u8,
-    /// Tracks whether we've already targeted a corpse for rez this combat cycle.
-    /// Reset when rez cast completes or target changes.
-    rez_pending: bool,
 }
 
 impl ClericStrategy {
     pub fn new(class_id: u8) -> Self {
-        Self {
-            class_id,
-            rez_pending: false,
-        }
-    }
-
-    /// Find the group member with the lowest HP percentage (alive only).
-    fn lowest_hp_member(&self, ctx: &CombatContext) -> Option<(u32, f32)> {
-        ctx.group_members
-            .iter()
-            .filter(|m| !m.is_dead && m.hp_pct > 0.0)
-            .min_by(|a, b| {
-                a.hp_pct
-                    .partial_cmp(&b.hp_pct)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|m| (m.spawn_id, m.hp_pct))
+        Self { class_id }
     }
 
     /// Find a dead group member who needs resurrection.
@@ -115,7 +96,7 @@ impl ClericStrategy {
     /// Check if the cleric should cancel an in-progress heal because the target
     /// has recovered above threshold. Called from the combat FSM during Casting state.
     pub fn should_cancel_heal(&self, ctx: &CombatContext) -> bool {
-        let Some((_, lowest_hp)) = self.lowest_hp_member(ctx) else {
+        let Some((_, lowest_hp)) = strategy::lowest_hp_member(ctx) else {
             return true; // no one to heal, cancel
         };
         lowest_hp >= HEAL_CANCEL_THRESHOLD
@@ -140,7 +121,7 @@ impl ClassStrategy for ClericStrategy {
         }
 
         // Priority 3: Lowest HP group member for healing
-        self.lowest_hp_member(ctx).map(|(id, _)| id)
+        strategy::lowest_hp_member(ctx).map(|(id, _)| id)
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
@@ -170,7 +151,7 @@ impl ClassStrategy for ClericStrategy {
         // Priority 2: Emergency heal — highest priority spell.
         // Emergency heal MUST fire before cure: if a group member is at 10% HP
         // with a detrimental, healing them is more urgent than curing the DoT.
-        if let Some((_, lowest_hp)) = self.lowest_hp_member(ctx) {
+        if let Some((_, lowest_hp)) = strategy::lowest_hp_member(ctx) {
             if lowest_hp < EMERGENCY_HP {
                 return ctx
                     .config
@@ -191,7 +172,7 @@ impl ClassStrategy for ClericStrategy {
             }
         }
 
-        let (_, lowest_hp) = self.lowest_hp_member(ctx)?;
+        let (_, lowest_hp) = strategy::lowest_hp_member(ctx)?;
 
         // Priority 4: Moderate heal — lower priority (efficient) spell
         if lowest_hp < MODERATE_HP {
@@ -214,11 +195,6 @@ impl ClassStrategy for ClericStrategy {
 
         // Priority 6: Everyone is healthy, med up.
         None
-    }
-
-    fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        // Clear rez pending flag after cast completes
-        self.rez_pending = false;
     }
 
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
@@ -597,7 +573,6 @@ mod tests {
 
     #[test]
     fn lowest_hp_excludes_dead_members() {
-        let cleric = ClericStrategy::new(2);
         let player = dmft_common::types::SpawnData {
             mana_current: 100,
             mana_max: 100,
@@ -619,7 +594,7 @@ mod tests {
             ch_chain_slot: None,
         };
 
-        let (id, hp) = cleric.lowest_hp_member(&ctx).unwrap();
+        let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
         assert_eq!(id, 11);
         assert!((hp - 50.0).abs() < f32::EPSILON);
     }

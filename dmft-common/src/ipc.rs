@@ -1,7 +1,7 @@
 use crate::types::ClientId;
 
 /// Commands sent from the manager to an injected DLL
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     // Movement
     MoveTo {

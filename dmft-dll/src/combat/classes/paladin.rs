@@ -21,17 +21,6 @@ impl PaladinStrategy {
         Self { class_id }
     }
 
-    fn lowest_hp_member(&self, ctx: &CombatContext) -> Option<(u32, f32)> {
-        ctx.group_members
-            .iter()
-            .filter(|m| !m.is_dead && m.hp_pct > 0.0 && m.hp_pct < 100.0)
-            .min_by(|a, b| {
-                a.hp_pct
-                    .partial_cmp(&b.hp_pct)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|m| (m.spawn_id, m.hp_pct))
-    }
 }
 
 fn is_cure_spell(s: &SpellEntry) -> bool {
@@ -56,7 +45,7 @@ impl ClassStrategy for PaladinStrategy {
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         // If someone needs healing, target them
-        if let Some((heal_target, hp)) = self.lowest_hp_member(ctx)
+        if let Some((heal_target, hp)) = strategy::lowest_hp_member(ctx)
             && hp < 60.0
         {
             return Some(heal_target);
@@ -72,7 +61,7 @@ impl ClassStrategy for PaladinStrategy {
         // Skip stun if a group member needs healing — select_target will have
         // returned a friendly heal target, so casting a hostile stun on them
         // makes no sense and causes a stun/heal oscillation loop.
-        let needs_heal = self.lowest_hp_member(ctx).is_some_and(|(_, hp)| hp < 60.0);
+        let needs_heal = strategy::lowest_hp_member(ctx).is_some_and(|(_, hp)| hp < 60.0);
         if ctx.in_combat && !needs_heal {
             if let Some(stun) = ctx
                 .config
@@ -107,7 +96,7 @@ impl ClassStrategy for PaladinStrategy {
         }
 
         // Priority 3: Emergency heal (< 40% HP)
-        if let Some((_, hp)) = self.lowest_hp_member(ctx)
+        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
             && hp < 40.0
         {
             return ctx
@@ -121,7 +110,7 @@ impl ClassStrategy for PaladinStrategy {
         }
 
         // Priority 4: Moderate heal (< 60% HP)
-        if let Some((_, hp)) = self.lowest_hp_member(ctx)
+        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
             && hp < 60.0
         {
             return ctx

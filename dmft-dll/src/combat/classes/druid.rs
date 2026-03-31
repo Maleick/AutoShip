@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// HP threshold for emergency heals.
 const EMERGENCY_HP: f32 = 45.0;
@@ -30,18 +30,6 @@ pub struct DruidStrategy {
 impl DruidStrategy {
     pub fn new(class_id: u8) -> Self {
         Self { class_id }
-    }
-
-    fn lowest_hp_member(&self, ctx: &CombatContext) -> Option<(u32, f32)> {
-        ctx.group_members
-            .iter()
-            .filter(|m| !m.is_dead && m.hp_pct > 0.0 && m.hp_pct < 100.0)
-            .min_by(|a, b| {
-                a.hp_pct
-                    .partial_cmp(&b.hp_pct)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|m| (m.spawn_id, m.hp_pct))
     }
 
     fn dead_member<'a>(&self, ctx: &CombatContext<'a>) -> Option<&'a str> {
@@ -79,7 +67,7 @@ impl ClassStrategy for DruidStrategy {
             return None;
         }
 
-        if let Some((heal_target, hp)) = self.lowest_hp_member(ctx)
+        if let Some((heal_target, hp)) = strategy::lowest_hp_member(ctx)
             && hp < MODERATE_HP
         {
             return Some(heal_target);
@@ -121,7 +109,7 @@ impl ClassStrategy for DruidStrategy {
         }
 
         // Priority 2: Emergency heal
-        if let Some((_, hp)) = self.lowest_hp_member(ctx)
+        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
             && hp < EMERGENCY_HP
         {
             // Even if no heal spell is configured, do NOT fall through to snare
@@ -155,7 +143,7 @@ impl ClassStrategy for DruidStrategy {
         }
 
         // Priority 4: Heal if group member below moderate threshold
-        if let Some((_, hp)) = self.lowest_hp_member(ctx)
+        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
             && hp < MODERATE_HP
         {
             return ctx
@@ -270,7 +258,6 @@ mod tests {
 
     #[test]
     fn druid_lowest_hp_excludes_dead() {
-        let druid = DruidStrategy::new(6);
         let player = dmft_common::types::SpawnData::default();
         let members = vec![
             make_member(1, 0.0, true),   // dead
@@ -288,7 +275,7 @@ mod tests {
             ch_chain_slot: None,
         };
 
-        let (id, hp) = druid.lowest_hp_member(&ctx).unwrap();
+        let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
         assert_eq!(id, 2);
         assert!((hp - 40.0).abs() < f32::EPSILON);
     }

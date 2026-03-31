@@ -170,6 +170,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Lifetap"); // lifetap priority at low HP
@@ -223,6 +224,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Darkness Snare"); // snare on fleeing mob
@@ -255,6 +257,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Nuke");
@@ -273,6 +276,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert!(sk.select_spell(&ctx).is_none());
     }

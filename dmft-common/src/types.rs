@@ -2,7 +2,7 @@
 pub type ClientId = u32;
 
 /// Full game state snapshot sent from the DLL to the manager
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GameState {
     pub client_id: ClientId,
     pub local_player: Option<SpawnData>,
@@ -16,7 +16,7 @@ pub struct GameState {
 }
 
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SpawnData {
     pub spawn_id: u32,
     pub name: String,
@@ -58,7 +58,7 @@ impl SpawnData {
 }
 
 /// Status of the in-process hook inside an EQ client
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum HookStatus {
     NotInjected,
     Injecting,

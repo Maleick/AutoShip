@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Shaman strategy: hybrid healer/slower/DoT. Prioritizes slow on new targets,
 /// heals when group HP is low, DoTs otherwise.
@@ -21,17 +21,6 @@ impl ShamanStrategy {
         }
     }
 
-    fn lowest_hp_member(&self, ctx: &CombatContext) -> Option<(u32, f32)> {
-        ctx.group_members
-            .iter()
-            .filter(|m| m.hp_pct < 100.0 && m.hp_pct > 0.0)
-            .min_by(|a, b| {
-                a.hp_pct
-                    .partial_cmp(&b.hp_pct)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|m| (m.spawn_id, m.hp_pct))
-    }
 }
 
 impl ClassStrategy for ShamanStrategy {
@@ -41,7 +30,7 @@ impl ClassStrategy for ShamanStrategy {
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         // If someone needs healing, target them
-        if let Some((heal_target, hp)) = self.lowest_hp_member(ctx)
+        if let Some((heal_target, hp)) = strategy::lowest_hp_member(ctx)
             && hp < 70.0
         {
             return Some(heal_target);
@@ -73,7 +62,7 @@ impl ClassStrategy for ShamanStrategy {
         }
 
         // Priority 1: Emergency heal (group member below 40%)
-        if let Some((_, hp)) = self.lowest_hp_member(ctx)
+        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
             && hp < 40.0
         {
             return ctx
@@ -103,7 +92,7 @@ impl ClassStrategy for ShamanStrategy {
         }
 
         // Priority 3: Heal if anyone below 70%
-        if let Some((_, hp)) = self.lowest_hp_member(ctx)
+        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
             && hp < 70.0
         {
             return ctx
@@ -330,6 +319,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(shaman.should_assist(&ctx));
     }
@@ -348,6 +338,9 @@ mod tests {
             hp_pct: 50.0, // below 70%
             mana_pct: 100.0,
             class_id: 1,
+            is_dead: false,
+            name: String::new(),
+            has_detrimental: false,
         }];
         let ctx = CombatContext {
             player: &player,
@@ -357,6 +350,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
     }
@@ -378,6 +372,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(99));
     }
@@ -401,6 +396,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         shaman.on_engage(&ctx);
         assert!(!shaman.target_slowed);
@@ -426,6 +422,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         shaman.on_engage(&ctx);
         assert!(shaman.target_slowed);
@@ -445,6 +442,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert!(shaman.select_spell(&ctx).is_none());
     }

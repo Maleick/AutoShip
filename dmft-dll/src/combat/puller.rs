@@ -130,6 +130,7 @@ mod tests {
             config: &DEFAULT_CONFIG,
             tick,
             in_combat: false,
+            ch_chain_slot: None,
         }
     }
 

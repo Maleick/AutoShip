@@ -58,7 +58,7 @@ impl Waypoint {
 }
 
 /// Current navigation state reported from DLL to orchestrator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NavStatus {
     /// Not navigating.
     Idle,
@@ -222,7 +222,7 @@ impl ZoneGraph {
 }
 
 /// A named camp position for a specific role.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CampSpot {
     pub position: Waypoint,
     /// Heading to face (EQ degrees, 0-512).

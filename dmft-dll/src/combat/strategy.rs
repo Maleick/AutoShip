@@ -124,6 +124,20 @@ pub fn melee_on_disengage() {
     crate::eq::toggle_auto_attack(false);
 }
 
+/// Find the group member with the lowest HP percentage (alive only).
+/// Used by healer and hybrid classes (cleric, druid, paladin, shaman) for heal targeting.
+pub fn lowest_hp_member(ctx: &CombatContext) -> Option<(u32, f32)> {
+    ctx.group_members
+        .iter()
+        .filter(|m| !m.is_dead && m.hp_pct.is_finite() && m.hp_pct > 0.0)
+        .min_by(|a, b| {
+            a.hp_pct
+                .partial_cmp(&b.hp_pct)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|m| (m.spawn_id, m.hp_pct))
+}
+
 /// Select the highest-priority spell from config, filtered by current mana.
 pub fn best_spell_by_mana(ctx: &CombatContext) -> Option<SpellEntry> {
     let mana_pct = ctx.player.mana_pct();
@@ -324,6 +338,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
     }
@@ -352,6 +367,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
     }
@@ -428,8 +444,49 @@ mod tests {
             hp_pct: 75.0,
             mana_pct: 50.0,
             class_id: 2,
+            is_dead: false,
+            name: String::new(),
+            has_detrimental: false,
         };
         let debug = format!("{gms:?}");
         assert!(debug.contains("spawn_id: 1"));
+    }
+
+    #[test]
+    fn lowest_hp_member_excludes_nan_hp() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let members = vec![
+            GroupMemberState {
+                spawn_id: 1,
+                hp_pct: f32::NAN,
+                mana_pct: 100.0,
+                class_id: 1,
+                is_dead: false,
+                name: "NanWarrior".into(),
+                has_detrimental: false,
+            },
+            GroupMemberState {
+                spawn_id: 2,
+                hp_pct: 50.0,
+                mana_pct: 100.0,
+                class_id: 2,
+                is_dead: false,
+                name: "Cleric".into(),
+                has_detrimental: false,
+            },
+        ];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+        };
+        let result = lowest_hp_member(&ctx);
+        assert_eq!(result, Some((2, 50.0)));
     }
 }

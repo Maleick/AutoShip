@@ -59,6 +59,10 @@ mod tests {
     use dmft_common::combat::{CombatConfig, SpellEntry};
     use dmft_common::types::SpawnData;
 
+    fn test_config() -> CombatConfig {
+        CombatConfig::default()
+    }
+
     fn make_ctx<'a>(
         player: &'a SpawnData,
         target: Option<&'a SpawnData>,
@@ -73,6 +77,7 @@ mod tests {
             config,
             tick: 0,
             in_combat,
+            ch_chain_slot: None,
         }
     }
 

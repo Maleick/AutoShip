@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// Big Five personality traits + EQ-themed traits.
 /// All values are 0.0..1.0 (normalized).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersonalityTraits {
     // Big Five
     pub openness: f32,
@@ -170,7 +170,7 @@ pub enum SayChannel {
 }
 
 /// Actions the Soul Engine can request the orchestrator to execute.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SoulAction {
     /// Send a chat message on a channel
     Say {

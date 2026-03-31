@@ -2,7 +2,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 use dmft_common::nav::Waypoint;
 use dmft_common::types::SpawnData;
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Ranger strategy: ranged/melee hybrid DPS with tracking and bow pulling.
 ///
@@ -24,22 +24,6 @@ impl RangerStrategy {
             class_id,
             melee_range: 30.0, // Switch to melee within 30 units
         }
-    }
-
-    /// Find nearest enemy for targeting.
-    fn nearest_enemy<'a>(
-        &self,
-        player: &SpawnData,
-        enemies: &'a [SpawnData],
-    ) -> Option<&'a SpawnData> {
-        let player_pos = Waypoint::new(player.x, player.y, player.z);
-        enemies.iter().min_by(|a, b| {
-            let dist_a = player_pos.distance_2d(&Waypoint::new(a.x, a.y, a.z));
-            let dist_b = player_pos.distance_2d(&Waypoint::new(b.x, b.y, b.z));
-            dist_a
-                .partial_cmp(&dist_b)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
     }
 
     /// Calculate distance to target.
@@ -67,7 +51,7 @@ impl ClassStrategy for RangerStrategy {
         if ctx.in_combat {
             ctx.target.map(|t| t.spawn_id)
         } else {
-            self.nearest_enemy(ctx.player, ctx.nearby_enemies)
+            strategy::nearest_enemy(ctx.player, ctx.nearby_enemies)
                 .map(|s| s.spawn_id)
         }
     }
@@ -149,6 +133,7 @@ mod tests {
             config,
             tick: 0,
             in_combat,
+            ch_chain_slot: None,
         }
     }
 
@@ -362,7 +347,6 @@ mod tests {
 
     #[test]
     fn nearest_enemy_finds_closest() {
-        let r = RangerStrategy::new(4);
         let player = SpawnData {
             x: 50.0,
             y: 50.0,
@@ -382,7 +366,7 @@ mod tests {
                 ..SpawnData::default()
             },
         ];
-        let nearest = r.nearest_enemy(&player, &enemies).unwrap();
+        let nearest = strategy::nearest_enemy(&player, &enemies).unwrap();
         assert_eq!(nearest.spawn_id, 2);
     }
 }

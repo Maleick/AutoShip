@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use dmft_common::combat::{CombatConfig, CombatRole, CombatStatus, HolyShitAction};
+use dmft_common::nav::Waypoint;
 use dmft_common::types::SpawnData;
 
 use super::dot_tracker::DotTracker;
@@ -62,11 +63,12 @@ pub struct Combatant {
     disc_cooldowns: HashMap<i32, u32>,
     dot_tracker: DotTracker,
     tick_count: u32,
+    client_id: u32,
     config: CombatConfig,
 }
 
 impl Combatant {
-    pub fn new(class_id: u8, client_id: u32, config: CombatConfig) -> Self {
+    pub fn new(class_id: u8, client_id: u32, mut config: CombatConfig) -> Self {
         let is_healer = matches!(config.role, CombatRole::Healer);
         let strategy = build_strategy(class_id, &config);
         let personality = CombatPersonality::from_client_id(client_id);
@@ -80,6 +82,10 @@ impl Combatant {
             holyshit_rules = holyshit.rule_count(),
             "Combatant created"
         );
+
+        // Pre-sort disciplines by priority so tick_disciplines can iterate
+        // without cloning or sorting every frame.
+        config.disciplines.sort_by_key(|d| d.priority);
 
         Self {
             state: CombatState::Idle,
@@ -96,6 +102,7 @@ impl Combatant {
             disc_cooldowns: HashMap::new(),
             dot_tracker: DotTracker::new(),
             tick_count: 0,
+            client_id,
             config,
         }
     }
@@ -112,6 +119,12 @@ impl Combatant {
             *ticks = ticks.saturating_sub(1);
             *ticks > 0
         });
+
+        // Periodically prune expired DoT entries to prevent unbounded growth.
+        // Every 120 ticks (~6 seconds at 20 ticks/sec).
+        if (self.tick_count + self.client_id) % 120 == 0 {
+            self.dot_tracker.prune_expired(self.tick_count);
+        }
 
         // --- Zone/disconnect safety guard ---
         // If we're in an active combat state but our target has vanished (zoned,
@@ -265,7 +278,8 @@ impl Combatant {
 
                 // Range check — don't cast if target is too far away
                 if let Some(t) = target {
-                    let dist = distance_3d(player, t);
+                    let dist = Waypoint::new(player.x, player.y, player.z)
+                        .distance_3d(&Waypoint::new(t.x, t.y, t.z));
                     if dist > MAX_SPELL_RANGE {
                         tracing::debug!(dist, "Target out of spell range, waiting");
                         return;
@@ -538,12 +552,8 @@ impl Combatant {
             100.0
         };
 
-        // Sort by priority (lower = higher priority). Clone to avoid borrowing
-        // config while we mutate disc_cooldowns.
-        let mut discs = self.config.disciplines.clone();
-        discs.sort_by_key(|d| d.priority);
-
-        for disc in &discs {
+        // Disciplines are pre-sorted by priority in new(), iterate directly.
+        for disc in &self.config.disciplines {
             // Skip if on cooldown
             if self.disc_cooldowns.contains_key(&disc.spell_id) {
                 continue;
@@ -572,14 +582,6 @@ impl Combatant {
             return;
         }
     }
-}
-
-/// 3D Euclidean distance between two spawns.
-fn distance_3d(a: &SpawnData, b: &SpawnData) -> f32 {
-    let dx = a.x - b.x;
-    let dy = a.y - b.y;
-    let dz = a.z - b.z;
-    (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
 #[cfg(test)]
@@ -699,7 +701,7 @@ mod tests {
         b.x = 3.0;
         b.y = 4.0;
         b.z = 0.0;
-        assert!((distance_3d(&a, &b) - 5.0).abs() < 0.01);
+        assert!((Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(b.x, b.y, b.z)) - 5.0).abs() < 0.01);
     }
 
     // --- Discipline tests ---
@@ -875,12 +877,18 @@ mod tests {
                 hp_pct: 80.0,
                 mana_pct: 100.0,
                 class_id: 1,
+                is_dead: false,
+                name: String::new(),
+                has_detrimental: false,
             },
             GroupMemberState {
                 spawn_id: 2,
                 hp_pct: 60.0,
                 mana_pct: 50.0,
                 class_id: 6,
+                is_dead: false,
+                name: String::new(),
+                has_detrimental: false,
             },
         ];
         c.set_group_members(members);
@@ -898,13 +906,13 @@ mod tests {
         b.x = 0.0;
         b.y = 0.0;
         b.z = 10.0;
-        assert!((distance_3d(&a, &b) - 10.0).abs() < 0.01);
+        assert!((Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(b.x, b.y, b.z)) - 10.0).abs() < 0.01);
     }
 
     #[test]
     fn distance_3d_same_position() {
         let a = SpawnData::default();
-        assert!((distance_3d(&a, &a)).abs() < 0.01);
+        assert!((Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(a.x, a.y, a.z))).abs() < 0.01);
     }
 
     #[test]

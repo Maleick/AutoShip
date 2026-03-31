@@ -67,6 +67,7 @@ mod tests {
             config: &DEFAULT_CONFIG,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         }
     }
 
@@ -161,6 +162,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = w.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Taunt");

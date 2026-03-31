@@ -103,6 +103,7 @@ mod tests {
             config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         }
     }
 

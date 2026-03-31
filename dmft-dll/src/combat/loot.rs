@@ -4,6 +4,7 @@
 //! Corpse detection walks the spawn list looking for spawn_type == 2 (corpse)
 //! within loot range.
 
+use dmft_common::nav::Waypoint;
 use dmft_common::types::SpawnData;
 
 /// Maximum range to detect lootable corpses (EQ units).
@@ -37,9 +38,8 @@ pub fn find_lootable_corpses(player: &SpawnData, spawns: &[SpawnData]) -> Vec<u3
         .iter()
         .filter(|s| s.spawn_type == SPAWN_TYPE_CORPSE)
         .filter(|s| {
-            let dx = s.x - player.x;
-            let dy = s.y - player.y;
-            (dx * dx + dy * dy).sqrt() <= LOOT_RANGE
+            Waypoint::new(s.x, s.y, 0.0).distance_2d(&Waypoint::new(player.x, player.y, 0.0))
+                <= LOOT_RANGE
         })
         .map(|s| s.spawn_id)
         .collect()
@@ -48,11 +48,10 @@ pub fn find_lootable_corpses(player: &SpawnData, spawns: &[SpawnData]) -> Vec<u3
 /// Check if there are nearby corpses that we could loot.
 pub fn has_lootable_corpses(player: &SpawnData, spawns: &[SpawnData]) -> bool {
     spawns.iter().any(|s| {
-        s.spawn_type == SPAWN_TYPE_CORPSE && {
-            let dx = s.x - player.x;
-            let dy = s.y - player.y;
-            (dx * dx + dy * dy).sqrt() <= LOOT_RANGE
-        }
+        s.spawn_type == SPAWN_TYPE_CORPSE
+            && Waypoint::new(s.x, s.y, 0.0)
+                .distance_2d(&Waypoint::new(player.x, player.y, 0.0))
+                <= LOOT_RANGE
     })
 }
 

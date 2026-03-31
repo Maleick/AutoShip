@@ -33,7 +33,8 @@ pub enum PositionAction {
 
 /// Check if we're within melee range of the target.
 pub fn is_in_melee_range(player: &SpawnData, target: &SpawnData) -> bool {
-    let dist = distance_2d(player, target);
+    let dist = Waypoint::new(player.x, player.y, 0.0)
+        .distance_2d(&Waypoint::new(target.x, target.y, 0.0));
     dist <= MELEE_RANGE
 }
 
@@ -64,11 +65,12 @@ pub fn check_melee_position(
     is_rogue: bool,
     camp_pos: Option<&Waypoint>,
 ) -> PositionAction {
-    let dist = distance_2d(player, target);
+    let dist = Waypoint::new(player.x, player.y, 0.0)
+        .distance_2d(&Waypoint::new(target.x, target.y, 0.0));
 
     // Priority 1: If too far from camp, return to camp (after combat)
     if let Some(camp) = camp_pos {
-        let camp_dist = ((player.x - camp.x).powi(2) + (player.y - camp.y).powi(2)).sqrt();
+        let camp_dist = Waypoint::new(player.x, player.y, 0.0).distance_2d(camp);
         if camp_dist > MAX_CAMP_DRIFT {
             return PositionAction::ReturnToCamp(*camp);
         }
@@ -112,7 +114,8 @@ pub fn check_aoe_avoidance(
     let cy: f32 = nearby_enemies.iter().map(|e| e.y).sum::<f32>() / count;
 
     // Check if we're dangerously close to the cluster center
-    let dist_to_center = ((player.x - cx).powi(2) + (player.y - cy).powi(2)).sqrt();
+    let dist_to_center = Waypoint::new(player.x, player.y, 0.0)
+        .distance_2d(&Waypoint::new(cx, cy, 0.0));
     if dist_to_center < 30.0 {
         // Move 40 units away from the cluster center
         let dx = player.x - cx;
@@ -124,13 +127,6 @@ pub fn check_aoe_avoidance(
     }
 
     None
-}
-
-/// 2D distance between two spawns (ignoring Z for melee range checks).
-fn distance_2d(a: &SpawnData, b: &SpawnData) -> f32 {
-    let dx = a.x - b.x;
-    let dy = a.y - b.y;
-    (dx * dx + dy * dy).sqrt()
 }
 
 #[cfg(test)]
@@ -330,7 +326,7 @@ mod tests {
             z: 100.0,
             ..SpawnData::default()
         };
-        let dist = distance_2d(&a, &b);
+        let dist = Waypoint::new(a.x, a.y, 0.0).distance_2d(&Waypoint::new(b.x, b.y, 0.0));
         assert!((dist - 5.0).abs() < 0.01);
     }
 }

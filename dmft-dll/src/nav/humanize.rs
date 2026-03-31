@@ -164,11 +164,11 @@ mod tests {
     fn should_detour_returns_bool() {
         let mut p = MovementPersonality::from_client_id(7);
         // Just verify it doesn't panic and returns a bool over many calls
-        let mut any_true = false;
+        let mut _any_true = false;
         let mut any_false = false;
         for _ in 0..1000 {
             if p.should_detour() {
-                any_true = true;
+                _any_true = true;
             } else {
                 any_false = true;
             }

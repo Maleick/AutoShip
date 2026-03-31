@@ -125,6 +125,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(necro.should_assist(&ctx));
     }
@@ -146,6 +147,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert_eq!(necro.select_target(&ctx), Some(99));
     }
@@ -187,6 +189,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = necro.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Lifetap"); // lifetap priority at low HP
@@ -237,6 +240,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = necro.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Venom of Solusek"); // DoT priority
@@ -269,6 +273,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         let spell = necro.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Nuke"); // fallback
@@ -287,6 +292,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert!(necro.select_spell(&ctx).is_none());
     }
@@ -318,6 +324,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert!(necro.select_spell(&ctx).is_none());
     }
