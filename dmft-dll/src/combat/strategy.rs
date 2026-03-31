@@ -147,6 +147,7 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
 

@@ -474,6 +474,7 @@ fn distance_3d(a: &SpawnData, b: &SpawnData) -> f32 {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use dmft_common::combat::CombatConfig;
