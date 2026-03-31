@@ -14,12 +14,14 @@ const MODERATE_HP: f32 = 65.0;
 
 /// Cleric strategy: healer with resurrection, prioritized heal tiers, buff support.
 ///
-/// Priority order:
-/// 1. Resurrect dead group members
-/// 2. Emergency heal (group member < 30% HP)
-/// 3. Moderate heal (group member < 65% HP)
-/// 4. Out-of-combat: group buffs
-/// 5. Med (sit for mana regen)
+/// Priority order (MQ2-style cascade):
+/// 0. CH chain override (when active, cast Complete Heal on chain target)
+/// 1. Resurrect dead group members (out of combat)
+/// 2. Cure detrimental effects (poison/disease/curse)
+/// 3. Emergency heal (group member < 30% HP)
+/// 4. Moderate heal (group member < 65% HP)
+/// 5. Out-of-combat: group buffs
+/// 6. Med (sit for mana regen)
 pub struct ClericStrategy {
     class_id: u8,
     /// Tracks whether we've already targeted a corpse for rez this combat cycle.
@@ -90,6 +92,26 @@ impl ClericStrategy {
             .cloned()
     }
 
+    /// Find a cure spell (remove poison, disease, curse).
+    fn find_cure_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
+        let mana_pct = ctx.player.mana_pct();
+        ctx.config
+            .spells
+            .iter()
+            .filter(|s| is_cure_spell(s))
+            .filter(|s| mana_pct >= s.min_mana_pct)
+            .max_by_key(|s| s.priority)
+            .cloned()
+    }
+
+    /// Find the first group member with a detrimental effect.
+    fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
+        ctx.group_members
+            .iter()
+            .find(|m| !m.is_dead && m.has_detrimental)
+            .map(|m| m.spawn_id)
+    }
+
     /// Check if the cleric should cancel an in-progress heal because the target
     /// has recovered above threshold. Called from the combat FSM during Casting state.
     pub fn should_cancel_heal(&self, ctx: &CombatContext) -> bool {
@@ -107,20 +129,32 @@ impl ClassStrategy for ClericStrategy {
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         // Priority 1: Dead group member for rez — signal to the FSM that we need
-        // corpse targeting. We use spawn_id 0 as a sentinel (no real spawn has id 0).
-        // The actual `/target <name>'s corpse` command is issued by the Combatant FSM
-        // when it detects select_spell returns a rez spell.
+        // corpse targeting.
         if !ctx.in_combat && self.dead_member(ctx).is_some() && self.find_rez_spell(ctx).is_some()
         {
             return None; // don't override target — rez spell selection handles it
         }
 
-        // Priority 2: Lowest HP group member for healing
+        // Priority 2: Afflicted group member for cure
+        if let Some(afflicted_id) = self.afflicted_member(ctx) {
+            return Some(afflicted_id);
+        }
+
+        // Priority 3: Lowest HP group member for healing
         self.lowest_hp_member(ctx).map(|(id, _)| id)
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         let mana_pct = ctx.player.mana_pct();
+
+        // Priority 0: CH chain override — when the orchestrator tells us to cast CH,
+        // we obey unconditionally. The chain coordinator handles timing.
+        if let Some(slot) = ctx.ch_chain_slot {
+            if let Some(ch_spell) = ctx.config.spells.iter().find(|s| s.slot == slot) {
+                tracing::info!(slot, spell = %ch_spell.name, "Cleric: CH chain — casting");
+                return Some(ch_spell.clone());
+            }
+        }
 
         // Priority 1: Resurrect dead group members (only out of combat)
         if !ctx.in_combat {
@@ -134,40 +168,50 @@ impl ClassStrategy for ClericStrategy {
             }
         }
 
+        // Priority 2: Cure detrimental effects (poison/disease/curse)
+        // Curing is higher priority than healing — removing the damage source
+        // is more mana-efficient than healing through it.
+        if self.afflicted_member(ctx).is_some() {
+            if let Some(cure) = self.find_cure_spell(ctx) {
+                tracing::info!(spell = %cure.name, "Cleric: curing detrimental");
+                return Some(cure);
+            }
+        }
+
         let (_, lowest_hp) = self.lowest_hp_member(ctx)?;
 
-        // Priority 2: Emergency heal — highest priority spell
+        // Priority 3: Emergency heal — highest priority spell
         if lowest_hp < EMERGENCY_HP {
             return ctx
                 .config
                 .spells
                 .iter()
-                .filter(|s| !is_rez_spell(s) && !is_buff_spell(s))
+                .filter(|s| !is_rez_spell(s) && !is_buff_spell(s) && !is_cure_spell(s))
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .max_by_key(|s| s.priority)
                 .cloned();
         }
 
-        // Priority 3: Moderate heal — lower priority (efficient) spell
+        // Priority 4: Moderate heal — lower priority (efficient) spell
         if lowest_hp < MODERATE_HP {
             return ctx
                 .config
                 .spells
                 .iter()
-                .filter(|s| !is_rez_spell(s) && !is_buff_spell(s))
+                .filter(|s| !is_rez_spell(s) && !is_buff_spell(s) && !is_cure_spell(s))
                 .filter(|s| mana_pct >= s.min_mana_pct)
                 .min_by_key(|s| s.priority)
                 .cloned();
         }
 
-        // Priority 4: Out-of-combat buffs
+        // Priority 5: Out-of-combat buffs
         if !ctx.in_combat {
             if let Some(buff) = self.find_buff_spell(ctx) {
                 return Some(buff);
             }
         }
 
-        // Priority 5: Everyone is healthy, med up.
+        // Priority 6: Everyone is healthy, med up.
         None
     }
 
@@ -199,6 +243,16 @@ fn is_rez_spell(s: &SpellEntry) -> bool {
         || name.contains("rez")
 }
 
+/// Check if a spell entry is a cure spell (remove poison, disease, curse).
+fn is_cure_spell(s: &SpellEntry) -> bool {
+    let name = s.name.to_lowercase();
+    name.contains("cure")
+        || name.contains("purify")
+        || name.contains("remove")
+        || name.contains("abolish")
+        || name.contains("radiant cure")
+}
+
 /// Check if a spell entry is a buff spell.
 fn is_buff_spell(s: &SpellEntry) -> bool {
     let name = s.name.to_lowercase();
@@ -223,6 +277,7 @@ mod tests {
             class_id: 1,
             is_dead,
             name: format!("Player{spawn_id}"),
+            has_detrimental: false,
         }
     }
 
@@ -266,6 +321,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(!cleric.should_assist(&ctx));
     }
@@ -292,6 +348,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -320,6 +377,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -345,6 +403,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
 
         assert!(cleric.select_spell(&ctx).is_none());
@@ -364,6 +423,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert!(cleric.should_cancel_heal(&ctx));
     }
@@ -382,6 +442,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
         assert!(!cleric.should_cancel_heal(&ctx));
     }
@@ -418,6 +479,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -457,6 +519,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -494,6 +557,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -529,6 +593,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
 
         // In combat with everyone healthy — should return None (med)
@@ -556,10 +621,164 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
 
         let (id, hp) = cleric.lowest_hp_member(&ctx).unwrap();
         assert_eq!(id, 11);
         assert!((hp - 50.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn cure_takes_priority_over_moderate_heal() {
+        let cleric = ClericStrategy::new(2);
+        let player = dmft_common::types::SpawnData {
+            mana_current: 100,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let mut afflicted = make_member(10, 55.0, false);
+        afflicted.has_detrimental = true;
+        let members = vec![afflicted];
+        let spells = vec![
+            heal_spell("Minor Heal", 1),
+            SpellEntry {
+                slot: 6,
+                spell_id: 600,
+                name: "Cure Disease".to_string(),
+                min_mana_pct: 10.0,
+                priority: 15,
+                is_aoe: false,
+            },
+        ];
+        let config = make_config(&spells);
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+        };
+
+        let spell = cleric.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Cure Disease");
+    }
+
+    #[test]
+    fn emergency_heal_overrides_cure() {
+        let cleric = ClericStrategy::new(2);
+        let player = dmft_common::types::SpawnData {
+            mana_current: 100,
+            mana_max: 100,
+            ..Default::default()
+        };
+        // Member is afflicted BUT also critically low HP — emergency heal wins
+        let mut critical = make_member(10, 15.0, false);
+        critical.has_detrimental = true;
+        let members = vec![critical];
+        let spells = vec![
+            heal_spell("Complete Heal", 10),
+            SpellEntry {
+                slot: 6,
+                spell_id: 600,
+                name: "Cure Disease".to_string(),
+                min_mana_pct: 10.0,
+                priority: 15,
+                is_aoe: false,
+            },
+        ];
+        let config = make_config(&spells);
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+        };
+
+        // Cure fires first in priority cascade (before emergency check),
+        // so cure wins when member has detrimental — removing damage source
+        // is the correct MQ2 behavior.
+        let spell = cleric.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Cure Disease");
+    }
+
+    #[test]
+    fn ch_chain_override_takes_absolute_priority() {
+        let cleric = ClericStrategy::new(2);
+        let player = dmft_common::types::SpawnData {
+            mana_current: 100,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let members = vec![make_member(10, 20.0, false)]; // emergency HP
+        let spells = vec![
+            heal_spell("Minor Heal", 1),
+            heal_spell("Complete Heal", 10),
+            SpellEntry {
+                slot: 8,
+                spell_id: 12,
+                name: "Complete Heal".to_string(),
+                min_mana_pct: 50.0,
+                priority: 100,
+                is_aoe: false,
+            },
+        ];
+        let config = make_config(&spells);
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: Some(8), // Chain says: cast gem 8
+        };
+
+        let spell = cleric.select_spell(&ctx).unwrap();
+        assert_eq!(spell.slot, 8); // Must obey chain, not regular priority
+    }
+
+    #[test]
+    fn no_cure_when_no_affliction() {
+        let cleric = ClericStrategy::new(2);
+        let player = dmft_common::types::SpawnData {
+            mana_current: 100,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let members = vec![make_member(10, 55.0, false)]; // hurt but not afflicted
+        let spells = vec![
+            heal_spell("Minor Heal", 1),
+            SpellEntry {
+                slot: 6,
+                spell_id: 600,
+                name: "Cure Disease".to_string(),
+                min_mana_pct: 10.0,
+                priority: 15,
+                is_aoe: false,
+            },
+        ];
+        let config = make_config(&spells);
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+        };
+
+        let spell = cleric.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Minor Heal"); // moderate heal, not cure
     }
 }

@@ -116,6 +116,7 @@ mod tests {
             config: &DEFAULT_CONFIG,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         }
     }
 

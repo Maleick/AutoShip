@@ -1,5 +1,13 @@
 //! Game loop hook -- intercepts CEverQuest::MainLoop.
-//! Runs our logic every game tick after the original function completes.
+//!
+//! **Timing terminology:**
+//! - **Frame**: one `CEverQuest::MainLoop` iteration (~20/sec, ~50ms each).
+//!   This is what `TICK_COUNT` counts and what all timing constants in the
+//!   combat/nav/login FSMs refer to as "ticks".
+//! - **Game tick**: EQ's internal 6-second pulse used for mana/HP regen,
+//!   DoT damage, buff duration, and poison counters. One game tick ≈ 120 frames.
+//!
+//! Runs our logic every frame after the original function completes.
 
 #[cfg(windows)]
 mod inner {
@@ -355,17 +363,17 @@ fn process_pending_commands(current_tick: u64) {
     }
 }
 
-/// Called every game tick after the original MainLoop runs.
-/// This is our main entry point for per-tick logic.
+/// Called every frame (~20/sec) after the original MainLoop runs.
+/// This is our main entry point for per-frame logic.
 fn on_game_tick() {
     let tick = TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    // Check foreground status every 30 ticks (~1 second) to minimize overhead.
+    // Check foreground status every 30 frames (~1.5 seconds) to minimize overhead.
     if tick.is_multiple_of(30) {
         update_foreground_status();
     }
 
-    // Auto-accept dialogs every 30 ticks (~1 second).
+    // Auto-accept dialogs every 30 frames (~1.5 seconds).
     if tick % 30 == 15 {
         // SAFETY: check_dialogs reads EQ's CXWndManager and clicks dialog buttons
         // via vtable. Called from the game loop thread where UI state is stable and
@@ -376,7 +384,7 @@ fn on_game_tick() {
         }
     }
 
-    // Rename window every 100 ticks (~3 seconds) to "[DMFT] EQ - CharName (ZoneName)".
+    // Rename window every 100 frames (~5 seconds) to "[DMFT] EQ - CharName (ZoneName)".
     if tick % 100 == 5 {
         update_window_title();
     }

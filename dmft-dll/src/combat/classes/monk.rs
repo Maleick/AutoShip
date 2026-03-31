@@ -86,6 +86,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(monk.should_assist(&ctx));
     }

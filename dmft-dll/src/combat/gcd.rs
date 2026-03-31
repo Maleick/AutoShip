@@ -1,5 +1,6 @@
 /// Tracks the global cooldown (GCD) between spell casts.
-/// EQ's GCD is approximately 1.5 seconds. At ~20 ticks/sec, that's ~30 ticks.
+/// EQ's GCD is approximately 1.5 seconds. At ~20 frames/sec, that's ~30 frames.
+/// (Not to be confused with EQ's 6-second "game tick" for regen/DoTs.)
 pub struct GcdTracker {
     remaining_ticks: u32,
     global_gcd_ticks: u32,

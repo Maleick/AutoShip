@@ -13,13 +13,14 @@ const SNARE_HP: f32 = 20.0;
 
 /// Druid strategy: hybrid healer/nuker/snarer with resurrection and buff support.
 ///
-/// Priority order:
+/// Priority order (MQ2-style cascade):
 /// 1. Resurrect dead group members (out of combat, if rez spell available)
-/// 2. Emergency heal (< 45% HP)
-/// 3. Snare on fleeing mobs (< 20% HP)
-/// 4. Moderate heal (< 65% HP)
-/// 5. Nuke/DoT
-/// 6. Out-of-combat: group buffs (regen, DS, resist)
+/// 2. Cure detrimental effects (poison/disease/curse)
+/// 3. Emergency heal (< 45% HP)
+/// 4. Snare on fleeing mobs (< 20% HP)
+/// 5. Moderate heal (< 65% HP)
+/// 6. Nuke/DoT
+/// 7. Out-of-combat: group buffs (regen, DS, resist)
 ///
 /// EQ class ID: 6
 pub struct DruidStrategy {
@@ -94,7 +95,20 @@ impl ClassStrategy for DruidStrategy {
             }
         }
 
-        // Priority 1: Emergency heal
+        // Priority 1: Cure detrimental effects
+        let has_afflicted = ctx.group_members.iter().any(|m| !m.is_dead && m.has_detrimental);
+        if has_afflicted {
+            if let Some(cure) = self.find_spell_by_category(
+                &ctx.config.spells,
+                &["cure", "purify", "remove", "counteract"],
+            ) {
+                if mana_pct >= cure.min_mana_pct {
+                    return Some(cure.clone());
+                }
+            }
+        }
+
+        // Priority 2: Emergency heal
         if let Some((_, hp)) = self.lowest_hp_member(ctx)
             && hp < EMERGENCY_HP
         {
@@ -207,6 +221,7 @@ mod tests {
             class_id: 1,
             is_dead,
             name: format!("Player{spawn_id}"),
+            has_detrimental: false,
         }
     }
 
@@ -235,6 +250,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: false,
+            ch_chain_slot: None,
         };
         assert!(druid.should_assist(&ctx));
     }
@@ -256,6 +272,7 @@ mod tests {
             config: &config,
             tick: 0,
             in_combat: true,
+            ch_chain_slot: None,
         };
 
         let (id, hp) = druid.lowest_hp_member(&ctx).unwrap();
