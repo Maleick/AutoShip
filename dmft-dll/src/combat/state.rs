@@ -4,9 +4,12 @@
 //! through the Idle → Engaging → Casting → OnGcd → Engaging loop, with
 //! HolyShit emergency overrides evaluated every tick before the normal rotation.
 
+use std::collections::HashMap;
+
 use dmft_common::combat::{CombatConfig, CombatRole, CombatStatus, HolyShitAction};
 use dmft_common::types::SpawnData;
 
+use super::dot_tracker::DotTracker;
 use super::gcd::GcdTracker;
 use super::holyshit::HolyShitEvaluator;
 use super::humanize::CombatPersonality;
@@ -55,6 +58,9 @@ pub struct Combatant {
     /// heal targets. Empty until the orchestrator sends group state updates.
     group_members: Vec<GroupMemberState>,
     skill_cooldowns: SkillCooldownTracker,
+    /// Discipline cooldowns keyed by spell_id → ticks remaining.
+    disc_cooldowns: HashMap<i32, u32>,
+    dot_tracker: DotTracker,
     tick_count: u32,
     config: CombatConfig,
 }
@@ -87,6 +93,8 @@ impl Combatant {
             needs_on_engage: false,
             group_members: Vec::new(),
             skill_cooldowns: SkillCooldownTracker::new(),
+            disc_cooldowns: HashMap::new(),
+            dot_tracker: DotTracker::new(),
             tick_count: 0,
             config,
         }
@@ -97,6 +105,12 @@ impl Combatant {
         self.tick_count += 1;
         self.gcd.tick();
         self.skill_cooldowns.tick();
+
+        // Tick discipline cooldowns
+        self.disc_cooldowns.retain(|_, ticks| {
+            *ticks = ticks.saturating_sub(1);
+            *ticks > 0
+        });
 
         // --- Zone/disconnect safety guard ---
         // If we're in an active combat state but our target has vanished (zoned,
@@ -119,6 +133,11 @@ impl Combatant {
             };
             self.strategy.on_action_complete(&cleanup_ctx);
             crate::eq::toggle_auto_attack(false);
+            // Clear DoT tracking — target is gone (zone/despawn/disconnect).
+            if let CombatState::Engaging { target_id } = &self.state {
+                self.dot_tracker.clear_target(*target_id);
+            }
+            self.dot_tracker.prune_expired(self.tick_count);
             self.assist_target = None;
             self.flee_requested = false;
             self.state = CombatState::Idle;
@@ -129,6 +148,7 @@ impl Combatant {
         if matches!(self.state, CombatState::Engaging { .. }) {
             let class_id = self.strategy.class_id();
             self.tick_melee_skills(class_id, player);
+            self.tick_disciplines(player);
         }
 
         // Build context snapshot for this tick.
@@ -170,7 +190,7 @@ impl Combatant {
                 }
                 HolyShitAction::UseItem(item_id) => {
                     tracing::warn!(item_id, "HolyShit: using emergency item");
-                    // Item usage not yet wired — log for now
+                    crate::eq::slash_command(&format!("/useitem {item_id}"));
                     self.gcd.consume();
                     self.state = CombatState::OnGcd;
                     return;
@@ -370,19 +390,28 @@ impl Combatant {
     }
 
     /// Begin combat against a specific target.
-    /// Issues `/face` to turn toward the target (melee misses without facing)
-    /// and `/pet attack` for pet classes.
+    /// Issues `/face` to turn toward the target (melee misses without facing),
+    /// `/pet attack` for pet classes, and immediate taunt for tanks without aggro.
     pub fn engage(&mut self, target_id: u32) {
         tracing::info!(target_id, "Engaging target");
 
         // Face the target so melee attacks connect
         crate::eq::slash_command("/face");
 
-        // Pet classes send pet to attack
+        // Pet classes: send pet to attack with /pet focus for single-target
         let class_id = self.strategy.class_id();
         if PET_CLASSES.contains(&class_id) {
             crate::eq::slash_command("/pet attack");
-            tracing::info!(class_id, "Sent /pet attack");
+            crate::eq::slash_command("/pet focus");
+            tracing::info!(class_id, "Sent /pet attack + /pet focus");
+        }
+
+        // Tanks: immediate taunt to establish aggro on engage
+        let role = self.strategy.role();
+        if matches!(role, CombatRole::MainTank | CombatRole::OffTank) {
+            crate::eq::use_skill(73, None); // skill 73 = taunt
+            self.skill_cooldowns.consume(73, super::skill_cooldowns::skill_timers::TAUNT.1);
+            tracing::info!("Tank: immediate taunt on engage");
         }
 
         crate::eq::toggle_auto_attack(true);
@@ -393,6 +422,12 @@ impl Combatant {
     /// Stop combat — return to idle.
     pub fn disengage(&mut self) {
         tracing::info!("Disengaging from combat");
+
+        // Clear DoT tracking for the current target (target died or we're done).
+        if let CombatState::Engaging { target_id } = &self.state {
+            self.dot_tracker.clear_target(*target_id);
+        }
+
         // Notify strategy of kill/disengage for state cleanup
         let player = SpawnData::default();
         let ctx = CombatContext {
@@ -407,6 +442,14 @@ impl Combatant {
         self.strategy.on_action_complete(&ctx);
 
         crate::eq::toggle_auto_attack(false);
+
+        // Pet classes: call pet back on disengage so it doesn't pull adds
+        let class_id = self.strategy.class_id();
+        if PET_CLASSES.contains(&class_id) {
+            crate::eq::slash_command("/pet back");
+            tracing::info!(class_id, "Sent /pet back on disengage");
+        }
+
         self.assist_target = None;
         self.state = CombatState::Idle;
     }
@@ -462,6 +505,56 @@ impl Combatant {
                     self.skill_cooldowns.consume(skill_id, cd);
                 }
             }
+        }
+    }
+
+    /// Fire disciplines (combat abilities) when conditions are met.
+    /// Called every tick while Engaging. Only one discipline fires per tick
+    /// since they share the GCD. Disciplines are evaluated in priority order
+    /// (lower priority number = higher priority).
+    fn tick_disciplines(&mut self, player: &SpawnData) {
+        if self.config.disciplines.is_empty() {
+            return;
+        }
+
+        let hp_pct = player.hp_pct();
+        let end_pct = if player.endurance_max > 0 {
+            (player.endurance_current as f32 / player.endurance_max as f32) * 100.0
+        } else {
+            100.0
+        };
+
+        // Sort by priority (lower = higher priority). Clone to avoid borrowing
+        // config while we mutate disc_cooldowns.
+        let mut discs = self.config.disciplines.clone();
+        discs.sort_by_key(|d| d.priority);
+
+        for disc in &discs {
+            // Skip if on cooldown
+            if self.disc_cooldowns.contains_key(&disc.spell_id) {
+                continue;
+            }
+
+            // Skip if HP outside valid range
+            if hp_pct < disc.min_hp_pct || hp_pct > disc.max_hp_pct {
+                continue;
+            }
+
+            // Skip if endurance too low
+            if end_pct < disc.min_endurance_pct {
+                continue;
+            }
+
+            tracing::debug!(
+                name = %disc.name,
+                spell_id = disc.spell_id,
+                "Firing discipline"
+            );
+            crate::eq::do_combat_ability(disc.spell_id, true);
+            self.disc_cooldowns.insert(disc.spell_id, disc.cooldown_ticks);
+
+            // Only one disc per tick
+            return;
         }
     }
 }
@@ -592,5 +685,172 @@ mod tests {
         b.y = 4.0;
         b.z = 0.0;
         assert!((distance_3d(&a, &b) - 5.0).abs() < 0.01);
+    }
+
+    // --- Discipline tests ---
+
+    use dmft_common::combat::DisciplineEntry;
+
+    fn make_disc(name: &str, spell_id: i32, priority: u8, cooldown: u32) -> DisciplineEntry {
+        DisciplineEntry {
+            name: name.to_string(),
+            spell_id,
+            priority,
+            cooldown_ticks: cooldown,
+            min_hp_pct: 0.0,
+            max_hp_pct: 100.0,
+            min_endurance_pct: 0.0,
+        }
+    }
+
+    fn config_with_discs(discs: Vec<DisciplineEntry>) -> CombatConfig {
+        let mut cfg = CombatConfig::default();
+        cfg.disciplines = discs;
+        cfg
+    }
+
+    fn player_with_hp_end(hp: i64, hp_max: i64, end: i32, end_max: u32) -> SpawnData {
+        let mut p = SpawnData::default();
+        p.name = "TestPlayer".into();
+        p.spawn_id = 1;
+        p.hp_current = hp;
+        p.hp_max = hp_max;
+        p.endurance_current = end;
+        p.endurance_max = end_max;
+        p
+    }
+
+    #[test]
+    fn discipline_fires_when_conditions_met() {
+        let cfg = config_with_discs(vec![make_disc("Mighty Strike", 1001, 1, 100)]);
+        let mut c = Combatant::new(1, 0, cfg);
+        let player = player_with_hp_end(1000, 1000, 500, 500);
+
+        c.state = CombatState::Engaging { target_id: 100 };
+        let target = test_target();
+        c.tick(&player, Some(&target), &[]);
+
+        // Disc should be on cooldown now (meaning it fired)
+        assert!(c.disc_cooldowns.contains_key(&1001));
+        assert_eq!(c.disc_cooldowns[&1001], 100);
+    }
+
+    #[test]
+    fn discipline_respects_cooldown() {
+        let cfg = config_with_discs(vec![make_disc("Mighty Strike", 1001, 1, 100)]);
+        let mut c = Combatant::new(1, 0, cfg);
+        let player = player_with_hp_end(1000, 1000, 500, 500);
+        let target = test_target();
+
+        c.state = CombatState::Engaging { target_id: 100 };
+
+        // First tick fires the disc
+        c.tick(&player, Some(&target), &[]);
+        assert!(c.disc_cooldowns.contains_key(&1001));
+        let cd_after_first = c.disc_cooldowns[&1001];
+
+        // Second tick should NOT re-fire (still on cooldown).
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        // Cooldown should be decremented, not reset to 100
+        assert!(c.disc_cooldowns[&1001] < cd_after_first);
+    }
+
+    #[test]
+    fn discipline_respects_hp_range() {
+        let mut disc = make_disc("Defensive", 2001, 1, 200);
+        disc.min_hp_pct = 20.0;
+        disc.max_hp_pct = 50.0;
+        let cfg = config_with_discs(vec![disc]);
+
+        // Player at full HP -- should NOT fire (hp_pct = 100%, outside [20, 50])
+        let mut c = Combatant::new(1, 0, cfg.clone());
+        let player_full = player_with_hp_end(1000, 1000, 500, 500);
+        let target = test_target();
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player_full, Some(&target), &[]);
+        assert!(
+            !c.disc_cooldowns.contains_key(&2001),
+            "Should not fire at full HP"
+        );
+
+        // Player at 40% HP -- should fire (inside [20, 50])
+        let mut c2 = Combatant::new(1, 0, cfg);
+        let player_low = player_with_hp_end(400, 1000, 500, 500);
+        c2.state = CombatState::Engaging { target_id: 100 };
+        c2.tick(&player_low, Some(&target), &[]);
+        assert!(
+            c2.disc_cooldowns.contains_key(&2001),
+            "Should fire at 40% HP"
+        );
+    }
+
+    #[test]
+    fn only_one_discipline_fires_per_tick() {
+        let cfg = config_with_discs(vec![
+            make_disc("Mighty Strike", 1001, 1, 100),
+            make_disc("Fellstrike", 1002, 2, 100),
+        ]);
+        let mut c = Combatant::new(1, 0, cfg);
+        let player = player_with_hp_end(1000, 1000, 500, 500);
+        let target = test_target();
+
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        // Only the higher-priority (lower number) disc should have fired
+        assert!(
+            c.disc_cooldowns.contains_key(&1001),
+            "Priority 1 disc should fire"
+        );
+        assert!(
+            !c.disc_cooldowns.contains_key(&1002),
+            "Priority 2 disc should NOT fire on same tick"
+        );
+    }
+
+    #[test]
+    fn discipline_respects_endurance_minimum() {
+        let mut disc = make_disc("Mighty Strike", 1001, 1, 100);
+        disc.min_endurance_pct = 50.0;
+        let cfg = config_with_discs(vec![disc]);
+
+        // Player with only 10% endurance -- should NOT fire
+        let mut c = Combatant::new(1, 0, cfg);
+        let player_low_end = player_with_hp_end(1000, 1000, 50, 500);
+        let target = test_target();
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player_low_end, Some(&target), &[]);
+        assert!(
+            !c.disc_cooldowns.contains_key(&1001),
+            "Should not fire with low endurance"
+        );
+    }
+
+    #[test]
+    fn disc_cooldown_expires_and_disc_refires() {
+        let cfg = config_with_discs(vec![make_disc("Quick Disc", 3001, 1, 3)]);
+        let mut c = Combatant::new(1, 0, cfg);
+        let player = player_with_hp_end(1000, 1000, 500, 500);
+        let target = test_target();
+
+        // Fire the disc
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+        assert!(c.disc_cooldowns.contains_key(&3001));
+
+        // Tick 3 more times (cooldown=3). Each tick() decrements at the start.
+        for _ in 0..3 {
+            c.state = CombatState::Engaging { target_id: 100 };
+            c.tick(&player, Some(&target), &[]);
+        }
+
+        // After 3 ticks the cooldown expired and the disc re-fired,
+        // so it should be back on cooldown with the full duration.
+        assert!(
+            c.disc_cooldowns.contains_key(&3001),
+            "Disc should re-fire after cooldown expires"
+        );
     }
 }
