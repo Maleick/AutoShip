@@ -52,6 +52,11 @@ impl CommandListener {
                 )
             })?;
 
+            // SAFETY: CreateNamedPipeA creates a named pipe server with the
+            // given name and security attributes. pipe_name is null-terminated.
+            // security_setup.sa is a valid SECURITY_ATTRIBUTES with a DACL
+            // restricting access to the current user. The handle is stored in
+            // self and closed in Drop.
             let handle = unsafe {
                 CreateNamedPipeA(
                     PCSTR(pipe_name.as_ptr()),
@@ -102,6 +107,9 @@ impl CommandListener {
 
             // If not connected, wait for a new connection + authenticate.
             if !self.connected {
+                // SAFETY: self.handle is a valid named pipe handle from
+                // CreateNamedPipeA. ConnectNamedPipe blocks until a client connects.
+                // ERROR_PIPE_CONNECTED means a client connected before we called this.
                 let connect_result = unsafe { ConnectNamedPipe(self.handle, None) };
                 if let Err(ref e) = connect_result {
                     if e.code() != ERROR_PIPE_CONNECTED.into() {
@@ -112,6 +120,9 @@ impl CommandListener {
                 // Read 32-byte session token (once per connection).
                 let mut token_buf = [0u8; 32];
                 let mut token_bytes_read: u32 = 0;
+                // SAFETY: self.handle is a connected named pipe. token_buf is
+                // a stack-allocated 32-byte buffer. ReadFile writes at most 32
+                // bytes. token_bytes_read receives the actual count.
                 let token_result = unsafe {
                     ReadFile(
                         self.handle,
@@ -129,6 +140,8 @@ impl CommandListener {
                         client_id = self.client_id,
                         "Session token validation failed — dropping connection"
                     );
+                    // SAFETY: self.handle is a valid pipe handle. DisconnectNamedPipe
+                    // drops the client connection so the pipe can accept a new one.
                     unsafe {
                         let _ = DisconnectNamedPipe(self.handle);
                     }
@@ -142,6 +155,8 @@ impl CommandListener {
             // Read the next command from the connected pipe.
             let mut buf = vec![0u8; 4096];
             let mut bytes_read: u32 = 0;
+            // SAFETY: self.handle is a connected pipe. buf is a heap-allocated
+            // 4096-byte buffer. ReadFile writes at most buf.len() bytes.
             let read_result =
                 unsafe { ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None) };
 
@@ -181,6 +196,8 @@ impl CommandListener {
         #[cfg(windows)]
         {
             use windows::Win32::System::Pipes::DisconnectNamedPipe;
+            // SAFETY: self.handle is a valid pipe handle. DisconnectNamedPipe
+            // drops the current client connection.
             unsafe {
                 let _ = DisconnectNamedPipe(self.handle);
             }
@@ -196,6 +213,8 @@ impl CommandListener {
             let data = protocol::encode(response)
                 .map_err(|e| anyhow::anyhow!("failed to encode response: {e}"))?;
             let mut written: u32 = 0;
+            // SAFETY: self.handle is a connected pipe. data is a valid byte
+            // slice from bincode encoding. WriteFile writes at most data.len() bytes.
             unsafe {
                 WriteFile(self.handle, Some(&data), Some(&mut written), None)?;
             }
@@ -344,6 +363,9 @@ impl Drop for CommandListener {
         {
             use windows::Win32::Foundation::CloseHandle;
             use windows::Win32::System::Pipes::DisconnectNamedPipe;
+            // SAFETY: self.handle is a valid pipe handle created in new().
+            // DisconnectNamedPipe + CloseHandle are called exactly once in Drop.
+            // After this, the handle is invalid and must not be used.
             unsafe {
                 let _ = DisconnectNamedPipe(self.handle);
                 let _ = CloseHandle(self.handle);

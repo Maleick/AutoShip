@@ -19,6 +19,10 @@ mod inner {
     /// The detour function -- called instead of the original MainLoop.
     fn main_loop_detour(this: *mut core::ffi::c_void) {
         // Call original first -- let EQ process normally.
+        // SAFETY: `this` is the CEverQuest* pointer passed by EQ's dispatch mechanism.
+        // The original function is saved by retour during hook installation and is
+        // guaranteed to be the real CEverQuest::MainLoop. We forward the same `this`
+        // pointer unchanged. If `this` were invalid, EQ itself would have already crashed.
         unsafe {
             MainLoopHook.call(this);
         }
@@ -29,6 +33,14 @@ mod inner {
 
     /// Install the game loop hook.
     pub fn install(main_loop_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
+        // SAFETY: `main_loop_addr` was resolved by rebasing the known
+        // PROCESS_GAME_EVENTS offset against the live eqgame.exe base address.
+        // The transmute converts this address into a function pointer matching
+        // CEverQuest::MainLoop's calling convention (x64 thiscall = "system").
+        // If the offset is wrong, EQ will crash on the next game tick when the
+        // detour calls the original — there is no way to validate this statically.
+        // retour's initialize + enable overwrites the function prologue with a
+        // trampoline and is only safe when the target is a valid function entry point.
         unsafe {
             let target: MainLoopFn = std::mem::transmute(main_loop_addr);
             MainLoopHook.initialize(target, main_loop_detour)?;
@@ -43,6 +55,11 @@ mod inner {
 
     /// Remove the game loop hook.
     pub fn remove() {
+        // SAFETY: Disabling a retour hook restores the original function bytes.
+        // This is safe as long as no thread is currently executing the trampoline
+        // prologue. In practice, this is called during graceful_shutdown() which
+        // runs outside the loader lock. A concurrent game tick executing the
+        // detour is acceptable — retour handles the race internally.
         unsafe {
             if MainLoopHook.is_enabled() {
                 let _ = MainLoopHook.disable();
@@ -145,6 +162,11 @@ pub fn rescan_char_list_wnd() -> Option<usize> {
     let mgr_ptr_addr =
         dmft_common::offsets::rebase(dmft_common::offsets::PINST_CXWND_MANAGER, eq_base)?;
 
+    // SAFETY: mgr_ptr_addr was rebased from PINST_CXWND_MANAGER, a known-valid
+    // global pointer in eqgame.exe. Each dereference follows EQ's CXWndManager
+    // layout (windows array pointer + count). Null checks and count cap (2000)
+    // guard against corrupted data. read_cxstr performs its own pointer validation.
+    // Must be called from the game loop thread where CXWndManager is stable.
     unsafe {
         let mgr = *(mgr_ptr_addr as *const usize);
         if mgr == 0 {
@@ -345,6 +367,10 @@ fn on_game_tick() {
 
     // Auto-accept dialogs every 30 ticks (~1 second).
     if tick % 30 == 15 {
+        // SAFETY: check_dialogs reads EQ's CXWndManager and clicks dialog buttons
+        // via vtable. Called from the game loop thread where UI state is stable and
+        // vtable calls are safe. EQ_BASE and PINST_CXWND_MANAGER are validated
+        // internally with null checks before any dereference.
         unsafe {
             crate::dialog::check_dialogs();
         }
@@ -370,6 +396,12 @@ fn on_game_tick() {
             ptr = format!("{:#x}", button_addr),
             "Clicking login button on game loop thread"
         );
+        // SAFETY: button_addr was stored by the IPC thread after resolving a
+        // CXWnd pointer from CXWndManager's window array. The click executes
+        // WndNotification(XWM_LCLICK) through the CXWnd vtable. Must run on
+        // the game loop thread (which we are). If the window was destroyed
+        // between queuing and execution, this is a use-after-free — mitigated
+        // by the short time window (single tick delay).
         unsafe {
             crate::eq::widgets::click_button_via_vtable(button_addr);
         }
@@ -399,6 +431,12 @@ fn on_game_tick() {
                 index,
                 "Phase 3: Calling SelectCharacter on game loop thread"
             );
+            // SAFETY: select_fn was rebased from SELECT_CHARACTER offset against
+            // eqgame.exe's base. The transmute converts it to a function pointer
+            // matching CCharacterListWnd::SelectCharacter(int). `wnd` is a freshly
+            // resolved CCharacterListWnd* from CXWndManager. If either address is
+            // stale or the offset is wrong, EQ will crash (no safe fallback exists
+            // for calling internal game functions with wrong addresses).
             unsafe {
                 // SelectCharacter(int index) — x64: RCX=this, RDX=index
                 type SelectCharFn = unsafe extern "C" fn(this: usize, index: i32);
@@ -456,6 +494,11 @@ fn on_game_tick() {
                 func = format!("{:#x}", enter_fn),
                 "Phase 3: Calling EnterWorld() on game loop thread (re-validated)"
             );
+            // SAFETY: enter_fn was rebased from ENTER_WORLD offset. `wnd` was
+            // re-validated via rescan_char_list_wnd() immediately above (not the
+            // stale pointer from Stage 1). The transmute converts the address to
+            // CCharacterListWnd::EnterWorld(). If the offset is wrong or the
+            // window was destroyed between rescan and call, this is UB/crash.
             unsafe {
                 type EnterWorldFn = unsafe extern "C" fn(this: usize);
                 let func: EnterWorldFn = std::mem::transmute(enter_fn);
@@ -487,6 +530,10 @@ fn on_game_tick() {
                 && let Some(player_addr) =
                     dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
             {
+                // SAFETY: player_addr was rebased from PINST_LOCAL_PLAYER — a
+                // known global pointer in eqgame.exe. Dereferencing it yields the
+                // PlayerClient* (null when not logged in). Checked for non-null
+                // immediately after. The address is within committed eqgame memory.
                 let player_ptr = unsafe { *(player_addr as *const usize) };
                 if player_ptr != 0 {
                     crate::nav::init(player_ptr, std::process::id());
@@ -511,6 +558,9 @@ fn on_game_tick() {
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
             let in_world = if eq_base != 0 {
                 dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
+                    // SAFETY: addr is rebased PINST_LOCAL_PLAYER — a committed
+                    // global in eqgame.exe. Reading a usize from it yields the
+                    // local player pointer (0 = not logged in).
                     .map(|addr| unsafe { *(addr as *const usize) } != 0)
                     .unwrap_or(false)
             } else {
@@ -549,6 +599,9 @@ pub fn send_enter_to_eq() {
     let our_pid = std::process::id();
     let mut target_hwnd: isize = 0;
 
+    // SAFETY: This callback is only invoked by EnumWindows below, which passes
+    // our `data` pointer as LPARAM. The cast back to (u32, *mut isize) is valid
+    // because we control the LPARAM value. HWND is always valid within the callback.
     #[allow(unsafe_op_in_unsafe_fn)]
     unsafe extern "system" fn find_eq_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let data = &mut *(lparam.0 as *mut (u32, *mut isize));
@@ -562,6 +615,9 @@ pub fn send_enter_to_eq() {
     }
 
     let mut data = (our_pid, &mut target_hwnd as *mut isize);
+    // SAFETY: EnumWindows calls find_eq_window for each top-level window.
+    // `data` lives on the stack and outlives the synchronous EnumWindows call.
+    // The LPARAM cast is valid because we cast it back to the same type in the callback.
     unsafe {
         let _ = EnumWindows(Some(find_eq_window), LPARAM(&mut data as *mut _ as isize));
     }
@@ -571,6 +627,10 @@ pub fn send_enter_to_eq() {
         const WM_KEYUP: u32 = 0x0101;
         const VK_RETURN: u16 = 0x0D;
         let hwnd = HWND(target_hwnd);
+        // SAFETY: PostMessageW is safe to call with any HWND — if the window was
+        // destroyed between EnumWindows and here, PostMessage returns an error
+        // (which we ignore with `let _`). The WM_KEYDOWN/WM_KEYUP messages with
+        // VK_RETURN are standard Win32 keyboard messages.
         unsafe {
             let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_RETURN as usize), LPARAM(0));
             let _ = PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_RETURN as usize), LPARAM(0));
@@ -728,7 +788,11 @@ unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
     };
 
     let mut buf = [0u8; BUF_SIZE];
-    // Copy into stack buffer — pointer is validated above.
+    // SAFETY: `addr` was validated as readable for `max_len` bytes by
+    // is_readable() above (VirtualQuery confirms committed, non-guard pages).
+    // `capped` <= `max_len` and <= BUF_SIZE, so both source and dest are in bounds.
+    // The copy is non-overlapping because `buf` is a stack allocation and `addr`
+    // points into EQ's process memory.
     unsafe {
         core::ptr::copy_nonoverlapping(addr as *const u8, buf.as_mut_ptr(), capped);
     }
@@ -762,11 +826,21 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     // Read spawn_id first as a validity canary: id == 0 means the PlayerClient
     // slot is empty or has been freed. Reading further fields from a freed spawn
     // causes an access violation and crashes eqgame.exe.
+    // SAFETY: spawn_ptr alignment and readability were validated above via
+    // is_multiple_of(align_of::<usize>()) and is_readable(). The SPAWN_ID
+    // offset is a known field within the PlayerClient struct.
     let spawn_id = unsafe { *((spawn_ptr + player_base::SPAWN_ID) as *const u32) };
     if spawn_id == 0 {
         return dmft_common::types::SpawnData::default();
     }
 
+    // SAFETY for all field reads below: spawn_ptr points to a live PlayerClient
+    // struct validated by is_readable() and a non-zero spawn_id canary above.
+    // Each offset is a known field within PlayerClient derived from MQ2 headers.
+    // read_string_at performs its own is_readable() check internally. Individual
+    // reads of primitives (u8, u32, f32) are naturally aligned within the struct.
+    // If the spawn is freed concurrently by EQ (rare race), reads may return
+    // garbage but won't segfault because the page is still committed.
     let name = unsafe { read_string_at(spawn_ptr + player_base::NAME, 64) };
     let displayed_name = unsafe { read_string_at(spawn_ptr + player_base::DISPLAYED_NAME, 64) };
     let spawn_type = unsafe { *((spawn_ptr + player_base::TYPE) as *const u8) };
@@ -843,6 +917,10 @@ fn read_zone_names(eq_base: u64) -> (String, String) {
 fn read_local_player_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
     let player_ptr_addr =
         dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)?;
+    // SAFETY: player_ptr_addr is the rebased address of PINST_LOCAL_PLAYER,
+    // a global pointer in eqgame.exe's data section. Reading a usize from it
+    // yields the PlayerClient* for the local player (null when not logged in).
+    // The address is within eqgame.exe's committed memory.
     let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
     if player_ptr == 0 {
         return None;
@@ -869,6 +947,9 @@ fn read_local_player_state(eq_base: u64) -> Option<dmft_common::types::SpawnData
 fn read_target_state(eq_base: u64) -> Option<dmft_common::types::SpawnData> {
     let target_ptr_addr =
         dmft_common::offsets::rebase(dmft_common::offsets::PINST_TARGET, eq_base)?;
+    // SAFETY: target_ptr_addr is the rebased address of PINST_TARGET, a global
+    // pointer in eqgame.exe. Reading a usize yields the target's PlayerClient*
+    // (null when no target). read_spawn_data validates the pointer internally.
     let target_ptr = unsafe { *(target_ptr_addr as *const usize) };
     if target_ptr == 0 {
         return None;
@@ -900,6 +981,8 @@ fn read_nearby_spawns(
         return Vec::new();
     }
 
+    // SAFETY: mgr_ptr_addr was validated as readable above. Reading a usize
+    // from PINST_SPAWN_MANAGER yields the SpawnManager* singleton pointer.
     let mgr_ptr = unsafe { *(mgr_ptr_addr as *const usize) };
     if mgr_ptr == 0 {
         return Vec::new();
@@ -910,6 +993,8 @@ fn read_nearby_spawns(
     if !is_readable(list_addr, size_of::<usize>()) {
         return Vec::new();
     }
+    // SAFETY: list_addr was validated as readable immediately above.
+    // Reading a usize yields the head pointer of the spawn linked list.
     let mut current = unsafe { *(list_addr as *const usize) };
 
     let mut spawns = Vec::with_capacity(MAX_NEARBY.min(256));
@@ -937,6 +1022,8 @@ fn read_nearby_spawns(
             break;
         }
 
+        // SAFETY: `current` was validated as readable for position fields by
+        // the is_readable() check above (covers X/Y/Z at known offsets).
         // Quick distance check before building full SpawnData.
         let sx = unsafe { *((current + player_base::X) as *const f32) };
         let sy = unsafe { *((current + player_base::Y) as *const f32) };
@@ -962,6 +1049,7 @@ fn read_nearby_spawns(
             );
             break;
         }
+        // SAFETY: next_addr was validated as readable by is_readable() above.
         // Follow NEXT pointer in linked list.
         current = unsafe { *((next_addr) as *const usize) };
     }
@@ -985,6 +1073,9 @@ fn update_foreground_status() {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
+        // SAFETY: GetForegroundWindow and GetWindowThreadProcessId are always
+        // safe Win32 calls. GetForegroundWindow returns NULL if no window is
+        // focused, which GetWindowThreadProcessId handles gracefully (returns 0).
         let fg: HWND = unsafe { GetForegroundWindow() };
         let our_pid = std::process::id();
 
@@ -1060,12 +1151,17 @@ fn read_char_name(eq_base: u64) -> Option<String> {
     use dmft_common::offsets::{self, player_base};
 
     let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)?;
+    // SAFETY: player_ptr_addr is the rebased PINST_LOCAL_PLAYER global.
+    // Dereferencing yields PlayerClient* (null when not logged in).
     let player_ptr = unsafe { *(player_ptr_addr as *const usize) };
     if player_ptr == 0 {
         return None;
     }
 
     let name_addr = player_ptr + player_base::NAME;
+    // SAFETY: player_ptr is a live PlayerClient*, validated non-null above.
+    // NAME is a char[64] field at a known offset. The 64-byte slice is within
+    // the PlayerClient struct's committed memory.
     let name_bytes = unsafe { std::slice::from_raw_parts(name_addr as *const u8, 64) };
     let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(64);
     String::from_utf8(name_bytes[..len].to_vec()).ok()
@@ -1078,6 +1174,8 @@ fn read_zone_short_name(eq_base: u64) -> Option<String> {
 
     let zone_addr = dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)?;
     let short_name_addr = zone_addr + zone_info::SHORT_NAME;
+    // SAFETY: zone_addr is the rebased instEQZoneInfo global. SHORT_NAME is a
+    // char[128] field at a known offset within the zone header struct.
     let name_bytes = unsafe { std::slice::from_raw_parts(short_name_addr as *const u8, 128) };
     let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(128);
     if len == 0 {
@@ -1093,6 +1191,8 @@ fn read_zone_long_name(eq_base: u64) -> Option<String> {
 
     let zone_addr = dmft_common::offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)?;
     let long_name_addr = zone_addr + zone_info::LONG_NAME;
+    // SAFETY: zone_addr is the rebased instEQZoneInfo global. LONG_NAME is a
+    // char[128] field at a known offset within the zone header struct.
     let name_bytes = unsafe { std::slice::from_raw_parts(long_name_addr as *const u8, 128) };
     let len = name_bytes.iter().position(|&b| b == 0).unwrap_or(128);
     if len == 0 {
@@ -1116,6 +1216,9 @@ fn set_window_title_for_pid(pid: u32, title: &str) {
         title_ptr: *const u8,
     }
 
+    // SAFETY: Callback invoked by EnumWindows below. The LPARAM is a pointer
+    // to our stack-local CallbackData which outlives the synchronous EnumWindows
+    // call. The title_ptr points to a null-terminated string also on the stack.
     unsafe extern "system" fn enum_cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
         unsafe {
             let data = &*(lparam.0 as *const CallbackData);

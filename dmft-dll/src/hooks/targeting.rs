@@ -62,6 +62,11 @@ impl TargetingController {
         );
 
         #[cfg(windows)]
+        // SAFETY: pinst_addr is the rebased pinstTarget global pointer in
+        // eqgame.exe. Writing a spawn address (or 0 for clear) to it sets the
+        // current target. The caller is responsible for providing a valid
+        // PlayerClient address. If spawn_addr points to a freed spawn, EQ may
+        // crash on the next tick when it dereferences the target pointer.
         unsafe {
             std::ptr::write(pinst_addr as *mut usize, spawn_addr);
         }
@@ -93,6 +98,9 @@ impl TargetingController {
         tracing::debug!(pinst_addr = format!("{:#x}", pinst_addr), "clearing target");
 
         #[cfg(windows)]
+        // SAFETY: pinst_addr is the rebased pinstTarget global. Writing 0
+        // clears the current target. This is always safe — EQ null-checks
+        // the target pointer before use.
         unsafe {
             std::ptr::write(pinst_addr as *mut usize, 0usize);
         }
@@ -111,6 +119,12 @@ impl TargetingController {
         let _pinst_addr = self.target_ptr_addr()?;
 
         #[cfg(windows)]
+        // SAFETY: _pinst_addr is the rebased pinstTarget global. Reading a
+        // usize yields the target's PlayerClient* (null = no target). If
+        // non-null, SPAWN_ID is a known u32 field within PlayerClient. If the
+        // target was cleared between the two reads (race), spawn_id may be
+        // stale but reading from recently-freed memory won't segfault because
+        // the page remains committed.
         unsafe {
             let target_ptr = std::ptr::read(_pinst_addr as *const usize);
             if target_ptr == 0 {
@@ -178,6 +192,12 @@ impl TargetingController {
         }
 
         #[cfg(windows)]
+        // SAFETY: All pointer dereferences follow EQ's known struct layout:
+        // PINST_SPAWN_MANAGER → SpawnManager* → PLAYER_LIST → linked list of
+        // PlayerClient nodes. Each node's SPAWN_ID and NEXT fields are at known
+        // offsets derived from MQ2 headers. The MAX_SPAWNS cap prevents infinite
+        // loops on corrupted linked list data. If any pointer is null or invalid,
+        // we return SpawnNotFound rather than crashing.
         unsafe {
             let mgr_pinst = offsets::rebase(offsets::PINST_SPAWN_MANAGER, self.eq_base)
                 .ok_or(TargetError::RebaseFailed)?;

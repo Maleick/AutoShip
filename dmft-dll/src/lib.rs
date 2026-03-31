@@ -74,6 +74,11 @@ mod dll_main {
     ) -> BOOL {
         match reason {
             DLL_PROCESS_ATTACH => {
+                // SAFETY: Called from DllMain under the loader lock with a valid HMODULE.
+                // DisableThreadLibraryCalls requires a valid module handle (guaranteed by
+                // the OS calling DllMain). CreateThread with a static extern "system" fn
+                // is safe; we use raw CreateThread instead of std::thread::spawn to avoid
+                // potential deadlocks from acquiring std runtime locks under the loader lock.
                 unsafe {
                     // Suppress DLL_THREAD_ATTACH/DETACH notifications for perf.
                     let _ = DisableThreadLibraryCalls(module);
@@ -168,7 +173,9 @@ fn resolve_eq_base() -> u64 {
     {
         use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 
-        // GetModuleHandleW(None) returns the base of the hosting exe (eqgame.exe).
+        // SAFETY: GetModuleHandleW(None) is always safe to call — it returns the
+        // base address of the hosting executable (eqgame.exe). The handle is used
+        // only as an integer base address, not as a loadable module reference.
         unsafe { GetModuleHandleW(None).map(|h| h.0 as u64).unwrap_or(0) }
     }
 

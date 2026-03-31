@@ -58,6 +58,10 @@ impl MovementController {
     /// Write heading value directly.
     pub fn write_heading(&self, heading: f32) {
         #[cfg(windows)]
+        // SAFETY: player_base is a PlayerClient* obtained from PINST_LOCAL_PLAYER.
+        // Null-checked above. HEADING is a known f32 field offset within
+        // PlayerClient. Writing a f32 to an aligned address within committed
+        // memory is safe. The game reads this value each tick for facing direction.
         unsafe {
             if self.player_base == 0 {
                 return;
@@ -72,6 +76,8 @@ impl MovementController {
     /// Write speed heading (direction of actual movement).
     pub fn write_speed_heading(&self, heading: f32) {
         #[cfg(windows)]
+        // SAFETY: Same invariants as write_heading — player_base is a validated
+        // PlayerClient*, SPEED_HEADING is a known f32 field offset.
         unsafe {
             if self.player_base == 0 {
                 return;
@@ -86,6 +92,9 @@ impl MovementController {
     /// Read current position from the PlayerClient struct.
     pub fn read_position(&self) -> Waypoint {
         #[cfg(windows)]
+        // SAFETY: player_base is a validated PlayerClient*. X, Y, Z are known
+        // f32 field offsets within the struct. Reads are naturally aligned and
+        // within committed eqgame process memory. Null-checked above.
         unsafe {
             if self.player_base == 0 {
                 return Waypoint::new(0.0, 0.0, 0.0);
@@ -127,6 +136,11 @@ impl MovementController {
             {
                 type ExecuteCmdFn =
                     unsafe extern "C" fn(command: u32, key_down: i32, data: usize, target: usize);
+                // SAFETY: addr was rebased from EXECUTE_CMD — a known function
+                // address in eqgame.exe. The transmute converts it to match
+                // __ExecuteCmd's calling convention. If the offset is wrong,
+                // this will crash EQ. data=0 and target=0 are valid (no item,
+                // no specific target).
                 unsafe {
                     let func: ExecuteCmdFn = std::mem::transmute(addr);
                     func(command, key_down as i32, 0, 0);
@@ -140,6 +154,8 @@ impl MovementController {
     /// Read current heading.
     pub fn read_heading(&self) -> f32 {
         #[cfg(windows)]
+        // SAFETY: Same invariants as read_position — player_base is a validated
+        // PlayerClient*, HEADING is a known f32 field offset. Null-checked below.
         unsafe {
             if self.player_base == 0 {
                 return 0.0;

@@ -303,6 +303,13 @@ pub fn write_login_credentials(eqmain_base: u64, account: &str, password: &str) 
             return false;
         };
 
+        // SAFETY: eqlogin is a validated non-null EQLogin* resolved through
+        // the LoginClient pointer chain. EQLOGIN_USERNAME and EQLOGIN_PASSWORD
+        // are char[0x80] fields at known offsets within the EQLogin struct.
+        // write_bytes(0, 0x80) zeroes the entire buffer, then copy_nonoverlapping
+        // writes the credential bytes (clamped to EQLOGIN_FIELD_MAX = 0x7F to
+        // preserve the null terminator). The buffers are within committed eqmain
+        // memory. If eqlogin were freed, resolve_eqlogin would have returned None.
         unsafe {
             // Write username: zero buffer, then copy bytes (max 0x7F to leave null terminator)
             let username_addr = (eqlogin + eqmain_offsets::EQLOGIN_USERNAME) as *mut u8;
@@ -613,6 +620,10 @@ pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
         const VK_TAB: u16 = 0x09;
         const VK_RETURN: u16 = 0x0D;
 
+        // SAFETY: hwnd was resolved from EQLogin::hEQWnd — a valid HWND stored
+        // by EQ itself. PostMessageW is safe to call with any HWND (returns
+        // failure if invalid). WM_KEYDOWN/WM_KEYUP/WM_CHAR are standard Win32
+        // keyboard messages. Character values are ASCII-safe (login credentials).
         unsafe {
             // Tab to move focus from username to password field
             let _ = PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_TAB as usize), LPARAM(0));
@@ -666,6 +677,9 @@ pub fn simulate_enter_key(eqmain_base: u64) -> bool {
         const WM_KEYUP: u32 = 0x0101;
         const VK_RETURN: u16 = 0x0D;
 
+        // SAFETY: hwnd was resolved from EQLogin::hEQWnd. PostMessageW is safe
+        // to call with any HWND. WM_KEYDOWN/WM_KEYUP with VK_RETURN simulates
+        // pressing Enter to submit/dismiss dialogs.
         unsafe {
             // PostMessage sends directly to the HWND — works even when EQ
             // is not the foreground window (unlike SendInput).

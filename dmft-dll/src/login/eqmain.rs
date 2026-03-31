@@ -11,6 +11,9 @@ pub fn find_eqmain() -> u64 {
         use windows::Win32::System::LibraryLoader::GetModuleHandleW;
         use windows::core::w;
 
+        // SAFETY: GetModuleHandleW is always safe to call — it queries the
+        // module table for a loaded DLL by name. Returns NULL if not loaded.
+        // The handle is used only as an integer base address.
         unsafe {
             GetModuleHandleW(w!("eqmain.dll"))
                 .map(|h| h.0 as u64)
@@ -33,6 +36,9 @@ pub fn resolve_sidl_manager(eqmain_base: u64) -> Option<usize> {
     {
         use dmft_common::offsets::eqmain;
 
+        // SAFETY: addr is a rebased global pointer within eqmain.dll's data
+        // section. Dereferencing yields the CSidlManager singleton pointer
+        // (null if not yet initialized). eqmain.dll is loaded in-process.
         let addr = eqmain::rebase(eqmain::SIDL_MANAGER, eqmain_base)?;
         let ptr = unsafe { *(addr as *const usize) };
         if ptr == 0 { None } else { Some(ptr) }
@@ -51,6 +57,8 @@ pub fn resolve_login_server_api(eqmain_base: u64) -> Option<usize> {
     {
         use dmft_common::offsets::eqmain;
 
+        // SAFETY: Same pattern as resolve_sidl_manager — rebased global pointer
+        // dereference within eqmain.dll's data section.
         let addr = eqmain::rebase(eqmain::LOGIN_SERVER_API, eqmain_base)?;
         let ptr = unsafe { *(addr as *const usize) };
         if ptr == 0 { None } else { Some(ptr) }
@@ -70,6 +78,7 @@ pub fn resolve_login_client(eqmain_base: u64) -> Option<usize> {
     {
         use dmft_common::offsets::eqmain;
 
+        // SAFETY: Same pattern — rebased eqmain.dll global pointer dereference.
         let addr = eqmain::rebase(eqmain::PINST_LOGIN_CLIENT, eqmain_base)?;
         let ptr = unsafe { *(addr as *const usize) };
         if ptr == 0 { None } else { Some(ptr) }
@@ -90,6 +99,9 @@ pub fn resolve_eqlogin(eqmain_base: u64) -> Option<usize> {
         use dmft_common::offsets::eqmain as eqmain_offsets;
 
         let login_client = resolve_login_client(eqmain_base)?;
+        // SAFETY: login_client is a validated non-null LoginClient*. The
+        // LOGINCLIENT_LOGIN_DATA offset (pLoginData field) is a known pointer
+        // within LoginClient that points to the EQLogin struct.
         let eqlogin_ptr =
             unsafe { *((login_client + eqmain_offsets::LOGINCLIENT_LOGIN_DATA) as *const usize) };
         if eqlogin_ptr == 0 {
@@ -113,6 +125,8 @@ pub fn resolve_eq_hwnd(eqmain_base: u64) -> Option<usize> {
         use dmft_common::offsets::eqmain as eqmain_offsets;
 
         let eqlogin = resolve_eqlogin(eqmain_base)?;
+        // SAFETY: eqlogin is a validated non-null EQLogin*. EQLOGIN_HWND is
+        // a known field containing the HWND of EQ's window.
         let hwnd = unsafe { *((eqlogin + eqmain_offsets::EQLOGIN_HWND) as *const usize) };
         if hwnd == 0 { None } else { Some(hwnd) }
     }
@@ -130,6 +144,7 @@ pub fn resolve_cxwnd_manager(eqmain_base: u64) -> Option<usize> {
     {
         use dmft_common::offsets::eqmain;
 
+        // SAFETY: Same pattern — rebased eqmain.dll global pointer dereference.
         let addr = eqmain::rebase(eqmain::CXWND_MANAGER, eqmain_base)?;
         let ptr = unsafe { *(addr as *const usize) };
         if ptr == 0 { None } else { Some(ptr) }

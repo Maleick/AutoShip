@@ -27,6 +27,9 @@ mod inner {
     /// The detour function -- called instead of CDisplay::RealRender_World.
     fn render_detour(this: *mut core::ffi::c_void) {
         if super::should_render() {
+            // SAFETY: `this` is the CDisplay* pointer passed by EQ's rendering
+            // pipeline. The original RealRender_World function was saved by retour
+            // during hook installation. We forward the same `this` pointer unchanged.
             unsafe {
                 RenderHook.call(this);
             }
@@ -37,6 +40,11 @@ mod inner {
 
     /// Install the render hook.
     pub fn install(render_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
+        // SAFETY: render_addr was rebased from REAL_RENDER_WORLD offset against
+        // the live eqgame.exe base address. The transmute converts it to a function
+        // pointer matching CDisplay::RealRender_World's calling convention.
+        // retour overwrites the function prologue with a trampoline. If the offset
+        // is wrong, EQ will crash on the next render call.
         unsafe {
             let target: RenderFn = std::mem::transmute(render_addr);
             RenderHook.initialize(target, render_detour)?;
@@ -51,6 +59,8 @@ mod inner {
 
     /// Remove the render hook.
     pub fn remove() {
+        // SAFETY: Disabling a retour hook restores the original function bytes.
+        // Safe to call during graceful_shutdown() — see game_loop::remove() for details.
         unsafe {
             if RenderHook.is_enabled() {
                 let _ = RenderHook.disable();

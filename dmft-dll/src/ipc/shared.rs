@@ -58,6 +58,10 @@ impl SharedStateWriter {
                 ))?;
             let sa_ptr = Some(sa_setup.sa_ptr());
 
+            // SAFETY: CreateFileMappingW with INVALID_HANDLE_VALUE creates a
+            // page-file-backed mapping. sa_ptr points to a valid SECURITY_ATTRIBUTES
+            // (or None for default security). name is a null-terminated UTF-16 string.
+            // The resulting handle is either valid or an error is returned.
             let handle = unsafe {
                 CreateFileMappingW(
                     INVALID_HANDLE_VALUE,
@@ -70,6 +74,10 @@ impl SharedStateWriter {
             }?;
             drop(sa_setup); // buffers no longer needed after CreateFileMappingW
 
+            // SAFETY: handle is a valid file mapping handle from CreateFileMappingW
+            // above. MapViewOfFile maps it into our address space with write access.
+            // The returned pointer is valid for SHARED_MEMORY_SIZE bytes until
+            // UnmapViewOfFile is called (in Drop). Null check follows immediately.
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_WRITE, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
                 anyhow::bail!("MapViewOfFile returned null for client {}", client_id);
@@ -114,13 +122,21 @@ impl SharedStateWriter {
             }
 
             let base = self.ptr;
+            // SAFETY: base points to the start of a mapped shared memory region
+            // of SHARED_MEMORY_SIZE bytes (validated non-null in new()). Casting
+            // to AtomicU64 is valid because the mapping is at least 8-byte aligned
+            // (OS guarantees page-aligned mappings) and we are the sole writer.
+            // The reader uses Acquire ordering to observe complete payloads.
             let seq = unsafe { &*(base as *const AtomicU64) };
 
             // Mark write-in-progress: increment sequence to make it odd
             self.sequence += 1;
             seq.store(self.sequence, Ordering::Release);
 
-            // Write payload
+            // SAFETY: base is a valid mapped pointer. The size check above ensures
+            // payload.len() + 12 <= self.size, so base+8 (4 bytes) and base+12
+            // (payload.len() bytes) are within the mapped region. The copies are
+            // non-overlapping because source is stack/heap and dest is shared memory.
             let len_bytes = (payload.len() as u32).to_le_bytes();
             unsafe {
                 std::ptr::copy_nonoverlapping(len_bytes.as_ptr(), base.add(8), 4);
@@ -261,6 +277,10 @@ impl Drop for SharedStateWriter {
             use windows::Win32::Foundation::CloseHandle;
             use windows::Win32::System::Memory::UnmapViewOfFile;
 
+            // SAFETY: self.ptr is a valid mapped view from MapViewOfFile (validated
+            // non-null in new()). self._handle is a valid file mapping handle from
+            // CreateFileMappingW. Both are cleaned up exactly once in Drop. After
+            // this, the shared memory region is no longer accessible.
             unsafe {
                 let view = windows::Win32::System::Memory::MEMORY_MAPPED_VIEW_ADDRESS {
                     Value: self.ptr as *mut _,

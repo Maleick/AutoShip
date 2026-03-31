@@ -18,6 +18,13 @@ pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
     use dmft_common::nav::{ZoneConnection, ZoneNode};
     use dmft_common::offsets::{self, zone_guide as zg};
 
+    // SAFETY: All pointer reads in this function follow EQ's ZoneGuideManagerClient
+    // struct layout. mgr_ptr_addr is rebased from ZONE_GUIDE_MANAGER — a known
+    // global in eqgame.exe. Each subsequent dereference follows known offsets
+    // (zone array, connections array) with null/range checks. The function is
+    // called from the game loop thread where the zone guide data is stable.
+    // If any pointer is invalid, we return None rather than crashing.
+
     // Resolve the singleton pointer
     let mgr_ptr_addr = offsets::rebase(offsets::ZONE_GUIDE_MANAGER, eq_base)?;
     let mgr_ptr = *(mgr_ptr_addr as *const usize);

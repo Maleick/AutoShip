@@ -1,7 +1,9 @@
 pub mod app;
+pub mod client;
 pub mod demo_data;
 pub mod event;
 pub mod run;
 pub mod sprites;
+pub mod state;
 pub mod theme;
 pub mod ui;

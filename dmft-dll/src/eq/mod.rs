@@ -131,6 +131,9 @@ fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
 
     #[cfg(windows)]
     {
+        // SAFETY: addr was rebased from PINST_LOCAL_PLAYER, a known global
+        // pointer in eqgame.exe's data section. Dereferencing yields the
+        // PlayerClient* (null when not logged in). Null-checked below.
         let ptr: *mut c_void = unsafe { *(addr as *const *mut c_void) };
         if ptr.is_null() { None } else { Some(ptr) }
     }
@@ -178,6 +181,11 @@ pub fn cast_spell(gem_id: u8, spell_id: i32) {
             *mut c_void, // item_ptr (null for normal casts)
             u64,         // item_guid (0 for normal casts)
         );
+        // SAFETY: addr was rebased from CAST_SPELL — a known function in
+        // eqgame.exe. The transmute converts it to CharacterZoneClient::CastSpell's
+        // calling convention. `player` is a validated non-null PlayerClient*.
+        // If the offset is wrong, this will crash EQ (no way to validate statically).
+        // Null item_ptr and zero item_guid indicate a normal (non-item) cast.
         let func: CastSpellFn = unsafe { std::mem::transmute(addr) };
 
         tracing::info!(
@@ -228,6 +236,10 @@ pub fn do_attack(attack_type: u8) {
             u8,          // attack_type/slot
             *mut c_void, // unknown (null)
         );
+        // SAFETY: addr was rebased from DO_ATTACK. The transmute converts it
+        // to PlayerZoneClient::DoAttack's calling convention. `player` is a
+        // validated non-null PlayerClient*. Null unknown arg is the standard
+        // calling pattern from MQ2. If the offset is wrong, EQ will crash.
         let func: DoAttackFn = unsafe { std::mem::transmute(addr) };
 
         tracing::info!(
@@ -279,6 +291,10 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
             *mut c_void, // target (PlayerZoneClient*)
             bool,        // bAuto (false = manual activation)
         );
+        // SAFETY: addr was rebased from USE_SKILL. The transmute converts it
+        // to CharacterZoneClient::UseSkill's calling convention. `player` is
+        // validated non-null. target_ptr may be null (use current target).
+        // bAuto=false indicates manual activation. If the offset is wrong, EQ crashes.
         let func: UseSkillFn = unsafe { std::mem::transmute(addr) };
 
         let target_ptr = target.unwrap_or(std::ptr::null_mut());
@@ -327,6 +343,9 @@ pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
             i32,         // spell_id
             bool,        // allow_lower_rank
         );
+        // SAFETY: addr was rebased from DO_COMBAT_ABILITY. The transmute
+        // converts it to PcZoneClient::DoCombatAbility's calling convention.
+        // `player` is validated non-null. If the offset is wrong, EQ crashes.
         let func: DoCombatAbilityFn = unsafe { std::mem::transmute(addr) };
 
         tracing::info!(
@@ -377,6 +396,10 @@ pub fn execute_cmd(cmd_id: u32, active: i32) {
             i32,         // active (1=on, 0=off)
             *mut c_void, // unknown (null)
         );
+        // SAFETY: addr was rebased from EXECUTE_CMD. The transmute converts
+        // it to __ExecuteCmd's calling convention. The first arg (this) is null
+        // per MQ2 convention (free function with dummy this-call). If the offset
+        // is wrong, EQ crashes.
         let func: ExecuteCmdFn = unsafe { std::mem::transmute(addr) };
 
         tracing::info!(
@@ -430,6 +453,8 @@ pub fn slash_command(command: &str) {
             return;
         };
 
+        // SAFETY: eq_inst_addr is the rebased PINST_CEVERQUEST global pointer.
+        // Dereferencing yields the CEverQuest singleton (null if not initialized).
         let eq_inst: *mut c_void = unsafe { *(eq_inst_addr as *const *mut c_void) };
         if eq_inst.is_null() {
             tracing::error!("CEverQuest instance pointer is null");
@@ -459,6 +484,11 @@ pub fn slash_command(command: &str) {
         if !validate_fn_ptr(interpret_addr, "InterpretCmd") {
             return;
         }
+        // SAFETY: interpret_addr was rebased from INTERPRET_CMD. The transmute
+        // converts it to CEverQuest::InterpretCmd's calling convention. eq_inst
+        // and player are validated non-null above. cmd_cstring is a valid
+        // null-terminated C string (CString guarantees no interior nulls).
+        // If the offset is wrong, EQ crashes.
         let func: InterpretCmdFn = unsafe { std::mem::transmute(interpret_addr) };
 
         tracing::info!(cmd = command, "Executing slash command");
