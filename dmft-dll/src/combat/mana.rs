@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn should_med_at_exact_floor_returns_true() {
+    fn should_med_at_exact_floor_returns_false() {
         let gov = ManaGovernor::new(30.0, false);
         assert!(!gov.should_med(30.0, false)); // not < floor, only ==
     }
