@@ -122,7 +122,7 @@ impl Combatant {
 
         // Periodically prune expired DoT entries to prevent unbounded growth.
         // Every 120 ticks (~6 seconds at 20 ticks/sec).
-        if (self.tick_count + self.client_id) % 120 == 0 {
+        if (self.tick_count + self.client_id).is_multiple_of(120) {
             self.dot_tracker.prune_expired(self.tick_count);
         }
 
@@ -701,7 +701,10 @@ mod tests {
         b.x = 3.0;
         b.y = 4.0;
         b.z = 0.0;
-        assert!((Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(b.x, b.y, b.z)) - 5.0).abs() < 0.01);
+        assert!(
+            (Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(b.x, b.y, b.z)) - 5.0).abs()
+                < 0.01
+        );
     }
 
     // --- Discipline tests ---
@@ -906,13 +909,18 @@ mod tests {
         b.x = 0.0;
         b.y = 0.0;
         b.z = 10.0;
-        assert!((Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(b.x, b.y, b.z)) - 10.0).abs() < 0.01);
+        assert!(
+            (Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(b.x, b.y, b.z)) - 10.0).abs()
+                < 0.01
+        );
     }
 
     #[test]
     fn distance_3d_same_position() {
         let a = SpawnData::default();
-        assert!((Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(a.x, a.y, a.z))).abs() < 0.01);
+        assert!(
+            (Waypoint::new(a.x, a.y, a.z).distance_3d(&Waypoint::new(a.x, a.y, a.z))).abs() < 0.01
+        );
     }
 
     #[test]

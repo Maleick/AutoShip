@@ -49,8 +49,7 @@ pub fn find_lootable_corpses(player: &SpawnData, spawns: &[SpawnData]) -> Vec<u3
 pub fn has_lootable_corpses(player: &SpawnData, spawns: &[SpawnData]) -> bool {
     spawns.iter().any(|s| {
         s.spawn_type == SPAWN_TYPE_CORPSE
-            && Waypoint::new(s.x, s.y, 0.0)
-                .distance_2d(&Waypoint::new(player.x, player.y, 0.0))
+            && Waypoint::new(s.x, s.y, 0.0).distance_2d(&Waypoint::new(player.x, player.y, 0.0))
                 <= LOOT_RANGE
     })
 }

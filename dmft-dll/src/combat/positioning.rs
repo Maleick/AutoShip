@@ -33,8 +33,8 @@ pub enum PositionAction {
 
 /// Check if we're within melee range of the target.
 pub fn is_in_melee_range(player: &SpawnData, target: &SpawnData) -> bool {
-    let dist = Waypoint::new(player.x, player.y, 0.0)
-        .distance_2d(&Waypoint::new(target.x, target.y, 0.0));
+    let dist =
+        Waypoint::new(player.x, player.y, 0.0).distance_2d(&Waypoint::new(target.x, target.y, 0.0));
     dist <= MELEE_RANGE
 }
 
@@ -65,8 +65,8 @@ pub fn check_melee_position(
     is_rogue: bool,
     camp_pos: Option<&Waypoint>,
 ) -> PositionAction {
-    let dist = Waypoint::new(player.x, player.y, 0.0)
-        .distance_2d(&Waypoint::new(target.x, target.y, 0.0));
+    let dist =
+        Waypoint::new(player.x, player.y, 0.0).distance_2d(&Waypoint::new(target.x, target.y, 0.0));
 
     // Priority 1: If too far from camp, return to camp (after combat)
     if let Some(camp) = camp_pos {
@@ -114,8 +114,8 @@ pub fn check_aoe_avoidance(
     let cy: f32 = nearby_enemies.iter().map(|e| e.y).sum::<f32>() / count;
 
     // Check if we're dangerously close to the cluster center
-    let dist_to_center = Waypoint::new(player.x, player.y, 0.0)
-        .distance_2d(&Waypoint::new(cx, cy, 0.0));
+    let dist_to_center =
+        Waypoint::new(player.x, player.y, 0.0).distance_2d(&Waypoint::new(cx, cy, 0.0));
     if dist_to_center < 30.0 {
         // Move 40 units away from the cluster center
         let dx = player.x - cx;

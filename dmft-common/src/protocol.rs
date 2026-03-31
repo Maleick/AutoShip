@@ -242,7 +242,11 @@ mod tests {
 
         let (decoded, consumed): (Command, usize) = decode(&encoded).expect("decode failed");
         assert!(matches!(decoded, Command::Ping));
-        assert_eq!(consumed, encoded.len() - 4, "The number of bytes consumed should account for the header and payload, leaving the extra bytes.");
+        assert_eq!(
+            consumed,
+            encoded.len() - 4,
+            "The number of bytes consumed should account for the header and payload, leaving the extra bytes."
+        );
     }
 
     #[test]
