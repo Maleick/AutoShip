@@ -146,6 +146,15 @@ pub struct LiveGroup {
     pub zone: String,
 }
 
+/// Cached CH chain status for TUI display (avoids reaching into Orchestrator).
+#[derive(Clone, Debug)]
+pub struct ChChainStatus {
+    pub members: usize,
+    pub interval_secs: f32,
+    pub is_adaptive: bool,
+    pub target_id: u32,
+}
+
 /// Application state for the TUI debugger.
 pub struct App {
     pub running: bool,
@@ -212,6 +221,9 @@ pub struct App {
 
     // Heal-cancel toggle (cleric duck on high HP during cast)
     pub heal_cancel_enabled: bool,
+
+    /// Cached CH chain status (updated each tick from Orchestrator).
+    pub ch_chain_status: Option<ChChainStatus>,
 
     // Account config for login automation
     pub accounts_config: Option<AccountsConfig>,
@@ -298,6 +310,7 @@ impl App {
             main_assist: None,
             main_tank: None,
             heal_cancel_enabled: true,
+            ch_chain_status: None,
 
             accounts_config: AccountsConfig::load(std::path::Path::new("config/accounts.toml"))
                 .ok(),
@@ -423,6 +436,20 @@ impl App {
             self.target = None;
             self.spawns.clear();
         }
+    }
+
+    /// Sync CH chain status from orchestrator into cached display state.
+    pub fn sync_ch_chain_status(&mut self, orchestrator: &Orchestrator) {
+        self.ch_chain_status = if orchestrator.combat.ch_chain_active() {
+            orchestrator.combat.ch_chain.as_ref().map(|chain| ChChainStatus {
+                members: chain.members().len(),
+                interval_secs: chain.interval_secs(),
+                is_adaptive: chain.is_adaptive(),
+                target_id: chain.target_id(),
+            })
+        } else {
+            None
+        };
     }
 
     /// Cycle to the next client.
@@ -2006,6 +2033,8 @@ impl App {
                 );
             }
         }
+        // Sync cached display state after any CH chain mutation
+        self.sync_ch_chain_status(orchestrator);
     }
 
     /// Handle `login <subcommand>` from the command bar.

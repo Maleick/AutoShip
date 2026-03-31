@@ -254,10 +254,23 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 // ─── Character screen layout ─────────────────────────────────────────────────
 
 pub fn draw_character_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-        .split(area);
+    let hex_empty = app.hex_state.hex_data.is_empty();
+    let narrow = area.width < 100;
+
+    // Adaptive horizontal split: favor character panel on narrow terminals,
+    // give full width when hex dump has no data to show.
+    let cols = if hex_empty {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(100)])
+            .split(area)
+    } else {
+        let (left_pct, right_pct) = if narrow { (60, 40) } else { (45, 55) };
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(left_pct), Constraint::Percentage(right_pct)])
+            .split(area)
+    };
 
     let left = Layout::default()
         .direction(Direction::Vertical)
@@ -266,7 +279,10 @@ pub fn draw_character_screen(frame: &mut Frame, area: ratatui::layout::Rect, app
 
     draw_player_detail(frame, left[0], app);
     draw_target_panel(frame, left[1], app);
-    draw_hex_panel(frame, cols[1], app);
+
+    if !hex_empty {
+        draw_hex_panel(frame, cols[1], app);
+    }
 }
 
 fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

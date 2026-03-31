@@ -104,10 +104,23 @@ fn draw_dashboard_grid(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
                 ])
                 .style(row_style)
             } else {
+                // Show client_status when player data isn't loaded yet (or errored)
+                let status_label = if client.client_status.is_empty() {
+                    format!("PID {}", client.pid)
+                } else {
+                    client.client_status.clone()
+                };
+                let status_color = if client.client_status.contains("error")
+                    || client.client_status.contains("Lost")
+                {
+                    t.hp_low
+                } else {
+                    t.text_muted
+                };
                 Row::new(vec![
                     ratatui::widgets::Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                    ratatui::widgets::Cell::from(format!("PID {}", client.pid))
-                        .style(Style::default().fg(t.text_muted)),
+                    ratatui::widgets::Cell::from(status_label)
+                        .style(Style::default().fg(status_color)),
                     ratatui::widgets::Cell::from("-"),
                     ratatui::widgets::Cell::from("-"),
                     ratatui::widgets::Cell::from("-"),
@@ -149,7 +162,7 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: ratatui::layout::Rect, app: &
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(6),     // Group health (flexible, gets leftover)
-                Constraint::Length(5),   // Combat status
+                Constraint::Length(7),   // Combat status (mode/MA/MT + heal-cancel + CH chain)
                 Constraint::Min(8),     // Session stats (flexible)
                 Constraint::Length(6),   // Server info
             ])
@@ -253,11 +266,20 @@ fn draw_group_health_gauges(frame: &mut Frame, area: ratatui::layout::Rect, app:
 
             frame.render_widget(gauge, gauge_area);
         } else {
+            let label = if client.client_status.is_empty() {
+                format!("  PID {} …", client.pid)
+            } else {
+                format!("  {}", client.client_status)
+            };
+            let color = if client.client_status.contains("error")
+                || client.client_status.contains("Lost")
+            {
+                t.hp_low
+            } else {
+                t.text_muted
+            };
             frame.render_widget(
-                Paragraph::new(Span::styled(
-                    format!("  PID {} …", client.pid),
-                    Style::default().fg(t.text_muted),
-                )),
+                Paragraph::new(Span::styled(label, Style::default().fg(color))),
                 row,
             );
         }
@@ -284,7 +306,7 @@ fn draw_combat_status(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         .as_deref()
         .unwrap_or("—");
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![
             Span::styled("Mode ", Style::default().fg(t.text_muted)),
             Span::styled(
@@ -297,8 +319,32 @@ fn draw_combat_status(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         Line::from(vec![
             Span::styled("MT   ", Style::default().fg(t.text_muted)),
             Span::styled(mt_str, Style::default().fg(t.text_highlight)),
+            Span::styled("  HlCx ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                if app.heal_cancel_enabled { "ON" } else { "off" },
+                Style::default().fg(if app.heal_cancel_enabled {
+                    t.hp_high
+                } else {
+                    t.text_muted
+                }),
+            ),
         ]),
     ];
+
+    // CH chain status line (only when active)
+    if let Some(ch) = &app.ch_chain_status {
+        let adaptive_str = if ch.is_adaptive { "adaptive" } else { "fixed" };
+        lines.push(Line::from(vec![
+            Span::styled("CH   ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!(
+                    "{}× {:.1}s {} tgt={}",
+                    ch.members, ch.interval_secs, adaptive_str, ch.target_id
+                ),
+                Style::default().fg(t.text_highlight),
+            ),
+        ]));
+    }
 
     frame.render_widget(
         Paragraph::new(lines).block(panel(" Combat ", t.border_active, t)),

@@ -242,6 +242,43 @@ pub fn handle_events(
             _ => {}
         }
 
+        // Quick action keybinds (only when not in search/command mode)
+        match key.code {
+            // r = repeat last command
+            KeyCode::Char('r') => {
+                if let Some(last) = app.cmd_state.command_history.last().cloned() {
+                    app.cmd_state.command_buffer = last;
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                } else {
+                    app.status_message = "No command history to repeat".into();
+                }
+                return Ok(true);
+            }
+            // e = engage selected target
+            KeyCode::Char('e') => {
+                app.cmd_state.command_buffer = "engage".into();
+                app.execute_command(orchestrator);
+                app.cmd_state.command_buffer.clear();
+                return Ok(true);
+            }
+            // d = disengage
+            KeyCode::Char('d') => {
+                app.cmd_state.command_buffer = "disengage".into();
+                app.execute_command(orchestrator);
+                app.cmd_state.command_buffer.clear();
+                return Ok(true);
+            }
+            // l = loot
+            KeyCode::Char('l') => {
+                app.cmd_state.command_buffer = "loot".into();
+                app.execute_command(orchestrator);
+                app.cmd_state.command_buffer.clear();
+                return Ok(true);
+            }
+            _ => {}
+        }
+
         // Map-screen keybindings: +/- adjust Z-depth filter
         if app.active_screen == ActiveScreen::Map {
             match key.code {
@@ -278,8 +315,8 @@ pub fn handle_events(
         {
             match app.active_panel {
                 ActivePanel::SpawnList => match key.code {
-                    KeyCode::Down => app.spawn_list_down(),
-                    KeyCode::Up => app.spawn_list_up(),
+                    KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
+                    KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
                     KeyCode::PageDown => app.spawn_list_page_down(),
                     KeyCode::PageUp => app.spawn_list_page_up(),
                     KeyCode::Home => app.spawns_state.table_state.select(Some(0)),

@@ -386,9 +386,19 @@ fn draw_map_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     let blk = panel(" Spawn Positions ", t.border_dim, t);
     let header = themed_header_row(vec!["T", "Name", "Y", "X", "Z"], t);
 
+    let player_z = app.local_player.as_ref().map(|p| p.z);
+    let z_range = app.map_state.z_filter_range;
+
     let rows: Vec<Row> = app
         .spawns
         .iter()
+        .filter(|spawn| {
+            // Match the Z-filter applied to the map canvas
+            match player_z {
+                Some(pz) => (spawn.z - pz).abs() <= z_range,
+                None => true,
+            }
+        })
         .map(|spawn| {
             let name = app.redact_name(&spawn.displayed_name).into_owned();
             let color = spawn_type_color(&spawn.spawn_type, t);

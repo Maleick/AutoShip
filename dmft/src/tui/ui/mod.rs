@@ -162,7 +162,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     // Split: left = message + hints, right = status badges
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(10), Constraint::Length(32)])
+        .constraints([Constraint::Min(10), Constraint::Min(32)])
         .split(area);
 
     // ── Left pane ─────────────────────────────────────────────────────
