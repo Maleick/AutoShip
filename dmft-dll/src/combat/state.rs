@@ -18,7 +18,7 @@ use super::strategy::{ClassStrategy, CombatContext, GroupMemberState, build_stra
 const MAX_SPELL_RANGE: f32 = 200.0;
 
 /// Pet classes that should issue `/pet attack` on engage.
-const PET_CLASSES: &[u8] = &[3, 10, 11, 13]; // SK, Shaman, Necro, Mage
+const PET_CLASSES: &[u8] = &[5, 10, 11, 13, 15]; // SK, Shaman, Necro, Mage, Beastlord
 
 /// Internal FSM states — not exposed outside this module.
 /// The public-facing status uses `CombatStatus` from dmft-common.
@@ -444,9 +444,12 @@ impl Combatant {
         // Build the skill list for this class
         let skills: &[u32] = match class_id {
             1 => &[73, 30],         // Warrior: taunt, kick
-            3 => &[73, 10, 30],     // Shadow Knight: taunt, bash, kick
+            3 => &[73, 10, 30],     // Paladin: taunt, bash, kick
+            5 => &[73, 10, 30],     // Shadow Knight: taunt, bash, kick
             7 => &[26, 38, 52, 23], // Monk: flying kick, round kick, tiger claw, eagle strike
             9 => &[8],              // Rogue: backstab
+            15 => &[30, 26],        // Beastlord: kick, flying kick
+            16 => &[30],            // Berserker: kick (frenzy via abilities)
             _ => &[30],             // Generic: kick
         };
 
