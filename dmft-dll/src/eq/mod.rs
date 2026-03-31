@@ -33,6 +33,97 @@ fn get_eq_base() -> Option<u64> {
     if base == 0 { None } else { Some(base) }
 }
 
+/// Validate that a rebased function pointer address is safe to transmute and call.
+///
+/// Checks:
+/// 1. Address is non-zero
+/// 2. Address falls within the EQ module's memory region (base .. base + reasonable size)
+/// 3. (Windows only) The memory page is committed and has execute permission
+///
+/// Returns `true` if the address looks valid, `false` otherwise (with a warning log).
+#[cfg(windows)]
+fn validate_fn_ptr(addr: usize, name: &str) -> bool {
+    if addr == 0 {
+        tracing::warn!(name, "Function pointer address is null");
+        return false;
+    }
+
+    let eq_base = crate::EQ_BASE.load(Ordering::Acquire) as usize;
+    if eq_base == 0 {
+        tracing::warn!(name, "EQ base not set during fn ptr validation");
+        return false;
+    }
+
+    // eqgame.exe is typically ~50-80 MB. Use 256 MB as a generous upper bound.
+    const MAX_MODULE_SIZE: usize = 256 * 1024 * 1024;
+    if addr < eq_base || addr >= eq_base + MAX_MODULE_SIZE {
+        tracing::warn!(
+            name,
+            addr = format!("{:#x}", addr),
+            eq_base = format!("{:#x}", eq_base),
+            "Function pointer outside EQ module range"
+        );
+        return false;
+    }
+
+    // Use VirtualQuery to verify the page is committed and executable.
+    use windows::Win32::System::Memory::{
+        MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_EXECUTE, PAGE_EXECUTE_READ,
+        PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, VirtualQuery,
+    };
+
+    let mut mbi = MEMORY_BASIC_INFORMATION::default();
+    let result = unsafe {
+        VirtualQuery(
+            Some(addr as *const core::ffi::c_void),
+            &mut mbi,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+    if result == 0 {
+        tracing::warn!(
+            name,
+            addr = format!("{:#x}", addr),
+            "VirtualQuery failed for function pointer"
+        );
+        return false;
+    }
+
+    if mbi.State != MEM_COMMIT {
+        tracing::warn!(
+            name,
+            addr = format!("{:#x}", addr),
+            state = mbi.State.0,
+            "Function pointer page not committed"
+        );
+        return false;
+    }
+
+    let protect = mbi.Protect;
+    let executable = protect == PAGE_EXECUTE
+        || protect == PAGE_EXECUTE_READ
+        || protect == PAGE_EXECUTE_READWRITE
+        || protect == PAGE_EXECUTE_WRITECOPY;
+    if !executable {
+        tracing::warn!(
+            name,
+            addr = format!("{:#x}", addr),
+            protect = protect.0,
+            "Function pointer page not executable"
+        );
+        return false;
+    }
+
+    true
+}
+
+#[cfg(not(windows))]
+fn validate_fn_ptr(_addr: usize, _name: &str) -> bool {
+    // Non-Windows builds never actually call these function pointers,
+    // so validation is a no-op.
+    true
+}
+
 /// Resolve the local player pointer (PlayerClient*).
 /// Returns `None` if not logged in.
 fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
@@ -73,6 +164,10 @@ pub fn cast_spell(gem_id: u8, spell_id: i32) {
             tracing::error!("Failed to rebase CAST_SPELL");
             return;
         };
+
+        if !validate_fn_ptr(addr, "CastSpell") {
+            return;
+        }
 
         // CharacterZoneClient::CastSpell(this, gemid, spellid, item_ptr, item_guid)
         // x64: this=RCX, gemid=DL, spellid=R8D, item_ptr=R9, item_guid=[stack]
@@ -123,6 +218,10 @@ pub fn do_attack(attack_type: u8) {
             return;
         };
 
+        if !validate_fn_ptr(addr, "DoAttack") {
+            return;
+        }
+
         // PlayerZoneClient::DoAttack(this, slot, unknown)
         type DoAttackFn = unsafe extern "C" fn(
             *mut c_void, // this (PlayerZoneClient*)
@@ -169,6 +268,10 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
             return;
         };
 
+        if !validate_fn_ptr(addr, "UseSkill") {
+            return;
+        }
+
         // CharacterZoneClient::UseSkill(this, skill, target, bAuto)
         type UseSkillFn = unsafe extern "C" fn(
             *mut c_void, // this (CharacterZoneClient*)
@@ -214,6 +317,10 @@ pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
             return;
         };
 
+        if !validate_fn_ptr(addr, "DoCombatAbility") {
+            return;
+        }
+
         // PcZoneClient::DoCombatAbility(this, spellID, allowLowerRank)
         type DoCombatAbilityFn = unsafe extern "C" fn(
             *mut c_void, // this (PcZoneClient*)
@@ -256,6 +363,10 @@ pub fn execute_cmd(cmd_id: u32, active: i32) {
             tracing::error!("Failed to rebase EXECUTE_CMD");
             return;
         };
+
+        if !validate_fn_ptr(addr, "ExecuteCmd") {
+            return;
+        }
 
         // __ExecuteCmd(this, cmd_id, active, unknown)
         // __ExecuteCmd is a free function but uses this-call convention with
@@ -345,6 +456,9 @@ pub fn slash_command(command: &str) {
             tracing::error!("Failed to rebase INTERPRET_CMD");
             return;
         };
+        if !validate_fn_ptr(interpret_addr, "InterpretCmd") {
+            return;
+        }
         let func: InterpretCmdFn = unsafe { std::mem::transmute(interpret_addr) };
 
         tracing::info!(cmd = command, "Executing slash command");

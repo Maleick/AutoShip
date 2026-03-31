@@ -760,7 +760,33 @@ pub fn dismiss_splash(eqmain_base: u64) {
     }
 }
 
-/// Check for error dialogs (okdialog) and return the appropriate LoginError.
+/// Check for error dialogs (okdialog) and return the appropriate `LoginError`.
+///
+/// # Current behavior (partial stub)
+///
+/// Detects whether an OK dialog is visible and dismisses it, but always returns
+/// `LoginError::WrongPassword` regardless of the actual dialog content. This is
+/// because reading the dialog's `CStmlWnd` text requires `CXStr` pointer chasing
+/// that has not been validated on the target client.
+///
+/// # Intended behavior (when fully implemented)
+///
+/// 1. Detect the visible `okdialog` window.
+/// 2. Read the `CStmlWnd` text content (the dialog message body).
+/// 3. Pattern-match the text to return a specific `LoginError` variant:
+///    - "password" / "invalid" -> `WrongPassword`
+///    - "suspended" / "banned" -> `AccountLocked`
+///    - "server" / "full" -> `ServerFull`
+///    - "timeout" / "connection" -> `Timeout`
+/// 4. Dismiss the dialog by clicking OK.
+///
+/// # Returns
+///
+/// `Some(LoginError::WrongPassword)` if any OK dialog is visible (always the same
+/// variant until text parsing is implemented). `None` if no dialog is visible.
+///
+// TODO(M2.5): Read CStmlWnd text content once CXStr layout is validated, and return
+// the correct LoginError variant based on dialog message content.
 pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
     #[cfg(windows)]
     {
@@ -769,7 +795,7 @@ pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
         }
 
         // Read the dialog text to determine error type.
-        // TODO: Read CStmlWnd text content once CXStr layout is validated.
+        // TODO(M2.5): Read CStmlWnd text content once CXStr layout is validated.
         // For now, dismiss the dialog and report a generic error.
         click_button(eqmain_base, OK_DIALOG);
         tracing::warn!("Error dialog detected and dismissed");
@@ -785,7 +811,46 @@ pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
     }
 }
 
-/// Join a server by name using LoginServerAPI::JoinServer directly.
+/// Join a specific server by name using `LoginServerAPI::JoinServer`.
+///
+/// # Intended behavior (when fully implemented)
+///
+/// 1. Resolve the `LoginServerAPI` pointer from eqmain.dll globals.
+/// 2. Iterate `LoginClient::ServerList` (a `DoublyLinkedList<EQClientServerData*>` at
+///    offset `0x178`) to find the entry whose `ServerName` (CXStr at `+0x08`) matches
+///    `server_name`.
+/// 3. Extract the `ServerID` (at `+0x00`) from the matching entry.
+/// 4. Call `LoginServerAPI::JoinServer(api, server_id, nullptr, 10)` to initiate
+///    the server connection.
+///
+/// # Why this is a stub
+///
+/// The `LoginServerAPI` pointer and `JoinServer` function address are successfully
+/// resolved, but the server-list iteration is not yet implemented. We need to:
+/// - Validate the `EQClientServerData` struct layout via a calibration dump on a live
+///   client (field offsets come from MQ2's `LoginFrontend.h` but are unverified).
+/// - Confirm the `JoinServer` calling convention (`extern "C"`, 4 args) matches the
+///   target client build.
+///
+/// The current login FSM bypasses this entirely by clicking "PLAY EVERQUEST!" which
+/// joins the last-used server. Named server selection requires this function.
+///
+/// # Returns
+///
+/// Always returns `false` — the stub has not yet performed any server join.
+/// When implemented, returns `true` if the join request was successfully dispatched.
+///
+/// # Related
+///
+/// - `calibrate_login_dump()` in this module dumps `LoginServerAPI` addresses for
+///   reverse-engineering the server list.
+/// - `LoginFsm::tick_selecting_server()` in `mod.rs` uses the "PLAY EVERQUEST!"
+///   button click as a workaround.
+///
+// TODO(M2.5): Implement server-list iteration and JoinServer call. This was deferred
+// from the M2.5 login milestone because the "PLAY EVERQUEST!" button workaround is
+// sufficient for single-server setups. Named server selection is needed for multi-server
+// TLP configurations.
 pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -804,7 +869,7 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
             return false;
         };
 
-        // TODO: Find server ID by iterating LoginClient::ServerList at offset 0x178.
+        // TODO(M2.5): Find server ID by iterating LoginClient::ServerList at offset 0x178.
         // The ServerList is a DoublyLinkedList<EQClientServerData*>.
         // EQClientServerData has ServerName (CXStr) at offset 0x08 and ID (ServerID) at 0x00.
         // For now, log what we have and return false — need calibration dump to discover
@@ -817,7 +882,7 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
              Use CalibrateLogin to dump server list."
         );
 
-        // TODO: Once we know the server ID, call:
+        // TODO(M2.5): Once we know the server ID, call:
         // type JoinServerFn = unsafe extern "C" fn(*mut u8, i32, *mut u8, i32) -> u32;
         // let func: JoinServerFn = std::mem::transmute(join_server_addr);
         // func(login_api as *mut u8, server_id, std::ptr::null_mut(), 10);
@@ -832,8 +897,47 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
     }
 }
 
-/// Select a character by name and enter world.
-/// Uses eqgame.exe's SelectCharacter + EnterWorld functions.
+/// Select a character by name from the character select screen and enter world.
+///
+/// # Intended behavior (when fully implemented)
+///
+/// 1. Find the `Character_List` `CListWnd` in eqgame.exe's `CXWndManager`.
+/// 2. Iterate the list items to find the row matching `character_name`.
+/// 3. Call `CCharacterListWnd::SelectCharacter(index)` to highlight the character.
+/// 4. Call `CCharacterListWnd::EnterWorld()` to zone into the game.
+///
+/// Both `SelectCharacter` and `EnterWorld` are eqgame.exe functions (not eqmain.dll),
+/// since eqmain.dll unloads during the transition from server select to character select.
+///
+/// # Why this is a stub
+///
+/// Reading `CListWnd` item text requires understanding the `CListWnd` vtable layout
+/// to call `GetItemText(row, col)`, which has not been reverse-engineered yet. The
+/// function addresses for `SelectCharacter` and `EnterWorld` are resolved successfully,
+/// but we cannot determine which list row corresponds to the desired character without
+/// the item-text accessor.
+///
+/// The login FSM works around this via `do_select_character_via_game_loop()` in
+/// `mod.rs`, which uses `queue_enter_world()` from the game loop hook to select
+/// the character by name through a different code path (scanning `CXWndManager`
+/// by SidlText).
+///
+/// # Returns
+///
+/// Always returns `false` — the stub has not performed character selection.
+/// When implemented, returns `true` if `SelectCharacter` + `EnterWorld` were
+/// successfully called.
+///
+/// # Related
+///
+/// - `LoginFsm::do_select_character_via_game_loop()` in `mod.rs` is the working
+///   alternative that bypasses this function entirely.
+/// - `crate::hooks::game_loop::queue_enter_world()` is the mechanism used by the FSM.
+///
+// TODO(M2.5): Implement CListWnd item iteration and direct SelectCharacter/EnterWorld
+// calls. This was deferred from M2.5 because the game-loop-based workaround
+// (`queue_enter_world`) handles character selection reliably. Direct calls would be
+// cleaner and avoid the game-loop dependency.
 pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -852,7 +956,7 @@ pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) ->
             return false;
         };
 
-        // TODO: Find character index in Character_List CListWnd by name,
+        // TODO(M2.5): Find character index in Character_List CListWnd by name,
         // then call SelectCharacter(index) followed by EnterWorld().
         // Requires reading CListWnd items to match character_name.
         let _ = (eqmain_base, select_addr, enter_world_addr, character_name);

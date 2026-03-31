@@ -1,28 +1,29 @@
-// Modules for future milestones or Windows-only functionality.
-// Suppressed per-module instead of crate-wide to keep active code checked.
-#[allow(dead_code)]
+// --- Modules wired through orchestrator/TUI, not referenced directly in main ---
+#[allow(dead_code)] // M4: camp loop state machine, driven by orchestrator
 mod camp;
-#[allow(dead_code)]
+#[allow(dead_code)] // M2: multi-client sessions, self-healing monitor
 mod client;
-#[allow(dead_code)]
+#[allow(dead_code)] // M4: combat automation, class strategies
 mod combat;
-mod config;
-#[allow(dead_code)]
+#[allow(dead_code)] // M2.5: encrypted credential store
 mod credentials;
-#[allow(dead_code)]
-mod eq;
-#[allow(dead_code)]
-mod inject;
-#[allow(dead_code)]
-mod ipc;
-#[allow(dead_code)]
+#[allow(dead_code)] // M2.5: login automation, process spawner
 mod launcher;
-#[allow(dead_code)]
+
+// --- Modules used in main.rs; dead_code on non-Windows from platform stubs ---
+mod config;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod eq;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod inject;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod ipc;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod nav;
 mod orchestrator;
-#[allow(dead_code)]
+#[cfg_attr(not(windows), allow(dead_code))]
 mod process;
-#[allow(dead_code)]
+#[cfg_attr(not(windows), allow(dead_code))]
 mod soul;
 mod tui;
 

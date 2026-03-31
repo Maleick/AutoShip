@@ -64,6 +64,7 @@ const MAX_CHILD_WALK: u32 = 200;
 /// # Safety
 /// `cxwnd_mgr` must be a valid CXWndManager pointer. Called from game process context.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_window_by_name(cxwnd_mgr: usize, name: &str) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
 
@@ -101,6 +102,7 @@ pub unsafe fn find_window_by_name(_cxwnd_mgr: usize, _name: &str) -> Option<usiz
 /// # Safety
 /// `cxwnd_mgr` must be a valid CXWndManager pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_window_by_text_contains(cxwnd_mgr: usize, substring: &str) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
     let needle = substring.to_ascii_lowercase();
@@ -140,6 +142,7 @@ pub unsafe fn find_window_by_text_contains(_cxwnd_mgr: usize, _substring: &str) 
 /// # Safety
 /// `parent_wnd` must be a valid CXWnd pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_child_button_by_text(parent_wnd: usize, button_text: &str) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
     let needle = button_text.to_ascii_lowercase();
@@ -185,6 +188,7 @@ pub unsafe fn find_child_button_by_text(_parent_wnd: usize, _button_text: &str) 
 /// # Safety
 /// `cxwnd_mgr` must be a valid CXWndManager pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn for_each_window<F>(cxwnd_mgr: usize, mut callback: F)
 where
     F: FnMut(usize, usize, Option<&str>) -> bool,
@@ -228,6 +232,7 @@ where
 /// # Safety
 /// `cxstr_addr` must point to a valid CXStr field (a `usize` holding a CStrRep pointer).
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
     use dmft_common::offsets::eqmain as off;
 
@@ -260,6 +265,7 @@ pub unsafe fn read_cxstr(_cxstr_addr: usize) -> Option<String> {
 /// `cxstr_addr` must point to a valid CXStr field with a non-null CStrRep.
 /// The CStrRep buffer must have enough allocated space for `text`.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn write_cxstr_inplace(cxstr_addr: usize, text: &str) -> bool {
     use dmft_common::offsets::eqmain as off;
 
@@ -304,6 +310,7 @@ pub unsafe fn write_cxstr_inplace(_cxstr_addr: usize, _text: &str) -> bool {
 /// `donor_rep` must be a valid CStrRep pointer. The returned CStrRep is empty
 /// (length=0) and must be written to via `write_cxstr_inplace()`.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn clone_cstrrep(donor_rep: usize) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
     use windows::Win32::System::Memory::{GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc};
@@ -348,6 +355,7 @@ pub unsafe fn clone_cstrrep(_donor_rep: usize) -> Option<usize> {
 /// # Safety
 /// The returned pointer must only be stored in a CXStr field that EQ manages.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn alloc_cstrrep(text: &str) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
     use windows::Win32::System::Memory::{GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc};
@@ -401,6 +409,7 @@ pub unsafe fn alloc_cstrrep(_text: &str) -> Option<usize> {
 /// # Safety
 /// `button_wnd` must be a valid CXWnd pointer with an intact vtable.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn click_button_via_vtable(button_wnd: usize) {
     use dmft_common::offsets::eqmain as off;
 
@@ -437,6 +446,7 @@ pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
 /// # Safety
 /// `edit_wnd` must be a valid CEditWnd pointer. Only call from game loop thread.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn set_edit_text_via_vtable(edit_wnd: usize, text: &str) -> bool {
     use dmft_common::offsets::eqmain as off;
 
@@ -489,6 +499,7 @@ pub unsafe fn set_edit_text_via_vtable(_edit_wnd: usize, _text: &str) -> bool {
 /// # Safety
 /// `wnd_ptr` must be a valid CXWnd pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn is_visible(wnd_ptr: usize) -> bool {
     use dmft_common::offsets::eqmain as off;
     *((wnd_ptr + off::CXWND_DSHOW) as *const u8) != 0
@@ -504,6 +515,7 @@ pub unsafe fn is_visible(_wnd_ptr: usize) -> bool {
 /// # Safety
 /// `wnd_ptr` must be a valid CXWnd pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn xml_index(wnd_ptr: usize) -> i32 {
     use dmft_common::offsets::eqmain as off;
     *((wnd_ptr + off::CXWND_XML_INDEX) as *const i32)
@@ -538,6 +550,7 @@ pub unsafe fn xml_index(_wnd_ptr: usize) -> i32 {
 /// # Safety
 /// `cxwnd_mgr` must be a valid CXWndManager pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_visible_window_by_sidl_name(
     cxwnd_mgr: usize,
     sidl_name: &str,
@@ -594,6 +607,7 @@ pub unsafe fn find_visible_window_by_sidl_name(
 /// # Safety
 /// `cxwnd_mgr` must be a valid CXWndManager pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_visible_window_by_name(cxwnd_mgr: usize, name: &str) -> Option<usize> {
     use dmft_common::offsets::eqmain as off;
 
@@ -642,6 +656,7 @@ pub unsafe fn find_visible_window_by_name(_cxwnd_mgr: usize, _name: &str) -> Opt
 /// # Safety
 /// `parent_wnd` must be a valid CXWnd pointer in eqgame.exe context.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_child_by_sidl_text(parent_wnd: usize, sidl_name: &str) -> Option<usize> {
     use dmft_common::offsets::eqgame as eqg;
     use dmft_common::offsets::eqmain as off;
@@ -676,6 +691,7 @@ pub unsafe fn find_child_by_sidl_text(_parent_wnd: usize, _sidl_name: &str) -> O
 /// # Safety
 /// `list_wnd` must be a valid CListWnd pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn read_list_item_text(list_wnd: usize, row: usize, col: usize) -> Option<String> {
     use dmft_common::offsets::eqgame as eqg;
 
@@ -715,6 +731,7 @@ pub unsafe fn read_list_item_text(_list_wnd: usize, _row: usize, _col: usize) ->
 /// # Safety
 /// `list_wnd` must be a valid CListWnd pointer.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn list_row_count(list_wnd: usize) -> usize {
     let count = *((list_wnd + dmft_common::offsets::eqgame::CLISTWND_ITEMS_COUNT) as *const i32);
     if count < 0 { 0 } else { count as usize }

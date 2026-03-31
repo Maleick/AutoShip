@@ -12,6 +12,7 @@ use dmft_common::nav::ZoneGraph;
 /// Must be called from the EQ game process (injected DLL context) while the
 /// game is running and ZoneGuideManagerClient is initialized.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
     use crate::eq::widgets::read_cxstr;
     use dmft_common::nav::{ZoneConnection, ZoneNode};

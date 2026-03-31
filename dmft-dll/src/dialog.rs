@@ -51,6 +51,7 @@ const DIALOG_ACCEPT_PAIRS: &[(&str, &str)] = &[
 /// # Safety
 /// Requires valid eqgame CXWndManager pointer. Must be called from game loop thread.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn check_dialogs() {
     if !AUTO_ACCEPT_ENABLED.load(Ordering::Relaxed) {
         return;

@@ -549,6 +549,7 @@ pub fn send_enter_to_eq() {
     let our_pid = std::process::id();
     let mut target_hwnd: isize = 0;
 
+    #[allow(unsafe_op_in_unsafe_fn)]
     unsafe extern "system" fn find_eq_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let data = &mut *(lparam.0 as *mut (u32, *mut isize));
         let mut pid: u32 = 0;

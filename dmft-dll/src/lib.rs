@@ -2,11 +2,6 @@
 //! This cdylib is loaded into eqgame.exe via CreateRemoteThread + LoadLibrary.
 //! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
 
-// This is a game-injection DLL — nearly every function performs raw pointer ops,
-// calls Win32 APIs, or invokes game functions via FFI. Requiring explicit unsafe
-// blocks inside every `unsafe fn` adds noise without improving safety guarantees
-// in this context. Edition 2024 changed the default; we opt out crate-wide.
-#![allow(unsafe_op_in_unsafe_fn)]
 // Deeply nested unsafe FFI code with many conditional pointer checks — collapsing
 // these ifs reduces readability in practice. Also suppress needless_return for
 // early-return patterns in long unsafe blocks.
