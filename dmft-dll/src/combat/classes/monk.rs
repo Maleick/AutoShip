@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Monk strategy: melee DPS + puller, flying kick/round kick priority, feign death escape.
 /// EQ class ID: 7
@@ -20,20 +20,13 @@ impl ClassStrategy for MonkStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        // Monk assists the main assist target
-        ctx.target.map(|t| t.spawn_id)
+        strategy::assist_target(ctx)
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         // Monks primarily use melee skills (flying kick, etc.) via UseSkill.
         // If config has spells (e.g., discs), use highest priority.
-        let mana_pct = ctx.player.mana_pct();
-        ctx.config
-            .spells
-            .iter()
-            .filter(|s| mana_pct >= s.min_mana_pct)
-            .max_by_key(|s| s.priority)
-            .cloned()
+        strategy::best_spell_by_mana(ctx)
     }
 
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
@@ -41,18 +34,11 @@ impl ClassStrategy for MonkStrategy {
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {
-        if let Some(target) = ctx.target {
-            tracing::info!(
-                target_id = target.spawn_id,
-                target_name = %target.name,
-                "Monk engaging"
-            );
-            crate::eq::toggle_auto_attack(true);
-        }
+        strategy::melee_on_engage(ctx, "Monk");
     }
 
     fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        crate::eq::toggle_auto_attack(false);
+        strategy::melee_on_disengage();
     }
 
     fn aoe_threshold(&self) -> u8 {
@@ -68,7 +54,6 @@ impl ClassStrategy for MonkStrategy {
 mod tests {
     use super::*;
     use dmft_common::combat::CombatConfig;
-    
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

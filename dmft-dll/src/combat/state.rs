@@ -98,6 +98,32 @@ impl Combatant {
         self.gcd.tick();
         self.skill_cooldowns.tick();
 
+        // --- Zone/disconnect safety guard ---
+        // If we're in an active combat state but our target has vanished (zoned,
+        // despawned, server disconnect back to char select), auto-disengage to
+        // prevent the FSM from getting stuck in Engaging/Casting forever.
+        if matches!(
+            self.state,
+            CombatState::Engaging { .. } | CombatState::Casting { .. } | CombatState::OnGcd
+        ) && target.is_none()
+        {
+            tracing::warn!("Combat target lost (zone/despawn/disconnect) — auto-disengaging");
+            let cleanup_ctx = CombatContext {
+                player,
+                target: None,
+                nearby_enemies: nearby,
+                group_members: &self.group_members,
+                config: &self.config,
+                tick: self.tick_count,
+                in_combat: false,
+            };
+            self.strategy.on_action_complete(&cleanup_ctx);
+            crate::eq::toggle_auto_attack(false);
+            self.assist_target = None;
+            self.state = CombatState::Idle;
+            return;
+        }
+
         // Fire melee skills when engaging (independent of GCD/spell casting)
         if matches!(self.state, CombatState::Engaging { .. }) {
             let class_id = self.strategy.class_id();
@@ -442,4 +468,106 @@ fn distance_3d(a: &SpawnData, b: &SpawnData) -> f32 {
     let dy = a.y - b.y;
     let dz = a.z - b.z;
     (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::combat::CombatConfig;
+
+    fn test_config() -> CombatConfig {
+        CombatConfig::default()
+    }
+
+    fn test_player() -> SpawnData {
+        let mut p = SpawnData::default();
+        p.name = "TestPlayer".into();
+        p.spawn_id = 1;
+        p
+    }
+
+    fn test_target() -> SpawnData {
+        let mut t = SpawnData::default();
+        t.name = "TestMob".into();
+        t.spawn_id = 100;
+        t
+    }
+
+    #[test]
+    fn new_combatant_starts_idle() {
+        let c = Combatant::new(1, 0, test_config());
+        assert!(matches!(c.status(), CombatStatus::Idle));
+    }
+
+    #[test]
+    fn zone_disconnect_auto_disengages() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+
+        // Force into Engaging state
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.assist_target = Some(100);
+
+        // Tick with no target (simulates zone/disconnect)
+        c.tick(&player, None, &[]);
+
+        // Should have auto-disengaged back to Idle
+        assert!(matches!(c.status(), CombatStatus::Idle));
+        assert!(c.assist_target.is_none());
+    }
+
+    #[test]
+    fn zone_disconnect_during_casting_auto_disengages() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+
+        // Force into Casting state
+        c.state = CombatState::Casting {
+            spell_slot: 1,
+            ticks_remaining: 10,
+        };
+
+        // Tick with no target
+        c.tick(&player, None, &[]);
+
+        assert!(matches!(c.status(), CombatStatus::Idle));
+    }
+
+    #[test]
+    fn idle_with_no_target_stays_idle() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+
+        // Idle + no target should NOT trigger zone guard (already safe)
+        c.tick(&player, None, &[]);
+
+        assert!(matches!(c.status(), CombatStatus::Idle));
+    }
+
+    #[test]
+    fn engaging_with_target_stays_engaging() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Engaging { target_id: 100 };
+
+        // Tick WITH target — should stay in combat
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(!matches!(c.status(), CombatStatus::Idle));
+    }
+
+    #[test]
+    fn distance_3d_basic() {
+        let mut a = SpawnData::default();
+        a.x = 0.0;
+        a.y = 0.0;
+        a.z = 0.0;
+        let mut b = SpawnData::default();
+        b.x = 3.0;
+        b.y = 4.0;
+        b.z = 0.0;
+        assert!((distance_3d(&a, &b) - 5.0).abs() < 0.01);
+    }
 }

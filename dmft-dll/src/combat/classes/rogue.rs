@@ -1,20 +1,16 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Rogue strategy: melee DPS, backstab priority, uses configured spells + UseSkill for backstab.
 /// EQ class ID: 9
 pub struct RogueStrategy {
     class_id: u8,
-    backstab_cooldown: u32,
 }
 
 impl RogueStrategy {
     pub fn new(class_id: u8) -> Self {
-        Self {
-            class_id,
-            backstab_cooldown: 0,
-        }
+        Self { class_id }
     }
 }
 
@@ -24,21 +20,13 @@ impl ClassStrategy for RogueStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        // Rogue assists the main assist target
-        ctx.target.map(|t| t.spawn_id)
+        strategy::assist_target(ctx)
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         // Rogues primarily use melee skills (backstab via UseSkill), not spells.
         // If config has spells (e.g., poison proc discs), use highest priority.
-        // Otherwise return None — the combat tick handles melee skill usage.
-        let mana_pct = ctx.player.mana_pct();
-        ctx.config
-            .spells
-            .iter()
-            .filter(|s| mana_pct >= s.min_mana_pct)
-            .max_by_key(|s| s.priority)
-            .cloned()
+        strategy::best_spell_by_mana(ctx)
     }
 
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
@@ -46,19 +34,11 @@ impl ClassStrategy for RogueStrategy {
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {
-        if let Some(target) = ctx.target {
-            tracing::info!(
-                target_id = target.spawn_id,
-                target_name = %target.name,
-                "Rogue engaging — backstab ready"
-            );
-            // Enable auto-attack on engage
-            crate::eq::toggle_auto_attack(true);
-        }
+        strategy::melee_on_engage(ctx, "Rogue");
     }
 
     fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        crate::eq::toggle_auto_attack(false);
+        strategy::melee_on_disengage();
     }
 
     fn aoe_threshold(&self) -> u8 {
@@ -74,7 +54,6 @@ impl ClassStrategy for RogueStrategy {
 mod tests {
     use super::*;
     use dmft_common::combat::CombatConfig;
-    
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

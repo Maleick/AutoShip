@@ -70,6 +70,59 @@ pub trait ClassStrategy: Send {
     fn role(&self) -> CombatRole;
 }
 
+// ---------------------------------------------------------------------------
+// Shared melee helpers — reused by warrior, rogue, monk, SK, paladin,
+// berserker, beastlord to eliminate duplicated code across class strategies.
+// ---------------------------------------------------------------------------
+
+/// Find the nearest NPC from the nearby enemies list based on 2D distance to player.
+/// Used by tank/pull-capable classes (warrior, berserker, beastlord) for target selection.
+pub fn nearest_enemy<'a>(player: &SpawnData, enemies: &'a [SpawnData]) -> Option<&'a SpawnData> {
+    use dmft_common::nav::Waypoint;
+    let player_pos = Waypoint::new(player.x, player.y, player.z);
+    enemies.iter().min_by(|a, b| {
+        let dist_a = player_pos.distance_2d(&Waypoint::new(a.x, a.y, a.z));
+        let dist_b = player_pos.distance_2d(&Waypoint::new(b.x, b.y, b.z));
+        dist_a
+            .partial_cmp(&dist_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })
+}
+
+/// Common assist-target selection: return the current target's spawn ID.
+/// Used by DPS melee classes that follow the main assist.
+pub fn assist_target(ctx: &CombatContext) -> Option<u32> {
+    ctx.target.map(|t| t.spawn_id)
+}
+
+/// Common on_engage for melee classes: log engagement and enable auto-attack.
+pub fn melee_on_engage(ctx: &CombatContext, class_label: &str) {
+    if let Some(target) = ctx.target {
+        tracing::info!(
+            target_id = target.spawn_id,
+            target_name = %target.name,
+            "{class_label} engaging"
+        );
+    }
+    crate::eq::toggle_auto_attack(true);
+}
+
+/// Common on_action_complete for melee classes: disable auto-attack.
+pub fn melee_on_disengage() {
+    crate::eq::toggle_auto_attack(false);
+}
+
+/// Select the highest-priority spell from config, filtered by current mana.
+pub fn best_spell_by_mana(ctx: &CombatContext) -> Option<SpellEntry> {
+    let mana_pct = ctx.player.mana_pct();
+    ctx.config
+        .spells
+        .iter()
+        .filter(|s| mana_pct >= s.min_mana_pct)
+        .max_by_key(|s| s.priority)
+        .cloned()
+}
+
 /// Factory function -- creates the right strategy for a given class.
 pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrategy> {
     match class_id {

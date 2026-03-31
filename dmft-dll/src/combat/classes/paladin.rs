@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Paladin strategy: off-tank + healer hybrid, stuns, heals, undead nukes.
 /// EQ class ID: 4
@@ -20,8 +20,7 @@ impl ClassStrategy for PaladinStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        // Paladin targets current mob (tank-like behavior)
-        ctx.target.map(|t| t.spawn_id)
+        strategy::assist_target(ctx)
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
@@ -74,18 +73,11 @@ impl ClassStrategy for PaladinStrategy {
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {
-        if let Some(target) = ctx.target {
-            tracing::info!(
-                target_id = target.spawn_id,
-                target_name = %target.name,
-                "Paladin engaging"
-            );
-            crate::eq::toggle_auto_attack(true);
-        }
+        strategy::melee_on_engage(ctx, "Paladin");
     }
 
     fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        crate::eq::toggle_auto_attack(false);
+        strategy::melee_on_disengage();
     }
 
     fn aoe_threshold(&self) -> u8 {
@@ -100,7 +92,6 @@ impl ClassStrategy for PaladinStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn paladin_class_id() {

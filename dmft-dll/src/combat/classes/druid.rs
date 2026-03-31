@@ -123,7 +123,6 @@ impl ClassStrategy for DruidStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn druid_class_id() {

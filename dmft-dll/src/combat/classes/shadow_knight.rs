@@ -1,6 +1,6 @@
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Shadow Knight strategy: off-tank with lifetap DPS, disease/poison DoTs, snare.
 /// EQ class ID: 3
@@ -20,8 +20,7 @@ impl ClassStrategy for ShadowKnightStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        // SK targets current mob (tank-like behavior)
-        ctx.target.map(|t| t.spawn_id)
+        strategy::assist_target(ctx)
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
@@ -76,18 +75,11 @@ impl ClassStrategy for ShadowKnightStrategy {
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {
-        if let Some(target) = ctx.target {
-            tracing::info!(
-                target_id = target.spawn_id,
-                target_name = %target.name,
-                "Shadow Knight engaging"
-            );
-            crate::eq::toggle_auto_attack(true);
-        }
+        strategy::melee_on_engage(ctx, "Shadow Knight");
     }
 
     fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        crate::eq::toggle_auto_attack(false);
+        strategy::melee_on_disengage();
     }
 
     fn aoe_threshold(&self) -> u8 {
@@ -102,7 +94,6 @@ impl ClassStrategy for ShadowKnightStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn sk_class_id() {
