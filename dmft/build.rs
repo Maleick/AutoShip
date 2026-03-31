@@ -8,29 +8,46 @@ fn main() {
             format!("{home}/.cargo")
         });
 
-    // Search for the recastnavigation-sys crate source
+    // Search for any version of recastnavigation-sys, not just a hardcoded one.
     let registry_src = std::path::Path::new(&home).join("registry/src");
     let mut include_dir = None;
 
-    if let Ok(entries) = std::fs::read_dir(&registry_src) {
-        for entry in entries.flatten() {
-            let candidate = entry
-                .path()
-                .join("recastnavigation-sys-1.0.3/recastnavigation/Detour/Include");
-            if candidate.exists() {
-                include_dir = Some(candidate);
+    if let Ok(registries) = std::fs::read_dir(&registry_src) {
+        for registry in registries.flatten() {
+            // Each registry index has its own subdirectory
+            let registry_path = registry.path();
+            if let Ok(crates) = std::fs::read_dir(&registry_path) {
+                for entry in crates.flatten() {
+                    let name = entry.file_name();
+                    let name_str = name.to_string_lossy();
+                    if name_str.starts_with("recastnavigation-sys-") {
+                        let candidate =
+                            entry.path().join("recastnavigation/Detour/Include");
+                        if candidate.exists() {
+                            include_dir = Some(candidate);
+                            break;
+                        }
+                    }
+                }
+            }
+            if include_dir.is_some() {
                 break;
             }
         }
     }
 
-    let include_dir = include_dir.unwrap_or_else(|| {
-        panic!(
-            "Could not find recastnavigation-sys headers in {}. \
-             Ensure recastnavigation-sys is downloaded.",
-            registry_src.display()
-        )
-    });
+    let include_dir = match include_dir {
+        Some(dir) => dir,
+        None => {
+            eprintln!(
+                "cargo:warning=Could not find recastnavigation-sys Detour headers in {}. \
+                 The C++ shim will not be compiled. \
+                 Ensure recastnavigation-sys is downloaded (cargo fetch).",
+                registry_src.display()
+            );
+            return;
+        }
+    };
 
     cc::Build::new()
         .cpp(true)

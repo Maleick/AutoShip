@@ -318,9 +318,9 @@ pub fn write_login_credentials(eqmain_base: u64, account: &str, password: &str) 
         }
 
         tracing::debug!(
-            account = %account,
+            account_len = account.len(),
             eqlogin = format!("{:#x}", eqlogin),
-            "Wrote credentials to EQLogin char arrays (password redacted)"
+            "Wrote credentials to EQLogin char arrays (account & password redacted)"
         );
         true
     }
@@ -493,8 +493,8 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             tracing::info!(
                 input_text = wrote_username,
                 window_text = wrote_wt,
-                account,
-                "Wrote username to edit widget"
+                account_len = account.len(),
+                "Wrote username to edit widget (account redacted)"
             );
 
             // Write password — CEditWnd may have null CXStr (never typed in).
@@ -540,14 +540,14 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             if let Some(readback) =
                 crate::eq::widgets::read_cxstr(username_edit + off::CEDITBASEWND_INPUT_TEXT)
             {
-                tracing::info!(readback = %readback, "Username InputText readback");
+                tracing::info!(readback_len = readback.len(), "Username InputText readback (account redacted)");
             } else {
                 tracing::warn!("Username InputText readback: null or empty");
             }
             if let Some(readback) =
                 crate::eq::widgets::read_cxstr(username_edit + off::CXWND_WINDOW_TEXT)
             {
-                tracing::info!(readback = %readback, "Username WindowText readback");
+                tracing::info!(readback_len = readback.len(), "Username WindowText readback (account redacted)");
             }
 
             // Hex dump the edit widget around the CXStr fields to verify layout

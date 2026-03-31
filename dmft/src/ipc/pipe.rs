@@ -67,9 +67,27 @@ impl CommandPipe {
 
             let data = protocol::encode(cmd)
                 .map_err(|e| anyhow::anyhow!("failed to encode command: {e}"))?;
-            let mut written: u32 = 0;
-            unsafe {
-                WriteFile(self.handle, Some(&data), Some(&mut written), None)?;
+
+            // Pipe is in byte mode (PIPE_TYPE_BYTE), so partial writes are
+            // possible. Loop until all bytes are written.
+            let mut offset = 0usize;
+            while offset < data.len() {
+                let mut written: u32 = 0;
+                unsafe {
+                    WriteFile(
+                        self.handle,
+                        Some(&data[offset..]),
+                        Some(&mut written),
+                        None,
+                    )?;
+                }
+                if written == 0 {
+                    return Err(anyhow::anyhow!(
+                        "WriteFile returned 0 bytes written for client {}",
+                        self.client_id
+                    ));
+                }
+                offset += written as usize;
             }
 
             // Read response (buffer sized to MAX_MESSAGE_SIZE + length prefix)
@@ -103,14 +121,26 @@ impl CommandPipe {
         {
             use windows::Win32::Storage::FileSystem::WriteFile;
 
-            let mut written: u32 = 0;
-            unsafe {
-                WriteFile(
-                    self.handle,
-                    Some(token.as_slice()),
-                    Some(&mut written),
-                    None,
-                )?;
+            // Pipe is in byte mode — loop to handle partial writes.
+            let data: &[u8] = token.as_slice();
+            let mut offset = 0usize;
+            while offset < data.len() {
+                let mut written: u32 = 0;
+                unsafe {
+                    WriteFile(
+                        self.handle,
+                        Some(&data[offset..]),
+                        Some(&mut written),
+                        None,
+                    )?;
+                }
+                if written == 0 {
+                    return Err(anyhow::anyhow!(
+                        "WriteFile returned 0 bytes written for token on client {}",
+                        self.client_id
+                    ));
+                }
+                offset += written as usize;
             }
             Ok(())
         }
@@ -130,9 +160,26 @@ impl CommandPipe {
 
             let data = protocol::encode(cmd)
                 .map_err(|e| anyhow::anyhow!("failed to encode command: {e}"))?;
-            let mut written: u32 = 0;
-            unsafe {
-                WriteFile(self.handle, Some(&data), Some(&mut written), None)?;
+
+            // Pipe is in byte mode — loop to handle partial writes.
+            let mut offset = 0usize;
+            while offset < data.len() {
+                let mut written: u32 = 0;
+                unsafe {
+                    WriteFile(
+                        self.handle,
+                        Some(&data[offset..]),
+                        Some(&mut written),
+                        None,
+                    )?;
+                }
+                if written == 0 {
+                    return Err(anyhow::anyhow!(
+                        "WriteFile returned 0 bytes written for client {}",
+                        self.client_id
+                    ));
+                }
+                offset += written as usize;
             }
             Ok(())
         }

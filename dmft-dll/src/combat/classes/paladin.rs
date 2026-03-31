@@ -100,6 +100,7 @@ impl ClassStrategy for PaladinStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dmft_common::types::SpawnData;
 
     #[test]
     fn paladin_class_id() {

@@ -86,6 +86,7 @@ impl ClassStrategy for BardStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dmft_common::types::SpawnData;
 
     fn make_spell(id: i32, name: &str, slot: u8) -> SpellEntry {
         SpellEntry {

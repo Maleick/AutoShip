@@ -91,43 +91,39 @@ fn main() -> Result<()> {
     } else if calibrate_mode {
         run_calibrate_mode()
     } else if let Some(pos) = login_pid_mode {
-        // --login-pid <PID> <account> <password> [server] [character]
+        // --login-pid <PID> <account> [server] [character]
         let pid: u32 = args
             .get(pos + 1)
             .context(
-                "--login-pid requires: --login-pid <PID> <account> <password> [server] [character]",
+                "--login-pid requires: --login-pid <PID> <account> [server] [character]",
             )?
             .parse()
             .context("PID must be a number")?;
         let account = args
             .get(pos + 2)
-            .context("--login-pid requires: --login-pid <PID> <account> <password>")?
+            .context("--login-pid requires: --login-pid <PID> <account>")?
             .clone();
-        let password = args
-            .get(pos + 3)
-            .context("--login-pid requires: --login-pid <PID> <account> <password>")?
-            .clone();
-        let server = args
-            .get(pos + 4)
-            .cloned()
-            .unwrap_or_else(|| "Firiona Vie".to_string());
-        let character = args.get(pos + 5).cloned().unwrap_or_default();
-        run_login_pid_mode(pid, &account, &password, &server, &character)
-    } else if let Some(pos) = login_mode {
-        // --login <account> <password> [server] [character]
-        let account = args
-            .get(pos + 1)
-            .context("--login requires: --login <account> <password> [server] [character]")?
-            .clone();
-        let password = args
-            .get(pos + 2)
-            .context("--login requires: --login <account> <password>")?
-            .clone();
+        let password = rpassword::prompt_password("Password: ")
+            .context("Failed to read password")?;
         let server = args
             .get(pos + 3)
             .cloned()
             .unwrap_or_else(|| "Firiona Vie".to_string());
         let character = args.get(pos + 4).cloned().unwrap_or_default();
+        run_login_pid_mode(pid, &account, &password, &server, &character)
+    } else if let Some(pos) = login_mode {
+        // --login <account> [server] [character]
+        let account = args
+            .get(pos + 1)
+            .context("--login requires: --login <account> [server] [character]")?
+            .clone();
+        let password = rpassword::prompt_password("Password: ")
+            .context("Failed to read password")?;
+        let server = args
+            .get(pos + 2)
+            .cloned()
+            .unwrap_or_else(|| "Firiona Vie".to_string());
+        let character = args.get(pos + 3).cloned().unwrap_or_default();
         run_login_mode(&account, &password, &server, &character)
     } else if let Some(pos) = cmd_mode {
         // --cmd <pid> "<slash command>"
@@ -1187,19 +1183,20 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
             // Interpret as 8 sequential u64 values
             for i in 0..8 {
                 let off = i * 8;
-                if off + 8 <= bytes.len() {
-                    let val = u64::from_le_bytes(bytes[off..off + 8].try_into().unwrap());
-                    let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
-                    info!(
-                        "  SpawnManager+{:#04x}: {:#018x} {}",
-                        off,
-                        val,
-                        if looks_like_ptr {
-                            "<-- looks like a pointer"
-                        } else {
-                            ""
-                        }
-                    );
+                if let Some(slice) = bytes.get(off..off + 8)
+                    && let Ok(arr) = <[u8; 8]>::try_from(slice) {
+                        let val = u64::from_le_bytes(arr);
+                        let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                        info!(
+                            "  SpawnManager+{:#04x}: {:#018x} {}",
+                            off,
+                            val,
+                            if looks_like_ptr {
+                                "<-- looks like a pointer"
+                            } else {
+                                ""
+                            }
+                        );
                 }
             }
         }
@@ -1216,9 +1213,15 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     match proc.read_bytes(list_addr, 16) {
         Ok(bytes) => {
             info!("\n{}", format_hex_dump(list_addr, &bytes));
-            if bytes.len() >= 16 {
-                let first_node = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
-                let last_node = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+            if let (Some(first_slice), Some(last_slice)) =
+                (bytes.get(0..8), bytes.get(8..16))
+            {
+                let first_node = u64::from_le_bytes(
+                    <[u8; 8]>::try_from(first_slice).unwrap_or_default(),
+                );
+                let last_node = u64::from_le_bytes(
+                    <[u8; 8]>::try_from(last_slice).unwrap_or_default(),
+                );
                 info!("  TList.m_pFirstNode: {:#x}", first_node);
                 info!("  TList.m_pLastNode:  {:#x}", last_node);
             }
@@ -1253,8 +1256,9 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                 (16, "m_pList"),
                 (24, "+0x18 unknown"),
             ] {
-                if off + 8 <= bytes.len() {
-                    let val = u64::from_le_bytes(bytes[off..off + 8].try_into().unwrap());
+                if let Some(slice) = bytes.get(off..off + 8) {
+                    let arr = <[u8; 8]>::try_from(slice).unwrap_or_default();
+                    let val = u64::from_le_bytes(arr);
                     let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
                     info!(
                         "  +{:#04x} ({}): {:#018x} {}",

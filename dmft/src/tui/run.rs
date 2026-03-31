@@ -142,8 +142,13 @@ fn scan_for_clients_live(app: &mut App) {
     // Track which PIDs we already have
     let existing_pids: std::collections::HashSet<u32> = app.clients.iter().map(|c| c.pid).collect();
 
-    // Remove clients whose process has gone away
-    app.clients.retain(|c| pids.contains(&c.pid));
+    // Remove clients whose process has gone away (but keep demo clients)
+    app.clients.retain(|c| c.is_demo || pids.contains(&c.pid));
+
+    // If we found real EQ processes, clear out any demo clients
+    if !pids.is_empty() {
+        app.clients.retain(|c| !c.is_demo);
+    }
 
     // Add newly discovered processes
     for &pid in &pids {
@@ -618,6 +623,7 @@ fn load_demo_data(app: &mut App) {
         });
         client.character_name = name.to_string();
         client.client_status = format!("Connected: {}", name);
+        client.is_demo = true;
         app.clients.push(client);
     }
 

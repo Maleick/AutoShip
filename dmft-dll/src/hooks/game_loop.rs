@@ -644,29 +644,119 @@ fn read_and_publish_state(tick: u64) {
     crate::ipc::publish_state(cached.as_ref().unwrap());
 }
 
-/// Read a null-terminated string from an in-process address. Max `max_len` bytes.
+/// Check whether `addr` points to at least `len` bytes of readable committed memory.
+///
+/// Uses `VirtualQuery` to verify the page is committed and readable before we
+/// dereference it. Returns `false` for null, misaligned, or unmapped addresses.
+#[cfg(windows)]
+fn is_readable(addr: usize, len: usize) -> bool {
+    use windows::Win32::System::Memory::{
+        MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS, VirtualQuery,
+    };
+
+    if addr == 0 || len == 0 {
+        return false;
+    }
+
+    let mut mbi = MEMORY_BASIC_INFORMATION::default();
+    let ret = unsafe {
+        VirtualQuery(
+            Some(addr as *const core::ffi::c_void),
+            &mut mbi,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+
+    if ret == 0 {
+        return false;
+    }
+
+    // Must be committed (not reserved or free).
+    if mbi.State != MEM_COMMIT {
+        return false;
+    }
+
+    // Reject guard pages and no-access pages.
+    let protect = mbi.Protect;
+    if protect.contains(PAGE_NOACCESS) || protect.contains(PAGE_GUARD) {
+        return false;
+    }
+
+    // Verify the entire range falls within this region.
+    let region_end = mbi.BaseAddress as usize + mbi.RegionSize;
+    let range_end = addr.saturating_add(len);
+    range_end <= region_end
+}
+
+#[cfg(not(windows))]
+fn is_readable(_addr: usize, _len: usize) -> bool {
+    // Stub for non-Windows builds (demo mode). Always true since we never
+    // dereference real pointers on macOS/Linux.
+    true
+}
+
+/// Read a null-terminated string from an in-process address into a stack buffer.
+///
+/// Uses a fixed 128-byte stack buffer (sufficient for EQ name/zone fields) to
+/// avoid per-call heap allocations on the hot path. Only allocates a `String`
+/// for the final return value.
 ///
 /// # Safety
 /// * `addr` must point to readable memory of at least `max_len` bytes.
-/// * `max_len` must not exceed the actual allocated buffer size for the field being read.
-///   EQ's fixed-size char arrays (name=64, displayedName=64, zone=128) always meet this
-///   requirement per the MQ2 `PlayerClient.h` layout. Do not pass arbitrary `max_len` values.
-/// * Returns an empty string safely when `addr == 0`.
+/// * `max_len` must not exceed 128 (the stack buffer size) AND must not exceed
+///   the actual allocated buffer size for the field being read. EQ's fixed-size
+///   char arrays (name=64, displayedName=64, zone=128) always meet this.
+/// * Returns an empty string safely when `addr == 0` or memory is unreadable.
 unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
     if addr == 0 {
         return String::new();
     }
-    let bytes = unsafe { std::slice::from_raw_parts(addr as *const u8, max_len) };
-    let len = bytes.iter().position(|&b| b == 0).unwrap_or(max_len);
-    String::from_utf8_lossy(&bytes[..len]).into_owned()
+
+    // Validate pointer before dereferencing.
+    if !is_readable(addr, max_len) {
+        return String::new();
+    }
+
+    // Use a stack buffer to avoid heap allocation for the intermediate copy.
+    // 128 bytes covers all EQ string fields (name=64, zone=128).
+    const BUF_SIZE: usize = 128;
+    let capped = if max_len <= BUF_SIZE {
+        max_len
+    } else {
+        BUF_SIZE
+    };
+
+    let mut buf = [0u8; BUF_SIZE];
+    // Copy into stack buffer — pointer is validated above.
+    unsafe {
+        core::ptr::copy_nonoverlapping(addr as *const u8, buf.as_mut_ptr(), capped);
+    }
+
+    let len = buf[..capped]
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(capped);
+    String::from_utf8_lossy(&buf[..len]).into_owned()
 }
 
 /// Build a `SpawnData` from a PlayerClient pointer (in-process direct read).
 ///
 /// # Safety
-/// Caller must ensure `spawn_ptr` is a valid PlayerClient address.
+/// Caller must ensure `spawn_ptr` is a plausible PlayerClient address.
+/// This function validates readability before dereferencing and returns
+/// `SpawnData::default()` for any invalid pointer.
 unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     use dmft_common::offsets::{player_base, player_zone};
+
+    // Reject null and obviously bad pointers (must be pointer-aligned).
+    if spawn_ptr == 0 || !spawn_ptr.is_multiple_of(core::mem::align_of::<usize>()) {
+        return dmft_common::types::SpawnData::default();
+    }
+
+    // Validate that the spawn_id field region is readable before touching it.
+    if !is_readable(spawn_ptr + player_base::SPAWN_ID, size_of::<u32>()) {
+        return dmft_common::types::SpawnData::default();
+    }
 
     // Read spawn_id first as a validity canary: id == 0 means the PlayerClient
     // slot is empty or has been freed. Reading further fields from a freed spawn
@@ -804,6 +894,11 @@ fn read_nearby_spawns(
             None => return Vec::new(),
         };
 
+    // Validate the manager pointer address is readable.
+    if !is_readable(mgr_ptr_addr, size_of::<usize>()) {
+        return Vec::new();
+    }
+
     let mgr_ptr = unsafe { *(mgr_ptr_addr as *const usize) };
     if mgr_ptr == 0 {
         return Vec::new();
@@ -811,14 +906,35 @@ fn read_nearby_spawns(
 
     // TList at spawn_manager::PLAYER_LIST, first node pointer at offset 0x00.
     let list_addr = mgr_ptr + spawn_manager::PLAYER_LIST;
+    if !is_readable(list_addr, size_of::<usize>()) {
+        return Vec::new();
+    }
     let mut current = unsafe { *(list_addr as *const usize) };
 
-    let mut spawns = Vec::new();
+    let mut spawns = Vec::with_capacity(MAX_NEARBY.min(256));
     let mut walked: usize = 0;
     const MAX_WALK: usize = 2000; // Safety limit to prevent infinite loops.
 
     while current != 0 && spawns.len() < MAX_NEARBY && walked < MAX_WALK {
         walked += 1;
+
+        // Validate current pointer before any dereference.
+        if current % core::mem::align_of::<usize>() != 0 {
+            tracing::warn!(
+                ptr = format!("{:#x}", current),
+                walked,
+                "read_nearby_spawns: misaligned spawn pointer, aborting walk"
+            );
+            break;
+        }
+        if !is_readable(current + player_base::X, size_of::<f32>() * 3) {
+            tracing::warn!(
+                ptr = format!("{:#x}", current),
+                walked,
+                "read_nearby_spawns: unreadable spawn pointer, aborting walk"
+            );
+            break;
+        }
 
         // Quick distance check before building full SpawnData.
         let sx = unsafe { *((current + player_base::X) as *const f32) };
@@ -835,8 +951,18 @@ fn read_nearby_spawns(
             spawns.push(spawn);
         }
 
+        // Validate NEXT pointer field is readable before following it.
+        let next_addr = current + player_base::NEXT;
+        if !is_readable(next_addr, size_of::<usize>()) {
+            tracing::warn!(
+                ptr = format!("{:#x}", current),
+                walked,
+                "read_nearby_spawns: NEXT pointer unreadable, aborting walk"
+            );
+            break;
+        }
         // Follow NEXT pointer in linked list.
-        current = unsafe { *((current + player_base::NEXT) as *const usize) };
+        current = unsafe { *((next_addr) as *const usize) };
     }
 
     spawns

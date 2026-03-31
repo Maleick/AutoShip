@@ -289,6 +289,8 @@ pub struct ClientState {
     pub group_info: Option<GroupInfo>,
     /// Status message specific to this client.
     pub client_status: String,
+    /// Whether this client was created from demo data (not a real process).
+    pub is_demo: bool,
 }
 
 impl ClientState {
@@ -303,6 +305,7 @@ impl ClientState {
             character_name: String::new(),
             group_info: None,
             client_status: format!("Attached to PID {}", pid),
+            is_demo: false,
         }
     }
 }
