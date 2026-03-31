@@ -37,8 +37,10 @@ impl ClassStrategy for RogueStrategy {
         strategy::melee_on_engage(ctx, "Rogue");
     }
 
-    fn on_action_complete(&mut self, _ctx: &CombatContext) {
-        strategy::melee_on_disengage();
+    fn on_action_complete(&mut self, ctx: &CombatContext) {
+        if !ctx.in_combat {
+            strategy::melee_on_disengage();
+        }
     }
 
     fn aoe_threshold(&self) -> u8 {

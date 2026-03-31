@@ -120,6 +120,7 @@ impl Combatant {
             self.strategy.on_action_complete(&cleanup_ctx);
             crate::eq::toggle_auto_attack(false);
             self.assist_target = None;
+            self.flee_requested = false;
             self.state = CombatState::Idle;
             return;
         }
@@ -560,6 +561,24 @@ mod tests {
         c.tick(&player, Some(&target), &[]);
 
         assert!(!matches!(c.status(), CombatStatus::Idle));
+    }
+
+    #[test]
+    fn zone_guard_clears_flee_requested() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+
+        // Simulate: flee was requested, then zone happens while engaging
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.assist_target = Some(100);
+        c.flee_requested = true;
+
+        // Zone/disconnect — target vanishes
+        c.tick(&player, None, &[]);
+
+        // flee_requested must be cleared so status() doesn't stick on Fleeing
+        assert!(matches!(c.status(), CombatStatus::Idle));
+        assert!(!c.flee_requested());
     }
 
     #[test]

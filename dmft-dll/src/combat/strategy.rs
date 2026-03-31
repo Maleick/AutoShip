@@ -107,7 +107,8 @@ pub fn melee_on_engage(ctx: &CombatContext, class_label: &str) {
     crate::eq::toggle_auto_attack(true);
 }
 
-/// Common on_action_complete for melee classes: disable auto-attack.
+/// Common disengage for melee classes: disable auto-attack.
+/// Only call when `!ctx.in_combat` — mid-combat spell completions should NOT disable auto-attack.
 pub fn melee_on_disengage() {
     crate::eq::toggle_auto_attack(false);
 }
