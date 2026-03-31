@@ -454,8 +454,7 @@ mod tests {
         for cmd in &commands {
             let encoded = encode(cmd).expect("encode failed");
             let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
-            // Just verify roundtrip doesn't crash
-            let _ = format!("{:?}", decoded);
+            assert_eq!(*cmd, decoded);
         }
     }
 
