@@ -37,19 +37,26 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .active_client()
         .map(|c| c.zone_name.as_str())
         .unwrap_or("Unknown");
+    let z_range = app.map_state.z_filter_range;
     let map_info = app
         .map_state
         .zone_map
         .as_ref()
         .map(|m| {
             format!(
-                " Map: {} ({} lines, {} labels) ",
+                " Map: {} ({} lines, {} labels) | Z filter: {:.0} [+/-] ",
                 zone_label,
                 m.lines.len(),
-                m.points.len()
+                m.points.len(),
+                z_range,
             )
         })
-        .unwrap_or_else(|| format!(" Map: {} (no map data) ", zone_label));
+        .unwrap_or_else(|| {
+            format!(
+                " Map: {} (no map data) | Z filter: {:.0} [+/-] ",
+                zone_label, z_range
+            )
+        });
 
     let blk = panel(map_info.as_str(), t.border_active, t);
     let inner = blk.inner(area);
@@ -129,7 +136,16 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         }
     }
 
+    let player_z = app.local_player.as_ref().map(|p| p.z);
+    let z_range = app.map_state.z_filter_range;
+
     for spawn in &app.spawns {
+        // Z-depth filter: skip spawns too far above/below the player.
+        if let Some(pz) = player_z
+            && (spawn.z - pz).abs() > z_range
+        {
+            continue;
+        }
         let mx = -spawn.y;
         let my = -spawn.x;
         let (col, row) = to_grid(mx, my);
@@ -161,8 +177,51 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         }
     }
 
+    // ─── Nav path overlay ─────────────────────────────────────────────────
+    if let Some(client) = app.active_client()
+        && let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
+        && nav.waypoints.len() >= 2
+    {
+        let nav_color = t.text_accent;
+        for pair in nav.waypoints.windows(2) {
+            let (c1, r1) = to_grid(-pair[0].y, -pair[0].x);
+            let (c2, r2) = to_grid(-pair[1].y, -pair[1].x);
+            bresenham_line(c1, r1, c2, r2, w, h, &mut grid, nav_color);
+        }
+        // Mark the final destination with a special symbol.
+        if let Some(dest) = nav.waypoints.last() {
+            let (dc, dr) = to_grid(-dest.y, -dest.x);
+            if dc >= 0 && dc < w as i32 && dr >= 0 && dr < h as i32 {
+                grid[dr as usize][dc as usize] = ('★', nav_color);
+            }
+        }
+    }
+
+    // ─── Player marker + FOV cone ────────────────────────────────────────
     if let Some(player) = &app.local_player {
         let (col, row) = to_grid(-player.y, -player.x);
+
+        // Draw FOV wedge: EQ heading 0=N, 128=W, 256=S, 384=E (512 units = 2*pi).
+        // Convert to standard math angle (radians, 0=east, counter-clockwise).
+        let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
+        let half_fov = std::f32::consts::PI / 6.0; // 30-degree half-angle (60 total)
+        let cone_len: f32 = 4.0; // length in grid cells
+        for &angle_offset in &[-half_fov, 0.0, half_fov] {
+            let a = heading_rad + angle_offset;
+            let end_col = col as f32 + a.cos() * cone_len;
+            let end_row = row as f32 - a.sin() * cone_len; // screen Y is inverted
+            bresenham_line(
+                col,
+                row,
+                end_col as i32,
+                end_row as i32,
+                w,
+                h,
+                &mut grid,
+                t.map_you,
+            );
+        }
+
         if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
             grid[row as usize][col as usize] = ('◆', t.map_you);
         }

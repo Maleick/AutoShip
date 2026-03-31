@@ -168,6 +168,8 @@ pub struct MapScreenState {
     pub map_dir: std::path::PathBuf,
     /// The zone short name currently loaded, used to avoid redundant reloads.
     pub loaded_zone: String,
+    /// Z-depth filter range — spawns farther than this from the player's Z are hidden.
+    pub z_filter_range: f32,
 }
 
 impl MapScreenState {
@@ -177,7 +179,18 @@ impl MapScreenState {
             zone_map: None,
             map_dir,
             loaded_zone: String::new(),
+            z_filter_range: 50.0,
         }
+    }
+
+    /// Increase Z filter range by 10 (max 500).
+    pub fn increase_z_filter(&mut self) {
+        self.z_filter_range = (self.z_filter_range + 10.0).min(500.0);
+    }
+
+    /// Decrease Z filter range by 10 (min 10).
+    pub fn decrease_z_filter(&mut self) {
+        self.z_filter_range = (self.z_filter_range - 10.0).max(10.0);
     }
 }
 
@@ -385,6 +398,8 @@ pub struct NavClientStatus {
     pub status: String,
     #[allow(dead_code)]
     pub eta_secs: Option<u32>,
+    /// Active navigation waypoints for map overlay rendering.
+    pub waypoints: Vec<dmft_common::nav::Waypoint>,
 }
 
 impl App {

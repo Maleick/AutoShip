@@ -230,6 +230,21 @@ pub fn handle_events(
             _ => {}
         }
 
+        // Map-screen keybindings: +/- adjust Z-depth filter
+        if app.active_screen == ActiveScreen::Map {
+            match key.code {
+                KeyCode::Char('+') | KeyCode::Char('=') => {
+                    app.map_state.increase_z_filter();
+                    return Ok(true);
+                }
+                KeyCode::Char('-') | KeyCode::Char('_') => {
+                    app.map_state.decrease_z_filter();
+                    return Ok(true);
+                }
+                _ => {}
+            }
+        }
+
         // Panel-specific keybindings (apply on Spawns and Character screens)
         match app.active_panel {
             ActivePanel::SpawnList => match key.code {
