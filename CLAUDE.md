@@ -97,7 +97,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **Logging**: Use `tracing` + `tracing-appender` for file-based structured logging; do not use the `log` crate. `println!` / `eprintln!` are reserved for user-facing CLI/TUI output only (e.g., `dmft/src/main.rs`), not for structured logs.
 - **Platform gates**: All OS APIs behind `#[cfg(windows)]` with macOS/Linux stubs. Never use `#[cfg(target_os)]` directly — use `#[cfg(windows)]` / `#[cfg(not(windows))]`.
 - **DLL injection approach**: Custom Rust DLL (like MacroQuest) rather than PostMessage — enables direct EQ function calls, navmesh access, and game memory writes.
-- **Tests**: Unit tests in-file (`#[cfg(test)]`), all platform-independent. Run on macOS; Windows-only tests gated behind `#[cfg(windows)]`.
+- **Tests**: Unit tests in-file (#[cfg(test)]); core logic tests are platform-independent and run on macOS, while Windows-specific tests are gated behind #[cfg(windows)].
 
 ## Gotchas
 
