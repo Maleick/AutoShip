@@ -13,9 +13,14 @@ use crate::tui::app::App;
 
 pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
+    // Adaptive: narrow terminals get more space for nav status
+    let (left_pct, right_pct) = if area.width < 100 { (65, 35) } else { (60, 40) };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([
+            Constraint::Percentage(left_pct),
+            Constraint::Percentage(right_pct),
+        ])
         .split(area);
 
     // ── Left: per-character nav status ────────────────────────────────
@@ -232,7 +237,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "Group Commands",
+        "Combat Commands",
         Style::default()
             .fg(t.text_accent)
             .add_modifier(Modifier::BOLD),
@@ -244,6 +249,11 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         (":accept    ", "Accept invite"),
         (":ma <name> ", "Main Assist"),
         (":mt <name> ", "Main Tank"),
+        (":engage    ", "Start combat"),
+        (":disengage ", "Stop combat"),
+        (":ch start  ", "Start CH chain"),
+        (":ch stop   ", "Stop CH chain"),
+        (":ch adaptive", "on/off"),
     ] {
         lines.push(Line::from(vec![
             Span::styled(*cmd, cmd_s),

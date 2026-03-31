@@ -164,8 +164,9 @@ impl CommandBarState {
             // Single meaningful arg: "ma Warrior", "mt Tank" → keep 2
             Some("all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6") => 2,
             Some("ma" | "mt" | "engage" | "mode" | "login") => 2,
-            // Camp subcommands: "camp start permafrost" → keep all 3
+            // Camp/CH subcommands: "camp start permafrost" → keep all 3, "ch start 1234,5678 3.0" → keep 2
             Some("camp") => 3,
+            Some("ch") => 2,
             // Everything else: just the base command
             _ => return trimmed.to_string(),
         };

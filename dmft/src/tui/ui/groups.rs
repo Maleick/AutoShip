@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use super::widgets::{hp_color, panel};
@@ -207,15 +207,12 @@ fn draw_live_group_panel(
     let leader_display = app.redact_name(&group.leader);
     let title = format!(" {} ({}/{}) {} ", leader_display, online, total, group.zone);
 
-    let blk = Block::default()
-        .borders(Borders::ALL)
-        .border_type(t.border_type)
-        .title(title.as_str())
-        .border_style(if focused {
-            border_style.add_modifier(Modifier::BOLD)
-        } else {
-            border_style
-        });
+    let effective_style = if focused {
+        border_style.add_modifier(Modifier::BOLD)
+    } else {
+        border_style
+    };
+    let blk = panel(title.as_str(), effective_style, t);
 
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
@@ -277,11 +274,7 @@ fn draw_ungrouped_panel(
 ) {
     let t = &app.theme;
     let ungrouped_title = format!(" Ungrouped ({}) ", ungrouped_indices.len());
-    let blk = Block::default()
-        .borders(Borders::ALL)
-        .border_type(t.border_type)
-        .title(ungrouped_title.as_str())
-        .border_style(t.border_dim);
+    let blk = panel(ungrouped_title.as_str(), t.border_dim, t);
 
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
@@ -436,15 +429,12 @@ fn draw_config_group_panel(
         group.id, group.name, online, total, zone
     );
 
-    let blk = Block::default()
-        .borders(Borders::ALL)
-        .border_type(t.border_type)
-        .title(title.as_str())
-        .border_style(if focused {
-            border_style.add_modifier(Modifier::BOLD)
-        } else {
-            border_style
-        });
+    let effective_style = if focused {
+        border_style.add_modifier(Modifier::BOLD)
+    } else {
+        border_style
+    };
+    let blk = panel(title.as_str(), effective_style, t);
 
     let inner = blk.inner(area);
     frame.render_widget(blk, area);

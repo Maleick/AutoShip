@@ -950,6 +950,21 @@ impl App {
             return;
         }
 
+        // :ch <Tab> → CH chain subcommands
+        if let Some(rest) = prefix.strip_prefix("ch ") {
+            let subs: Vec<String> = vec![
+                "start".into(),
+                "stop".into(),
+                "status".into(),
+                "add".into(),
+                "rm".into(),
+                "interval".into(),
+                "adaptive".into(),
+            ];
+            self.complete_with_candidates("ch ", rest, &subs);
+            return;
+        }
+
         // Common slash commands shared by :all and :G1-G6 completions
         let slash_cmds: Vec<String> = ["/sit", "/stand", "/camp", "/follow", "/assist", "/disband"]
             .iter()
@@ -1033,6 +1048,7 @@ impl App {
             "invite".into(),
             "accept".into(),
             "heal".into(),
+            "ch".into(),
             "loot".into(),
             "G1".into(),
             "G2".into(),
@@ -1552,6 +1568,9 @@ impl App {
                     );
                 }
             },
+            "ch" => {
+                self.execute_ch_command(&parts[1..], orchestrator);
+            }
             "inject" => {
                 self.status_message = String::from("Inject requested (not yet wired)");
             }
@@ -1811,6 +1830,181 @@ impl App {
                     );
                 }
             },
+        }
+    }
+
+    /// Handle `ch <subcommand>` — CH chain management from the command bar.
+    ///
+    /// Subcommands:
+    ///   ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
+    ///   ch stop                  — Stop the running CH chain
+    ///   ch add <pid>             — Add a cleric to the chain
+    ///   ch rm <pid>              — Remove a cleric from the chain
+    ///   ch interval <seconds>    — Set the interval between casts
+    ///   ch adaptive on|off       — Toggle adaptive timing mode
+    ///   ch status                — Show current chain status
+    fn execute_ch_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        match args.first().copied() {
+            None | Some("status") => {
+                if orchestrator.combat.ch_chain_active() {
+                    let chain = orchestrator.combat.ch_chain.as_ref().unwrap();
+                    let members = chain.members().len();
+                    let interval = chain.interval_secs();
+                    let adaptive = if chain.is_adaptive() { "adaptive" } else { "fixed" };
+                    let target = chain.target_id();
+                    self.status_message = format!(
+                        "CH chain: {} clerics, {:.1}s interval ({}), target={}",
+                        members, interval, adaptive, target
+                    );
+                } else {
+                    self.status_message = String::from(
+                        "No CH chain active. Usage: ch start <pid1,pid2,...> <interval> <target_id>",
+                    );
+                }
+            }
+            Some("start") => {
+                // ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
+                let pids_str = match args.get(1) {
+                    Some(s) => s,
+                    None => {
+                        self.status_message = String::from(
+                            "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
+                        );
+                        return;
+                    }
+                };
+                let pids: Vec<u32> = pids_str
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<u32>().ok())
+                    .collect();
+                if pids.is_empty() {
+                    self.status_message = String::from("No valid PIDs. Use comma-separated PIDs.");
+                    return;
+                }
+                let interval: f32 = args
+                    .get(2)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(3.0);
+                let target_id: u32 = args
+                    .get(3)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let spell_slot: u8 = args
+                    .get(4)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1);
+
+                orchestrator
+                    .combat
+                    .start_ch_chain(pids.clone(), interval, target_id, spell_slot);
+                tracing::info!(
+                    pids = ?pids,
+                    interval,
+                    target_id,
+                    spell_slot,
+                    "CH chain started from TUI"
+                );
+                self.status_message = format!(
+                    "CH chain started: {} clerics, {:.1}s interval, target={}, slot={}",
+                    pids.len(),
+                    interval,
+                    target_id,
+                    spell_slot
+                );
+            }
+            Some("stop") => {
+                if orchestrator.combat.ch_chain_active() {
+                    orchestrator.combat.stop_ch_chain();
+                    tracing::info!("CH chain stopped from TUI");
+                    self.status_message = String::from("CH chain stopped");
+                } else {
+                    self.status_message = String::from("No CH chain is running");
+                }
+            }
+            Some("add") => {
+                if let Some(pid_str) = args.get(1) {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if orchestrator.combat.ch_chain_active() {
+                            orchestrator.combat.ch_chain_add(pid);
+                            tracing::info!(pid, "Cleric added to CH chain");
+                            self.status_message = format!("Added PID {} to CH chain", pid);
+                        } else {
+                            self.status_message = String::from("No CH chain is running. Use: ch start");
+                        }
+                    } else {
+                        self.status_message = String::from("Invalid PID. Usage: ch add <pid>");
+                    }
+                } else {
+                    self.status_message = String::from("Usage: ch add <pid>");
+                }
+            }
+            Some("rm" | "remove") => {
+                if let Some(pid_str) = args.get(1) {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if orchestrator.combat.ch_chain_active() {
+                            orchestrator.combat.ch_chain_remove(pid);
+                            tracing::info!(pid, "Cleric removed from CH chain");
+                            self.status_message = format!("Removed PID {} from CH chain", pid);
+                        } else {
+                            self.status_message = String::from("No CH chain is running");
+                        }
+                    } else {
+                        self.status_message = String::from("Invalid PID. Usage: ch rm <pid>");
+                    }
+                } else {
+                    self.status_message = String::from("Usage: ch rm <pid>");
+                }
+            }
+            Some("interval") => {
+                if let Some(secs_str) = args.get(1) {
+                    if let Ok(secs) = secs_str.parse::<f32>() {
+                        if orchestrator.combat.ch_chain_active() {
+                            orchestrator.combat.ch_chain_set_interval(secs);
+                            tracing::info!(interval = secs, "CH chain interval updated");
+                            self.status_message = format!("CH chain interval set to {:.1}s", secs);
+                        } else {
+                            self.status_message = String::from("No CH chain is running");
+                        }
+                    } else {
+                        self.status_message = String::from("Invalid seconds. Usage: ch interval <seconds>");
+                    }
+                } else {
+                    self.status_message = String::from("Usage: ch interval <seconds>");
+                }
+            }
+            Some("adaptive") => match args.get(1).copied() {
+                Some("on" | "true" | "1") => {
+                    if orchestrator.combat.ch_chain_active() {
+                        if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                            chain.set_adaptive(true);
+                            tracing::info!("CH chain adaptive mode enabled");
+                            self.status_message = String::from("CH chain: adaptive timing ON");
+                        }
+                    } else {
+                        self.status_message = String::from("No CH chain is running");
+                    }
+                }
+                Some("off" | "false" | "0") => {
+                    if orchestrator.combat.ch_chain_active() {
+                        if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                            chain.set_adaptive(false);
+                            tracing::info!("CH chain adaptive mode disabled");
+                            self.status_message = String::from("CH chain: adaptive timing OFF");
+                        }
+                    } else {
+                        self.status_message = String::from("No CH chain is running");
+                    }
+                }
+                _ => {
+                    self.status_message = String::from("Usage: ch adaptive <on|off>");
+                }
+            },
+            Some(sub) => {
+                self.status_message = format!(
+                    "Unknown CH subcommand: {}. Use: start|stop|add|rm|interval|adaptive|status",
+                    sub
+                );
+            }
         }
     }
 

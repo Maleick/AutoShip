@@ -16,7 +16,7 @@ pub struct CombatCoordinator {
     /// Track which clients were dead last tick.
     prev_dead: HashMap<ClientId, bool>,
     /// Complete Heal chain coordinator — rotates CH casts across clerics.
-    ch_chain: Option<ChChain>,
+    pub ch_chain: Option<ChChain>,
 }
 
 impl CombatCoordinator {
@@ -81,13 +81,12 @@ impl CombatCoordinator {
         // 2. CH chain — feed tank HP for adaptive mode, then tick rotation
         if let Some(ref mut chain) = self.ch_chain {
             // Feed tank HP to adaptive timer
-            if chain.is_adaptive() {
-                if let Some(tank_id) = self.main_tank_id
-                    && let Some(tank_state) = states.get(&tank_id)
-                    && let Some(ref lp) = tank_state.local_player
-                {
-                    chain.update_tank_hp(lp.hp_pct());
-                }
+            if chain.is_adaptive()
+                && let Some(tank_id) = self.main_tank_id
+                && let Some(tank_state) = states.get(&tank_id)
+                && let Some(ref lp) = tank_state.local_player
+            {
+                chain.update_tank_hp(lp.hp_pct());
             }
 
             if let Some(cleric_pid) = chain.tick() {

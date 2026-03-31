@@ -2,6 +2,7 @@
 
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampAction, CampLoop, CampMember, CampSnapshot, CampState, Role};
+use crate::combat::coordinator::CombatCoordinator;
 use crate::ipc::pipe::CommandPipe;
 use crate::ipc::shared::SharedStateReader;
 use dmft_common::ipc::{Command, SessionToken};
@@ -26,6 +27,7 @@ pub struct Orchestrator {
     pub client_pids: Vec<u32>,
     pub client_names: HashMap<u32, String>,
     pub active_camp: Option<CampLoop>,
+    pub combat: CombatCoordinator,
     pub tick_count: u64,
     /// Commands dispatched this tick (for status display).
     pub last_dispatched: Vec<(u32, CampAction)>,
@@ -47,6 +49,7 @@ impl Orchestrator {
             client_pids: Vec::new(),
             client_names: HashMap::new(),
             active_camp: None,
+            combat: CombatCoordinator::new(),
             tick_count: 0,
             last_dispatched: Vec::new(),
             game_states: HashMap::new(),

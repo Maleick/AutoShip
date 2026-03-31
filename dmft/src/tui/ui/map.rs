@@ -14,6 +14,17 @@ use crate::tui::app::App;
 use crate::tui::theme::Theme;
 
 pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Narrow terminals: collapse to 2-panel (map + spawn list) instead of 3-panel
+    if area.width < 100 {
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(area);
+        draw_map_view(frame, cols[0], app);
+        draw_map_spawn_list(frame, cols[1], app);
+        return;
+    }
+
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([

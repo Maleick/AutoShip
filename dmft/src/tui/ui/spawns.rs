@@ -41,7 +41,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     let fl = app.spawns_state.spawn_type_filter.label();
     let title = if app.spawns_state.search_mode {
         format!(
-            " Spawns: {} ({}) [{}] search: \"{}\" ",
+            " Spawns: {} ({}) [{}] search: \"{}\" [Esc to close] ",
             client_label,
             filtered.len(),
             fl,
@@ -67,8 +67,8 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         .and_then(|c| c.local_player.as_ref())
         .map(|p| (p.x, p.y));
 
-    // Show coordinate columns when terminal is wide enough (>= 140 chars)
-    let show_coords = area.width >= 140;
+    // Show coordinate columns when terminal is wide enough (>= 120 chars)
+    let show_coords = area.width >= 120;
 
     let mut header_cells = vec!["Type", "Name", "Race", "Cls", "Lv", "HP%", "Dist2D", "ID"];
     if show_coords {

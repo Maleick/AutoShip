@@ -1,13 +1,13 @@
-/// Complete Heal chain coordinator.
-///
-/// Manages a rotation of clerics casting Complete Heal on the main tank.
-/// Each cleric starts their cast at a fixed interval after the previous one,
-/// creating a steady stream of heals landing on the tank.
-///
-/// Timing: all intervals are in *frames* (~20/sec, ~50ms each).
-/// An EQ "game tick" is 6 seconds (~120 frames) — used for regen/DoTs, not casting.
+//! Complete Heal chain coordinator.
+//!
+//! Manages a rotation of clerics casting Complete Heal on the main tank.
+//! Each cleric starts their cast at a fixed interval after the previous one,
+//! creating a steady stream of heals landing on the tank.
+//!
+//! Timing: all intervals are in *frames* (~20/sec, ~50ms each).
+//! An EQ "game tick" is 6 seconds (~120 frames) — used for regen/DoTs, not casting.
 
-/// Main loop iterations per second (~20fps = ~50ms per frame).
+// Main loop iterations per second (~20fps = ~50ms per frame).
 const FRAMES_PER_SECOND: u64 = 20;
 
 /// One EQ game tick in frames (6 seconds × 20 frames/sec).
@@ -164,7 +164,7 @@ impl ChChain {
         self.sample_frame += 1;
 
         // Sample damage rate every second (~20 frames)
-        if self.sample_frame % FRAMES_PER_SECOND == 0 {
+        if self.sample_frame.is_multiple_of(FRAMES_PER_SECOND) {
             // HP delta per second (positive = damage taken, negative = healed)
             let delta = self.last_tank_hp - tank_hp_pct;
             self.last_tank_hp = tank_hp_pct;
