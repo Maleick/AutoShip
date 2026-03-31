@@ -173,4 +173,126 @@ mod tests {
         let strategy = build_strategy(99, &config);
         assert_eq!(strategy.class_id(), 99);
     }
+
+    #[test]
+    fn nearest_enemy_returns_closest() {
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            ..SpawnData::default()
+        };
+        let enemies = vec![
+            SpawnData {
+                spawn_id: 1,
+                x: 100.0,
+                y: 0.0,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 2,
+                x: 10.0,
+                y: 0.0,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 3,
+                x: 50.0,
+                y: 0.0,
+                ..SpawnData::default()
+            },
+        ];
+        let closest = nearest_enemy(&player, &enemies).unwrap();
+        assert_eq!(closest.spawn_id, 2);
+    }
+
+    #[test]
+    fn nearest_enemy_empty_list() {
+        let player = SpawnData::default();
+        assert!(nearest_enemy(&player, &[]).is_none());
+    }
+
+    #[test]
+    fn assist_target_returns_target_id() {
+        let player = SpawnData::default();
+        let target = SpawnData {
+            spawn_id: 42,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        assert_eq!(assist_target(&ctx), Some(42));
+    }
+
+    #[test]
+    fn assist_target_none_without_target() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        assert!(assist_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn best_spell_by_mana_returns_highest_priority() {
+        use dmft_common::combat::SpellEntry;
+        let mut player = SpawnData::default();
+        player.mana_current = 5000;
+        player.mana_max = 10000;
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "Low".into(),
+                    slot: 1,
+                    spell_id: 100,
+                    priority: 1,
+                    min_mana_pct: 10.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "High".into(),
+                    slot: 2,
+                    spell_id: 200,
+                    priority: 10,
+                    min_mana_pct: 10.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "TooExpensive".into(),
+                    slot: 3,
+                    spell_id: 300,
+                    priority: 100,
+                    min_mana_pct: 90.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        let spell = best_spell_by_mana(&ctx).unwrap();
+        assert_eq!(spell.name, "High"); // highest priority that we can afford
+    }
 }
