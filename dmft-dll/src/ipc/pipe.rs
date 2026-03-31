@@ -277,7 +277,7 @@ struct PipeSecuritySetup {
 #[cfg(windows)]
 fn build_restrictive_security_attributes() -> Result<PipeSecuritySetup> {
     use std::mem;
-    use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
+    use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE};
     use windows::Win32::Security::{
         ACE_REVISION, ACL, AddAccessAllowedAce, GetLengthSid, GetTokenInformation, InitializeAcl,
         InitializeSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
@@ -322,7 +322,7 @@ fn build_restrictive_security_attributes() -> Result<PipeSecuritySetup> {
         AddAccessAllowedAce(
             acl_buf.as_mut_ptr() as *mut ACL,
             ACE_REVISION(2),
-            GENERIC_ALL.0,
+            GENERIC_READ.0 | GENERIC_WRITE.0,
             sid,
         )
         .map_err(|e| anyhow::anyhow!("AddAccessAllowedAce failed: {e}"))?;

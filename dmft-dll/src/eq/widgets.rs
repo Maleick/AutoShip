@@ -241,6 +241,12 @@ pub unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
         return None;
     }
 
+    // Validate CStrRep memory is still committed and readable before dereferencing.
+    // Covers all fields up through the start of the data buffer.
+    if !crate::hooks::game_loop::is_readable(rep_ptr, off::CSTRREP_DATA + 1) {
+        return None;
+    }
+
     let length = *((rep_ptr + off::CSTRREP_LENGTH) as *const u32) as usize;
     if length == 0 || length > 256 {
         return None;

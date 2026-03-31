@@ -8,6 +8,18 @@ use std::collections::HashMap;
 use std::io;
 use std::time::{Duration, Instant};
 
+/// RAII guard that restores the terminal on drop, even if a panic unwinds.
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = crossterm::execute!(io::stdout(), LeaveAlternateScreen);
+        // show_cursor requires a terminal instance; fall back to raw crossterm command
+        let _ = crossterm::execute!(io::stdout(), crossterm::cursor::Show);
+    }
+}
+
 use super::app::App;
 use super::event::handle_events;
 use super::ui::draw;
@@ -34,12 +46,17 @@ pub fn run_tui(mut app: App, mut orchestrator: Orchestrator) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    // RAII guard ensures terminal is restored even if run_loop panics.
+    let guard = TerminalGuard;
+
     let result = run_loop(&mut terminal, &mut app, &mut orchestrator);
 
-    // Restore terminal — always runs even if loop panicked
-    disable_raw_mode()?;
-    crossterm::execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
+    // Normal exit: disarm the guard and do explicit cleanup so we can use
+    // the terminal backend directly. Errors are ignored to preserve `result`.
+    std::mem::forget(guard);
+    let _ = disable_raw_mode();
+    let _ = crossterm::execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    let _ = terminal.show_cursor();
 
     result
 }

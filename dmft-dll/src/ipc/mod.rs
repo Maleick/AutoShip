@@ -235,9 +235,7 @@ fn login_chain_phase2() {
                 attempt,
                 "Phase 2: Found PLAY EVERQUEST!"
             );
-            unsafe {
-                crate::eq::widgets::click_button_via_vtable(play_btn);
-            }
+            crate::hooks::game_loop::queue_button_click(play_btn);
             // Also press Enter via PostMessage as backup
             std::thread::sleep(std::time::Duration::from_millis(200));
             crate::login::widgets::simulate_enter_key(eqmain_base);

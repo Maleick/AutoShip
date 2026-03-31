@@ -392,18 +392,25 @@ fn on_game_tick() {
     // Check for pending login button click (queued from IPC thread).
     let button_addr = PENDING_BUTTON_CLICK.swap(0, std::sync::atomic::Ordering::AcqRel);
     if button_addr != 0 {
-        tracing::info!(
-            ptr = format!("{:#x}", button_addr),
-            "Clicking login button on game loop thread"
-        );
-        // SAFETY: button_addr was stored by the IPC thread after resolving a
-        // CXWnd pointer from CXWndManager's window array. The click executes
-        // WndNotification(XWM_LCLICK) through the CXWnd vtable. Must run on
-        // the game loop thread (which we are). If the window was destroyed
-        // between queuing and execution, this is a use-after-free — mitigated
-        // by the short time window (single tick delay).
-        unsafe {
-            crate::eq::widgets::click_button_via_vtable(button_addr);
+        if !is_readable(button_addr, 8) {
+            tracing::warn!(
+                ptr = format!("{:#x}", button_addr),
+                "Pending button click target is no longer readable — skipping (window may have been destroyed)"
+            );
+        } else {
+            tracing::info!(
+                ptr = format!("{:#x}", button_addr),
+                "Clicking login button on game loop thread"
+            );
+            // SAFETY: button_addr was stored by the IPC thread after resolving a
+            // CXWnd pointer from CXWndManager's window array. The click executes
+            // WndNotification(XWM_LCLICK) through the CXWnd vtable. Must run on
+            // the game loop thread (which we are). The pointer is re-validated via
+            // is_readable() above to guard against use-after-free if the window
+            // was destroyed between queuing and dispatch.
+            unsafe {
+                crate::eq::widgets::click_button_via_vtable(button_addr);
+            }
         }
     }
 
@@ -576,7 +583,11 @@ fn on_game_tick() {
 
                 // If not in world and game loop is running, we're at character select.
                 // Send Enter key every ~3 seconds to click the Enter World button.
-                if tick % 90 == 45 {
+                // Guard: skip when the Enter World FSM is active (stage != 0) to
+                // avoid dismissing windows the FSM expects to interact with.
+                if tick % 90 == 45
+                    && ENTER_WORLD_STAGE.load(std::sync::atomic::Ordering::Acquire) == 0
+                {
                     send_enter_to_eq();
                 }
             }
@@ -679,7 +690,9 @@ fn read_and_publish_state(tick: u64) {
     let refresh_spawns = tick.is_multiple_of(30) || cached.is_none();
 
     if refresh_spawns {
-        let player = local_player.as_ref().unwrap();
+        let Some(ref player) = local_player else {
+            return;
+        };
         let spawns = read_nearby_spawns(eq_base, player.x, player.y, player.z);
         let (zone_short, zone_long) = read_zone_names(eq_base);
         *cached = Some(dmft_common::types::GameState {
@@ -693,16 +706,19 @@ fn read_and_publish_state(tick: u64) {
             zone_short_name: zone_short,
             zone_long_name: zone_long,
         });
-    } else {
-        let state = cached.as_mut().unwrap();
+    } else if let Some(ref mut state) = *cached {
         state.local_player = local_player;
         state.target = target;
         state.timestamp_ms = current_time_ms();
         state.nav_status = crate::nav::status();
         state.combat_status = crate::combat::status();
+    } else {
+        return;
     }
 
-    crate::ipc::publish_state(cached.as_ref().unwrap());
+    if let Some(ref state) = *cached {
+        crate::ipc::publish_state(state);
+    }
 }
 
 /// Check whether `addr` points to at least `len` bytes of readable committed memory.
@@ -710,7 +726,7 @@ fn read_and_publish_state(tick: u64) {
 /// Uses `VirtualQuery` to verify the page is committed and readable before we
 /// dereference it. Returns `false` for null, misaligned, or unmapped addresses.
 #[cfg(windows)]
-fn is_readable(addr: usize, len: usize) -> bool {
+pub(crate) fn is_readable(addr: usize, len: usize) -> bool {
     use windows::Win32::System::Memory::{
         MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_GUARD, PAGE_NOACCESS, VirtualQuery,
     };
@@ -750,7 +766,7 @@ fn is_readable(addr: usize, len: usize) -> bool {
 }
 
 #[cfg(not(windows))]
-fn is_readable(_addr: usize, _len: usize) -> bool {
+pub(crate) fn is_readable(_addr: usize, _len: usize) -> bool {
     // Stub for non-Windows builds (demo mode). Always true since we never
     // dereference real pointers on macOS/Linux.
     true
