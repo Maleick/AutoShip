@@ -182,8 +182,22 @@ mod tests {
 
     #[test]
     fn load_from_nonexistent_file_returns_error() {
-        let path = std::path::Path::new("/tmp/dmft_nonexistent_12345.json");
-        let result = OffsetDatabase::load_from_file(path);
+        // Construct a path in the system temp directory that should not exist.
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "dmft_nonexistent_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        // Ensure the file does not exist at this path.
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+        }
+
+        let result = OffsetDatabase::load_from_file(&path);
         assert!(result.is_err());
     }
 
