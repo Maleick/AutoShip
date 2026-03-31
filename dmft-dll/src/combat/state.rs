@@ -844,6 +844,123 @@ mod tests {
     }
 
     #[test]
+    fn status_reflects_fleeing() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.flee_requested = true;
+        assert!(matches!(c.status(), CombatStatus::Fleeing));
+    }
+
+    #[test]
+    fn clear_flee_requested_restores_idle() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.flee_requested = true;
+        c.clear_flee_requested();
+        assert!(!c.flee_requested());
+        assert!(matches!(c.status(), CombatStatus::Idle));
+    }
+
+    #[test]
+    fn set_assist_target_stores_id() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.set_assist_target(42);
+        assert_eq!(c.assist_target, Some(42));
+    }
+
+    #[test]
+    fn set_group_members_populates_state() {
+        let mut c = Combatant::new(2, 0, test_config());
+        let members = vec![
+            GroupMemberState {
+                spawn_id: 1,
+                hp_pct: 80.0,
+                mana_pct: 100.0,
+                class_id: 1,
+            },
+            GroupMemberState {
+                spawn_id: 2,
+                hp_pct: 60.0,
+                mana_pct: 50.0,
+                class_id: 6,
+            },
+        ];
+        c.set_group_members(members);
+        assert_eq!(c.group_members.len(), 2);
+        assert_eq!(c.group_members[0].spawn_id, 1);
+    }
+
+    #[test]
+    fn distance_3d_with_z_component() {
+        let mut a = SpawnData::default();
+        a.x = 0.0;
+        a.y = 0.0;
+        a.z = 0.0;
+        let mut b = SpawnData::default();
+        b.x = 0.0;
+        b.y = 0.0;
+        b.z = 10.0;
+        assert!((distance_3d(&a, &b) - 10.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn distance_3d_same_position() {
+        let a = SpawnData::default();
+        assert!((distance_3d(&a, &a)).abs() < 0.01);
+    }
+
+    #[test]
+    fn pet_classes_list_is_correct() {
+        // SK=5, Shaman=10, Necro=11, Mage=13, Beastlord=15
+        assert!(PET_CLASSES.contains(&5));
+        assert!(PET_CLASSES.contains(&10));
+        assert!(PET_CLASSES.contains(&11));
+        assert!(PET_CLASSES.contains(&13));
+        assert!(PET_CLASSES.contains(&15));
+        // Warrior, Cleric, Wizard should NOT be pet classes
+        assert!(!PET_CLASSES.contains(&1));
+        assert!(!PET_CLASSES.contains(&2));
+        assert!(!PET_CLASSES.contains(&12));
+    }
+
+    #[test]
+    fn status_engaging_carries_target_id() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.state = CombatState::Engaging { target_id: 42 };
+        if let CombatStatus::Engaging { target_id } = c.status() {
+            assert_eq!(target_id, 42);
+        } else {
+            panic!("expected Engaging status");
+        }
+    }
+
+    #[test]
+    fn status_casting_carries_spell_slot() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.state = CombatState::Casting {
+            spell_slot: 3,
+            ticks_remaining: 10,
+        };
+        if let CombatStatus::Casting { spell_slot, .. } = c.status() {
+            assert_eq!(spell_slot, 3);
+        } else {
+            panic!("expected Casting status");
+        }
+    }
+
+    #[test]
+    fn status_on_gcd() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.state = CombatState::OnGcd;
+        assert!(matches!(c.status(), CombatStatus::OnGcd));
+    }
+
+    #[test]
+    fn status_recovering() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.state = CombatState::Recovering;
+        assert!(matches!(c.status(), CombatStatus::Recovering));
+    }
+
+    #[test]
     fn disc_cooldown_expires_and_disc_refires() {
         let cfg = config_with_discs(vec![make_disc("Quick Disc", 3001, 1, 3)]);
         let mut c = Combatant::new(1, 0, cfg);

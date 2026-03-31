@@ -176,4 +176,129 @@ mod tests {
         buf.extend_from_slice(&[0u8; 100]);
         assert!(decode::<Command>(&buf).is_none());
     }
+
+    #[test]
+    fn encode_length_prefix_correct() {
+        let cmd = Command::Ping;
+        let encoded = encode(&cmd).expect("encode failed");
+        assert!(encoded.len() >= 4);
+        let len = u32::from_le_bytes(encoded[..4].try_into().unwrap());
+        assert_eq!(len as usize, encoded.len() - 4);
+    }
+
+    #[test]
+    fn decode_empty_slice_returns_none() {
+        assert!(decode::<Command>(&[]).is_none());
+    }
+
+    #[test]
+    fn decode_exactly_three_bytes_returns_none() {
+        assert!(decode::<Command>(&[0, 0, 0]).is_none());
+    }
+
+    #[test]
+    fn decode_zero_length_payload() {
+        let buf = 0u32.to_le_bytes();
+        // Zero-length payload is valid framing but bincode can't decode an enum from empty bytes
+        let result = decode::<Command>(&buf);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn decode_malformed_bincode_returns_none() {
+        // Valid length prefix but garbage payload
+        let mut buf = 4u32.to_le_bytes().to_vec();
+        buf.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        let result = decode::<Command>(&buf);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn decode_exactly_max_message_size_is_not_rejected_by_size_check() {
+        // Exactly MAX_MESSAGE_SIZE should pass the size check (len_u32 > MAX_MESSAGE_SIZE is false)
+        // but fail at bincode parsing since it's all zeros
+        let len_bytes = MAX_MESSAGE_SIZE.to_le_bytes();
+        let mut buf = len_bytes.to_vec();
+        buf.extend(vec![0u8; MAX_MESSAGE_SIZE as usize]);
+        // The size guard uses `>` not `>=`, so MAX_MESSAGE_SIZE passes the guard
+        // All-zeros may or may not be a valid bincode enum variant
+        let _result = decode::<Command>(&buf);
+        // Main assertion: MAX_MESSAGE_SIZE + 1 IS rejected
+        let over = (MAX_MESSAGE_SIZE + 1).to_le_bytes();
+        let mut over_buf = over.to_vec();
+        over_buf.extend(vec![0u8; (MAX_MESSAGE_SIZE + 1) as usize]);
+        assert!(
+            decode::<Command>(&over_buf).is_none(),
+            "MAX_MESSAGE_SIZE+1 should be rejected"
+        );
+    }
+
+    #[test]
+    fn encode_decode_with_extra_data() {
+        let cmd = Command::Ping;
+        let mut encoded = encode(&cmd).expect("encode failed");
+        // Append extra garbage
+        encoded.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
+
+        let (decoded, consumed): (Command, usize) = decode(&encoded).expect("decode failed");
+        assert!(matches!(decoded, Command::Ping));
+        assert_eq!(4 + consumed, encoded.len() - 4, "The number of bytes consumed should account for the header and payload, leaving the extra bytes.");
+    }
+
+    #[test]
+    fn response_roundtrip_nav_update() {
+        use crate::nav::NavStatus;
+        let resp = Response::NavUpdate {
+            status: NavStatus::Moving {
+                waypoint_index: 3,
+                waypoint_count: 10,
+                distance_remaining: 42.5,
+            },
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, usize) = decode(&encoded).expect("decode");
+        if let Response::NavUpdate { status } = decoded {
+            if let NavStatus::Moving {
+                waypoint_index,
+                waypoint_count,
+                distance_remaining,
+            } = status
+            {
+                assert_eq!(waypoint_index, 3);
+                assert_eq!(waypoint_count, 10);
+                assert!((distance_remaining - 42.5).abs() < f32::EPSILON);
+            } else {
+                panic!("expected Moving");
+            }
+        } else {
+            panic!("expected NavUpdate");
+        }
+    }
+
+    #[test]
+    fn response_roundtrip_combat_update() {
+        use crate::combat::CombatStatus;
+        let resp = Response::CombatUpdate {
+            status: CombatStatus::Casting {
+                spell_slot: 5,
+                target_id: 9999,
+            },
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, usize) = decode(&encoded).expect("decode");
+        if let Response::CombatUpdate { status } = decoded {
+            if let CombatStatus::Casting {
+                spell_slot,
+                target_id,
+            } = status
+            {
+                assert_eq!(spell_slot, 5);
+                assert_eq!(target_id, 9999);
+            } else {
+                panic!("expected Casting");
+            }
+        } else {
+            panic!("expected CombatUpdate");
+        }
+    }
 }

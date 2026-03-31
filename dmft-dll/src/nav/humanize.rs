@@ -143,4 +143,58 @@ mod tests {
             assert!(ticks < 20, "stagger_ticks {ticks} should be < 20");
         }
     }
+
+    #[test]
+    fn stagger_ticks_zero_max_returns_zero() {
+        let mut p = MovementPersonality::from_client_id(1);
+        for _ in 0..10 {
+            assert_eq!(p.stagger_ticks(0), 0);
+        }
+    }
+
+    #[test]
+    fn stagger_ticks_one_returns_zero() {
+        let mut p = MovementPersonality::from_client_id(1);
+        for _ in 0..10 {
+            assert_eq!(p.stagger_ticks(1), 0);
+        }
+    }
+
+    #[test]
+    fn should_detour_returns_bool() {
+        let mut p = MovementPersonality::from_client_id(7);
+        // Just verify it doesn't panic and returns a bool over many calls
+        let mut any_true = false;
+        let mut any_false = false;
+        for _ in 0..1000 {
+            if p.should_detour() {
+                any_true = true;
+            } else {
+                any_false = true;
+            }
+        }
+        // With detour_chance between 0 and 0.08, we expect mostly false
+        assert!(any_false, "should_detour should sometimes return false");
+    }
+
+    #[test]
+    fn wobble_heading_at_zero() {
+        let mut p = MovementPersonality::from_client_id(3);
+        let result = p.wobble_heading(0.0);
+        assert!(
+            (0.0..512.0).contains(&result),
+            "wobbled heading at 0 should stay in range"
+        );
+    }
+
+    #[test]
+    fn wobble_heading_at_boundary() {
+        let mut p = MovementPersonality::from_client_id(3);
+        // Test heading near 512 boundary (wraps to 0)
+        let result = p.wobble_heading(511.0);
+        assert!(
+            (0.0..512.0).contains(&result),
+            "wobbled heading near 512 should wrap correctly"
+        );
+    }
 }

@@ -150,4 +150,83 @@ note = "Drops Mithril Two-Handed Sword"
         assert_eq!(tangrin.priority, HvtPriority::Medium);
         assert!(!tangrin.alert_discord);
     }
+
+    #[test]
+    fn test_empty_watchlist() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"targets = []\n").unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        assert!(wl.is_empty());
+        assert_eq!(wl.len(), 0);
+        assert!(wl.is_hvt("anything").is_none());
+    }
+
+    #[test]
+    fn test_iter_all_targets() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(sample_toml().as_bytes()).unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        let names: Vec<_> = wl.iter().map(|t| t.name.clone()).collect();
+        assert_eq!(names.len(), 3);
+    }
+
+    #[test]
+    fn test_hvt_note_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(sample_toml().as_bytes()).unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        let crush = wl.is_hvt("Emperor Crush").unwrap();
+        assert_eq!(crush.note, "Drops Belt of the River");
+    }
+
+    #[test]
+    fn test_hvt_default_fields() {
+        let toml = r#"
+[[targets]]
+name = "Test"
+zone = "testzone"
+priority = "low"
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(toml.as_bytes()).unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        let t = wl.is_hvt("Test").unwrap();
+        assert!(!t.alert_discord); // default false
+        assert!(t.note.is_empty()); // default empty
+        assert_eq!(t.priority, HvtPriority::Low);
+    }
+
+    #[test]
+    fn test_load_nonexistent_file() {
+        let result = HvtWatchlist::load(Path::new("/nonexistent/hvt.toml"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_priority_all_variants() {
+        let variants = ["critical", "high", "medium", "low"];
+        for v in variants {
+            let toml = format!(
+                r#"[[targets]]
+name = "T"
+zone = "z"
+priority = "{v}"
+"#
+            );
+            let parsed: WatchlistFile = toml::from_str(&toml).unwrap();
+            assert_eq!(parsed.targets.len(), 1);
+        }
+    }
 }

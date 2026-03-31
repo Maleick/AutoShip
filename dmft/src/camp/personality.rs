@@ -217,4 +217,61 @@ mod tests {
         let p = PersonalityProfile::generate("");
         assert!((0.7..=1.5).contains(&p.reaction_speed));
     }
+
+    #[test]
+    fn test_name_stored_correctly() {
+        let p = PersonalityProfile::generate("Warrior01");
+        assert_eq!(p.name, "Warrior01");
+    }
+
+    #[test]
+    fn test_adjust_delay_never_zero() {
+        let mut p = PersonalityProfile::generate("Test");
+        p.reaction_speed = 0.01; // extremely fast
+        assert_eq!(p.adjust_delay(1), 1); // clamped to 1
+    }
+
+    #[test]
+    fn test_adjust_delay_rounding() {
+        let mut p = PersonalityProfile::generate("Test");
+        p.reaction_speed = 1.0;
+        assert_eq!(p.adjust_delay(10), 10);
+
+        p.reaction_speed = 1.25;
+        assert_eq!(p.adjust_delay(10), 13); // 12.5 rounds to 13
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let p = PersonalityProfile::generate("Cleric01");
+        let json = serde_json::to_string(&p).unwrap();
+        let restored: PersonalityProfile = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.name, "Cleric01");
+        assert!((restored.reaction_speed - p.reaction_speed).abs() < f32::EPSILON);
+        assert_eq!(restored.phase_offset, p.phase_offset);
+    }
+
+    #[test]
+    fn test_name_hash_deterministic() {
+        let a = name_hash("Warrior01");
+        let b = name_hash("Warrior01");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_name_hash_differs() {
+        let a = name_hash("Warrior01");
+        let b = name_hash("Cleric01");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_many_names_varied_phase_offsets() {
+        let offsets: Vec<u64> = (0..20)
+            .map(|i| PersonalityProfile::generate(&format!("Char{i}")).phase_offset)
+            .collect();
+        // With 20 names over 31 possible offsets, we should get some variation
+        let unique: std::collections::HashSet<_> = offsets.iter().collect();
+        assert!(unique.len() > 3, "Expected varied phase offsets");
+    }
 }

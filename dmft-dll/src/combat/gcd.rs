@@ -95,4 +95,32 @@ mod tests {
         }
         assert_eq!(tracker.remaining(), 7);
     }
+
+    #[test]
+    fn consume_resets_to_full_gcd() {
+        let mut tracker = GcdTracker::new(10);
+        tracker.consume();
+        for _ in 0..5 {
+            tracker.tick();
+        }
+        assert_eq!(tracker.remaining(), 5);
+        tracker.consume(); // re-consume mid-cooldown
+        assert_eq!(tracker.remaining(), 10);
+    }
+
+    #[test]
+    fn zero_gcd_always_ready() {
+        let mut tracker = GcdTracker::new(0);
+        tracker.consume();
+        assert!(tracker.is_ready());
+    }
+
+    #[test]
+    fn one_tick_gcd() {
+        let mut tracker = GcdTracker::new(1);
+        tracker.consume();
+        assert!(!tracker.is_ready());
+        tracker.tick();
+        assert!(tracker.is_ready());
+    }
 }

@@ -269,4 +269,114 @@ mod tests {
             assert!(plan.current().is_some());
         }
     }
+
+    #[test]
+    fn travel_plan_empty_steps() {
+        let plan = TravelPlan::new(1, vec![]);
+        assert!(plan.current().is_none());
+        assert!(plan.is_complete());
+    }
+
+    #[test]
+    fn travel_plan_single_step() {
+        let mut plan = TravelPlan::new(
+            1,
+            vec![TravelStep::StaggerWait {
+                min_secs: 5,
+                max_secs: 10,
+            }],
+        );
+        assert!(!plan.is_complete());
+        assert!(plan.current().is_some());
+        assert!(!plan.advance()); // can't advance past single step
+    }
+
+    #[test]
+    fn travel_plan_client_id() {
+        let plan = TravelPlan::new(42, vec![]);
+        assert_eq!(plan.client_id, 42);
+    }
+
+    #[test]
+    fn travel_step_walk_to() {
+        let step = TravelStep::WalkTo {
+            waypoints: vec![Waypoint::new(1.0, 2.0, 3.0), Waypoint::new(4.0, 5.0, 6.0)],
+        };
+        if let TravelStep::WalkTo { waypoints } = step {
+            assert_eq!(waypoints.len(), 2);
+        } else {
+            panic!("expected WalkTo");
+        }
+    }
+
+    #[test]
+    fn travel_step_zone_to() {
+        let step = TravelStep::ZoneTo {
+            zone_name: "gfay".to_string(),
+            zone_line_pos: Waypoint::new(0.0, 0.0, 0.0),
+        };
+        if let TravelStep::ZoneTo { zone_name, .. } = step {
+            assert_eq!(zone_name, "gfay");
+        }
+    }
+
+    #[test]
+    fn travel_step_port_to() {
+        let step = TravelStep::PortTo {
+            zone_name: "commons".to_string(),
+            caster_id: 10,
+        };
+        if let TravelStep::PortTo {
+            zone_name,
+            caster_id,
+        } = step
+        {
+            assert_eq!(zone_name, "commons");
+            assert_eq!(caster_id, 10);
+        }
+    }
+
+    #[test]
+    fn generate_zone_staggers_different_seeds_produce_different_delays() {
+        let ids = vec![1, 2, 3, 4, 5];
+        let a = generate_zone_staggers(&ids, 5, 60, 42);
+        let b = generate_zone_staggers(&ids, 5, 60, 99);
+        // At least some delays should differ
+        let differs = ids.iter().any(|id| a[id] != b[id]);
+        assert!(differs, "different seeds should produce different delays");
+    }
+
+    #[test]
+    fn generate_zone_staggers_single_id() {
+        let ids = vec![1];
+        let staggers = generate_zone_staggers(&ids, 0, 100, 42);
+        assert_eq!(staggers.len(), 1);
+        assert!(staggers[&1] <= 100);
+    }
+
+    #[test]
+    fn generate_zone_staggers_zero_range() {
+        let ids = vec![1, 2, 3];
+        let staggers = generate_zone_staggers(&ids, 42, 42, 0);
+        for &delay in staggers.values() {
+            assert_eq!(delay, 42);
+        }
+    }
+
+    #[test]
+    fn plan_group_travel_empty_ids() {
+        let plans = plan_group_travel(&[], &HashMap::new(), "a", "b");
+        assert!(plans.is_empty());
+    }
+
+    #[test]
+    fn plan_group_travel_each_plan_has_stagger_step() {
+        let ids = vec![1, 2];
+        let class_map: HashMap<u32, u8> = ids.iter().map(|&id| (id, 1u8)).collect();
+        let plans = plan_group_travel(&ids, &class_map, "a", "b");
+        for plan in &plans {
+            let step = plan.current().unwrap();
+            assert!(matches!(step, TravelStep::StaggerWait { .. }));
+        }
+    }
 }

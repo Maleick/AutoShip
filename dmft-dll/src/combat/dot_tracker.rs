@@ -146,4 +146,59 @@ mod tests {
         assert!(!tracker.is_dot_active(1, "Poison", 30));
         assert_eq!(tracker.active_count(), 1); // still only one entry
     }
+
+    #[test]
+    fn new_tracker_is_empty() {
+        let tracker = DotTracker::new();
+        assert_eq!(tracker.active_count(), 0);
+    }
+
+    #[test]
+    fn prune_on_empty_is_noop() {
+        let mut tracker = DotTracker::new();
+        tracker.prune_expired(100);
+        assert_eq!(tracker.active_count(), 0);
+    }
+
+    #[test]
+    fn clear_nonexistent_target_is_noop() {
+        let mut tracker = DotTracker::new();
+        tracker.record_dot(1, "Poison", 30, 0);
+        tracker.clear_target(999);
+        assert_eq!(tracker.active_count(), 1);
+    }
+
+    #[test]
+    fn zero_duration_dot_never_active() {
+        let mut tracker = DotTracker::new();
+        tracker.record_dot(1, "Instant", 0, 5); // expires at 5
+        assert!(!tracker.is_dot_active(1, "Instant", 5));
+        assert!(!tracker.is_dot_active(1, "Instant", 6));
+    }
+
+    #[test]
+    fn multiple_dots_on_same_target() {
+        let mut tracker = DotTracker::new();
+        tracker.record_dot(1, "Poison", 30, 0);
+        tracker.record_dot(1, "Disease", 60, 0);
+        tracker.record_dot(1, "Fire", 10, 0);
+        assert_eq!(tracker.active_count(), 3);
+
+        // Fire expired
+        assert!(!tracker.is_dot_active(1, "Fire", 15));
+        assert!(tracker.is_dot_active(1, "Poison", 15));
+        assert!(tracker.is_dot_active(1, "Disease", 15));
+    }
+
+    #[test]
+    fn prune_removes_all_expired() {
+        let mut tracker = DotTracker::new();
+        tracker.record_dot(1, "A", 5, 0);
+        tracker.record_dot(2, "B", 5, 0);
+        tracker.record_dot(3, "C", 5, 0);
+        assert_eq!(tracker.active_count(), 3);
+
+        tracker.prune_expired(10);
+        assert_eq!(tracker.active_count(), 0);
+    }
 }

@@ -264,4 +264,161 @@ mod tests {
         let ctx2 = make_context(&player, Some(&other_player));
         assert!(evaluator.evaluate(&ctx2).is_none());
     }
+
+    #[test]
+    fn always_condition_fires_immediately() {
+        let rules = vec![HolyShitCondition {
+            priority: 1,
+            condition: ConditionExpr::Always,
+            action: HolyShitAction::CastSpell(5),
+        }];
+        let evaluator = HolyShitEvaluator::new(rules);
+        let player = make_player(100.0, 100.0);
+        let ctx = make_context(&player, None);
+        assert!(matches!(
+            evaluator.evaluate(&ctx),
+            Some(HolyShitAction::CastSpell(5))
+        ));
+    }
+
+    #[test]
+    fn mana_below_condition() {
+        let rules = vec![HolyShitCondition {
+            priority: 1,
+            condition: ConditionExpr::ManaBelow(30.0),
+            action: HolyShitAction::UseAbility(99),
+        }];
+        let evaluator = HolyShitEvaluator::new(rules);
+
+        // Low mana
+        let player = make_player(100.0, 15.0);
+        let ctx = make_context(&player, None);
+        assert!(evaluator.evaluate(&ctx).is_some());
+
+        // High mana
+        let player2 = make_player(100.0, 80.0);
+        let ctx2 = make_context(&player2, None);
+        assert!(evaluator.evaluate(&ctx2).is_none());
+    }
+
+    #[test]
+    fn target_hp_above_condition() {
+        let rules = vec![HolyShitCondition {
+            priority: 1,
+            condition: ConditionExpr::TargetHpAbove(80.0),
+            action: HolyShitAction::CastSpell(10),
+        }];
+        let evaluator = HolyShitEvaluator::new(rules);
+
+        let player = make_player(100.0, 100.0);
+        let npc = make_npc(90.0);
+        let ctx = make_context(&player, Some(&npc));
+        assert!(evaluator.evaluate(&ctx).is_some());
+
+        let weak_npc = make_npc(50.0);
+        let ctx2 = make_context(&player, Some(&weak_npc));
+        assert!(evaluator.evaluate(&ctx2).is_none());
+    }
+
+    #[test]
+    fn nested_and_or_conditions() {
+        let rules = vec![HolyShitCondition {
+            priority: 1,
+            condition: ConditionExpr::Or(vec![
+                ConditionExpr::And(vec![
+                    ConditionExpr::HpBelow(20.0),
+                    ConditionExpr::ManaBelow(20.0),
+                ]),
+                ConditionExpr::HpBelow(5.0),
+            ]),
+            action: HolyShitAction::Flee,
+        }];
+        let evaluator = HolyShitEvaluator::new(rules);
+
+        // hp=3%, mana=80% -> second Or branch (HpBelow(5)) triggers
+        let player = make_player(3.0, 80.0);
+        let ctx = make_context(&player, None);
+        assert!(evaluator.evaluate(&ctx).is_some());
+
+        // hp=15%, mana=15% -> first And branch triggers
+        let player2 = make_player(15.0, 15.0);
+        let ctx2 = make_context(&player2, None);
+        assert!(evaluator.evaluate(&ctx2).is_some());
+
+        // hp=15%, mana=80% -> neither branch
+        let player3 = make_player(15.0, 80.0);
+        let ctx3 = make_context(&player3, None);
+        assert!(evaluator.evaluate(&ctx3).is_none());
+    }
+
+    #[test]
+    fn rule_count() {
+        let rules = vec![
+            HolyShitCondition {
+                priority: 1,
+                condition: ConditionExpr::Always,
+                action: HolyShitAction::Flee,
+            },
+            HolyShitCondition {
+                priority: 2,
+                condition: ConditionExpr::Always,
+                action: HolyShitAction::Flee,
+            },
+        ];
+        let evaluator = HolyShitEvaluator::new(rules);
+        assert_eq!(evaluator.rule_count(), 2);
+    }
+
+    #[test]
+    fn first_matching_rule_wins() {
+        // Two rules, both match, but priority 1 should fire first
+        let rules = vec![
+            HolyShitCondition {
+                priority: 1,
+                condition: ConditionExpr::HpBelow(50.0),
+                action: HolyShitAction::CastSpell(1),
+            },
+            HolyShitCondition {
+                priority: 2,
+                condition: ConditionExpr::HpBelow(80.0),
+                action: HolyShitAction::CastSpell(2),
+            },
+        ];
+        let evaluator = HolyShitEvaluator::new(rules);
+        let player = make_player(30.0, 100.0);
+        let ctx = make_context(&player, None);
+        assert!(matches!(
+            evaluator.evaluate(&ctx),
+            Some(HolyShitAction::CastSpell(1))
+        ));
+    }
+
+    #[test]
+    fn aggro_on_me_no_target_returns_false() {
+        let rules = vec![HolyShitCondition {
+            priority: 1,
+            condition: ConditionExpr::AggroOnMe,
+            action: HolyShitAction::Flee,
+        }];
+        let evaluator = HolyShitEvaluator::new(rules);
+        let player = make_player(100.0, 100.0);
+        let ctx = make_context(&player, None);
+        assert!(evaluator.evaluate(&ctx).is_none());
+    }
+
+    #[test]
+    fn use_ability_action_variant() {
+        let rules = vec![HolyShitCondition {
+            priority: 1,
+            condition: ConditionExpr::Always,
+            action: HolyShitAction::UseAbility(42),
+        }];
+        let evaluator = HolyShitEvaluator::new(rules);
+        let player = make_player(100.0, 100.0);
+        let ctx = make_context(&player, None);
+        assert!(matches!(
+            evaluator.evaluate(&ctx),
+            Some(HolyShitAction::UseAbility(42))
+        ));
+    }
 }

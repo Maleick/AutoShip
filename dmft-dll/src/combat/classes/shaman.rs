@@ -310,4 +310,142 @@ mod tests {
         assert!(spell.is_some());
         assert!(spell.unwrap().name.contains("Envenomed"));
     }
+
+    #[test]
+    fn shaman_aoe_threshold() {
+        let shaman = ShamanStrategy::new(10);
+        assert_eq!(shaman.aoe_threshold(), 3);
+    }
+
+    #[test]
+    fn shaman_should_assist() {
+        let shaman = ShamanStrategy::new(10);
+        let config = CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+        };
+        assert!(shaman.should_assist(&ctx));
+    }
+
+    #[test]
+    fn shaman_select_target_heal_when_low() {
+        let shaman = ShamanStrategy::new(10);
+        let config = CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let target = dmft_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let group = vec![GroupMemberState {
+            spawn_id: 42,
+            hp_pct: 50.0, // below 70%
+            mana_pct: 100.0,
+            class_id: 1,
+        }];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &group,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        assert_eq!(shaman.select_target(&ctx), Some(42));
+    }
+
+    #[test]
+    fn shaman_select_target_mob_when_healthy() {
+        let shaman = ShamanStrategy::new(10);
+        let config = CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let target = dmft_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        assert_eq!(shaman.select_target(&ctx), Some(99));
+    }
+
+    #[test]
+    fn shaman_on_engage_resets_slow_on_new_target() {
+        let mut shaman = ShamanStrategy::new(10);
+        shaman.target_slowed = true;
+        shaman.last_target_id = 1;
+        let config = CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let new_target = dmft_common::types::SpawnData {
+            spawn_id: 2,
+            ..Default::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&new_target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        shaman.on_engage(&ctx);
+        assert!(!shaman.target_slowed);
+        assert_eq!(shaman.last_target_id, 2);
+    }
+
+    #[test]
+    fn shaman_on_engage_keeps_slow_same_target() {
+        let mut shaman = ShamanStrategy::new(10);
+        shaman.target_slowed = true;
+        shaman.last_target_id = 5;
+        let config = CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let target = dmft_common::types::SpawnData {
+            spawn_id: 5,
+            ..Default::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        shaman.on_engage(&ctx);
+        assert!(shaman.target_slowed);
+    }
+
+    #[test]
+    fn shaman_no_spells_returns_none() {
+        let mut shaman = ShamanStrategy::new(10);
+        shaman.target_slowed = true;
+        let config = CombatConfig::default();
+        let player = dmft_common::types::SpawnData::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+        };
+        assert!(shaman.select_spell(&ctx).is_none());
+    }
 }

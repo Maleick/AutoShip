@@ -122,6 +122,48 @@ mod tests {
     }
 
     #[test]
+    fn test_ignore_and_burn_defaults_empty() {
+        let toml_str = r#"
+            name = "test"
+            zone = "gfay"
+            camp_center = [0.0, 0.0, 0.0]
+            pull_point = [10.0, 10.0, 0.0]
+            pull_radius = 100.0
+            camp_radius = 20.0
+            leash_radius = 80.0
+            rest_mana_pct = 50
+            pull_mana_pct = 20
+            level_range = [1, 5]
+        "#;
+        let config: CampConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.ignore_mob_names.is_empty());
+        assert!(config.burn_mob_names.is_empty());
+        assert!(config.next_camp.is_none());
+        assert!(config.prev_camp.is_none());
+    }
+
+    #[test]
+    fn test_next_prev_camp_links() {
+        let config = sample_config();
+        assert_eq!(config.next_camp.as_deref(), Some("crushbone_throne"));
+        assert!(config.prev_camp.is_none());
+    }
+
+    #[test]
+    fn test_camp_center_and_pull_point() {
+        let config = sample_config();
+        assert_eq!(config.camp_center, [100.0, 200.0, 0.0]);
+        assert_eq!(config.pull_point, [150.0, 250.0, 0.0]);
+    }
+
+    #[test]
+    fn test_radiuses() {
+        let config = sample_config();
+        assert!(config.pull_radius > config.camp_radius);
+        assert!(config.leash_radius > config.camp_radius);
+    }
+
+    #[test]
     fn test_empty_pull_mob_names_default() {
         let toml_str = r#"
             name = "test"

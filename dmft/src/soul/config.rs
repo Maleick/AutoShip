@@ -194,4 +194,95 @@ mod tests {
         assert!((seed.trust - 0.5).abs() < 0.01);
         assert!(seed.tags.is_empty());
     }
+
+    #[test]
+    fn relationship_seed_with_tags() {
+        let toml_str = r#"
+            from = "Alice"
+            to = "Bob"
+            faction = 500
+            trust = 0.9
+            tags = ["Friend", "Mentor"]
+        "#;
+
+        let seed: RelationshipSeed = toml::from_str(toml_str).unwrap();
+        assert_eq!(seed.tags.len(), 2);
+        assert!((seed.trust - 0.9).abs() < 0.01);
+    }
+
+    #[test]
+    fn relationship_seed_default_faction() {
+        let toml_str = r#"
+            from = "A"
+            to = "B"
+        "#;
+
+        let seed: RelationshipSeed = toml::from_str(toml_str).unwrap();
+        assert_eq!(seed.faction, 0); // serde default
+    }
+
+    #[test]
+    fn soul_config_with_characters() {
+        let toml_str = r#"
+            enabled = true
+
+            [[character]]
+            name = "Grimjaw"
+            backstory = "A grumpy dwarf"
+
+            [[character]]
+            name = "Luminara"
+            backstory = "A cheerful elf"
+            edginess = "mild"
+        "#;
+
+        let config: SoulConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.character.len(), 2);
+        assert_eq!(config.character[0].name, "Grimjaw");
+        assert_eq!(config.character[1].edginess, Some(EdginessLevel::Mild));
+    }
+
+    #[test]
+    fn character_soul_config_defaults() {
+        let toml_str = r#"
+            name = "Test"
+        "#;
+
+        let config: CharacterSoulConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.name, "Test");
+        assert!(config.edginess.is_none());
+        assert!(config.backstory.is_empty());
+        assert!(config.quirks.is_empty());
+    }
+
+    #[test]
+    fn edginess_all_variants_deserialize() {
+        for variant in ["mild", "moderate", "spicy"] {
+            let toml_str = format!(
+                r#"
+                name = "Test"
+                edginess = "{variant}"
+            "#
+            );
+            let config: CharacterSoulConfig = toml::from_str(&toml_str).unwrap();
+            assert!(config.edginess.is_some());
+        }
+    }
+
+    #[test]
+    fn soul_config_with_relationship() {
+        let toml_str = r#"
+            enabled = true
+
+            [[relationship]]
+            from = "Alice"
+            to = "Bob"
+            faction = 100
+            trust = 0.8
+        "#;
+
+        let config: SoulConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.relationship.len(), 1);
+        assert_eq!(config.relationship[0].from, "Alice");
+    }
 }

@@ -53,12 +53,27 @@ impl ClassStrategy for RogueStrategy {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use dmft_common::combat::CombatConfig;
+    use dmft_common::combat::{CombatConfig, SpellEntry};
+    use dmft_common::types::SpawnData;
 
-    fn test_config() -> CombatConfig {
-        CombatConfig::default()
+    fn make_ctx<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        config: &'a CombatConfig,
+        in_combat: bool,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat,
+        }
     }
 
     #[test]
@@ -95,5 +110,68 @@ mod tests {
     fn rogue_no_aoe() {
         let rogue = RogueStrategy::new(9);
         assert_eq!(rogue.aoe_threshold(), 255);
+    }
+
+    #[test]
+    fn select_target_returns_assist_target() {
+        let rogue = RogueStrategy::new(9);
+        let player = SpawnData::default();
+        let target = SpawnData {
+            spawn_id: 66,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, Some(&target), &config, true);
+        assert_eq!(rogue.select_target(&ctx), Some(66));
+    }
+
+    #[test]
+    fn select_target_none_without_target() {
+        let rogue = RogueStrategy::new(9);
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &config, false);
+        assert!(rogue.select_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn select_spell_highest_priority() {
+        let rogue = RogueStrategy::new(9);
+        let mut player = SpawnData::default();
+        player.mana_current = 1000;
+        player.mana_max = 1000;
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "PoisonDisc".into(),
+                    slot: 1,
+                    spell_id: 1,
+                    priority: 10,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "Backstab".into(),
+                    slot: 2,
+                    spell_id: 2,
+                    priority: 20,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = make_ctx(&player, None, &config, true);
+        let spell = rogue.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Backstab");
+    }
+
+    #[test]
+    fn select_spell_empty_returns_none() {
+        let rogue = RogueStrategy::new(9);
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &config, false);
+        assert!(rogue.select_spell(&ctx).is_none());
     }
 }

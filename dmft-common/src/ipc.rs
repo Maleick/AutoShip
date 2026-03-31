@@ -371,4 +371,128 @@ mod tests {
             panic!("expected CommandResult");
         }
     }
+
+    #[test]
+    fn command_debug_redacts_password() {
+        let cmd = Command::StartLogin {
+            account_name: "user".into(),
+            password: "secret123".into(),
+            server_name: "Teek".into(),
+            character_name: "Char".into(),
+        };
+        let debug_output = format!("{:?}", cmd);
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains("secret123"));
+        assert!(debug_output.contains("user"));
+        assert!(debug_output.contains("Teek"));
+    }
+
+    #[test]
+    fn command_debug_non_login_uses_json() {
+        let cmd = Command::Ping;
+        let debug_output = format!("{:?}", cmd);
+        assert!(debug_output.contains("Ping"));
+    }
+
+    #[test]
+    fn command_debug_move_to() {
+        let cmd = Command::MoveTo {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+        };
+        let debug_output = format!("{:?}", cmd);
+        assert!(debug_output.contains("MoveTo"));
+    }
+
+    #[test]
+    fn pipe_name_with_max_client_id() {
+        let name = pipe_name(0x1234, u32::MAX);
+        assert!(name.contains(&u32::MAX.to_string()));
+    }
+
+    #[test]
+    fn shared_memory_name_with_max_client_id() {
+        let name = shared_memory_name(0x1234, u32::MAX);
+        assert!(name.contains(&u32::MAX.to_string()));
+    }
+
+    #[test]
+    fn pipe_name_with_zero_session_and_client() {
+        let name = pipe_name(0, 0);
+        assert_eq!(name, r"\\.\pipe\0_cmd_0");
+    }
+
+    #[test]
+    fn shared_memory_name_with_zero_session_and_client() {
+        let name = shared_memory_name(0, 0);
+        assert_eq!(name, "0_state_0");
+    }
+
+    #[test]
+    fn command_all_simple_variants_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let commands: Vec<Command> = vec![
+            Command::Ping,
+            Command::Eject,
+            Command::StopMovement,
+            Command::StopAttack,
+            Command::ClearTarget,
+            Command::Sit,
+            Command::Stand,
+            Command::StopNavigation,
+            Command::LoginPhaseQuery,
+            Command::CalibrateLogin,
+            Command::ApplyBuffs,
+            Command::ReportReady,
+            Command::CombatDisengage,
+            Command::LootCorpse,
+            Command::LootAll,
+            Command::QueryZoneGraph,
+        ];
+        for cmd in &commands {
+            let encoded = encode(cmd).expect("encode failed");
+            let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
+            assert_eq!(*cmd, decoded);
+        }
+    }
+
+    #[test]
+    fn response_all_variants_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let responses: Vec<Response> = vec![
+            Response::Pong {
+                client_id: 1,
+                timestamp_ms: 0,
+            },
+            Response::CommandResult {
+                success: false,
+                message: "err".into(),
+            },
+            Response::Error {
+                message: "oh no".into(),
+            },
+            Response::NavUpdate {
+                status: crate::nav::NavStatus::Idle,
+            },
+            Response::NavUpdate {
+                status: crate::nav::NavStatus::Arrived,
+            },
+            Response::LoginPhaseUpdate {
+                phase: crate::login::LoginPhase::Ready,
+            },
+            Response::PostLoginComplete { client_id: 42 },
+            Response::CombatUpdate {
+                status: crate::combat::CombatStatus::Idle,
+            },
+            Response::ZoneGraph { zones: vec![] },
+        ];
+        for resp in &responses {
+            let encoded = encode(resp).expect("encode failed");
+            let (decoded, _): (Response, usize) = decode(&encoded).expect("decode failed");
+            let _ = format!("{:?}", decoded);
+        }
+    }
 }

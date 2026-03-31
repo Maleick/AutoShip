@@ -148,6 +148,55 @@ mod tests {
     }
 
     #[test]
+    fn get_all_known_spells() {
+        let known_ids = [201, 202, 203, 301, 302, 401, 402, 501, 502, 601];
+        for id in known_ids {
+            assert!(get(id).is_some(), "spell_id {id} should be found");
+        }
+    }
+
+    #[test]
+    fn all_spells_have_non_empty_names() {
+        for spell in SPELLS {
+            assert!(
+                !spell.name.is_empty(),
+                "spell_id {} has empty name",
+                spell.spell_id
+            );
+        }
+    }
+
+    #[test]
+    fn all_spells_have_positive_mana_cost() {
+        for spell in SPELLS {
+            assert!(
+                spell.mana_cost > 0,
+                "Spell {} should have positive mana cost",
+                spell.name
+            );
+        }
+    }
+
+    #[test]
+    fn all_spells_have_positive_cast_time() {
+        for spell in SPELLS {
+            assert!(
+                spell.cast_time_ms > 0,
+                "Spell {} should have positive cast time",
+                spell.name
+            );
+        }
+    }
+
+    #[test]
+    fn spirit_of_wolf_is_druid_buff() {
+        let spell = get(601).unwrap();
+        assert_eq!(spell.name, "Spirit of Wolf");
+        assert!(!spell.is_aoe);
+        assert_eq!(spell.mana_cost, 40); // cheap buff
+    }
+
+    #[test]
     fn all_spell_ids_are_unique() {
         for (i, a) in SPELLS.iter().enumerate() {
             for b in SPELLS.iter().skip(i + 1) {

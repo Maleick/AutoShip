@@ -569,4 +569,233 @@ mod tests {
         let result = rebase(EQ_PREFERRED_BASE, actual_base);
         assert_eq!(result, Some(actual_base as usize));
     }
+
+    #[test]
+    fn rebase_zero_actual_base_returns_offset() {
+        let result = rebase(PINST_LOCAL_PLAYER, 0);
+        let expected_offset = PINST_LOCAL_PLAYER - EQ_PREFERRED_BASE;
+        assert_eq!(result, Some(expected_offset as usize));
+    }
+
+    #[test]
+    fn rebase_all_globals_succeed_with_realistic_base() {
+        let actual_base: u64 = 0x7FF600000000;
+        let globals = [
+            PINST_LOCAL_PLAYER,
+            PINST_CONTROLLED_PLAYER,
+            PINST_TARGET,
+            PINST_SPAWN_MANAGER,
+            PINST_LOCAL_PC,
+            PINST_SPELL_MANAGER,
+            PINST_CDISPLAY,
+            PINST_CEVERQUEST,
+        ];
+        for addr in &globals {
+            let result = rebase(*addr, actual_base);
+            assert!(result.is_some(), "rebase failed for 0x{:X}", addr);
+        }
+    }
+
+    #[test]
+    fn rebase_all_function_addresses_succeed() {
+        let actual_base: u64 = 0x7FF600000000;
+        let funcs = [
+            CAST_SPELL,
+            DO_COMBAT_ABILITY,
+            USE_SKILL,
+            CAN_USE_ITEM,
+            DO_ATTACK,
+            EXECUTE_CMD,
+            INTERPRET_CMD,
+            PROCESS_GAME_EVENTS,
+            CLICKED_PLAYER,
+            ISSUE_PET_COMMAND,
+            DO_LOOT,
+        ];
+        for addr in &funcs {
+            let result = rebase(*addr, actual_base);
+            assert!(result.is_some(), "rebase failed for func 0x{:X}", addr);
+        }
+    }
+
+    #[test]
+    fn eqmain_rebase_normal_case() {
+        let actual_base: u64 = 0x7FFA00000000;
+        let result = eqmain::rebase(eqmain::SIDL_MANAGER, actual_base);
+        let expected_offset = eqmain::SIDL_MANAGER - eqmain::EQMAIN_PREFERRED_BASE;
+        assert_eq!(result, Some((actual_base + expected_offset) as usize));
+    }
+
+    #[test]
+    fn eqmain_rebase_underflow_returns_none() {
+        let result = eqmain::rebase(0x100, 0x7FFA00000000);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn eqmain_rebase_preferred_base_returns_actual_base() {
+        let actual_base: u64 = 0x7FFA00000000;
+        let result = eqmain::rebase(eqmain::EQMAIN_PREFERRED_BASE, actual_base);
+        assert_eq!(result, Some(actual_base as usize));
+    }
+
+    #[test]
+    fn eqmain_rebase_all_pointers_succeed() {
+        let actual_base: u64 = 0x7FFA00000000;
+        let ptrs = [
+            eqmain::SIDL_MANAGER,
+            eqmain::LOGIN_SERVER_API,
+            eqmain::CXWND_MANAGER,
+            eqmain::JOIN_SERVER,
+            eqmain::LOGIN_VIEW_MANAGER,
+            eqmain::PINST_LOGIN_CLIENT,
+            eqmain::PINST_LOGIN_CONTROLLER,
+        ];
+        for addr in &ptrs {
+            let result = eqmain::rebase(*addr, actual_base);
+            assert!(result.is_some(), "eqmain rebase failed for 0x{:X}", addr);
+        }
+    }
+
+    #[test]
+    fn eqmain_and_eqgame_have_different_preferred_bases() {
+        assert_ne!(EQ_PREFERRED_BASE, eqmain::EQMAIN_PREFERRED_BASE);
+    }
+
+    #[test]
+    fn all_globals_above_preferred_base() {
+        let globals = [
+            PINST_LOCAL_PLAYER,
+            PINST_CONTROLLED_PLAYER,
+            PINST_TARGET,
+            PINST_SPAWN_MANAGER,
+            PINST_LOCAL_PC,
+            PINST_SPELL_MANAGER,
+            PINST_CDISPLAY,
+            PINST_CEVERQUEST,
+            PINST_CXWND_MANAGER,
+            PINST_ACTIVE_CORPSE,
+        ];
+        for addr in &globals {
+            assert!(
+                *addr > EQ_PREFERRED_BASE,
+                "Global 0x{:X} should be above preferred base",
+                addr
+            );
+        }
+    }
+
+    #[test]
+    fn all_function_addresses_above_preferred_base() {
+        let funcs = [
+            CAST_SPELL,
+            DO_COMBAT_ABILITY,
+            USE_SKILL,
+            CAN_USE_ITEM,
+            DO_ATTACK,
+            EXECUTE_CMD,
+            INTERPRET_CMD,
+            PROCESS_GAME_EVENTS,
+            REAL_RENDER_WORLD,
+            CLICKED_PLAYER,
+            ISSUE_PET_COMMAND,
+            GET_CON_LEVEL,
+            GET_PC_CLIENT,
+            DO_LOOT,
+            FIX_HEADING,
+            GET_BEARING,
+            FREE_TARGET_CAST_SPELL,
+            CHANGE_HEIGHT,
+            ZONE_GUIDE_MANAGER,
+            CHAR_LIST_ENTER_WORLD,
+            CHAR_LIST_SELECT_CHAR,
+        ];
+        for addr in &funcs {
+            assert!(
+                *addr > EQ_PREFERRED_BASE,
+                "Function 0x{:X} should be above preferred base",
+                addr
+            );
+        }
+    }
+
+    #[test]
+    fn eqmain_all_addresses_above_eqmain_base() {
+        let addrs = [
+            eqmain::SIDL_MANAGER,
+            eqmain::LOGIN_SERVER_API,
+            eqmain::CXWND_MANAGER,
+            eqmain::JOIN_SERVER,
+            eqmain::LOGIN_VIEW_MANAGER,
+            eqmain::PINST_LOGIN_CLIENT,
+            eqmain::PINST_LOGIN_CONTROLLER,
+        ];
+        for addr in &addrs {
+            assert!(
+                *addr > eqmain::EQMAIN_PREFERRED_BASE,
+                "eqmain 0x{:X} should be above eqmain preferred base",
+                addr
+            );
+        }
+    }
+
+    #[test]
+    fn player_base_offsets_are_ordered() {
+        // Name is at a lower offset than displayed name
+        assert!(player_base::NAME < player_base::DISPLAYED_NAME);
+        // Position fields are grouped together
+        assert!(player_base::Y < player_base::X);
+        assert!(player_base::X < player_base::Z);
+    }
+
+    #[test]
+    fn buff_slots_constants_consistent() {
+        // Each buff entry has a size, and the array offset should be nonzero
+        assert!(buff_slots::BUFF_ENTRY_SIZE > 0);
+        assert!(buff_slots::BUFF_ARRAY_OFFSET > 0);
+        assert!(buff_slots::MAX_BUFF_SLOTS > 0);
+        assert_eq!(buff_slots::EMPTY_SPELL_ID, 0xFFFF);
+    }
+
+    #[test]
+    fn zone_guide_constants_consistent() {
+        assert_eq!(zone_guide::ZONE_COUNT, 888);
+        assert!(zone_guide::ZONE_SIZE > 0);
+        assert!(zone_guide::CONNECTION_SIZE > 0);
+        // Zone connections array offset should be within zone struct
+        assert!(zone_guide::ZONE_CONNECTIONS_COUNT < zone_guide::ZONE_SIZE);
+    }
+
+    #[test]
+    fn group_constants_valid() {
+        assert_eq!(group::MAX_GROUP_SIZE, 6);
+        assert!(group::PC_CLIENT_GROUP_PTR > 0);
+        assert!(group::GROUP_MEMBERS < group::GROUP_LEADER);
+    }
+
+    #[test]
+    fn eqmain_vtable_offsets_differ_from_eqgame() {
+        // eqmain::CXWnd has WndNotification at 0x110, eqgame at 0x120
+        assert_ne!(
+            eqmain::CXWND_VTABLE_WND_NOTIFICATION,
+            eqgame::CXWND_VTABLE_WND_NOTIFICATION
+        );
+    }
+
+    #[test]
+    fn rebase_with_large_offset() {
+        // ZONE_GUIDE_MANAGER is a high address
+        let actual_base: u64 = 0x7FF600000000;
+        let result = rebase(ZONE_GUIDE_MANAGER, actual_base);
+        assert!(result.is_some());
+        let addr = result.unwrap();
+        assert!(addr > actual_base as usize);
+    }
+
+    #[test]
+    fn duplicate_constants_match() {
+        // SELECT_CHARACTER and CHAR_LIST_SELECT_CHAR should be the same
+        assert_eq!(SELECT_CHARACTER, CHAR_LIST_SELECT_CHAR);
+        assert_eq!(ENTER_WORLD, CHAR_LIST_ENTER_WORLD);
+    }
 }

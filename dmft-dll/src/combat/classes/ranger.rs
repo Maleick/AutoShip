@@ -129,13 +129,45 @@ impl ClassStrategy for RangerStrategy {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
+    use dmft_common::combat::{CombatConfig, SpellEntry};
+
+    fn make_ctx<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        enemies: &'a [SpawnData],
+        config: &'a CombatConfig,
+        in_combat: bool,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: enemies,
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat,
+        }
+    }
+
+    #[test]
+    fn ranger_class_id() {
+        let r = RangerStrategy::new(4);
+        assert_eq!(r.class_id(), 4);
+    }
 
     #[test]
     fn ranger_role_is_dps() {
         let ranger = RangerStrategy::new(4);
         assert!(matches!(ranger.role(), CombatRole::DpsRanged));
+    }
+
+    #[test]
+    fn ranger_aoe_threshold() {
+        let r = RangerStrategy::new(4);
+        assert_eq!(r.aoe_threshold(), 3);
     }
 
     #[test]
@@ -154,5 +186,203 @@ mod tests {
             ch_chain_slot: None,
         };
         assert!(ranger.should_assist(&ctx));
+    }
+
+    #[test]
+    fn select_target_in_combat_returns_assist_target() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData::default();
+        let target = SpawnData {
+            spawn_id: 33,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, Some(&target), &[], &config, true);
+        assert_eq!(r.select_target(&ctx), Some(33));
+    }
+
+    #[test]
+    fn select_target_out_of_combat_nearest_enemy() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let enemies = vec![
+            SpawnData {
+                spawn_id: 1,
+                x: 100.0,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 2,
+                x: 15.0,
+                ..SpawnData::default()
+            },
+        ];
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &enemies, &config, false);
+        assert_eq!(r.select_target(&ctx), Some(2));
+    }
+
+    #[test]
+    fn in_melee_range_true_when_close() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 1,
+            x: 20.0, // within 30 unit melee range
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, Some(&target), &[], &config, true);
+        assert!(r.in_melee_range(&ctx));
+    }
+
+    #[test]
+    fn in_melee_range_false_when_far() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 1,
+            x: 100.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, Some(&target), &[], &config, true);
+        assert!(!r.in_melee_range(&ctx));
+    }
+
+    #[test]
+    fn in_melee_range_false_no_target() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &[], &config, true);
+        assert!(!r.in_melee_range(&ctx));
+    }
+
+    #[test]
+    fn select_spell_melee_range_prefers_high_priority() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 1,
+            x: 10.0, // in melee range
+            ..SpawnData::default()
+        };
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "RangedDoT".into(),
+                    slot: 1,
+                    spell_id: 1,
+                    priority: 3,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "Kick".into(),
+                    slot: 2,
+                    spell_id: 2,
+                    priority: 7,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = make_ctx(&player, Some(&target), &[], &config, true);
+        let spell = r.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Kick"); // priority >= 5, melee ability
+    }
+
+    #[test]
+    fn select_spell_ranged_prefers_low_priority() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData {
+            x: 0.0,
+            y: 0.0,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 1,
+            x: 100.0, // at range
+            ..SpawnData::default()
+        };
+        let config = CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    name: "Snare".into(),
+                    slot: 1,
+                    spell_id: 1,
+                    priority: 4,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    name: "Kick".into(),
+                    slot: 2,
+                    spell_id: 2,
+                    priority: 7,
+                    min_mana_pct: 0.0,
+                    is_aoe: false,
+                },
+            ],
+            ..CombatConfig::default()
+        };
+        let ctx = make_ctx(&player, Some(&target), &[], &config, true);
+        let spell = r.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Snare"); // priority < 5, ranged ability
+    }
+
+    #[test]
+    fn select_spell_empty_returns_none() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, None, &[], &config, false);
+        assert!(r.select_spell(&ctx).is_none());
+    }
+
+    #[test]
+    fn nearest_enemy_finds_closest() {
+        let r = RangerStrategy::new(4);
+        let player = SpawnData {
+            x: 50.0,
+            y: 50.0,
+            ..SpawnData::default()
+        };
+        let enemies = vec![
+            SpawnData {
+                spawn_id: 1,
+                x: 200.0,
+                y: 200.0,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 2,
+                x: 55.0,
+                y: 55.0,
+                ..SpawnData::default()
+            },
+        ];
+        let nearest = r.nearest_enemy(&player, &enemies).unwrap();
+        assert_eq!(nearest.spawn_id, 2);
     }
 }

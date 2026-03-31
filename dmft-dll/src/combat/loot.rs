@@ -152,4 +152,47 @@ mod tests {
         let corpses = find_lootable_corpses(&player, &spawns);
         assert_eq!(corpses.len(), 3);
     }
+
+    #[test]
+    fn corpse_at_exact_loot_range() {
+        let player = make_player(0.0, 0.0);
+        let spawns = vec![make_corpse(1, LOOT_RANGE, 0.0)];
+        assert!(has_lootable_corpses(&player, &spawns));
+        assert_eq!(find_lootable_corpses(&player, &spawns).len(), 1);
+    }
+
+    #[test]
+    fn corpse_just_outside_loot_range() {
+        let player = make_player(0.0, 0.0);
+        let spawns = vec![make_corpse(1, LOOT_RANGE + 0.1, 0.0)];
+        assert!(!has_lootable_corpses(&player, &spawns));
+        assert!(find_lootable_corpses(&player, &spawns).is_empty());
+    }
+
+    #[test]
+    fn empty_spawn_list() {
+        let player = make_player(0.0, 0.0);
+        assert!(!has_lootable_corpses(&player, &[]));
+        assert!(find_lootable_corpses(&player, &[]).is_empty());
+    }
+
+    #[test]
+    fn corpse_at_same_position() {
+        let player = make_player(50.0, 50.0);
+        let spawns = vec![make_corpse(1, 50.0, 50.0)];
+        assert!(has_lootable_corpses(&player, &spawns));
+    }
+
+    #[test]
+    fn mixed_spawn_types_only_corpses() {
+        let player = make_player(0.0, 0.0);
+        let spawns = vec![
+            make_npc(1, 5.0, 0.0),
+            make_corpse(2, 5.0, 0.0),
+            make_npc(3, 5.0, 0.0),
+            make_corpse(4, 5.0, 0.0),
+        ];
+        let corpses = find_lootable_corpses(&player, &spawns);
+        assert_eq!(corpses, vec![2, 4]);
+    }
 }

@@ -481,4 +481,283 @@ mod tests {
         let g = ZoneGraph::default();
         assert!(g.zones.is_empty());
     }
+
+    // ─── Additional Xorshift32 tests ───
+
+    #[test]
+    fn xorshift32_new_with_seed_is_deterministic() {
+        let mut a = Xorshift32::new(42);
+        let mut b = Xorshift32::new(42);
+        for _ in 0..100 {
+            assert_eq!(a.next_u32(), b.next_u32());
+        }
+    }
+
+    #[test]
+    fn xorshift32_different_client_ids_produce_different_sequences() {
+        let mut a = Xorshift32::from_client_id(1);
+        let mut b = Xorshift32::from_client_id(2);
+        // At least one of the first 10 values should differ
+        let differs = (0..10).any(|_| a.next_u32() != b.next_u32());
+        assert!(
+            differs,
+            "different client IDs should produce different sequences"
+        );
+    }
+
+    #[test]
+    fn xorshift32_next_f32_never_returns_exactly_one() {
+        // u32::MAX / u32::MAX as f32 should be < 1.0 due to floating point
+        let mut rng = Xorshift32::new(1);
+        for _ in 0..10_000 {
+            let v = rng.next_f32();
+            assert!(v < 1.0, "next_f32 should never return >= 1.0, got {v}");
+        }
+    }
+
+    // ─── Additional Waypoint tests ───
+
+    #[test]
+    fn waypoint_new_sets_coordinates() {
+        let wp = Waypoint::new(1.5, -2.5, 3.0);
+        assert!((wp.x - 1.5).abs() < f32::EPSILON);
+        assert!((wp.y - (-2.5)).abs() < f32::EPSILON);
+        assert!((wp.z - 3.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn waypoint_distance_to_self_is_zero() {
+        let wp = Waypoint::new(10.0, 20.0, 30.0);
+        assert!((wp.distance_2d(&wp)).abs() < f32::EPSILON);
+        assert!((wp.distance_3d(&wp)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn waypoint_distance_2d_ignores_z() {
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(0.0, 0.0, 1000.0);
+        assert!((a.distance_2d(&b)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn waypoint_distance_3d_includes_z() {
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(0.0, 0.0, 5.0);
+        assert!((a.distance_3d(&b) - 5.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn waypoint_distance_is_symmetric() {
+        let a = Waypoint::new(1.0, 2.0, 3.0);
+        let b = Waypoint::new(4.0, 5.0, 6.0);
+        assert!((a.distance_2d(&b) - b.distance_2d(&a)).abs() < f32::EPSILON);
+        assert!((a.distance_3d(&b) - b.distance_3d(&a)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn waypoint_negative_coordinates() {
+        let a = Waypoint::new(-3.0, -4.0, 0.0);
+        let b = Waypoint::new(0.0, 0.0, 0.0);
+        assert!((a.distance_2d(&b) - 5.0).abs() < f32::EPSILON);
+    }
+
+    // ─── Additional IndexedQueue tests ───
+
+    #[test]
+    fn indexed_queue_advance_on_empty_returns_false() {
+        let mut q: IndexedQueue<i32> = IndexedQueue::new();
+        assert!(!q.advance());
+        assert_eq!(q.index(), 0);
+    }
+
+    #[test]
+    fn indexed_queue_single_item() {
+        let mut q = IndexedQueue::new();
+        q.set_items(vec![42]);
+        assert_eq!(q.current(), Some(&42));
+        assert!(!q.advance()); // can't advance past single item
+        assert_eq!(q.current(), Some(&42));
+    }
+
+    #[test]
+    fn indexed_queue_set_items_on_non_empty_overwrites() {
+        let mut q = IndexedQueue::new();
+        q.set_items(vec![1, 2, 3]);
+        q.advance();
+        assert_eq!(q.current(), Some(&2));
+
+        q.set_items(vec![10, 20]);
+        assert_eq!(q.current(), Some(&10));
+        assert_eq!(q.len(), 2);
+    }
+
+    #[test]
+    fn indexed_queue_current_returns_none_after_clear() {
+        let mut q = IndexedQueue::new();
+        q.set_items(vec![1, 2, 3]);
+        q.advance();
+        q.clear();
+        assert!(q.current().is_none());
+        assert!(q.is_empty());
+    }
+
+    #[test]
+    fn indexed_queue_set_items_with_empty_vec() {
+        let mut q = IndexedQueue::new();
+        q.set_items(vec![1, 2]);
+        q.set_items(Vec::<i32>::new());
+        assert!(q.is_empty());
+        assert!(q.current().is_none());
+    }
+
+    // ─── Additional ZoneGraph tests ───
+
+    #[test]
+    fn zone_graph_find_path_both_zones_unknown() {
+        let g = ZoneGraph::default();
+        assert!(g.find_path(100, 200).is_none());
+    }
+
+    #[test]
+    fn zone_graph_find_path_same_zone_unknown_returns_self() {
+        let g = ZoneGraph::default();
+        // Same zone returns immediately even if not in graph (by design)
+        assert_eq!(g.find_path(999, 999), Some(vec![999]));
+    }
+
+    #[test]
+    fn zone_graph_find_path_prefers_shorter_route() {
+        // A -> B (direct), A -> C -> D -> B (3 hops)
+        let mut g = ZoneGraph::default();
+        g.zones.insert(
+            1,
+            ZoneNode {
+                zone_id: 1,
+                name: "A".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![
+                    ZoneConnection {
+                        dest_zone_id: 2,
+                        transfer_type: 0,
+                        disabled: false,
+                    },
+                    ZoneConnection {
+                        dest_zone_id: 3,
+                        transfer_type: 0,
+                        disabled: false,
+                    },
+                ],
+            },
+        );
+        g.zones.insert(
+            2,
+            ZoneNode {
+                zone_id: 2,
+                name: "B".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![],
+            },
+        );
+        g.zones.insert(
+            3,
+            ZoneNode {
+                zone_id: 3,
+                name: "C".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![ZoneConnection {
+                    dest_zone_id: 4,
+                    transfer_type: 0,
+                    disabled: false,
+                }],
+            },
+        );
+        g.zones.insert(
+            4,
+            ZoneNode {
+                zone_id: 4,
+                name: "D".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![ZoneConnection {
+                    dest_zone_id: 2,
+                    transfer_type: 0,
+                    disabled: false,
+                }],
+            },
+        );
+
+        let path = g.find_path(1, 2).unwrap();
+        assert_eq!(path, vec![1, 2], "BFS should find shortest path");
+    }
+
+    #[test]
+    fn zone_graph_find_path_routes_around_disabled() {
+        // A -> B (disabled), A -> C -> B (enabled)
+        let mut g = ZoneGraph::default();
+        g.zones.insert(
+            1,
+            ZoneNode {
+                zone_id: 1,
+                name: "A".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![
+                    ZoneConnection {
+                        dest_zone_id: 2,
+                        transfer_type: 0,
+                        disabled: true,
+                    },
+                    ZoneConnection {
+                        dest_zone_id: 3,
+                        transfer_type: 0,
+                        disabled: false,
+                    },
+                ],
+            },
+        );
+        g.zones.insert(
+            2,
+            ZoneNode {
+                zone_id: 2,
+                name: "B".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![],
+            },
+        );
+        g.zones.insert(
+            3,
+            ZoneNode {
+                zone_id: 3,
+                name: "C".into(),
+                min_level: 0,
+                max_level: 0,
+                connections: vec![ZoneConnection {
+                    dest_zone_id: 2,
+                    transfer_type: 0,
+                    disabled: false,
+                }],
+            },
+        );
+
+        let path = g.find_path(1, 2).unwrap();
+        assert_eq!(
+            path,
+            vec![1, 3, 2],
+            "should route around disabled connection"
+        );
+    }
+
+    #[test]
+    fn zone_graph_serialization_roundtrip() {
+        let g = make_test_graph();
+        let json = serde_json::to_string(&g).expect("serialize");
+        let restored: ZoneGraph = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.zones.len(), g.zones.len());
+        // Verify path still works
+        assert_eq!(restored.find_path(1, 3).unwrap().len(), 3);
+    }
 }
