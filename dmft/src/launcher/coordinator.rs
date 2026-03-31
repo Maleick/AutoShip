@@ -338,7 +338,7 @@ mod tests {
         for _ in 0..100 {
             let duration = compute_stagger_between(3, 10);
             let secs = duration.as_secs();
-            assert!(secs >= 3 && secs <= 10, "stagger {secs} not in [3, 10]");
+            assert!((3..=10).contains(&secs), "stagger {secs} not in [3, 10]");
         }
     }
 

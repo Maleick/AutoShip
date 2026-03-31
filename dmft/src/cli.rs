@@ -12,7 +12,7 @@ use crate::process;
 use crate::soul;
 use crate::tui;
 
-use crate::{get_module_base, SOUL_DB_PATH};
+use crate::{SOUL_DB_PATH, get_module_base};
 
 /// TUI mode — the default. Shows ShowEQ-inspired live dashboard.
 pub(crate) fn run_tui_mode() -> Result<()> {
@@ -622,7 +622,12 @@ pub(crate) fn run_login_pid_mode(
 }
 
 /// Login mode (--login <account> <password> [server] [character]) — send StartLogin to all injected EQ clients.
-pub(crate) fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
+pub(crate) fn run_login_mode(
+    account: &str,
+    password: &str,
+    server: &str,
+    character: &str,
+) -> Result<()> {
     use dmft_common::ipc::Command;
 
     let config = load_config()?;
@@ -739,7 +744,11 @@ pub(crate) fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 }
 
 /// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
-pub(crate) fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> Result<()> {
+pub(crate) fn run_navpath_mode(
+    zone: &str,
+    from: (f32, f32, f32),
+    to: (f32, f32, f32),
+) -> Result<()> {
     info!("Navpath mode: zone={zone} from={from:?} to={to:?}");
     println!("Loading navmesh for zone '{zone}'...");
 
@@ -967,19 +976,20 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
             for i in 0..8 {
                 let off = i * 8;
                 if let Some(slice) = bytes.get(off..off + 8)
-                    && let Ok(arr) = <[u8; 8]>::try_from(slice) {
-                        let val = u64::from_le_bytes(arr);
-                        let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
-                        info!(
-                            "  SpawnManager+{:#04x}: {:#018x} {}",
-                            off,
-                            val,
-                            if looks_like_ptr {
-                                "<-- looks like a pointer"
-                            } else {
-                                ""
-                            }
-                        );
+                    && let Ok(arr) = <[u8; 8]>::try_from(slice)
+                {
+                    let val = u64::from_le_bytes(arr);
+                    let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                    info!(
+                        "  SpawnManager+{:#04x}: {:#018x} {}",
+                        off,
+                        val,
+                        if looks_like_ptr {
+                            "<-- looks like a pointer"
+                        } else {
+                            ""
+                        }
+                    );
                 }
             }
         }
@@ -996,15 +1006,11 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     match proc.read_bytes(list_addr, 16) {
         Ok(bytes) => {
             info!("\n{}", format_hex_dump(list_addr, &bytes));
-            if let (Some(first_slice), Some(last_slice)) =
-                (bytes.get(0..8), bytes.get(8..16))
-            {
-                let first_node = u64::from_le_bytes(
-                    <[u8; 8]>::try_from(first_slice).unwrap_or_default(),
-                );
-                let last_node = u64::from_le_bytes(
-                    <[u8; 8]>::try_from(last_slice).unwrap_or_default(),
-                );
+            if let (Some(first_slice), Some(last_slice)) = (bytes.get(0..8), bytes.get(8..16)) {
+                let first_node =
+                    u64::from_le_bytes(<[u8; 8]>::try_from(first_slice).unwrap_or_default());
+                let last_node =
+                    u64::from_le_bytes(<[u8; 8]>::try_from(last_slice).unwrap_or_default());
                 info!("  TList.m_pFirstNode: {:#x}", first_node);
                 info!("  TList.m_pLastNode:  {:#x}", last_node);
             }

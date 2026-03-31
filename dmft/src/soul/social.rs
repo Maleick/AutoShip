@@ -343,6 +343,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn standing_labels() {
         let mut rel = Relationship::default();
 

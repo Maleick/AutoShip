@@ -245,16 +245,16 @@ pub fn handle_events(
             }
         }
 
-        // Navigation screen keybindings: j/k navigate the character list
+        // Navigation screen keybindings: arrows navigate the character list
         if app.active_screen == ActiveScreen::Navigation {
             match key.code {
-                KeyCode::Down | KeyCode::Char('j') => {
+                KeyCode::Down => {
                     let max = app.visible_clients().len().saturating_sub(1);
                     if app.nav_state.nav_selected < max {
                         app.nav_state.nav_selected += 1;
                     }
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
+                KeyCode::Up => {
                     app.nav_state.nav_selected = app.nav_state.nav_selected.saturating_sub(1);
                 }
                 _ => {}
@@ -262,13 +262,12 @@ pub fn handle_events(
         }
 
         // Panel-specific keybindings (only on Spawns and Character screens)
-        if app.active_screen == ActiveScreen::Spawns
-            || app.active_screen == ActiveScreen::Character
+        if app.active_screen == ActiveScreen::Spawns || app.active_screen == ActiveScreen::Character
         {
             match app.active_panel {
                 ActivePanel::SpawnList => match key.code {
-                    KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
-                    KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
+                    KeyCode::Down => app.spawn_list_down(),
+                    KeyCode::Up => app.spawn_list_up(),
                     KeyCode::PageDown => app.spawn_list_page_down(),
                     KeyCode::PageUp => app.spawn_list_page_up(),
                     KeyCode::Home => app.spawns_state.table_state.select(Some(0)),
@@ -280,8 +279,8 @@ pub fn handle_events(
                     _ => {}
                 },
                 ActivePanel::HexDump => match key.code {
-                    KeyCode::Down | KeyCode::Char('j') => app.hex_scroll_down(),
-                    KeyCode::Up | KeyCode::Char('k') => app.hex_scroll_up(),
+                    KeyCode::Down => app.hex_scroll_down(),
+                    KeyCode::Up => app.hex_scroll_up(),
                     _ => {}
                 },
             }

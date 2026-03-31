@@ -258,6 +258,214 @@ fn emotes_for_mood(mood: MoodState) -> &'static [&'static str] {
     }
 }
 
+// ─── Phrase tables ───
+
+fn phrases_for_mood(mood: MoodState, edginess: EdginessLevel) -> &'static [&'static str] {
+    match (mood, edginess) {
+        // ── Neutral ──
+        (MoodState::Neutral, EdginessLevel::Mild) => &[
+            "Nice day for adventuring.",
+            "Wonder what's around the next corner.",
+            "Everyone doing alright?",
+            "Keeping an eye out.",
+            "Steady as she goes.",
+        ],
+        (MoodState::Neutral, EdginessLevel::Moderate) => &[
+            "Another day, another plat.",
+            "Let's keep moving.",
+            "Anything good drop yet?",
+            "I've seen worse camps.",
+            "Stay sharp, people.",
+        ],
+        (MoodState::Neutral, EdginessLevel::Spicy) => &[
+            "This camp is deader than my last group.",
+            "Somebody wake me when something drops.",
+            "I didn't roll on this server to sit around.",
+            "Buff check, who's slacking?",
+            "At least the company's tolerable. Barely.",
+        ],
+        // ── Happy ──
+        (MoodState::Happy, EdginessLevel::Mild) => &[
+            "What a great group!",
+            "This is going really well!",
+            "I love this zone.",
+            "Good times, good times.",
+            "Couldn't ask for better company.",
+        ],
+        (MoodState::Happy, EdginessLevel::Moderate) => &[
+            "Now we're cooking!",
+            "This is more like it!",
+            "Hah, that was a good pull.",
+            "Ding! Oh wait, not yet.",
+            "Loving this XP flow.",
+        ],
+        (MoodState::Happy, EdginessLevel::Spicy) => &[
+            "This is what I live for!",
+            "Get wrecked, mobs!",
+            "I could do this all day. And I will.",
+            "Who needs sleep when the XP is this good?",
+            "Whoever picked this camp deserves a raise.",
+        ],
+        // ── Angry ──
+        (MoodState::Angry, EdginessLevel::Mild) => &[
+            "That wasn't ideal.",
+            "We can do better than this.",
+            "Focus up, everyone.",
+            "Let's not let that happen again.",
+        ],
+        (MoodState::Angry, EdginessLevel::Moderate) => &[
+            "Come on, keep it together!",
+            "That pull was sloppy.",
+            "We're better than this.",
+            "Who pulled that? Seriously.",
+        ],
+        (MoodState::Angry, EdginessLevel::Spicy) => &[
+            "What in Cazic's name was THAT?",
+            "I swear, if we wipe again...",
+            "Did the tank fall asleep?",
+            "My grandma could tank better than this.",
+            "I'm about two bad pulls from camping.",
+        ],
+        // ── Anxious ──
+        (MoodState::Anxious, EdginessLevel::Mild) => &[
+            "Is everyone buffed?",
+            "Maybe we should pull slower.",
+            "I have a bad feeling about this.",
+            "Check your health, please.",
+        ],
+        (MoodState::Anxious, EdginessLevel::Moderate) => &[
+            "Mana check before the next pull.",
+            "Anyone else feeling jumpy?",
+            "Last time I was here it didn't go well.",
+            "Let's not get cocky.",
+        ],
+        (MoodState::Anxious, EdginessLevel::Spicy) => &[
+            "I'm not dying here. Not today.",
+            "If we wipe I'm blaming whoever pulled.",
+            "My corpse is NOT staying in this zone.",
+            "Please tell me the cleric is paying attention.",
+        ],
+        // ── Bored ──
+        (MoodState::Bored, EdginessLevel::Mild) => &[
+            "How much longer until we move?",
+            "Anything else we could be doing?",
+            "Maybe I'll go fishing.",
+            "Getting a bit restless here.",
+        ],
+        (MoodState::Bored, EdginessLevel::Moderate) => &[
+            "This camp is dead.",
+            "Think I'll go check vendors.",
+            "Need a bio, back in a few.",
+            "We've been here forever.",
+            "Can we pull faster?",
+        ],
+        (MoodState::Bored, EdginessLevel::Spicy) => &[
+            "I'm going to die of boredom before anything kills me.",
+            "ZzZzZz... oh sorry, still here.",
+            "My butt is numb from sitting.",
+            "Entertainment value of this camp: zero.",
+            "I've had more excitement waiting for the boat.",
+        ],
+        // ── Excited ──
+        (MoodState::Excited, EdginessLevel::Mild) => &[
+            "This is wonderful!",
+            "What an adventure!",
+            "I can't wait to see what's next!",
+            "This is why I became an adventurer!",
+        ],
+        (MoodState::Excited, EdginessLevel::Moderate) => &[
+            "Let's GO!",
+            "Oh man, this is going to be good!",
+            "Best camp on the server right here!",
+            "More! Pull more!",
+        ],
+        (MoodState::Excited, EdginessLevel::Spicy) => &[
+            "SEND IT!",
+            "Let's burn this place to the ground!",
+            "I am FEELING it right now!",
+            "Chain pull! CHAIN PULL!",
+            "Who needs mana? Just keep pulling!",
+        ],
+        // ── Melancholy ──
+        (MoodState::Melancholy, EdginessLevel::Mild) => &[
+            "I miss the old days.",
+            "Things were simpler back in Qeynos.",
+            "Does anyone remember when...",
+            "Just thinking about things.",
+        ],
+        (MoodState::Melancholy, EdginessLevel::Moderate) => &[
+            "Remember when this zone used to be packed?",
+            "Lost a good group member last week.",
+            "Sometimes I wonder why we keep at this.",
+            "The loot tables mock me.",
+        ],
+        (MoodState::Melancholy, EdginessLevel::Spicy) => &[
+            "This game's gonna outlive us all.",
+            "Remember when dying meant something?",
+            "Spent more time here than with my family. Worth it.",
+            "I've seen things... terrible wipes in Lower Guk...",
+        ],
+        // ── Focused ──
+        (MoodState::Focused, EdginessLevel::Mild) => &[
+            "Stay alert.",
+            "Let's keep the pace.",
+            "Good work, everyone.",
+            "Eyes on the camp.",
+        ],
+        (MoodState::Focused, EdginessLevel::Moderate) => &[
+            "On task. Let's go.",
+            "Save the chat for after the named.",
+            "Mana's good, keep pulling.",
+            "Tight pulls, tight heals.",
+        ],
+        (MoodState::Focused, EdginessLevel::Spicy) => &[
+            "Shut up and DPS.",
+            "Less talking, more killing.",
+            "Save the life story for after we ding.",
+            "Focus or wipe. Your call.",
+        ],
+        // ── Playful ──
+        (MoodState::Playful, EdginessLevel::Mild) => &[
+            "Hehe, watch this!",
+            "Bet I can out-DPS the tank.",
+            "Anyone want to race to the zone line?",
+            "Duck duck goose?",
+        ],
+        (MoodState::Playful, EdginessLevel::Moderate) => &[
+            "I dare someone to pull two.",
+            "Last one to ding buys the port!",
+            "Plot twist: I'm actually a bard.",
+            "Hold my ale and watch this.",
+        ],
+        (MoodState::Playful, EdginessLevel::Spicy) => &[
+            "I'm going to train the whole zone. Kidding. Maybe.",
+            "What if I just... pulled everything?",
+            "The floor is lava! Everyone levitate!",
+            "Leroy Jenkins would be proud of that pull.",
+            "Accidental AoE? That was ARTISTIC AoE.",
+        ],
+        // ── Exhausted ──
+        (MoodState::Exhausted, EdginessLevel::Mild) => &[
+            "Getting a bit tired.",
+            "Maybe we should take a break.",
+            "My eyes are getting heavy.",
+            "One more pull, then rest?",
+        ],
+        (MoodState::Exhausted, EdginessLevel::Moderate) => &[
+            "Running on fumes here.",
+            "I need to crash soon.",
+            "Bio and then maybe call it?",
+            "My fingers are going numb.",
+        ],
+        (MoodState::Exhausted, EdginessLevel::Spicy) => &[
+            "If I fall asleep at the keyboard, just rez me later.",
+            "We've been at this so long I forgot what daylight looks like.",
+            "My coffee gave up on me three hours ago.",
+            "I'm one bad pull from logging to bed.",
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -585,213 +793,5 @@ mod tests {
             .collect();
 
         assert_ne!(mild_phrases, spicy_phrases);
-    }
-}
-
-// ─── Phrase tables ───
-
-fn phrases_for_mood(mood: MoodState, edginess: EdginessLevel) -> &'static [&'static str] {
-    match (mood, edginess) {
-        // ── Neutral ──
-        (MoodState::Neutral, EdginessLevel::Mild) => &[
-            "Nice day for adventuring.",
-            "Wonder what's around the next corner.",
-            "Everyone doing alright?",
-            "Keeping an eye out.",
-            "Steady as she goes.",
-        ],
-        (MoodState::Neutral, EdginessLevel::Moderate) => &[
-            "Another day, another plat.",
-            "Let's keep moving.",
-            "Anything good drop yet?",
-            "I've seen worse camps.",
-            "Stay sharp, people.",
-        ],
-        (MoodState::Neutral, EdginessLevel::Spicy) => &[
-            "This camp is deader than my last group.",
-            "Somebody wake me when something drops.",
-            "I didn't roll on this server to sit around.",
-            "Buff check, who's slacking?",
-            "At least the company's tolerable. Barely.",
-        ],
-        // ── Happy ──
-        (MoodState::Happy, EdginessLevel::Mild) => &[
-            "What a great group!",
-            "This is going really well!",
-            "I love this zone.",
-            "Good times, good times.",
-            "Couldn't ask for better company.",
-        ],
-        (MoodState::Happy, EdginessLevel::Moderate) => &[
-            "Now we're cooking!",
-            "This is more like it!",
-            "Hah, that was a good pull.",
-            "Ding! Oh wait, not yet.",
-            "Loving this XP flow.",
-        ],
-        (MoodState::Happy, EdginessLevel::Spicy) => &[
-            "This is what I live for!",
-            "Get wrecked, mobs!",
-            "I could do this all day. And I will.",
-            "Who needs sleep when the XP is this good?",
-            "Whoever picked this camp deserves a raise.",
-        ],
-        // ── Angry ──
-        (MoodState::Angry, EdginessLevel::Mild) => &[
-            "That wasn't ideal.",
-            "We can do better than this.",
-            "Focus up, everyone.",
-            "Let's not let that happen again.",
-        ],
-        (MoodState::Angry, EdginessLevel::Moderate) => &[
-            "Come on, keep it together!",
-            "That pull was sloppy.",
-            "We're better than this.",
-            "Who pulled that? Seriously.",
-        ],
-        (MoodState::Angry, EdginessLevel::Spicy) => &[
-            "What in Cazic's name was THAT?",
-            "I swear, if we wipe again...",
-            "Did the tank fall asleep?",
-            "My grandma could tank better than this.",
-            "I'm about two bad pulls from camping.",
-        ],
-        // ── Anxious ──
-        (MoodState::Anxious, EdginessLevel::Mild) => &[
-            "Is everyone buffed?",
-            "Maybe we should pull slower.",
-            "I have a bad feeling about this.",
-            "Check your health, please.",
-        ],
-        (MoodState::Anxious, EdginessLevel::Moderate) => &[
-            "Mana check before the next pull.",
-            "Anyone else feeling jumpy?",
-            "Last time I was here it didn't go well.",
-            "Let's not get cocky.",
-        ],
-        (MoodState::Anxious, EdginessLevel::Spicy) => &[
-            "I'm not dying here. Not today.",
-            "If we wipe I'm blaming whoever pulled.",
-            "My corpse is NOT staying in this zone.",
-            "Please tell me the cleric is paying attention.",
-        ],
-        // ── Bored ──
-        (MoodState::Bored, EdginessLevel::Mild) => &[
-            "How much longer until we move?",
-            "Anything else we could be doing?",
-            "Maybe I'll go fishing.",
-            "Getting a bit restless here.",
-        ],
-        (MoodState::Bored, EdginessLevel::Moderate) => &[
-            "This camp is dead.",
-            "Think I'll go check vendors.",
-            "Need a bio, back in a few.",
-            "We've been here forever.",
-            "Can we pull faster?",
-        ],
-        (MoodState::Bored, EdginessLevel::Spicy) => &[
-            "I'm going to die of boredom before anything kills me.",
-            "ZzZzZz... oh sorry, still here.",
-            "My butt is numb from sitting.",
-            "Entertainment value of this camp: zero.",
-            "I've had more excitement waiting for the boat.",
-        ],
-        // ── Excited ──
-        (MoodState::Excited, EdginessLevel::Mild) => &[
-            "This is wonderful!",
-            "What an adventure!",
-            "I can't wait to see what's next!",
-            "This is why I became an adventurer!",
-        ],
-        (MoodState::Excited, EdginessLevel::Moderate) => &[
-            "Let's GO!",
-            "Oh man, this is going to be good!",
-            "Best camp on the server right here!",
-            "More! Pull more!",
-        ],
-        (MoodState::Excited, EdginessLevel::Spicy) => &[
-            "SEND IT!",
-            "Let's burn this place to the ground!",
-            "I am FEELING it right now!",
-            "Chain pull! CHAIN PULL!",
-            "Who needs mana? Just keep pulling!",
-        ],
-        // ── Melancholy ──
-        (MoodState::Melancholy, EdginessLevel::Mild) => &[
-            "I miss the old days.",
-            "Things were simpler back in Qeynos.",
-            "Does anyone remember when...",
-            "Just thinking about things.",
-        ],
-        (MoodState::Melancholy, EdginessLevel::Moderate) => &[
-            "Remember when this zone used to be packed?",
-            "Lost a good group member last week.",
-            "Sometimes I wonder why we keep at this.",
-            "The loot tables mock me.",
-        ],
-        (MoodState::Melancholy, EdginessLevel::Spicy) => &[
-            "This game's gonna outlive us all.",
-            "Remember when dying meant something?",
-            "Spent more time here than with my family. Worth it.",
-            "I've seen things... terrible wipes in Lower Guk...",
-        ],
-        // ── Focused ──
-        (MoodState::Focused, EdginessLevel::Mild) => &[
-            "Stay alert.",
-            "Let's keep the pace.",
-            "Good work, everyone.",
-            "Eyes on the camp.",
-        ],
-        (MoodState::Focused, EdginessLevel::Moderate) => &[
-            "On task. Let's go.",
-            "Save the chat for after the named.",
-            "Mana's good, keep pulling.",
-            "Tight pulls, tight heals.",
-        ],
-        (MoodState::Focused, EdginessLevel::Spicy) => &[
-            "Shut up and DPS.",
-            "Less talking, more killing.",
-            "Save the life story for after we ding.",
-            "Focus or wipe. Your call.",
-        ],
-        // ── Playful ──
-        (MoodState::Playful, EdginessLevel::Mild) => &[
-            "Hehe, watch this!",
-            "Bet I can out-DPS the tank.",
-            "Anyone want to race to the zone line?",
-            "Duck duck goose?",
-        ],
-        (MoodState::Playful, EdginessLevel::Moderate) => &[
-            "I dare someone to pull two.",
-            "Last one to ding buys the port!",
-            "Plot twist: I'm actually a bard.",
-            "Hold my ale and watch this.",
-        ],
-        (MoodState::Playful, EdginessLevel::Spicy) => &[
-            "I'm going to train the whole zone. Kidding. Maybe.",
-            "What if I just... pulled everything?",
-            "The floor is lava! Everyone levitate!",
-            "Leroy Jenkins would be proud of that pull.",
-            "Accidental AoE? That was ARTISTIC AoE.",
-        ],
-        // ── Exhausted ──
-        (MoodState::Exhausted, EdginessLevel::Mild) => &[
-            "Getting a bit tired.",
-            "Maybe we should take a break.",
-            "My eyes are getting heavy.",
-            "One more pull, then rest?",
-        ],
-        (MoodState::Exhausted, EdginessLevel::Moderate) => &[
-            "Running on fumes here.",
-            "I need to crash soon.",
-            "Bio and then maybe call it?",
-            "My fingers are going numb.",
-        ],
-        (MoodState::Exhausted, EdginessLevel::Spicy) => &[
-            "If I fall asleep at the keyboard, just rez me later.",
-            "We've been at this so long I forgot what daylight looks like.",
-            "My coffee gave up on me three hours ago.",
-            "I'm one bad pull from logging to bed.",
-        ],
     }
 }

@@ -271,7 +271,10 @@ mod tests {
             in_combat: true,
         };
         bard.on_engage(&engage_ctx);
-        assert!(bard.melody_active, "melody should be active after on_engage");
+        assert!(
+            bard.melody_active,
+            "melody should be active after on_engage"
+        );
 
         // Combat ends — melody should stop
         let disengage_ctx = CombatContext {

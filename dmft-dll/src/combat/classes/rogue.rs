@@ -74,7 +74,7 @@ impl ClassStrategy for RogueStrategy {
 mod tests {
     use super::*;
     use dmft_common::combat::CombatConfig;
-    use dmft_common::types::SpawnData;
+    
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

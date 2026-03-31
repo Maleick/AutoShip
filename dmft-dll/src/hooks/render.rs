@@ -102,6 +102,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn strobe_interval_is_nonzero() {
         assert!(STROBE_INTERVAL > 0);
     }
@@ -117,7 +118,7 @@ mod tests {
         let total = STROBE_INTERVAL * 3;
         for _ in 0..total {
             let tick = RENDER_TICK.fetch_add(1, Ordering::Relaxed);
-            if tick % STROBE_INTERVAL == 0 {
+            if tick.is_multiple_of(STROBE_INTERVAL) {
                 rendered += 1;
             }
         }

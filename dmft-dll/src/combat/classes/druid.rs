@@ -123,7 +123,7 @@ impl ClassStrategy for DruidStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmft_common::types::SpawnData;
+    
 
     #[test]
     fn druid_class_id() {

@@ -138,6 +138,7 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
 /// Finds the DLL's module base address in the target process using a Toolhelp snapshot,
 /// then spawns a remote thread calling `FreeLibrary` on that address.
 #[cfg(windows)]
+#[allow(dead_code)] // Will be used by graceful eject command path
 pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     use anyhow::Context;
     use windows::Win32::Foundation::WAIT_EVENT;

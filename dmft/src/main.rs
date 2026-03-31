@@ -13,18 +13,18 @@ mod credentials;
 mod launcher;
 
 // --- Modules used in main.rs; dead_code on non-Windows from platform stubs ---
-#[cfg_attr(not(windows), allow(dead_code))]
+#[allow(dead_code)] // M1: EQ data layer — some fields/functions are scaffolding for future features
 mod eq;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod inject;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod ipc;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[allow(dead_code)] // M3+: nav routing, camp management, waypoint recording — scaffolding
 mod nav;
 mod orchestrator;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod process;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[allow(dead_code)] // M5/M6: Soul Engine — scaffolding for LLM personalities, social graph
 mod soul;
 mod tui;
 
@@ -96,17 +96,15 @@ fn main() -> Result<()> {
         // --login-pid <PID> <account> [server] [character]
         let pid: u32 = args
             .get(pos + 1)
-            .context(
-                "--login-pid requires: --login-pid <PID> <account> [server] [character]",
-            )?
+            .context("--login-pid requires: --login-pid <PID> <account> [server] [character]")?
             .parse()
             .context("PID must be a number")?;
         let account = args
             .get(pos + 2)
             .context("--login-pid requires: --login-pid <PID> <account>")?
             .clone();
-        let password = rpassword::prompt_password("Password: ")
-            .context("Failed to read password")?;
+        let password =
+            rpassword::prompt_password("Password: ").context("Failed to read password")?;
         let server = args
             .get(pos + 3)
             .cloned()
@@ -119,8 +117,8 @@ fn main() -> Result<()> {
             .get(pos + 1)
             .context("--login requires: --login <account> [server] [character]")?
             .clone();
-        let password = rpassword::prompt_password("Password: ")
-            .context("Failed to read password")?;
+        let password =
+            rpassword::prompt_password("Password: ").context("Failed to read password")?;
         let server = args
             .get(pos + 2)
             .cloned()

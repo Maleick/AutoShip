@@ -317,6 +317,28 @@ fn combat_reactions(
     }
 }
 
+fn bot_chat_responses(mood: MoodState, traits: &PersonalityTraits) -> &'static [&'static str] {
+    if traits.extraversion > 0.7 {
+        match mood {
+            MoodState::Happy | MoodState::Playful => &[
+                "Hah, good one!",
+                "You said it!",
+                "Right?!",
+                "Tell me about it!",
+                "Ha! Classic.",
+            ],
+            MoodState::Angry => &["Don't even start.", "Not now.", "Yeah yeah.", "Whatever."],
+            _ => &["Mm-hmm.", "Yeah.", "Fair enough.", "True that."],
+        }
+    } else {
+        match mood {
+            MoodState::Happy => &["Heh.", "Yep.", "Mhm."],
+            MoodState::Angry => &["...", "Sure.", "Uh huh."],
+            _ => &["...", "Mm.", "Right.", "Yeah."],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -567,27 +589,5 @@ mod tests {
     fn provider_is_always_available() {
         let responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
         assert!(LlmProvider::is_available(&responder));
-    }
-}
-
-fn bot_chat_responses(mood: MoodState, traits: &PersonalityTraits) -> &'static [&'static str] {
-    if traits.extraversion > 0.7 {
-        match mood {
-            MoodState::Happy | MoodState::Playful => &[
-                "Hah, good one!",
-                "You said it!",
-                "Right?!",
-                "Tell me about it!",
-                "Ha! Classic.",
-            ],
-            MoodState::Angry => &["Don't even start.", "Not now.", "Yeah yeah.", "Whatever."],
-            _ => &["Mm-hmm.", "Yeah.", "Fair enough.", "True that."],
-        }
-    } else {
-        match mood {
-            MoodState::Happy => &["Heh.", "Yep.", "Mhm."],
-            MoodState::Angry => &["...", "Sure.", "Uh huh."],
-            _ => &["...", "Mm.", "Right.", "Yeah."],
-        }
     }
 }

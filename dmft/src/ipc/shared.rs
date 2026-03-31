@@ -9,6 +9,7 @@ use dmft_common::types::{ClientId, GameState};
 
 /// Reads game state from shared memory for a specific client.
 pub struct SharedStateReader {
+    #[allow(dead_code)] // Used for diagnostics and future per-client filtering
     client_id: ClientId,
     #[cfg(windows)]
     _handle: windows::Win32::Foundation::HANDLE,

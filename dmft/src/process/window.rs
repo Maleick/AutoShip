@@ -4,6 +4,7 @@ use anyhow::Result;
 /// Milestone 1 only defines the structure — actual input dispatch is M2.
 pub struct WindowHandle {
     #[cfg(windows)]
+    #[allow(dead_code)] // Needed for PostMessage input dispatch in M2+
     pub hwnd: windows::Win32::Foundation::HWND,
     pub title: String,
     pub pid: u32,

@@ -74,12 +74,7 @@ impl CommandPipe {
             while offset < data.len() {
                 let mut written: u32 = 0;
                 unsafe {
-                    WriteFile(
-                        self.handle,
-                        Some(&data[offset..]),
-                        Some(&mut written),
-                        None,
-                    )?;
+                    WriteFile(self.handle, Some(&data[offset..]), Some(&mut written), None)?;
                 }
                 if written == 0 {
                     return Err(anyhow::anyhow!(
@@ -127,12 +122,7 @@ impl CommandPipe {
             while offset < data.len() {
                 let mut written: u32 = 0;
                 unsafe {
-                    WriteFile(
-                        self.handle,
-                        Some(&data[offset..]),
-                        Some(&mut written),
-                        None,
-                    )?;
+                    WriteFile(self.handle, Some(&data[offset..]), Some(&mut written), None)?;
                 }
                 if written == 0 {
                     return Err(anyhow::anyhow!(
@@ -166,12 +156,7 @@ impl CommandPipe {
             while offset < data.len() {
                 let mut written: u32 = 0;
                 unsafe {
-                    WriteFile(
-                        self.handle,
-                        Some(&data[offset..]),
-                        Some(&mut written),
-                        None,
-                    )?;
+                    WriteFile(self.handle, Some(&data[offset..]), Some(&mut written), None)?;
                 }
                 if written == 0 {
                     return Err(anyhow::anyhow!(

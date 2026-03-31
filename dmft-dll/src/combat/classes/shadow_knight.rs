@@ -102,7 +102,7 @@ impl ClassStrategy for ShadowKnightStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmft_common::types::SpawnData;
+    
 
     #[test]
     fn sk_class_id() {

@@ -712,7 +712,7 @@ fn read_and_publish_state(tick: u64) {
 #[cfg(windows)]
 fn is_readable(addr: usize, len: usize) -> bool {
     use windows::Win32::System::Memory::{
-        MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS, VirtualQuery,
+        MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_GUARD, PAGE_NOACCESS, VirtualQuery,
     };
 
     if addr == 0 || len == 0 {
@@ -797,10 +797,7 @@ unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
         core::ptr::copy_nonoverlapping(addr as *const u8, buf.as_mut_ptr(), capped);
     }
 
-    let len = buf[..capped]
-        .iter()
-        .position(|&b| b == 0)
-        .unwrap_or(capped);
+    let len = buf[..capped].iter().position(|&b| b == 0).unwrap_or(capped);
     String::from_utf8_lossy(&buf[..len]).into_owned()
 }
 

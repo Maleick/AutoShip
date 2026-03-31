@@ -68,7 +68,7 @@ fn validate_fn_ptr(addr: usize, name: &str) -> bool {
 
     // Use VirtualQuery to verify the page is committed and executable.
     use windows::Win32::System::Memory::{
-        MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_EXECUTE, PAGE_EXECUTE_READ,
+        MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
         PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, VirtualQuery,
     };
 

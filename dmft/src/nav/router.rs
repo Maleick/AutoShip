@@ -170,7 +170,7 @@ mod tests {
         let staggers = generate_zone_staggers(&ids, 5, 60, 99);
         for (&_id, &delay) in &staggers {
             assert!(
-                delay >= 5 && delay <= 60,
+                (5..=60).contains(&delay),
                 "stagger delay {delay} not in [5, 60]"
             );
         }

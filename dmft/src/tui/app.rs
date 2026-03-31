@@ -429,8 +429,10 @@ impl App {
                 let (live_groups, _) = self.build_live_groups();
                 if idx < live_groups.len() {
                     self.active_group = Some(idx);
-                    self.status_message =
-                        format!("Viewing: {} ({})", live_groups[idx].leader, live_groups[idx].zone);
+                    self.status_message = format!(
+                        "Viewing: {} ({})",
+                        live_groups[idx].leader, live_groups[idx].zone
+                    );
                 }
             } else if idx < self.groups.len() {
                 self.active_group = Some(idx);

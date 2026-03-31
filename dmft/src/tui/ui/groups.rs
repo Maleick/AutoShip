@@ -239,9 +239,11 @@ fn draw_live_group_panel(
 
                 lines.push(member_line(player, is_leader, display_name, t));
 
-                if show_buffs && lines.len() < member_budget
-                    && let Some(bl) = buff_line(player, t) {
-                        lines.push(bl);
+                if show_buffs
+                    && lines.len() < member_budget
+                    && let Some(bl) = buff_line(player, t)
+                {
+                    lines.push(bl);
                 }
             } else {
                 lines.push(Line::from(Span::styled(
@@ -494,9 +496,11 @@ fn draw_config_group_panel(
                 // Config groups don't have a leader concept per se; no leader marker
                 lines.push(member_line(player, false, name, t));
 
-                if show_buffs && lines.len() < member_budget
-                    && let Some(bl) = buff_line(player, t) {
-                        lines.push(bl);
+                if show_buffs
+                    && lines.len() < member_budget
+                    && let Some(bl) = buff_line(player, t)
+                {
+                    lines.push(bl);
                 }
             } else {
                 lines.push(Line::from(Span::styled(

@@ -21,8 +21,7 @@ fn main() {
                     let name = entry.file_name();
                     let name_str = name.to_string_lossy();
                     if name_str.starts_with("recastnavigation-sys-") {
-                        let candidate =
-                            entry.path().join("recastnavigation/Detour/Include");
+                        let candidate = entry.path().join("recastnavigation/Detour/Include");
                         if candidate.exists() {
                             include_dir = Some(candidate);
                             break;

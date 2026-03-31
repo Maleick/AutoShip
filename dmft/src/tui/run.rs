@@ -668,7 +668,6 @@ fn load_demo_data(app: &mut App) {
     app.reload_map_for_selected_client();
 }
 
-
 /// Convert a zone display name (long name from zoneHeader) to its EQ short name
 /// for Brewall map file lookup. Handles both display names ("West Freeport") and
 /// short names that are already correct ("freportw").

@@ -117,7 +117,7 @@ mod tests {
         for _ in 0..100 {
             let result = p.wobble_heading(256.0);
             assert!(
-                result >= 0.0 && result < 512.0,
+                (0.0..512.0).contains(&result),
                 "wobbled heading {result} out of EQ range 0..512"
             );
         }

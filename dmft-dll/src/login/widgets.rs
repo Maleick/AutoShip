@@ -547,14 +547,20 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             if let Some(readback) =
                 crate::eq::widgets::read_cxstr(username_edit + off::CEDITBASEWND_INPUT_TEXT)
             {
-                tracing::info!(readback_len = readback.len(), "Username InputText readback (account redacted)");
+                tracing::info!(
+                    readback_len = readback.len(),
+                    "Username InputText readback (account redacted)"
+                );
             } else {
                 tracing::warn!("Username InputText readback: null or empty");
             }
             if let Some(readback) =
                 crate::eq::widgets::read_cxstr(username_edit + off::CXWND_WINDOW_TEXT)
             {
-                tracing::info!(readback_len = readback.len(), "Username WindowText readback (account redacted)");
+                tracing::info!(
+                    readback_len = readback.len(),
+                    "Username WindowText readback (account redacted)"
+                );
             }
 
             // Hex dump the edit widget around the CXStr fields to verify layout

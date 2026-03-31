@@ -220,7 +220,7 @@ mod tests {
     fn parse_p_line_valid() {
         let line = "P 5531.2642, -168.7061, -299.5485, 128, 255, 0, 2, Gargoyle_Island";
         let mp = parse_p_line(line).unwrap();
-        assert!((mp.x - 5531.2642).abs() < 0.01);
+        assert!((mp.x - 5_531.264).abs() < 0.01);
         assert_eq!(mp.size, 2);
         assert_eq!(mp.label, "Gargoyle Island");
     }

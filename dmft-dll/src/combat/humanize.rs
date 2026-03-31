@@ -106,7 +106,7 @@ mod tests {
         for _ in 0..100 {
             let val = personality.jitter_threshold(50.0, 5.0);
             assert!(
-                val >= 45.0 && val <= 55.0,
+                (45.0..=55.0).contains(&val),
                 "jittered value {val} out of range"
             );
         }
