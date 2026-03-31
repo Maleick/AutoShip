@@ -18,15 +18,18 @@ Frostreaver reads live game state from EQ client memory, injects a DLL for direc
 - **IPC Pipeline** — Named pipes (commands) + shared memory (game state) with current-user DACL security
 - **Render Strobing** — Hooks `CDisplay::RealRender_World`, skips 3D rendering for background clients (~97% GPU savings)
 
-### TUI Dashboard (5 screens)
+### TUI Dashboard (6 screens, 3 themes)
 
-| Screen    | Key | Description                                                                        |
-| --------- | --- | ---------------------------------------------------------------------------------- |
-| Dashboard | `1` | All characters overview, group health bars, session stats (XP/hr, plat/hr)         |
-| Spawns    | `2` | Full spawn list with live search (`/`), type filter (`f`: All/PC/NPC/Named)        |
-| Character | `3` | Selected character detail with pixel art class emblem sprites                      |
-| Map       | `4` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers |
-| Groups    | `5` | 6-group dashboard (2x3 grid) with member status                                    |
+| Screen     | Key | Description                                                                        |
+| ---------- | --- | ---------------------------------------------------------------------------------- |
+| Dashboard  | `1` | All characters overview, group health bars, session stats (XP/hr, plat/hr)         |
+| Spawns     | `2` | Full spawn list with live search (`/`), type filter (`f`: All/PC/NPC/Named)        |
+| Character  | `3` | Selected character detail with pixel art class emblem sprites                      |
+| Map        | `4` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers |
+| Groups     | `5` | 6-group dashboard (2x3 grid) with member status                                    |
+| Navigation | `6` | Per-character nav status, operating mode, command reference                         |
+
+**Themes:** Dark Modern (default), Dracula, Classic — cycle with `t`
 
 ### TUI Controls
 
@@ -39,6 +42,7 @@ Frostreaver reads live game state from EQ client memory, injects a DLL for direc
 | `p`       | Privacy mode (redacts names + server for screenshots) |
 | `:`       | Command mode (Tab completion, command history)        |
 | `?`       | Help overlay                                          |
+| `t`       | Cycle theme (Dark / Dracula / Classic)                |
 | `q`       | Quit                                                  |
 
 ### Command Bar (`:` mode)
@@ -117,14 +121,24 @@ DLL executes InterpretCmd with human-like jitter delay
 
 ## Quick Start
 
-### Development (macOS — demo mode)
+### Development (any platform — demo mode)
 
 ```bash
 cargo build              # Debug build
-cargo run                # TUI with demo data
-cargo test               # Run all 686 tests
-cargo clippy             # Lint
+cargo run                # TUI with demo data (auto-detected on non-Windows)
+cargo test               # Run all 667 tests
+cargo clippy             # Lint (0 warnings)
 ```
+
+**Demo mode** activates automatically when no live EQ process is found (always on macOS/Linux, on Windows when EQ isn't running). It populates the TUI with 18 simulated characters across 3 groups covering all 16 EQ classes:
+
+| Group | Zone | Classes |
+|-------|------|---------|
+| G1 | Permafrost | WAR, CLR, ENC, BRD, RNG, WIZ |
+| G2 | Eastern Wastes | SK, SHM, DRU, ROG, NEC, MAG |
+| G3 | Great Divide | PAL, MNK, BST, BER, CLR, WIZ |
+
+Each zone has NPC spawns (including named bosses like Lady Vox, Wuoshi, Garudon), corpses, and realistic HP/mana values. This lets you develop and test all TUI screens without a live EQ client.
 
 ### Production (Windows — live EQ)
 
@@ -217,7 +231,7 @@ Run `scripts\optimize_ini.ps1` to apply minimal settings:
 - [x] Phase 2: Camp loop (state machine, smart HP/mana decisions)
 - [x] Phase 3: Class configs + CC system + positioning
 - [x] Phase 4: Autonomy (sell/bank, death recovery, buff maintenance)
-- [ ] Phase 5: Navigation (navmesh loading, zone-to-zone travel)
+- [x] Phase 5: Navigation (navmesh pathfinding via Detour, 888-zone BFS routing)
 - [ ] Phase 6: Anti-detection hardening (reflective injection, string obfuscation)
 - [ ] Phase 7: TLP launch readiness
 
