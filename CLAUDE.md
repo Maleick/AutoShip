@@ -57,15 +57,15 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 
 **`dmft-dll/` — Injected DLL (cdylib)**
 
-| Module      | Purpose                                                                                                                                                           |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hooks/`    | Game loop hooks — ProcessGameEvents, movement, casting, targeting                                                                                                 |
-| `eq/`       | EQ function bindings — UI widget primitives (CXWndManager, CXStr, button click via vtable)                                                                        |
-| `ipc/`      | Shared memory + named pipe client                                                                                                                                 |
-| `nav/`      | Navigator FSM, stuck detection, movement humanization, waypoint queue                                                                                             |
-| `combat/`   | Combatant FSM, ClassStrategy trait, 18 class implementations, HolyShit conditions, GCD tracker, mana governor, puller FSM, aggro detection, loot, skill cooldowns |
-| `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                             |
-| `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                |
+| Module      | Purpose                                                                                                                                                                     |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hooks/`    | Game loop hooks — ProcessGameEvents, movement, casting, targeting                                                                                                           |
+| `eq/`       | EQ function bindings — UI widget primitives (CXWndManager, CXStr, button click via vtable)                                                                                  |
+| `ipc/`      | Shared memory + named pipe client                                                                                                                                           |
+| `nav/`      | Navigator FSM, stuck detection, movement humanization, waypoint queue                                                                                                       |
+| `combat/`   | Combatant FSM, ClassStrategy trait, class strategy implementations (including a generic DPS strategy), HolyShit conditions, GCD tracker, mana governor, puller FSM, aggro detection, loot, skill cooldowns |
+| `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                                       |
+| `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                          |
 
 **`dmft-common/` — Shared types**
 
