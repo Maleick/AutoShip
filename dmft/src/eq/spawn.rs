@@ -1,7 +1,9 @@
 use super::structs::{BuffSlot, CastState, EqClass, GroupInfo, SpawnInfo, SpawnType, StandState};
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
-use dmft_common::offsets::{self, group, player_base, player_zone, spawn_manager, zone_info};
+use dmft_common::offsets::{
+    self, actor_client, group, player_base, player_zone, spawn_manager, zone_info,
+};
 
 /// Read a single spawn's data from the process at the given PlayerClient address.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
@@ -73,6 +75,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         .unwrap_or(0);
 
     let gm_flag = proc.read::<u8>(addr + player_zone::GM).unwrap_or(0);
+    let race_id = proc.read::<i32>(addr + actor_client::RACE).unwrap_or(0) as u32;
 
     Ok(SpawnInfo {
         name,
@@ -95,6 +98,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         endurance_current,
         endurance_max,
         is_gm: gm_flag != 0,
+        race_id,
         buff_slots: Vec::new(),
         cast_state: None,
     })

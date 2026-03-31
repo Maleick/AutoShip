@@ -349,11 +349,23 @@ fn load_demo_data(app: &mut App) {
     // Names use trailing digits (e.g., "Frostreaver01") so they match group slots
     // via extract_account_number().
     //
-    // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state, zone)
+    // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state, zone, race_id)
     // Melee classes have mana 0. Caster/hybrid mana is class-appropriate.
-    type DemoClient<'a> = (&'a str, u8, u8, i64, i64, i32, i32, StandState, &'a str);
+    type DemoClient<'a> = (
+        &'a str,
+        u8,
+        u8,
+        i64,
+        i64,
+        i32,
+        i32,
+        StandState,
+        &'a str,
+        u32,
+    );
     let demo_clients: &[DemoClient<'_>] = &[
         // ── Group 1: Permafrost ──────────────────────────────────────
+        // (name, class, lv, hp, hp_max, mana, mana_max, stand, zone, race)
         (
             "Frostreaver01",
             1,
@@ -364,7 +376,8 @@ fn load_demo_data(app: &mut App) {
             0,
             StandState::Standing,
             "Permafrost",
-        ), // WAR
+            2,
+        ), // WAR Barbarian
         (
             "Iceweaver02",
             2,
@@ -375,7 +388,8 @@ fn load_demo_data(app: &mut App) {
             7500,
             StandState::Standing,
             "Permafrost",
-        ), // CLR
+            1,
+        ), // CLR Human
         (
             "Coldchain03",
             14,
@@ -386,7 +400,8 @@ fn load_demo_data(app: &mut App) {
             6000,
             StandState::Standing,
             "Permafrost",
-        ), // ENC
+            5,
+        ), // ENC High Elf
         (
             "Frostsong04",
             8,
@@ -397,7 +412,8 @@ fn load_demo_data(app: &mut App) {
             0,
             StandState::Standing,
             "Permafrost",
-        ), // BRD
+            7,
+        ), // BRD Half Elf
         (
             "Tundrablade05",
             4,
@@ -408,7 +424,8 @@ fn load_demo_data(app: &mut App) {
             2500,
             StandState::Standing,
             "Permafrost",
-        ), // RNG
+            4,
+        ), // RNG Wood Elf
         (
             "Glacierstrike06",
             12,
@@ -419,7 +436,8 @@ fn load_demo_data(app: &mut App) {
             8000,
             StandState::Sitting,
             "Permafrost",
-        ), // WIZ
+            3,
+        ), // WIZ Erudite
         // ── Group 2: Eastern Wastes ──────────────────────────────────
         (
             "Shadowveil07",
@@ -431,7 +449,8 @@ fn load_demo_data(app: &mut App) {
             5000,
             StandState::Standing,
             "Eastern Wastes",
-        ), // SK
+            6,
+        ), // SK Dark Elf
         (
             "Spiritcaller08",
             10,
@@ -442,7 +461,8 @@ fn load_demo_data(app: &mut App) {
             6000,
             StandState::Standing,
             "Eastern Wastes",
-        ), // SHM
+            2,
+        ), // SHM Barbarian
         (
             "Verdantleaf09",
             6,
@@ -453,7 +473,8 @@ fn load_demo_data(app: &mut App) {
             7000,
             StandState::Standing,
             "Eastern Wastes",
-        ), // DRU
+            4,
+        ), // DRU Wood Elf
         (
             "Nightblade10",
             9,
@@ -464,7 +485,8 @@ fn load_demo_data(app: &mut App) {
             0,
             StandState::Ducking,
             "Eastern Wastes",
-        ), // ROG
+            6,
+        ), // ROG Dark Elf
         (
             "Soulreaper11",
             11,
@@ -475,7 +497,8 @@ fn load_demo_data(app: &mut App) {
             7000,
             StandState::Standing,
             "Eastern Wastes",
-        ), // NEC
+            12,
+        ), // NEC Gnome
         (
             "Petmaster12",
             13,
@@ -486,7 +509,8 @@ fn load_demo_data(app: &mut App) {
             7500,
             StandState::Standing,
             "Eastern Wastes",
-        ), // MAG
+            5,
+        ), // MAG High Elf
         // ── Group 3: Great Divide ────────────────────────────────────
         (
             "Holyblade13",
@@ -498,7 +522,8 @@ fn load_demo_data(app: &mut App) {
             4500,
             StandState::Standing,
             "Great Divide",
-        ), // PAL
+            1,
+        ), // PAL Human
         (
             "Swiftfist14",
             7,
@@ -509,7 +534,8 @@ fn load_demo_data(app: &mut App) {
             0,
             StandState::Standing,
             "Great Divide",
-        ), // MNK
+            128,
+        ), // MNK Iksar
         (
             "Beastkin15",
             15,
@@ -520,7 +546,8 @@ fn load_demo_data(app: &mut App) {
             4000,
             StandState::Standing,
             "Great Divide",
-        ), // BST
+            130,
+        ), // BST Vah Shir
         (
             "Ragecleave16",
             16,
@@ -531,7 +558,8 @@ fn load_demo_data(app: &mut App) {
             0,
             StandState::Standing,
             "Great Divide",
-        ), // BER
+            10,
+        ), // BER Ogre
         (
             "Frostmend17",
             2,
@@ -542,7 +570,8 @@ fn load_demo_data(app: &mut App) {
             7500,
             StandState::Sitting,
             "Great Divide",
-        ), // CLR (2nd)
+            8,
+        ), // CLR Dwarf
         (
             "Glacialsurge18",
             12,
@@ -553,10 +582,11 @@ fn load_demo_data(app: &mut App) {
             8000,
             StandState::Feigned,
             "Great Divide",
-        ), // WIZ (2nd)
+            1,
+        ), // WIZ Human
     ];
 
-    for (i, &(name, class_id, level, hp, hp_max, mana, mana_max, ref stand, zone)) in
+    for (i, &(name, class_id, level, hp, hp_max, mana, mana_max, ref stand, zone, race_id)) in
         demo_clients.iter().enumerate()
     {
         let mut client = ClientState::new(1000 + i as u32, 0x140000000);
@@ -582,6 +612,7 @@ fn load_demo_data(app: &mut App) {
             heading: 128.0,
             spawn_id: i as u32 + 1,
             is_gm: false,
+            race_id,
             buff_slots: Vec::new(),
             cast_state: None,
         });
@@ -908,6 +939,7 @@ fn make_demo_spawns(
                 heading: 0.0,
                 spawn_id: 100 + i as u32,
                 is_gm: false,
+                race_id: 1, // Default to Human for NPC spawns
                 buff_slots: Vec::new(),
                 cast_state: None,
             },

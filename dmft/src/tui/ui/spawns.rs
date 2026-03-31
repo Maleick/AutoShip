@@ -61,7 +61,22 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         format!(" Spawns: {} ({}) ", client_label, filtered.len())
     };
 
-    let header = themed_header_row(vec!["Type", "Name", "Cls", "Lv", "HP%", "ID"], t);
+    // Get local player position for distance calculation
+    let player_pos: Option<(f32, f32)> = app
+        .active_client()
+        .and_then(|c| c.local_player.as_ref())
+        .map(|p| (p.x, p.y));
+
+    // Show coordinate columns when terminal is wide enough (>= 140 chars)
+    let show_coords = area.width >= 140;
+
+    let mut header_cells = vec!["Type", "Name", "Race", "Cls", "Lv", "HP%", "Dist", "ID"];
+    if show_coords {
+        header_cells.push("X");
+        header_cells.push("Y");
+        header_cells.push("Z");
+    }
+    let header = themed_header_row(header_cells, t);
 
     let highlight_style = Style::default()
         .bg(t.row_selected_bg)
@@ -72,32 +87,56 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         .map(|spawn| {
             let style = spawn_row_style(spawn, player_level, t);
             let name = app.redact_name(&spawn.displayed_name);
-            Row::new(vec![
+
+            let dist_str = match player_pos {
+                Some((px, py)) => {
+                    let dx = spawn.x - px;
+                    let dy = spawn.y - py;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    format!("{:.0}", dist)
+                }
+                None => String::from("-"),
+            };
+
+            let mut cells = vec![
                 Cell::from(spawn.spawn_type.to_string()),
                 Cell::from(name.into_owned()),
+                Cell::from(spawn.race_name()),
                 Cell::from(spawn.class_str()),
                 Cell::from(spawn.level.to_string()),
                 Cell::from(format!("{:.0}%", spawn.hp_pct())),
+                Cell::from(dist_str),
                 Cell::from(spawn.spawn_id.to_string()),
-            ])
-            .style(style)
+            ];
+            if show_coords {
+                cells.push(Cell::from(format!("{:.0}", spawn.x)));
+                cells.push(Cell::from(format!("{:.0}", spawn.y)));
+                cells.push(Cell::from(format!("{:.0}", spawn.z)));
+            }
+            Row::new(cells).style(style)
         })
         .collect();
 
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(7),
-            Constraint::Min(20),
-            Constraint::Length(4),
-            Constraint::Length(4),
-            Constraint::Length(6),
-            Constraint::Length(8),
-        ],
-    )
-    .header(header)
-    .block(panel(title.as_str(), border_style, t))
-    .row_highlight_style(highlight_style);
+    let mut constraints = vec![
+        Constraint::Length(7),  // Type
+        Constraint::Min(16),    // Name
+        Constraint::Length(10), // Race
+        Constraint::Length(4),  // Cls
+        Constraint::Length(4),  // Lv
+        Constraint::Length(6),  // HP%
+        Constraint::Length(6),  // Dist
+        Constraint::Length(8),  // ID
+    ];
+    if show_coords {
+        constraints.push(Constraint::Length(7)); // X
+        constraints.push(Constraint::Length(7)); // Y
+        constraints.push(Constraint::Length(6)); // Z
+    }
+
+    let table = Table::new(rows, constraints)
+        .header(header)
+        .block(panel(title.as_str(), border_style, t))
+        .row_highlight_style(highlight_style);
 
     frame.render_stateful_widget(table, area, &mut app.spawns_state.table_state);
 }

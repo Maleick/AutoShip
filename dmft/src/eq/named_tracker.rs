@@ -269,6 +269,7 @@ mod tests {
             endurance_current: 0,
             endurance_max: 0,
             is_gm: false,
+            race_id: 1,
             buff_slots: Vec::new(),
             cast_state: None,
         }

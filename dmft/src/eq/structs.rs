@@ -254,6 +254,8 @@ pub struct SpawnInfo {
     pub endurance_current: i32,
     pub endurance_max: u32,
     pub is_gm: bool,
+    /// Race ID from ActorClient (e.g., Human=1, Barbarian=2, etc.)
+    pub race_id: u32,
     /// Active buff slots (populated only for local player via read_buff_slots).
     pub buff_slots: Vec<BuffSlot>,
     /// Cast state (populated only for local player via read_cast_state).
@@ -283,6 +285,30 @@ impl SpawnInfo {
             .map_or(format!("?c{}?", self.class_id), |c| {
                 c.short_name().to_string()
             })
+    }
+
+    /// Human-readable race name from the numeric race ID.
+    pub fn race_name(&self) -> String {
+        match self.race_id {
+            1 => "Human".to_string(),
+            2 => "Barbarian".to_string(),
+            3 => "Erudite".to_string(),
+            4 => "Wood Elf".to_string(),
+            5 => "High Elf".to_string(),
+            6 => "Dark Elf".to_string(),
+            7 => "Half Elf".to_string(),
+            8 => "Dwarf".to_string(),
+            9 => "Troll".to_string(),
+            10 => "Ogre".to_string(),
+            11 => "Halfling".to_string(),
+            12 => "Gnome".to_string(),
+            128 => "Iksar".to_string(),
+            130 => "Vah Shir".to_string(),
+            330 => "Froglok".to_string(),
+            522 => "Drakkin".to_string(),
+            0 => "Unknown".to_string(),
+            id => format!("R{}", id),
+        }
     }
 }
 
