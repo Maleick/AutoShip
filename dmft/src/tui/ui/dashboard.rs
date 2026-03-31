@@ -1,26 +1,45 @@
-//! Overview screen — fleet grid with collapsible operational sections.
+//! Overview screen — fleet roster with adaptive operational sections.
 
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Gauge, Paragraph, Row, Table, Wrap},
+    widgets::{Cell, Gauge, Paragraph, Row, Table, Wrap},
 };
 
 use super::widgets::{hp_color, panel, stand_state_color, themed_header_row};
-use crate::tui::app::{ActivePanel, App};
+use crate::eq::structs::{EqClass, StandState};
+use crate::tui::app::{ActivePanel, App, ClientState};
 
 pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
-    let chunks = if area.width < 110 {
+    let natural_sidebar_height = overview_sections(app)
+        .iter()
+        .map(|(_, constraint)| preferred_height(*constraint))
+        .sum::<u16>();
+
+    let chunks = if area.width < 118 {
+        let sidebar_height = natural_sidebar_height
+            .min(area.height.saturating_sub(10))
+            .max(3);
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+            .constraints([Constraint::Min(10), Constraint::Length(sidebar_height)])
             .split(area)
     } else {
+        let sidebar_width = if area.width >= 170 {
+            46
+        } else if area.width >= 145 {
+            42
+        } else {
+            38
+        };
         Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(64), Constraint::Percentage(36)])
+            .constraints([
+                Constraint::Min(54),
+                Constraint::Length(sidebar_width.min(area.width.saturating_sub(24))),
+            ])
             .split(area)
     };
 
@@ -35,13 +54,18 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible_clients();
     let title = match app.active_group {
         Some(idx) => {
-            if let Some(g) = app.groups.get(idx) {
-                format!(" Fleet — G{} {} ({}) ", g.id, g.name, visible.len())
+            if let Some(group) = app.groups.get(idx) {
+                format!(
+                    " Command Center — G{} {} ({}) ",
+                    group.id,
+                    group.name,
+                    visible.len()
+                )
             } else {
-                format!(" Fleet — Group {} ({}) ", idx + 1, visible.len())
+                format!(" Command Center — Group {} ({}) ", idx + 1, visible.len())
             }
         }
-        None => format!(" Fleet ({}) ", app.clients.len()),
+        None => format!(" Command Center — All Groups ({}) ", visible.len()),
     };
 
     let border_style = if app.is_panel_focused(ActivePanel::OverviewRoster) {
@@ -61,10 +85,26 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let header = themed_header_row(
-        vec!["", "Name", "Cls", "Lv", "HP%", "MP%", "State", "Zone"],
-        t,
-    );
+    let show_group = area.width >= 78;
+    let show_class = area.width >= 88;
+    let show_zone = area.width >= 104;
+
+    let mut headers = vec!["", "Name"];
+    if show_group {
+        headers.push("Grp");
+    }
+    if show_class {
+        headers.push("Cls");
+    }
+    if show_zone {
+        headers.push("Zone");
+    }
+    headers.extend(["HP", "Cond", "State"]);
+
+    let header = themed_header_row(headers, t);
+    let highlight_style = Style::default()
+        .bg(t.row_selected_bg)
+        .add_modifier(Modifier::BOLD);
 
     let rows: Vec<Row> = visible
         .iter()
@@ -72,97 +112,235 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
             let global_idx = app
                 .clients
                 .iter()
-                .position(|c| c.pid == client.pid)
+                .position(|candidate| candidate.pid == client.pid)
                 .unwrap_or(usize::MAX);
             let is_sel = global_idx == app.selected_client;
             let marker = if is_sel { "▶" } else { " " };
 
             if let Some(player) = &client.local_player {
                 let hp_pct = player.hp_pct();
-                let mana_pct = player.mana_pct();
                 let name = app.redact_name(&player.displayed_name).into_owned();
+                let (condition_label, condition_style) = client_condition(client, t);
+                let (activity_label, activity_style) = client_activity(app, client);
 
-                let row_style = if is_sel {
-                    Style::default()
-                        .bg(t.row_selected_bg)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default()
-                };
-
-                Row::new(vec![
-                    ratatui::widgets::Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                    ratatui::widgets::Cell::from(name).style(Style::default().fg(t.text_normal)),
-                    ratatui::widgets::Cell::from(player.class_str())
-                        .style(Style::default().fg(t.text_accent)),
-                    ratatui::widgets::Cell::from(player.level.to_string())
+                let mut cells = vec![
+                    Cell::from(marker).style(Style::default().fg(t.text_accent)),
+                    Cell::from(name).style(Style::default().fg(t.text_normal)),
+                ];
+                if show_group {
+                    cells.push(
+                        Cell::from(
+                            app.client_group_label(client)
+                                .unwrap_or_else(|| "--".into()),
+                        )
                         .style(Style::default().fg(t.text_secondary)),
-                    ratatui::widgets::Cell::from(format!("{:.0}%", hp_pct))
+                    );
+                }
+                if show_class {
+                    cells.push(
+                        Cell::from(player.class_str()).style(Style::default().fg(t.text_accent)),
+                    );
+                }
+                if show_zone {
+                    cells.push(
+                        Cell::from(client.zone_name.clone())
+                            .style(Style::default().fg(t.text_muted)),
+                    );
+                }
+                cells.push(
+                    Cell::from(format!("{:>3.0}%", hp_pct))
                         .style(Style::default().fg(hp_color(hp_pct, t))),
-                    ratatui::widgets::Cell::from(if player.mana_max > 0 {
-                        format!("{:.0}%", mana_pct)
-                    } else {
-                        "-".into()
-                    })
-                    .style(Style::default().fg(t.mana_color)),
-                    ratatui::widgets::Cell::from(player.stand_state.label())
-                        .style(Style::default().fg(stand_state_color(&player.stand_state, t))),
-                    ratatui::widgets::Cell::from(client.zone_name.as_str())
-                        .style(Style::default().fg(t.text_muted)),
-                ])
-                .style(row_style)
+                );
+                cells.push(Cell::from(condition_label).style(condition_style));
+                cells.push(Cell::from(activity_label).style(activity_style));
+
+                Row::new(cells).style(if is_sel {
+                    highlight_style
+                } else {
+                    Style::default()
+                })
             } else {
-                let status_label = if client.client_status.is_empty() {
-                    format!("PID {}", client.pid)
+                let mut cells = vec![
+                    Cell::from(marker).style(Style::default().fg(t.text_accent)),
+                    Cell::from(if client.client_status.is_empty() {
+                        format!("PID {}", client.pid)
+                    } else {
+                        client.client_status.clone()
+                    })
+                    .style(Style::default().fg(t.hp_low)),
+                ];
+                if show_group {
+                    cells.push(Cell::from("--"));
+                }
+                if show_class {
+                    cells.push(Cell::from("--"));
+                }
+                if show_zone {
+                    cells.push(Cell::from(client.zone_name.clone()));
+                }
+                cells.push(Cell::from(" --"));
+                cells.push(Cell::from("Offline").style(Style::default().fg(t.hp_low)));
+                cells.push(Cell::from("• Waiting").style(Style::default().fg(t.text_muted)));
+                Row::new(cells).style(if is_sel {
+                    highlight_style
                 } else {
-                    client.client_status.clone()
-                };
-                let status_color = if client.client_status.contains("error")
-                    || client.client_status.contains("Lost")
-                {
-                    t.hp_low
-                } else {
-                    t.text_muted
-                };
-                Row::new(vec![
-                    ratatui::widgets::Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                    ratatui::widgets::Cell::from(status_label)
-                        .style(Style::default().fg(status_color)),
-                    ratatui::widgets::Cell::from("-"),
-                    ratatui::widgets::Cell::from("-"),
-                    ratatui::widgets::Cell::from("-"),
-                    ratatui::widgets::Cell::from("-"),
-                    ratatui::widgets::Cell::from("-"),
-                    ratatui::widgets::Cell::from(client.zone_name.as_str()),
-                ])
+                    Style::default()
+                })
             }
         })
         .collect();
 
+    let mut constraints = vec![Constraint::Length(2), Constraint::Min(14)];
+    if show_group {
+        constraints.push(Constraint::Length(4));
+    }
+    if show_class {
+        constraints.push(Constraint::Length(4));
+    }
+    if show_zone {
+        constraints.push(Constraint::Min(12));
+    }
+    constraints.extend([
+        Constraint::Length(5),
+        Constraint::Length(8),
+        Constraint::Min(12),
+    ]);
+
     frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(2),
-                Constraint::Min(14),
-                Constraint::Length(4),
-                Constraint::Length(3),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(8),
-                Constraint::Min(12),
-            ],
-        )
-        .header(header)
-        .block(blk),
+        Table::new(rows, constraints)
+            .header(header)
+            .block(blk)
+            .row_highlight_style(highlight_style),
         area,
     );
+}
+
+fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (String, Style) {
+    let Some(player) = &client.local_player else {
+        return (String::from("Offline"), Style::default().fg(t.hp_low));
+    };
+
+    if matches!(player.stand_state, StandState::Dead) {
+        return (String::from("Dead"), Style::default().fg(t.hp_low));
+    }
+
+    let hp_pct = player.hp_pct();
+    if hp_pct < 25.0 {
+        (
+            String::from("Critical"),
+            Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+        )
+    } else if hp_pct < 60.0 {
+        (
+            String::from("Hurt"),
+            Style::default().fg(hp_color(hp_pct, t)),
+        )
+    } else if matches!(player.stand_state, StandState::Sitting) || hp_pct < 90.0 {
+        (String::from("Recover"), Style::default().fg(t.mana_color))
+    } else {
+        (String::from("Stable"), Style::default().fg(t.hp_high))
+    }
+}
+
+fn client_activity(app: &App, client: &ClientState) -> (String, Style) {
+    let t = &app.theme;
+
+    if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
+        match nav.status.as_str() {
+            "Navigating" => {
+                return (
+                    String::from("➜ Nav"),
+                    Style::default()
+                        .fg(t.text_highlight)
+                        .add_modifier(Modifier::BOLD),
+                );
+            }
+            "Arrived" => {
+                return (String::from("✓ Arr"), Style::default().fg(t.hp_high));
+            }
+            "Stuck" => {
+                return (
+                    String::from("! Stuck"),
+                    Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    let Some(player) = &client.local_player else {
+        return (String::from("• Idle"), Style::default().fg(t.text_muted));
+    };
+
+    if matches!(player.stand_state, StandState::Dead) {
+        return (String::from("☠ Dead"), Style::default().fg(t.hp_low));
+    }
+    if matches!(player.stand_state, StandState::Feigned) {
+        return (String::from("⇣ FD"), Style::default().fg(t.text_secondary));
+    }
+    if matches!(player.stand_state, StandState::Sitting) {
+        return (String::from("☾ Sit"), Style::default().fg(t.state_sitting));
+    }
+    if matches!(player.stand_state, StandState::Looting) {
+        return (
+            String::from("⌕ Loot"),
+            Style::default().fg(t.text_highlight),
+        );
+    }
+
+    if let Some(cast) = &player.cast_state
+        && cast.is_casting()
+    {
+        if is_healer_class(player.class) {
+            return (String::from("✚ Heal"), Style::default().fg(t.hp_high));
+        }
+        if is_debuffer_class(player.class) {
+            return (String::from("≈ Debuff"), Style::default().fg(t.text_accent));
+        }
+        return (
+            String::from("✦ Cast"),
+            Style::default().fg(t.text_highlight),
+        );
+    }
+
+    if client.target.is_some() {
+        return (
+            String::from("⚔ Fight"),
+            Style::default()
+                .fg(t.text_server)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
+
+    match player.stand_state {
+        StandState::Ducking => (
+            String::from("↧ Duck"),
+            Style::default().fg(t.text_secondary),
+        ),
+        StandState::Frozen => (String::from("■ Hold"), Style::default().fg(t.text_muted)),
+        _ => (String::from("• Ready"), Style::default().fg(t.text_muted)),
+    }
+}
+
+fn is_healer_class(class: Option<EqClass>) -> bool {
+    matches!(
+        class,
+        Some(EqClass::Cleric | EqClass::Druid | EqClass::Shaman | EqClass::Paladin)
+    )
+}
+
+fn is_debuffer_class(class: Option<EqClass>) -> bool {
+    matches!(
+        class,
+        Some(EqClass::Enchanter | EqClass::Shaman | EqClass::Necromancer | EqClass::Bard)
+    )
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy)]
 enum OverviewSectionKind {
+    Character,
     Groups,
     Filters,
     Combat,
@@ -187,6 +365,9 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
 
     for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
         match section {
+            OverviewSectionKind::Character => {
+                draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed)
+            }
             OverviewSectionKind::Groups => {
                 draw_group_health_gauges(frame, *chunk, app, app.overview_state.groups_collapsed)
             }
@@ -204,15 +385,23 @@ fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn overview_sections(app: &App) -> Vec<(OverviewSectionKind, Constraint)> {
-    let mut sections = Vec::new();
+    let mut sections = vec![(
+        OverviewSectionKind::Character,
+        if app.overview_state.character_collapsed {
+            Constraint::Length(3)
+        } else {
+            Constraint::Length(7)
+        },
+    )];
 
     if app.overview_state.show_groups {
+        let group_rows = app.visible_clients().len().min(5) as u16;
         sections.push((
             OverviewSectionKind::Groups,
             if app.overview_state.groups_collapsed {
                 Constraint::Length(3)
             } else {
-                Constraint::Min(7)
+                Constraint::Length(group_rows.saturating_add(2).max(4))
             },
         ));
     }
@@ -223,7 +412,7 @@ fn overview_sections(app: &App) -> Vec<(OverviewSectionKind, Constraint)> {
             if app.overview_state.filters_collapsed {
                 Constraint::Length(3)
             } else {
-                Constraint::Length(6)
+                Constraint::Length(5)
             },
         ));
     }
@@ -232,20 +421,31 @@ fn overview_sections(app: &App) -> Vec<(OverviewSectionKind, Constraint)> {
         OverviewSectionKind::Combat,
         if app.overview_state.combat_collapsed {
             Constraint::Length(3)
+        } else if app.ch_chain_status.is_some() {
+            Constraint::Length(5)
         } else {
-            Constraint::Length(7)
+            Constraint::Length(4)
         },
     ));
     sections.push((
         OverviewSectionKind::Session,
         if app.overview_state.session_collapsed {
             Constraint::Length(3)
+        } else if app.loot_database.items.is_empty() {
+            Constraint::Min(7)
         } else {
-            Constraint::Min(9)
+            Constraint::Min(10)
         },
     ));
 
     sections
+}
+
+fn preferred_height(constraint: Constraint) -> u16 {
+    match constraint {
+        Constraint::Length(height) | Constraint::Min(height) => height,
+        _ => 3,
+    }
 }
 
 fn section_title(label: &str, key_hint: Option<&str>, collapsed: bool) -> String {
@@ -254,6 +454,126 @@ fn section_title(label: &str, key_hint: Option<&str>, collapsed: bool) -> String
         Some(key) => format!(" {} [{}] {} ", label, key, icon),
         None => format!(" {} {} ", label, icon),
     }
+}
+
+fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewCharacter) {
+        t.border_active
+    } else {
+        t.border_primary
+    };
+    let title = section_title("Character", None, collapsed);
+    let blk = panel(title.as_str(), border_style, t);
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    let Some(client) = app.active_client() else {
+        frame.render_widget(
+            Paragraph::new("No character selected").style(Style::default().fg(t.text_muted)),
+            inner,
+        );
+        return;
+    };
+    let Some(player) = &client.local_player else {
+        frame.render_widget(
+            Paragraph::new("Selected client has no player data")
+                .style(Style::default().fg(t.text_muted)),
+            inner,
+        );
+        return;
+    };
+
+    let name = app.redact_name(&player.displayed_name).into_owned();
+    let group_label = app
+        .client_group_label(client)
+        .unwrap_or_else(|| String::from("--"));
+    let (condition_label, condition_style) = client_condition(client, t);
+    let (activity_label, activity_style) = client_activity(app, client);
+    let target_name = client
+        .target
+        .as_ref()
+        .map(|target| app.redact_name(&target.displayed_name).into_owned())
+        .unwrap_or_else(|| String::from("—"));
+
+    let lines = if collapsed {
+        vec![Line::from(vec![
+            Span::styled(name, Style::default().fg(t.text_bright)),
+            Span::styled("  ", Style::default()),
+            Span::styled(group_label, Style::default().fg(t.text_secondary)),
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                format!("{:.0}%", player.hp_pct()),
+                Style::default().fg(hp_color(player.hp_pct(), t)),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(activity_label, activity_style),
+        ])]
+    } else {
+        vec![
+            Line::from(vec![
+                Span::styled(
+                    name,
+                    Style::default()
+                        .fg(t.text_bright)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  ", Style::default()),
+                Span::styled(player.class_str(), Style::default().fg(t.text_accent)),
+                Span::styled(
+                    format!(" Lv{}", player.level),
+                    Style::default().fg(t.text_secondary),
+                ),
+                Span::styled("  ", Style::default()),
+                Span::styled(group_label, Style::default().fg(t.text_secondary)),
+            ]),
+            Line::from(vec![
+                Span::styled("Zone ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    client.zone_name.as_str(),
+                    Style::default().fg(t.text_normal),
+                ),
+                Span::styled("  HP ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{:.0}%", player.hp_pct()),
+                    Style::default().fg(hp_color(player.hp_pct(), t)),
+                ),
+                Span::styled("  MP ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    if player.mana_max > 0 {
+                        format!("{:.0}%", player.mana_pct())
+                    } else {
+                        String::from("—")
+                    },
+                    Style::default().fg(t.mana_color),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Cond ", Style::default().fg(t.text_muted)),
+                Span::styled(condition_label, condition_style),
+                Span::styled("  State ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    player.stand_state.label(),
+                    Style::default().fg(stand_state_color(&player.stand_state, t)),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Act  ", Style::default().fg(t.text_muted)),
+                Span::styled(activity_label, activity_style),
+                Span::styled("  Tgt ", Style::default().fg(t.text_muted)),
+                Span::styled(target_name, Style::default().fg(t.text_highlight)),
+            ]),
+            Line::from(vec![
+                Span::styled("Pos  ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("y:{:.0} x:{:.0} z:{:.0}", player.y, player.x, player.z),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]),
+        ]
+    };
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
 /// HP bars using ratatui's `Gauge` widget — one per visible character.

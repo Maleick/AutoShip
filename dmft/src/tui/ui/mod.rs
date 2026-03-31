@@ -290,7 +290,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let text = vec![
         Line::from(Span::styled(" Keybindings", head_s)),
         Line::from(""),
-        kv("1-3", "Overview, Tactical, Inspect"),
+        kv("1-3", "Overview, Tactical, Debug"),
         kv("Shift+1-6", "Focus group G1–G6"),
         kv("Shift+0", "All groups"),
         kv("Tab", "Cycle focused pane"),

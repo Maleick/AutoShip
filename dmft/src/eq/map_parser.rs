@@ -258,6 +258,21 @@ mod tests {
     }
 
     #[test]
+    fn load_zone_map_with_points_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let map_path = dir.path().join("pointzone.txt");
+        let mut f = File::create(&map_path).unwrap();
+        writeln!(f, "P 10, 20, 0, 255, 0, 0, 2, Test_Label").unwrap();
+        drop(f);
+
+        let map = load_zone_map(dir.path(), "pointzone").unwrap();
+        assert!(map.lines.is_empty());
+        assert_eq!(map.points.len(), 1);
+        assert!((map.bounds.min_x - 10.0).abs() < 0.01);
+        assert!((map.bounds.max_y - 20.0).abs() < 0.01);
+    }
+
+    #[test]
     fn load_zone_map_with_layers() {
         let dir = tempfile::tempdir().unwrap();
 

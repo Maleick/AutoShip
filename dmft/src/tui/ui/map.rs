@@ -72,23 +72,34 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .map(|c| c.zone_name.as_str())
         .unwrap_or("Unknown");
     let z_range = app.map_state.z_filter_range;
+    let player_pos_label = app
+        .local_player
+        .as_ref()
+        .map(|player| {
+            format!(
+                " | You y:{:.0} x:{:.0} z:{:.0}",
+                player.y, player.x, player.z
+            )
+        })
+        .unwrap_or_default();
     let map_info = app
         .map_state
         .zone_map
         .as_ref()
         .map(|m| {
             format!(
-                " Map: {} ({} lines, {} labels) | Z filter: {:.0} [+/-] ",
+                " Map: {} ({} lines, {} labels){} | Z filter: {:.0} [+/-] ",
                 zone_label,
                 m.lines.len(),
                 m.points.len(),
+                player_pos_label,
                 z_range,
             )
         })
         .unwrap_or_else(|| {
             format!(
-                " Map: {} (no map data) | Z filter: {:.0} [+/-] ",
-                zone_label, z_range
+                " Map: {} (no map data){} | Z filter: {:.0} [+/-] ",
+                zone_label, player_pos_label, z_range
             )
         });
 
@@ -111,7 +122,13 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let (center_x, center_y, scale_x, scale_y) = if let Some(map) = &app.map_state.zone_map {
         let (cx, cy) = if let Some(player) = &app.local_player {
-            (-player.y, -player.x)
+            let player_map_x = -player.y;
+            let player_map_y = -player.x;
+            if map_contains_player(map, player_map_x, player_map_y) {
+                (player_map_x, player_map_y)
+            } else {
+                (map.bounds.center_x(), map.bounds.center_y())
+            }
         } else {
             (map.bounds.center_x(), map.bounds.center_y())
         };
@@ -343,6 +360,15 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .collect();
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn map_contains_player(map: &crate::eq::map_parser::ZoneMap, x: f32, y: f32) -> bool {
+    let margin_x = map.bounds.width() * 0.20;
+    let margin_y = map.bounds.height() * 0.20;
+    x >= map.bounds.min_x - margin_x
+        && x <= map.bounds.max_x + margin_x
+        && y >= map.bounds.min_y - margin_y
+        && y <= map.bounds.max_y + margin_y
 }
 
 fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {

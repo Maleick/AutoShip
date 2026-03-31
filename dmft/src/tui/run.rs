@@ -645,6 +645,12 @@ fn load_demo_data(app: &mut App) {
     {
         let mut client = ClientState::new(1000 + i as u32, 0x140000000);
         client.zone_name = zone.to_string();
+        let (x, y, z, heading) = super::demo_data::demo_player_position(zone, i).unwrap_or((
+            1234.5 + (i as f32 * 100.0),
+            -567.8 + (i as f32 * 50.0),
+            12.0,
+            128.0,
+        ));
         client.local_player = Some(SpawnInfo {
             name: name.to_string(),
             displayed_name: name.to_string(),
@@ -660,10 +666,10 @@ fn load_demo_data(app: &mut App) {
             mana_max,
             endurance_current: 150,
             endurance_max: 200,
-            x: 1234.5 + (i as f32 * 100.0),
-            y: -567.8 + (i as f32 * 50.0),
-            z: 12.0,
-            heading: 128.0,
+            x,
+            y,
+            z,
+            heading,
             spawn_id: i as u32 + 1,
             is_gm: false,
             race_id,

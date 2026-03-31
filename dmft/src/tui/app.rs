@@ -32,7 +32,7 @@ impl ActiveScreen {
         match self {
             Self::Overview => "Overview",
             Self::Tactical => "Tactical",
-            Self::Inspect => "Inspect",
+            Self::Inspect => "Debug",
         }
     }
 
@@ -43,6 +43,7 @@ impl ActiveScreen {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivePanel {
     OverviewRoster,
+    OverviewCharacter,
     OverviewGroups,
     OverviewFilters,
     OverviewCombat,
@@ -375,7 +376,7 @@ impl App {
     fn visible_panels(&self) -> Vec<ActivePanel> {
         match self.active_screen {
             ActiveScreen::Overview => {
-                let mut panels = vec![ActivePanel::OverviewRoster];
+                let mut panels = vec![ActivePanel::OverviewRoster, ActivePanel::OverviewCharacter];
                 if self.overview_state.show_groups {
                     panels.push(ActivePanel::OverviewGroups);
                 }
@@ -458,6 +459,10 @@ impl App {
 
     pub fn toggle_focused_section(&mut self) {
         let state = match self.active_panel {
+            ActivePanel::OverviewCharacter => {
+                self.overview_state.character_collapsed = !self.overview_state.character_collapsed;
+                Some(("Character", self.overview_state.character_collapsed))
+            }
             ActivePanel::OverviewGroups => {
                 self.overview_state.groups_collapsed = !self.overview_state.groups_collapsed;
                 Some(("Groups", self.overview_state.groups_collapsed))
@@ -665,6 +670,26 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Get a short display label for the client's configured group, if known.
+    pub fn client_group_label(&self, client: &ClientState) -> Option<String> {
+        let name = if !client.character_name.is_empty() {
+            client.character_name.as_str()
+        } else if let Some(player) = &client.local_player {
+            player.displayed_name.as_str()
+        } else {
+            return None;
+        };
+
+        let account_num = extract_account_number(name)?;
+        self.groups
+            .iter()
+            .find(|group| {
+                let (lo, hi) = group.account_range;
+                account_num >= lo && account_num <= hi
+            })
+            .map(|group| format!("G{}", group.id))
     }
 
     /// Get clients belonging to the group at the given index (0-based).
@@ -1478,7 +1503,7 @@ impl App {
             return;
         }
         match crate::eq::map_parser::load_zone_map(&self.map_state.map_dir, zone_short_name) {
-            Ok(map) if !map.lines.is_empty() => {
+            Ok(map) if !map.lines.is_empty() || !map.points.is_empty() => {
                 tracing::info!(
                     zone = zone_short_name,
                     lines = map.lines.len(),

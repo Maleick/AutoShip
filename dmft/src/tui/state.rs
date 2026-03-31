@@ -81,6 +81,7 @@ impl MapScreenState {
 pub struct OverviewScreenState {
     pub show_groups: bool,
     pub show_filters: bool,
+    pub character_collapsed: bool,
     pub groups_collapsed: bool,
     pub filters_collapsed: bool,
     pub combat_collapsed: bool,
@@ -92,6 +93,7 @@ impl OverviewScreenState {
         Self {
             show_groups: true,
             show_filters: true,
+            character_collapsed: false,
             groups_collapsed: false,
             filters_collapsed: false,
             combat_collapsed: false,
