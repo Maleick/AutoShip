@@ -421,8 +421,6 @@ mod tests {
         };
         let json = serde_json::to_string(&traits).expect("serialize");
         let restored: PersonalityTraits = serde_json::from_str(&json).expect("deserialize");
-        assert!((restored.openness - 0.9).abs() < f32::EPSILON);
-        assert!((restored.loyalty - 0.95).abs() < f32::EPSILON);
-        assert!((restored.mischief - 0.05).abs() < f32::EPSILON);
+        assert_eq!(restored, traits);
     }
 }
