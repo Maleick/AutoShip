@@ -42,7 +42,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `process/`        | OS-level process interaction — open, read memory, find processes/windows                                                                            |
 | `eq/`             | EverQuest data layer — spawn structs, spawn linked list traversal                                                                                   |
-| `tui/`            | Terminal UI — app state, event handling, theme, sprites; `ui/` subdir has per-panel renderers (dashboard, groups, map, navigation, spawns, widgets) |
+| tui/            | Terminal UI — app state, event handling, theme, sprites; ui/ subdir has per-panel renderers (dashboard, groups, hex dump, map, navigation, spawns, widgets) |
 | `config.rs`       | TOML config loading (`config/frostreaver.toml`)                                                                                                     |
 | `inject/`         | DLL injection and staging                                                                                                                           |
 | `ipc/`            | Named pipe server + shared memory setup                                                                                                             |
