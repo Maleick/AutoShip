@@ -182,7 +182,7 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
             },
             MenuItem {
                 label: "CH Chain",
-                command: "ch status",
+                command: "chui",
                 shortcut: "",
             },
             MenuItem {

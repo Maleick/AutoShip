@@ -396,6 +396,30 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eq::map_parser;
+    use std::path::Path;
+
+    fn map_name_for_zone(zone: &str) -> &'static str {
+        match zone {
+            "Permafrost" => "permafrost",
+            "Eastern Wastes" => "eastwastes",
+            "Great Divide" => "greatdivide",
+            _ => "unknown",
+        }
+    }
+
+    fn in_demo_map_bounds(map_name: &str, spawn: &crate::eq::structs::SpawnInfo) -> bool {
+        let map_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../config/maps");
+        let Ok(map) = map_parser::load_zone_map(&map_dir, map_name) else {
+            return false;
+        };
+        let margin_x = map.bounds.width().max(120.0);
+        let margin_y = map.bounds.height().max(120.0);
+        spawn.x >= map.bounds.min_x - margin_x * 0.10
+            && spawn.x <= map.bounds.max_x + margin_x * 0.10
+            && spawn.y >= map.bounds.min_y - margin_y * 0.10
+            && spawn.y <= map.bounds.max_y + margin_y * 0.10
+    }
 
     #[test]
     fn player_positions_match_zone_space() {
@@ -418,5 +442,23 @@ mod tests {
         assert!(!spawns.is_empty());
         assert!(spawns.iter().all(|spawn| spawn.x < -1_800.0));
         assert!(spawns.iter().all(|spawn| spawn.y < -2_600.0));
+    }
+
+    #[test]
+    fn demo_spawns_fall_within_render_bounds() {
+        for zone in ["Permafrost", "Eastern Wastes", "Great Divide"] {
+            let map_name = map_name_for_zone(zone);
+            let spawns = demo_spawns_for_zone(zone);
+
+            for spawn in spawns {
+                assert!(
+                    in_demo_map_bounds(map_name, &spawn),
+                    "spawn {zone}::{name} ({x}, {y}) is out of bounds",
+                    name = spawn.name,
+                    x = spawn.x,
+                    y = spawn.y,
+                );
+            }
+        }
     }
 }

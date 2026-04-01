@@ -168,7 +168,8 @@ impl MapScreenState {
         self.show_navmesh
     }
 
-    /// Toggle a map layer by number (1=geometry, 2=spawns, 3=nav paths, 4=mesh).
+    /// Toggle a map layer by number:
+    /// 1=geometry, 2=spawns, 3=nav paths, 4=mesh, 5=labels.
     pub fn toggle_layer(&mut self, layer: u8) -> &'static str {
         match layer {
             1 => {
@@ -201,6 +202,14 @@ impl MapScreenState {
                     "Navmesh ON"
                 } else {
                     "Navmesh OFF"
+                }
+            }
+            5 => {
+                self.show_labels = !self.show_labels;
+                if self.show_labels {
+                    "Labels ON"
+                } else {
+                    "Labels OFF"
                 }
             }
             _ => "Unknown layer",

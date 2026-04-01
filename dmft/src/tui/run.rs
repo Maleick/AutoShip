@@ -103,6 +103,7 @@ fn run_loop(
             refresh_eq_data(app);
             app.tick_count += 1;
             app.update_tracked_spawns();
+            app.sync_ch_chain_state(orchestrator);
             last_refresh = Instant::now();
         }
 
@@ -643,17 +644,27 @@ fn load_demo_data(app: &mut App) {
         ), // WIZ Human
     ];
 
+    let mut zone_cache = HashMap::new();
     for (i, &(name, class_id, level, hp, hp_max, mana, mana_max, ref stand, zone, race_id)) in
         demo_clients.iter().enumerate()
     {
         let mut client = ClientState::new(1000 + i as u32, 0x0001_4000_0000);
         client.zone_name = zone.to_string();
-        let (x, y, z, heading) = super::demo_data::demo_player_position(zone, i).unwrap_or((
-            1234.5 + (i as f32 * 100.0),
-            -567.8 + (i as f32 * 50.0),
-            12.0,
-            128.0,
-        ));
+        let zone_short = zone_to_short_name(zone);
+        let (mut x, mut y, z, heading) =
+            super::demo_data::demo_player_position(zone, i).unwrap_or((
+                1234.5 + (i as f32 * 100.0),
+                -567.8 + (i as f32 * 50.0),
+                12.0,
+                128.0,
+            ));
+        clamp_demo_xy_to_map_bounds(
+            &zone_short,
+            &app.map_state.map_dir,
+            &mut zone_cache,
+            &mut x,
+            &mut y,
+        );
         client.local_player = Some(SpawnInfo {
             name: name.to_string(),
             displayed_name: name.to_string(),
@@ -689,8 +700,19 @@ fn load_demo_data(app: &mut App) {
     // Each group's clients share a spawn list appropriate to their zone.
     // Spawn definitions live in demo_data.rs to keep this function focused.
     for client in &mut app.clients {
-        let spawns = super::demo_data::demo_spawns_for_zone(&client.zone_name);
+        let mut spawns = super::demo_data::demo_spawns_for_zone(&client.zone_name);
         if !spawns.is_empty() {
+            let zone_short = zone_to_short_name(&client.zone_name);
+            for spawn in &mut spawns {
+                let spawn_zone = zone_short.as_str();
+                clamp_demo_xy_to_map_bounds(
+                    spawn_zone,
+                    &app.map_state.map_dir,
+                    &mut zone_cache,
+                    &mut spawn.x,
+                    &mut spawn.y,
+                );
+            }
             client.spawns = spawns;
         }
     }
@@ -724,6 +746,52 @@ fn load_demo_data(app: &mut App) {
 
     // Load zone map for the selected client's zone
     app.reload_map_for_selected_client();
+}
+
+#[derive(Clone, Copy)]
+struct DemoMapBounds {
+    min_x: f32,
+    max_x: f32,
+    min_y: f32,
+    max_y: f32,
+}
+
+impl DemoMapBounds {
+    fn from_zone_name(zone: &str, map_dir: &std::path::Path) -> Option<Self> {
+        let map = crate::eq::map_parser::load_zone_map(map_dir, zone).ok()?;
+        Some(Self {
+            min_x: map.bounds.min_x,
+            max_x: map.bounds.max_x,
+            min_y: map.bounds.min_y,
+            max_y: map.bounds.max_y,
+        })
+    }
+
+    fn clamp_xy(&self, x: &mut f32, y: &mut f32) {
+        let pad_x = (self.max_x - self.min_x).max(220.0) * 0.09;
+        let pad_y = (self.max_y - self.min_y).max(220.0) * 0.09;
+        let min_x = self.min_x - pad_x;
+        let max_x = self.max_x + pad_x;
+        let min_y = self.min_y - pad_y;
+        let max_y = self.max_y + pad_y;
+        *x = (*x).clamp(min_x, max_x);
+        *y = (*y).clamp(min_y, max_y);
+    }
+}
+
+fn clamp_demo_xy_to_map_bounds(
+    zone_short: &str,
+    map_dir: &std::path::Path,
+    cache: &mut HashMap<String, Option<DemoMapBounds>>,
+    x: &mut f32,
+    y: &mut f32,
+) {
+    let bounds = cache
+        .entry(zone_short.to_string())
+        .or_insert_with(|| DemoMapBounds::from_zone_name(zone_short, map_dir));
+    if let Some(bounds) = bounds {
+        bounds.clamp_xy(x, y);
+    }
 }
 
 /// Convert a zone display name (long name from zoneHeader) to its EQ short name

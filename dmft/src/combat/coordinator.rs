@@ -279,6 +279,20 @@ impl CombatCoordinator {
         }
     }
 
+    /// Replace the full CH chain member order.
+    pub fn ch_chain_set_members(&mut self, members: Vec<u32>) {
+        if let Some(ref mut chain) = self.ch_chain {
+            chain.set_members(members);
+        }
+    }
+
+    /// Set the CH chain target spawn ID.
+    pub fn ch_chain_set_target(&mut self, target_id: u32) {
+        if let Some(ref mut chain) = self.ch_chain {
+            chain.set_target(target_id);
+        }
+    }
+
     /// Assign nearby enemies to enchanter CC targets and return commands.
     pub fn decide_cc_assignments(
         &mut self,
