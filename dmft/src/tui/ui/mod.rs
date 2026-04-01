@@ -315,6 +315,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(Span::styled(" Commands  (:cmd)", head_s)),
         Line::from(""),
         kv("<name> /cmd", "Send to character"),
+        kv("@<name> /cmd", "Force direct target"),
         kv("G1-G6 /cmd", "Send to group"),
         kv("all /cmd", "Broadcast"),
         kv("camp <sub>", "start|stop|list|add|rm"),

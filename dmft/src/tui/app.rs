@@ -11,6 +11,7 @@ use crate::eq::named_tracker::NamedTracker;
 use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::orchestrator::Orchestrator;
 use crate::soul::coordinator::SoulCoordinator;
+use anyhow::Context;
 
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
@@ -595,13 +596,15 @@ impl App {
     }
 
     pub fn client_command_target(&self, client: &ClientState) -> String {
-        if !client.character_name.is_empty() {
-            client.character_name.clone()
+        let name = if !client.character_name.is_empty() {
+            client.character_name.as_str()
         } else if let Some(player) = &client.local_player {
-            player.displayed_name.clone()
+            player.displayed_name.as_str()
         } else {
-            format!("PID {}", client.pid)
-        }
+            return format!("PID {}", client.pid);
+        };
+
+        self.redact_name(name).into_owned()
     }
 
     fn select_client_idx(&mut self, idx: usize) {
@@ -1618,12 +1621,19 @@ impl App {
     }
 
     /// Parse a direct client target from the first word.
-    /// Examples: `Tank`, `cleric01 /sit`.
+    /// Examples: `Tank`, `cleric01 /sit`, `@all /sit`.
     fn parse_client_prefix<'a>(&self, input: &'a str) -> Option<(usize, &'a str)> {
         let trimmed = input.trim();
         let mut parts = trimmed.splitn(2, char::is_whitespace);
-        let target = parts.next()?;
+        let raw_target = parts.next()?;
         let rest = parts.next().map(str::trim).unwrap_or("");
+        let forced = raw_target.starts_with('@');
+        let target = raw_target.trim_start_matches('@');
+
+        if target.is_empty() || (!forced && is_reserved_command_name(target)) {
+            return None;
+        }
+
         self.find_client_index_by_name(target)
             .map(|idx| (idx, rest))
     }
@@ -2684,12 +2694,45 @@ fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
 fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result<()> {
     use crate::ipc::pipe::CommandPipe;
 
-    let token = crate::ipc::load_session_token(pid).unwrap_or([0u8; 32]);
+    let token = crate::ipc::load_session_token(pid).with_context(|| {
+        format!(
+            "missing session token for PID {}; inject the DLL before sending commands",
+            pid
+        )
+    })?;
     let session_id = dmft_common::ipc::session_id_from_token(&token);
     let pipe = CommandPipe::connect(pid, session_id)?;
     pipe.send_raw_token(&token)?;
     pipe.send_async(cmd)?;
     Ok(())
+}
+
+fn is_reserved_command_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "help"
+            | "camp"
+            | "nav"
+            | "loot"
+            | "status"
+            | "login"
+            | "launch"
+            | "stop"
+            | "restart"
+            | "track"
+            | "untrack"
+            | "mode"
+            | "ma"
+            | "mt"
+            | "engage"
+            | "disengage"
+            | "invite"
+            | "accept"
+            | "heal"
+            | "ch"
+            | "inject"
+            | "all"
+    )
 }
 
 /// Case-insensitive substring search for ASCII strings, without heap allocation.
@@ -2703,4 +2746,89 @@ fn ascii_icontains(haystack: &str, needle: &str) -> bool {
         .as_bytes()
         .windows(n.len())
         .any(|w| w.eq_ignore_ascii_case(n))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
+
+    fn test_spawn(name: &str) -> SpawnInfo {
+        SpawnInfo {
+            name: name.into(),
+            displayed_name: name.into(),
+            lastname: String::new(),
+            spawn_id: 1,
+            spawn_type: SpawnType::Player,
+            level: 60,
+            class_id: 1,
+            class: None,
+            stand_state: StandState::Standing,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 100,
+            mana_max: 100,
+            endurance_current: 100,
+            endurance_max: 100,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: Vec::new(),
+            cast_state: None,
+        }
+    }
+
+    fn test_client(pid: u32, name: &str) -> ClientState {
+        let mut client = ClientState::new(pid, 0);
+        client.character_name = name.into();
+        client.local_player = Some(test_spawn(name));
+        client
+    }
+
+    #[test]
+    fn client_command_target_respects_privacy_mode() {
+        let mut app = App::new();
+        app.clients.push(test_client(42, "Alpha"));
+        app.privacy_mode = true;
+
+        let target = app.client_command_target(&app.clients[0]);
+
+        assert_eq!(target, "Toon-01");
+    }
+
+    #[test]
+    fn parse_client_prefix_preserves_reserved_commands() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "all"));
+
+        assert_eq!(app.parse_client_prefix("all /sit"), None);
+        assert_eq!(app.parse_client_prefix("@all /sit"), Some((0, "/sit")));
+    }
+
+    #[test]
+    fn send_ipc_command_errors_when_session_token_is_missing() {
+        let pid = u32::MAX - 7;
+        let login_token_path = std::env::temp_dir()
+            .join("dmft")
+            .join(format!("login_token_{}.bin", pid));
+        let _ = std::fs::remove_file(&login_token_path);
+
+        let error = send_ipc_command(
+            pid,
+            &dmft_common::ipc::Command::SlashCommand {
+                command: String::from("/sit"),
+            },
+        )
+        .expect_err("missing login token should fail before pipe connect");
+
+        assert!(
+            error
+                .to_string()
+                .contains("missing session token for PID 4294967288"),
+            "unexpected error: {error:#}"
+        );
+    }
 }
