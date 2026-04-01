@@ -103,7 +103,7 @@ impl ProcessHandle {
     }
 
     /// Chase a pointer chain: read base, then follow each offset.
-    /// Example: chase_ptr(base, &[0x10, 0x08]) reads *(*base + 0x10) + 0x08
+    /// Example: `chase_ptr(base`, &[0x10, 0x08]) reads *(*base + 0x10) + 0x08
     pub fn chase_ptr(&self, base: usize, offsets: &[usize]) -> Result<usize> {
         let mut addr = base;
         for (i, &offset) in offsets.iter().enumerate() {

@@ -1,4 +1,4 @@
-//! Game loop hook -- intercepts CEverQuest::MainLoop.
+//! Game loop hook -- intercepts `CEverQuest::MainLoop`.
 //!
 //! **Timing terminology:**
 //! - **Frame**: one `CEverQuest::MainLoop` iteration (~20/sec, ~50ms each).
@@ -1114,7 +1114,7 @@ fn update_foreground_status() {
 }
 
 /// Returns true if this client's window is currently in the foreground.
-/// The render hook can use this to skip CDisplay::RealRender_World for
+/// The render hook can use this to skip `CDisplay::RealRender_World` for
 /// background clients, saving near-zero GPU usage across 35 bot clients.
 pub fn is_foreground() -> bool {
     WINDOW_IS_FOREGROUND.load(std::sync::atomic::Ordering::Relaxed)
@@ -1357,8 +1357,8 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
 }
 
 /// Call EQ's `InterpretCmd` to execute a slash command string.
-/// CEverQuest::InterpretCmd is a member function:
-///   void CEverQuest::InterpretCmd(PlayerClient* pChar, const char* szCmd)
+/// `CEverQuest::InterpretCmd` is a member function:
+///   void `CEverQuest::InterpretCmd(PlayerClient`* pChar, const char* szCmd)
 /// On x64 Windows: this=RCX (`CEverQuest`*), pChar=RDX, szCmd=R8.
 fn execute_slash_command(command: &str) {
     #[cfg(windows)]

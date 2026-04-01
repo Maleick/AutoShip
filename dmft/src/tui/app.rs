@@ -638,7 +638,7 @@ impl App {
     }
 
     /// Sync the legacy single-client fields from the selected client.
-    /// This keeps backward compatibility with code that reads app.local_player, etc.
+    /// This keeps backward compatibility with code that reads `app.local_player`, etc.
     pub fn sync_from_selected_client(&mut self) {
         if let Some(client) = self.clients.get(self.selected_client) {
             self.local_player = client.local_player.clone();

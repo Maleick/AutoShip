@@ -109,7 +109,7 @@ pub fn run_tui_mode() -> Result<()> {
     tui::run::run_tui(app, orchestrator)
 }
 
-/// Inject mode (--inject) — find eqgame.exe processes and inject dmft_dll.dll into each.
+/// Inject mode (--inject) — find eqgame.exe processes and inject `dmft_dll.dll` into each.
 pub fn run_inject_mode() -> Result<()> {
     info!("DMFT inject mode — finding EQ processes...");
 
@@ -382,7 +382,7 @@ pub fn run_statusall_mode() -> Result<()> {
     Ok(())
 }
 
-/// Navigate mode (--nav <PID> <x> <y> <z>) — send NavigateTo to a specific client.
+/// Navigate mode (--nav <PID> <x> <y> <z>) — send `NavigateTo` to a specific client.
 pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
@@ -609,7 +609,7 @@ pub fn run_login_pid_mode(
     Ok(())
 }
 
-/// Login mode (--login <account> <password> [server] [character]) — send StartLogin to all injected EQ clients.
+/// Login mode (--login <account> <password> [server] [character]) — send `StartLogin` to all injected EQ clients.
 pub fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
@@ -650,7 +650,7 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
     Ok(())
 }
 
-/// Calibrate mode (--calibrate) — find all EQ processes and send calibrate_login to each.
+/// Calibrate mode (--calibrate) — find all EQ processes and send `calibrate_login` to each.
 pub fn run_calibrate_mode() -> Result<()> {
     use dmft_common::ipc::Command;
 
@@ -842,7 +842,7 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
     lines.join("\n")
 }
 
-/// Diagnostic hex dump of SpawnManager, the TList, and the first spawn node.
+/// Diagnostic hex dump of `SpawnManager`, the TList, and the first spawn node.
 /// Helps debug why the NEXT pointer reads as 0x0 after the first spawn.
 #[allow(unused_variables)]
 fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u64) {

@@ -1,4 +1,4 @@
-//! Named mob database — loads per-zone TOML files from config/named_mobs/.
+//! Named mob database — loads per-zone TOML files from `config/named_mobs`/.
 
 use anyhow::{Context, Result};
 use serde::Deserialize;

@@ -75,7 +75,7 @@ pub fn is_window_visible(eqmain_base: u64, window_name: &str) -> bool {
 
 /// Check if a SIDL-named window is visible in the eqmain.dll `CXWndManager`.
 ///
-/// Uses CSidlScreenWnd::SidlText (+0x270 in eqmain) for matching and checks
+/// Uses `CSidlScreenWnd::SidlText` (+0x270 in eqmain) for matching and checks
 /// the dShow visibility flag. This is the MQ2 `AutoLogin` approach.
 pub fn is_sidl_window_visible(eqmain_base: u64, sidl_name: &str) -> bool {
     #[cfg(windows)]
@@ -385,8 +385,8 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
 /// window list and setting their `InputText` `CXStr` in-place.
 ///
 /// This is the MQ2 approach — no keyboard simulation. We:
-/// 1. Walk CXWndManager::pWindows to find username/password edit widgets
-/// 2. Write directly to CEditBaseWnd::InputText (`CXStr` at +0x278)
+/// 1. Walk `CXWndManager::pWindows` to find username/password edit widgets
+/// 2. Write directly to `CEditBaseWnd::InputText` (`CXStr` at +0x278)
 /// 3. Click the Login button via vtable WndNotification(XWM_LCLICK)
 pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]

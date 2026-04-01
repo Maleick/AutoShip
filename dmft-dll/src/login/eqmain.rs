@@ -117,7 +117,7 @@ pub fn resolve_eqlogin(eqmain_base: u64) -> Option<usize> {
     }
 }
 
-/// Resolve the EQ window handle (HWND) from EQLogin::hEQWnd.
+/// Resolve the EQ window handle (HWND) from `EQLogin::hEQWnd`.
 pub fn resolve_eq_hwnd(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
     {

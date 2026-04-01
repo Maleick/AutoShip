@@ -1,4 +1,4 @@
-//! Render strobe hook -- intercepts CDisplay::RealRender_World.
+//! Render strobe hook -- intercepts `CDisplay::RealRender_World`.
 //! Background clients skip most render calls to save GPU. Foreground clients
 //! always render normally. Background clients render once every `STROBE_INTERVAL`
 //! ticks (~5 seconds at 30fps) so the orchestrator can still grab screenshots.
@@ -24,7 +24,7 @@ mod inner {
         static RenderHook: unsafe extern "system" fn(*mut core::ffi::c_void);
     }
 
-    /// The detour function -- called instead of CDisplay::RealRender_World.
+    /// The detour function -- called instead of `CDisplay::RealRender_World`.
     fn render_detour(this: *mut core::ffi::c_void) {
         if super::should_render() {
             // SAFETY: `this` is the CDisplay* pointer passed by EQ's rendering

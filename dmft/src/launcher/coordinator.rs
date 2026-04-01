@@ -15,7 +15,7 @@ pub struct LaunchCoordinator {
     launch_queue: VecDeque<(ClientId, AccountInfo)>,
     active_logins: Vec<LoginStateMachine>,
     failure_window: VecDeque<(Instant, ClientId)>,
-    /// Per-client earliest retry time, honoring backoff from LoginAction::Retry.
+    /// Per-client earliest retry time, honoring backoff from `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
     paused: bool,
     last_launch: Option<Instant>,

@@ -18,7 +18,7 @@
 //!
 //! - **`set_edit_text_via_vtable()`** — `SetWindowText` vtable 0x280 does not work in eqmain.dll
 //!   context. Kept for reference and possible eqgame.exe use. Use `write_cxstr_inplace()` instead.
-//! - **`PostMessageW` (WM_CHAR/VK_RETURN)** — EQ uses `DirectInput`, not Win32 message pump.
+//! - **`PostMessageW` (`WM_CHAR/VK_RETURN`)** — EQ uses `DirectInput`, not Win32 message pump.
 //! - **`EQLogin` char array write alone** — UI doesn't read from backend arrays; must also write `CXStr`.
 //!
 //! # Thread safety
@@ -531,7 +531,7 @@ pub unsafe fn xml_index(_wnd_ptr: usize) -> i32 {
 
 // ─── SIDL-Based Window Finding ───
 
-/// Find a visible window by its SIDL name (CSidlScreenWnd::SidlText at +0x270).
+/// Find a visible window by its SIDL name (`CSidlScreenWnd::SidlText` at +0x270).
 ///
 /// This is the MQ2 `AutoLogin` approach: scan `CXWndManager`'s window array, read
 /// each window's `SidlText`, and check the dShow visibility flag. SIDL names

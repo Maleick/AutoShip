@@ -39,22 +39,22 @@ pub const PINST_CEVERQUEST: u64 = 0x0001_40F1_1758;
 // Source: macroquest/eqlib live branch, client date 20260310
 // Calling convention: x64 MSVC (this in RCX for member functions)
 
-/// CharacterZoneClient::CastSpell — cast a spell by gem ID
+/// `CharacterZoneClient::CastSpell` — cast a spell by gem ID
 /// Signature: unsigned char CastSpell(unsigned char gemid, int spellid, ...)
 pub const CAST_SPELL: u64 = 0x0001_400D_9F20;
 
-/// PcZoneClient::DoCombatAbility — use a combat ability
+/// `PcZoneClient::DoCombatAbility` — use a combat ability
 /// Signature: bool DoCombatAbility(int spellID, bool allowLowerRank)
 pub const DO_COMBAT_ABILITY: u64 = 0x0001_402E_D490;
 
-/// CharacterZoneClient::UseSkill — use a skill on a target
+/// `CharacterZoneClient::UseSkill` — use a skill on a target
 /// Signature: void UseSkill(unsigned char skill, `PlayerZoneClient`* Target, bool bAuto)
 pub const USE_SKILL: u64 = 0x0001_4010_52A0;
 
-/// CharacterZoneClient::CanUseItem — check if an item is usable
+/// `CharacterZoneClient::CanUseItem` — check if an item is usable
 pub const CAN_USE_ITEM: u64 = 0x0001_400E_DDB0;
 
-/// PlayerZoneClient::DoAttack — perform a melee attack
+/// `PlayerZoneClient::DoAttack` — perform a melee attack
 /// Signature: bool DoAttack(BYTE slot, BYTE skill, `PlayerZoneClient`* Target, ...)
 pub const DO_ATTACK: u64 = 0x0001_4031_B890;
 
@@ -62,29 +62,29 @@ pub const DO_ATTACK: u64 = 0x0001_4031_B890;
 /// Can do: follow, stopcast, face, sit, stand, attack, etc.
 pub const EXECUTE_CMD: u64 = 0x0001_4022_35B0;
 
-/// CEverQuest::InterpretCmd — interpret a slash command string
+/// `CEverQuest::InterpretCmd` — interpret a slash command string
 /// Signature: void InterpretCmd(PlayerClient*, const char*)
 pub const INTERPRET_CMD: u64 = 0x0001_4028_3FB0;
 
 /// pinstCXWndManager — eqgame.exe's UI window manager (not eqmain.dll's)
 pub const PINST_CXWND_MANAGER: u64 = 0x0001_40F3_7B28;
 
-/// CCharacterListWnd::EnterWorld — enter world from character select
+/// `CCharacterListWnd::EnterWorld` — enter world from character select
 /// Signature: void EnterWorld() (member function, takes this only)
 pub const CHAR_LIST_ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
-/// CCharacterListWnd::SelectCharacter — select a character by index
+/// `CCharacterListWnd::SelectCharacter` — select a character by index
 /// Signature: void SelectCharacter(int index)
 pub const CHAR_LIST_SELECT_CHAR: u64 = 0x0001_400D_5D20;
 
-/// CEverQuest::ClickedPlayer — click-target a player
+/// `CEverQuest::ClickedPlayer` — click-target a player
 pub const CLICKED_PLAYER: u64 = 0x0001_4027_24F0;
 
-/// CEverQuest::IssuePetCommand — issue a pet command
+/// `CEverQuest::IssuePetCommand` — issue a pet command
 /// Signature: void IssuePetCommand(ePetCommandType, int `TargetID`, bool bQuiet, ...)
 pub const ISSUE_PET_COMMAND: u64 = 0x0001_4028_56A0;
 
-/// PcClient::GetConLevel — get consider level of target
+/// `PcClient::GetConLevel` — get consider level of target
 pub const GET_CON_LEVEL: u64 = 0x0001_402E_3C10;
 
 /// `PlayerClient`::GetPcClient — get `PcClient` from `PlayerClient`
@@ -99,7 +99,7 @@ pub const PINST_ACTIVE_CORPSE: u64 = 0x0001_40E8_E390;
 /// __ProcessGameEvents — game event processing (hook point for game loop)
 pub const PROCESS_GAME_EVENTS: u64 = 0x0001_4028_E0F0;
 
-/// CDisplay::RealRender_World — render loop (alternative hook point)
+/// `CDisplay::RealRender_World` — render loop (alternative hook point)
 pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
 
 /// __FixHeading — normalize heading value
@@ -108,10 +108,10 @@ pub const FIX_HEADING: u64 = 0x0001_4066_1520;
 /// __get_bearing — calculate bearing between two points
 pub const GET_BEARING: u64 = 0x0001_4025_8850;
 
-/// FreeTargetTracker::CastSpell — ground-targeted spell casting
+/// `FreeTargetTracker::CastSpell` — ground-targeted spell casting
 pub const FREE_TARGET_CAST_SPELL: u64 = 0x0001_402B_5740;
 
-/// PlayerZoneClient::ChangeHeight — change character height
+/// `PlayerZoneClient::ChangeHeight` — change character height
 pub const CHANGE_HEIGHT: u64 = 0x0001_4031_AB80;
 
 /// `ZoneGuideManagerClient` singleton (preferred base)
@@ -147,7 +147,7 @@ pub mod eqmain {
     /// Pointer to `CXWndManager` instance
     pub const CXWND_MANAGER: u64 = 0x0001_8038_24B8;
 
-    /// LoginServerAPI::JoinServer function address
+    /// `LoginServerAPI::JoinServer` function address
     pub const JOIN_SERVER: u64 = 0x0001_8001_8050;
 
     /// `LoginViewManager` function address
@@ -165,15 +165,15 @@ pub mod eqmain {
 
     // ─── LoginClient struct field offsets ───
 
-    /// LoginClient::pLoginData (EQLS::EQLogin*) at offset 0x010
+    /// `LoginClient::pLoginData` (`EQLS::EQLogin`*) at offset 0x010
     pub const LOGINCLIENT_LOGIN_DATA: usize = 0x010;
 
-    /// LoginClient::ServerList (`DoublyLinkedList`) at offset 0x178
+    /// `LoginClient::ServerList` (`DoublyLinkedList`) at offset 0x178
     pub const LOGINCLIENT_SERVER_LIST: usize = 0x178;
 
     // ─── EQLogin struct field offsets ───
 
-    /// EQLogin::hEQWnd (HWND) at offset 0x408
+    /// `EQLogin::hEQWnd` (HWND) at offset 0x408
     pub const EQLOGIN_HWND: usize = 0x408;
 
     /// `EQLogin::Login` (char\[0x80\] array) at offset 0x414
@@ -190,7 +190,7 @@ pub mod eqmain {
 
     // ─── UI widget field offsets ───
 
-    /// CEditBaseWnd::InputText field offset (`CXStr`)
+    /// `CEditBaseWnd::InputText` field offset (`CXStr`)
     /// `CXStr` is a single pointer to `CStrRep` (8 bytes).
     pub const CEDITBASEWND_INPUT_TEXT: usize = 0x278;
 
@@ -211,36 +211,36 @@ pub mod eqmain {
     // From MQ2: CXWndManager { /*0x008*/ ArrayClass<CXWnd*> pWindows; ... }
     // ArrayClass<T> = { T* m_array; int m_length; int m_alloc; }
 
-    /// CXWndManager::pWindows.m_array (pointer to `CXWnd`* array)
+    /// `CXWndManager::pWindows.m_array` (pointer to `CXWnd`* array)
     /// NOTE: eqmain.dll layout differs from eqgame.exe — calibrated from hex dump
     pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
-    /// CXWndManager::pWindows.m_length (window count, u32)
+    /// `CXWndManager::pWindows.m_length` (window count, u32)
     pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x018;
-    /// CXWndManager::FocusWindow (`CXWnd`*)
+    /// `CXWndManager::FocusWindow` (`CXWnd`*)
     pub const CXWNDMGR_FOCUS_WINDOW: usize = 0x090;
 
     // ─── CXWnd struct offsets ───
 
-    /// CXWnd::WindowText (`CXStr` at +0x078)
+    /// `CXWnd::WindowText` (`CXStr` at +0x078)
     pub const CXWND_WINDOW_TEXT: usize = 0x078;
-    /// CXWnd::XMLIndex (int at +0x054 in eqmain, varies)
+    /// `CXWnd::XMLIndex` (int at +0x054 in eqmain, varies)
     pub const CXWND_XML_INDEX: usize = 0x054;
-    /// CXWnd::dShow (bool at +0x06c)
+    /// `CXWnd::dShow` (bool at +0x06c)
     pub const CXWND_DSHOW: usize = 0x06c;
-    /// CXWnd::FirstNode (child window, at +0x028)
+    /// `CXWnd::FirstNode` (child window, at +0x028)
     pub const CXWND_FIRST_NODE: usize = 0x028;
-    /// CXWnd::Next (sibling window, at +0x020)
+    /// `CXWnd::Next` (sibling window, at +0x020)
     pub const CXWND_NEXT: usize = 0x020;
 
     // ─── CStrRep struct offsets ───
 
-    /// CStrRep::length (u32 at +0x08)
+    /// `CStrRep::length` (u32 at +0x08)
     pub const CSTRREP_LENGTH: usize = 0x08;
-    /// CStrRep::alloc (u32 at +0x04)
+    /// `CStrRep::alloc` (u32 at +0x04)
     pub const CSTRREP_ALLOC: usize = 0x04;
-    /// CStrRep::encoding (enum at +0x0c, 0=utf8)
+    /// `CStrRep::encoding` (enum at +0x0c, 0=utf8)
     pub const CSTRREP_ENCODING: usize = 0x0c;
-    /// CStrRep::data (char[] at +0x18)
+    /// `CStrRep::data` (char[] at +0x18)
     pub const CSTRREP_DATA: usize = 0x18;
 
     /// Convert a preferred-base eqmain.dll offset to an actual address.
@@ -255,18 +255,18 @@ pub mod eqmain {
 // while eqmain.dll has it at +0x010 (different struct layout).
 /// Offsets within eqgame.exe (in-game UI and window manager).
 pub mod eqgame {
-    /// CXWndManager::pWindows.m_length in eqgame.exe
+    /// `CXWndManager::pWindows.m_length` in eqgame.exe
     /// `ArrayClass` layout: `m_length` at +0x00, `m_array` at +0x08 within the `ArrayClass`
     /// pWindows `ArrayClass` starts at `CXWndManager` +0x008
     pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x008;
-    /// CXWndManager::pWindows.m_array in eqgame.exe
+    /// `CXWndManager::pWindows.m_array` in eqgame.exe
     pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
 
     /// `CXWnd` vtable offset for `WndNotification` in eqgame.exe context.
-    /// eqgame::CXWnd has this at 0x120 (vs eqmain::CXWnd at 0x110).
+    /// `eqgame::CXWnd` has this at 0x120 (vs `eqmain::CXWnd` at 0x110).
     pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x120;
 
-    /// CSidlScreenWnd::SidlText (`CXStr` at +0x270) — the SIDL window name
+    /// `CSidlScreenWnd::SidlText` (`CXStr` at +0x270) — the SIDL window name
     /// Used to find windows like "`CharacterListWnd`" by name
     pub const CSIDL_SCREEN_WND_SIDL_TEXT: usize = 0x270;
 
@@ -275,28 +275,28 @@ pub mod eqgame {
 
     /// `CListWnd::ItemsArray` (`ArrayClass<SListWndLine>`) — row count (int at +0x270)
     pub const CLISTWND_ITEMS_COUNT: usize = 0x270;
-    /// CListWnd::ItemsArray.m_array — pointer to `SListWndLine` array (at +0x278)
+    /// `CListWnd::ItemsArray.m_array` — pointer to `SListWndLine` array (at +0x278)
     pub const CLISTWND_ITEMS_ARRAY: usize = 0x278;
 
     /// sizeof(SListWndLine) — each row in the list
     pub const SLISTWNDLINE_SIZE: usize = 0x138;
     /// `SListWndLine::Cells.m_length` (`ArrayClass<SListWndCell>` at +0x00)
     pub const SLISTWNDLINE_CELLS_COUNT: usize = 0x000;
-    /// SListWndLine::Cells.m_array (pointer at +0x08)
+    /// `SListWndLine::Cells.m_array` (pointer at +0x08)
     pub const SLISTWNDLINE_CELLS_ARRAY: usize = 0x008;
 
     /// sizeof(SListWndCell)
     pub const SLISTWNDCELL_SIZE: usize = 0x28;
-    /// SListWndCell::Text (`CXStr` at +0x08)
+    /// `SListWndCell::Text` (`CXStr` at +0x08)
     pub const SLISTWNDCELL_TEXT: usize = 0x08;
 }
 
 // ─── Character select offsets (eqgame.exe) ───
 
-/// CCharacterListWnd::SelectCharacter function address (preferred base, eqgame.exe)
+/// `CCharacterListWnd::SelectCharacter` function address (preferred base, eqgame.exe)
 pub const SELECT_CHARACTER: u64 = 0x0001_400D_5D20;
 
-/// CCharacterListWnd::EnterWorld function address (preferred base, eqgame.exe)
+/// `CCharacterListWnd::EnterWorld` function address (preferred base, eqgame.exe)
 pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
 // ─── PlayerClient (SPAWNINFO) field offsets ───
@@ -353,16 +353,16 @@ pub mod buff_slots {
     /// sizeof(EQ_Affect) per entry.
     pub const BUFF_ENTRY_SIZE: usize = 0x28;
 
-    /// EQ_Affect::SpellID (u32 at +0x00) — 0xFFFF = empty slot.
+    /// `EQ_Affect::SpellID` (u32 at +0x00) — 0xFFFF = empty slot.
     pub const SPELL_ID: usize = 0x00;
 
-    /// EQ_Affect::Duration (i32 at +0x04) — remaining ticks (6 sec/tick).
+    /// `EQ_Affect::Duration` (i32 at +0x04) — remaining ticks (6 sec/tick).
     pub const DURATION_TICKS: usize = 0x04;
 
-    /// EQ_Affect::InitialDuration (i32 at +0x08) — original duration ticks.
+    /// `EQ_Affect::InitialDuration` (i32 at +0x08) — original duration ticks.
     pub const INITIAL_DURATION: usize = 0x08;
 
-    /// EQ_Affect::CasterLevel (u8 at +0x14).
+    /// `EQ_Affect::CasterLevel` (u8 at +0x14).
     pub const CASTER_LEVEL: usize = 0x14;
 
     /// `SpellID` value indicating an empty buff slot.
@@ -372,13 +372,13 @@ pub mod buff_slots {
 /// Offsets within `CharacterZoneClient` (casting state)
 pub mod character_zone {
     /// `uint32_t` — cast completion ETA (server timestamp when spell finishes)
-    /// Source: PlayerClient.h offset 0x010 (CharacterZoneClient::SpellETA)
+    /// Source: PlayerClient.h offset 0x010 (`CharacterZoneClient::SpellETA`)
     pub const SPELL_ETA: usize = 0x010;
     /// `uint8_t` — active spell gem slot (0xFF = not casting)
-    /// Source: PlayerClient.h offset 0x039 (CharacterZoneClient::SpellSlot)
+    /// Source: PlayerClient.h offset 0x039 (`CharacterZoneClient::SpellSlot`)
     pub const SPELL_SLOT: usize = 0x039;
     /// `uint32_t`\[15\] — per-gem recast timestamp array
-    /// Source: PlayerClient.h offset 0x3B0 (CharacterZoneClient::SpellGemETA)
+    /// Source: PlayerClient.h offset 0x3B0 (`CharacterZoneClient::SpellGemETA`)
     pub const SPELL_GEM_ETA: usize = 0x3B0;
 }
 
@@ -426,7 +426,7 @@ pub mod actor_client {
     pub const RACE_OVERRIDE: usize = 0x0FD8;
     /// `int32_t` — character class ID (from `ActorBase` at offset 0x1C)
     /// Source: `ActorClient` at 0x0FC0 + ActorBase.Class at 0x1C = 0x0FDC
-    /// Note: Prefer player_zone::CHAR_CLASS (0x0420) for spawn reads — it's a
+    /// Note: Prefer `player_zone::CHAR_CLASS` (0x0420) for spawn reads — it's a
     /// direct field and less likely to break if struct layout shifts.
     pub const CHAR_CLASS: usize = 0x0FDC;
 }

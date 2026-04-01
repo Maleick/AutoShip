@@ -4,8 +4,8 @@
 
 pub mod widgets;
 
-/// CEverQuest::MainLoop offset from EQ base.
-/// Derived from dmft_common::offsets::PROCESS_GAME_EVENTS (0x14028E0F0)
+/// `CEverQuest::MainLoop` offset from EQ base.
+/// Derived from `dmft_common::offsets::PROCESS_GAME_EVENTS` (0x14028E0F0)
 /// minus preferred base (0x140000000).
 pub const MAIN_LOOP_OFFSET: usize = 0x0028_E0F0;
 
@@ -150,7 +150,7 @@ fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
 /// `gem_id`: 0-based gem slot index.
 /// `spell_id`: the spell's ID number.
 ///
-/// Calls CharacterZoneClient::CastSpell(gemid, spellid, item_ptr=null, item_guid=0).
+/// Calls `CharacterZoneClient::CastSpell(gemid`, spellid, item_ptr=null, item_guid=0).
 pub fn cast_spell(gem_id: u8, spell_id: i32) {
     #[cfg(windows)]
     {
@@ -208,7 +208,7 @@ pub fn cast_spell(gem_id: u8, spell_id: i32) {
 ///
 /// `attack_type`: attack slot/type byte.
 ///
-/// Calls PlayerZoneClient::DoAttack(slot, unknown=null).
+/// Calls `PlayerZoneClient::DoAttack(slot`, unknown=null).
 pub fn do_attack(attack_type: u8) {
     #[cfg(windows)]
     {
@@ -262,7 +262,7 @@ pub fn do_attack(attack_type: u8) {
 /// `skill_id`: the skill index (e.g., kick, bash, etc.).
 /// `target`: optional target pointer. Pass `None` to use current target.
 ///
-/// Calls CharacterZoneClient::UseSkill(skill, target, bAuto=false).
+/// Calls `CharacterZoneClient::UseSkill(skill`, target, bAuto=false).
 pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
     #[cfg(windows)]
     {
@@ -314,7 +314,7 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
 /// `spell_id`: the ability's spell ID.
 /// `allow_lower_rank`: whether to allow using a lower rank if the exact rank is unavailable.
 ///
-/// Calls PcZoneClient::DoCombatAbility(spellID, allowLowerRank).
+/// Calls `PcZoneClient::DoCombatAbility(spellID`, allowLowerRank).
 pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
     #[cfg(windows)]
     {
@@ -432,7 +432,7 @@ pub fn toggle_auto_attack(enable: bool) {
 
 /// Execute an EQ slash command string (e.g., "/face", "/pet attack").
 ///
-/// Calls CEverQuest::InterpretCmd(this, pChar, szCmd).
+/// Calls `CEverQuest::InterpretCmd(this`, pChar, szCmd).
 pub fn slash_command(command: &str) {
     #[cfg(windows)]
     {
