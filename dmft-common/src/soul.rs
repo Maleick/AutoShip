@@ -518,4 +518,130 @@ mod tests {
         let restored: PersonalityTraits = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored, traits);
     }
+
+    #[test]
+    fn social_tag_all_variants() {
+        let tags = [
+            SocialTag::Friend,
+            SocialTag::Rival,
+            SocialTag::Mentor,
+            SocialTag::Mentee,
+            SocialTag::Sibling,
+            SocialTag::Acquaintance,
+            SocialTag::Nemesis,
+            SocialTag::Crush,
+        ];
+        assert_eq!(tags.len(), 8);
+        // All distinct
+        for (i, a) in tags.iter().enumerate() {
+            for (j, b) in tags.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn social_tag_hash_key() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(SocialTag::Friend);
+        set.insert(SocialTag::Friend);
+        set.insert(SocialTag::Rival);
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn soul_event_all_variants_constructible() {
+        let events: Vec<SoulEvent> = vec![
+            SoulEvent::Death {
+                zone: "z".into(),
+                killer: None,
+            },
+            SoulEvent::Kill {
+                target: "t".into(),
+                zone: "z".into(),
+            },
+            SoulEvent::Loot {
+                item: "i".into(),
+                zone: "z".into(),
+            },
+            SoulEvent::PlayerChat {
+                player_name: "p".into(),
+                sentiment: 0.5,
+            },
+            SoulEvent::BotChat {
+                character_name: "c".into(),
+            },
+            SoulEvent::Witnessed {
+                description: "d".into(),
+            },
+            SoulEvent::MoodShift {
+                from: MoodState::Neutral,
+                to: MoodState::Happy,
+                reason: "r".into(),
+            },
+            SoulEvent::ZoneEnter { zone: "z".into() },
+            SoulEvent::LevelUp { new_level: 1 },
+            SoulEvent::GroupWipe { zone: "z".into() },
+            SoulEvent::RelationshipChange {
+                character: "c".into(),
+                delta: -0.5,
+            },
+        ];
+        assert_eq!(events.len(), 11);
+    }
+
+    #[test]
+    fn soul_action_emote() {
+        let action = SoulAction::Emote {
+            emote: "dance".into(),
+        };
+        assert!(matches!(action, SoulAction::Emote { .. }));
+    }
+
+    #[test]
+    fn soul_action_stop_idle() {
+        let action = SoulAction::StopIdle;
+        assert!(matches!(action, SoulAction::StopIdle));
+    }
+
+    #[test]
+    fn soul_action_equality() {
+        let a = SoulAction::StopIdle;
+        let b = SoulAction::StopIdle;
+        assert_eq!(a, b);
+
+        let c = SoulAction::Emote {
+            emote: "dance".into(),
+        };
+        let d = SoulAction::Emote {
+            emote: "dance".into(),
+        };
+        assert_eq!(c, d);
+
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn mood_state_copy() {
+        let a = MoodState::Excited;
+        let b = a;
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn speech_style_with_catchphrases_roundtrip() {
+        let style = SpeechStyle {
+            vocabulary_level: 0.3,
+            emote_frequency: 0.7,
+            typing_speed: 0.8,
+            catchphrases: vec!["By Tunare!".into(), "Aye.".into()],
+            adopted_slang: vec!["kk".into()],
+        };
+        let json = serde_json::to_string(&style).expect("serialize");
+        let restored: SpeechStyle = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, style);
+    }
 }

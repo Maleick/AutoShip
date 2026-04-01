@@ -730,4 +730,207 @@ mod tests {
         };
         assert!(!cs.is_casting());
     }
+
+    // --- SpawnType::as_str tests ---
+
+    #[test]
+    fn spawn_type_as_str_player() {
+        assert_eq!(SpawnType::Player.as_str(), "PC");
+    }
+
+    #[test]
+    fn spawn_type_as_str_npc() {
+        assert_eq!(SpawnType::Npc.as_str(), "NPC");
+    }
+
+    #[test]
+    fn spawn_type_as_str_corpse() {
+        assert_eq!(SpawnType::Corpse.as_str(), "Corpse");
+    }
+
+    #[test]
+    fn spawn_type_as_str_unknown() {
+        assert_eq!(SpawnType::Unknown(42).as_str(), "Unknown");
+        assert_eq!(SpawnType::Unknown(0).as_str(), "Unknown");
+    }
+
+    // --- race_name full coverage ---
+
+    #[test]
+    fn spawn_info_race_name_all_known() {
+        let mut s = make_spawn_info(1);
+        let expected = [
+            (1, "Human"),
+            (2, "Barbarian"),
+            (3, "Erudite"),
+            (4, "Wood Elf"),
+            (5, "High Elf"),
+            (6, "Dark Elf"),
+            (7, "Half Elf"),
+            (8, "Dwarf"),
+            (9, "Troll"),
+            (10, "Ogre"),
+            (11, "Halfling"),
+            (12, "Gnome"),
+            (128, "Iksar"),
+            (130, "Vah Shir"),
+            (330, "Froglok"),
+            (522, "Drakkin"),
+        ];
+        for (id, name) in expected {
+            s.race_id = id;
+            assert_eq!(s.race_name(), name, "race_id {} should be {}", id, name);
+        }
+    }
+
+    #[test]
+    fn spawn_info_race_name_unknown_formats_with_id() {
+        let mut s = make_spawn_info(1);
+        s.race_id = 255;
+        assert_eq!(s.race_name(), "R255");
+        s.race_id = 65535;
+        assert_eq!(s.race_name(), "R65535");
+    }
+
+    // --- GroupInfo construction ---
+
+    #[test]
+    fn group_info_construction() {
+        let g = GroupInfo {
+            leader_name: "Camrene".to_string(),
+            members: vec!["Camrene".into(), "Zisdarenu".into()],
+            member_count: 2,
+        };
+        assert_eq!(g.leader_name, "Camrene");
+        assert_eq!(g.member_count, 2);
+        assert_eq!(g.members.len(), 2);
+    }
+
+    // --- BuffSlot edge cases ---
+
+    #[test]
+    fn buff_slot_large_duration_formats_correctly() {
+        // 100 ticks * 6 = 600s = 10:00
+        let b = BuffSlot {
+            spell_id: 42,
+            duration_ticks: 100,
+            caster_level: 60,
+        };
+        assert_eq!(b.duration_str(), "10:00");
+        assert_eq!(b.duration_secs(), 600);
+    }
+
+    #[test]
+    fn buff_slot_one_tick_formats_as_seconds() {
+        let b = BuffSlot {
+            spell_id: 42,
+            duration_ticks: 1,
+            caster_level: 60,
+        };
+        assert_eq!(b.duration_str(), "6s");
+        assert_eq!(b.duration_secs(), 6);
+    }
+
+    #[test]
+    fn buff_slot_is_empty_boundary() {
+        // 0xFFFE is NOT empty
+        let b = BuffSlot {
+            spell_id: 0xFFFE,
+            duration_ticks: 0,
+            caster_level: 0,
+        };
+        assert!(!b.is_empty());
+    }
+
+    // --- CastState edge cases ---
+
+    #[test]
+    fn cast_state_last_gem_slot() {
+        let cs = CastState {
+            spell_slot: 14,
+            spell_eta: 99999,
+            gem_etas: [0; 15],
+        };
+        assert!(cs.is_casting());
+    }
+
+    #[test]
+    fn cast_state_slot_0xfe_not_casting() {
+        // 0xFE is NOT 0xFF, so this should be casting if eta is nonzero
+        let cs = CastState {
+            spell_slot: 0xFE,
+            spell_eta: 100,
+            gem_etas: [0; 15],
+        };
+        assert!(cs.is_casting());
+    }
+
+    // --- SpawnInfo display edge cases ---
+
+    #[test]
+    fn spawn_info_display_corpse_type() {
+        let mut s = make_spawn_info(1);
+        s.spawn_type = SpawnType::Corpse;
+        let display = format!("{s}");
+        assert!(display.contains("Corpse"));
+    }
+
+    #[test]
+    fn spawn_info_hp_pct_negative_current() {
+        let mut s = make_spawn_info(1);
+        s.hp_current = -500;
+        s.hp_max = 10000;
+        // Negative current HP should give negative percentage
+        assert!(s.hp_pct() < 0.0);
+    }
+
+    // --- StandState edge cases ---
+
+    #[test]
+    fn stand_state_from_id_all_known_ids() {
+        // Ensure specific IDs map to the correct variants
+        assert_eq!(StandState::from_id(0), StandState::Standing);
+        assert_eq!(StandState::from_id(1), StandState::Frozen);
+        assert_eq!(StandState::from_id(2), StandState::Looting);
+        assert_eq!(StandState::from_id(3), StandState::Sitting);
+        assert_eq!(StandState::from_id(4), StandState::Ducking);
+        assert_eq!(StandState::from_id(110), StandState::Feigned);
+        assert_eq!(StandState::from_id(111), StandState::Dead);
+    }
+
+    #[test]
+    fn stand_state_display_all_known() {
+        assert_eq!(format!("{}", StandState::Frozen), "Frozen");
+        assert_eq!(format!("{}", StandState::Looting), "Loot");
+        assert_eq!(format!("{}", StandState::Sitting), "Sit");
+        assert_eq!(format!("{}", StandState::Ducking), "Duck");
+        assert_eq!(format!("{}", StandState::Feigned), "FD");
+        assert_eq!(format!("{}", StandState::Unknown(42)), "???");
+    }
+
+    // --- EqClass Display ---
+
+    #[test]
+    fn eq_class_display_all_classes() {
+        let pairs = [
+            (EqClass::Cleric, "CLR"),
+            (EqClass::Paladin, "PAL"),
+            (EqClass::Ranger, "RNG"),
+            (EqClass::ShadowKnight, "SK"),
+            (EqClass::Druid, "DRU"),
+            (EqClass::Monk, "MNK"),
+            (EqClass::Bard, "BRD"),
+            (EqClass::Rogue, "ROG"),
+            (EqClass::Shaman, "SHM"),
+            (EqClass::Necromancer, "NEC"),
+            (EqClass::Wizard, "WIZ"),
+            (EqClass::Magician, "MAG"),
+            (EqClass::Enchanter, "ENC"),
+            (EqClass::Beastlord, "BST"),
+            (EqClass::Berserker, "BER"),
+        ];
+        for (class, expected) in pairs {
+            assert_eq!(format!("{}", class), expected);
+        }
+    }
 }

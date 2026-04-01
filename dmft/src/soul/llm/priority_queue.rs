@@ -348,4 +348,80 @@ mod tests {
         let queue = LlmRequestQueue::new(5000);
         assert_eq!(queue.budget_remaining(0), 5000);
     }
+
+    #[test]
+    fn token_budget_zero_max_blocks_everything() {
+        let budget = TokenBudget::new(0);
+        assert!(!budget.can_afford(1, 0));
+        assert_eq!(budget.remaining(0), 0);
+    }
+
+    #[test]
+    fn token_budget_consume_exactly_max() {
+        let mut budget = TokenBudget::new(500);
+        budget.consume(500, 100);
+        assert_eq!(budget.remaining(100), 0);
+        assert!(!budget.can_afford(1, 100));
+    }
+
+    #[test]
+    fn token_budget_can_afford_zero_tokens() {
+        let budget = TokenBudget::new(1000);
+        assert!(budget.can_afford(0, 0));
+    }
+
+    #[test]
+    fn token_budget_saturating_remaining() {
+        let mut budget = TokenBudget::new(100);
+        budget.consume(200, 0); // consume more than max
+        assert_eq!(budget.remaining(0), 0); // should saturate at 0
+    }
+
+    #[test]
+    fn queue_process_all_returns_highest_priority_first() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("Low", LlmPriority::Low));
+        queue.enqueue(make_request("High", LlmPriority::High));
+        queue.enqueue(make_request("Medium", LlmPriority::Medium));
+
+        let mut provider = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let results = queue.process_all(&mut provider, 0);
+
+        assert_eq!(results[0].0.character_name, "High");
+        assert_eq!(results[1].0.character_name, "Medium");
+        assert_eq!(results[2].0.character_name, "Low");
+    }
+
+    #[test]
+    fn queue_enqueue_increments_pending() {
+        let mut queue = LlmRequestQueue::new(10000);
+        for i in 0..5 {
+            queue.enqueue(make_request(&format!("Char{}", i), LlmPriority::Low));
+        }
+        assert_eq!(queue.pending_count(), 5);
+    }
+
+    #[test]
+    fn queue_budget_remaining_after_process() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("Test", LlmPriority::Low));
+        let mut provider = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        queue.process_next(&mut provider, 0);
+        // Fallback uses 0 tokens
+        assert_eq!(queue.budget_remaining(0), 10000);
+    }
+
+    #[test]
+    fn pop_next_decrements_pending() {
+        let mut queue = LlmRequestQueue::new(10000);
+        queue.enqueue(make_request("A", LlmPriority::Low));
+        queue.enqueue(make_request("B", LlmPriority::High));
+        assert_eq!(queue.pending_count(), 2);
+        queue.pop_next(0);
+        assert_eq!(queue.pending_count(), 1);
+        queue.pop_next(0);
+        assert_eq!(queue.pending_count(), 0);
+        queue.pop_next(0); // no-op
+        assert_eq!(queue.pending_count(), 0);
+    }
 }

@@ -804,4 +804,333 @@ mod tests {
 
         assert_ne!(mild_phrases, spicy_phrases);
     }
+
+    #[test]
+    fn bot_chat_playful_for_extraverted() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = extraverted_traits();
+        let event = SoulEvent::BotChat {
+            character_name: "Grimjaw".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Playful);
+    }
+
+    #[test]
+    fn bot_chat_no_change_for_introverted() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = introverted_traits();
+        let event = SoulEvent::BotChat {
+            character_name: "Grimjaw".into(),
+        };
+        let mood = engine.process_event(MoodState::Focused, &event, &traits);
+        assert_eq!(mood, MoodState::Focused);
+    }
+
+    #[test]
+    fn witnessed_excited_for_open() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            openness: 0.9,
+            ..Default::default()
+        };
+        let event = SoulEvent::Witnessed {
+            description: "A dragon landed nearby!".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Excited);
+    }
+
+    #[test]
+    fn witnessed_no_change_for_low_openness() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            openness: 0.3,
+            ..Default::default()
+        };
+        let event = SoulEvent::Witnessed {
+            description: "A dragon landed nearby!".into(),
+        };
+        let mood = engine.process_event(MoodState::Bored, &event, &traits);
+        assert_eq!(mood, MoodState::Bored);
+    }
+
+    #[test]
+    fn relationship_negative_delta_angry_for_disagreeable() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            agreeableness: 0.2,
+            ..Default::default()
+        };
+        let event = SoulEvent::RelationshipChange {
+            character: "Rival".into(),
+            delta: -100.0,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Angry);
+    }
+
+    #[test]
+    fn relationship_negative_delta_melancholy_for_agreeable() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            agreeableness: 0.8,
+            ..Default::default()
+        };
+        let event = SoulEvent::RelationshipChange {
+            character: "Friend".into(),
+            delta: -100.0,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Melancholy);
+    }
+
+    #[test]
+    fn relationship_small_delta_no_change() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+        let event = SoulEvent::RelationshipChange {
+            character: "Ally".into(),
+            delta: 10.0,
+        };
+        let mood = engine.process_event(MoodState::Focused, &event, &traits);
+        assert_eq!(mood, MoodState::Focused);
+    }
+
+    #[test]
+    fn loot_playful_for_mischievous() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            greed: 0.3,
+            mischief: 0.8,
+            ..Default::default()
+        };
+        let event = SoulEvent::Loot {
+            item: "rusty sword".into(),
+            zone: "bb".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Playful);
+    }
+
+    #[test]
+    fn loot_no_change_for_default_traits() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            greed: 0.3,
+            mischief: 0.3,
+            ..Default::default()
+        };
+        let event = SoulEvent::Loot {
+            item: "item".into(),
+            zone: "zone".into(),
+        };
+        let mood = engine.process_event(MoodState::Bored, &event, &traits);
+        assert_eq!(mood, MoodState::Bored);
+    }
+
+    #[test]
+    fn player_chat_neutral_keeps_mood() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits::default();
+        let event = SoulEvent::PlayerChat {
+            player_name: "Dave".into(),
+            sentiment: 0.0,
+        };
+        let mood = engine.process_event(MoodState::Focused, &event, &traits);
+        assert_eq!(mood, MoodState::Focused);
+    }
+
+    #[test]
+    fn player_chat_negative_anxious_for_neurotic() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            agreeableness: 0.5,
+            neuroticism: 0.8,
+            ..Default::default()
+        };
+        let event = SoulEvent::PlayerChat {
+            player_name: "Troll".into(),
+            sentiment: -0.8,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Anxious);
+    }
+
+    #[test]
+    fn player_chat_negative_melancholy_for_agreeable_non_neurotic() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            agreeableness: 0.7,
+            neuroticism: 0.3,
+            ..Default::default()
+        };
+        let event = SoulEvent::PlayerChat {
+            player_name: "Meanie".into(),
+            sentiment: -0.5,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Melancholy);
+    }
+
+    #[test]
+    fn zone_enter_anxious_for_neurotic_closed() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            wanderlust: 0.3,
+            neuroticism: 0.9,
+            openness: 0.2,
+            ..Default::default()
+        };
+        let event = SoulEvent::ZoneEnter {
+            zone: "fearplane".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Anxious);
+    }
+
+    #[test]
+    fn zone_enter_no_change_for_default() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            wanderlust: 0.3,
+            neuroticism: 0.3,
+            openness: 0.5,
+            ..Default::default()
+        };
+        let event = SoulEvent::ZoneEnter {
+            zone: "commons".into(),
+        };
+        let mood = engine.process_event(MoodState::Happy, &event, &traits);
+        assert_eq!(mood, MoodState::Happy);
+    }
+
+    #[test]
+    fn group_wipe_angry_for_battle_hungry() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            neuroticism: 0.3,
+            battle_hunger: 0.8,
+            ..Default::default()
+        };
+        let event = SoulEvent::GroupWipe {
+            zone: "lower_guk".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Angry);
+    }
+
+    #[test]
+    fn group_wipe_melancholy_for_loyal() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            neuroticism: 0.3,
+            battle_hunger: 0.3,
+            loyalty: 0.8,
+            ..Default::default()
+        };
+        let event = SoulEvent::GroupWipe {
+            zone: "sebilis".into(),
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Melancholy);
+    }
+
+    #[test]
+    fn kill_no_change_for_default_traits() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = PersonalityTraits {
+            battle_hunger: 0.3,
+            conscientiousness: 0.3,
+            ..Default::default()
+        };
+        let event = SoulEvent::Kill {
+            target: "a rat".into(),
+            zone: "qeynos".into(),
+        };
+        let mood = engine.process_event(MoodState::Bored, &event, &traits);
+        assert_eq!(mood, MoodState::Bored);
+    }
+
+    #[test]
+    fn emotes_for_all_moods_non_empty() {
+        let moods = [
+            MoodState::Neutral,
+            MoodState::Happy,
+            MoodState::Angry,
+            MoodState::Anxious,
+            MoodState::Excited,
+            MoodState::Melancholy,
+            MoodState::Focused,
+            MoodState::Playful,
+            MoodState::Bored,
+            MoodState::Exhausted,
+        ];
+        for mood in &moods {
+            let emotes = emotes_for_mood(*mood);
+            assert!(!emotes.is_empty(), "No emotes for {:?}", mood);
+        }
+    }
+
+    #[test]
+    fn phrases_for_all_moods_and_edginess_non_empty() {
+        let moods = [
+            MoodState::Neutral,
+            MoodState::Happy,
+            MoodState::Angry,
+            MoodState::Anxious,
+            MoodState::Excited,
+            MoodState::Melancholy,
+            MoodState::Focused,
+            MoodState::Playful,
+            MoodState::Bored,
+            MoodState::Exhausted,
+        ];
+        let edginess_levels = [
+            EdginessLevel::Mild,
+            EdginessLevel::Moderate,
+            EdginessLevel::Spicy,
+        ];
+        for mood in &moods {
+            for edginess in &edginess_levels {
+                let phrases = phrases_for_mood(*mood, *edginess);
+                assert!(
+                    !phrases.is_empty(),
+                    "No phrases for {:?} / {:?}",
+                    mood,
+                    edginess
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn player_chat_happy_for_introverted_positive() {
+        let mut engine = PersonalityEngine::new(42);
+        let traits = introverted_traits();
+        let event = SoulEvent::PlayerChat {
+            player_name: "Friend".into(),
+            sentiment: 0.8,
+        };
+        let mood = engine.process_event(MoodState::Neutral, &event, &traits);
+        assert_eq!(mood, MoodState::Happy);
+    }
+
+    #[test]
+    fn soul_context_construction() {
+        let traits = PersonalityTraits::default();
+        let ctx = SoulContext {
+            character_name: "Test",
+            traits: &traits,
+            mood: MoodState::Happy,
+            edginess: EdginessLevel::Spicy,
+            zone: "guk",
+            level: 60,
+            in_combat: true,
+            group_members: &["Alice".into(), "Bob".into()],
+        };
+        assert_eq!(ctx.character_name, "Test");
+        assert!(ctx.in_combat);
+        assert_eq!(ctx.group_members.len(), 2);
+    }
 }

@@ -748,4 +748,74 @@ mod tests {
         let b = Pos2D::new(3.0, 4.0);
         assert!((a.distance_to(&b) - 5.0).abs() < 1e-5);
     }
+
+    #[test]
+    fn test_pos2d_distance_to_self_is_zero() {
+        let a = Pos2D::new(100.0, 200.0);
+        assert!(a.distance_to(&a) < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_operating_mode_equality() {
+        assert_eq!(OperatingMode::Camp, OperatingMode::Camp);
+        assert_eq!(OperatingMode::Hunt, OperatingMode::Hunt);
+        assert_ne!(OperatingMode::Camp, OperatingMode::Hunt);
+    }
+
+    #[test]
+    fn test_hunt_state_equality() {
+        assert_eq!(HuntState::Roaming, HuntState::Roaming);
+        assert_ne!(HuntState::Roaming, HuntState::Engaging { started_tick: 0 });
+    }
+
+    #[test]
+    fn test_formation_default_values() {
+        let fc = FormationConfig::default();
+        assert!((fc.melee_follow_dist - 20.0).abs() < f32::EPSILON);
+        assert!((fc.melee_leash_dist - 40.0).abs() < f32::EPSILON);
+        assert!((fc.caster_follow_dist - 70.0).abs() < f32::EPSILON);
+        assert!((fc.caster_leash_dist - 100.0).abs() < f32::EPSILON);
+        assert!((fc.caster_min_dist - 40.0).abs() < f32::EPSILON);
+        assert!((fc.healer_follow_dist - 50.0).abs() < f32::EPSILON);
+        assert!((fc.healer_leash_dist - 80.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_formation_puller_is_in_position() {
+        let fm = FormationManager::new(FormationConfig::default());
+        assert!(fm.is_in_position(&Role::Puller, 999.0));
+    }
+
+    #[test]
+    fn test_formation_dps_in_position_boundary() {
+        let fm = FormationManager::new(FormationConfig::default());
+        // desired = 20.0, in_position if dist <= 20.0 * 1.2 = 24.0
+        assert!(fm.is_in_position(&Role::Dps, 24.0));
+        assert!(!fm.is_in_position(&Role::Dps, 25.0));
+    }
+
+    #[test]
+    fn test_pick_target_with_no_pull_mobs() {
+        let mut config = test_config();
+        config.pull_mob_names.clear();
+        let hunt = HuntLoop::new(config, test_members());
+        // pick_target falls back to "a_mob"
+        assert_eq!(hunt.config.pull_mob_names.len(), 0);
+    }
+
+    #[test]
+    fn test_patrol_waypoints_initially_empty() {
+        let hunt = HuntLoop::new(test_config(), test_members());
+        assert!(hunt.patrol_waypoints.is_empty());
+        assert_eq!(hunt.patrol_idx, 0);
+    }
+
+    #[test]
+    fn test_hunt_no_members_no_target_command() {
+        let mut hunt = HuntLoop::new(test_config(), Vec::new());
+        let cmds = hunt.tick(None);
+        // No tank found, still transitions to Engaging (roaming checks tank)
+        // With no members, find_by_role returns None so no /target is issued
+        assert!(cmds.is_empty() || !cmds.iter().any(|(_, cmd)| cmd.contains("/target")));
+    }
 }

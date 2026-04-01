@@ -285,4 +285,77 @@ mod tests {
         assert_eq!(config.relationship.len(), 1);
         assert_eq!(config.relationship[0].from, "Alice");
     }
+
+    #[test]
+    fn soul_config_empty_toml_uses_defaults() {
+        let config: SoulConfig = toml::from_str("").unwrap();
+        assert!(!config.enabled);
+        assert_eq!(config.edginess, EdginessLevel::Moderate);
+        assert_eq!(config.idle_tick_secs, 30);
+    }
+
+    #[test]
+    fn edginess_clone() {
+        let e = EdginessLevel::Spicy;
+        let c = e;
+        assert_eq!(e, c);
+    }
+
+    #[test]
+    fn edginess_copy() {
+        let e = EdginessLevel::Mild;
+        let c = e;
+        assert_eq!(e, c); // Copy, not moved
+    }
+
+    #[test]
+    fn default_trust_fn_returns_half() {
+        assert!((default_trust() - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn relationship_seed_negative_faction() {
+        let toml_str = r#"
+            from = "Enemy1"
+            to = "Enemy2"
+            faction = -500
+        "#;
+        let seed: RelationshipSeed = toml::from_str(toml_str).unwrap();
+        assert_eq!(seed.faction, -500);
+    }
+
+    #[test]
+    fn character_soul_config_with_quirks() {
+        let toml_str = r#"
+            name = "Quirky"
+            quirks = ["loves fishing", "hates rain", "always jumps"]
+        "#;
+        let config: CharacterSoulConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.quirks.len(), 3);
+        assert!(config.quirks.contains(&"loves fishing".to_string()));
+    }
+
+    #[test]
+    fn soul_config_multiple_relationships() {
+        let toml_str = r#"
+            enabled = true
+
+            [[relationship]]
+            from = "A"
+            to = "B"
+            faction = 100
+
+            [[relationship]]
+            from = "B"
+            to = "C"
+            faction = -200
+
+            [[relationship]]
+            from = "C"
+            to = "A"
+            faction = 50
+        "#;
+        let config: SoulConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.relationship.len(), 3);
+    }
 }

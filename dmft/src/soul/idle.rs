@@ -560,4 +560,336 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn adjust_multiplies_target_weight() {
+        let mut weights = vec![
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Sit,
+                weight: 1.0,
+            },
+            PrioritizedBehavior {
+                behavior: IdleBehaviorType::Wander,
+                weight: 2.0,
+            },
+        ];
+        adjust(&mut weights, &IdleBehaviorType::Wander, 3.0);
+        assert!((weights[1].weight - 6.0).abs() < f32::EPSILON);
+        // Sit should be unchanged
+        assert!((weights[0].weight - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn adjust_noop_for_missing_target() {
+        let mut weights = vec![PrioritizedBehavior {
+            behavior: IdleBehaviorType::Sit,
+            weight: 1.0,
+        }];
+        adjust(&mut weights, &IdleBehaviorType::Wander, 5.0);
+        assert!((weights[0].weight - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn happy_mood_boosts_emote_and_lore() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits {
+            extraversion: 0.5,
+            openness: 0.5,
+            piety: 0.5,
+            ..Default::default()
+        };
+        let neutral_ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let happy_ctx = make_ctx(&traits, MoodState::Happy, false);
+
+        let neutral_w = scheduler.compute_weights(&neutral_ctx);
+        let happy_w = scheduler.compute_weights(&happy_ctx);
+
+        let neutral_emote = neutral_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Emote)
+            .unwrap()
+            .weight;
+        let happy_emote = happy_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Emote)
+            .unwrap()
+            .weight;
+        assert!(happy_emote > neutral_emote);
+    }
+
+    #[test]
+    fn anxious_mood_reduces_wander() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits {
+            wanderlust: 0.5,
+            ..Default::default()
+        };
+        let neutral_ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let anxious_ctx = make_ctx(&traits, MoodState::Anxious, false);
+
+        let neutral_w = scheduler.compute_weights(&neutral_ctx);
+        let anxious_w = scheduler.compute_weights(&anxious_ctx);
+
+        let neutral_wander = neutral_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        let anxious_wander = anxious_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        assert!(anxious_wander < neutral_wander);
+    }
+
+    #[test]
+    fn melancholy_mood_boosts_sit_and_fish() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits {
+            conscientiousness: 0.5,
+            ..Default::default()
+        };
+        let neutral_ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let mel_ctx = make_ctx(&traits, MoodState::Melancholy, false);
+
+        let neutral_w = scheduler.compute_weights(&neutral_ctx);
+        let mel_w = scheduler.compute_weights(&mel_ctx);
+
+        let neutral_sit = neutral_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Sit)
+            .unwrap()
+            .weight;
+        let mel_sit = mel_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Sit)
+            .unwrap()
+            .weight;
+        assert!(mel_sit > neutral_sit);
+    }
+
+    #[test]
+    fn focused_mood_reduces_wander_and_jump() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits {
+            wanderlust: 0.5,
+            mischief: 0.5,
+            ..Default::default()
+        };
+        let neutral_ctx = make_ctx(&traits, MoodState::Neutral, false);
+        let focused_ctx = make_ctx(&traits, MoodState::Focused, false);
+
+        let neutral_w = scheduler.compute_weights(&neutral_ctx);
+        let focused_w = scheduler.compute_weights(&focused_ctx);
+
+        let neutral_wander = neutral_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        let focused_wander = focused_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        assert!(focused_wander < neutral_wander);
+
+        let neutral_jump = neutral_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::RandomJump)
+            .unwrap()
+            .weight;
+        let focused_jump = focused_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::RandomJump)
+            .unwrap()
+            .weight;
+        assert!(focused_jump < neutral_jump);
+    }
+
+    #[test]
+    fn long_idle_boosts_variety() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits::default();
+        let ctx = make_ctx(&traits, MoodState::Neutral, false);
+
+        let fresh_weights = scheduler.compute_weights(&ctx);
+        let fresh_wander = fresh_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+
+        // Simulate being idle for >10 ticks
+        scheduler.ticks_idle = 15;
+        let stale_weights = scheduler.compute_weights(&ctx);
+        let stale_wander = stale_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+
+        assert!(stale_wander > fresh_wander);
+    }
+
+    #[test]
+    fn random_duration_returns_at_least_one() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits::default();
+        for behavior in &[
+            IdleBehaviorType::Sit,
+            IdleBehaviorType::Wander,
+            IdleBehaviorType::Fish,
+            IdleBehaviorType::Craft,
+            IdleBehaviorType::BioBrk,
+            IdleBehaviorType::RandomJump,
+            IdleBehaviorType::Emote,
+            IdleBehaviorType::Inspect,
+            IdleBehaviorType::VendorBrowse,
+            IdleBehaviorType::LoreChatter,
+            IdleBehaviorType::LogOffToSleep,
+        ] {
+            let d = scheduler.random_duration(behavior, &traits);
+            assert!(d >= 1, "duration for {:?} was {}", behavior, d);
+        }
+    }
+
+    #[test]
+    fn sleep_duration_minimum_600_seconds() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        // Even with extreme traits, sleep should be at least 600s
+        for i in 0..20 {
+            let traits = PersonalityTraits {
+                conscientiousness: if i % 2 == 0 { 1.0 } else { 0.0 },
+                ..Default::default()
+            };
+            let dur = scheduler.sleep_duration(&traits);
+            assert!(dur >= 600, "sleep_duration was {} (< 600)", dur);
+        }
+    }
+
+    #[test]
+    fn weighted_select_single_weight() {
+        let config = default_config();
+        let mut scheduler = IdleScheduler::new(1, &config);
+        let weights = vec![PrioritizedBehavior {
+            behavior: IdleBehaviorType::Fish,
+            weight: 1.0,
+        }];
+        for _ in 0..10 {
+            assert_eq!(scheduler.weighted_select(&weights), IdleBehaviorType::Fish);
+        }
+    }
+
+    #[test]
+    fn active_behavior_debug_and_clone() {
+        let active = ActiveBehavior {
+            behavior: IdleBehaviorType::Wander,
+            ticks_remaining: 5,
+            flavor_text: Some("Walking around...".into()),
+        };
+        let cloned = active.clone();
+        assert_eq!(cloned.ticks_remaining, 5);
+        assert_eq!(cloned.flavor_text.as_deref(), Some("Walking around..."));
+        let _ = format!("{:?}", cloned);
+    }
+
+    #[test]
+    fn idle_transition_debug() {
+        let transitions = [
+            IdleTransition::Continue,
+            IdleTransition::Stop,
+            IdleTransition::LogOff {
+                return_after_secs: 1200,
+            },
+            IdleTransition::Start(ActiveBehavior {
+                behavior: IdleBehaviorType::Sit,
+                ticks_remaining: 3,
+                flavor_text: None,
+            }),
+        ];
+        for t in &transitions {
+            let _ = format!("{:?}", t);
+        }
+    }
+
+    #[test]
+    fn prioritized_behavior_debug_and_clone() {
+        let pb = PrioritizedBehavior {
+            behavior: IdleBehaviorType::Craft,
+            weight: 0.42,
+        };
+        let c = pb.clone();
+        assert!((c.weight - 0.42).abs() < f32::EPSILON);
+        let _ = format!("{:?}", c);
+    }
+
+    #[test]
+    fn scheduler_config_tick_conversion() {
+        // With 10s ticks, 60s min / 300s max → 6 / 30 ticks
+        let config = SoulConfig {
+            idle_tick_secs: 10,
+            min_chat_interval_secs: 60,
+            max_chat_interval_secs: 300,
+            ..Default::default()
+        };
+        let scheduler = IdleScheduler::new(1, &config);
+        assert_eq!(scheduler.min_duration_ticks, 6);
+        assert_eq!(scheduler.max_duration_ticks, 30);
+    }
+
+    #[test]
+    fn scheduler_config_prevents_zero_tick_secs() {
+        // idle_tick_secs = 0 should be clamped to 1
+        let config = SoulConfig {
+            idle_tick_secs: 0,
+            min_chat_interval_secs: 10,
+            max_chat_interval_secs: 20,
+            ..Default::default()
+        };
+        let scheduler = IdleScheduler::new(1, &config);
+        assert!(scheduler.min_duration_ticks >= 1);
+        assert!(scheduler.max_duration_ticks > scheduler.min_duration_ticks);
+    }
+
+    #[test]
+    fn greed_trait_boosts_vendor_browse() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+
+        let low_greed = PersonalityTraits {
+            greed: 0.1,
+            ..Default::default()
+        };
+        let high_greed = PersonalityTraits {
+            greed: 0.9,
+            ..Default::default()
+        };
+
+        let low_ctx = make_ctx(&low_greed, MoodState::Neutral, false);
+        let high_ctx = make_ctx(&high_greed, MoodState::Neutral, false);
+
+        let low_w = scheduler.compute_weights(&low_ctx);
+        let high_w = scheduler.compute_weights(&high_ctx);
+
+        let low_vendor = low_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::VendorBrowse)
+            .unwrap()
+            .weight;
+        let high_vendor = high_w
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::VendorBrowse)
+            .unwrap()
+            .weight;
+        assert!(high_vendor > low_vendor);
+    }
 }

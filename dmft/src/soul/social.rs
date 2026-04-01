@@ -488,4 +488,133 @@ mod tests {
         let summary = graph.build_relationship_summary("Alice", "Bob");
         assert!(summary.contains("no opinion"));
     }
+
+    #[test]
+    fn tag_label_all_variants() {
+        assert_eq!(tag_label(&SocialTag::Friend), "friend");
+        assert_eq!(tag_label(&SocialTag::Rival), "rival");
+        assert_eq!(tag_label(&SocialTag::Mentor), "mentor");
+        assert_eq!(tag_label(&SocialTag::Mentee), "mentee");
+        assert_eq!(tag_label(&SocialTag::Sibling), "sibling");
+        assert_eq!(tag_label(&SocialTag::Acquaintance), "acquaintance");
+        assert_eq!(tag_label(&SocialTag::Nemesis), "nemesis");
+        assert_eq!(tag_label(&SocialTag::Crush), "crush");
+    }
+
+    #[test]
+    fn should_defer_with_high_trust_and_faction() {
+        let mut graph = SocialGraph::new();
+        let rel = graph.get_or_create("Junior", "Senior");
+        rel.trust = 0.9;
+        rel.faction_score = 600;
+        // No Mentor tag, but high trust + faction triggers deference
+        assert!(graph.should_defer("Junior", "Senior"));
+    }
+
+    #[test]
+    fn should_defer_false_with_high_trust_low_faction() {
+        let mut graph = SocialGraph::new();
+        let rel = graph.get_or_create("A", "B");
+        rel.trust = 0.9;
+        rel.faction_score = 400; // Not > 500
+        assert!(!graph.should_defer("A", "B"));
+    }
+
+    #[test]
+    fn most_likely_to_gossip_about_none_when_no_edges() {
+        let graph = SocialGraph::new();
+        assert!(graph.most_likely_to_gossip_about("Alice").is_none());
+    }
+
+    #[test]
+    fn standing_boundary_values() {
+        let mut rel = Relationship::default();
+        rel.faction_score = 750;
+        assert_eq!(rel.standing(), "ally");
+        rel.faction_score = 749;
+        assert_eq!(rel.standing(), "warmly");
+        rel.faction_score = 400;
+        assert_eq!(rel.standing(), "warmly");
+        rel.faction_score = 399;
+        assert_eq!(rel.standing(), "amiably");
+        rel.faction_score = 100;
+        assert_eq!(rel.standing(), "amiably");
+        rel.faction_score = 99;
+        assert_eq!(rel.standing(), "indifferent");
+        rel.faction_score = 0;
+        assert_eq!(rel.standing(), "indifferent");
+        rel.faction_score = -1;
+        assert_eq!(rel.standing(), "apprehensive");
+        rel.faction_score = -100;
+        assert_eq!(rel.standing(), "dubious");
+        rel.faction_score = -400;
+        assert_eq!(rel.standing(), "threatening");
+        rel.faction_score = -750;
+        assert_eq!(rel.standing(), "scowling");
+    }
+
+    #[test]
+    fn infer_communication_style_nemesis_is_terse() {
+        assert_eq!(infer_communication_style(&[SocialTag::Nemesis]), "terse");
+    }
+
+    #[test]
+    fn infer_communication_style_mentee_is_respectful() {
+        assert_eq!(
+            infer_communication_style(&[SocialTag::Mentee]),
+            "respectful"
+        );
+    }
+
+    #[test]
+    fn event_deltas_all_events() {
+        // Verify all event types return non-zero deltas
+        let events = [
+            SocialEvent::FoughtTogether {
+                zone: "guk".into(),
+            },
+            SocialEvent::Saved,
+            SocialEvent::LetDie,
+            SocialEvent::SharedLoot {
+                item: "FBSS".into(),
+            },
+            SocialEvent::NinjaLoot {
+                item: "FBSS".into(),
+            },
+            SocialEvent::PositiveChat,
+            SocialEvent::NegativeChat,
+            SocialEvent::Gossip {
+                about: "Dave".into(),
+            },
+            SocialEvent::IdleTogether,
+            SocialEvent::Mentored,
+        ];
+        for event in &events {
+            let (faction, trust) = event_deltas(event);
+            assert_ne!(faction, 0, "event {:?} should have non-zero faction delta", event);
+            assert!(trust.abs() > 0.001, "event {:?} should have non-zero trust delta", event);
+        }
+    }
+
+    #[test]
+    fn relationships_for_empty_when_no_edges() {
+        let graph = SocialGraph::new();
+        let rels = graph.relationships_for("Nobody");
+        assert!(rels.is_empty());
+    }
+
+    #[test]
+    fn from_seeds_clamps_extreme_values() {
+        let seeds = vec![RelationshipSeed {
+            from: "A".into(),
+            to: "B".into(),
+            faction: 5000,  // Over max
+            tags: vec![],
+            trust: 2.0,     // Over max
+        }];
+        let graph = SocialGraph::from_seeds(&seeds);
+        let rel = graph.get("A", "B").unwrap();
+        assert_eq!(rel.faction_score, 1000);
+        assert!((rel.trust - 1.0).abs() < 0.01);
+    }
 }

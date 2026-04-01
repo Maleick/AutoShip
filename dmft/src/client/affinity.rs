@@ -211,4 +211,58 @@ mod tests {
         };
         assert!(apply_affinity(1234, &config).is_ok());
     }
+
+    #[test]
+    fn compute_affinity_two_cpus() {
+        // 2 CPUs total: available = 1 (skip CPU 0), all clients go to CPU 1
+        let assignments = compute_affinity_assignments(5, 2);
+        assert_eq!(assignments.len(), 5);
+        for a in &assignments {
+            assert_eq!(a.cpu_mask, 1 << 1);
+        }
+    }
+
+    #[test]
+    fn compute_affinity_large_cpu_count() {
+        let assignments = compute_affinity_assignments(3, 64);
+        assert_eq!(assignments.len(), 3);
+        assert_eq!(assignments[0].cpu_mask, 1 << 1);
+        assert_eq!(assignments[1].cpu_mask, 1 << 2);
+        assert_eq!(assignments[2].cpu_mask, 1 << 3);
+    }
+
+    #[test]
+    fn compute_affinity_masks_are_power_of_two() {
+        let assignments = compute_affinity_assignments(8, 8);
+        for a in &assignments {
+            // Each mask should have exactly one bit set
+            assert_eq!(a.cpu_mask.count_ones(), 1);
+        }
+    }
+
+    #[test]
+    fn compute_affinity_never_uses_cpu_zero() {
+        let assignments = compute_affinity_assignments(20, 16);
+        for a in &assignments {
+            assert_eq!(a.cpu_mask & 1, 0, "CPU 0 should never be used");
+        }
+    }
+
+    #[test]
+    fn affinity_config_debug_format() {
+        let config = AffinityConfig {
+            cpu_mask: 0b100,
+            priority: ProcessPriority::High,
+        };
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("cpu_mask"));
+        assert!(debug.contains("High"));
+    }
+
+    #[test]
+    fn process_priority_clone() {
+        let p = ProcessPriority::AboveNormal;
+        let p2 = p.clone();
+        assert_eq!(p, p2);
+    }
 }

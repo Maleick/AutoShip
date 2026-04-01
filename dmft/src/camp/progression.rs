@@ -388,4 +388,86 @@ mod tests {
         let db = CampDatabase::load_from(Path::new("/tmp/nonexistent_camps_dir_xyz")).unwrap();
         assert!(db.is_empty());
     }
+
+    #[test]
+    fn test_check_progression_at_exact_min_boundary() {
+        let (_dir, db) = test_db();
+        let camp = db.get("crushbone_entrance").unwrap();
+        // Level exactly at min (5) — should be in range
+        assert!(check_progression(camp, 5.0, &db).is_none());
+    }
+
+    #[test]
+    fn test_check_progression_at_exact_max_boundary() {
+        let (_dir, db) = test_db();
+        let camp = db.get("crushbone_entrance").unwrap();
+        // Level exactly at max (15) — should be in range
+        assert!(check_progression(camp, 15.0, &db).is_none());
+    }
+
+    #[test]
+    fn test_next_camp_for_nonexistent_camp() {
+        let (_dir, db) = test_db();
+        assert!(db.next_camp("does_not_exist").is_none());
+    }
+
+    #[test]
+    fn test_prev_camp_for_nonexistent_camp() {
+        let (_dir, db) = test_db();
+        assert!(db.prev_camp("does_not_exist").is_none());
+    }
+
+    #[test]
+    fn test_fallback_end_of_chain() {
+        let (_dir, db) = test_db();
+        let camp = db.get("crescent_reach").unwrap();
+        // Level 0 < min 1, no prev_camp → end of chain
+        let event = check_progression(camp, 0.0, &db).unwrap();
+        assert!(matches!(event, CampProgressionEvent::EndOfChain { .. }));
+    }
+
+    #[test]
+    fn test_camp_progression_event_equality() {
+        let a = CampProgressionEvent::AdvanceToNext {
+            from_camp: "a".into(),
+            to_camp: "b".into(),
+            avg_level: 10.0,
+        };
+        let b = CampProgressionEvent::AdvanceToNext {
+            from_camp: "a".into(),
+            to_camp: "b".into(),
+            avg_level: 10.0,
+        };
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_camp_progression_event_not_equal() {
+        let a = CampProgressionEvent::AdvanceToNext {
+            from_camp: "a".into(),
+            to_camp: "b".into(),
+            avg_level: 10.0,
+        };
+        let b = CampProgressionEvent::FallbackToPrev {
+            from_camp: "a".into(),
+            to_camp: "b".into(),
+            avg_level: 10.0,
+        };
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_best_camp_at_boundary() {
+        let (_dir, db) = test_db();
+        // Level 1 — exactly at crescent_reach min
+        let camp = db.best_camp_for_level(1.0).unwrap();
+        assert_eq!(camp.name, "crescent_reach");
+    }
+
+    #[test]
+    fn test_best_camp_at_zero() {
+        let (_dir, db) = test_db();
+        // Level 0 — below all ranges
+        assert!(db.best_camp_for_level(0.0).is_none());
+    }
 }

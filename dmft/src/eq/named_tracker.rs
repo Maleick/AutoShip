@@ -584,4 +584,115 @@ priority = "high"
         // After window: tick 600 (after 580)
         assert!(tracker.in_respawn_window(600).is_empty());
     }
+
+    #[test]
+    fn test_is_named_case_insensitive_articles() {
+        assert!(!is_named("A moss snake"));
+        assert!(!is_named("An orc pawn"));
+        assert!(!is_named("The Tangrin"));
+    }
+
+    #[test]
+    fn test_is_named_no_false_positive_on_embedded_articles() {
+        // Names that contain articles but don't start with them
+        assert!(is_named("Phinigel Autropos"));
+        assert!(is_named("Grand Master Athe"));
+    }
+
+    #[test]
+    fn test_set_zone_same_zone_no_clear() {
+        let mut tracker = NamedTracker::new();
+        tracker.set_zone("crushbone");
+        let spawns = vec![make_npc("Emperor Crush", 1001)];
+        tracker.update(&spawns, 1);
+        assert_eq!(tracker.len(), 1);
+
+        // Set same zone again — should NOT clear
+        tracker.set_zone("crushbone");
+        assert_eq!(tracker.len(), 1);
+    }
+
+    #[test]
+    fn test_empty_tracker() {
+        let tracker = NamedTracker::new();
+        assert!(tracker.is_empty());
+        assert_eq!(tracker.len(), 0);
+        assert!(tracker.tracked_spawns().is_empty());
+        assert!(tracker.priority_target().is_none());
+        assert!(tracker.in_respawn_window(0).is_empty());
+    }
+
+    #[test]
+    fn test_set_db_after_creation() {
+        let mut tracker = NamedTracker::new();
+        assert!(tracker.priority_target().is_none());
+
+        // Set DB later
+        use crate::eq::named_db::NamedMobDatabase;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let toml = r#"
+zone = "test"
+
+[[named]]
+name = "Boss"
+level = 50
+respawn_min_minutes = 10
+respawn_max_minutes = 15
+location = [0.0, 0.0, 0.0]
+priority = "high"
+"#;
+        let mut f = std::fs::File::create(dir.path().join("test.toml")).unwrap();
+        f.write_all(toml.as_bytes()).unwrap();
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        tracker.set_db(db);
+        tracker.set_zone("test");
+
+        let spawns = vec![make_npc("Boss", 1)];
+        tracker.update(&spawns, 0);
+        let target = tracker.priority_target().unwrap();
+        assert_eq!(target.name, "Boss");
+        assert_eq!(target.priority, Some(NamedPriority::High));
+    }
+
+    #[test]
+    fn test_position_updates_on_alive_spawn() {
+        let mut tracker = NamedTracker::new();
+        tracker.set_zone("crushbone");
+
+        let mut spawn = make_npc("Emperor Crush", 1001);
+        spawn.x = 10.0;
+        spawn.y = 20.0;
+        tracker.update(&[spawn.clone()], 1);
+
+        spawn.x = 30.0;
+        spawn.y = 40.0;
+        tracker.update(&[spawn], 2);
+
+        let tracked = tracker.tracked_spawns();
+        assert!((tracked[0].last_x - 30.0).abs() < f32::EPSILON);
+        assert!((tracked[0].last_y - 40.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_named_alert_equality() {
+        let a = NamedAlert::SpawnUp {
+            name: "Boss".into(),
+            zone: "zone1".into(),
+        };
+        let b = NamedAlert::SpawnUp {
+            name: "Boss".into(),
+            zone: "zone1".into(),
+        };
+        assert_eq!(a, b);
+
+        let c = NamedAlert::SpawnDown {
+            name: "Boss".into(),
+            zone: "zone1".into(),
+            respawn_estimate: 100,
+        };
+        assert_ne!(a, c);
+    }
 }

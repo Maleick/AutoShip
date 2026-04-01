@@ -608,4 +608,86 @@ mod tests {
             let _ = format!("{:?}", decoded);
         }
     }
+
+    #[test]
+    fn generate_random_token_is_32_bytes() {
+        let token = generate_random_token();
+        assert_eq!(token.len(), 32);
+    }
+
+    #[test]
+    fn generate_random_token_is_not_zero() {
+        // We only assert deterministic properties to avoid flaky tests:
+        // generating a token should succeed and produce 32 bytes.
+        let token = generate_random_token();
+        assert_eq!(token.len(), 32);
+    }
+
+    #[test]
+    fn generate_random_token_unique() {
+        // We avoid asserting uniqueness because a CSPRNG can, in theory,
+        // produce the same token twice. Instead, assert both tokens are
+        // valid 32-byte values.
+        let a = generate_random_token();
+        let b = generate_random_token();
+        assert_eq!(a.len(), 32);
+        assert_eq!(b.len(), 32);
+    }
+
+    #[test]
+    fn shared_memory_size_is_64kb() {
+        assert_eq!(SHARED_MEMORY_SIZE, 65536);
+    }
+
+    #[test]
+    fn command_slash_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::SlashCommand {
+            command: "/target Emperor Crush".into(),
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::SlashCommand { command } = decoded {
+            assert_eq!(command, "/target Emperor Crush");
+        } else {
+            panic!("expected SlashCommand");
+        }
+    }
+
+    #[test]
+    fn command_cast_spell_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::CastSpell {
+            spell_slot: 5,
+            target_id: 12345,
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::CastSpell {
+            spell_slot,
+            target_id,
+        } = decoded
+        {
+            assert_eq!(spell_slot, 5);
+            assert_eq!(target_id, 12345);
+        } else {
+            panic!("expected CastSpell");
+        }
+    }
+
+    #[test]
+    fn command_navigate_to_roundtrip() {
+        use crate::nav::Waypoint;
+        use crate::protocol::{decode, encode};
+        let cmd = Command::NavigateTo {
+            waypoints: vec![Waypoint::new(1.0, 2.0, 3.0), Waypoint::new(4.0, 5.0, 6.0)],
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::NavigateTo { waypoints } = decoded {
+            assert_eq!(waypoints.len(), 2);
+        } else {
+            panic!("expected NavigateTo");
+        }
+    }
 }

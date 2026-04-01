@@ -95,3 +95,168 @@ impl EqSession {
         self.last_state = Some(state);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::types::SpawnData;
+
+    fn make_game_state(player_name: &str) -> GameState {
+        GameState {
+            client_id: 1,
+            local_player: Some(SpawnData {
+                displayed_name: player_name.to_string(),
+                name: player_name.to_string(),
+                ..SpawnData::default()
+            }),
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: dmft_common::nav::NavStatus::Idle,
+            combat_status: dmft_common::combat::CombatStatus::Idle,
+            zone_short_name: "test".into(),
+            zone_long_name: "Test Zone".into(),
+        }
+    }
+
+    #[test]
+    fn new_session_defaults() {
+        let s = EqSession::new(42, 1234);
+        assert_eq!(s.client_id, 42);
+        assert_eq!(s.pid, 1234);
+        assert!(s.character_name.is_none());
+        assert_eq!(s.hook_status, HookStatus::NotInjected);
+        assert!(s.dll_path.is_none());
+        assert!(s.last_state.is_none());
+        assert!(s.account_name.is_none());
+        assert!(s.bound_toon.is_none());
+        assert!(matches!(s.post_login_phase, PostLoginPhase::NotStarted));
+    }
+
+    #[test]
+    fn is_active_requires_hooks_active_and_healthy() {
+        let mut s = EqSession::new(1, 100);
+        // Not active by default (NotInjected)
+        assert!(!s.is_active());
+
+        // Still not active with just hooks
+        s.hook_status = HookStatus::HooksActive;
+        assert!(s.is_active()); // healthy by default
+
+        // Not active if hook status is wrong
+        s.hook_status = HookStatus::Injected;
+        assert!(!s.is_active());
+    }
+
+    #[test]
+    fn update_state_sets_character_name_from_first_player() {
+        let mut s = EqSession::new(1, 100);
+        let state = make_game_state("Frostreaver");
+        s.update_state(state);
+        assert_eq!(s.character_name.as_deref(), Some("Frostreaver"));
+    }
+
+    #[test]
+    fn update_state_does_not_overwrite_character_name() {
+        let mut s = EqSession::new(1, 100);
+        s.update_state(make_game_state("FirstName"));
+        s.update_state(make_game_state("SecondName"));
+        // Should keep first name
+        assert_eq!(s.character_name.as_deref(), Some("FirstName"));
+    }
+
+    #[test]
+    fn update_state_stores_last_state() {
+        let mut s = EqSession::new(1, 100);
+        let state = make_game_state("Test");
+        s.update_state(state.clone());
+        assert!(s.last_state.is_some());
+        assert_eq!(s.last_state.as_ref().unwrap().client_id, 1);
+    }
+
+    #[test]
+    fn update_state_without_player_keeps_name_none() {
+        let mut s = EqSession::new(1, 100);
+        let state = GameState {
+            client_id: 1,
+            local_player: None,
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: dmft_common::nav::NavStatus::Idle,
+            combat_status: dmft_common::combat::CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
+        };
+        s.update_state(state);
+        assert!(s.character_name.is_none());
+    }
+
+    #[test]
+    fn post_login_phase_debug_format() {
+        let phases = [
+            PostLoginPhase::NotStarted,
+            PostLoginPhase::JoiningGroup,
+            PostLoginPhase::Buffing,
+            PostLoginPhase::NavigatingToCamp,
+            PostLoginPhase::Ready,
+        ];
+        for p in &phases {
+            let _ = format!("{:?}", p);
+        }
+    }
+
+    #[test]
+    fn update_state_replaces_last_state() {
+        let mut s = EqSession::new(1, 100);
+        let state1 = GameState {
+            client_id: 1,
+            local_player: None,
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 100,
+            nav_status: dmft_common::nav::NavStatus::Idle,
+            combat_status: dmft_common::combat::CombatStatus::Idle,
+            zone_short_name: "zone1".into(),
+            zone_long_name: "Zone One".into(),
+        };
+        let state2 = GameState {
+            client_id: 1,
+            local_player: None,
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 200,
+            nav_status: dmft_common::nav::NavStatus::Idle,
+            combat_status: dmft_common::combat::CombatStatus::Idle,
+            zone_short_name: "zone2".into(),
+            zone_long_name: "Zone Two".into(),
+        };
+        s.update_state(state1);
+        assert_eq!(s.last_state.as_ref().unwrap().timestamp_ms, 100);
+        s.update_state(state2);
+        assert_eq!(s.last_state.as_ref().unwrap().timestamp_ms, 200);
+    }
+
+    #[test]
+    fn is_active_false_when_not_injected() {
+        let s = EqSession::new(1, 100);
+        assert_eq!(s.hook_status, HookStatus::NotInjected);
+        assert!(!s.is_active());
+    }
+
+    #[test]
+    fn post_login_phase_clone() {
+        let p = PostLoginPhase::Buffing;
+        let c = p.clone();
+        assert_eq!(p, c);
+    }
+
+    #[test]
+    fn session_fields_mutable() {
+        let mut s = EqSession::new(1, 100);
+        s.account_name = Some("test_account".into());
+        assert_eq!(s.account_name.as_deref(), Some("test_account"));
+        s.hook_status = HookStatus::HooksActive;
+        assert!(s.is_active());
+    }
+}

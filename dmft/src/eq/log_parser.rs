@@ -599,4 +599,137 @@ mod tests {
         assert_eq!(db.total_xp_events, 2);
         assert_eq!(db.deaths, 1);
     }
+
+    // --- Edge case tests ---
+
+    #[test]
+    fn test_parse_empty_line() {
+        assert!(parse_log_line("").is_none());
+    }
+
+    #[test]
+    fn test_parse_timestamp_only() {
+        assert!(parse_log_line("[Thu Mar 28 12:34:56 2026] ").is_none());
+    }
+
+    #[test]
+    fn test_parse_malformed_timestamp_no_close_bracket() {
+        let line = "[Thu Mar 28 12:34:56 You have looted a Sword.--";
+        // No closing ], falls through to raw line parsing
+        assert!(parse_log_line(line).is_none());
+    }
+
+    #[test]
+    fn test_parse_money_copper_only() {
+        let line = "You receive 7 copper from the corpse.";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(
+            event,
+            LogEvent::Money {
+                plat: 0,
+                gold: 0,
+                silver: 0,
+                copper: 7,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_money_gold_silver() {
+        let line = "You receive 2 gold and 15 silver from the corpse.";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(
+            event,
+            LogEvent::Money {
+                plat: 0,
+                gold: 2,
+                silver: 15,
+                copper: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_raid_chat() {
+        let line = "[Thu Mar 28 12:40:00 2026] Raidleader tells the raid, 'Pull to camp!'";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(
+            event,
+            LogEvent::Chat(ChatEvent {
+                channel: ChatChannel::Raid,
+                sender: "Raidleader".to_string(),
+                message: "Pull to camp!".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_chat_channel_equality() {
+        assert_eq!(ChatChannel::Say, ChatChannel::Say);
+        assert_ne!(ChatChannel::Say, ChatChannel::Shout);
+        assert_ne!(ChatChannel::Tell, ChatChannel::TellOut);
+    }
+
+    #[test]
+    fn test_loot_database_process_line_returns_event() {
+        let mut db = LootDatabase::new();
+        let event = db.process_line("--You have looted a Rusty Axe.--");
+        assert!(event.is_some());
+        let event = db.process_line("Random unrecognized text");
+        assert!(event.is_none());
+    }
+
+    #[test]
+    fn test_loot_database_zone_enter_no_stats() {
+        let mut db = LootDatabase::new();
+        db.process_line("[Thu Mar 28 12:39:00 2026] You have entered Kithicor Forest.");
+        assert_eq!(db.deaths, 0);
+        assert_eq!(db.total_xp_events, 0);
+    }
+
+    #[test]
+    fn test_loot_database_chat_no_stats() {
+        let mut db = LootDatabase::new();
+        db.process_line("[Thu Mar 28 12:40:00 2026] Soandso says, 'Hello!'");
+        assert_eq!(db.items.len(), 0);
+        assert_eq!(db.kills.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_loot_item_with_special_chars() {
+        let line = "--You have looted a Glowing Black Stone.--";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(
+            event,
+            LogEvent::Loot {
+                character: String::new(),
+                item: "Glowing Black Stone".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_kill_named_mob() {
+        let line = "You have slain Emperor Crush!";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(
+            event,
+            LogEvent::Kill {
+                mob: "Emperor Crush".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_loot_database_defaults() {
+        let db = LootDatabase::new();
+        assert!(db.items.is_empty());
+        assert!(db.kills.is_empty());
+        assert_eq!(db.total_plat, 0);
+        assert_eq!(db.total_gold, 0);
+        assert_eq!(db.total_silver, 0);
+        assert_eq!(db.total_copper, 0);
+        assert_eq!(db.total_xp_events, 0);
+        assert_eq!(db.deaths, 0);
+    }
 }

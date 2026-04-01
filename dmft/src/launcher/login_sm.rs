@@ -451,4 +451,128 @@ mod tests {
             ),
         }
     }
+
+    #[test]
+    fn server_selected_produces_select_character_with_correct_name() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        sm.advance(LoginEvent::LoginScreenDetected);
+        sm.advance(LoginEvent::CredentialsSent);
+        let action = sm.advance(LoginEvent::ServerSelected);
+        match action {
+            LoginAction::SelectCharacter { name } => {
+                assert_eq!(name, "Frostreaver");
+            }
+            other => panic!(
+                "expected SelectCharacter, got {:?}",
+                std::mem::discriminant(&other)
+            ),
+        }
+    }
+
+    #[test]
+    fn character_selected_produces_wait_for_zone() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        sm.advance(LoginEvent::LoginScreenDetected);
+        sm.advance(LoginEvent::CredentialsSent);
+        sm.advance(LoginEvent::ServerSelected);
+        let action = sm.advance(LoginEvent::CharacterSelected);
+        assert!(matches!(action, LoginAction::WaitForZone));
+    }
+
+    #[test]
+    fn server_down_retries_then_aborts() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+
+        for i in 0..2 {
+            let action = sm.advance(LoginEvent::ErrorDetected {
+                error: LoginError::ServerDown,
+            });
+            assert!(matches!(action, LoginAction::Retry { .. }), "attempt {i}");
+        }
+
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::ServerDown,
+        });
+        assert!(matches!(action, LoginAction::Abort { .. }));
+    }
+
+    #[test]
+    fn character_not_found_error_aborts() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::CharacterNotFound {
+                expected: "Frostreaver".into(),
+                found: "WrongChar".into(),
+            },
+        });
+        assert!(matches!(action, LoginAction::Abort { .. }));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn timeout_error_aborts() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        let action = sm.advance(LoginEvent::ErrorDetected {
+            error: LoginError::Timeout {
+                phase: "test".into(),
+            },
+        });
+        assert!(matches!(action, LoginAction::Abort { .. }));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn dll_reported_ready_is_terminal() {
+        let mut sm = new_sm();
+        let action = sm.advance(LoginEvent::DllReported {
+            phase: LoginPhase::Ready,
+        });
+        assert!(matches!(action, LoginAction::None));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn dll_reported_failed_aborts() {
+        let mut sm = new_sm();
+        let action = sm.advance(LoginEvent::DllReported {
+            phase: LoginPhase::Failed {
+                reason: LoginError::WrongPassword,
+            },
+        });
+        assert!(matches!(action, LoginAction::Abort { .. }));
+        assert!(sm.is_terminal());
+    }
+
+    #[test]
+    fn dll_reported_intermediate_phase_is_none() {
+        let mut sm = new_sm();
+        let action = sm.advance(LoginEvent::DllReported {
+            phase: LoginPhase::AtLoginScreen,
+        });
+        assert!(matches!(action, LoginAction::None));
+        assert!(!sm.is_terminal());
+    }
+
+    #[test]
+    fn class_mismatch_in_player_data_aborts() {
+        let mut sm = new_sm();
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        sm.advance(LoginEvent::ZoneInComplete);
+        let action = sm.advance(LoginEvent::PlayerDataConfirmed {
+            name: "Frostreaver".to_string(),
+            class_name: "Cleric".to_string(), // Wrong class
+        });
+        assert!(matches!(action, LoginAction::Abort { .. }));
+    }
+
+    #[test]
+    fn client_id_preserved() {
+        let sm = LoginStateMachine::new(42, test_account());
+        assert_eq!(sm.client_id, 42);
+    }
 }

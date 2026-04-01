@@ -597,4 +597,71 @@ mod tests {
         let cmds = cycle.tick(pid, 107);
         assert!(!cmds.is_empty());
     }
+
+    #[test]
+    fn test_queue_sell_items_all_kept() {
+        let mut cycle = SellCycle::new(test_vendor_config());
+        cycle.queue_sell_items(&["Fine Steel Dagger".into(), "Bone Chips".into()]);
+        assert!(cycle.sell_queue.is_empty());
+    }
+
+    #[test]
+    fn test_queue_sell_items_empty_inventory() {
+        let mut cycle = SellCycle::new(test_vendor_config());
+        cycle.queue_sell_items(&[]);
+        assert!(cycle.sell_queue.is_empty());
+    }
+
+    #[test]
+    fn test_needs_sell_false_at_zero_tick() {
+        let cycle = SellCycle::new(test_vendor_config());
+        assert!(!cycle.needs_sell(0));
+    }
+
+    #[test]
+    fn test_needs_sell_after_last_sell() {
+        let mut cycle = SellCycle::new(test_vendor_config());
+        cycle.last_sell_tick = 100;
+        assert!(!cycle.needs_sell(120)); // 20 < 50
+        assert!(cycle.needs_sell(150)); // 50 >= 50
+        assert!(cycle.needs_sell(200)); // 100 >= 50
+    }
+
+    #[test]
+    fn test_sell_state_debug_format() {
+        let state = SellState::Selling {
+            step: VendorStep::SellingItems { index: 3 },
+        };
+        let dbg = format!("{:?}", state);
+        assert!(dbg.contains("SellingItems"));
+        assert!(dbg.contains("3"));
+    }
+
+    #[test]
+    fn test_vendor_step_equality() {
+        assert_eq!(VendorStep::Targeting, VendorStep::Targeting);
+        assert_ne!(VendorStep::Targeting, VendorStep::Approaching);
+        assert_eq!(
+            VendorStep::SellingItems { index: 0 },
+            VendorStep::SellingItems { index: 0 }
+        );
+        assert_ne!(
+            VendorStep::SellingItems { index: 0 },
+            VendorStep::SellingItems { index: 1 }
+        );
+    }
+
+    #[test]
+    fn test_sell_commands_pid_passed_through() {
+        let cmds = sell_commands(&SellState::Returning, "Vendor", 999);
+        assert_eq!(cmds[0].0, 999);
+    }
+
+    #[test]
+    fn test_not_needed_tick_is_noop() {
+        let mut cycle = SellCycle::new(test_vendor_config());
+        let cmds = cycle.tick(104, 999);
+        assert!(cmds.is_empty());
+        assert_eq!(cycle.state, SellState::NotNeeded);
+    }
 }

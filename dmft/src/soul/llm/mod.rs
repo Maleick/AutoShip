@@ -99,3 +99,124 @@ pub trait LlmProvider {
     /// Whether this provider is currently available (API key set, quota remaining, etc.)
     fn is_available(&self) -> bool;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
+
+    #[test]
+    fn llm_priority_ordering() {
+        assert!(LlmPriority::Low < LlmPriority::Medium);
+        assert!(LlmPriority::Medium < LlmPriority::High);
+        assert!(LlmPriority::Low < LlmPriority::High);
+    }
+
+    #[test]
+    fn llm_priority_equality() {
+        assert_eq!(LlmPriority::Low, LlmPriority::Low);
+        assert_ne!(LlmPriority::Low, LlmPriority::High);
+    }
+
+    #[test]
+    fn llm_priority_copy_clone() {
+        let p = LlmPriority::Medium;
+        let c = p; // Copy
+        assert_eq!(p, c);
+        let cl = p.clone();
+        assert_eq!(p, cl);
+    }
+
+    #[test]
+    fn llm_priority_debug() {
+        assert_eq!(format!("{:?}", LlmPriority::Low), "Low");
+        assert_eq!(format!("{:?}", LlmPriority::Medium), "Medium");
+        assert_eq!(format!("{:?}", LlmPriority::High), "High");
+    }
+
+    #[test]
+    fn situation_variants_debug_and_clone() {
+        let situations = [
+            Situation::PlayerChat {
+                player_name: "Dave".into(),
+                message: "Hello".into(),
+                channel: "say".into(),
+            },
+            Situation::GameEvent {
+                description: "ding".into(),
+            },
+            Situation::IdleChatter,
+            Situation::BotChat {
+                character_name: "Grimjaw".into(),
+                message: "Hey".into(),
+            },
+            Situation::CombatReaction {
+                description: "killed orc".into(),
+            },
+        ];
+        for s in &situations {
+            let _ = format!("{:?}", s);
+            let _ = s.clone();
+        }
+    }
+
+    #[test]
+    fn llm_request_construction() {
+        let req = LlmRequest {
+            character_name: "TestChar".into(),
+            traits: PersonalityTraits::default(),
+            mood: MoodState::Neutral,
+            speech_style: SpeechStyle::default(),
+            situation: Situation::IdleChatter,
+            priority: LlmPriority::Low,
+            memory_context: vec!["memory1".into()],
+            backstory: "A brave warrior".into(),
+        };
+        assert_eq!(req.character_name, "TestChar");
+        assert_eq!(req.priority, LlmPriority::Low);
+        assert_eq!(req.memory_context.len(), 1);
+        let _ = format!("{:?}", req);
+    }
+
+    #[test]
+    fn llm_response_construction() {
+        let resp = LlmResponse {
+            text: "Hail, traveler!".into(),
+            from_llm: false,
+            tokens_used: 0,
+        };
+        assert!(!resp.from_llm);
+        assert_eq!(resp.tokens_used, 0);
+        let cloned = resp.clone();
+        assert_eq!(cloned.text, "Hail, traveler!");
+        let _ = format!("{:?}", cloned);
+    }
+
+    #[test]
+    fn llm_response_from_real_llm() {
+        let resp = LlmResponse {
+            text: "Generated text".into(),
+            from_llm: true,
+            tokens_used: 150,
+        };
+        assert!(resp.from_llm);
+        assert_eq!(resp.tokens_used, 150);
+    }
+
+    #[test]
+    fn llm_request_clone() {
+        let req = LlmRequest {
+            character_name: "Test".into(),
+            traits: PersonalityTraits::default(),
+            mood: MoodState::Happy,
+            speech_style: SpeechStyle::default(),
+            situation: Situation::IdleChatter,
+            priority: LlmPriority::High,
+            memory_context: vec![],
+            backstory: String::new(),
+        };
+        let cloned = req.clone();
+        assert_eq!(cloned.character_name, "Test");
+        assert_eq!(cloned.priority, LlmPriority::High);
+    }
+}

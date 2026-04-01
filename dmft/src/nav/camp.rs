@@ -237,4 +237,81 @@ mod tests {
         assert_eq!(camp.name, "standard");
         assert_eq!(camp.zone, "");
     }
+
+    #[test]
+    fn create_standard_camp_preserves_z() {
+        let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 42.0), 0.0, 2);
+        for spot in &camp.spots {
+            assert!((spot.position.z - 42.0).abs() < f32::EPSILON);
+        }
+    }
+
+    #[test]
+    fn create_standard_camp_dps_roles_numbered() {
+        let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), 0.0, 5);
+        let dps_roles: Vec<&str> = camp
+            .spots
+            .iter()
+            .filter(|s| s.role.starts_with("dps"))
+            .map(|s| s.role.as_str())
+            .collect();
+        assert_eq!(dps_roles, vec!["dps1", "dps2", "dps3", "dps4", "dps5"]);
+    }
+
+    #[test]
+    fn set_camp_replaces_previous_camp() {
+        let mut mgr = CampManager::new();
+        let camp1 = make_camp(1);
+        let camp2 = make_camp(2);
+
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        mgr.set_camp(camp1, &role_map);
+        assert!(mgr.is_active());
+
+        let mut role_map2 = HashMap::new();
+        role_map2.insert(2, "healer".to_string());
+        mgr.set_camp(camp2, &role_map2);
+
+        // Client 1's tank assignment should still exist from old assignments,
+        // but the spot lookup uses the new camp definition
+        assert!(mgr.get_spot(2).is_some());
+    }
+
+    #[test]
+    fn all_spots_have_correct_heading() {
+        let pull_heading = 200.0;
+        let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), pull_heading, 3);
+        for spot in &camp.spots {
+            assert!(
+                (spot.heading - pull_heading).abs() < f32::EPSILON,
+                "All spots should face the pull direction"
+            );
+        }
+    }
+
+    #[test]
+    fn tank_is_closer_to_pull_direction() {
+        let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), 0.0, 1);
+        let tank = &camp.spots[0];
+        let healer = &camp.spots[1];
+        // Tank should be 20 units from center, healer 15 units but in opposite direction
+        let tank_dist = (tank.position.x.powi(2) + tank.position.y.powi(2)).sqrt();
+        let healer_dist = (healer.position.x.powi(2) + healer.position.y.powi(2)).sqrt();
+        assert!((tank_dist - 20.0).abs() < 0.1);
+        assert!((healer_dist - 15.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn get_spot_after_clear_returns_none() {
+        let mut mgr = CampManager::new();
+        let camp = make_camp(1);
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        mgr.set_camp(camp, &role_map);
+        assert!(mgr.get_spot(1).is_some());
+
+        mgr.clear();
+        assert!(mgr.get_spot(1).is_none());
+    }
 }

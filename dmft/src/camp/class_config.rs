@@ -320,6 +320,100 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
+    fn class_ability_clone() {
+        let ability = ClassAbility {
+            name: "Taunt".into(),
+            command: "/taunt".into(),
+            cooldown_secs: 8.0,
+            priority: 1,
+            condition: Some("always".into()),
+            duration_secs: Some(0.0),
+        };
+        let cloned = ability.clone();
+        assert_eq!(cloned, ability);
+    }
+
+    #[test]
+    fn class_ability_debug_format() {
+        let ability = ClassAbility {
+            name: "Kick".into(),
+            command: "/kick".into(),
+            cooldown_secs: 6.0,
+            priority: 2,
+            condition: None,
+            duration_secs: None,
+        };
+        let dbg = format!("{:?}", ability);
+        assert!(dbg.contains("Kick"));
+        assert!(dbg.contains("6.0"));
+    }
+
+    #[test]
+    fn cc_ability_config_debug_clone() {
+        let cc = CcAbilityConfig {
+            name: "Stun".into(),
+            cc_type: "stun".into(),
+            command: "/cast 2".into(),
+            cooldown_secs: 6.0,
+            duration_secs: 12.0,
+            priority: 0,
+        };
+        let cloned = cc.clone();
+        assert_eq!(cloned, cc);
+        let dbg = format!("{:?}", cc);
+        assert!(dbg.contains("stun"));
+    }
+
+    #[test]
+    fn debuff_ability_config_debug_clone() {
+        let debuff = DebuffAbilityConfig {
+            name: "Malo".into(),
+            command: "/cast 6".into(),
+            cooldown_secs: 3.0,
+            order: 2,
+        };
+        let cloned = debuff.clone();
+        assert_eq!(cloned, debuff);
+        let dbg = format!("{:?}", debuff);
+        assert!(dbg.contains("Malo"));
+    }
+
+    #[test]
+    fn class_config_clone_and_debug() {
+        let config = sample_warrior();
+        let cloned = config.clone();
+        assert_eq!(cloned, config);
+        let dbg = format!("{:?}", config);
+        assert!(dbg.contains("warrior"));
+    }
+
+    #[test]
+    fn class_config_serialization_roundtrip() {
+        let config = sample_warrior();
+        let json = serde_json::to_string(&config).unwrap();
+        let loaded: ClassConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded, config);
+    }
+
+    #[test]
+    fn default_rest_command_fn() {
+        assert_eq!(default_rest_command(), "/sit");
+    }
+
+    #[test]
+    fn effective_duration_zero_explicit() {
+        let ability = ClassAbility {
+            name: "Instant".into(),
+            command: "/cast 1".into(),
+            cooldown_secs: 5.0,
+            priority: 1,
+            condition: None,
+            duration_secs: Some(0.0),
+        };
+        assert!((ability.effective_duration_secs() - 0.0).abs() < f32::EPSILON);
+    }
+
     /// Validate all shipped class TOML files parse correctly.
     #[test]
     fn test_all_shipped_configs_parse() {

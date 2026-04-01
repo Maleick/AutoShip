@@ -528,3 +528,260 @@ impl ThemeKind {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn theme_kind_next_cycles_all_three() {
+        let start = ThemeKind::DarkModern;
+        let second = start.next();
+        assert_eq!(second, ThemeKind::Dracula);
+        let third = second.next();
+        assert_eq!(third, ThemeKind::Classic);
+        let back = third.next();
+        assert_eq!(back, ThemeKind::DarkModern);
+    }
+
+    #[test]
+    fn theme_kind_labels() {
+        assert_eq!(ThemeKind::DarkModern.label(), "Dark");
+        assert_eq!(ThemeKind::Classic.label(), "Classic");
+        assert_eq!(ThemeKind::Dracula.label(), "Dracula");
+    }
+
+    #[test]
+    fn theme_kind_default_is_dark_modern() {
+        assert_eq!(ThemeKind::default(), ThemeKind::DarkModern);
+    }
+
+    #[test]
+    fn dark_modern_theme_has_rounded_borders() {
+        let theme = dark_modern();
+        assert_eq!(theme.border_type, BorderType::Rounded);
+    }
+
+    #[test]
+    fn classic_theme_has_plain_borders() {
+        let theme = classic();
+        assert_eq!(theme.border_type, BorderType::Plain);
+    }
+
+    #[test]
+    fn dracula_theme_has_rounded_borders() {
+        let theme = dracula();
+        assert_eq!(theme.border_type, BorderType::Rounded);
+    }
+
+    #[test]
+    fn build_returns_correct_theme_variant() {
+        let dm = ThemeKind::DarkModern.build();
+        assert_eq!(dm.border_type, BorderType::Rounded);
+
+        let cl = ThemeKind::Classic.build();
+        assert_eq!(cl.border_type, BorderType::Plain);
+
+        let dr = ThemeKind::Dracula.build();
+        assert_eq!(dr.border_type, BorderType::Rounded);
+    }
+
+    #[test]
+    fn dark_modern_hp_colors_are_distinct() {
+        let theme = dark_modern();
+        assert_ne!(theme.hp_high, theme.hp_mid);
+        assert_ne!(theme.hp_mid, theme.hp_low);
+        assert_ne!(theme.hp_high, theme.hp_low);
+    }
+
+    #[test]
+    fn classic_uses_named_colors() {
+        let theme = classic();
+        assert_eq!(theme.hp_high, Color::Green);
+        assert_eq!(theme.hp_mid, Color::Yellow);
+        assert_eq!(theme.hp_low, Color::Red);
+        assert_eq!(theme.mana_color, Color::Blue);
+    }
+
+    #[test]
+    fn dracula_con_colors_set() {
+        let theme = dracula();
+        // Dracula uses its own palette colors for con
+        assert_ne!(theme.con_red, theme.con_green);
+        assert_ne!(theme.con_yellow, theme.con_blue);
+    }
+
+    #[test]
+    fn all_themes_have_distinct_spawn_colors() {
+        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+            let theme = kind.build();
+            // PC and corpse should always be visually distinct
+            assert_ne!(
+                theme.spawn_pc, theme.spawn_corpse,
+                "{:?} spawn_pc == spawn_corpse",
+                kind
+            );
+            assert_ne!(
+                theme.spawn_npc, theme.spawn_corpse,
+                "{:?} spawn_npc == spawn_corpse",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn theme_kind_clone_and_copy() {
+        let a = ThemeKind::Dracula;
+        let b = a;
+        let c = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn theme_kind_debug_format() {
+        let dbg = format!("{:?}", ThemeKind::DarkModern);
+        assert!(dbg.contains("DarkModern"));
+    }
+
+    #[test]
+    fn theme_struct_is_clone() {
+        let theme = dark_modern();
+        let cloned = theme.clone();
+        assert_eq!(cloned.border_type, theme.border_type);
+        assert_eq!(cloned.hp_high, theme.hp_high);
+    }
+
+    #[test]
+    fn all_themes_have_distinct_state_colors() {
+        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+            let theme = kind.build();
+            assert_ne!(
+                theme.state_dead, theme.state_normal,
+                "{:?} dead == normal",
+                kind
+            );
+            assert_ne!(
+                theme.state_sitting, theme.state_dead,
+                "{:?} sitting == dead",
+                kind
+            );
+            assert_ne!(
+                theme.state_feigned, theme.state_normal,
+                "{:?} feigned == normal",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn all_themes_have_distinct_map_colors() {
+        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+            let theme = kind.build();
+            assert_ne!(
+                theme.map_you, theme.map_npc,
+                "{:?} map_you == map_npc",
+                kind
+            );
+            assert_ne!(
+                theme.map_pc, theme.map_corpse,
+                "{:?} map_pc == map_corpse",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn all_themes_have_distinct_mode_colors() {
+        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+            let theme = kind.build();
+            assert_ne!(
+                theme.mode_camp, theme.mode_hunt,
+                "{:?} mode_camp == mode_hunt",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn all_themes_hp_colors_are_distinct() {
+        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+            let theme = kind.build();
+            assert_ne!(theme.hp_high, theme.hp_mid, "{:?} hp_high == hp_mid", kind);
+            assert_ne!(theme.hp_mid, theme.hp_low, "{:?} hp_mid == hp_low", kind);
+            assert_ne!(theme.hp_high, theme.hp_low, "{:?} hp_high == hp_low", kind);
+        }
+    }
+
+    #[test]
+    fn all_themes_have_six_con_colors() {
+        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+            let theme = kind.build();
+            let cons = [
+                theme.con_red,
+                theme.con_yellow,
+                theme.con_white,
+                theme.con_light_blue,
+                theme.con_blue,
+                theme.con_green,
+            ];
+            // Red and green should always differ
+            assert_ne!(cons[0], cons[5], "{:?} con_red == con_green", kind);
+            // White and blue should differ
+            assert_ne!(cons[2], cons[4], "{:?} con_white == con_blue", kind);
+        }
+    }
+
+    #[test]
+    fn dark_modern_text_colors_descend_brightness() {
+        let theme = dark_modern();
+        // text_bright should be brighter than text_muted
+        if let (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) =
+            (theme.text_bright, theme.text_muted)
+        {
+            let bright_sum = r1 as u32 + g1 as u32 + b1 as u32;
+            let muted_sum = r2 as u32 + g2 as u32 + b2 as u32;
+            assert!(
+                bright_sum > muted_sum,
+                "text_bright ({}) should be brighter than text_muted ({})",
+                bright_sum,
+                muted_sum
+            );
+        }
+    }
+
+    #[test]
+    fn dark_modern_mana_is_blue_family() {
+        let theme = dark_modern();
+        if let Color::Rgb(r, _g, b) = theme.mana_color {
+            assert!(b > r, "Mana color should be blue-dominant");
+        }
+    }
+
+    #[test]
+    fn classic_mana_is_named_blue() {
+        let theme = classic();
+        assert_eq!(theme.mana_color, Color::Blue);
+    }
+
+    #[test]
+    fn dracula_uses_rgb_colors() {
+        let theme = dracula();
+        // Dracula theme should use RGB colors for HP
+        assert!(matches!(theme.hp_high, Color::Rgb(_, _, _)));
+        assert!(matches!(theme.hp_mid, Color::Rgb(_, _, _)));
+        assert!(matches!(theme.hp_low, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn all_themes_text_accent_differs_from_normal() {
+        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+            let theme = kind.build();
+            assert_ne!(
+                theme.text_accent, theme.text_normal,
+                "{:?} accent == normal",
+                kind
+            );
+        }
+    }
+}

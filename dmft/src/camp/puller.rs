@@ -287,4 +287,130 @@ mod tests {
         // Should pick the closer orc pawn (spawn 2)
         assert_eq!(result, Some("an orc pawn".into()));
     }
+
+    #[test]
+    fn test_filters_out_other_spawn_type() {
+        let spawns = vec![make_spawn(
+            1,
+            "a trap",
+            SpawnType::Other,
+            155.0,
+            255.0,
+        )];
+        let cc = CcTracker::new();
+        let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_all_cc_tracked_returns_none() {
+        let spawns = vec![
+            make_spawn(1, "an orc pawn", SpawnType::Npc, 155.0, 255.0),
+        ];
+        let mut cc = CcTracker::new();
+        cc.update(&[(1, "an orc pawn".into())], None, 0);
+        let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_hvt_prefers_closest_of_multiple_hvts() {
+        let mut config = test_config();
+        config.pull_mob_names.clear();
+        let spawns = vec![
+            make_spawn(1, "rare dragon", SpawnType::Npc, 300.0, 350.0),
+            make_spawn(2, "rare dragon", SpawnType::Npc, 155.0, 255.0),
+        ];
+        let cc = CcTracker::new();
+        let hvt = vec!["rare dragon".to_string()];
+        let result = select_pull_target(&spawns, &config, &cc, &hvt);
+        assert_eq!(result, Some("rare dragon".into()));
+    }
+
+    #[test]
+    fn test_config_match_beats_hvt() {
+        let config = test_config(); // pull_mob_names has "an orc pawn"
+        let spawns = vec![
+            make_spawn(1, "an orc pawn", SpawnType::Npc, 170.0, 270.0),
+            make_spawn(2, "hvt_mob", SpawnType::Npc, 155.0, 255.0),
+        ];
+        let cc = CcTracker::new();
+        let hvt = vec!["hvt_mob".to_string()];
+        let result = select_pull_target(&spawns, &config, &cc, &hvt);
+        // Config match takes priority over HVT
+        assert_eq!(result, Some("an orc pawn".into()));
+    }
+
+    #[test]
+    fn test_mixed_types_only_npc_selected() {
+        let mut config = test_config();
+        config.pull_mob_names.clear();
+        let spawns = vec![
+            make_spawn(1, "PlayerOne", SpawnType::Player, 155.0, 255.0),
+            make_spawn(2, "orc_corpse", SpawnType::Corpse, 156.0, 256.0),
+            make_spawn(3, "a_trap", SpawnType::Other, 157.0, 257.0),
+            make_spawn(4, "an orc", SpawnType::Npc, 160.0, 260.0),
+        ];
+        let cc = CcTracker::new();
+        let result = select_pull_target(&spawns, &config, &cc, &[]);
+        assert_eq!(result, Some("an orc".into()));
+    }
+
+    #[test]
+    fn test_spawn_type_equality() {
+        assert_eq!(SpawnType::Player, SpawnType::Player);
+        assert_eq!(SpawnType::Npc, SpawnType::Npc);
+        assert_eq!(SpawnType::Corpse, SpawnType::Corpse);
+        assert_eq!(SpawnType::Other, SpawnType::Other);
+        assert_ne!(SpawnType::Player, SpawnType::Npc);
+    }
+
+    #[test]
+    fn test_nearby_spawn_construction() {
+        let s = make_spawn(42, "test mob", SpawnType::Npc, 1.0, 2.0);
+        assert_eq!(s.spawn_id, 42);
+        assert_eq!(s.name, "test mob");
+        assert_eq!(s.x, 1.0);
+        assert_eq!(s.y, 2.0);
+        assert_eq!(s.z, 0.0);
+    }
+
+    #[test]
+    fn test_select_pull_target_with_named_priority() {
+        let mut config = test_config();
+        config.pull_mob_names.clear();
+        let spawns = vec![
+            make_spawn(1, "common orc", SpawnType::Npc, 155.0, 255.0),
+            make_spawn(2, "Emperor Crush", SpawnType::Npc, 160.0, 260.0),
+        ];
+        let cc = CcTracker::new();
+        let named = NamedTracker::new();
+        // Without a priority target in named tracker, falls back to normal logic
+        let result = select_pull_target_with_named(&spawns, &config, &cc, &[], &named);
+        assert_eq!(result, Some("common orc".into())); // closest
+    }
+
+    #[test]
+    fn test_select_pull_target_with_named_no_spawns() {
+        let config = test_config();
+        let cc = CcTracker::new();
+        let named = NamedTracker::new();
+        let result = select_pull_target_with_named(&[], &config, &cc, &[], &named);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_boundary_pull_radius() {
+        let mut config = test_config();
+        config.pull_mob_names.clear();
+        config.pull_radius = 10.0;
+        // Spawn exactly at pull_radius distance
+        let spawns = vec![
+            make_spawn(1, "boundary orc", SpawnType::Npc, 160.0, 250.0), // dist = 10.0 from pull_point
+        ];
+        let cc = CcTracker::new();
+        let result = select_pull_target(&spawns, &config, &cc, &[]);
+        // distance_2d(160, 250, 150, 250) = 10.0, equal to pull_radius => should be included
+        assert_eq!(result, Some("boundary orc".into()));
+    }
 }
