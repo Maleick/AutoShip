@@ -229,4 +229,81 @@ priority = "{v}"
             assert_eq!(parsed.targets.len(), 1);
         }
     }
+
+    #[test]
+    fn test_priority_equality() {
+        assert_eq!(HvtPriority::Critical, HvtPriority::Critical);
+        assert_ne!(HvtPriority::Critical, HvtPriority::High);
+        assert_ne!(HvtPriority::High, HvtPriority::Medium);
+        assert_ne!(HvtPriority::Medium, HvtPriority::Low);
+    }
+
+    #[test]
+    fn test_hvt_target_clone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(sample_toml().as_bytes()).unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        let target = wl.is_hvt("Emperor Crush").unwrap();
+        let cloned = target.clone();
+        assert_eq!(cloned.name, target.name);
+        assert_eq!(cloned.zone, target.zone);
+        assert_eq!(cloned.priority, target.priority);
+    }
+
+    #[test]
+    fn test_watchlist_clone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(sample_toml().as_bytes()).unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        let cloned = wl.clone();
+        assert_eq!(cloned.len(), wl.len());
+    }
+
+    #[test]
+    fn test_duplicate_names_last_wins() {
+        let toml = r#"
+[[targets]]
+name = "TestMob"
+zone = "zone1"
+priority = "low"
+
+[[targets]]
+name = "TestMob"
+zone = "zone2"
+priority = "high"
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(toml.as_bytes()).unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        // HashMap overwrites, so the last entry wins
+        assert_eq!(wl.len(), 1);
+        let t = wl.is_hvt("TestMob").unwrap();
+        assert_eq!(t.zone, "zone2");
+        assert_eq!(t.priority, HvtPriority::High);
+    }
+
+    #[test]
+    fn test_iter_collects_all_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hvt.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(sample_toml().as_bytes()).unwrap();
+
+        let wl = HvtWatchlist::load(&path).unwrap();
+        let mut names: Vec<String> = wl.iter().map(|t| t.name.clone()).collect();
+        names.sort();
+        assert_eq!(
+            names,
+            vec!["Emperor Crush", "Lord Nagafen", "the Tangrin"]
+        );
+    }
 }

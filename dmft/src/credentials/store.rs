@@ -216,4 +216,67 @@ mod tests {
         let result = store.get_password("no_such_account");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn add_account_with_empty_password() {
+        let store = open_memory_store();
+        store.add_account("empty_pass", "").unwrap();
+        let password = store.get_password("empty_pass").unwrap();
+        assert_eq!(&*password, "");
+    }
+
+    #[test]
+    fn add_account_with_special_characters() {
+        let store = open_memory_store();
+        let special = "p@$$w0rd!#%^&*(){}[]|\\:\";<>,.?/~`";
+        store.add_account("special", special).unwrap();
+        let password = store.get_password("special").unwrap();
+        assert_eq!(&*password, special);
+    }
+
+    #[test]
+    fn add_account_with_unicode() {
+        let store = open_memory_store();
+        let unicode_pass = "password_\u{1F600}_\u{00E9}";
+        store.add_account("unicode_acct", unicode_pass).unwrap();
+        let password = store.get_password("unicode_acct").unwrap();
+        assert_eq!(&*password, unicode_pass);
+    }
+
+    #[test]
+    fn list_accounts_sorted() {
+        let store = open_memory_store();
+        store.add_account("charlie", "pass").unwrap();
+        store.add_account("alpha", "pass").unwrap();
+        store.add_account("bravo", "pass").unwrap();
+        let accounts = store.list_accounts().unwrap();
+        assert_eq!(accounts, vec!["alpha", "bravo", "charlie"]);
+    }
+
+    #[test]
+    fn remove_and_re_add_account() {
+        let store = open_memory_store();
+        store.add_account("reuse", "first_pass").unwrap();
+        store.remove_account("reuse").unwrap();
+        store.add_account("reuse", "second_pass").unwrap();
+        let password = store.get_password("reuse").unwrap();
+        assert_eq!(&*password, "second_pass");
+    }
+
+    #[test]
+    fn get_password_after_remove_fails() {
+        let store = open_memory_store();
+        store.add_account("temp", "pass").unwrap();
+        store.remove_account("temp").unwrap();
+        assert!(store.get_password("temp").is_err());
+    }
+
+    #[test]
+    fn add_account_with_long_password() {
+        let store = open_memory_store();
+        let long_pass = "a".repeat(10_000);
+        store.add_account("long_pass_acct", &long_pass).unwrap();
+        let password = store.get_password("long_pass_acct").unwrap();
+        assert_eq!(&*password, &*long_pass);
+    }
 }
