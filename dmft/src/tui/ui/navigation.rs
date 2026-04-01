@@ -73,9 +73,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                     .unwrap_or_else(|| format!("PID {}", client.pid));
 
                 let nav = app.nav_state.nav_statuses.get(&client.pid);
-                let status = nav
-                    .map(|s| s.status.label())
-                    .unwrap_or("Idle");
+                let status = nav.map(|s| s.status.label()).unwrap_or("Idle");
                 let dest = nav.map(|s| s.destination.as_str()).unwrap_or("—");
 
                 let status_color = nav

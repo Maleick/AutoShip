@@ -309,13 +309,12 @@ pub fn handle_events(
                 }
                 _ => {}
             },
-            ActivePanel::TacticalMap => match key.code {
-                KeyCode::Enter => {
+            ActivePanel::TacticalMap => {
+                if key.code == KeyCode::Enter {
                     app.toggle_tactical_map_maximized();
                     return Ok(true);
                 }
-                _ => {}
-            },
+            }
             ActivePanel::TacticalNavigation => match key.code {
                 KeyCode::Down | KeyCode::Char('j') => {
                     app.next_client();

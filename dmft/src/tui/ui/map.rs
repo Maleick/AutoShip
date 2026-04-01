@@ -53,7 +53,11 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     }
 
     if area.width < WIDTH_MAP_NARROW {
-        let right_width = if area.width >= WIDTH_MAP_WIDE_RIGHT { 52 } else { 46 };
+        let right_width = if area.width >= WIDTH_MAP_WIDE_RIGHT {
+            52
+        } else {
+            46
+        };
         let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(40), Constraint::Length(right_width)])
@@ -69,8 +73,16 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         return;
     }
 
-    let sidebar_width = if area.width >= WIDTH_MAP_EXTRA_WIDE { 30 } else { 26 };
-    let spawn_width = if area.width >= WIDTH_SIDEBAR_WIDE { 52 } else { 46 };
+    let sidebar_width = if area.width >= WIDTH_MAP_EXTRA_WIDE {
+        30
+    } else {
+        26
+    };
+    let spawn_width = if area.width >= WIDTH_SIDEBAR_WIDE {
+        52
+    } else {
+        46
+    };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -105,7 +117,10 @@ fn draw_maximized_map_screen(
     if area.width < WIDTH_MAP_NARROW {
         let dock = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(6), Constraint::Length(sidebar_height.max(6))])
+            .constraints([
+                Constraint::Min(6),
+                Constraint::Length(sidebar_height.max(6)),
+            ])
             .split(rows[1]);
         spawns::draw_spawn_list(frame, dock[0], app);
         draw_tactical_sidebar(frame, dock[1], app, sections);
@@ -195,22 +210,12 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             } else {
                 let scale = ((w as f32 - 2.0) / map.bounds.width())
                     .min((h as f32 - 2.0) / map.bounds.height());
-                (
-                    map.bounds.center_x(),
-                    map.bounds.center_y(),
-                    scale,
-                    scale,
-                )
+                (map.bounds.center_x(), map.bounds.center_y(), scale, scale)
             }
         } else {
-            let scale = ((w as f32 - 2.0) / map.bounds.width())
-                .min((h as f32 - 2.0) / map.bounds.height());
-            (
-                map.bounds.center_x(),
-                map.bounds.center_y(),
-                scale,
-                scale,
-            )
+            let scale =
+                ((w as f32 - 2.0) / map.bounds.width()).min((h as f32 - 2.0) / map.bounds.height());
+            (map.bounds.center_x(), map.bounds.center_y(), scale, scale)
         }
     } else {
         let spawns = &app.spawns;
@@ -503,8 +508,7 @@ fn local_map_transform(
     };
     let aspect = (w as f32 / h.max(1) as f32).clamp(1.0, 2.6);
     let half_width = half_height * aspect;
-    let scale = ((w as f32 - 2.0) / (half_width * 2.0))
-        .min((h as f32 - 2.0) / (half_height * 2.0));
+    let scale = ((w as f32 - 2.0) / (half_width * 2.0)).min((h as f32 - 2.0) / (half_height * 2.0));
     (player_x, player_y, scale, scale)
 }
 
@@ -910,9 +914,7 @@ fn draw_navigation_summary(
     let selected_nav = app
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid));
-    let selected_status = selected_nav
-        .map(|nav| nav.status.label())
-        .unwrap_or("Idle");
+    let selected_status = selected_nav.map(|nav| nav.status.label()).unwrap_or("Idle");
     let selected_dest = selected_nav
         .map(|nav| nav.destination.as_str())
         .unwrap_or("—");
@@ -963,7 +965,10 @@ fn draw_navigation_summary(
         ]),
         Line::from(vec![
             Span::styled("Enter ", Style::default().fg(t.text_highlight)),
-            Span::styled("full navigation window", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                "full navigation window",
+                Style::default().fg(t.text_secondary),
+            ),
         ]),
     ];
 
