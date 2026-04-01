@@ -1045,14 +1045,7 @@ mod tests {
         let store = open_memory_store();
         for i in 0..10 {
             store
-                .record_conversation(
-                    1,
-                    &format!("Player{}", i),
-                    true,
-                    "say",
-                    "msg",
-                    Some(0.5),
-                )
+                .record_conversation(1, &format!("Player{}", i), true, "say", "msg", Some(0.5))
                 .unwrap();
         }
         let convos = store.recall_conversations(1, 3).unwrap();
@@ -1135,10 +1128,7 @@ mod tests {
 
     #[test]
     fn event_zone_none_for_non_zone_events() {
-        assert_eq!(
-            event_zone(&SoulEvent::LevelUp { new_level: 50 }),
-            None
-        );
+        assert_eq!(event_zone(&SoulEvent::LevelUp { new_level: 50 }), None);
         assert_eq!(
             event_zone(&SoulEvent::MoodShift {
                 from: MoodState::Neutral,

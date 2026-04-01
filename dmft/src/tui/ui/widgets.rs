@@ -363,7 +363,10 @@ pub fn render_progress_indicator(indicator: &ProgressIndicator, t: &Theme) -> Li
             ])
         }
         None => {
-            let frames = ["\u{280b}", "\u{2819}", "\u{2839}", "\u{2838}", "\u{283c}", "\u{2834}", "\u{2826}", "\u{2827}"];
+            let frames = [
+                "\u{280b}", "\u{2819}", "\u{2839}", "\u{2838}", "\u{283c}", "\u{2834}", "\u{2826}",
+                "\u{2827}",
+            ];
             // Use a static-ish frame; in real use the app tick counter drives this.
             let spinner = frames[0];
             Line::from(vec![
@@ -403,8 +406,7 @@ impl StatusHistory {
         if self.messages.len() >= self.capacity {
             self.messages.remove(0);
         }
-        self
-            .messages
+        self.messages
             .push((message.into(), std::time::Instant::now()));
     }
 
@@ -420,10 +422,7 @@ impl StatusHistory {
         self.messages
             .iter()
             .map(|(msg, _ts)| {
-                Line::from(Span::styled(
-                    msg.clone(),
-                    Style::default().fg(t.text_muted),
-                ))
+                Line::from(Span::styled(msg.clone(), Style::default().fg(t.text_muted)))
             })
             .collect()
     }
@@ -472,28 +471,116 @@ pub struct CommandHint {
 #[must_use]
 pub fn command_hints() -> Vec<CommandHint> {
     vec![
-        CommandHint { prefix: "nav", usage: "nav <zone> [camp]", description: "Navigate to a zone/camp" },
-        CommandHint { prefix: "camp start", usage: "camp start <name>", description: "Start a camp by name" },
-        CommandHint { prefix: "camp stop", usage: "camp stop", description: "Stop the current camp" },
-        CommandHint { prefix: "camp list", usage: "camp list", description: "List available camps" },
-        CommandHint { prefix: "camp add", usage: "camp add <name> <zone>", description: "Add a new camp" },
-        CommandHint { prefix: "camp rm", usage: "camp rm <name>", description: "Remove a camp" },
-        CommandHint { prefix: "ma", usage: "ma <name>", description: "Set main assist" },
-        CommandHint { prefix: "mt", usage: "mt <name>", description: "Set main tank" },
-        CommandHint { prefix: "engage", usage: "engage [target_id]", description: "Engage combat" },
-        CommandHint { prefix: "disengage", usage: "disengage", description: "Stop combat" },
-        CommandHint { prefix: "track", usage: "track <spawn_name>", description: "Track a spawn on the map" },
-        CommandHint { prefix: "all", usage: "all /<command>", description: "Broadcast to all characters" },
-        CommandHint { prefix: "invite", usage: "invite <name>", description: "Invite player to group" },
-        CommandHint { prefix: "accept", usage: "accept", description: "Accept pending invite" },
-        CommandHint { prefix: "mode", usage: "mode <camp|hunt>", description: "Switch operating mode" },
-        CommandHint { prefix: "login", usage: "login <profile>", description: "Login a character profile" },
-        CommandHint { prefix: "ch start", usage: "ch start <pids> <interval>", description: "Start CH chain" },
-        CommandHint { prefix: "ch stop", usage: "ch stop", description: "Stop CH chain" },
-        CommandHint { prefix: "ch add", usage: "ch add <pid>", description: "Add cleric to CH chain" },
-        CommandHint { prefix: "ch rm", usage: "ch rm <pid>", description: "Remove cleric from CH chain" },
-        CommandHint { prefix: "ch interval", usage: "ch interval <seconds>", description: "Set CH interval" },
-        CommandHint { prefix: "ch adaptive", usage: "ch adaptive <on|off>", description: "Toggle adaptive CH timing" },
+        CommandHint {
+            prefix: "nav",
+            usage: "nav <zone> [camp]",
+            description: "Navigate to a zone/camp",
+        },
+        CommandHint {
+            prefix: "camp start",
+            usage: "camp start <name>",
+            description: "Start a camp by name",
+        },
+        CommandHint {
+            prefix: "camp stop",
+            usage: "camp stop",
+            description: "Stop the current camp",
+        },
+        CommandHint {
+            prefix: "camp list",
+            usage: "camp list",
+            description: "List available camps",
+        },
+        CommandHint {
+            prefix: "camp add",
+            usage: "camp add <name> <zone>",
+            description: "Add a new camp",
+        },
+        CommandHint {
+            prefix: "camp rm",
+            usage: "camp rm <name>",
+            description: "Remove a camp",
+        },
+        CommandHint {
+            prefix: "ma",
+            usage: "ma <name>",
+            description: "Set main assist",
+        },
+        CommandHint {
+            prefix: "mt",
+            usage: "mt <name>",
+            description: "Set main tank",
+        },
+        CommandHint {
+            prefix: "engage",
+            usage: "engage [target_id]",
+            description: "Engage combat",
+        },
+        CommandHint {
+            prefix: "disengage",
+            usage: "disengage",
+            description: "Stop combat",
+        },
+        CommandHint {
+            prefix: "track",
+            usage: "track <spawn_name>",
+            description: "Track a spawn on the map",
+        },
+        CommandHint {
+            prefix: "all",
+            usage: "all /<command>",
+            description: "Broadcast to all characters",
+        },
+        CommandHint {
+            prefix: "invite",
+            usage: "invite <name>",
+            description: "Invite player to group",
+        },
+        CommandHint {
+            prefix: "accept",
+            usage: "accept",
+            description: "Accept pending invite",
+        },
+        CommandHint {
+            prefix: "mode",
+            usage: "mode <camp|hunt>",
+            description: "Switch operating mode",
+        },
+        CommandHint {
+            prefix: "login",
+            usage: "login <profile>",
+            description: "Login a character profile",
+        },
+        CommandHint {
+            prefix: "ch start",
+            usage: "ch start <pids> <interval>",
+            description: "Start CH chain",
+        },
+        CommandHint {
+            prefix: "ch stop",
+            usage: "ch stop",
+            description: "Stop CH chain",
+        },
+        CommandHint {
+            prefix: "ch add",
+            usage: "ch add <pid>",
+            description: "Add cleric to CH chain",
+        },
+        CommandHint {
+            prefix: "ch rm",
+            usage: "ch rm <pid>",
+            description: "Remove cleric from CH chain",
+        },
+        CommandHint {
+            prefix: "ch interval",
+            usage: "ch interval <seconds>",
+            description: "Set CH interval",
+        },
+        CommandHint {
+            prefix: "ch adaptive",
+            usage: "ch adaptive <on|off>",
+            description: "Toggle adaptive CH timing",
+        },
     ]
 }
 
@@ -502,8 +589,7 @@ pub fn command_hints() -> Vec<CommandHint> {
 pub fn find_command_hint(input: &str) -> Option<&'static str> {
     // Static storage so we can return references.
     // This is fine because the hints are all &'static str.
-    static HINTS: std::sync::LazyLock<Vec<CommandHint>> =
-        std::sync::LazyLock::new(command_hints);
+    static HINTS: std::sync::LazyLock<Vec<CommandHint>> = std::sync::LazyLock::new(command_hints);
 
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -588,7 +674,10 @@ pub fn render_dropdown(
     use ratatui::widgets::{Clear, List, ListItem, ListState};
 
     let item_count = selector.items.len() as u16;
-    let popup_h = (item_count + 2).min(area.height.saturating_sub(4)).max(3).min(area.height);
+    let popup_h = (item_count + 2)
+        .min(area.height.saturating_sub(4))
+        .max(3)
+        .min(area.height);
     let popup_w = (area.width * 40 / 100).clamp(20.min(area.width), 45.min(area.width));
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
@@ -757,7 +846,10 @@ pub fn render_command_palette(
 
     let filtered = palette.filtered_commands();
     let item_count = filtered.len() as u16;
-    let popup_h = (item_count + 4).min(area.height * 70 / 100).max(6).min(area.height);
+    let popup_h = (item_count + 4)
+        .min(area.height * 70 / 100)
+        .max(6)
+        .min(area.height);
     let popup_w = (area.width * 60 / 100).clamp(40.min(area.width), 60.min(area.width));
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
@@ -772,7 +864,11 @@ pub fn render_command_palette(
 
     let sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(1),
+        ])
         .split(inner);
 
     // Filter input
@@ -997,7 +1093,10 @@ pub fn render_multi_option(
     use ratatui::widgets::{Clear, List, ListItem, ListState};
 
     let item_count = selector.items.len() as u16;
-    let popup_h = (item_count + 3).min(area.height.saturating_sub(4)).max(5).min(area.height);
+    let popup_h = (item_count + 3)
+        .min(area.height.saturating_sub(4))
+        .max(5)
+        .min(area.height);
     let popup_w = (area.width * 45 / 100).clamp(25.min(area.width), 50.min(area.width));
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
@@ -1050,14 +1149,8 @@ pub fn render_multi_option(
 pub fn render_inline_hint(input: &str, t: &Theme) -> Option<Line<'static>> {
     find_command_hint(input).map(|usage| {
         Line::from(vec![
-            Span::styled(
-                "  Usage: ",
-                Style::default().fg(t.text_muted),
-            ),
-            Span::styled(
-                usage.to_string(),
-                Style::default().fg(t.text_accent),
-            ),
+            Span::styled("  Usage: ", Style::default().fg(t.text_muted)),
+            Span::styled(usage.to_string(), Style::default().fg(t.text_accent)),
         ])
     })
 }
@@ -1096,8 +1189,7 @@ impl NotificationArea {
     /// Remove expired notifications.
     pub fn prune_expired(&mut self) {
         let ttl = std::time::Duration::from_secs(self.ttl_secs);
-        self.notifications
-            .retain(|n| n.created_at.elapsed() < ttl);
+        self.notifications.retain(|n| n.created_at.elapsed() < ttl);
     }
 
     /// Push a convenience info notification.
@@ -1439,14 +1531,8 @@ pub fn divider(width: usize, label: Option<&str>, t: &Theme) -> Line<'static> {
             let side = width.saturating_sub(text_len) / 2;
             let right_side = width.saturating_sub(text_len).saturating_sub(side);
             Line::from(vec![
-                Span::styled(
-                    "\u{2500}".repeat(side),
-                    Style::default().fg(t.text_muted),
-                ),
-                Span::styled(
-                    format!(" {text} "),
-                    Style::default().fg(t.text_secondary),
-                ),
+                Span::styled("\u{2500}".repeat(side), Style::default().fg(t.text_muted)),
+                Span::styled(format!(" {text} "), Style::default().fg(t.text_secondary)),
                 Span::styled(
                     "\u{2500}".repeat(right_side),
                     Style::default().fg(t.text_muted),
@@ -1467,10 +1553,7 @@ pub fn divider(width: usize, label: Option<&str>, t: &Theme) -> Line<'static> {
 pub fn badge(text: &str, fg: Color, bg: Color) -> Span<'static> {
     Span::styled(
         format!(" {text} "),
-        Style::default()
-            .fg(fg)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
+        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
     )
 }
 
@@ -1711,7 +1794,9 @@ impl Sparkline {
 /// Render a sparkline as a styled span using Unicode block elements.
 #[must_use]
 pub fn render_sparkline(spark: &Sparkline, color: Color) -> Span<'static> {
-    const BLOCKS: [char; 8] = [' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}'];
+    const BLOCKS: [char; 8] = [
+        ' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}',
+    ];
 
     let max = spark
         .max_val
@@ -1944,8 +2029,10 @@ mod tests {
         let mut p = CommandPalette::new();
         p.filter = "nav".into();
         let cmds = p.filtered_commands();
-        assert!(cmds.iter().all(|c| c.prefix.contains("nav")
-            || c.description.to_lowercase().contains("nav")));
+        assert!(
+            cmds.iter()
+                .all(|c| c.prefix.contains("nav") || c.description.to_lowercase().contains("nav"))
+        );
     }
 
     #[test]
@@ -1969,8 +2056,7 @@ mod tests {
 
     #[test]
     fn multi_option_selector_navigation() {
-        let mut sel =
-            MultiOptionSelector::new("Pick", vec!["A".into(), "B".into(), "C".into()]);
+        let mut sel = MultiOptionSelector::new("Pick", vec!["A".into(), "B".into(), "C".into()]);
         assert_eq!(sel.focused, 0);
         sel.focus_next();
         assert_eq!(sel.focused, 1);
@@ -1982,8 +2068,7 @@ mod tests {
 
     #[test]
     fn multi_option_checked_labels() {
-        let mut sel =
-            MultiOptionSelector::new("Pick", vec!["A".into(), "B".into(), "C".into()]);
+        let mut sel = MultiOptionSelector::new("Pick", vec!["A".into(), "B".into(), "C".into()]);
         sel.items[0].checked = true;
         sel.items[2].checked = true;
         let labels = sel.checked_labels();
@@ -1992,8 +2077,7 @@ mod tests {
 
     #[test]
     fn multi_option_select_deselect_all() {
-        let mut sel =
-            MultiOptionSelector::new("Pick", vec!["X".into(), "Y".into()]);
+        let mut sel = MultiOptionSelector::new("Pick", vec!["X".into(), "Y".into()]);
         sel.select_all();
         assert!(sel.items.iter().all(|i| i.checked));
         sel.deselect_all();

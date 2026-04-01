@@ -2319,8 +2319,7 @@ impl App {
                         "Engage: no clients received command. Check connection with :status",
                     );
                 } else {
-                    self.status_message =
-                        format!("Engage → {ok} clients (target_id={target_id})");
+                    self.status_message = format!("Engage → {ok} clients (target_id={target_id})");
                 }
             }
             "disengage" => {
@@ -3173,7 +3172,10 @@ const KNOWN_COMMANDS: &[(&str, &str)] = &[
     ("help", "Show help overlay"),
     ("commands", "List all commands with usage"),
     ("status", "Show connected client count"),
-    ("camp", "Camp management: start|stop|status|list|add|remove|next|prev"),
+    (
+        "camp",
+        "Camp management: start|stop|status|list|add|remove|next|prev",
+    ),
     ("nav", "Navigate: nav <camp_name|x y z|zone>"),
     ("loot", "Loot nearby corpses"),
     ("login", "Login management: login [all|G<n>|<name>]"),
@@ -3435,10 +3437,29 @@ mod tests {
     fn known_commands_has_all_expected_commands() {
         let names: Vec<&str> = KNOWN_COMMANDS.iter().map(|(n, _)| *n).collect();
         for expected in &[
-            "help", "commands", "status", "camp", "nav", "loot", "login",
-            "launch", "stop", "restart", "track", "untrack", "mode", "ma",
-            "mt", "engage", "disengage", "invite", "accept", "heal", "ch",
-            "inject", "all",
+            "help",
+            "commands",
+            "status",
+            "camp",
+            "nav",
+            "loot",
+            "login",
+            "launch",
+            "stop",
+            "restart",
+            "track",
+            "untrack",
+            "mode",
+            "ma",
+            "mt",
+            "engage",
+            "disengage",
+            "invite",
+            "accept",
+            "heal",
+            "ch",
+            "inject",
+            "all",
         ] {
             assert!(
                 names.contains(expected),
