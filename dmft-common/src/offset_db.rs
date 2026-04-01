@@ -2,41 +2,57 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Hot-updatable offset database backed by JSON.
+///
+/// Allows updating EQ memory offsets without recompiling by loading a JSON file
+/// at runtime. Falls back to compile-time constants from `offsets.rs`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OffsetDatabase {
+    /// EQ client build date (e.g. "20260310").
     pub client_date: String,
+    /// Preferred base address of eqgame.exe.
     pub eq_preferred_base: u64,
+    /// Global pointer addresses keyed by name (e.g. "pinstLocalPlayer").
     pub globals: HashMap<String, u64>,
+    /// PlayerBase struct field offsets keyed by name.
     pub player_base: HashMap<String, usize>,
+    /// PlayerZoneClient struct field offsets keyed by name.
     pub player_zone: HashMap<String, usize>,
+    /// SpawnManager struct offsets keyed by name.
     pub spawn_manager: HashMap<String, usize>,
 }
 
 impl OffsetDatabase {
+    /// Load an offset database from a JSON file on disk.
     pub fn load_from_file(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let db: Self = serde_json::from_str(&content)?;
         Ok(db)
     }
 
+    /// Serialize and write this database to a JSON file.
     pub fn save_to_file(&self, path: &Path) -> anyhow::Result<()> {
         let content = serde_json::to_string_pretty(self)?;
         std::fs::write(path, content)?;
         Ok(())
     }
 
+    /// Look up a global pointer address by name.
     pub fn get_global(&self, name: &str) -> Option<u64> {
         self.globals.get(name).copied()
     }
 
+    /// Look up a PlayerBase field offset by name.
     pub fn get_player_base_offset(&self, name: &str) -> Option<usize> {
         self.player_base.get(name).copied()
     }
 
+    /// Look up a PlayerZoneClient field offset by name.
     pub fn get_player_zone_offset(&self, name: &str) -> Option<usize> {
         self.player_zone.get(name).copied()
     }
 
+    /// Convert a preferred-base address to a runtime address using this database's preferred base.
     pub fn rebase(&self, preferred_addr: u64, actual_base: u64) -> Option<usize> {
         let offset = preferred_addr.checked_sub(self.eq_preferred_base)?;
         Some((actual_base + offset) as usize)

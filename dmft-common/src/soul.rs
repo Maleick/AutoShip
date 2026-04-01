@@ -259,17 +259,25 @@ pub enum SayChannel {
 /// Actions the Soul Engine can request the orchestrator to execute.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SoulAction {
-    /// Send a chat message on a channel
+    /// Send a chat message on a channel.
     Say {
+        /// Chat channel to use.
         channel: SayChannel,
+        /// Message text to send.
         message: String,
-        /// For tells — the target player name
+        /// For tells — the target player name.
         target: Option<String>,
     },
-    /// Perform an emote
-    Emote { emote: String },
-    /// Start an idle behavior
-    StartIdle { behavior: IdleBehaviorType },
+    /// Perform an emote.
+    Emote {
+        /// Emote name (e.g. "dance", "bow").
+        emote: String,
+    },
+    /// Start an idle behavior.
+    StartIdle {
+        /// The idle behavior to perform.
+        behavior: IdleBehaviorType,
+    },
     /// Stop current idle behavior and return to normal
     StopIdle,
 }
