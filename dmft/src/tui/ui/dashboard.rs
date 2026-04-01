@@ -10,7 +10,7 @@ use ratatui::{
 
 use super::widgets::{
     WIDTH_OVERVIEW_STACK, WIDTH_SHOW_CLASS_COL, WIDTH_SHOW_GROUP_COL, WIDTH_SHOW_ZONE_COL,
-    WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, hp_color, panel, stand_state_color,
+    WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, hp_color, panel, render_cast_bar, stand_state_color,
     themed_header_row,
 };
 use crate::eq::structs::{EqClass, StandState};
@@ -659,7 +659,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
             ),
         ])]
     } else {
-        vec![
+        let mut lines = vec![
             Line::from(vec![
                 Span::styled(
                     name,
@@ -734,14 +734,36 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                 Span::styled("  To ", Style::default().fg(t.text_muted)),
                 Span::styled(nav_destination, Style::default().fg(t.text_secondary)),
             ]),
-            Line::from(vec![
+        ];
+
+        if let Some(cast_display) = app.client_cast_display(client) {
+            lines.push(render_cast_bar(
+                &cast_display,
+                inner.width as usize,
+                if cast_display.exact {
+                    t.hp_high
+                } else {
+                    t.text_highlight
+                },
+                if cast_display.exact {
+                    t.hp_high
+                } else {
+                    t.text_accent
+                },
+                t.text_secondary,
+                t.text_muted,
+            ));
+        } else {
+            lines.push(Line::from(vec![
                 Span::styled("Pos  ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     format!("y:{:.0} x:{:.0} z:{:.0}", player.y, player.x, player.z),
                     Style::default().fg(t.text_secondary),
                 ),
-            ]),
-        ]
+            ]));
+        }
+
+        lines
     };
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
