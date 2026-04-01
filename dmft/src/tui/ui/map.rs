@@ -183,6 +183,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let view_label = map_view_transform
         .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
         .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
+    let mesh_label = format!(" | Mesh: {} {} [n]", mesh_cache_label, overlay_label);
     let map_info = app
         .map_state
         .zone_map
