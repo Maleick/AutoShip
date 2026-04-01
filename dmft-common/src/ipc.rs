@@ -199,6 +199,47 @@ pub fn session_id_from_token(token: &SessionToken) -> u64 {
     u64::from_le_bytes(token[..8].try_into().unwrap())
 }
 
+/// Generate a cryptographically random 32-byte session token using OS entropy.
+pub fn generate_random_token() -> SessionToken {
+    use rand::RngCore;
+    let mut token = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut token);
+    token
+}
+
+/// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
+/// Must be called BEFORE injection.
+pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
+    let token_dir = std::env::temp_dir().join("dmft");
+    std::fs::create_dir_all(&token_dir)?;
+    let token_path = token_dir.join(format!("token_{}.bin", pid));
+
+    let token = generate_random_token();
+
+    std::fs::write(&token_path, token)?;
+    // Also cache in memory for later --login-pid calls in the same process
+    let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
+    std::fs::write(&login_token_path, token)?;
+
+    Ok(())
+}
+
+/// Read the session token for authenticating with an already-injected DLL.
+pub fn load_session_token(pid: u32) -> Option<SessionToken> {
+    let token_path = std::env::temp_dir()
+        .join("dmft")
+        .join(format!("login_token_{}.bin", pid));
+
+    if let Ok(data) = std::fs::read(&token_path)
+        && data.len() == 32
+    {
+        let mut token = [0u8; 32];
+        token.copy_from_slice(&data);
+        return Some(token);
+    }
+    None
+}
+
 /// Build a per-client pipe name incorporating a random session ID.
 /// Format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
 pub fn pipe_name(session_id: u64, client_id: u32) -> String {

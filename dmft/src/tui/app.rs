@@ -2655,34 +2655,6 @@ fn generate_demo_hex_data(name: &str, spawn_id: u32) -> Vec<u8> {
     data
 }
 
-/// Load the disk-based session token for IPC auth.
-/// The token was written by --inject-pid (via write_session_token_file) before DLL injection.
-fn generate_session_token(pid: u32) -> [u8; 32] {
-    let token_path = std::env::temp_dir()
-        .join("dmft")
-        .join(format!("token_{}.bin", pid));
-
-    if let Ok(data) = std::fs::read(&token_path)
-        && data.len() == 32
-    {
-        let mut token = [0u8; 32];
-        token.copy_from_slice(&data);
-        return token;
-    }
-
-    // Fallback: PID-derived (won't match DLL's random token — will fail auth)
-    tracing::warn!(
-        pid,
-        "No session token file found for TUI — auth will likely fail"
-    );
-    let pid_bytes = pid.to_le_bytes();
-    let mut token = [0u8; 32];
-    for (i, byte) in token.iter_mut().enumerate() {
-        *byte = pid_bytes[i % 4] ^ (i as u8);
-    }
-    token
-}
-
 /// Extract account number from a character name or window title.
 /// Looks for trailing digits (e.g., "frostreaver05" → 5).
 pub fn extract_account_number(name: &str) -> Option<u8> {
@@ -2712,7 +2684,7 @@ fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
 fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result<()> {
     use crate::ipc::pipe::CommandPipe;
 
-    let token = generate_session_token(pid);
+    let token = crate::ipc::load_session_token(pid).unwrap_or([0u8; 32]);
     let session_id = dmft_common::ipc::session_id_from_token(&token);
     let pipe = CommandPipe::connect(pid, session_id)?;
     pipe.send_raw_token(&token)?;

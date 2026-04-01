@@ -1,8 +1,96 @@
 use dmft::cli;
 
 use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt};
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Args {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    /// One-shot CLI dump mode
+    #[arg(short, long)]
+    dump: bool,
+
+    /// Inject into eqgame.exe processes
+    #[arg(short, long)]
+    inject: bool,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Launch the TUI dashboard (default)
+    Tui,
+    /// Inject into eqgame.exe processes
+    Inject {
+        /// Optional PID to inject into a specific process only
+        #[arg(long)]
+        pid: Option<u32>,
+    },
+    /// Automated login
+    Login {
+        /// Account name from config/accounts.toml
+        account: String,
+        /// Server name (default: "Firiona Vie")
+        #[arg(long, default_value = "Firiona Vie")]
+        server: String,
+        /// Character name
+        #[arg(long)]
+        character: Option<String>,
+        /// Optional PID to target a specific process only
+        #[arg(long)]
+        pid: Option<u32>,
+    },
+    /// Send a slash command to a PID
+    Cmd {
+        /// Target PID
+        pid: u32,
+        /// Slash command (e.g., "/sit")
+        command: String,
+    },
+    /// Navigate to coordinates
+    Nav {
+        /// Target PID
+        pid: u32,
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+    /// Navigate ALL clients to coordinates
+    NavAll {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+    /// Navigate between zones
+    NavPath {
+        zone: String,
+        x1: f32,
+        y1: f32,
+        z1: f32,
+        x2: f32,
+        y2: f32,
+        z2: f32,
+    },
+    /// Query player status for a PID
+    Status {
+        /// Target PID
+        pid: u32,
+    },
+    /// Summary table for all EQ clients
+    StatusAll,
+    /// Query the zone adjacency graph from an injected client
+    Zones {
+        /// Target PID
+        pid: u32,
+    },
+    /// Calibrate login addresses for all processes
+    Calibrate,
+}
 
 fn main() -> Result<()> {
     // Set up file logging — must be done before anything else.
@@ -26,175 +114,52 @@ fn main() -> Result<()> {
 
     tracing::info!("DMFT orchestrator starting");
 
-    let args: Vec<String> = std::env::args().collect();
-    let dump_mode = args.iter().any(|a| a == "--dump");
-    let inject_mode = args.iter().any(|a| a == "--inject" || a == "inject");
-    let inject_pid_mode = args.iter().position(|a| a == "--inject-pid");
-    let calibrate_mode = args.iter().any(|a| a == "--calibrate");
-    let login_mode = args.iter().position(|a| a == "--login");
-    let login_pid_mode = args.iter().position(|a| a == "--login-pid");
-    let cmd_mode = args.iter().position(|a| a == "--cmd");
-    let nav_mode = args.iter().position(|a| a == "--nav");
-    let navpath_mode = args.iter().position(|a| a == "--navpath");
-    let navall_mode = args.iter().position(|a| a == "--navall");
-    let status_mode = args.iter().position(|a| a == "--status");
-    let statusall_mode = args.iter().any(|a| a == "--statusall");
-    let zones_mode = args.iter().position(|a| a == "--zones");
+    let args = Args::parse();
 
-    if let Some(pos) = zones_mode {
-        let pid: u32 = args
-            .get(pos + 1)
-            .context("--zones requires: --zones <PID>")?
-            .parse()
-            .context("PID must be a number")?;
-        cli::run_zones_mode(pid)
-    } else if statusall_mode {
-        cli::run_statusall_mode()
-    } else if let Some(pos) = status_mode {
-        let pid: u32 = args
-            .get(pos + 1)
-            .context("--status requires: --status <PID>")?
-            .parse()
-            .context("PID must be a number")?;
-        cli::run_status_mode(pid)
-    } else if calibrate_mode {
-        cli::run_calibrate_mode()
-    } else if let Some(pos) = login_pid_mode {
-        // --login-pid <PID> <account> [server] [character]
-        let pid: u32 = args
-            .get(pos + 1)
-            .context("--login-pid requires: --login-pid <PID> <account> [server] [character]")?
-            .parse()
-            .context("PID must be a number")?;
-        let account = args
-            .get(pos + 2)
-            .context("--login-pid requires: --login-pid <PID> <account>")?
-            .clone();
-        let password =
-            rpassword::prompt_password("Password: ").context("Failed to read password")?;
-        let server = args
-            .get(pos + 3)
-            .cloned()
-            .unwrap_or_else(|| "Firiona Vie".to_string());
-        let character = args.get(pos + 4).cloned().unwrap_or_default();
-        cli::run_login_pid_mode(pid, &account, &password, &server, &character)
-    } else if let Some(pos) = login_mode {
-        // --login <account> [server] [character]
-        let account = args
-            .get(pos + 1)
-            .context("--login requires: --login <account> [server] [character]")?
-            .clone();
-        let password =
-            rpassword::prompt_password("Password: ").context("Failed to read password")?;
-        let server = args
-            .get(pos + 2)
-            .cloned()
-            .unwrap_or_else(|| "Firiona Vie".to_string());
-        let character = args.get(pos + 3).cloned().unwrap_or_default();
-        cli::run_login_mode(&account, &password, &server, &character)
-    } else if let Some(pos) = cmd_mode {
-        // --cmd <pid> "<slash command>"
-        let pid: u32 = args
-            .get(pos + 1)
-            .context("--cmd requires: --cmd <pid> <command>")?
-            .parse()
-            .context("PID must be a number")?;
-        let command = args
-            .get(pos + 2)
-            .context("--cmd requires: --cmd <pid> <command>")?
-            .clone();
-        cli::run_cmd_mode(pid, &command)
-    } else if let Some(pos) = nav_mode {
-        // --nav <PID> <x> <y> <z> — navigate to coordinates
-        let pid: u32 = args
-            .get(pos + 1)
-            .context("--nav requires: --nav <PID> <x> <y> <z>")?
-            .parse()
-            .context("PID must be a number")?;
-        let x: f32 = args
-            .get(pos + 2)
-            .context("--nav requires: --nav <PID> <x> <y> <z>")?
-            .parse()
-            .context("x must be a number")?;
-        let y: f32 = args
-            .get(pos + 3)
-            .context("--nav requires: --nav <PID> <x> <y> <z>")?
-            .parse()
-            .context("y must be a number")?;
-        let z: f32 = args
-            .get(pos + 4)
-            .context("--nav requires: --nav <PID> <x> <y> <z>")?
-            .parse()
-            .context("z must be a number")?;
-        cli::run_nav_mode(pid, x, y, z)
-    } else if let Some(pos) = navall_mode {
-        // --navall <x> <y> <z> — navigate all EQ clients to coordinates
-        let x: f32 = args
-            .get(pos + 1)
-            .context("--navall requires: --navall <x> <y> <z>")?
-            .parse()
-            .context("x must be a number")?;
-        let y: f32 = args
-            .get(pos + 2)
-            .context("--navall requires: --navall <x> <y> <z>")?
-            .parse()
-            .context("y must be a number")?;
-        let z: f32 = args
-            .get(pos + 3)
-            .context("--navall requires: --navall <x> <y> <z>")?
-            .parse()
-            .context("z must be a number")?;
-        cli::run_navall_mode(x, y, z)
-    } else if let Some(pos) = inject_pid_mode {
-        // --inject-pid <PID> — inject into a specific process only
-        let pid: u32 = args
-            .get(pos + 1)
-            .context("--inject-pid requires: --inject-pid <PID>")?
-            .parse()
-            .context("PID must be a number")?;
-        cli::run_inject_pid_mode(pid)
-    } else if inject_mode {
-        cli::run_inject_mode()
-    } else if let Some(pos) = navpath_mode {
-        // --navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>
-        let zone = args
-            .get(pos + 1)
-            .context("--navpath requires: --navpath <zone> <x1> <y1> <z1> <x2> <y2> <z2>")?
-            .clone();
-        let x1: f32 = args
-            .get(pos + 2)
-            .context("missing x1")?
-            .parse()
-            .context("x1 not a number")?;
-        let y1: f32 = args
-            .get(pos + 3)
-            .context("missing y1")?
-            .parse()
-            .context("y1 not a number")?;
-        let z1: f32 = args
-            .get(pos + 4)
-            .context("missing z1")?
-            .parse()
-            .context("z1 not a number")?;
-        let x2: f32 = args
-            .get(pos + 5)
-            .context("missing x2")?
-            .parse()
-            .context("x2 not a number")?;
-        let y2: f32 = args
-            .get(pos + 6)
-            .context("missing y2")?
-            .parse()
-            .context("y2 not a number")?;
-        let z2: f32 = args
-            .get(pos + 7)
-            .context("missing z2")?
-            .parse()
-            .context("z2 not a number")?;
-        cli::run_navpath_mode(&zone, (x1, y1, z1), (x2, y2, z2))
-    } else if dump_mode {
-        cli::run_dump_mode()
-    } else {
-        cli::run_tui_mode()
+    match args.command {
+        Some(Commands::Tui) => cli::run_tui_mode(),
+        Some(Commands::Inject { pid: Some(pid) }) => cli::run_inject_pid_mode(pid),
+        Some(Commands::Inject { pid: None }) => cli::run_inject_mode(),
+        Some(Commands::Login {
+            account,
+            server,
+            character,
+            pid,
+        }) => {
+            let password =
+                rpassword::prompt_password("Password: ").context("Failed to read password")?;
+            let character = character.unwrap_or_default();
+            if let Some(pid) = pid {
+                cli::run_login_pid_mode(pid, &account, &password, &server, &character)
+            } else {
+                cli::run_login_mode(&account, &password, &server, &character)
+            }
+        }
+        Some(Commands::Cmd { pid, command }) => cli::run_cmd_mode(pid, &command),
+        Some(Commands::Nav { pid, x, y, z }) => cli::run_nav_mode(pid, x, y, z),
+        Some(Commands::NavAll { x, y, z }) => cli::run_navall_mode(x, y, z),
+        Some(Commands::NavPath {
+            zone,
+            x1,
+            y1,
+            z1,
+            x2,
+            y2,
+            z2,
+        }) => cli::run_navpath_mode(&zone, (x1, y1, z1), (x2, y2, z2)),
+        Some(Commands::Status { pid }) => cli::run_status_mode(pid),
+        Some(Commands::StatusAll) => cli::run_statusall_mode(),
+        Some(Commands::Zones { pid }) => cli::run_zones_mode(pid),
+        Some(Commands::Calibrate) => cli::run_calibrate_mode(),
+        None => {
+            // Check top-level flags for backward compatibility
+            if args.dump {
+                cli::run_dump_mode()
+            } else if args.inject {
+                cli::run_inject_mode()
+            } else {
+                cli::run_tui_mode()
+            }
+        }
     }
 }

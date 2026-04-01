@@ -21,6 +21,7 @@ aes-gcm = "0.10"
 argon2 = "0.5"
 rpassword = "7"
 rand = "0.8"
+clap = { version = "4.5", features = ["derive"] }
 zeroize = { version = "1", features = ["alloc"] }
 prost = "0.13"
 flate2 = "1"
