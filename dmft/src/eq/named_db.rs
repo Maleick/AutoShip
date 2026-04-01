@@ -1,4 +1,4 @@
-//! Named mob database — loads per-zone TOML files from config/named_mobs/.
+//! Named mob database — loads per-zone TOML files from `config/named_mobs`/.
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -9,33 +9,45 @@ use std::path::Path;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NamedPriority {
+    /// Kill on sight — rare drops, quest targets.
     High,
+    /// Worth pulling if nearby, but not worth hunting.
     Medium,
+    /// Track for information, low priority to engage.
     Low,
 }
 
 /// A single named mob entry from a zone TOML file.
 #[derive(Debug, Clone, Deserialize)]
 pub struct NamedMobEntry {
+    /// Display name of the named mob.
     pub name: String,
+    /// Expected level of the mob.
     pub level: u8,
+    /// Minimum respawn time in minutes.
     pub respawn_min_minutes: u32,
+    /// Maximum respawn time in minutes.
     pub respawn_max_minutes: u32,
+    /// Known spawn location as `[x, y, z]`.
     pub location: [f32; 3],
+    /// Notable drops from this mob.
     #[serde(default)]
     pub drops: Vec<String>,
+    /// Priority level for pull target selection.
     pub priority: NamedPriority,
 }
 
 impl NamedMobEntry {
-    /// Convert respawn_min_minutes to ticks (at 250ms per tick = 4 ticks/sec).
+    /// Convert `respawn_min_minutes` to ticks (at 250ms per tick = 4 ticks/sec).
+    #[must_use]
     pub fn respawn_min_ticks(&self) -> u64 {
-        self.respawn_min_minutes as u64 * 60 * 4
+        u64::from(self.respawn_min_minutes) * 60 * 4
     }
 
-    /// Convert respawn_max_minutes to ticks.
+    /// Convert `respawn_max_minutes` to ticks.
+    #[must_use]
     pub fn respawn_max_ticks(&self) -> u64 {
-        self.respawn_max_minutes as u64 * 60 * 4
+        u64::from(self.respawn_max_minutes) * 60 * 4
     }
 }
 
@@ -49,7 +61,7 @@ struct ZoneFile {
 /// Database of all named mobs across all zones.
 #[derive(Debug, Clone)]
 pub struct NamedMobDatabase {
-    /// Keyed by (zone_lowercase, name_lowercase).
+    /// Keyed by (`zone_lowercase`, `name_lowercase`).
     entries: HashMap<(String, String), NamedMobEntry>,
     /// All entries for a given zone.
     by_zone: HashMap<String, Vec<NamedMobEntry>>,
@@ -57,6 +69,10 @@ pub struct NamedMobDatabase {
 
 impl NamedMobDatabase {
     /// Load all zone TOML files from a directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(dir: &Path) -> Result<Self> {
         let mut entries = HashMap::new();
         let mut by_zone: HashMap<String, Vec<NamedMobEntry>> = HashMap::new();
@@ -92,6 +108,7 @@ impl NamedMobDatabase {
     }
 
     /// Look up a named mob by zone and name (case-insensitive).
+    #[must_use]
     pub fn get(&self, zone: &str, name: &str) -> Option<&NamedMobEntry> {
         self.entries
             .get(&(zone.to_ascii_lowercase(), name.to_ascii_lowercase()))
@@ -101,21 +118,24 @@ impl NamedMobDatabase {
     pub fn for_zone(&self, zone: &str) -> &[NamedMobEntry] {
         self.by_zone
             .get(&zone.to_ascii_lowercase())
-            .map(|v| v.as_slice())
+            .map(std::vec::Vec::as_slice)
             .unwrap_or(&[])
     }
 
     /// Total number of entries.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Whether the database is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Number of zones loaded.
+    #[must_use]
     pub fn zone_count(&self) -> usize {
         self.by_zone.len()
     }

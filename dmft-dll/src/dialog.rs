@@ -1,7 +1,7 @@
 //! Auto-accept dialog handling.
 //!
 //! Scans for common EQ dialog windows (group invite, trade, task, resurrect, etc.)
-//! and automatically clicks the accept/yes button. Similar to MQ2AutoAccept.
+//! and automatically clicks the accept/yes button. Similar to `MQ2AutoAccept`.
 //!
 //! Only active when in-world (local player != null) and enabled via IPC command.
 //! Called from the game loop tick every 30 ticks (~1 second) to avoid spam.
@@ -23,7 +23,7 @@ pub fn is_enabled() -> bool {
 }
 
 /// Known dialog windows and their accept button SIDL names.
-/// Format: (parent_sidl_name, accept_button_sidl_name)
+/// Format: (`parent_sidl_name`, `accept_button_sidl_name`)
 ///
 /// These are stable SIDL names from EQ's UI XML definitions.
 /// We intentionally exclude dangerous dialogs (delete character, etc.).
@@ -49,7 +49,7 @@ const DIALOG_ACCEPT_PAIRS: &[(&str, &str)] = &[
 /// Only scans when in-world and auto-accept is enabled.
 ///
 /// # Safety
-/// Requires valid eqgame CXWndManager pointer. Must be called from game loop thread.
+/// Requires valid eqgame `CXWndManager` pointer. Must be called from game loop thread.
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn check_dialogs() {
@@ -65,19 +65,18 @@ pub unsafe fn check_dialogs() {
     // Only scan when in-world (local player exists)
     let local_player =
         dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
-            .map(|addr| *(addr as *const usize))
-            .unwrap_or(0);
+            .map_or(0, |addr| *(addr as *const usize));
 
     if local_player == 0 {
         return;
     }
 
     // Get eqgame CXWndManager
-    let mgr_ptr_addr =
-        match dmft_common::offsets::rebase(dmft_common::offsets::PINST_CXWND_MANAGER, eq_base) {
-            Some(addr) => addr,
-            None => return,
-        };
+    let Some(mgr_ptr_addr) =
+        dmft_common::offsets::rebase(dmft_common::offsets::PINST_CXWND_MANAGER, eq_base)
+    else {
+        return;
+    };
 
     let mgr = *(mgr_ptr_addr as *const usize);
     if mgr == 0 {

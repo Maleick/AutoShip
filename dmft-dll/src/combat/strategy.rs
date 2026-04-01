@@ -74,7 +74,7 @@ pub trait ClassStrategy: Send {
     /// Override to advance internal state (e.g., bard twist index, auto-attack toggle).
     fn on_action_complete(&mut self, _ctx: &CombatContext) {}
 
-    /// Minimum enemy count before switching to AoE rotation.
+    /// Minimum enemy count before switching to `AoE` rotation.
     fn aoe_threshold(&self) -> u8;
 
     /// Combat role for this strategy.
@@ -106,7 +106,7 @@ pub fn assist_target(ctx: &CombatContext) -> Option<u32> {
     ctx.target.map(|t| t.spawn_id)
 }
 
-/// Common on_engage for melee classes: log engagement and enable auto-attack.
+/// Common `on_engage` for melee classes: log engagement and enable auto-attack.
 pub fn melee_on_engage(ctx: &CombatContext, class_label: &str) {
     if let Some(target) = ctx.target {
         tracing::info!(

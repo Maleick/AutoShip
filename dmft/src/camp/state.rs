@@ -10,7 +10,7 @@
 //!
 //! - **Combatant FSM** (`dmft-dll/src/combat/state.rs`, DLL-side): Handles micro-level
 //!   execution per character — class strategy spell rotations, melee skill firing, GCD
-//!   tracking, mana governance, and HolyShit emergency overrides.
+//!   tracking, mana governance, and `HolyShit` emergency overrides.
 //!
 //! Both are needed: the camp loop orchestrates the group, the combatant executes per-character
 //! combat logic. Integration point: `transition_to_fighting()` sends slash commands AND should
@@ -34,11 +34,22 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CampEvent {
     /// A charm has broken — immediate emergency CC needed.
-    CharmBreak { spawn_id: u32 },
+    CharmBreak {
+        /// Spawn ID of the mob whose charm broke.
+        spawn_id: u32,
+    },
     /// A new add has spawned or aggroed within camp radius.
-    AddSpawned { spawn_id: u32, name: String },
+    AddSpawned {
+        /// Spawn ID of the new add.
+        spawn_id: u32,
+        /// Display name of the add.
+        name: String,
+    },
     /// A CC effect is about to expire on a mob.
-    CcExpiring { spawn_id: u32 },
+    CcExpiring {
+        /// Spawn ID of the mob whose CC is about to expire.
+        spawn_id: u32,
+    },
 }
 
 /// Real-time game state snapshot for the camp loop.
@@ -46,11 +57,15 @@ pub enum CampEvent {
 /// instead of fixed tick timers.
 #[derive(Debug, Clone)]
 pub struct CampSnapshot {
+    /// Healer's current mana as a percentage (0.0-100.0).
     pub healer_mana_pct: f32,
+    /// Tank's current HP as a percentage (0.0-100.0).
     pub tank_hp_pct: f32,
+    /// Current target's HP percentage, if a target exists.
     pub target_hp_pct: Option<f32>,
+    /// Whether the current target is dead.
     pub target_is_dead: bool,
-    /// Spawn ID of the tank's current target (for CombatEngage commands).
+    /// Spawn ID of the tank's current target (for `CombatEngage` commands).
     pub target_spawn_id: Option<u32>,
     /// Per-member HP values: `(pid, current_hp)`. Used to detect deaths
     /// and trigger recovery (rez commands). Empty when HP data is unavailable.
@@ -65,13 +80,17 @@ pub enum CampAction {
     /// A slash command string (e.g., "/attack", "/assist Tankname").
     Slash(String),
     /// Engage the Combatant FSM against a specific spawn.
-    CombatEngage { target_id: u32 },
+    CombatEngage {
+        /// Spawn ID of the target to engage.
+        target_id: u32,
+    },
     /// Disengage the Combatant FSM.
     CombatDisengage,
 }
 
 impl CampAction {
-    /// Helper to convert a vec of slash command strings into CampActions.
+    /// Helper to convert a vec of slash command strings into `CampActions`.
+    #[must_use]
     pub fn from_slash_vec(cmds: Vec<(u32, String)>) -> Vec<(u32, CampAction)> {
         cmds.into_iter()
             .map(|(pid, cmd)| (pid, CampAction::Slash(cmd)))
@@ -79,6 +98,7 @@ impl CampAction {
     }
 
     /// Extract the slash command string, if this is a Slash action.
+    #[must_use]
     pub fn as_slash(&self) -> Option<&str> {
         match self {
             CampAction::Slash(s) => Some(s),
@@ -87,11 +107,13 @@ impl CampAction {
     }
 
     /// Check if this action's slash text contains a substring.
+    #[must_use]
     pub fn contains(&self, needle: &str) -> bool {
         self.as_slash().is_some_and(|s| s.contains(needle))
     }
 
     /// Check if this action's slash text starts with a prefix.
+    #[must_use]
     pub fn starts_with(&self, prefix: &str) -> bool {
         self.as_slash().is_some_and(|s| s.starts_with(prefix))
     }
@@ -112,36 +134,58 @@ impl PartialEq<str> for CampAction {
 /// Current phase of the camp loop.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CampState {
+    /// Waiting for the next pull cycle.
     Idle,
-    Pulling { started_tick: u64 },
-    Fighting { started_tick: u64 },
-    Looting { started_tick: u64 },
-    Medding { started_tick: u64 },
-    Buffing { started_tick: u64 },
+    /// Puller is out pulling a mob back to camp.
+    Pulling { /// Tick when pull started.
+        started_tick: u64 },
+    /// Group is actively fighting a mob.
+    Fighting { /// Tick when fight started.
+        started_tick: u64 },
+    /// Looting corpses after a kill.
+    Looting { /// Tick when loot phase started.
+        started_tick: u64 },
+    /// Medding up mana/HP between pulls.
+    Medding { /// Tick when med phase started.
+        started_tick: u64 },
+    /// Applying pre-pull buffs.
+    Buffing { /// Tick when buff phase started.
+        started_tick: u64 },
 }
 
 /// Role a group member fills in the camp loop.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
+    /// Main tank — holds aggro and takes damage.
     Tank,
+    /// Primary healer — keeps the tank alive.
     Healer,
+    /// Crowd control — mezzes and roots adds.
     CC,
+    /// Damage dealer — kills the target.
     Dps,
+    /// Puller — fetches mobs back to camp.
     Puller,
+    /// Bard — songs, crowd control, and pulling support.
     Bard,
 }
 
 /// A single member of the camp group.
 #[derive(Debug, Clone)]
 pub struct CampMember {
+    /// OS process ID for this member's EQ client.
     pub pid: u32,
+    /// Character name.
     pub name: String,
+    /// Assigned role in the camp group.
     pub role: Role,
+    /// Personality profile for humanization and idle behavior.
     pub personality: PersonalityProfile,
 }
 
 impl CampMember {
     /// Create a new camp member with an auto-generated personality from their name.
+    #[must_use]
     pub fn new(pid: u32, name: String, role: Role) -> Self {
         let personality = PersonalityProfile::generate(&name);
         Self {
@@ -166,13 +210,21 @@ const CC_REMEZ_BUFFER: u64 = 3;
 /// The camp loop state machine. Each `tick()` call advances state and
 /// returns slash commands to send to EQ clients via IPC.
 pub struct CampLoop {
+    /// Camp configuration (pull range, med threshold, etc.).
     pub config: CampConfig,
+    /// Current camp loop phase.
     pub state: CampState,
+    /// Group members participating in this camp.
     pub members: Vec<CampMember>,
+    /// Monotonic tick counter for phase timing.
     pub tick: u64,
+    /// Name of the last mob pulled.
     pub last_pull_target: String,
+    /// Crowd control state tracker for mezz/root durations.
     pub cc_tracker: CcTracker,
+    /// Members designated for CC duty.
     pub cc_members: Vec<CcMember>,
+    /// Queued events to process on the next tick.
     pub pending_events: Vec<CampEvent>,
     /// Loot configuration for the camp.
     pub loot_config: LootConfig,
@@ -191,6 +243,8 @@ pub struct CampLoop {
 }
 
 impl CampLoop {
+    /// Creates a new camp loop with the given config and group members.
+    #[must_use]
     pub fn new(config: CampConfig, members: Vec<CampMember>) -> Self {
         let recovery_members: Vec<(u32, String)> =
             members.iter().map(|m| (m.pid, m.name.clone())).collect();
@@ -343,16 +397,14 @@ impl CampLoop {
             CampState::Idle => {
                 // Only pull if healer has enough mana (when we know).
                 // Apply healer's personality jitter to the threshold.
-                let pull_threshold = self
-                    .find_by_role(&Role::Healer)
-                    .map(|h| {
+                let pull_threshold = self.find_by_role(&Role::Healer).map_or(
+                    f32::from(self.config.pull_mana_pct),
+                    |h| {
                         h.personality
-                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
-                    })
-                    .unwrap_or(self.config.pull_mana_pct as f32);
-                let healer_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= pull_threshold)
-                    .unwrap_or(true);
+                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
+                    },
+                );
+                let healer_ready = snapshot.is_none_or(|s| s.healer_mana_pct >= pull_threshold);
                 if healer_ready {
                     self.transition_to_pulling(&mut commands);
                 }
@@ -426,16 +478,14 @@ impl CampLoop {
             CampState::Medding { started_tick } => {
                 // Transition when healer mana is above pull threshold (real data) or timer (fallback).
                 // Apply healer's personality jitter to the threshold.
-                let med_threshold = self
-                    .find_by_role(&Role::Healer)
-                    .map(|h| {
+                let med_threshold = self.find_by_role(&Role::Healer).map_or(
+                    f32::from(self.config.pull_mana_pct),
+                    |h| {
                         h.personality
-                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
-                    })
-                    .unwrap_or(self.config.pull_mana_pct as f32);
-                let mana_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= med_threshold)
-                    .unwrap_or(false);
+                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
+                    },
+                );
+                let mana_ready = snapshot.is_some_and(|s| s.healer_mana_pct >= med_threshold);
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
                 if mana_ready || timer_expired {
                     // Check if any buffs need refreshing before going idle
@@ -542,10 +592,10 @@ impl CampLoop {
         }
 
         // DPS assists tank and attacks
-        let assist_name = if !tank_name.is_empty() {
-            &tank_name
-        } else {
+        let assist_name = if tank_name.is_empty() {
             &puller_name
+        } else {
+            &tank_name
         };
 
         for dps in self.find_all_by_role(&Role::Dps) {
@@ -587,13 +637,13 @@ impl CampLoop {
         // Create a loot cycle from pending corpses.
         // If no corpses recorded, fall back to the last pull target as a single corpse.
         let corpses = if self.pending_corpses.is_empty() {
-            if !self.last_pull_target.is_empty() {
+            if self.last_pull_target.is_empty() {
+                Vec::new()
+            } else {
                 vec![CorpseEntry {
                     spawn_id: 0,
                     mob_name: self.last_pull_target.clone(),
                 }]
-            } else {
-                Vec::new()
             }
         } else {
             self.pending_corpses.drain(..).collect()

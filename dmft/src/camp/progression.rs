@@ -10,35 +10,54 @@ use std::path::Path;
 pub enum CampProgressionEvent {
     /// Group has outleveled the current camp — advance to next.
     AdvanceToNext {
+        /// Name of the camp being left.
         from_camp: String,
+        /// Name of the camp to advance to.
         to_camp: String,
+        /// Current average group level.
         avg_level: f32,
     },
     /// Group is underleveled for current camp — fall back to previous.
     FallbackToPrev {
+        /// Name of the camp being left.
         from_camp: String,
+        /// Name of the camp to fall back to.
         to_camp: String,
+        /// Current average group level.
         avg_level: f32,
     },
     /// No next/prev camp configured — end of progression chain.
-    EndOfChain { camp: String, avg_level: f32 },
+    EndOfChain {
+        /// Name of the current (terminal) camp.
+        camp: String,
+        /// Current average group level.
+        avg_level: f32,
+    },
 }
 
 /// Database of all known camp configurations, loaded from `config/camps/`.
 pub struct CampDatabase {
     /// Camp configs keyed by their file name (without `.toml`).
     camps: HashMap<String, CampConfig>,
-    /// Ordered list of camp names by level_range[0] (ascending).
+    /// Ordered list of camp names by `level_range`[0] (ascending).
     by_level: Vec<String>,
 }
 
 impl CampDatabase {
     /// Load all `.toml` files from `config/camps/` into memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load() -> Result<Self> {
         Self::load_from(Path::new("config/camps"))
     }
 
     /// Load from a specific directory (for testing).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load_from(dir: &Path) -> Result<Self> {
         let mut camps = HashMap::new();
 
@@ -76,26 +95,31 @@ impl CampDatabase {
     }
 
     /// Get a camp config by name.
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&CampConfig> {
         self.camps.get(name)
     }
 
     /// List all camp names, sorted by minimum level.
+    #[must_use]
     pub fn list_by_level(&self) -> &[String] {
         &self.by_level
     }
 
     /// Number of loaded camps.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.camps.len()
     }
 
     /// Whether the database is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.camps.is_empty()
     }
 
     /// Find the best camp for a given average level.
+    #[must_use]
     pub fn best_camp_for_level(&self, avg_level: f32) -> Option<&CampConfig> {
         let level = avg_level as u8;
         // Find the highest-min-level camp whose range contains the level.
@@ -107,6 +131,7 @@ impl CampDatabase {
     }
 
     /// Get the next camp in the progression chain from a given camp.
+    #[must_use]
     pub fn next_camp(&self, current: &str) -> Option<&CampConfig> {
         let config = self.camps.get(current)?;
         let next_name = config.next_camp.as_deref()?;
@@ -114,6 +139,7 @@ impl CampDatabase {
     }
 
     /// Get the previous camp in the progression chain from a given camp.
+    #[must_use]
     pub fn prev_camp(&self, current: &str) -> Option<&CampConfig> {
         let config = self.camps.get(current)?;
         let prev_name = config.prev_camp.as_deref()?;
@@ -122,6 +148,7 @@ impl CampDatabase {
 }
 
 /// Checks whether a camp progression event should fire based on average group level.
+#[must_use]
 pub fn check_progression(
     current_camp: &CampConfig,
     avg_level: f32,

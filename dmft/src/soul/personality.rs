@@ -5,13 +5,21 @@ use crate::soul::config::EdginessLevel;
 
 /// Snapshot of a character's current soul state, passed to engine methods.
 pub struct SoulContext<'a> {
+    /// In-game character name.
     pub character_name: &'a str,
+    /// Big-five personality traits for this character.
     pub traits: &'a PersonalityTraits,
+    /// Current mood state.
     pub mood: MoodState,
+    /// How edgy/spicy the character's dialogue should be.
     pub edginess: EdginessLevel,
+    /// Current zone short name.
     pub zone: &'a str,
+    /// Character level.
     pub level: u8,
+    /// Whether the character is currently in combat.
     pub in_combat: bool,
+    /// Names of other group members (for social interactions).
     pub group_members: &'a [String],
 }
 
@@ -22,6 +30,8 @@ pub struct PersonalityEngine {
 }
 
 impl PersonalityEngine {
+    /// Creates a new personality engine seeded from the client ID.
+    #[must_use]
     pub fn new(client_id: u32) -> Self {
         Self {
             rng: Xorshift32::from_client_id(client_id),

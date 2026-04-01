@@ -4,18 +4,25 @@ use ratatui::widgets::TableState;
 
 use super::app::{NavClientStatus, SpawnFilter};
 use crate::eq::map_parser::ZoneMap;
+use crate::nav::mesh::NavMeshOverlay;
 
 // ─── Per-screen state sub-structs ────────────────────────────────────────────
 
 /// State for the Spawns screen — selection, filtering, and search.
 pub struct SpawnsScreenState {
+    /// Ratatui table widget state (tracks selected row and scroll offset).
     pub table_state: TableState,
+    /// Text search filter string for spawn names.
     pub spawn_filter: String,
+    /// Active spawn type filter (All, PC, NPC, Named).
     pub spawn_type_filter: SpawnFilter,
+    /// Whether the user is currently typing a search query.
     pub search_mode: bool,
 }
 
 impl SpawnsScreenState {
+    /// Creates a new spawn screen state with default filter settings.
+    #[must_use]
     pub fn new() -> Self {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
@@ -30,12 +37,17 @@ impl SpawnsScreenState {
 
 /// State for the hex dump viewer panel.
 pub struct HexDumpState {
+    /// Base address for the hex dump display.
     pub hex_address: usize,
+    /// Raw bytes to display in the hex viewer.
     pub hex_data: Vec<u8>,
+    /// Label shown above the hex dump (e.g., spawn name).
     pub hex_label: String,
 }
 
 impl HexDumpState {
+    /// Creates a new hex dump state with no data loaded.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             hex_address: 0,
@@ -45,17 +57,52 @@ impl HexDumpState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapViewportMode {
+    Auto,
+    Local,
+    Global,
+}
+
+impl MapViewportMode {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Auto => Self::Local,
+            Self::Local => Self::Global,
+            Self::Global => Self::Auto,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Local => "local",
+            Self::Global => "global",
+        }
+    }
+}
+
 /// State for the Map screen.
 pub struct MapScreenState {
+    /// Parsed zone map data (lines and points), if loaded.
     pub zone_map: Option<ZoneMap>,
+    /// Directory path where map files are stored.
     pub map_dir: std::path::PathBuf,
     /// The zone short name currently loaded, used to avoid redundant reloads.
     pub loaded_zone: String,
     /// Z-depth filter range — spawns farther than this from the player's Z are hidden.
     pub z_filter_range: f32,
+    pub viewport_mode: MapViewportMode,
+    pub zoom: f32,
+    pub pan_x: f32,
+    pub pan_y: f32,
+    pub show_navmesh: bool,
+    pub navmesh_overlay: Option<NavMeshOverlay>,
 }
 
 impl MapScreenState {
+    /// Creates a new map state, resolving the map directory path.
+    #[must_use]
     pub fn new() -> Self {
         let map_dir = resolve_map_dir();
         Self {
@@ -63,6 +110,12 @@ impl MapScreenState {
             map_dir,
             loaded_zone: String::new(),
             z_filter_range: 50.0,
+            viewport_mode: MapViewportMode::Auto,
+            zoom: 1.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+            show_navmesh: true,
+            navmesh_overlay: None,
         }
     }
 
@@ -75,20 +128,59 @@ impl MapScreenState {
     pub fn decrease_z_filter(&mut self) {
         self.z_filter_range = (self.z_filter_range - 10.0).max(10.0);
     }
+
+    pub fn zoom_in(&mut self) {
+        self.zoom = (self.zoom * 1.25).min(4.0);
+    }
+
+    pub fn zoom_out(&mut self) {
+        self.zoom = (self.zoom / 1.25).max(0.35);
+    }
+
+    pub fn pan(&mut self, delta_x: f32, delta_y: f32) {
+        self.pan_x += delta_x;
+        self.pan_y += delta_y;
+    }
+
+    pub fn reset_viewport(&mut self) {
+        self.zoom = 1.0;
+        self.pan_x = 0.0;
+        self.pan_y = 0.0;
+    }
+
+    pub fn cycle_viewport_mode(&mut self) -> MapViewportMode {
+        self.viewport_mode = self.viewport_mode.next();
+        self.reset_viewport();
+        self.viewport_mode
+    }
+
+    pub fn toggle_navmesh(&mut self) -> bool {
+        self.show_navmesh = !self.show_navmesh;
+        self.show_navmesh
+    }
 }
 
 /// State for the composite Overview screen.
 pub struct OverviewScreenState {
+    /// Whether the groups panel is visible.
     pub show_groups: bool,
+    /// Whether the filters/scope panel is visible.
     pub show_filters: bool,
+    /// Whether the character detail panel is collapsed.
     pub character_collapsed: bool,
+    /// Whether the groups panel is collapsed.
     pub groups_collapsed: bool,
+    /// Whether the filters panel is collapsed.
     pub filters_collapsed: bool,
+    /// Whether the combat panel is collapsed.
     pub combat_collapsed: bool,
+    /// Whether the session stats panel is collapsed.
     pub session_collapsed: bool,
 }
 
 impl OverviewScreenState {
+    /// Creates a new overview state with all panels visible and expanded.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             show_groups: true,
@@ -104,14 +196,21 @@ impl OverviewScreenState {
 
 /// State for the composite Tactical screen.
 pub struct TacticalScreenState {
+    /// Whether the map is in full-screen maximized mode.
     pub map_maximized: bool,
+    /// Whether the named mob tracker panel is visible.
     pub show_named: bool,
+    /// Whether the navigation panel is visible.
     pub show_navigation: bool,
+    /// Whether the named panel is collapsed.
     pub named_collapsed: bool,
+    /// Whether the navigation panel is collapsed.
     pub navigation_collapsed: bool,
 }
 
 impl TacticalScreenState {
+    /// Creates a new tactical state with side panels visible.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             map_maximized: false,
@@ -150,11 +249,15 @@ fn resolve_map_dir() -> std::path::PathBuf {
 
 /// State for the Navigation screen.
 pub struct NavigationScreenState {
+    /// Currently selected navigation entry index.
     pub nav_selected: usize,
+    /// Per-client navigation statuses keyed by PID.
     pub nav_statuses: HashMap<u32, NavClientStatus>,
 }
 
 impl NavigationScreenState {
+    /// Creates a new navigation state with no active statuses.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             nav_selected: 0,
@@ -165,9 +268,13 @@ impl NavigationScreenState {
 
 /// State for the command bar (: mode).
 pub struct CommandBarState {
+    /// Whether the command bar is active (user is typing).
     pub command_mode: bool,
+    /// Current text in the command input buffer.
     pub command_buffer: String,
+    /// History of previously executed commands.
     pub command_history: Vec<String>,
+    /// Index into command history for up/down navigation.
     pub command_history_idx: Option<usize>,
     /// Command usage frequency — tracks how often each command is used.
     pub command_frequency: HashMap<String, u32>,
@@ -176,6 +283,8 @@ pub struct CommandBarState {
 }
 
 impl CommandBarState {
+    /// Creates a new command bar state with empty buffer and history.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             command_mode: false,
@@ -208,12 +317,13 @@ impl CommandBarState {
         let token_count = match parts.first().copied() {
             // Group broadcast + slash: "all /sit", "G1 /follow" → keep 2
             // Single meaningful arg: "ma Warrior", "mt Tank" → keep 2
-            Some("all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6") => 2,
-            Some("ma" | "mt" | "mode" | "login" | "nav" | "track") => 2,
+            Some(
+                "all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6" | "ma" | "mt" | "mode" | "login"
+                | "nav" | "track" | "ch",
+            ) => 2,
             Some("engage") => 1,
-            // Camp/CH subcommands: "camp start permafrost" → keep all 3, "ch start 1234,5678 3.0" → keep 2
+            // Camp subcommands: "camp start permafrost" → keep all 3
             Some("camp") => 3,
-            Some("ch") => 2,
             // Everything else: just the base command
             _ => return trimmed.to_string(),
         };
@@ -234,7 +344,7 @@ impl CommandBarState {
 
     /// Get the favorite command at index (0-based, for F1=0, F2=1, etc.).
     pub fn get_favorite(&self, idx: usize) -> Option<&str> {
-        self.favorites.get(idx).map(|s| s.as_str())
+        self.favorites.get(idx).map(std::string::String::as_str)
     }
 }
 
@@ -308,5 +418,39 @@ mod tests {
             "ma Warrior"
         );
         assert_eq!(CommandBarState::normalize_command("engage 100"), "engage");
+    }
+
+    #[test]
+    fn map_viewport_mode_cycles() {
+        let mut state = MapScreenState::new();
+        assert_eq!(state.viewport_mode, MapViewportMode::Auto);
+        assert_eq!(state.cycle_viewport_mode(), MapViewportMode::Local);
+        assert_eq!(state.cycle_viewport_mode(), MapViewportMode::Global);
+        assert_eq!(state.cycle_viewport_mode(), MapViewportMode::Auto);
+    }
+
+    #[test]
+    fn map_zoom_is_clamped() {
+        let mut state = MapScreenState::new();
+        for _ in 0..20 {
+            state.zoom_in();
+        }
+        assert!((state.zoom - 4.0).abs() < f32::EPSILON);
+
+        for _ in 0..40 {
+            state.zoom_out();
+        }
+        assert!((state.zoom - 0.35).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_reset_viewport_clears_pan_and_zoom() {
+        let mut state = MapScreenState::new();
+        state.zoom_in();
+        state.pan(42.0, -18.0);
+        state.reset_viewport();
+        assert!((state.zoom - 1.0).abs() < f32::EPSILON);
+        assert!((state.pan_x - 0.0).abs() < f32::EPSILON);
+        assert!((state.pan_y - 0.0).abs() < f32::EPSILON);
     }
 }

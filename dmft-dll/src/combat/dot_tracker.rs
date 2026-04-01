@@ -1,10 +1,10 @@
-//! Tracks active DoTs on targets to prevent wasteful recasts.
+//! Tracks active `DoTs` on targets to prevent wasteful recasts.
 
 use std::collections::HashMap;
 
 /// Tracks which spells are active on which targets, with expiration ticks.
 pub struct DotTracker {
-    /// (target_spawn_id, spell_id) -> expiration_tick
+    /// (`target_spawn_id`, `spell_id`) -> `expiration_tick`
     active_dots: HashMap<(u32, i32), u32>,
 }
 
@@ -15,10 +15,10 @@ impl DotTracker {
         }
     }
 
-    /// Record that a DoT was applied to a target.
+    /// Record that a `DoT` was applied to a target.
     ///
     /// Non-positive `spell_id` values (0, -1, etc.) are ignored — they could
-    /// alias unrelated DoTs across different targets.
+    /// alias unrelated `DoTs` across different targets.
     pub fn record_dot(
         &mut self,
         target_id: u32,
@@ -33,7 +33,7 @@ impl DotTracker {
             .insert((target_id, spell_id), current_tick + duration_ticks);
     }
 
-    /// Check if a DoT is still active on a target.
+    /// Check if a `DoT` is still active on a target.
     ///
     /// Always returns `false` for non-positive `spell_id` values.
     pub fn is_dot_active(&self, target_id: u32, spell_id: i32, current_tick: u32) -> bool {

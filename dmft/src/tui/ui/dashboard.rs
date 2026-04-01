@@ -16,6 +16,7 @@ use super::widgets::{
 use crate::eq::structs::{EqClass, StandState};
 use crate::tui::app::{ActivePanel, App, ClientState};
 
+/// Draw the main overview dashboard with roster and status panels.
 pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
     let sections = overview_sections(app);
     let natural_sidebar_height = sections
@@ -151,7 +152,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                     );
                 }
                 cells.push(
-                    Cell::from(format!("{:>3.0}%", hp_pct))
+                    Cell::from(format!("{hp_pct:>3.0}%"))
                         .style(Style::default().fg(hp_color(hp_pct, t))),
                 );
                 cells.push(Cell::from(condition_label).style(condition_style));
@@ -260,8 +261,7 @@ fn group_scope_entries(app: &App) -> Vec<GroupScopeEntry> {
                 label: format!("G{} {}", group.id, group.name),
                 zone: members
                     .first()
-                    .map(|client| client.zone_name.clone())
-                    .unwrap_or_else(|| String::from("—")),
+                    .map_or_else(|| String::from("—"), |client| client.zone_name.clone()),
                 connected: members.len(),
                 members: usize::from(hi.saturating_sub(lo).saturating_add(1)),
                 active: app.active_group == Some(idx),
@@ -476,19 +476,19 @@ fn draw_dashboard_sidebar(
     for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
         match section {
             OverviewSectionKind::Character => {
-                draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed)
+                draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed);
             }
             OverviewSectionKind::Groups => {
-                draw_group_ops_summary(frame, *chunk, app, app.overview_state.groups_collapsed)
+                draw_group_ops_summary(frame, *chunk, app, app.overview_state.groups_collapsed);
             }
             OverviewSectionKind::Filters => {
-                draw_scope_summary(frame, *chunk, app, app.overview_state.filters_collapsed)
+                draw_scope_summary(frame, *chunk, app, app.overview_state.filters_collapsed);
             }
             OverviewSectionKind::Combat => {
-                draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed)
+                draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed);
             }
             OverviewSectionKind::Session => {
-                draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed)
+                draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed);
             }
         }
     }
@@ -561,8 +561,8 @@ fn preferred_height(constraint: Constraint) -> u16 {
 fn section_title(label: &str, key_hint: Option<&str>, collapsed: bool) -> String {
     let icon = if collapsed { "▶" } else { "▼" };
     match key_hint {
-        Some(key) => format!(" {} [{}] {} ", label, key, icon),
-        None => format!(" {} {} ", label, icon),
+        Some(key) => format!(" {label} [{key}] {icon} "),
+        None => format!(" {label} {icon} "),
     }
 }
 
@@ -608,39 +608,37 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
             .add_modifier(Modifier::BOLD),
         _ => Style::default().fg(t.text_muted),
     };
-    let target_name = client
-        .target
-        .as_ref()
-        .map(|target| app.redact_name(&target.displayed_name).into_owned())
-        .unwrap_or_else(|| String::from("—"));
-    let (nav_label, nav_style, nav_destination) = app
-        .nav_state
-        .nav_statuses
-        .get(&client.pid)
-        .map(|nav| {
-            let style = if nav.status.is_moving() {
-                Style::default().fg(t.text_highlight)
-            } else if nav.status.is_arrived() {
-                Style::default().fg(t.hp_high)
-            } else if nav.status.is_stuck() {
-                Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.text_muted)
-            };
-            let destination = if nav.destination.is_empty() {
-                String::from("—")
-            } else {
-                nav.destination.clone()
-            };
-            (nav.status.label().to_string(), style, destination)
-        })
-        .unwrap_or_else(|| {
-            (
-                String::from("Idle"),
-                Style::default().fg(t.text_muted),
-                String::from("—"),
-            )
-        });
+    let target_name = client.target.as_ref().map_or_else(
+        || String::from("—"),
+        |target| app.redact_name(&target.displayed_name).into_owned(),
+    );
+    let (nav_label, nav_style, nav_destination) =
+        app.nav_state.nav_statuses.get(&client.pid).map_or_else(
+            || {
+                (
+                    String::from("Idle"),
+                    Style::default().fg(t.text_muted),
+                    String::from("—"),
+                )
+            },
+            |nav| {
+                let style = if nav.status.is_moving() {
+                    Style::default().fg(t.text_highlight)
+                } else if nav.status.is_arrived() {
+                    Style::default().fg(t.hp_high)
+                } else if nav.status.is_stuck() {
+                    Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(t.text_muted)
+                };
+                let destination = if nav.destination.is_empty() {
+                    String::from("—")
+                } else {
+                    nav.destination.clone()
+                };
+                (nav.status.label().to_string(), style, destination)
+            },
+        );
 
     let lines = if collapsed {
         vec![Line::from(vec![
@@ -856,7 +854,7 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!(" | {} | {} chars", mode_str, focused_count),
+                format!(" | {mode_str} | {focused_count} chars"),
                 t.text_muted,
             ),
         ])]
@@ -1008,7 +1006,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     let xp_15min = {
         let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
         if rate > 0.01 {
-            format!("{:.0}/hr", rate)
+            format!("{rate:.0}/hr")
         } else {
             "-".into()
         }
@@ -1039,7 +1037,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
             ),
             Span::styled("  |  P ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{:.0}", total_plat),
+                format!("{total_plat:.0}"),
                 Style::default().fg(t.text_highlight),
             ),
         ])]
@@ -1062,7 +1060,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
             Line::from(vec![
                 Span::styled("Pp  ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    format!("{:.0} ({}/hr)", total_plat, plat_per_hour),
+                    format!("{total_plat:.0} ({plat_per_hour}/hr)"),
                     Style::default().fg(t.text_highlight),
                 ),
             ]),
@@ -1090,10 +1088,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                 let label: String = name.chars().take(18).collect();
                 lines.push(Line::from(vec![
                     Span::raw(" "),
-                    Span::styled(
-                        format!("{}× ", count),
-                        Style::default().fg(t.text_highlight),
-                    ),
+                    Span::styled(format!("{count}× "), Style::default().fg(t.text_highlight)),
                     Span::styled(label, Style::default().fg(t.text_secondary)),
                 ]));
             }

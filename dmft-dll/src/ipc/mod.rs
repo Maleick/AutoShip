@@ -206,7 +206,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
     }
 }
 
-/// Find a button by WindowText in eqmain's CXWndManager.
+/// Find a button by `WindowText` in eqmain's `CXWndManager`.
 fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
     let cxwnd_mgr = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base)?;
     unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, target_text) }
@@ -320,8 +320,7 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                         client_id,
                         timestamp_ms: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
-                            .map(|d| d.as_millis() as u64)
-                            .unwrap_or(0),
+                            .map_or(0, |d| d.as_millis() as u64),
                     });
                     continue;
                 }

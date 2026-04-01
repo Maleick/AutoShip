@@ -4,72 +4,108 @@ use crate::types::ClientId;
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     // Movement
+    /// Move to an absolute world position.
     MoveTo {
+        /// World X coordinate.
         x: f32,
+        /// World Y coordinate.
         y: f32,
+        /// World Z coordinate.
         z: f32,
     },
+    /// Stop all movement immediately.
     StopMovement,
     // Combat
+    /// Cast a memorized spell on a target.
     CastSpell {
+        /// Memorized spell slot (0-indexed gem number).
         spell_slot: u8,
+        /// Spawn ID of the cast target.
         target_id: u32,
     },
+    /// Begin auto-attack on a target.
     Attack {
+        /// Spawn ID of the mob to attack.
         target_id: u32,
     },
+    /// Stop auto-attack.
     StopAttack,
     // Targeting
+    /// Set the current target by spawn ID.
     SetTarget {
+        /// Spawn ID to target.
         spawn_id: u32,
     },
+    /// Clear the current target.
     ClearTarget,
     // Utility
+    /// Sit down (mana/HP regen).
     Sit,
+    /// Stand up from sitting.
     Stand,
     // Navigation
     /// Follow a sequence of waypoints.
     NavigateTo {
+        /// Ordered list of waypoints to traverse.
         waypoints: Vec<crate::nav::Waypoint>,
     },
     /// Move to a camp spot and face heading.
     SetCamp {
+        /// Camp position and facing direction.
         spot: crate::nav::CampSpot,
     },
     /// Stop navigating, stay where you are.
     StopNavigation,
     // Login automation
+    /// Query the current login phase from the DLL.
     LoginPhaseQuery,
     /// Dump all login-related pointer addresses to the DLL log for calibration.
     /// Used to validate offsets on the live client before attempting auto-login.
     CalibrateLogin,
     /// Start the automated login sequence. The DLL handles all UI steps
-    /// autonomously and reports progress via LoginPhaseUpdate responses.
+    /// autonomously and reports progress via `LoginPhaseUpdate` responses.
     /// Password is zeroized in DLL memory immediately after use.
     StartLogin {
+        /// Account name for login.
         account_name: String,
+        /// Password (zeroized after use in DLL memory).
         password: String,
+        /// Target server name (e.g. "Teek").
         server_name: String,
+        /// Character name to select at character select.
         character_name: String,
     },
     // Post-login
+    /// Join a group by group ID.
     JoinGroup {
+        /// EQ group ID to join.
         group_id: u32,
     },
+    /// Apply standard buff rotation.
     ApplyBuffs,
+    /// Report that this client is ready for orchestration.
     ReportReady,
     // Combat
+    /// Engage a target in combat via the combat FSM.
     CombatEngage {
+        /// Spawn ID of the mob to engage.
         target_id: u32,
     },
+    /// Disengage from combat, return to idle.
     CombatDisengage,
+    /// Set the main assist target for this character.
     CombatSetAssistTarget {
+        /// Spawn ID of the assist target.
         spawn_id: u32,
     },
+    /// Force-use a specific combat ability.
     CombatForceAbility {
+        /// Ability ID to activate.
         ability_id: u32,
     },
+    /// Emergency heal a specific target.
     CombatEmergencyHeal {
+        /// Spawn ID of the character to heal.
         target_id: u32,
     },
     /// Loot the nearest corpse.
@@ -79,34 +115,45 @@ pub enum Command {
     // Soul Engine
     /// Send a chat message in-game.
     Say {
+        /// Chat channel to send on.
         channel: crate::soul::SayChannel,
+        /// Message text.
         message: String,
+        /// Target player name (for tells).
         target: Option<String>,
     },
     /// Perform an emote animation.
     Emote {
+        /// Emote name (e.g. "dance", "wave").
         emote: String,
     },
     /// Execute a soul action (idle behavior, etc.).
     SoulAction {
+        /// The soul action to perform.
         action: crate::soul::SoulAction,
     },
     /// Execute a slash command as if typed in the chat window.
-    /// Uses EQ's InterpretCmd internally (e.g. "/target Camrene", "/follow").
+    /// Uses EQ's `InterpretCmd` internally (e.g. "/target Camrene", "/follow").
     SlashCommand {
+        /// Full slash command string (e.g. "/target Mob").
         command: String,
     },
     // Zone graph
-    /// Request the zone adjacency graph from ZoneGuideManagerClient.
+    /// Request the zone adjacency graph from `ZoneGuideManagerClient`.
     QueryZoneGraph,
     // System
+    /// Heartbeat ping — expects a Pong response.
     Ping,
+    /// Eject the DLL from the game process.
     Eject,
+    /// Enable or disable the game loop hook.
     SetHookState {
+        /// Whether hooks should be active.
         enabled: bool,
     },
     /// Enable or disable automatic dialog acceptance (group invite, trade, etc.).
     SetAutoAccept {
+        /// Whether auto-accept is enabled.
         enabled: bool,
     },
 }
@@ -138,44 +185,60 @@ impl std::fmt::Debug for Command {
 /// Responses sent from the DLL back to the manager
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Response {
+    /// Heartbeat response to a Ping command.
     Pong {
+        /// PID of the responding client.
         client_id: ClientId,
+        /// Timestamp in milliseconds when the pong was generated.
         timestamp_ms: u64,
     },
+    /// Generic result for a command execution.
     CommandResult {
+        /// Whether the command succeeded.
         success: bool,
+        /// Human-readable status or error message.
         message: String,
     },
+    /// Error response when a command fails.
     Error {
+        /// Error description.
         message: String,
     },
     /// Navigation status push notification from the DLL's nav state machine.
-    /// Note: NavStatus is also available in `GameState.nav_status` (shared memory).
+    /// Note: `NavStatus` is also available in `GameState.nav_status` (shared memory).
     /// `GameState.nav_status` is authoritative — it is updated every tick.
     /// `NavUpdate` is sent only on state transitions (Idle→Moving, Moving→Arrived, etc.)
     /// for low-latency notification without polling shared memory.
     NavUpdate {
+        /// Current navigation FSM state.
         status: crate::nav::NavStatus,
     },
+    /// Login phase transition notification.
     LoginPhaseUpdate {
+        /// Current login phase.
         phase: crate::login::LoginPhase,
     },
+    /// Notification that a client has completed post-login setup.
     PostLoginComplete {
+        /// PID of the client that finished post-login.
         client_id: crate::types::ClientId,
     },
+    /// Combat FSM state transition notification.
     CombatUpdate {
+        /// Current combat FSM state.
         status: crate::combat::CombatStatus,
     },
-    /// Zone adjacency graph from ZoneGuideManagerClient.
-    /// Simplified wire format: Vec of (zone_id, name, min_level, max_level, connections).
-    /// Each connection is (dest_zone_id, transfer_type, disabled).
+    /// Zone adjacency graph from `ZoneGuideManagerClient`.
+    /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).
+    /// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
     ZoneGraph {
+        /// List of zone entries with connectivity data.
         zones: Vec<ZoneGraphEntry>,
     },
 }
 
-/// Wire-format for a single zone entry: (zone_id, name, min_level, max_level, connections).
-/// Each connection is (dest_zone_id, transfer_type, disabled).
+/// Wire-format for a single zone entry: (`zone_id`, name, `min_level`, `max_level`, connections).
+/// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
 pub type ZoneGraphEntry = (u16, String, i32, i32, Vec<(u16, u8, bool)>);
 
 /// Random session token generated at injection time for IPC authentication.
@@ -195,11 +258,13 @@ pub const SHARED_MEMORY_NAME_PREFIX: &str = "dmft_state_";
 /// Derive a deterministic `u64` session ID from a 32-byte session token.
 /// Uses the first 8 bytes interpreted as little-endian. Both the DLL and
 /// orchestrator call this on the same token to produce matching IPC names.
+#[must_use]
 pub fn session_id_from_token(token: &SessionToken) -> u64 {
     u64::from_le_bytes(token[..8].try_into().unwrap())
 }
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
+#[must_use]
 pub fn generate_random_token() -> SessionToken {
     use rand::RngCore;
     let mut token = [0u8; 32];
@@ -209,26 +274,31 @@ pub fn generate_random_token() -> SessionToken {
 
 /// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
 /// Must be called BEFORE injection.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
     let token_dir = std::env::temp_dir().join("dmft");
     std::fs::create_dir_all(&token_dir)?;
-    let token_path = token_dir.join(format!("token_{}.bin", pid));
+    let token_path = token_dir.join(format!("token_{pid}.bin"));
 
     let token = generate_random_token();
 
     std::fs::write(&token_path, token)?;
     // Also persist a copy for later CLI commands that reconnect to the injected client.
-    let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
+    let login_token_path = token_dir.join(format!("login_token_{pid}.bin"));
     std::fs::write(&login_token_path, token)?;
 
     Ok(())
 }
 
 /// Read the session token for authenticating with an already-injected DLL.
+#[must_use]
 pub fn load_session_token(pid: u32) -> Option<SessionToken> {
     let token_path = std::env::temp_dir()
         .join("dmft")
-        .join(format!("login_token_{}.bin", pid));
+        .join(format!("login_token_{pid}.bin"));
 
     if let Ok(data) = std::fs::read(&token_path)
         && data.len() == 32
@@ -242,14 +312,16 @@ pub fn load_session_token(pid: u32) -> Option<SessionToken> {
 
 /// Build a per-client pipe name incorporating a random session ID.
 /// Format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
+#[must_use]
 pub fn pipe_name(session_id: u64, client_id: u32) -> String {
-    format!(r"\\.\pipe\{:x}_cmd_{}", session_id, client_id)
+    format!(r"\\.\pipe\{session_id:x}_cmd_{client_id}")
 }
 
 /// Build a per-client shared memory name incorporating a random session ID.
 /// Format: `{session_id:x}_state_{client_id}`
+#[must_use]
 pub fn shared_memory_name(session_id: u64, client_id: u32) -> String {
-    format!("{:x}_state_{}", session_id, client_id)
+    format!("{session_id:x}_state_{client_id}")
 }
 
 #[cfg(test)]

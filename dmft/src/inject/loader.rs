@@ -5,7 +5,11 @@ use anyhow::Result;
 use anyhow::bail;
 
 /// Inject a DLL into a target process by PID.
-/// Uses CreateRemoteThread + LoadLibraryW (classic injection technique).
+/// Uses `CreateRemoteThread` + `LoadLibraryW` (classic injection technique).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
@@ -137,6 +141,10 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
 ///
 /// Finds the DLL's module base address in the target process using a Toolhelp snapshot,
 /// then spawns a remote thread calling `FreeLibrary` on that address.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 #[allow(dead_code)] // Will be used by graceful eject command path
 pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
@@ -175,7 +183,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
                     .szModule
                     .iter()
                     .take_while(|&&c| c != 0)
-                    .map(|&c| char::from_u32(c as u32).unwrap_or('?'))
+                    .map(|&c| char::from_u32(u32::from(c)).unwrap_or('?'))
                     .collect::<String>()
                     .to_ascii_lowercase();
 
@@ -197,7 +205,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     }
 
     if !found || module_base.is_invalid() {
-        bail!("DLL '{}' not found in modules of process {}", dll_name, pid);
+        bail!("DLL '{dll_name}' not found in modules of process {pid}");
     }
 
     // Open target process with thread-creation rights.

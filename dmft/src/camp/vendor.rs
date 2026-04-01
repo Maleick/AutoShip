@@ -1,7 +1,7 @@
 //! Vendor/sell cycle — periodically sell loot to a nearby vendor.
 //!
 //! The sell cycle is a two-level FSM:
-//! - Outer: `SellState` — NotNeeded → TravelingToVendor → Selling → Returning
+//! - Outer: `SellState` — `NotNeeded` → `TravelingToVendor` → Selling → Returning
 //! - Inner: `VendorStep` — sub-states within `Selling` that drive the actual
 //!   vendor UI interaction (target, approach, open window, sell items, close).
 
@@ -10,10 +10,13 @@ use std::collections::HashSet;
 /// Configuration for the vendor sell cycle.
 #[derive(Debug, Clone)]
 pub struct VendorConfig {
+    /// Name of the vendor NPC to target.
     pub vendor_name: String,
+    /// Ticks between sell runs.
     pub sell_interval_ticks: u64,
+    /// Items to never sell (quest items, gear, etc.).
     pub keep_items: Vec<String>,
-    /// Ticks to wait in TravelingToVendor / Returning.
+    /// Ticks to wait in `TravelingToVendor` / Returning.
     pub travel_ticks: u64,
     /// Items to sell. If empty, sells everything not in `keep_items`.
     pub sellable_items: Vec<String>,
@@ -33,7 +36,10 @@ pub enum VendorStep {
     /// Right-click vendor to open the merchant window.
     OpeningWindow,
     /// Sell items one at a time. `index` tracks progress through sellable inventory.
-    SellingItems { index: usize },
+    SellingItems {
+        /// Index of the item currently being sold.
+        index: usize,
+    },
     /// Close the merchant window.
     ClosingWindow,
 }
@@ -41,17 +47,28 @@ pub enum VendorStep {
 /// Current state of the sell cycle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SellState {
+    /// No sell run needed right now.
     NotNeeded,
+    /// En route to the vendor NPC.
     TravelingToVendor,
-    Selling { step: VendorStep },
+    /// At the vendor, working through the vendor UI sub-FSM.
+    Selling {
+        /// Current sub-step of the vendor interaction.
+        step: VendorStep,
+    },
+    /// Returning to camp after selling.
     Returning,
 }
 
 /// Tracks the sell cycle for one camp group.
 pub struct SellCycle {
+    /// Vendor configuration.
     pub config: VendorConfig,
+    /// Current sell cycle state.
     pub state: SellState,
+    /// Tick when the last sell run completed.
     pub last_sell_tick: u64,
+    /// Tick when the current state was entered (for delay timing).
     pub state_entered_tick: u64,
     keep_set: HashSet<String>,
     /// Items queued for selling in the current cycle.
@@ -59,6 +76,8 @@ pub struct SellCycle {
 }
 
 impl SellCycle {
+    /// Creates a new sell cycle with the given vendor configuration.
+    #[must_use]
     pub fn new(config: VendorConfig) -> Self {
         let keep_set: HashSet<String> = config.keep_items.iter().cloned().collect();
         Self {
@@ -72,12 +91,14 @@ impl SellCycle {
     }
 
     /// Check if it's time to sell. Call from camp loop during Idle/Medding.
+    #[must_use]
     pub fn needs_sell(&self, current_tick: u64) -> bool {
         self.state == SellState::NotNeeded
             && current_tick.saturating_sub(self.last_sell_tick) >= self.config.sell_interval_ticks
     }
 
     /// Returns true if the item should be kept (not sold).
+    #[must_use]
     pub fn should_keep(&self, item_name: &str) -> bool {
         self.keep_set.contains(item_name)
     }
@@ -237,6 +258,7 @@ impl SellCycle {
 }
 
 /// Generate slash commands for the current sell state (standalone helper).
+#[must_use]
 pub fn sell_commands(state: &SellState, vendor_name: &str, seller_pid: u32) -> Vec<(u32, String)> {
     match state {
         SellState::NotNeeded => Vec::new(),

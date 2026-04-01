@@ -9,11 +9,16 @@ use crate::soul::config::SoulConfig;
 /// A single account entry from config/accounts.toml.
 #[derive(Debug, Deserialize, Clone)]
 pub struct AccountEntry {
+    /// Account login name (e.g., "frostreaver01").
     pub name: String,
+    /// Target server name (e.g., "Firiona Vie").
     pub server: String,
+    /// Character name to log in as.
     pub character: String,
+    /// Short class code (e.g., "WAR", "CLR").
     #[serde(default = "default_class")]
     pub class: String,
+    /// Group ID this account belongs to (0 = ungrouped).
     #[serde(default = "default_group")]
     pub group: u32,
 }
@@ -29,12 +34,17 @@ fn default_group() -> u32 {
 /// Top-level wrapper for config/accounts.toml.
 #[derive(Debug, Deserialize, Clone)]
 pub struct AccountsConfig {
+    /// List of account entries defined in the config file.
     #[serde(default)]
     pub accounts: Vec<AccountEntry>,
 }
 
 impl AccountsConfig {
     /// Load account definitions from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read accounts config: {}", path.display()))?;
@@ -44,6 +54,7 @@ impl AccountsConfig {
     }
 
     /// Return accounts belonging to a specific group.
+    #[must_use]
     pub fn accounts_for_group(&self, group_id: u32) -> Vec<&AccountEntry> {
         self.accounts
             .iter()
@@ -52,6 +63,7 @@ impl AccountsConfig {
     }
 
     /// Find a single account by name (case-insensitive).
+    #[must_use]
     pub fn find_account(&self, name: &str) -> Option<&AccountEntry> {
         let lower = name.to_lowercase();
         self.accounts
@@ -59,7 +71,8 @@ impl AccountsConfig {
             .find(|a| a.name.to_lowercase() == lower)
     }
 
-    /// Convert an AccountEntry into the AccountInfo used by the launch system.
+    /// Convert an `AccountEntry` into the `AccountInfo` used by the launch system.
+    #[must_use]
     pub fn to_account_info(entry: &AccountEntry) -> dmft_common::login::AccountInfo {
         dmft_common::login::AccountInfo {
             account_name: entry.name.clone(),
@@ -72,6 +85,7 @@ impl AccountsConfig {
     }
 }
 
+/// Top-level application configuration loaded from frostreaver.toml.
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     /// Name of the EQ process to attach to (default: "eqgame.exe")
@@ -138,34 +152,50 @@ impl Default for DiscordConfig {
     }
 }
 
+/// Configuration for a group of characters that play together.
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
 #[derive(Debug, Deserialize, Clone)]
 pub struct GroupConfig {
+    /// Numeric group identifier.
     pub id: u32,
+    /// Human-readable group name.
     pub name: String,
+    /// Toon (character) definitions within this group.
     #[serde(default)]
     pub toon: Vec<ToonConfig>,
 }
 
+/// Configuration for a single character (toon) within a group.
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
 #[derive(Debug, Deserialize, Clone)]
 pub struct ToonConfig {
+    /// Character name.
     pub name: String,
+    /// Class short code (e.g., "WAR").
     pub class: String,
+    /// Role assignment (e.g., "tank", "healer").
     pub role: String,
+    /// EQ window title for targeting this client.
     #[serde(default)]
     pub eq_window_title: String,
+    /// Account name this toon belongs to.
     #[serde(default)]
     pub account: Option<String>,
 }
 
+/// Configuration for EQ client launching — paths, stagger timing, and resource limits.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct LaunchConfig {
+    /// Path to the EQ installation directory.
     pub eq_path: String,
+    /// Minimum delay between client launches (seconds).
     pub stagger_min_secs: u64,
+    /// Maximum delay between client launches (seconds).
     pub stagger_max_secs: u64,
+    /// Maximum number of clients launching simultaneously.
     pub max_concurrent_launches: usize,
+    /// Additional command-line arguments for the EQ process.
     pub launch_args: Vec<String>,
     /// Maximum physical RAM (working set) per EQ client in MB. 0 = unlimited.
     pub max_working_set_mb: u32,
@@ -184,11 +214,15 @@ impl Default for LaunchConfig {
     }
 }
 
+/// EQ server connection settings.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ServerConfig {
+    /// Server name (e.g., "Firiona Vie").
     pub name: String,
+    /// URL for server status checks.
     pub status_url: Option<String>,
+    /// Timeout in seconds for server status HTTP checks.
     pub status_check_timeout_secs: u64,
 }
 
@@ -202,12 +236,17 @@ impl Default for ServerConfig {
     }
 }
 
+/// Retry and backoff policy for failed client launches.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct RetryConfig {
+    /// Maximum number of retry attempts before giving up.
     pub max_retries: u32,
+    /// Base backoff delay in seconds (multiplied on each retry).
     pub base_backoff_secs: u64,
+    /// Number of failures within the window to trigger mass-failure mode.
     pub mass_failure_threshold: u32,
+    /// Time window in seconds for mass-failure detection.
     pub mass_failure_window_secs: u64,
 }
 
@@ -231,6 +270,11 @@ fn default_max_spawns() -> usize {
 }
 
 impl AppConfig {
+    /// Load application configuration from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
@@ -239,6 +283,8 @@ impl AppConfig {
         Ok(config)
     }
 
+    /// Returns a default configuration with sensible defaults.
+    #[must_use]
     pub fn default_config() -> Self {
         Self {
             process_name: default_process_name(),

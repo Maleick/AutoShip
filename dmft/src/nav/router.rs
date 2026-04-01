@@ -8,28 +8,43 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub enum TravelStep {
     /// Walk to a position within the current zone.
-    WalkTo { waypoints: Vec<Waypoint> },
+    WalkTo {
+        /// Waypoints to follow within the current zone.
+        waypoints: Vec<Waypoint>,
+    },
     /// Zone transition: walk to zone line and enter.
     ZoneTo {
+        /// Target zone short name.
         zone_name: String,
+        /// Position of the zone line to walk to.
         zone_line_pos: Waypoint,
     },
     /// Port: caster ports the group (requires port-class character).
     PortTo {
+        /// Destination zone short name.
         zone_name: String,
+        /// Client ID of the character casting the port spell.
         caster_id: ClientId,
     },
     /// Wait for staggered entry (random delay before zoning).
-    StaggerWait { min_secs: u32, max_secs: u32 },
+    StaggerWait {
+        /// Minimum wait time in seconds.
+        min_secs: u32,
+        /// Maximum wait time in seconds.
+        max_secs: u32,
+    },
 }
 
 /// A complete travel plan for one character.
 pub struct TravelPlan {
+    /// Client this travel plan belongs to.
     pub client_id: ClientId,
     steps: IndexedQueue<TravelStep>,
 }
 
 impl TravelPlan {
+    /// Create a travel plan with the given steps for a client.
+    #[must_use]
     pub fn new(client_id: ClientId, steps: Vec<TravelStep>) -> Self {
         let mut queue = IndexedQueue::new();
         queue.set_items(steps);
@@ -39,21 +54,27 @@ impl TravelPlan {
         }
     }
 
+    /// The current step in the travel plan, if any remain.
+    #[must_use]
     pub fn current(&self) -> Option<&TravelStep> {
         self.steps.current()
     }
 
+    /// Advance to the next step. Returns `true` if there are more steps.
     pub fn advance(&mut self) -> bool {
         self.steps.advance()
     }
 
+    /// Whether all steps have been completed.
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         self.steps.index() >= self.steps.len()
     }
 }
 
 /// Generates stagger delays for a group of characters zoning together.
-/// Returns map of client_id -> delay in seconds.
+/// Returns map of `client_id` -> delay in seconds.
+#[must_use]
 pub fn generate_zone_staggers(
     client_ids: &[ClientId],
     min_secs: u32,
@@ -87,6 +108,8 @@ pub struct GroupRouter {
 }
 
 impl GroupRouter {
+    /// Create a new group router with no registered porters.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             porters: Vec::new(),
@@ -101,6 +124,7 @@ impl GroupRouter {
     }
 
     /// Whether any porters are available for long-distance travel.
+    #[must_use]
     pub fn has_porters(&self) -> bool {
         !self.porters.is_empty()
     }
@@ -108,9 +132,10 @@ impl GroupRouter {
     /// Plan travel for a group of characters.
     ///
     /// When porters are available and the route is long-distance (multiple zone
-    /// transitions), the planner would prefer PortTo steps over walking. For now,
+    /// transitions), the planner would prefer `PortTo` steps over walking. For now,
     /// port-based routing is a future enhancement — all travel uses staggered
     /// zone transitions.
+    #[must_use]
     pub fn plan_travel(
         &self,
         client_ids: &[ClientId],
@@ -140,6 +165,7 @@ impl GroupRouter {
 }
 
 /// Convenience wrapper that creates a one-shot travel plan without porter awareness.
+#[must_use]
 pub fn plan_group_travel(
     client_ids: &[ClientId],
     class_map: &HashMap<ClientId, u8>,

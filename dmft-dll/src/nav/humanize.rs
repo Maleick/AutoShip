@@ -3,7 +3,7 @@
 
 use dmft_common::nav::Xorshift32;
 
-/// Per-character movement personality. Values are seeded from the client_id
+/// Per-character movement personality. Values are seeded from the `client_id`
 /// so each character consistently moves differently.
 pub struct MovementPersonality {
     /// Speed multiplier variance (e.g., 0.93..1.07).
@@ -44,7 +44,7 @@ impl MovementPersonality {
         self.rng.next_f32() < self.detour_chance
     }
 
-    /// Generate a random stagger delay in ticks (0..max_ticks).
+    /// Generate a random stagger delay in ticks (`0..max_ticks`).
     pub fn stagger_ticks(&mut self, max_ticks: u32) -> u32 {
         (self.rng.next_f32() * max_ticks as f32) as u32
     }

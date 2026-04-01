@@ -15,6 +15,8 @@ pub struct TokenBudget {
 }
 
 impl TokenBudget {
+    /// Create a new token budget with the given hourly limit.
+    #[must_use]
     pub fn new(max_tokens_per_hour: u32) -> Self {
         Self {
             max_tokens_per_hour,
@@ -24,6 +26,7 @@ impl TokenBudget {
     }
 
     /// Check if we have budget for the estimated token count.
+    #[must_use]
     pub fn can_afford(&self, estimated_tokens: u32, now_secs: u64) -> bool {
         if self.is_window_expired(now_secs) {
             return estimated_tokens <= self.max_tokens_per_hour;
@@ -41,6 +44,7 @@ impl TokenBudget {
     }
 
     /// Tokens remaining in the current window.
+    #[must_use]
     pub fn remaining(&self, now_secs: u64) -> u32 {
         if self.is_window_expired(now_secs) {
             return self.max_tokens_per_hour;
@@ -53,7 +57,7 @@ impl TokenBudget {
     }
 }
 
-/// Wrapper to make LlmRequest orderable by priority for the BinaryHeap.
+/// Wrapper to make `LlmRequest` orderable by priority for the `BinaryHeap`.
 struct PrioritizedRequest {
     request: LlmRequest,
     /// Sequence number for FIFO within same priority
@@ -94,6 +98,8 @@ pub struct LlmRequestQueue {
 }
 
 impl LlmRequestQueue {
+    /// Create a new request queue with the given hourly token budget.
+    #[must_use]
     pub fn new(max_tokens_per_hour: u32) -> Self {
         Self {
             queue: BinaryHeap::new(),
@@ -165,11 +171,13 @@ impl LlmRequestQueue {
     }
 
     /// Number of pending requests.
+    #[must_use]
     pub fn pending_count(&self) -> usize {
         self.queue.len()
     }
 
     /// Tokens remaining in the current budget window.
+    #[must_use]
     pub fn budget_remaining(&self, now_secs: u64) -> u32 {
         self.budget.remaining(now_secs)
     }

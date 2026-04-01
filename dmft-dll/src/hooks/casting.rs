@@ -1,8 +1,8 @@
 //! Spell casting control -- invokes EQ's internal casting functions.
 //!
 //! This is a function-call API rather than a detour hook. Eventually
-//! these functions will call EQ's internal CastSpell / UseAbility /
-//! UseItem functions once we have their resolved addresses from the
+//! these functions will call EQ's internal `CastSpell` / `UseAbility` /
+//! `UseItem` functions once we have their resolved addresses from the
 //! offset database. Until then, they log intent and return an error.
 //!
 //! On non-Windows platforms all operations are no-ops that log a warning.
@@ -44,9 +44,9 @@ impl CastingController {
 
     /// Cast a spell from the given spell gem slot (1-13) on a target.
     ///
-    /// Once we have the resolved address for EQ's CastSpell function,
+    /// Once we have the resolved address for EQ's `CastSpell` function,
     /// this will call it directly. The target should be set via the
-    /// TargetingController before calling this.
+    /// `TargetingController` before calling this.
     pub fn cast_spell(&self, spell_slot: u8, target_id: u32) -> Result<(), CastError> {
         if spell_slot == 0 || spell_slot > 13 {
             return Err(CastError::InvalidSlot(spell_slot));
@@ -101,7 +101,7 @@ impl CastingController {
 
     /// Check if the local player is currently casting a spell.
     ///
-    /// Reads the cast timer from the local player's PcClient struct.
+    /// Reads the cast timer from the local player's `PcClient` struct.
     /// Returns `true` if a cast is in progress.
     pub fn is_casting(&self) -> Result<bool, CastError> {
         if self.eq_base == 0 {
@@ -138,7 +138,7 @@ impl CastingController {
     /// Use an ability or discipline by ID.
     ///
     /// Abilities include skills like Kick, Bash, Taunt, and disciplines.
-    /// Once we have the DoAbility function address from the offset database,
+    /// Once we have the `DoAbility` function address from the offset database,
     /// this will call it directly.
     pub fn use_ability(&self, ability_id: u32) -> Result<(), CastError> {
         if self.eq_base == 0 {
@@ -159,7 +159,7 @@ impl CastingController {
 
     /// Use an item (clicky) in an inventory slot.
     ///
-    /// Activates a clickable item effect. Once we have the UseItem
+    /// Activates a clickable item effect. Once we have the `UseItem`
     /// function address from the offset database, this will call it.
     pub fn use_item(&self, slot_id: u32) -> Result<(), CastError> {
         if self.eq_base == 0 {

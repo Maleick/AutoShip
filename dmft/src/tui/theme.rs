@@ -29,7 +29,9 @@ pub struct Theme {
     pub border_server: Style,
 
     // ── Tab bar ──────────────────────────────────────────────────────
+    /// Style for the active/selected screen tab.
     pub tab_active: Style,
+    /// Style for inactive screen tabs.
     pub tab_inactive: Style,
 
     // ── Text ─────────────────────────────────────────────────────────
@@ -49,81 +51,128 @@ pub struct Theme {
     pub text_server: Color,
 
     // ── HP / resource bars ───────────────────────────────────────────
+    /// HP bar color when above 75%.
     pub hp_high: Color,
+    /// HP bar color when between 25-75%.
     pub hp_mid: Color,
+    /// HP bar color when below 25%.
     pub hp_low: Color,
+    /// Mana bar color.
     pub mana_color: Color,
     /// Empty portion of a bar.
     pub bar_empty: Color,
 
     // ── Spawn type colors ────────────────────────────────────────────
+    /// Color for player character spawns.
     pub spawn_pc: Color,
+    /// Color for regular NPC spawns.
     pub spawn_npc: Color,
     /// Named NPC (non-trivial mob name).
     pub spawn_named: Color,
+    /// Color for corpse spawns.
     pub spawn_corpse: Color,
+    /// Color for unknown spawn types.
     pub spawn_unknown: Color,
 
     // ── Tables ───────────────────────────────────────────────────────
+    /// Style for table column headers.
     pub table_header: Style,
     /// Selected / highlighted row background.
     pub row_selected_bg: Color,
 
     // ── Stand-state colors ───────────────────────────────────────────
+    /// Color for dead characters.
     pub state_dead: Color,
+    /// Color for sitting characters.
     pub state_sitting: Color,
+    /// Color for feign-death characters.
     pub state_feigned: Color,
+    /// Color for frozen/stunned characters.
     pub state_frozen: Color,
+    /// Color for standing (normal) characters.
     pub state_normal: Color,
 
     // ── Operating-mode colors ────────────────────────────────────────
+    /// Color for camp mode indicator.
     pub mode_camp: Color,
+    /// Color for hunt mode indicator.
     pub mode_hunt: Color,
 
     // ── Status bar ───────────────────────────────────────────────────
+    /// Style for status bar messages.
     pub statusbar_message: Style,
+    /// Style for keyboard shortcut hints in the status bar.
     pub statusbar_key: Style,
+    /// Dim style for low-priority status bar text.
     pub statusbar_dim: Style,
+    /// Style for the command mode indicator.
     pub statusbar_cmd: Style,
+    /// Badge style for highlighted status items.
     pub statusbar_badge: Style,
 
     // ── Map overlay ──────────────────────────────────────────────────
+    /// Color for the player's own position on the map.
     pub map_you: Color,
+    /// Color for other PCs on the map.
     pub map_pc: Color,
+    /// Color for NPCs on the map.
     pub map_npc: Color,
+    /// Color for named mobs on the map.
     pub map_named: Color,
+    /// Color for dead named mobs on the map.
     pub map_dead_named: Color,
+    /// Color for corpses on the map.
     pub map_corpse: Color,
+    /// Color for zone geometry lines on the map.
     pub map_lines: Color,
 
     // ── Header ───────────────────────────────────────────────────────
+    /// Style for the main title in the header bar.
     pub header_title: Style,
+    /// Style for the connected client count display.
     pub header_client_count: Style,
+    /// Style for the selected client indicator.
     pub header_selected: Style,
+    /// Style for the zone name in the header.
     pub header_zone: Style,
+    /// Style for inactive group labels in the header.
     pub header_group: Style,
+    /// Style for the actively focused group label.
     pub header_group_active: Style,
 
     // ── Help overlay ─────────────────────────────────────────────────
+    /// Style for keyboard shortcut keys in the help overlay.
     pub help_key: Style,
+    /// Style for help description text.
     pub help_desc: Style,
+    /// Style for section headings in the help overlay.
     pub help_heading: Style,
+    /// Dim style for secondary help text.
     pub help_dim: Style,
+    /// Background color for the help overlay.
     pub help_bg: Color,
+    /// Border style for the help overlay panel.
     pub help_border: Style,
 
     // ── Con colors (level-relative mob difficulty) ────────────────────
+    /// Con color for dangerous mobs (red con).
     pub con_red: Color,
+    /// Con color for even-level mobs (yellow con).
     pub con_yellow: Color,
+    /// Con color for slightly below-level mobs (white con).
     pub con_white: Color,
+    /// Con color for below-level mobs (light blue con).
     pub con_light_blue: Color,
+    /// Con color for trivial mobs (blue con).
     pub con_blue: Color,
+    /// Con color for very low mobs (green con).
     pub con_green: Color,
 }
 
 // ─── Dark Modern ────────────────────────────────────────────────────────────
 
 /// A polished dark theme using RGB colors and rounded borders.
+#[must_use]
 pub fn dark_modern() -> Theme {
     let accent = Color::Rgb(0, 200, 210); // teal-cyan
     let gold = Color::Rgb(240, 185, 40); // warm gold
@@ -228,6 +277,7 @@ pub fn dark_modern() -> Theme {
 // ─── Classic ────────────────────────────────────────────────────────────────
 
 /// Classic terminal theme using named colors and plain borders.
+#[must_use]
 pub fn classic() -> Theme {
     Theme {
         border_type: BorderType::Plain,
@@ -330,7 +380,8 @@ pub fn classic() -> Theme {
 // ─── Dracula ────────────────────────────────────────────────────────────────
 
 /// Dracula color scheme — dark purples, pinks, and vivid accents.
-/// Based on https://draculatheme.com/contribute#color-palette
+/// Based on <https://draculatheme.com/contribute#color-palette>.
+#[must_use]
 pub fn dracula() -> Theme {
     let bg = Color::Rgb(40, 42, 54); // #282a36
     let fg = Color::Rgb(248, 248, 242); // #f8f8f2
@@ -437,13 +488,18 @@ pub fn dracula() -> Theme {
 /// Enum so the app can store which theme is active and cycle through them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemeKind {
+    /// Polished dark theme with RGB colors and rounded borders.
     #[default]
     DarkModern,
+    /// Classic terminal theme with named colors and plain borders.
     Classic,
+    /// Dracula color scheme with dark purples and vivid accents.
     Dracula,
 }
 
 impl ThemeKind {
+    /// Cycles to the next theme variant.
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Self::DarkModern => Self::Dracula,
@@ -452,6 +508,8 @@ impl ThemeKind {
         }
     }
 
+    /// Returns a short display label for this theme.
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::DarkModern => "Dark",
@@ -460,6 +518,8 @@ impl ThemeKind {
         }
     }
 
+    /// Constructs the full `Theme` for this variant.
+    #[must_use]
     pub fn build(self) -> Theme {
         match self {
             Self::DarkModern => dark_modern(),

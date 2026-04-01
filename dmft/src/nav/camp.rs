@@ -8,11 +8,13 @@ use std::collections::HashMap;
 pub struct CampManager {
     /// Current camp definition (if any).
     active_camp: Option<CampDefinition>,
-    /// client_id -> assigned role.
+    /// `client_id` -> assigned role.
     assignments: HashMap<ClientId, String>,
 }
 
 impl CampManager {
+    /// Create a new camp manager with no active camp.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             active_camp: None,
@@ -21,7 +23,7 @@ impl CampManager {
     }
 
     /// Set the active camp and assign characters to spots based on their roles.
-    /// `role_map` maps client_id to their role string (e.g., "tank", "healer1").
+    /// `role_map` maps `client_id` to their role string (e.g., "tank", "healer1").
     pub fn set_camp(
         &mut self,
         camp: CampDefinition,
@@ -43,6 +45,7 @@ impl CampManager {
     }
 
     /// Get the camp spot for a specific client.
+    #[must_use]
     pub fn get_spot(&self, client_id: ClientId) -> Option<&CampSpot> {
         let role = self.assignments.get(&client_id)?;
         self.active_camp
@@ -59,6 +62,7 @@ impl CampManager {
     }
 
     /// Whether a camp is active.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.active_camp.is_some()
     }
@@ -66,6 +70,7 @@ impl CampManager {
 
 /// Helper: create a basic group camp with standard EQ positioning.
 /// Tank in front, healer behind, DPS spread in a semicircle.
+#[must_use]
 pub fn create_standard_camp(center: Waypoint, pull_heading: f32, num_dps: usize) -> CampDefinition {
     let mut spots = Vec::new();
 

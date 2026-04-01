@@ -1,44 +1,69 @@
+//! Frostreaver orchestrator crate — external process for EQ multibox control.
+//!
+//! This crate provides the TUI dashboard, process reading, IPC, client management,
+//! navigation, combat orchestration, camp loop, launcher, and Soul Engine modules.
+
 #![allow(clippy::new_without_default)]
 
-// --- Modules wired through orchestrator/TUI, not referenced directly in main ---
-#[allow(dead_code)] // M4: camp loop state machine, driven by orchestrator
+/// Camp loop state machine — pulls, fights, loots, meds, buffs.
+#[allow(dead_code)]
 pub mod camp;
-#[allow(dead_code)] // M2: multi-client sessions, self-healing monitor
+/// Multi-client session management and self-healing monitor.
+#[allow(dead_code)]
 pub mod client;
-#[allow(dead_code)] // M4: combat automation, class strategies
+/// Combat automation — assist broadcasting, CC assignment, spell database.
+#[allow(dead_code)]
 pub mod combat;
+/// TOML configuration loading.
 pub mod config;
-#[allow(dead_code)] // M2.5: encrypted credential store
+/// Encrypted credential store (Argon2id + AES-256-GCM).
+#[allow(dead_code)]
 pub mod credentials;
-#[allow(dead_code)] // M2.5: login automation, process spawner
+/// Login automation — per-client FSM, staggered launch, process spawner.
+#[allow(dead_code)]
 pub mod launcher;
 
-// --- Modules used in main.rs; dead_code on non-Windows from platform stubs ---
+/// Discord webhook and bridge integration.
 #[allow(dead_code)]
 pub mod discord;
-#[allow(dead_code)] // M1: EQ data layer — some fields/functions are scaffolding for future features
+/// EverQuest data layer — spawn structs, memory reading, log parsing.
+#[allow(dead_code)]
 pub mod eq;
+/// DLL injection and staging.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod inject;
+/// Named pipe server and shared memory IPC.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod ipc;
-#[allow(dead_code)] // M3+: nav routing, camp management, waypoint recording — scaffolding
+/// Navigation — waypoint recording, zone routing, navmesh integration.
+#[allow(dead_code)]
 pub mod nav;
+/// Orchestrator — wires camp loop state machine to IPC command delivery.
 pub mod orchestrator;
+/// OS-level process interaction — open, read memory, find processes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod process;
-#[allow(dead_code)] // M5/M6: Soul Engine — scaffolding for LLM personalities, social graph
+/// Soul Engine — LLM-driven character personalities, persistent memory.
+#[allow(dead_code)]
 pub mod soul;
+/// Terminal UI — app state, event handling, theme, renderers.
 pub mod tui;
 
+/// CLI subcommands (dump, inject, navigate, login, etc.).
 pub mod cli;
 
-use anyhow::{Context, Result};
+#[cfg(windows)]
+use anyhow::Context;
+use anyhow::Result;
 
 /// Default path for the soul memory database.
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
 /// Get the base address of eqgame.exe module in the target process.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
     use windows::Win32::Foundation::CloseHandle;
@@ -75,6 +100,11 @@ pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
     Ok(base)
 }
 
+/// Non-Windows stub: returns the preferred base address.
+///
+/// # Errors
+///
+/// This stub always succeeds.
 #[cfg(not(windows))]
 pub fn get_module_base(_proc: &process::memory::ProcessHandle) -> Result<u64> {
     tracing::warn!("Using preferred base address (non-Windows stub)");

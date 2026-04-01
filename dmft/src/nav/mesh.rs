@@ -1,7 +1,8 @@
-//! Navmesh loading pipeline — download from mqmesh.com, parse MQ2Nav binary format,
+//! Navmesh loading pipeline — download from mqmesh.com, parse `MQ2Nav` binary format,
 //! load into Detour for pathfinding.
 
 use anyhow::{Context, Result, bail};
+use dmft_common::nav::Waypoint;
 use flate2::read::ZlibDecoder;
 use prost::Message;
 use std::io::Read;
@@ -14,10 +15,13 @@ use std::path::{Path, PathBuf};
 /// nav.vector3
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoVector3 {
+    /// X component.
     #[prost(float, tag = "1")]
     pub x: f32,
+    /// Y component.
     #[prost(float, tag = "2")]
     pub y: f32,
+    /// Z component.
     #[prost(float, tag = "3")]
     pub z: f32,
 }
@@ -25,14 +29,19 @@ pub struct ProtoVector3 {
 /// nav.dtNavMeshParams
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoDtNavMeshParams {
+    /// Mesh origin point.
     #[prost(message, optional, tag = "1")]
     pub origin: Option<ProtoVector3>,
+    /// Width of each tile in world units.
     #[prost(float, tag = "2")]
     pub tile_width: f32,
+    /// Height of each tile in world units.
     #[prost(float, tag = "3")]
     pub tile_height: f32,
+    /// Maximum number of tiles.
     #[prost(int32, tag = "4")]
     pub max_tiles: i32,
+    /// Maximum number of polygons per tile.
     #[prost(int32, tag = "5")]
     pub max_polys: i32,
 }
@@ -40,8 +49,10 @@ pub struct ProtoDtNavMeshParams {
 /// nav.NavMeshTile
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshTile {
+    /// Tile reference ID within the navmesh.
     #[prost(uint64, tag = "1")]
     pub tile_ref: u64,
+    /// Raw Detour tile data bytes.
     #[prost(bytes = "vec", tag = "2")]
     pub tile_data: Vec<u8>,
 }
@@ -49,21 +60,26 @@ pub struct ProtoNavMeshTile {
 /// nav.NavMeshTileSet
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshTileSet {
+    /// Version number for format compatibility.
     #[prost(int32, tag = "1")]
     pub compatibility_version: i32,
+    /// Parameters defining the navmesh grid.
     #[prost(message, optional, tag = "2")]
     pub mesh_params: Option<ProtoDtNavMeshParams>,
+    /// Individual mesh tiles.
     #[prost(message, repeated, tag = "3")]
     pub tiles: Vec<ProtoNavMeshTile>,
 }
 
 /// nav.NavMeshFile — top-level container.
-/// Fields 3-6 (build_settings, convex_volumes, areas, connections) exist in the
+/// Fields 3-6 (`build_settings`, `convex_volumes`, areas, connections) exist in the
 /// proto but are not needed for pathfinding — prost silently skips unknown fields.
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshFile {
+    /// EQ zone short name (e.g., "gfaydark").
     #[prost(string, tag = "1")]
     pub zone_short_name: String,
+    /// The navigation mesh tile set.
     #[prost(message, optional, tag = "2")]
     pub tile_set: Option<ProtoNavMeshTileSet>,
 }
@@ -78,6 +94,8 @@ const NAVMESH_FILE_MAGIC: u32 = u32::from_le_bytes([b'T', b'E', b'S', b'M']);
 const FLAG_COMPRESSED: u16 = 0x0001;
 const NAVMESH_QUERY_MAX_NODES: i32 = 16384;
 const MESH_CACHE_DIR: &str = "data/meshes";
+const DT_EXT_LINK: u16 = 0x8000;
+const DT_NULL_LINK: u32 = 0xffff_ffff;
 
 // ---------------------------------------------------------------------------
 // FFI — recastnavigation-sys types + our C++ shim
@@ -127,13 +145,20 @@ unsafe extern "C" {
         max_straight_path: i32,
         options: i32,
     ) -> recastnavigation_sys::dtStatus;
+
+    fn shim_dtNavMesh_getMaxTiles(nav: *const recastnavigation_sys::dtNavMesh) -> i32;
+
+    fn shim_dtNavMesh_getTile(
+        nav: *const recastnavigation_sys::dtNavMesh,
+        index: i32,
+    ) -> *const recastnavigation_sys::dtMeshTile;
 }
 
 // ---------------------------------------------------------------------------
 // Safe Detour wrappers
 // ---------------------------------------------------------------------------
 
-/// DT_TILE_FREE_DATA flag — tells Detour to free tile data when removing.
+/// `DT_TILE_FREE_DATA` flag — tells Detour to free tile data when removing.
 const DT_TILE_FREE_DATA: i32 = 0x01;
 
 /// Check if a Detour status indicates success.
@@ -141,7 +166,7 @@ fn dt_success(status: u32) -> bool {
     (status & 0x4000_0000) != 0
 }
 
-/// Owned Detour NavMesh.
+/// Owned Detour `NavMesh`.
 struct DetourNavMesh {
     ptr: *mut recastnavigation_sys::dtNavMesh,
 }
@@ -195,7 +220,7 @@ impl Drop for DetourNavMesh {
     }
 }
 
-/// Owned Detour NavMeshQuery.
+/// Owned Detour `NavMeshQuery`.
 struct DetourNavMeshQuery {
     ptr: *mut recastnavigation_sys::dtNavMeshQuery,
 }
@@ -339,6 +364,10 @@ fn default_query_filter() -> recastnavigation_sys::dtQueryFilter {
 // ---------------------------------------------------------------------------
 
 /// Download a zone's navmesh file from mqmesh.com, caching to disk.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     let cache_path = mesh_cache_path(zone_short_name);
 
@@ -348,10 +377,7 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
             .with_context(|| format!("Failed to read cached mesh: {}", cache_path.display()));
     }
 
-    let url = format!(
-        "https://mqmesh.com/resources/meshes/{}.navmesh",
-        zone_short_name
-    );
+    let url = format!("https://mqmesh.com/resources/meshes/{zone_short_name}.navmesh");
     tracing::info!(zone = zone_short_name, %url, "Downloading navmesh");
 
     let data = reqwest::blocking::get(&url)
@@ -378,6 +404,10 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
 
 /// Parse the raw .navmesh file bytes: validate header, decompress if needed,
 /// decode protobuf payload.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     if data.len() < 8 {
         bail!("Navmesh file too small ({} bytes)", data.len());
@@ -386,9 +416,7 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     if magic != NAVMESH_FILE_MAGIC {
         bail!(
-            "Invalid navmesh magic: expected 0x{:08X} ('MSET'), got 0x{:08X}",
-            NAVMESH_FILE_MAGIC,
-            magic
+            "Invalid navmesh magic: expected 0x{NAVMESH_FILE_MAGIC:08X} ('MSET'), got 0x{magic:08X}"
         );
     }
 
@@ -447,7 +475,102 @@ pub struct LoadedNavMesh {
     query: DetourNavMeshQuery,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct NavMeshSegment {
+    pub x1: f32,
+    pub y1: f32,
+    pub z1: f32,
+    pub x2: f32,
+    pub y2: f32,
+    pub z2: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct NavMeshOverlayBounds {
+    pub min_x: f32,
+    pub max_x: f32,
+    pub min_y: f32,
+    pub max_y: f32,
+}
+
+impl NavMeshOverlayBounds {
+    fn empty() -> Self {
+        Self {
+            min_x: f32::MAX,
+            max_x: f32::MIN,
+            min_y: f32::MAX,
+            max_y: f32::MIN,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.min_x == f32::MAX
+    }
+
+    pub fn max_dimension(&self) -> f32 {
+        if self.is_empty() {
+            1.0
+        } else {
+            (self.max_x - self.min_x)
+                .max(self.max_y - self.min_y)
+                .max(1.0)
+        }
+    }
+
+    fn expand_point(&mut self, x: f32, y: f32) {
+        self.min_x = self.min_x.min(x);
+        self.max_x = self.max_x.max(x);
+        self.min_y = self.min_y.min(y);
+        self.max_y = self.max_y.max(y);
+    }
+
+    fn expand_segment(&mut self, segment: &NavMeshSegment) {
+        self.expand_point(segment.x1, segment.y1);
+        self.expand_point(segment.x2, segment.y2);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NavMeshOverlay {
+    pub outer_lines: Vec<NavMeshSegment>,
+    pub inner_lines: Vec<NavMeshSegment>,
+    pub bounds: NavMeshOverlayBounds,
+}
+
+impl NavMeshOverlay {
+    pub fn is_empty(&self) -> bool {
+        self.outer_lines.is_empty() && self.inner_lines.is_empty()
+    }
+
+    pub fn segment_count(&self) -> usize {
+        self.outer_lines.len() + self.inner_lines.len()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteSource {
+    /// Route computed via Detour navmesh pathfinding.
+    NavMesh,
+    /// Straight line from A to B (navmesh unavailable).
+    StraightLineFallback,
+}
+
+/// A planned navigation route with waypoints and metadata.
+#[derive(Debug, Clone)]
+pub struct RoutePlan {
+    /// Ordered waypoints from start to destination.
+    pub waypoints: Vec<Waypoint>,
+    /// How the route was generated.
+    pub source: RouteSource,
+    /// Whether the zone mesh was loaded from cache.
+    pub mesh_cached: bool,
+}
+
 /// Load a parsed navmesh into Detour, returning a query-ready object.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     let tile_set = proto
         .tile_set
@@ -461,8 +584,7 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     let origin = params_proto
         .origin
         .as_ref()
-        .map(|o| [o.x, o.y, o.z])
-        .unwrap_or([0.0; 3]);
+        .map_or([0.0; 3], |o| [o.x, o.y, o.z]);
 
     let params = recastnavigation_sys::dtNavMeshParams {
         orig: origin,
@@ -498,7 +620,7 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
 }
 
 /// Convert EQ coordinates (x, y, z where Z=up) to Detour coordinates (x, z, y where Y=up).
-/// MQ2Nav stores meshes in Detour's native coordinate space: (eq_x, eq_z, eq_y).
+/// `MQ2Nav` stores meshes in Detour's native coordinate space: (`eq_x`, `eq_z`, `eq_y`).
 fn eq_to_detour(eq_x: f32, eq_y: f32, eq_z: f32) -> [f32; 3] {
     [eq_x, eq_z, eq_y]
 }
@@ -508,9 +630,185 @@ fn detour_to_eq(d: &[f32; 3]) -> (f32, f32, f32) {
     (d[0], d[2], d[1])
 }
 
+fn detour_to_map(d: &[f32; 3]) -> (f32, f32, f32) {
+    (-d[2], -d[0], d[1])
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OverlayEdgeKind {
+    Outer,
+    Inner,
+    Skip,
+}
+
+fn edge_kind(
+    poly_index: usize,
+    edge_index: usize,
+    poly: &recastnavigation_sys::dtPoly,
+    links: &[recastnavigation_sys::dtLink],
+) -> OverlayEdgeKind {
+    let neighbor = poly.neis[edge_index];
+
+    if neighbor == 0 {
+        return OverlayEdgeKind::Outer;
+    }
+
+    if (neighbor & DT_EXT_LINK) != 0 {
+        return if edge_has_portal_link(poly.firstLink, edge_index, links) {
+            OverlayEdgeKind::Inner
+        } else {
+            OverlayEdgeKind::Outer
+        };
+    }
+
+    let neighbor_index = neighbor.saturating_sub(1) as usize;
+    if poly_index < neighbor_index {
+        OverlayEdgeKind::Inner
+    } else {
+        OverlayEdgeKind::Skip
+    }
+}
+
+fn edge_has_portal_link(
+    first_link: u32,
+    edge_index: usize,
+    links: &[recastnavigation_sys::dtLink],
+) -> bool {
+    let mut link_index = first_link;
+
+    while link_index != DT_NULL_LINK {
+        let Some(link) = links.get(link_index as usize) else {
+            return false;
+        };
+
+        if link.edge as usize == edge_index {
+            return true;
+        }
+
+        link_index = link.next;
+    }
+
+    false
+}
+
+fn detour_vertex(verts: &[f32], vertex_index: u16) -> Option<[f32; 3]> {
+    let start = vertex_index as usize * 3;
+    Some([
+        *verts.get(start)?,
+        *verts.get(start + 1)?,
+        *verts.get(start + 2)?,
+    ])
+}
+
+fn edge_segment(
+    poly: &recastnavigation_sys::dtPoly,
+    edge_index: usize,
+    verts: &[f32],
+) -> Option<NavMeshSegment> {
+    let vert_count = poly.vertCount as usize;
+    if vert_count < 2 {
+        return None;
+    }
+
+    let start = detour_vertex(verts, poly.verts[edge_index])?;
+    let end = detour_vertex(verts, poly.verts[(edge_index + 1) % vert_count])?;
+    let (x1, y1, z1) = detour_to_map(&start);
+    let (x2, y2, z2) = detour_to_map(&end);
+
+    Some(NavMeshSegment {
+        x1,
+        y1,
+        z1,
+        x2,
+        y2,
+        z2,
+    })
+}
+
+fn overlay_from_loaded(loaded: &LoadedNavMesh) -> Result<NavMeshOverlay> {
+    let max_tiles = unsafe { shim_dtNavMesh_getMaxTiles(loaded._nav_mesh.ptr) };
+    if max_tiles <= 0 {
+        return Ok(NavMeshOverlay {
+            outer_lines: Vec::new(),
+            inner_lines: Vec::new(),
+            bounds: NavMeshOverlayBounds::empty(),
+        });
+    }
+
+    let mut overlay = NavMeshOverlay {
+        outer_lines: Vec::new(),
+        inner_lines: Vec::new(),
+        bounds: NavMeshOverlayBounds::empty(),
+    };
+
+    for tile_index in 0..max_tiles {
+        let tile = unsafe { shim_dtNavMesh_getTile(loaded._nav_mesh.ptr, tile_index) };
+        if tile.is_null() {
+            continue;
+        }
+
+        let header_ptr = unsafe { (*tile).header };
+        if header_ptr.is_null() {
+            continue;
+        }
+
+        let header = unsafe { &*header_ptr };
+        if header.polyCount <= 0 || header.vertCount <= 0 {
+            continue;
+        }
+
+        let polys_ptr = unsafe { (*tile).polys };
+        let verts_ptr = unsafe { (*tile).verts };
+        if polys_ptr.is_null() || verts_ptr.is_null() {
+            continue;
+        }
+
+        let poly_count = header.polyCount as usize;
+        let polys = unsafe { std::slice::from_raw_parts(polys_ptr, poly_count) };
+        let verts = unsafe { std::slice::from_raw_parts(verts_ptr, header.vertCount as usize * 3) };
+        let links = if header.maxLinkCount > 0 && unsafe { !(*tile).links.is_null() } {
+            unsafe { std::slice::from_raw_parts((*tile).links, header.maxLinkCount as usize) }
+        } else {
+            &[]
+        };
+
+        let walkable_poly_count = header.offMeshBase.clamp(0, header.polyCount) as usize;
+        for (poly_index, poly) in polys.iter().take(walkable_poly_count).enumerate() {
+            let vert_count = poly.vertCount as usize;
+            if vert_count < 2 {
+                continue;
+            }
+
+            for edge_index in 0..vert_count {
+                let Some(segment) = edge_segment(poly, edge_index, verts) else {
+                    continue;
+                };
+
+                match edge_kind(poly_index, edge_index, poly, links) {
+                    OverlayEdgeKind::Outer => {
+                        overlay.bounds.expand_segment(&segment);
+                        overlay.outer_lines.push(segment);
+                    }
+                    OverlayEdgeKind::Inner => {
+                        overlay.bounds.expand_segment(&segment);
+                        overlay.inner_lines.push(segment);
+                    }
+                    OverlayEdgeKind::Skip => {}
+                }
+            }
+        }
+    }
+
+    Ok(overlay)
+}
+
 /// Find a path between two EQ positions using a loaded navmesh.
 /// Positions are in EQ coordinate space (x=east/west, y=north/south, z=up).
 /// Returns a list of EQ waypoint positions (x, y, z).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn find_path(
     loaded: &LoadedNavMesh,
     from: (f32, f32, f32),
@@ -567,10 +865,65 @@ pub fn find_path(
 }
 
 /// End-to-end convenience: download (or load from cache), parse, and load a zone mesh.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_zone(zone_short_name: &str) -> Result<LoadedNavMesh> {
     let data = download_zone_mesh(zone_short_name)?;
     let proto = parse_navmesh(&data)?;
     load_navmesh(&proto)
+}
+
+pub fn load_zone_overlay(zone_short_name: &str) -> Result<NavMeshOverlay> {
+    let loaded = load_zone(zone_short_name)?;
+    overlay_from_loaded(&loaded)
+}
+
+pub fn has_cached_zone_mesh(zone_short_name: &str) -> bool {
+    mesh_cache_path(zone_short_name).exists()
+}
+
+/// Plan a navigation route between two points in a zone using the navmesh.
+pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> RoutePlan {
+    let mesh_cached = has_cached_zone_mesh(zone_short_name);
+
+    match load_zone(zone_short_name) {
+        Ok(loaded) => match find_path(&loaded, from, to) {
+            Ok(path) => RoutePlan {
+                waypoints: path
+                    .into_iter()
+                    .map(|(x, y, z)| Waypoint::new(x, y, z))
+                    .collect(),
+                source: RouteSource::NavMesh,
+                mesh_cached,
+            },
+            Err(error) => {
+                tracing::warn!(
+                    zone = zone_short_name,
+                    %error,
+                    "Navmesh path query failed; falling back to straight-line route"
+                );
+                RoutePlan {
+                    waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                    source: RouteSource::StraightLineFallback,
+                    mesh_cached,
+                }
+            }
+        },
+        Err(error) => {
+            tracing::warn!(
+                zone = zone_short_name,
+                %error,
+                "Navmesh load failed; falling back to straight-line route"
+            );
+            RoutePlan {
+                waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                source: RouteSource::StraightLineFallback,
+                mesh_cached,
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -625,5 +978,20 @@ mod tests {
     fn mesh_cache_path_format() {
         let p = mesh_cache_path("befallen");
         assert!(p.to_string_lossy().contains("befallen.navmesh"));
+    }
+
+    #[test]
+    fn detour_to_map_matches_brewall_axes() {
+        let detour = [100.0, 25.0, -60.0];
+        let (map_x, map_y, z) = detour_to_map(&detour);
+        assert!((map_x - 60.0).abs() < f32::EPSILON);
+        assert!((map_y - (-100.0)).abs() < f32::EPSILON);
+        assert!((z - 25.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn navmesh_overlay_bounds_empty_dimension_is_one() {
+        let bounds = NavMeshOverlayBounds::empty();
+        assert!((bounds.max_dimension() - 1.0).abs() < f32::EPSILON);
     }
 }

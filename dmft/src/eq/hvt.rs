@@ -6,20 +6,29 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HvtPriority {
+    /// Raid-level targets — immediate response required.
     Critical,
+    /// Named mobs with valuable drops.
     High,
+    /// Worth killing if convenient.
     Medium,
+    /// Informational tracking only.
     Low,
 }
 
 /// A single high-value target entry from the watchlist.
 #[derive(Debug, Clone, Deserialize)]
 pub struct HvtTarget {
+    /// Mob display name (case-sensitive in config, case-insensitive in lookup).
     pub name: String,
+    /// Zone where this target spawns.
     pub zone: String,
+    /// How urgently to respond when spotted.
     pub priority: HvtPriority,
+    /// Whether to send a Discord webhook alert when spotted.
     #[serde(default)]
     pub alert_discord: bool,
+    /// Free-text note (drops, strategy, etc.).
     #[serde(default)]
     pub note: String,
 }
@@ -37,6 +46,10 @@ struct WatchlistFile {
 
 impl HvtWatchlist {
     /// Load the watchlist from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let file: WatchlistFile = toml::from_str(&content)?;
@@ -48,16 +61,19 @@ impl HvtWatchlist {
     }
 
     /// Check if a spawn name matches an HVT entry (case-insensitive).
+    #[must_use]
     pub fn is_hvt(&self, name: &str) -> Option<&HvtTarget> {
         self.targets.get(&name.to_lowercase())
     }
 
     /// Number of targets in the watchlist.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.targets.len()
     }
 
     /// Whether the watchlist is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.targets.is_empty()
     }

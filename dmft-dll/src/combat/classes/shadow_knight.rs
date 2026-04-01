@@ -2,7 +2,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
-/// Shadow Knight strategy: off-tank with lifetap DPS, disease/poison DoTs, snare.
+/// Shadow Knight strategy: off-tank with lifetap DPS, disease/poison `DoTs`, snare.
 /// EQ class ID: 5
 pub struct ShadowKnightStrategy {
     class_id: u8,

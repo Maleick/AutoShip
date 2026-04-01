@@ -4,42 +4,67 @@ pub type ClientId = u32;
 /// Full game state snapshot sent from the DLL to the manager
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GameState {
+    /// PID of the EQ client this state belongs to.
     pub client_id: ClientId,
+    /// The local player's spawn data, if in-game.
     pub local_player: Option<SpawnData>,
+    /// Current target's spawn data, if any.
     pub target: Option<SpawnData>,
+    /// All spawns within render distance.
     pub nearby_spawns: Vec<SpawnData>,
+    /// Millisecond timestamp when this snapshot was captured.
     pub timestamp_ms: u64,
+    /// Current navigation FSM state.
     pub nav_status: crate::nav::NavStatus,
+    /// Current combat FSM state.
     pub combat_status: crate::combat::CombatStatus,
+    /// Zone short name (e.g. "qey2hh1").
     pub zone_short_name: String,
+    /// Zone long name (e.g. "Queynos Hills").
     pub zone_long_name: String,
 }
 
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SpawnData {
+    /// Unique spawn ID assigned by the EQ server.
     pub spawn_id: u32,
+    /// Internal name (e.g. "a_fire_beetle").
     pub name: String,
+    /// Name shown in-game (e.g. "a fire beetle").
     pub displayed_name: String,
+    /// Spawn type: 0=player, 1=NPC, 2=corpse, 3=any.
     pub spawn_type: u8,
+    /// Character or mob level.
     pub level: u8,
+    /// EQ class ID (1=Warrior, 2=Cleric, etc.).
     pub class_id: u8,
+    /// World X position.
     pub x: f32,
+    /// World Y position.
     pub y: f32,
+    /// World Z position (vertical).
     pub z: f32,
+    /// Facing direction in degrees (0-512 EQ heading units).
     pub heading: f32,
+    /// Current hit points.
     pub hp_current: i64,
+    /// Maximum hit points.
     pub hp_max: i64,
+    /// Current mana.
     pub mana_current: i32,
+    /// Maximum mana.
     pub mana_max: i32,
     /// Signed because EQ can drain endurance below zero internally.
     pub endurance_current: i32,
-    /// Unsigned in the EQ struct (PlayerZoneClient). Do not compare directly
-    /// with endurance_current without casting — signedness differs intentionally.
+    /// Unsigned in the EQ struct (`PlayerZoneClient`). Do not compare directly
+    /// with `endurance_current` without casting — signedness differs intentionally.
     pub endurance_max: u32,
 }
 
 impl SpawnData {
+    /// Returns current HP as a percentage (0.0 - 100.0). Returns 100.0 if max HP is zero or negative.
+    #[must_use]
     pub fn hp_pct(&self) -> f32 {
         if self.hp_max > 0 {
             (self.hp_current as f32 / self.hp_max as f32) * 100.0
@@ -48,6 +73,8 @@ impl SpawnData {
         }
     }
 
+    /// Returns current mana as a percentage (0.0 - 100.0). Returns 100.0 if max mana is zero or negative.
+    #[must_use]
     pub fn mana_pct(&self) -> f32 {
         if self.mana_max > 0 {
             (self.mana_current as f32 / self.mana_max as f32) * 100.0
@@ -60,11 +87,17 @@ impl SpawnData {
 /// Status of the in-process hook inside an EQ client
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum HookStatus {
+    /// DLL has not been injected into this client.
     NotInjected,
+    /// DLL injection is in progress.
     Injecting,
+    /// DLL is loaded but hooks are not yet active.
     Injected,
+    /// DLL hooks are active and processing game events.
     HooksActive,
+    /// An error occurred during injection or hook setup.
     Error(String),
+    /// DLL is being ejected from the process.
     Ejecting,
 }
 

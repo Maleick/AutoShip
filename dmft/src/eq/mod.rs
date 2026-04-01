@@ -1,8 +1,18 @@
+//! EverQuest data layer — spawn reading, log parsing, map loading, named mob tracking.
+
+/// High-value target definitions and alert configuration.
 pub mod hvt;
+/// EQ log file parser — chat channels, loot events, combat messages.
 pub mod log_parser;
+/// Real-time log file watcher with tail-follow semantics.
 pub mod log_watcher;
+/// SOE `.map` file parser — lines and points for zone map overlays.
 pub mod map_parser;
+/// Named mob database — spawn names, respawn timers, loot tables.
 pub mod named_db;
+/// Named mob tracker — live tracking of named spawns across zones.
 pub mod named_tracker;
+/// Spawn linked list traversal — reads all spawns from EQ memory.
 pub mod spawn;
+/// EQ data structures — `SpawnInfo`, `GroupInfo`, class/type enums.
 pub mod structs;

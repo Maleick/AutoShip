@@ -20,7 +20,7 @@ pub struct LootRules {
     /// Items to pick up and immediately destroy (junk clogging inventory).
     #[serde(default)]
     pub destroy_items: HashSet<String>,
-    /// If true, loot everything not in destroy_items. Overrides keep/sell lists.
+    /// If true, loot everything not in `destroy_items`. Overrides keep/sell lists.
     #[serde(default = "default_true")]
     pub loot_all: bool,
     /// If true, auto-split coin with group.
@@ -80,7 +80,9 @@ impl Default for LootConfig {
 /// A corpse to loot, tracked by spawn ID and mob name.
 #[derive(Debug, Clone)]
 pub struct CorpseEntry {
+    /// EQ spawn ID of the corpse.
     pub spawn_id: u32,
+    /// Display name of the mob that died.
     pub mob_name: String,
 }
 
@@ -90,13 +92,25 @@ pub enum LootPhase {
     /// Target the corpse via /target.
     TargetCorpse,
     /// Move within loot range of the corpse.
-    ApproachCorpse { entered_tick: u64 },
+    ApproachCorpse {
+        /// Tick when approach began.
+        entered_tick: u64,
+    },
     /// Open the loot window via /loot.
-    OpenLoot { entered_tick: u64 },
+    OpenLoot {
+        /// Tick when loot window was opened.
+        entered_tick: u64,
+    },
     /// Pick up items from the loot window.
-    LootItems { entered_tick: u64 },
+    LootItems {
+        /// Tick when item pickup began.
+        entered_tick: u64,
+    },
     /// Close loot window and clean up.
-    CloseLoot { entered_tick: u64 },
+    CloseLoot {
+        /// Tick when close phase began.
+        entered_tick: u64,
+    },
     /// Move to the next corpse in the queue.
     NextCorpse,
     /// All corpses looted.
@@ -105,13 +119,19 @@ pub enum LootPhase {
 
 /// The loot FSM — drives the corpse-by-corpse loot cycle.
 pub struct LootCycle {
+    /// Loot configuration (rules, delays).
     pub config: LootConfig,
+    /// Current FSM phase.
     pub phase: LootPhase,
+    /// Queue of corpses to loot.
     pub corpse_queue: Vec<CorpseEntry>,
+    /// Index of the corpse currently being looted.
     pub current_corpse_idx: usize,
 }
 
 impl LootCycle {
+    /// Creates a new loot cycle with the given config and corpse queue.
+    #[must_use]
     pub fn new(config: LootConfig, corpses: Vec<CorpseEntry>) -> Self {
         let phase = if corpses.is_empty() {
             LootPhase::Done
@@ -127,6 +147,7 @@ impl LootCycle {
     }
 
     /// Is the loot cycle complete?
+    #[must_use]
     pub fn is_done(&self) -> bool {
         self.phase == LootPhase::Done
     }
@@ -232,13 +253,18 @@ impl LootCycle {
 /// Determine the item action based on loot rules.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ItemAction {
+    /// Keep the item in inventory.
     Keep,
+    /// Queue the item for vendor sale.
     Sell,
+    /// Destroy the item immediately.
     Destroy,
+    /// Leave the item on the corpse.
     Ignore,
 }
 
 /// Classify an item based on loot rules.
+#[must_use]
 pub fn classify_item(item_name: &str, rules: &LootRules) -> ItemAction {
     if rules.destroy_items.contains(item_name) {
         return ItemAction::Destroy;

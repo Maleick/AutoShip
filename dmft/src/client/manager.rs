@@ -1,4 +1,4 @@
-//! ClientManager — discovers, tracks, and manages all EQ client sessions.
+//! `ClientManager` — discovers, tracks, and manages all EQ client sessions.
 
 use super::session::EqSession;
 use anyhow::Result;
@@ -14,6 +14,8 @@ pub struct ClientManager {
 }
 
 impl ClientManager {
+    #[must_use]
+    /// Create a new client manager that watches for the given EQ process name.
     pub fn new(process_name: &str) -> Self {
         Self {
             sessions: HashMap::new(),
@@ -23,6 +25,10 @@ impl ClientManager {
     }
 
     /// Discover running EQ processes and create sessions for new ones.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn discover(&mut self) -> Result<Vec<ClientId>> {
         let pids = crate::process::memory::find_processes_by_name(&self.eq_process_name)?;
         let mut new_clients = Vec::new();
@@ -43,11 +49,15 @@ impl ClientManager {
     }
 
     /// Inject the DLL into a specific client.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn inject(&mut self, client_id: ClientId, dll_source: &Path) -> Result<()> {
         let session = self
             .sessions
             .get_mut(&client_id)
-            .ok_or_else(|| anyhow::anyhow!("Client {} not found", client_id))?;
+            .ok_or_else(|| anyhow::anyhow!("Client {client_id} not found"))?;
 
         let prepared = crate::inject::dll_prep::prepare_dll(dll_source)?;
         crate::inject::loader::inject_dll(session.pid, &prepared)?;
@@ -92,6 +102,7 @@ impl ClientManager {
     }
 
     /// Get a reference to a session.
+    #[must_use]
     pub fn get(&self, client_id: ClientId) -> Option<&EqSession> {
         self.sessions.get(&client_id)
     }
@@ -102,11 +113,13 @@ impl ClientManager {
     }
 
     /// Get all active sessions.
+    #[must_use]
     pub fn active_sessions(&self) -> Vec<&EqSession> {
         self.sessions.values().filter(|s| s.is_active()).collect()
     }
 
     /// Total number of managed sessions.
+    #[must_use]
     pub fn session_count(&self) -> usize {
         self.sessions.len()
     }

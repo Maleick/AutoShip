@@ -7,15 +7,25 @@ use std::path::{Path, PathBuf};
 /// Configuration for a single XP camp location.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CampConfig {
+    /// Camp name used as the file stem (e.g., `crushbone_entrance`).
     pub name: String,
+    /// Zone short name (e.g., `crushbone`).
     pub zone: String,
+    /// XYZ coordinates of the camp anchor point.
     pub camp_center: [f32; 3],
+    /// XYZ coordinates where the puller brings mobs.
     pub pull_point: [f32; 3],
+    /// Maximum distance from pull point to engage mobs.
     pub pull_radius: f32,
+    /// Radius around camp center that members should stay within.
     pub camp_radius: f32,
+    /// Maximum distance a pulled mob can go before being abandoned.
     pub leash_radius: f32,
+    /// Mana percentage threshold to sit and med between pulls.
     pub rest_mana_pct: u8,
+    /// Minimum mana percentage required before pulling the next mob.
     pub pull_mana_pct: u8,
+    /// Min and max level range for this camp (used for progression).
     pub level_range: [u8; 2],
     /// Mob names to pull. Empty means pull anything in range.
     #[serde(default)]
@@ -41,6 +51,10 @@ impl CampConfig {
     }
 
     /// Save this camp config to `config/camps/{name}.toml`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn save(&self) -> Result<()> {
         let dir = Self::camps_dir();
         std::fs::create_dir_all(&dir)
@@ -56,6 +70,10 @@ impl CampConfig {
     }
 
     /// Load a camp config from `config/camps/{name}.toml`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(name: &str) -> Result<Self> {
         let path = Self::camps_dir().join(format!("{name}.toml"));
         let contents = std::fs::read_to_string(&path)

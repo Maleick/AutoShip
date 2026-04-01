@@ -8,6 +8,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+/// Coordinates staggered launching and login of multiple EQ clients.
 pub struct LaunchCoordinator {
     config: LaunchConfig,
     retry_config: RetryConfig,
@@ -15,7 +16,7 @@ pub struct LaunchCoordinator {
     launch_queue: VecDeque<(ClientId, AccountInfo)>,
     active_logins: Vec<LoginStateMachine>,
     failure_window: VecDeque<(Instant, ClientId)>,
-    /// Per-client earliest retry time, honoring backoff from LoginAction::Retry.
+    /// Per-client earliest retry time, honoring backoff from `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
     paused: bool,
     last_launch: Option<Instant>,
@@ -23,25 +24,39 @@ pub struct LaunchCoordinator {
 }
 
 #[derive(Debug)]
+/// Events emitted by the launch coordinator.
 pub enum CoordinatorEvent {
+    /// A client process was spawned.
     ClientLaunched {
+        /// Client identifier.
         client_id: ClientId,
+        /// OS process ID.
         pid: u32,
     },
+    /// A client completed login and is in-world.
     ClientReady {
+        /// Client identifier.
         client_id: ClientId,
     },
+    /// A client login failed.
     ClientFailed {
+        /// Client identifier.
         client_id: ClientId,
+        /// The login error.
         error: LoginError,
     },
+    /// All launches paused due to mass failure.
     AllPaused {
+        /// Reason for the pause.
         reason: String,
     },
+    /// All queued clients are ready.
     AllReady,
 }
 
 impl LaunchCoordinator {
+    /// Creates a new coordinator with the given config.
+    #[must_use]
     pub fn new(config: LaunchConfig, retry: RetryConfig, server: ServerConfig) -> Self {
         let next_stagger =
             compute_stagger_between(config.stagger_min_secs, config.stagger_max_secs);
@@ -59,10 +74,12 @@ impl LaunchCoordinator {
         }
     }
 
+    /// Adds a client to the launch queue.
     pub fn enqueue(&mut self, client_id: ClientId, account: AccountInfo) {
         self.launch_queue.push_back((client_id, account));
     }
 
+    /// Advances all active logins and launches queued clients. Returns events.
     pub fn tick(&mut self) -> Vec<CoordinatorEvent> {
         let mut events = Vec::new();
 
@@ -162,7 +179,10 @@ impl LaunchCoordinator {
         // 7. If all active logins are terminal and queue is empty, emit AllReady
         if self.launch_queue.is_empty()
             && !self.active_logins.is_empty()
-            && self.active_logins.iter().all(|sm| sm.is_terminal())
+            && self
+                .active_logins
+                .iter()
+                .all(super::login_sm::LoginStateMachine::is_terminal)
         {
             // Only emit AllReady if all finished successfully (Ready state)
             let all_ready = self
@@ -177,6 +197,7 @@ impl LaunchCoordinator {
         events
     }
 
+    /// Report a login state machine event for a specific client.
     pub fn report_login_event(&mut self, client_id: ClientId, event: LoginEvent) {
         if let Some(sm) = self
             .active_logins
@@ -217,19 +238,26 @@ impl LaunchCoordinator {
         }
     }
 
+    /// Resume the launch coordinator after a pause.
     pub fn resume(&mut self) {
         self.paused = false;
         tracing::info!("Launch coordinator resumed");
     }
 
+    /// Whether the coordinator is paused (e.g., due to mass failure).
+    #[must_use]
     pub fn is_paused(&self) -> bool {
         self.paused
     }
 
+    /// Number of clients waiting in the launch queue.
+    #[must_use]
     pub fn pending_count(&self) -> usize {
         self.launch_queue.len()
     }
 
+    /// Number of clients currently in the login process.
+    #[must_use]
     pub fn active_count(&self) -> usize {
         self.active_logins
             .iter()

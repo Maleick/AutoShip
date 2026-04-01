@@ -21,9 +21,9 @@ pub enum AlertLevel {
 impl AlertLevel {
     fn color(&self) -> u32 {
         match self {
-            AlertLevel::Info => 0x2ECC71,     // green
-            AlertLevel::Warning => 0xF1C40F,  // yellow
-            AlertLevel::Critical => 0xE74C3C, // red
+            AlertLevel::Info => 0x002E_CC71,     // green
+            AlertLevel::Warning => 0x00F1_C40F,  // yellow
+            AlertLevel::Critical => 0x00E7_4C3C, // red
         }
     }
 }
@@ -31,8 +31,11 @@ impl AlertLevel {
 /// A Discord alert to be sent via webhook.
 #[derive(Debug, Clone)]
 pub struct DiscordAlert {
+    /// Alert title (shown as embed title in Discord).
     pub title: String,
+    /// Alert body text.
     pub message: String,
+    /// Severity level controlling the embed color.
     pub level: AlertLevel,
 }
 
@@ -49,6 +52,7 @@ pub struct WebhookSender {
 impl WebhookSender {
     /// Create a new webhook sender for the given URL.
     /// Spawns a background thread that processes the alert queue.
+    #[must_use]
     pub fn new(webhook_url: String) -> Self {
         let (tx, rx) = mpsc::channel::<DiscordAlert>();
 
@@ -157,10 +161,7 @@ fn chrono_now_iso() -> String {
     let day_of_year = days % 365;
     let month = day_of_year / 30 + 1;
     let day = day_of_year % 30 + 1;
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        year, month, day, hours, minutes, seconds
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
 }
 
 #[cfg(test)]

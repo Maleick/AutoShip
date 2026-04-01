@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use super::camp_loop::{CampEvent, CampLoop, CampState};
 use super::ch_chain::ChChain;
 
+/// Coordinates group combat — assist targeting, CC assignments, and camp loop FSM.
 pub struct CombatCoordinator {
     assist_target: Option<u32>,
     main_tank_id: Option<ClientId>,
@@ -20,6 +21,8 @@ pub struct CombatCoordinator {
 }
 
 impl CombatCoordinator {
+    /// Create a new combat coordinator with no assignments.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             assist_target: None,
@@ -32,10 +35,13 @@ impl CombatCoordinator {
         }
     }
 
+    /// Designate a client as the main tank for assist targeting.
     pub fn set_main_tank(&mut self, client_id: ClientId) {
         self.main_tank_id = Some(client_id);
     }
 
+    /// Reference to the inner camp loop FSM.
+    #[must_use]
     pub fn camp_loop(&self) -> &CampLoop {
         &self.camp_loop
     }
@@ -128,7 +134,7 @@ impl CombatCoordinator {
         commands
     }
 
-    /// Detect combat state changes from GameState and convert to CampEvents.
+    /// Detect combat state changes from `GameState` and convert to `CampEvents`.
     fn detect_camp_events(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<CampEvent> {
         let mut events = Vec::new();
 
@@ -247,7 +253,9 @@ impl CombatCoordinator {
 
     /// Whether a CH chain is currently active.
     pub fn ch_chain_active(&self) -> bool {
-        self.ch_chain.as_ref().is_some_and(|c| c.is_active())
+        self.ch_chain
+            .as_ref()
+            .is_some_and(super::ch_chain::ChChain::is_active)
     }
 
     /// Add a cleric to the active CH chain.
@@ -271,6 +279,7 @@ impl CombatCoordinator {
         }
     }
 
+    /// Assign nearby enemies to enchanter CC targets and return commands.
     pub fn decide_cc_assignments(
         &mut self,
         nearby_enemies: &[(u32, String)],

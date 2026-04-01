@@ -38,6 +38,10 @@ const LOG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Initialize crossterm, run the TUI loop, and clean up on exit.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_tui(mut app: App, mut orchestrator: Orchestrator) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
@@ -183,9 +187,8 @@ fn scan_for_clients_live(app: &mut App) {
     use super::app::ClientState;
     use crate::process::memory::{ProcessHandle, find_processes_by_name};
 
-    let pids = match find_processes_by_name("eqgame.exe") {
-        Ok(p) => p,
-        Err(_) => return,
+    let Ok(pids) = find_processes_by_name("eqgame.exe") else {
+        return;
     };
 
     // Track which PIDs we already have
@@ -262,8 +265,8 @@ fn scan_for_clients_live(app: &mut App) {
 }
 
 /// Parse character name and zone name from the DLL-renamed window title.
-/// Format: "[DMFT] EQ - CharName (ZoneName)" or "[DMFT] EQ - CharName"
-/// Falls back to the old EQ format: "EverQuest - Character - Zone"
+/// Format: "[DMFT] EQ - `CharName` (`ZoneName`)" or "[DMFT] EQ - `CharName`"
+/// Falls back to the old EQ format: "`EverQuest` - Character - Zone"
 #[cfg(windows)]
 fn parse_title_fields(title: &str) -> (String, String) {
     // Strip optional "[DMFT] " prefix before parsing.
@@ -329,7 +332,7 @@ fn refresh_eq_data_live(app: &mut App) {
         let proc = match ProcessHandle::open(client.pid) {
             Ok(p) => p,
             Err(e) => {
-                client.client_status = format!("Lost connection: {}", e);
+                client.client_status = format!("Lost connection: {e}");
                 continue;
             }
         };
@@ -337,19 +340,19 @@ fn refresh_eq_data_live(app: &mut App) {
         // Read local player
         match eq::spawn::read_local_player(&proc, client.eq_base) {
             Ok(player) => client.local_player = Some(player),
-            Err(e) => client.client_status = format!("Player read error: {}", e),
+            Err(e) => client.client_status = format!("Player read error: {e}"),
         }
 
         // Read target
         match eq::spawn::read_target(&proc, client.eq_base) {
             Ok(target) => client.target = target,
-            Err(e) => client.client_status = format!("Target read error: {}", e),
+            Err(e) => client.client_status = format!("Target read error: {e}"),
         }
 
         // Read spawn list
         match eq::spawn::read_all_spawns(&proc, client.eq_base, 200) {
             Ok(spawns) => client.spawns = spawns,
-            Err(e) => client.client_status = format!("Spawn read error: {}", e),
+            Err(e) => client.client_status = format!("Spawn read error: {e}"),
         }
 
         // Read zone name from memory (preferred) or fall back to window title
@@ -643,7 +646,7 @@ fn load_demo_data(app: &mut App) {
     for (i, &(name, class_id, level, hp, hp_max, mana, mana_max, ref stand, zone, race_id)) in
         demo_clients.iter().enumerate()
     {
-        let mut client = ClientState::new(1000 + i as u32, 0x140000000);
+        let mut client = ClientState::new(1000 + i as u32, 0x0001_4000_0000);
         client.zone_name = zone.to_string();
         let (x, y, z, heading) = super::demo_data::demo_player_position(zone, i).unwrap_or((
             1234.5 + (i as f32 * 100.0),
@@ -677,7 +680,7 @@ fn load_demo_data(app: &mut App) {
             cast_state: None,
         });
         client.character_name = name.to_string();
-        client.client_status = format!("Connected: {}", name);
+        client.client_status = format!("Connected: {name}");
         client.is_demo = true;
         app.clients.push(client);
     }
@@ -780,9 +783,8 @@ pub(super) fn zone_to_short_name(zone_name: &str) -> String {
 /// Tick the Soul Engine coordinator (if enabled).
 /// Generates soul commands (idle behaviors, chat, emotes) for all registered characters.
 fn tick_soul_engine(app: &mut App) {
-    let coordinator = match app.soul_coordinator.as_mut() {
-        Some(c) => c,
-        None => return,
+    let Some(coordinator) = app.soul_coordinator.as_mut() else {
+        return;
     };
 
     // Build game states from current app data
@@ -795,8 +797,8 @@ fn tick_soul_engine(app: &mut App) {
 
     if !commands.is_empty() {
         tracing::debug!(count = commands.len(), "Soul Engine generated commands");
-        // TODO: dispatch commands to clients via IPC pipe
-        // For now, commands are generated but not sent (no live clients in TUI demo mode)
+        // Soul commands are logged but not dispatched in TUI demo mode.
+        // The Orchestrator handles IPC delivery when live clients are connected.
     }
 
     app.soul_tick_counter += 1;

@@ -16,20 +16,26 @@ use anyhow::Context;
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
 pub use super::state::{
-    CommandBarState, HexDumpState, MapScreenState, NavigationScreenState, OverviewScreenState,
-    SpawnsScreenState, TacticalScreenState,
+    CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
+    OverviewScreenState, SpawnsScreenState, TacticalScreenState,
 };
 
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveScreen {
+    /// Character roster and group overview.
     Overview,
+    /// Map and spawn list tactical view.
     Tactical,
+    /// Waypoint navigation management.
     Navigation,
+    /// Debug panels (raw spawns, hex dump).
     Debug,
 }
 
 impl ActiveScreen {
+    /// Returns the human-readable label for this screen tab.
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Overview => "Characters",
@@ -39,6 +45,7 @@ impl ActiveScreen {
         }
     }
 
+    /// All screen variants for iteration.
     pub const ALL: [ActiveScreen; 4] = [
         Self::Overview,
         Self::Tactical,
@@ -50,30 +57,48 @@ impl ActiveScreen {
 /// Which panel is currently focused for keyboard input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivePanel {
+    /// Character roster list on the overview screen.
     OverviewRoster,
+    /// Selected character detail panel.
     OverviewCharacter,
+    /// Group membership panel.
     OverviewGroups,
+    /// Spawn filter/scope panel.
     OverviewFilters,
+    /// Combat status panel (assist, CH chain).
     OverviewCombat,
+    /// Session statistics panel (uptime, loot).
     OverviewSession,
+    /// Zone map display on tactical screen.
     TacticalMap,
+    /// Spawn list on tactical screen.
     TacticalSpawns,
+    /// Named mob tracker on tactical screen.
     TacticalNamed,
+    /// Navigation waypoints panel.
     TacticalNavigation,
+    /// Raw spawn data table (debug).
     DebugSpawns,
+    /// Memory hex dump panel (debug).
     DebugHexDump,
 }
 
 /// Spawn type filter for the spawn list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnFilter {
+    /// Show all spawn types.
     All,
+    /// Show only player characters.
     Pc,
+    /// Show only non-player characters.
     Npc,
+    /// Show only named (rare) mobs.
     Named,
 }
 
 impl SpawnFilter {
+    /// Cycles to the next filter variant.
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Self::All => Self::Pc,
@@ -83,6 +108,8 @@ impl SpawnFilter {
         }
     }
 
+    /// Returns the display label for this filter.
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::All => "All",
@@ -96,12 +123,17 @@ impl SpawnFilter {
 /// Status of a user-tracked spawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackedStatus {
+    /// Spawn is currently alive in the zone.
     Up,
+    /// Spawn has despawned or been killed.
     Down,
+    /// Spawn status cannot be determined.
     Unknown,
 }
 
 impl TrackedStatus {
+    /// Returns the short status label (UP, DOWN, ???).
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Up => "UP",
@@ -110,6 +142,8 @@ impl TrackedStatus {
         }
     }
 
+    /// Returns the color for rendering this status.
+    #[must_use]
     pub fn color(&self) -> ratatui::style::Color {
         use ratatui::style::Color;
         match self {
@@ -123,20 +157,30 @@ impl TrackedStatus {
 /// A user-tracked spawn (via :track command).
 #[derive(Debug, Clone)]
 pub struct TrackedSpawn {
+    /// Spawn name being tracked.
     pub name: String,
+    /// Current up/down/unknown status.
     pub status: TrackedStatus,
+    /// Tick count when this spawn was last seen alive.
     pub last_seen_tick: Option<u64>,
+    /// Last known X coordinate.
     pub last_x: f32,
+    /// Last known Y coordinate.
     pub last_y: f32,
+    /// Last known Z coordinate.
     pub last_z: f32,
 }
 
 /// Definition for a logical group of accounts.
 #[derive(Debug, Clone)]
 pub struct GroupDef {
+    /// Numeric group identifier (1-based).
     pub id: u8,
+    /// Human-readable group name (e.g., "Alpha").
     pub name: String,
+    /// Inclusive range of account numbers in this group.
     pub account_range: (u8, u8),
+    /// Default camp assignment for this group.
     #[allow(dead_code)]
     pub default_camp: String,
 }
@@ -155,117 +199,159 @@ pub struct LiveGroup {
 /// Cached CH chain status for TUI display (avoids reaching into Orchestrator).
 #[derive(Clone, Debug)]
 pub struct ChChainStatus {
+    /// Number of clerics in the chain.
     pub members: usize,
+    /// Interval between heals in seconds.
     pub interval_secs: f32,
+    /// Whether the chain dynamically adjusts timing.
     pub is_adaptive: bool,
+    /// Spawn ID of the heal target.
     pub target_id: u32,
 }
 
 /// Application state for the TUI command center.
 pub struct App {
+    /// Whether the application is still running (false triggers shutdown).
     pub running: bool,
+    /// Currently displayed screen tab.
     pub active_screen: ActiveScreen,
+    /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
 
-    // Multi-client state
+    /// Connected EQ client states.
     pub clients: Vec<ClientState>,
+    /// Index of the currently selected client in `clients`.
     pub selected_client: usize,
 
-    // Group definitions (6 groups of 6 accounts each)
+    /// Configured group definitions (6 groups of 6 accounts each).
     pub groups: Vec<GroupDef>,
 
-    // Active group focus: None = aggregate view, Some(0..5) = focused on group
+    /// Active group focus: `None` = aggregate view, `Some(idx)` = single group.
     pub active_group: Option<usize>,
 
-    // Server name from config
+    /// EQ server name from config.
     pub server_name: String,
 
-    // Legacy single-client fields kept for compatibility
+    /// Legacy: local player from the selected client (kept for backward compat).
     pub local_player: Option<SpawnInfo>,
+    /// Legacy: target of the selected client.
     pub target: Option<SpawnInfo>,
+    /// Legacy: spawn list from the selected client.
     pub spawns: Vec<SpawnInfo>,
+    /// Status bar message displayed at the bottom of the TUI.
     pub status_message: String,
+    /// Monotonic tick counter incremented each refresh cycle.
     pub tick_count: u64,
 
-    // Per-screen state
+    /// Overview screen UI state (collapse flags, selection).
     pub overview_state: OverviewScreenState,
+    /// Debug spawn list UI state (table selection, filters).
     pub spawns_state: SpawnsScreenState,
+    /// Hex dump panel state (address, cursor).
     pub hex_state: HexDumpState,
 
-    // Refresh timing
+    /// TUI refresh interval in milliseconds.
     pub refresh_rate_ms: u64,
 
-    // EQ connection info (legacy — first client)
+    /// EQ module base address (legacy, from first attached client).
     pub eq_base: u64,
+    /// PID of the attached EQ process (legacy, first client).
     pub attached_pid: Option<u32>,
 
-    // Soul Engine
+    /// Soul Engine coordinator for LLM-driven character personalities.
     pub soul_coordinator: Option<SoulCoordinator>,
+    /// Tick counter for soul engine update throttling.
     pub soul_tick_counter: u64,
 
+    /// Map panel state (zoom, pan, overlays).
     pub map_state: MapScreenState,
+    /// Tactical screen state (named/nav panel visibility, collapse flags).
     pub tactical_state: TacticalScreenState,
 
-    // Privacy mode — hides own character names and server for screenshots
+    /// Privacy mode — hides character names and server for screenshots.
     pub privacy_mode: bool,
 
+    /// Command bar state (input text, history, visibility).
     pub cmd_state: CommandBarState,
 
-    // Named spawn tracking
+    /// Named mob tracker for rare spawn monitoring.
     pub named_tracker: NamedTracker,
 
-    // User-tracked spawns (via :track command)
+    /// User-tracked spawns registered via the `:track` command.
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
 
-    // Help overlay
+    /// Whether the help overlay is currently visible.
     pub help_visible: bool,
+    pub help_scroll: usize,
 
-    // Operating mode (camp vs hunt)
+    /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
 
-    // Combat roles
+    /// Name of the main assist character, if set.
     pub main_assist: Option<String>,
+    /// Name of the main tank character, if set.
     pub main_tank: Option<String>,
 
-    // Heal-cancel toggle (cleric duck on high HP during cast)
+    /// Whether heal-cancel is enabled (cleric ducks on high HP during cast).
     pub heal_cancel_enabled: bool,
 
     /// Cached CH chain status (updated each tick from Orchestrator).
     pub ch_chain_status: Option<ChChainStatus>,
 
-    // Account config for login automation
+    /// Account configuration for login automation.
     pub accounts_config: Option<AccountsConfig>,
 
-    // Log parsing / session stats
+    /// Accumulated loot data from log parsing.
     pub loot_database: LootDatabase,
+    /// Per-client log file watchers for chat/loot events.
     pub log_watchers: Vec<LogWatcher>,
+    /// Timestamp when this TUI session started.
     pub session_start: std::time::Instant,
     /// Ring buffer of recent chat events (capped at 200).
     pub chat_events: VecDeque<ChatEvent>,
 
+    /// Navigation screen state (waypoint list, route display).
     pub nav_state: NavigationScreenState,
 
-    // Theme
+    /// EQ install path for launch operations (from config or default).
+    pub launch_eq_path: String,
+
+    /// Active theme variant identifier.
     pub theme_kind: ThemeKind,
+    /// Resolved theme colors and styles.
     pub theme: Theme,
 
-    // Discord integration
+    /// Discord webhook sender for alerts, if configured.
     pub discord_webhook: Option<crate::discord::webhook::WebhookSender>,
+    /// Discord bridge for bidirectional chat relay.
     pub discord_bridge: Option<crate::discord::bridge::TuiBridge>,
 }
 
 /// Navigation status for a single client.
 #[derive(Debug, Clone)]
 pub struct NavClientStatus {
+    /// Name of the navigation destination.
     pub destination: String,
+    /// Current navigator state (idle, moving, stuck, arrived).
     pub status: dmft_common::nav::NavStatus,
+    /// Estimated time of arrival in seconds, if calculable.
     #[allow(dead_code)]
     pub eta_secs: Option<u32>,
     /// Active navigation waypoints for map overlay rendering.
     pub waypoints: Vec<dmft_common::nav::Waypoint>,
 }
 
+struct FocusedNavClient {
+    pid: u32,
+    client_name: String,
+    zone_short: String,
+    position: (f32, f32, f32),
+    is_demo: bool,
+}
+
 impl App {
+    /// Create a new TUI application with default state.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             running: true,
@@ -314,6 +400,7 @@ impl App {
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
+            help_scroll: 0,
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
@@ -331,6 +418,8 @@ impl App {
             chat_events: VecDeque::with_capacity(200),
 
             nav_state: NavigationScreenState::new(),
+
+            launch_eq_path: String::from(r"C:\EverQuest"),
 
             theme_kind: ThemeKind::DarkModern,
             theme: ThemeKind::DarkModern.build(),
@@ -413,16 +502,19 @@ impl App {
         }
     }
 
+    /// Returns `true` if the given panel currently has keyboard focus.
     pub fn is_panel_focused(&self, panel: ActivePanel) -> bool {
         self.active_panel == panel
     }
 
+    /// Switches to the given screen and resets panel focus.
     pub fn set_active_screen(&mut self, screen: ActiveScreen) {
         self.active_screen = screen;
         self.active_panel = Self::default_panel_for_screen(screen);
         self.ensure_panel_focus();
     }
 
+    /// Ensures the active panel is visible; resets to first visible if not.
     pub fn ensure_panel_focus(&mut self) {
         let visible = self.visible_panels();
         if !visible.contains(&self.active_panel)
@@ -432,6 +524,7 @@ impl App {
         }
     }
 
+    /// Cycles focus to the next visible panel on the current screen.
     pub fn toggle_panel(&mut self) {
         let visible = self.visible_panels();
         if visible.is_empty() {
@@ -445,6 +538,7 @@ impl App {
         self.active_panel = visible[(current + 1) % visible.len()];
     }
 
+    /// Toggles the group section visibility on the overview screen.
     pub fn toggle_groups_visibility(&mut self) {
         self.overview_state.show_groups = !self.overview_state.show_groups;
         if self.overview_state.show_groups {
@@ -456,6 +550,7 @@ impl App {
         self.ensure_panel_focus();
     }
 
+    /// Toggles the scope/filter section visibility on the overview screen.
     pub fn toggle_filters_visibility(&mut self) {
         self.overview_state.show_filters = !self.overview_state.show_filters;
         if self.overview_state.show_filters {
@@ -467,6 +562,7 @@ impl App {
         self.ensure_panel_focus();
     }
 
+    /// Collapses or expands the currently focused panel section.
     pub fn toggle_focused_section(&mut self) {
         let state = match self.active_panel {
             ActivePanel::OverviewCharacter => {
@@ -508,6 +604,7 @@ impl App {
         };
     }
 
+    /// Toggles the tactical map between maximized and split view.
     pub fn toggle_tactical_map_maximized(&mut self) {
         self.tactical_state.map_maximized = !self.tactical_state.map_maximized;
         self.active_screen = ActiveScreen::Tactical;
@@ -520,6 +617,124 @@ impl App {
         self.ensure_panel_focus();
     }
 
+    pub fn cycle_tactical_map_view(&mut self) {
+        let mode = self.map_state.cycle_viewport_mode();
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.status_message = format!("Map: {} view", mode.label());
+        self.ensure_panel_focus();
+    }
+
+    pub fn zoom_tactical_map_in(&mut self) {
+        self.map_state.zoom_in();
+        self.status_message = format!("Map: zoom {:.2}x", self.map_state.zoom);
+    }
+
+    pub fn zoom_tactical_map_out(&mut self) {
+        self.map_state.zoom_out();
+        self.status_message = format!("Map: zoom {:.2}x", self.map_state.zoom);
+    }
+
+    pub fn reset_tactical_map_view(&mut self) {
+        self.map_state.reset_viewport();
+        self.status_message = format!("Map: {} view reset", self.map_state.viewport_mode.label());
+    }
+
+    pub fn pan_tactical_map_left(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(-step, 0.0);
+    }
+
+    pub fn pan_tactical_map_right(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(step, 0.0);
+    }
+
+    pub fn pan_tactical_map_up(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(0.0, -step);
+    }
+
+    pub fn pan_tactical_map_down(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(0.0, step);
+    }
+
+    pub fn toggle_tactical_navmesh_overlay(&mut self) {
+        let enabled = self.map_state.toggle_navmesh();
+        if enabled {
+            if let Some(zone) = self.current_zone_short_name() {
+                if self.map_state.navmesh_overlay.is_none() {
+                    self.load_zone_navmesh_overlay(&zone);
+                }
+            }
+            let segment_count = self
+                .map_state
+                .navmesh_overlay
+                .as_ref()
+                .map_or(0, |overlay| overlay.segment_count());
+            self.status_message = if segment_count > 0 {
+                format!("Map: navmesh overlay on ({segment_count} segments)")
+            } else {
+                String::from("Map: navmesh overlay enabled (no mesh available)")
+            };
+        } else {
+            self.status_message = String::from("Map: navmesh overlay hidden");
+        }
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.ensure_panel_focus();
+    }
+
+    fn pan_tactical_map(&mut self, delta_x: f32, delta_y: f32) {
+        self.map_state.pan(delta_x, delta_y);
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+    }
+
+    fn map_pan_step(&self) -> f32 {
+        let zoom = self.map_state.zoom.max(0.35);
+        let global_step = (self.current_map_max_dimension() / 12.0).clamp(45.0, 320.0);
+        let local_step = if self.tactical_state.map_maximized {
+            70.0
+        } else {
+            45.0
+        };
+        let base_step = match self.map_state.viewport_mode {
+            MapViewportMode::Local => local_step,
+            MapViewportMode::Global => global_step,
+            MapViewportMode::Auto => {
+                if self.map_auto_uses_local_view() {
+                    local_step
+                } else {
+                    global_step
+                }
+            }
+        };
+        base_step / zoom
+    }
+
+    fn map_auto_uses_local_view(&self) -> bool {
+        self.tactical_state.map_maximized || self.current_map_max_dimension() > 1_200.0
+    }
+
+    fn current_map_max_dimension(&self) -> f32 {
+        let map_dim = self
+            .map_state
+            .zone_map
+            .as_ref()
+            .map(|map| map.bounds.width().max(map.bounds.height()))
+            .unwrap_or(0.0);
+        let mesh_dim = self
+            .map_state
+            .navmesh_overlay
+            .as_ref()
+            .map(|overlay| overlay.bounds.max_dimension())
+            .unwrap_or(0.0);
+
+        map_dim.max(mesh_dim).max(600.0)
+    }
+
     pub fn expand_selected_character(&mut self) {
         self.overview_state.character_collapsed = false;
         self.active_screen = ActiveScreen::Overview;
@@ -527,8 +742,10 @@ impl App {
         self.status_message = self
             .active_client()
             .and_then(|client| client.local_player.as_ref())
-            .map(|player| format!("Character: {}", self.redact_name(&player.displayed_name)))
-            .unwrap_or_else(|| String::from("Character: no client selected"));
+            .map_or_else(
+                || String::from("Character: no client selected"),
+                |player| format!("Character: {}", self.redact_name(&player.displayed_name)),
+            );
         self.ensure_panel_focus();
     }
 
@@ -559,16 +776,16 @@ impl App {
                         let lo = account_nums.iter().copied().min().unwrap_or(1);
                         let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
-                        let name = default_names
-                            .get((id - 1) as usize)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| format!("Group {}", id));
+                        let name = default_names.get((id - 1) as usize).map_or_else(
+                            || format!("Group {id}"),
+                            std::string::ToString::to_string,
+                        );
 
                         GroupDef {
                             id: id as u8,
                             name,
                             account_range: (lo, hi),
-                            default_camp: format!("Camp {}", id),
+                            default_camp: format!("Camp {id}"),
                         }
                     })
                     .collect();
@@ -595,6 +812,19 @@ impl App {
         self.clients.get(self.selected_client)
     }
 
+    /// Returns the short zone name for the selected client's current zone.
+    pub fn current_zone_short_name(&self) -> Option<String> {
+        self.active_client()
+            .map(|client| super::run::zone_to_short_name(&client.zone_name))
+    }
+
+    /// Checks whether the selected client's zone has a cached navmesh.
+    pub fn current_zone_has_cached_mesh(&self) -> Option<bool> {
+        self.current_zone_short_name()
+            .map(|zone| crate::nav::mesh::has_cached_zone_mesh(&zone))
+    }
+
+    /// Returns the display name for a client, redacted if privacy mode is on.
     pub fn client_command_target(&self, client: &ClientState) -> String {
         let name = if !client.character_name.is_empty() {
             client.character_name.as_str()
@@ -619,7 +849,7 @@ impl App {
     }
 
     /// Sync the legacy single-client fields from the selected client.
-    /// This keeps backward compatibility with code that reads app.local_player, etc.
+    /// This keeps backward compatibility with code that reads `app.local_player`, etc.
     pub fn sync_from_selected_client(&mut self) {
         if let Some(client) = self.clients.get(self.selected_client) {
             self.local_player = client.local_player.clone();
@@ -719,8 +949,7 @@ impl App {
                     let zone = self
                         .clients_in_group_idx(idx)
                         .first()
-                        .map(|c| c.zone_name.as_str())
-                        .unwrap_or("???");
+                        .map_or("???", |c| c.zone_name.as_str());
                     format!("G{} {} ({})", g.id, g.name, zone)
                 } else {
                     String::from("All Groups")
@@ -861,7 +1090,7 @@ impl App {
         // Collect ungrouped clients (those not mentioned in any group)
         let all_grouped_names: std::collections::HashSet<&str> = groups_map
             .values()
-            .flat_map(|g| g.member_names.iter().map(|s| s.as_str()))
+            .flat_map(|g| g.member_names.iter().map(std::string::String::as_str))
             .collect();
 
         let ungrouped: Vec<usize> = self
@@ -910,6 +1139,7 @@ impl App {
             .and_then(|idx| self.clients.get(idx))
     }
 
+    /// Returns spawns filtered by type and text search criteria.
     pub fn filtered_spawns(&self) -> Vec<&SpawnInfo> {
         self.spawns
             .iter()
@@ -939,12 +1169,14 @@ impl App {
             .collect()
     }
 
+    /// Cycles the spawn type filter (All -> PC -> NPC -> Named).
     pub fn cycle_spawn_filter(&mut self) {
         self.spawns_state.spawn_type_filter = self.spawns_state.spawn_type_filter.next();
         self.spawns_state.table_state.select(Some(0));
         self.status_message = format!("Filter: {}", self.spawns_state.spawn_type_filter.label());
     }
 
+    /// Moves the spawn list selection down by one row.
     pub fn spawn_list_down(&mut self) {
         let count = self.filtered_spawns().len();
         self.spawns_state.table_state.select_next();
@@ -958,27 +1190,40 @@ impl App {
         }
     }
 
+    /// Moves the spawn list selection up by one row.
     pub fn spawn_list_up(&mut self) {
         self.spawns_state.table_state.select_previous();
     }
 
+    /// Moves the spawn list selection down by one page.
     pub fn spawn_list_page_down(&mut self) {
-        // TODO: make page size dynamic based on terminal height when available
-        const PAGE_SIZE: usize = 25;
+        let page_size = Self::dynamic_page_size();
         let max = self.filtered_spawns().len().saturating_sub(1);
         let current = self.spawn_selected();
         self.spawns_state
             .table_state
-            .select(Some((current + PAGE_SIZE).min(max)));
+            .select(Some((current + page_size).min(max)));
     }
 
+    /// Moves the spawn list selection up by one page.
     pub fn spawn_list_page_up(&mut self) {
-        // TODO: make page size dynamic based on terminal height when available
-        const PAGE_SIZE: usize = 25;
+        let page_size = Self::dynamic_page_size();
         let current = self.spawn_selected();
         self.spawns_state
             .table_state
-            .select(Some(current.saturating_sub(PAGE_SIZE)));
+            .select(Some(current.saturating_sub(page_size)));
+    }
+
+    /// Compute page size from terminal height. Uses the spawn table area
+    /// (terminal height minus chrome: header, status bar, column headers, borders).
+    /// Falls back to 25 rows if terminal size cannot be determined.
+    fn dynamic_page_size() -> usize {
+        const CHROME_ROWS: u16 = 8; // header + tabs + column header + borders + status bar
+        const FALLBACK: usize = 25;
+        match crossterm::terminal::size() {
+            Ok((_w, h)) => (h.saturating_sub(CHROME_ROWS) as usize).max(5),
+            Err(_) => FALLBACK,
+        }
     }
 
     /// Convenience accessor for the current spawn selection index.
@@ -986,10 +1231,12 @@ impl App {
         self.spawns_state.table_state.selected().unwrap_or(0)
     }
 
+    /// Scrolls the hex dump view down by 256 bytes.
     pub fn hex_scroll_down(&mut self) {
         self.hex_state.hex_address = self.hex_state.hex_address.wrapping_add(0x100);
     }
 
+    /// Scrolls the hex dump view up by 256 bytes.
     pub fn hex_scroll_up(&mut self) {
         self.hex_state.hex_address = self.hex_state.hex_address.wrapping_sub(0x100);
     }
@@ -1005,8 +1252,8 @@ impl App {
                 .map(|s| (s.displayed_name.clone(), s.spawn_id, sel))
         };
         if let Some((name, id, _idx)) = info {
-            self.hex_state.hex_label = format!("Raw memory: {} (ID {})", name, id);
-            self.status_message = format!("Debug: {}", name);
+            self.hex_state.hex_label = format!("Raw memory: {name} (ID {id})");
+            self.status_message = format!("Debug: {name}");
 
             // On Windows, read real spawn memory; on macOS, generate demo hex data
             #[cfg(windows)]
@@ -1035,9 +1282,9 @@ impl App {
             && let Ok(proc) = ProcessHandle::open(client.pid)
         {
             // Find the spawn address by walking the spawn list
-            let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
-                Some(a) => a,
-                None => return Vec::new(),
+            let Some(mgr_ptr_addr) = offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base)
+            else {
+                return Vec::new();
             };
             let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
                 Ok(a) if a != 0 => a,
@@ -1061,12 +1308,14 @@ impl App {
         Vec::new()
     }
 
+    /// Clears the spawn list text filter and resets selection.
     pub fn clear_filter(&mut self) {
         self.spawns_state.spawn_filter.clear();
         self.spawns_state.search_mode = false;
         self.spawns_state.table_state.select(Some(0));
     }
 
+    /// Toggles privacy mode, which hides character names and server.
     pub fn toggle_privacy(&mut self) {
         self.privacy_mode = !self.privacy_mode;
         self.status_message = if self.privacy_mode {
@@ -1120,8 +1369,7 @@ impl App {
                 // Suggest zone-based name
                 let zone = self
                     .active_client()
-                    .map(|c| c.zone_name.clone())
-                    .unwrap_or_else(|| "camp".into());
+                    .map_or_else(|| "camp".into(), |c| c.zone_name.clone());
                 let suggestion = vec![zone];
                 self.complete_with_candidates("camp add ", add_rest, &suggestion);
             } else {
@@ -1239,7 +1487,7 @@ impl App {
             let cmd_prefix_str = &prefix[..2];
             let rest = prefix[2..].trim_start();
             if !rest.is_empty() {
-                self.complete_with_candidates(&format!("{} ", cmd_prefix_str), rest, &slash_cmds);
+                self.complete_with_candidates(&format!("{cmd_prefix_str} "), rest, &slash_cmds);
                 return;
             }
         }
@@ -1283,6 +1531,7 @@ impl App {
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
             "help".into(),
+            "commands".into(),
             "camp".into(),
             "nav".into(),
             "login".into(),
@@ -1340,11 +1589,11 @@ impl App {
                 let name = &matches[0];
                 // Quote multi-word names
                 let formatted = if name.contains(' ') {
-                    format!("\"{}\"", name)
+                    format!("\"{name}\"")
                 } else {
                     name.to_string()
                 };
-                self.cmd_state.command_buffer = format!("{}{} ", cmd_prefix, formatted);
+                self.cmd_state.command_buffer = format!("{cmd_prefix}{formatted} ");
             }
             _ => {
                 // Complete common prefix
@@ -1363,7 +1612,7 @@ impl App {
 
                 if common_len > search.len() {
                     let common = &matches[0][..common_len];
-                    self.cmd_state.command_buffer = format!("{}{}", cmd_prefix, common);
+                    self.cmd_state.command_buffer = format!("{cmd_prefix}{common}");
                 }
                 // Show available options (truncate if too many)
                 let display: Vec<&str> = matches.iter().take(10).map(|s| s.as_str()).collect();
@@ -1382,13 +1631,13 @@ impl App {
         let camps_dir = std::path::Path::new("config/camps");
         match std::fs::read_dir(camps_dir) {
             Ok(entries) => entries
-                .filter_map(|e| e.ok())
+                .filter_map(std::result::Result::ok)
                 .filter_map(|e| {
                     let path = e.path();
                     if path.extension().is_some_and(|ext| ext == "toml") {
                         path.file_stem()
                             .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                     } else {
                         None
                     }
@@ -1404,13 +1653,13 @@ impl App {
         let mesh_dir = std::path::Path::new("data/meshes");
         if let Ok(entries) = std::fs::read_dir(mesh_dir) {
             return entries
-                .filter_map(|e| e.ok())
+                .filter_map(std::result::Result::ok)
                 .filter_map(|e| {
                     let path = e.path();
                     if path.extension().is_some_and(|ext| ext == "navmesh") {
                         path.file_stem()
                             .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                     } else {
                         None
                     }
@@ -1496,6 +1745,7 @@ impl App {
     }
 
     /// Update user-tracked spawns against the current spawn list.
+    /// Updates tracked spawn statuses against the current spawn list.
     pub fn update_tracked_spawns(&mut self) {
         for tracked in self.tracked_spawns.values_mut() {
             let found = self
@@ -1523,7 +1773,7 @@ impl App {
     pub fn track_spawn(&mut self, name: &str) {
         let key = name.to_lowercase();
         if self.tracked_spawns.contains_key(&key) {
-            self.status_message = format!("Already tracking: {}", name);
+            self.status_message = format!("Already tracking: {name}");
             return;
         }
 
@@ -1560,9 +1810,9 @@ impl App {
     pub fn untrack_spawn(&mut self, name: &str) {
         let key = name.to_lowercase();
         if self.tracked_spawns.remove(&key).is_some() {
-            self.status_message = format!("Untracked: {}", name);
+            self.status_message = format!("Untracked: {name}");
         } else {
-            self.status_message = format!("Not tracking: {}", name);
+            self.status_message = format!("Not tracking: {name}");
         }
     }
 
@@ -1594,6 +1844,12 @@ impl App {
                 self.map_state.zone_map = None;
             }
         }
+
+        self.map_state.reset_viewport();
+        self.map_state.navmesh_overlay = None;
+        if self.map_state.show_navmesh {
+            self.load_zone_navmesh_overlay(zone_short_name);
+        }
     }
 
     /// Reload the zone map for the currently selected client's zone.
@@ -1605,8 +1861,33 @@ impl App {
         }
     }
 
+    fn load_zone_navmesh_overlay(&mut self, zone_short_name: &str) {
+        match crate::nav::mesh::load_zone_overlay(zone_short_name) {
+            Ok(overlay) if !overlay.is_empty() => {
+                tracing::info!(
+                    zone = zone_short_name,
+                    outer_lines = overlay.outer_lines.len(),
+                    inner_lines = overlay.inner_lines.len(),
+                    "Loaded navmesh overlay"
+                );
+                self.map_state.navmesh_overlay = Some(overlay);
+            }
+            Ok(_) => {
+                tracing::debug!(
+                    zone = zone_short_name,
+                    "Navmesh overlay contained no segments"
+                );
+                self.map_state.navmesh_overlay = None;
+            }
+            Err(error) => {
+                tracing::warn!(zone = zone_short_name, %error, "Failed to load navmesh overlay");
+                self.map_state.navmesh_overlay = None;
+            }
+        }
+    }
+
     /// Parse a group prefix like "G1", "G2", ..., "G6" from the first word.
-    /// Returns (group_idx 0-based, remaining command) if found.
+    /// Returns (`group_idx` 0-based, remaining command) if found.
     fn parse_group_prefix<'a>(&self, input: &'a str) -> Option<(usize, &'a str)> {
         let trimmed = input.trim();
         let bytes = trimmed.as_bytes();
@@ -1626,7 +1907,7 @@ impl App {
         let trimmed = input.trim();
         let mut parts = trimmed.splitn(2, char::is_whitespace);
         let raw_target = parts.next()?;
-        let rest = parts.next().map(str::trim).unwrap_or("");
+        let rest = parts.next().map_or("", str::trim);
         let forced = raw_target.starts_with('@');
         let target = raw_target.trim_start_matches('@');
 
@@ -1636,6 +1917,191 @@ impl App {
 
         self.find_client_index_by_name(target)
             .map(|idx| (idx, rest))
+    }
+
+    fn resolve_nav_target(
+        &self,
+        args: &[&str],
+    ) -> Option<(String, dmft_common::nav::Waypoint, Option<String>)> {
+        let normalized: Vec<&str> = args
+            .iter()
+            .copied()
+            .filter(|part| !part.is_empty())
+            .collect();
+        if normalized.is_empty() {
+            return None;
+        }
+
+        if normalized.len() == 3
+            && let (Ok(x), Ok(y), Ok(z)) = (
+                normalized[0].parse::<f32>(),
+                normalized[1].parse::<f32>(),
+                normalized[2].parse::<f32>(),
+            )
+        {
+            return Some((
+                format!("{x:.0} {y:.0} {z:.0}"),
+                dmft_common::nav::Waypoint::new(x, y, z),
+                None,
+            ));
+        }
+
+        let destination = normalized.join(" ");
+        CampConfig::load(&destination).ok().map(|camp| {
+            (
+                destination,
+                dmft_common::nav::Waypoint::new(
+                    camp.camp_center[0],
+                    camp.camp_center[1],
+                    camp.camp_center[2],
+                ),
+                Some(super::run::zone_to_short_name(&camp.zone)),
+            )
+        })
+    }
+
+    fn execute_waypoint_navigation(
+        &mut self,
+        destination_label: &str,
+        target: dmft_common::nav::Waypoint,
+        zone_hint: Option<&str>,
+    ) {
+        let focused_clients: Vec<FocusedNavClient> = self
+            .visible_clients()
+            .into_iter()
+            .filter_map(|client| {
+                client.local_player.as_ref().map(|player| FocusedNavClient {
+                    pid: client.pid,
+                    client_name: self.client_command_target(client),
+                    zone_short: super::run::zone_to_short_name(&client.zone_name),
+                    position: (player.x, player.y, player.z),
+                    is_demo: client.is_demo,
+                })
+            })
+            .collect();
+
+        if focused_clients.is_empty() {
+            self.status_message = String::from("No focused clients with position data");
+            return;
+        }
+
+        let mut mesh_routes = 0usize;
+        let mut fallback_routes = 0usize;
+        let mut sent = 0usize;
+        let mut previews = 0usize;
+        let mut skipped = 0usize;
+        let mut failed = 0usize;
+
+        for focused_client in focused_clients {
+            if let Some(expected_zone) = zone_hint
+                && focused_client.zone_short != expected_zone
+            {
+                skipped += 1;
+                continue;
+            }
+
+            let route = crate::nav::mesh::plan_route(
+                &focused_client.zone_short,
+                focused_client.position,
+                (target.x, target.y, target.z),
+            );
+
+            match route.source {
+                crate::nav::mesh::RouteSource::NavMesh => mesh_routes += 1,
+                crate::nav::mesh::RouteSource::StraightLineFallback => fallback_routes += 1,
+            }
+
+            let delivered = if focused_client.is_demo {
+                previews += 1;
+                true
+            } else {
+                let cmd = dmft_common::ipc::Command::NavigateTo {
+                    waypoints: route.waypoints.clone(),
+                };
+                match send_ipc_command(focused_client.pid, &cmd) {
+                    Ok(()) => {
+                        sent += 1;
+                        true
+                    }
+                    Err(error) => {
+                        failed += 1;
+                        tracing::warn!(
+                            pid = focused_client.pid,
+                            client = %focused_client.client_name,
+                            %error,
+                            "Failed to send NavigateTo from TUI"
+                        );
+                        false
+                    }
+                }
+            };
+
+            if delivered {
+                let from = dmft_common::nav::Waypoint::new(
+                    focused_client.position.0,
+                    focused_client.position.1,
+                    focused_client.position.2,
+                );
+                let distance_remaining = from.distance_3d(&target);
+                let waypoint_count = route.waypoints.len().max(1);
+                let status = if distance_remaining <= 5.0 {
+                    dmft_common::nav::NavStatus::Arrived
+                } else {
+                    dmft_common::nav::NavStatus::Moving {
+                        waypoint_index: 0,
+                        waypoint_count,
+                        distance_remaining,
+                    }
+                };
+
+                self.nav_state.nav_statuses.insert(
+                    focused_client.pid,
+                    NavClientStatus {
+                        destination: destination_label.to_string(),
+                        status,
+                        eta_secs: None,
+                        waypoints: route.waypoints,
+                    },
+                );
+            }
+        }
+
+        let mut details = Vec::new();
+        if mesh_routes > 0 {
+            details.push(format!("{} mesh", mesh_routes));
+        }
+        if fallback_routes > 0 {
+            details.push(format!("{} fallback", fallback_routes));
+        }
+        if sent > 0 {
+            details.push(format!("{} sent", sent));
+        }
+        if previews > 0 {
+            details.push(format!("{} preview", previews));
+        }
+        if skipped > 0 {
+            details.push(format!("{} skipped", skipped));
+        }
+        if failed > 0 {
+            details.push(format!("{} failed", failed));
+        }
+
+        self.status_message = format!(
+            "Nav → {} ({})",
+            destination_label,
+            if details.is_empty() {
+                String::from("no clients routed")
+            } else {
+                details.join(", ")
+            }
+        );
+
+        if sent > 0 || previews > 0 {
+            self.set_active_screen(ActiveScreen::Tactical);
+            if self.tactical_state.show_navigation {
+                self.active_panel = ActivePanel::TacticalNavigation;
+            }
+        }
     }
 
     /// Get PIDs for a specific group index (0-based).
@@ -1668,7 +2134,7 @@ impl App {
             let group_name = format!("G{} {}", g.id, g.name);
             let pids = self.pids_for_group(group_idx);
             if pids.is_empty() {
-                self.status_message = format!("{}: no online members", group_name);
+                self.status_message = format!("{group_name}: no online members");
                 return;
             }
             let slash_cmd = rest;
@@ -1680,10 +2146,7 @@ impl App {
                     Err(_) => fail += 1,
                 }
             }
-            self.status_message = format!(
-                "{} {} → sent to {}, failed {}",
-                group_name, slash_cmd, ok, fail
-            );
+            self.status_message = format!("{group_name} {slash_cmd} → sent to {ok}, failed {fail}");
             return;
         }
 
@@ -1692,7 +2155,7 @@ impl App {
             if rest.is_empty() {
                 self.select_client_idx(client_idx);
                 self.expand_selected_character();
-                self.status_message = format!("Focused client: {}", target_name);
+                self.status_message = format!("Focused client: {target_name}");
                 return;
             }
 
@@ -1700,10 +2163,10 @@ impl App {
             self.select_client_idx(client_idx);
             match send_slash_command(pid, rest) {
                 Ok(()) => {
-                    self.status_message = format!("{} → {}", target_name, rest);
+                    self.status_message = format!("{target_name} → {rest}");
                 }
                 Err(e) => {
-                    self.status_message = format!("Error sending to {}: {}", target_name, e);
+                    self.status_message = format!("Error sending to {target_name}: {e}");
                 }
             }
             return;
@@ -1713,46 +2176,64 @@ impl App {
         match parts[0] {
             "help" => {
                 self.help_visible = true;
+                self.help_scroll = 0;
+            }
+            "commands" => {
+                let listing: Vec<String> = KNOWN_COMMANDS
+                    .iter()
+                    .map(|(cmd, desc)| format!("{cmd}: {desc}"))
+                    .collect();
+                self.status_message = listing.join(" | ");
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
             }
             "nav" => {
-                if let Some(destination) = parts.get(1) {
+                let destination = parts[1..].join(" ").trim().to_string();
+                if destination.is_empty() {
+                    self.status_message =
+                        String::from("Usage: nav <camp_name|x y z|zone>  (Tab for camps/zones)");
+                } else if let Some((label, target, zone_hint)) =
+                    self.resolve_nav_target(&parts[1..])
+                {
+                    self.execute_waypoint_navigation(&label, target, zone_hint.as_deref());
+                } else {
                     let cmd = dmft_common::ipc::Command::SlashCommand {
-                        command: format!("/nav to {}", destination),
+                        command: format!("/nav to {destination}"),
                     };
                     let ok = self.send_ipc_to_focused(&cmd);
                     if ok == 0 {
                         self.status_message = String::from("No clients connected for navigation");
                     } else {
-                        tracing::info!(destination, sent = ok, "Navigation command sent");
+                        tracing::info!(destination, sent = ok, "Navigation slash command sent");
                         self.status_message =
-                            format!("Nav → {} (sent to {} clients)", destination, ok);
+                            format!("Nav slash → {destination} (sent to {ok} clients)");
                         self.set_active_screen(ActiveScreen::Tactical);
                         if self.tactical_state.show_navigation {
                             self.active_panel = ActivePanel::TacticalNavigation;
                         }
                     }
-                } else {
-                    self.status_message =
-                        String::from("Usage: nav <zone|camp_name>  (Tab for zone autocomplete)");
                 }
             }
             "loot" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
-                self.status_message = format!("Loot → sent to {} clients", ok);
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Loot: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message = format!("Loot → sent to {ok} clients");
+                }
             }
             "status" => {
                 let client_count = self.clients.len();
                 let visible_count = self.visible_clients().len();
                 if self.active_group.is_some() {
                     self.status_message = format!(
-                        "{} visible / {} total client(s) connected",
-                        visible_count, client_count
+                        "{visible_count} visible / {client_count} total client(s) connected"
                     );
                 } else {
-                    self.status_message = format!("{} client(s) connected", client_count);
+                    self.status_message = format!("{client_count} client(s) connected");
                 }
             }
             "login" | "launch" => {
@@ -1800,15 +2281,15 @@ impl App {
                     let pids = self.focused_pids();
                     let mut ok = 0;
                     for pid in &pids {
-                        if send_slash_command(*pid, &format!("/assist {}", name)).is_ok() {
+                        if send_slash_command(*pid, &format!("/assist {name}")).is_ok() {
                             ok += 1;
                         }
                     }
                     tracing::info!(target = %name, sent = ok, "Main Assist set");
-                    self.status_message = format!("MA → {} (sent /assist to {} clients)", name, ok);
+                    self.status_message = format!("MA → {name} (sent /assist to {ok} clients)");
                 } else {
                     self.status_message = match &self.main_assist {
-                        Some(ma) => format!("Main Assist: {}", ma),
+                        Some(ma) => format!("Main Assist: {ma}"),
                         None => "No MA set. Usage: ma <character_name>".into(),
                     };
                 }
@@ -1817,10 +2298,10 @@ impl App {
                 if let Some(name) = parts.get(1) {
                     self.main_tank = Some(name.to_string());
                     tracing::info!(target = %name, "Main Tank set");
-                    self.status_message = format!("MT → {}", name);
+                    self.status_message = format!("MT → {name}");
                 } else {
                     self.status_message = match &self.main_tank {
-                        Some(mt) => format!("Main Tank: {}", mt),
+                        Some(mt) => format!("Main Tank: {mt}"),
                         None => "No MT set. Usage: mt <character_name>".into(),
                     };
                 }
@@ -1833,26 +2314,39 @@ impl App {
                 let ok = self
                     .send_ipc_to_focused(&dmft_common::ipc::Command::CombatEngage { target_id });
                 tracing::info!(target_id, sent = ok, "Combat engage sent");
-                self.status_message = format!("Engage → {} clients (target_id={})", ok, target_id);
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Engage: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message =
+                        format!("Engage → {ok} clients (target_id={target_id})");
+                }
             }
             "disengage" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
-                self.status_message = format!("Disengage → {} clients", ok);
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Disengage: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message = format!("Disengage → {ok} clients");
+                }
             }
             "invite" => {
                 if let Some(name) = parts.get(1) {
                     if let Some(client) = self.active_client() {
                         let pid = client.pid;
-                        let slash = format!("/invite {}", name);
+                        let slash = format!("/invite {name}");
                         match send_slash_command(pid, &slash) {
                             Ok(()) => {
                                 tracing::info!(target = %name, pid, "Group invite sent");
                                 let from = self.client_command_target(client);
-                                self.status_message = format!("Invited {} from {}", name, from);
+                                self.status_message = format!("Invited {name} from {from}");
                             }
                             Err(e) => {
-                                self.status_message = format!("Invite failed: {}", e);
+                                self.status_message = format!("Invite failed: {e}");
                             }
                         }
                     } else {
@@ -1869,18 +2363,18 @@ impl App {
                         Ok(()) => {
                             tracing::info!(pid, "Group invite accepted");
                             let on_client = self.client_command_target(client);
-                            self.status_message = format!("Accepted group invite on {}", on_client);
+                            self.status_message = format!("Accepted group invite on {on_client}");
                         }
                         Err(e) => {
-                            self.status_message = format!("Accept failed: {}", e);
+                            self.status_message = format!("Accept failed: {e}");
                         }
                     }
                 } else {
                     self.status_message = String::from("No active client to accept on");
                 }
             }
-            "heal" => match parts.get(1).copied() {
-                Some("cancel") => {
+            "heal" => {
+                if let Some("cancel") = parts.get(1).copied() {
                     self.heal_cancel_enabled = !self.heal_cancel_enabled;
                     let state = if self.heal_cancel_enabled {
                         "ON"
@@ -1888,29 +2382,39 @@ impl App {
                         "OFF"
                     };
                     tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
-                    self.status_message = format!("Heal-cancel: {}", state);
-                }
-                _ => {
+                    self.status_message = format!("Heal-cancel: {state}");
+                } else {
                     let state = if self.heal_cancel_enabled {
                         "ON"
                     } else {
                         "OFF"
                     };
-                    self.status_message = format!(
-                        "Heal-cancel is {}. Usage: heal cancel (toggles on/off)",
-                        state
-                    );
+                    self.status_message =
+                        format!("Heal-cancel is {state}. Usage: heal cancel (toggles on/off)");
                 }
-            },
+            }
             "ch" => {
                 self.execute_ch_command(&parts[1..], orchestrator);
             }
             "inject" => {
-                self.status_message = String::from("Inject requested (not yet wired)");
+                if self.clients.is_empty() {
+                    self.status_message =
+                        String::from("Inject: no clients connected. Connect a client first.");
+                } else {
+                    self.status_message = String::from(
+                        "Inject: DLL injection placeholder (not yet wired). Will inject into active client.",
+                    );
+                }
             }
             "all" => {
                 if let Some(slash_cmd) = parts.get(1) {
                     let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                    if pids.is_empty() {
+                        self.status_message = format!(
+                            "all {slash_cmd}: no clients connected. Use :login to connect first."
+                        );
+                        return;
+                    }
                     let mut ok = 0usize;
                     let mut fail = 0usize;
                     for pid in &pids {
@@ -1919,8 +2423,7 @@ impl App {
                             Err(_) => fail += 1,
                         }
                     }
-                    self.status_message =
-                        format!("all {} → sent to {}, failed {}", slash_cmd, ok, fail);
+                    self.status_message = format!("all {slash_cmd} → sent to {ok}, failed {fail}");
                 } else {
                     self.status_message = String::from("Usage: all <slash command>");
                 }
@@ -1931,17 +2434,22 @@ impl App {
                     if let Some(slash_cmd) = parts.get(1) {
                         match send_slash_command(pid, slash_cmd) {
                             Ok(()) => {
-                                self.status_message = format!("{} → {}", pid, slash_cmd);
+                                self.status_message = format!("{pid} → {slash_cmd}");
                             }
                             Err(e) => {
-                                self.status_message = format!("Error sending to {}: {}", pid, e);
+                                self.status_message = format!("Error sending to {pid}: {e}");
                             }
                         }
                     } else {
-                        self.status_message = format!("Usage: {} <slash command>", pid);
+                        self.status_message = format!("Usage: {pid} <slash command>");
                     }
+                } else if let Some(suggestion) = did_you_mean(parts[0]) {
+                    self.status_message =
+                        format!("Unknown command: '{input}'. Did you mean '{suggestion}'?");
                 } else {
-                    self.status_message = format!("Unknown command: {}", input);
+                    self.status_message = format!(
+                        "Unknown command: '{input}'. Type :help or :commands for available commands."
+                    );
                 }
             }
         }
@@ -1956,14 +2464,12 @@ impl App {
                 );
             }
             Some("start") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message = String::from(
-                            "Usage: camp start <name>  (loads config/camps/<name>.toml)",
-                        );
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
+                    self.status_message =
+                        String::from("Usage: camp start <name>  (loads config/camps/<name>.toml)");
+                    return;
                 };
 
                 match CampConfig::load(camp_name) {
@@ -1977,10 +2483,10 @@ impl App {
                         let count = members.len();
                         orchestrator.start_camp(config, members);
                         self.status_message =
-                            format!("Camp '{}' started with {} members", camp_name, count);
+                            format!("Camp '{camp_name}' started with {count} members");
                     }
                     Err(e) => {
-                        self.status_message = format!("Failed to load camp '{}': {}", camp_name, e);
+                        self.status_message = format!("Failed to load camp '{camp_name}': {e}");
                     }
                 }
             }
@@ -2000,28 +2506,23 @@ impl App {
                 }
             }
             Some("add") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message =
-                            String::from("Usage: camp add <name>  (saves current position)");
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
+                    self.status_message =
+                        String::from("Usage: camp add <name>  (saves current position)");
+                    return;
                 };
 
-                let (center, zone) = match &self.local_player {
-                    Some(player) => {
-                        let zone = self
-                            .active_client()
-                            .map(|c| c.zone_name.clone())
-                            .unwrap_or_else(|| "unknown".into());
-                        ([player.x, player.y, player.z], zone)
-                    }
-                    None => {
-                        self.status_message =
-                            String::from("No player data — cannot save camp position");
-                        return;
-                    }
+                let (center, zone) = if let Some(player) = &self.local_player {
+                    let zone = self
+                        .active_client()
+                        .map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
+                    ([player.x, player.y, player.z], zone)
+                } else {
+                    self.status_message =
+                        String::from("No player data — cannot save camp position");
+                    return;
                 };
 
                 let config = CampConfig {
@@ -2050,32 +2551,31 @@ impl App {
                         );
                     }
                     Err(e) => {
-                        self.status_message = format!("Failed to save camp '{}': {}", camp_name, e);
+                        self.status_message = format!("Failed to save camp '{camp_name}': {e}");
                     }
                 }
             }
             Some("remove") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message = String::from("Usage: camp remove <name>");
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
+                    self.status_message = String::from("Usage: camp remove <name>");
+                    return;
                 };
 
-                let path = std::path::Path::new("config/camps").join(format!("{}.toml", camp_name));
+                let path = std::path::Path::new("config/camps").join(format!("{camp_name}.toml"));
                 if path.exists() {
                     match std::fs::remove_file(&path) {
                         Ok(()) => {
-                            self.status_message = format!("Camp '{}' removed", camp_name);
+                            self.status_message = format!("Camp '{camp_name}' removed");
                         }
                         Err(e) => {
                             self.status_message =
-                                format!("Failed to remove camp '{}': {}", camp_name, e);
+                                format!("Failed to remove camp '{camp_name}': {e}");
                         }
                     }
                 } else {
-                    self.status_message = format!("Camp '{}' not found", camp_name);
+                    self.status_message = format!("Camp '{camp_name}' not found");
                 }
             }
             Some("next") => match &orchestrator.active_camp {
@@ -2097,16 +2597,16 @@ impl App {
                                 let to = config.name.clone();
                                 orchestrator.start_camp(config, members);
                                 self.status_message =
-                                    format!("Advanced: {} → {} ({} members)", current, to, count);
+                                    format!("Advanced: {current} → {to} ({count} members)");
                             }
                             Err(e) => {
                                 self.status_message =
-                                    format!("Failed to load next camp '{}': {}", next_name, e);
+                                    format!("Failed to load next camp '{next_name}': {e}");
                             }
                         },
                         None => {
                             self.status_message =
-                                format!("Camp '{}' has no next camp configured", current);
+                                format!("Camp '{current}' has no next camp configured");
                         }
                     }
                 }
@@ -2130,16 +2630,16 @@ impl App {
                                 let to = config.name.clone();
                                 orchestrator.start_camp(config, members);
                                 self.status_message =
-                                    format!("Fell back: {} → {} ({} members)", current, to, count);
+                                    format!("Fell back: {current} → {to} ({count} members)");
                             }
                             Err(e) => {
                                 self.status_message =
-                                    format!("Failed to load prev camp '{}': {}", prev_name, e);
+                                    format!("Failed to load prev camp '{prev_name}': {e}");
                             }
                         },
                         None => {
                             self.status_message =
-                                format!("Camp '{}' has no previous camp configured", current);
+                                format!("Camp '{current}' has no previous camp configured");
                         }
                     }
                 }
@@ -2155,12 +2655,11 @@ impl App {
                     }
                     let count = members.len();
                     orchestrator.start_camp(config, members);
-                    self.status_message = format!("Camp '{}' started with {} members", name, count);
+                    self.status_message = format!("Camp '{name}' started with {count} members");
                 }
                 Err(_) => {
                     self.status_message = format!(
-                        "Unknown camp subcommand or config: '{}'. Try: start|stop|status|list|add|remove|next|prev",
-                        name
+                        "Unknown camp subcommand or config: '{name}'. Try: start|stop|status|list|add|remove|next|prev"
                     );
                 }
             },
@@ -2170,7 +2669,7 @@ impl App {
     /// Handle `ch <subcommand>` — CH chain management from the command bar.
     ///
     /// Subcommands:
-    ///   ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
+    ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
     ///   ch stop                  — Stop the running CH chain
     ///   ch add <pid>             — Add a cleric to the chain
     ///   ch rm <pid>              — Remove a cleric from the chain
@@ -2191,8 +2690,7 @@ impl App {
                     };
                     let target = chain.target_id();
                     self.status_message = format!(
-                        "CH chain: {} clerics, {:.1}s interval ({}), target={}",
-                        members, interval, adaptive, target
+                        "CH chain: {members} clerics, {interval:.1}s interval ({adaptive}), target={target}"
                     );
                 } else {
                     self.status_message = String::from(
@@ -2202,14 +2700,11 @@ impl App {
             }
             Some("start") => {
                 // ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
-                let pids_str = match args.get(1) {
-                    Some(s) => s,
-                    None => {
-                        self.status_message = String::from(
-                            "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
-                        );
-                        return;
-                    }
+                let Some(pids_str) = args.get(1) else {
+                    self.status_message = String::from(
+                        "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
+                    );
+                    return;
                 };
                 let pids: Vec<u32> = pids_str
                     .split(',')
@@ -2256,7 +2751,7 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_add(pid);
                             tracing::info!(pid, "Cleric added to CH chain");
-                            self.status_message = format!("Added PID {} to CH chain", pid);
+                            self.status_message = format!("Added PID {pid} to CH chain");
                         } else {
                             self.status_message =
                                 String::from("No CH chain is running. Use: ch start");
@@ -2274,7 +2769,7 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_remove(pid);
                             tracing::info!(pid, "Cleric removed from CH chain");
-                            self.status_message = format!("Removed PID {} from CH chain", pid);
+                            self.status_message = format!("Removed PID {pid} from CH chain");
                         } else {
                             self.status_message = String::from("No CH chain is running");
                         }
@@ -2291,7 +2786,7 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_set_interval(secs);
                             tracing::info!(interval = secs, "CH chain interval updated");
-                            self.status_message = format!("CH chain interval set to {:.1}s", secs);
+                            self.status_message = format!("CH chain interval set to {secs:.1}s");
                         } else {
                             self.status_message = String::from("No CH chain is running");
                         }
@@ -2332,8 +2827,7 @@ impl App {
             },
             Some(sub) => {
                 self.status_message = format!(
-                    "Unknown CH subcommand: {}. Use: start|stop|add|rm|interval|adaptive|status",
-                    sub
+                    "Unknown CH subcommand: {sub}. Use: start|stop|add|rm|interval|adaptive|status"
                 );
             }
         }
@@ -2349,13 +2843,11 @@ impl App {
     ///   login G<n>        — launch all accounts in group n
     ///   login <name>      — launch a single account by name
     fn execute_login_command(&mut self, args: &[&str]) {
-        let accounts = match &self.accounts_config {
-            Some(cfg) => cfg.clone(),
-            None => {
-                self.status_message =
-                    String::from("No accounts config — create config/accounts.toml");
-                return;
-            }
+        let accounts = if let Some(cfg) = &self.accounts_config {
+            cfg.clone()
+        } else {
+            self.status_message = String::from("No accounts config — create config/accounts.toml");
+            return;
         };
 
         match args.first().copied() {
@@ -2421,12 +2913,12 @@ impl App {
                         .collect();
                     if group_accounts.is_empty() {
                         self.status_message =
-                            format!("No accounts configured for group {}", group_id);
+                            format!("No accounts configured for group {group_id}");
                     } else {
                         self.enqueue_account_launches(&group_accounts);
                     }
                 } else {
-                    self.status_message = format!("Invalid group: {}", arg);
+                    self.status_message = format!("Invalid group: {arg}");
                 }
             }
 
@@ -2435,7 +2927,7 @@ impl App {
                 if let Some(entry) = accounts.find_account(name) {
                     self.enqueue_account_launches(std::slice::from_ref(entry));
                 } else {
-                    self.status_message = format!("Account '{}' not found in config", name);
+                    self.status_message = format!("Account '{name}' not found in config");
                 }
             }
         }
@@ -2457,7 +2949,7 @@ impl App {
                 for pid in pids {
                     orchestrator.eject_client(pid);
                 }
-                self.status_message = format!("Ejected {} client(s)", count);
+                self.status_message = format!("Ejected {count} client(s)");
             }
             Some(name) => {
                 if let Some(client) = self
@@ -2468,9 +2960,9 @@ impl App {
                     let pid = client.pid;
                     let char_name = client.character_name.clone();
                     orchestrator.eject_client(pid);
-                    self.status_message = format!("Ejected {} (PID {})", char_name, pid);
+                    self.status_message = format!("Ejected {char_name} (PID {pid})");
                 } else {
-                    self.status_message = format!("Client '{}' not found", name);
+                    self.status_message = format!("Client '{name}' not found");
                 }
             }
         }
@@ -2496,7 +2988,7 @@ impl App {
                 // Then re-launch all
                 self.execute_login_command(&["all"]);
                 self.status_message =
-                    format!("Restarting {} client(s) — ejected, re-launching...", count);
+                    format!("Restarting {count} client(s) — ejected, re-launching...");
             }
             Some(name) => {
                 // Eject the specific client
@@ -2510,10 +3002,8 @@ impl App {
                     orchestrator.eject_client(pid);
                     // Re-launch via login
                     self.execute_login_command(&[name]);
-                    self.status_message = format!(
-                        "Restarting {} (PID {}) — ejected, re-launching...",
-                        char_name, pid
-                    );
+                    self.status_message =
+                        format!("Restarting {char_name} (PID {pid}) — ejected, re-launching...");
                 } else {
                     // Maybe the client isn't connected but the account exists — just launch
                     self.execute_login_command(&[name]);
@@ -2577,8 +3067,7 @@ impl App {
         let mut failed = 0u32;
         for entry in entries {
             let info = AccountsConfig::to_account_info(entry);
-            let eq_path = std::path::Path::new("C:\\EverQuest");
-            // TODO: Read eq_path from AppConfig.launch.eq_path instead of hardcoding
+            let eq_path = std::path::Path::new(&self.launch_eq_path);
             match crate::launcher::spawner::spawn_eq_client(
                 eq_path,
                 &info.account_name,
@@ -2593,9 +3082,10 @@ impl App {
                         "Launched EQ client for login"
                     );
                     launched += 1;
-                    // TODO: Wire into LaunchCoordinator for staggered launch + state tracking
-                    // TODO: After window title shows "[DMFT] EQ - <CharName>", auto-inject DLL
-                    // TODO: After DLL injection, auto-form groups + set camp
+                    // Post-launch automation (M2.5 roadmap):
+                    // 1. Wire into LaunchCoordinator for staggered launch + state tracking
+                    // 2. After window title shows "[DMFT] EQ - <CharName>", auto-inject DLL
+                    // 3. After DLL injection, auto-form groups + set camp
                 }
                 Err(e) => {
                     tracing::error!(account = "[redacted]", %e, "Failed to launch EQ client");
@@ -2604,10 +3094,8 @@ impl App {
             }
         }
 
-        self.status_message = format!(
-            "Login: launched {}, failed {} of {} queued",
-            launched, failed, count
-        );
+        self.status_message =
+            format!("Login: launched {launched}, failed {failed} of {count} queued");
     }
 
     /// Build camp members from connected clients using simple role assignment.
@@ -2671,13 +3159,84 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
     let digits: String = name
         .chars()
         .rev()
-        .take_while(|c| c.is_ascii_digit())
+        .take_while(char::is_ascii_digit)
         .collect();
     if digits.is_empty() {
         return None;
     }
     let digits: String = digits.chars().rev().collect();
     digits.parse().ok()
+}
+
+/// All known top-level commands for suggestions and the :commands listing.
+const KNOWN_COMMANDS: &[(&str, &str)] = &[
+    ("help", "Show help overlay"),
+    ("commands", "List all commands with usage"),
+    ("status", "Show connected client count"),
+    ("camp", "Camp management: start|stop|status|list|add|remove|next|prev"),
+    ("nav", "Navigate: nav <camp_name|x y z|zone>"),
+    ("loot", "Loot nearby corpses"),
+    ("login", "Login management: login [all|G<n>|<name>]"),
+    ("launch", "Alias for login"),
+    ("stop", "Stop client: stop <name|all>"),
+    ("restart", "Restart client: restart <name|all>"),
+    ("track", "Track spawn: track <name> | track list"),
+    ("untrack", "Stop tracking: untrack <name>"),
+    ("mode", "Switch mode: mode <camp|hunt>"),
+    ("ma", "Main Assist: ma [name]"),
+    ("mt", "Main Tank: mt [name]"),
+    ("engage", "Start combat: engage [target_id]"),
+    ("disengage", "Stop combat for focused clients"),
+    ("invite", "Group invite: invite <name>"),
+    ("accept", "Accept pending group invite"),
+    ("heal", "Heal options: heal cancel"),
+    ("ch", "CH chain: start|stop|add|rm|interval|adaptive|status"),
+    ("inject", "Request DLL injection"),
+    ("all", "Broadcast: all <slash_command>"),
+];
+
+/// Levenshtein edit distance between two strings.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a_len = a.len();
+    let b_len = b.len();
+    let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
+
+    for i in 0..=a_len {
+        matrix[i][0] = i;
+    }
+    for j in 0..=b_len {
+        matrix[0][j] = j;
+    }
+
+    for (i, ca) in a.chars().enumerate() {
+        for (j, cb) in b.chars().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            matrix[i + 1][j + 1] = (matrix[i][j + 1] + 1)
+                .min(matrix[i + 1][j] + 1)
+                .min(matrix[i][j] + cost);
+        }
+    }
+
+    matrix[a_len][b_len]
+}
+
+/// Find the closest matching command to the given input, within a max edit distance.
+fn did_you_mean(input: &str) -> Option<&'static str> {
+    let input_lower = input.to_lowercase();
+    let mut best: Option<(&str, usize)> = None;
+
+    for &(cmd, _) in KNOWN_COMMANDS {
+        let dist = edit_distance(&input_lower, cmd);
+        // Only suggest if distance is at most 2 (or 3 for longer commands)
+        let max_dist = if cmd.len() > 5 { 3 } else { 2 };
+        if dist <= max_dist {
+            if best.is_none() || dist < best.unwrap().1 {
+                best = Some((cmd, dist));
+            }
+        }
+    }
+
+    best.map(|(cmd, _)| cmd)
 }
 
 /// Send a slash command to a specific PID via named pipe.
@@ -2695,10 +3254,7 @@ fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result
     use crate::ipc::pipe::CommandPipe;
 
     let token = crate::ipc::load_session_token(pid).with_context(|| {
-        format!(
-            "missing session token for PID {}; inject the DLL before sending commands",
-            pid
-        )
+        format!("missing session token for PID {pid}; inject the DLL before sending commands")
     })?;
     let session_id = dmft_common::ipc::session_id_from_token(&token);
     let pipe = CommandPipe::connect(pid, session_id)?;
@@ -2832,660 +3388,62 @@ mod tests {
         );
     }
 
-    // --- extract_account_number tests ---
-
     #[test]
-    fn extract_account_number_trailing_digits() {
-        assert_eq!(extract_account_number("Frostreaver01"), Some(1));
-        assert_eq!(extract_account_number("Iceweaver02"), Some(2));
-        assert_eq!(extract_account_number("Warrior36"), Some(36));
+    fn edit_distance_identical_strings() {
+        assert_eq!(edit_distance("hello", "hello"), 0);
     }
 
     #[test]
-    fn extract_account_number_no_digits() {
-        assert_eq!(extract_account_number("Frostreaver"), None);
-        assert_eq!(extract_account_number(""), None);
+    fn edit_distance_one_substitution() {
+        assert_eq!(edit_distance("camp", "came"), 1);
     }
 
     #[test]
-    fn extract_account_number_all_digits() {
-        assert_eq!(extract_account_number("42"), Some(42));
+    fn edit_distance_insertion_and_deletion() {
+        assert_eq!(edit_distance("nav", "navi"), 1);
+        assert_eq!(edit_distance("engage", "engag"), 1);
     }
 
     #[test]
-    fn extract_account_number_only_trailing_digits_used() {
-        // "Test1Name2" -> trailing digits are "2"
-        assert_eq!(extract_account_number("Test1Name2"), Some(2));
-    }
-
-    // --- SpawnFilter tests ---
-
-    #[test]
-    fn spawn_filter_next_cycles_all_variants() {
-        let f = SpawnFilter::All;
-        let f = f.next();
-        assert_eq!(f, SpawnFilter::Pc);
-        let f = f.next();
-        assert_eq!(f, SpawnFilter::Npc);
-        let f = f.next();
-        assert_eq!(f, SpawnFilter::Named);
-        let f = f.next();
-        assert_eq!(f, SpawnFilter::All);
+    fn edit_distance_empty_strings() {
+        assert_eq!(edit_distance("", ""), 0);
+        assert_eq!(edit_distance("abc", ""), 3);
+        assert_eq!(edit_distance("", "xyz"), 3);
     }
 
     #[test]
-    fn spawn_filter_labels() {
-        assert_eq!(SpawnFilter::All.label(), "All");
-        assert_eq!(SpawnFilter::Pc.label(), "PC");
-        assert_eq!(SpawnFilter::Npc.label(), "NPC");
-        assert_eq!(SpawnFilter::Named.label(), "Named");
-    }
-
-    // --- TrackedStatus tests ---
-
-    #[test]
-    fn tracked_status_labels() {
-        assert_eq!(TrackedStatus::Up.label(), "UP");
-        assert_eq!(TrackedStatus::Down.label(), "DOWN");
-        assert_eq!(TrackedStatus::Unknown.label(), "???");
+    fn did_you_mean_close_match() {
+        assert_eq!(did_you_mean("campp"), Some("camp"));
+        assert_eq!(did_you_mean("navv"), Some("nav"));
+        assert_eq!(did_you_mean("engge"), Some("engage"));
+        assert_eq!(did_you_mean("disengag"), Some("disengage"));
     }
 
     #[test]
-    fn tracked_status_colors_are_distinct() {
-        let up = TrackedStatus::Up.color();
-        let down = TrackedStatus::Down.color();
-        let unknown = TrackedStatus::Unknown.color();
-        assert_ne!(up, down);
-        assert_ne!(up, unknown);
-        assert_ne!(down, unknown);
-    }
-
-    // --- ActiveScreen tests ---
-
-    #[test]
-    fn active_screen_labels() {
-        assert_eq!(ActiveScreen::Overview.label(), "Characters");
-        assert_eq!(ActiveScreen::Tactical.label(), "Map");
-        assert_eq!(ActiveScreen::Navigation.label(), "Navigation");
-        assert_eq!(ActiveScreen::Debug.label(), "Debug");
+    fn did_you_mean_no_match() {
+        assert_eq!(did_you_mean("xyzzy"), None);
+        assert_eq!(did_you_mean("foobarqux"), None);
     }
 
     #[test]
-    fn active_screen_all_has_four() {
-        assert_eq!(ActiveScreen::ALL.len(), 4);
-    }
-
-    // --- TrackedSpawn tests ---
-
-    #[test]
-    fn tracked_spawn_construction() {
-        let ts = TrackedSpawn {
-            name: "Lady Vox".into(),
-            status: TrackedStatus::Up,
-            last_seen_tick: Some(100),
-            last_x: 1.0,
-            last_y: 2.0,
-            last_z: 3.0,
-        };
-        assert_eq!(ts.name, "Lady Vox");
-        assert_eq!(ts.status, TrackedStatus::Up);
-        assert_eq!(ts.last_seen_tick, Some(100));
+    fn did_you_mean_exact_match_returns_itself() {
+        assert_eq!(did_you_mean("help"), Some("help"));
+        assert_eq!(did_you_mean("status"), Some("status"));
     }
 
     #[test]
-    fn tracked_spawn_unknown_not_seen() {
-        let ts = TrackedSpawn {
-            name: "Nagafen".into(),
-            status: TrackedStatus::Unknown,
-            last_seen_tick: None,
-            last_x: 0.0,
-            last_y: 0.0,
-            last_z: 0.0,
-        };
-        assert!(ts.last_seen_tick.is_none());
-    }
-
-    // --- GroupDef / LiveGroup / ChChainStatus tests ---
-
-    #[test]
-    fn group_def_construction() {
-        let g = GroupDef {
-            id: 1,
-            name: "Group 1".into(),
-            account_range: (1, 6),
-            default_camp: "permafrost".into(),
-        };
-        assert_eq!(g.id, 1);
-        assert_eq!(g.account_range, (1, 6));
-    }
-
-    #[test]
-    fn live_group_construction() {
-        let lg = LiveGroup {
-            leader: "Tank01".into(),
-            member_names: vec!["Tank01".into(), "Healer01".into()],
-            zone: "permafrost".into(),
-        };
-        assert_eq!(lg.leader, "Tank01");
-        assert_eq!(lg.member_names.len(), 2);
-    }
-
-    #[test]
-    fn ch_chain_status_construction() {
-        let s = ChChainStatus {
-            members: 4,
-            interval_secs: 3.0,
-            is_adaptive: true,
-            target_id: 99,
-        };
-        assert_eq!(s.members, 4);
-        assert!(s.is_adaptive);
-    }
-
-    // --- App navigation tests ---
-
-    #[test]
-    fn new_app_defaults() {
-        let app = App::new();
-        assert!(app.running);
-        assert_eq!(app.active_screen, ActiveScreen::Overview);
-        assert_eq!(app.active_panel, ActivePanel::OverviewRoster);
-        assert!(app.clients.is_empty());
-        assert_eq!(app.selected_client, 0);
-        assert!(app.active_group.is_none());
-        assert!(!app.privacy_mode);
-        assert!(!app.help_visible);
-    }
-
-    #[test]
-    fn active_client_none_when_empty() {
-        let app = App::new();
-        assert!(app.active_client().is_none());
-    }
-
-    #[test]
-    fn active_client_returns_selected() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "Alpha01"));
-        app.clients.push(test_client(2, "Bravo02"));
-        app.selected_client = 1;
-        assert_eq!(app.active_client().unwrap().pid, 2);
-    }
-
-    #[test]
-    fn next_client_cycles() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "A01"));
-        app.clients.push(test_client(2, "B02"));
-        app.clients.push(test_client(3, "C03"));
-        assert_eq!(app.selected_client, 0);
-        app.next_client();
-        assert_eq!(app.selected_client, 1);
-        app.next_client();
-        assert_eq!(app.selected_client, 2);
-        app.next_client();
-        assert_eq!(app.selected_client, 0); // wraps
-    }
-
-    #[test]
-    fn prev_client_cycles() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "A01"));
-        app.clients.push(test_client(2, "B02"));
-        assert_eq!(app.selected_client, 0);
-        app.prev_client();
-        assert_eq!(app.selected_client, 1); // wraps to end
-        app.prev_client();
-        assert_eq!(app.selected_client, 0);
-    }
-
-    #[test]
-    fn next_client_noop_when_empty() {
-        let mut app = App::new();
-        app.next_client();
-        assert_eq!(app.selected_client, 0);
-    }
-
-    #[test]
-    fn prev_client_noop_when_empty() {
-        let mut app = App::new();
-        app.prev_client();
-        assert_eq!(app.selected_client, 0);
-    }
-
-    #[test]
-    fn set_active_screen_updates_panel() {
-        let mut app = App::new();
-        app.set_active_screen(ActiveScreen::Tactical);
-        assert_eq!(app.active_screen, ActiveScreen::Tactical);
-        assert_eq!(app.active_panel, ActivePanel::TacticalMap);
-
-        app.set_active_screen(ActiveScreen::Debug);
-        assert_eq!(app.active_screen, ActiveScreen::Debug);
-        assert_eq!(app.active_panel, ActivePanel::DebugSpawns);
-    }
-
-    #[test]
-    fn is_panel_focused_true_for_active() {
-        let app = App::new();
-        assert!(app.is_panel_focused(ActivePanel::OverviewRoster));
-        assert!(!app.is_panel_focused(ActivePanel::TacticalMap));
-    }
-
-    #[test]
-    fn toggle_panel_cycles_through_visible() {
-        let mut app = App::new();
-        let initial = app.active_panel;
-        app.toggle_panel();
-        // Should have moved to next panel
-        assert_ne!(app.active_panel, initial);
-    }
-
-    #[test]
-    fn toggle_groups_visibility() {
-        let mut app = App::new();
-        let initial = app.overview_state.show_groups;
-        app.toggle_groups_visibility();
-        assert_ne!(app.overview_state.show_groups, initial);
-        app.toggle_groups_visibility();
-        assert_eq!(app.overview_state.show_groups, initial);
-    }
-
-    #[test]
-    fn toggle_filters_visibility() {
-        let mut app = App::new();
-        let initial = app.overview_state.show_filters;
-        app.toggle_filters_visibility();
-        assert_ne!(app.overview_state.show_filters, initial);
-        app.toggle_filters_visibility();
-        assert_eq!(app.overview_state.show_filters, initial);
-    }
-
-    #[test]
-    fn toggle_focused_section_collapses_character() {
-        let mut app = App::new();
-        app.active_panel = ActivePanel::OverviewCharacter;
-        app.toggle_focused_section();
-        assert!(app.overview_state.character_collapsed);
-        assert!(app.status_message.contains("collapsed"));
-        app.toggle_focused_section();
-        assert!(!app.overview_state.character_collapsed);
-        assert!(app.status_message.contains("expanded"));
-    }
-
-    #[test]
-    fn toggle_tactical_map_maximized() {
-        let mut app = App::new();
-        assert!(!app.tactical_state.map_maximized);
-        app.toggle_tactical_map_maximized();
-        assert!(app.tactical_state.map_maximized);
-        assert_eq!(app.active_screen, ActiveScreen::Tactical);
-        assert!(app.status_message.contains("maximized"));
-        app.toggle_tactical_map_maximized();
-        assert!(!app.tactical_state.map_maximized);
-        assert!(app.status_message.contains("restored"));
-    }
-
-    #[test]
-    fn set_active_group_none_shows_all() {
-        let mut app = App::new();
-        app.active_group = Some(0);
-        app.set_active_group(None);
-        assert!(app.active_group.is_none());
-        assert!(app.status_message.contains("All Groups"));
-    }
-
-    #[test]
-    fn group_focus_label_all_groups() {
-        let app = App::new();
-        assert_eq!(app.group_focus_label(), "All Groups");
-    }
-
-    #[test]
-    fn visible_clients_all_when_no_group() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "A01"));
-        app.clients.push(test_client(2, "B02"));
-        let visible = app.visible_clients();
-        assert_eq!(visible.len(), 2);
-    }
-
-    #[test]
-    fn focused_pids_returns_all_pids() {
-        let mut app = App::new();
-        app.clients.push(test_client(100, "A01"));
-        app.clients.push(test_client(200, "B02"));
-        let pids = app.focused_pids();
-        assert_eq!(pids, vec![100, 200]);
-    }
-
-    #[test]
-    fn has_live_group_data_false_initially() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "A01"));
-        assert!(!app.has_live_group_data());
-    }
-
-    #[test]
-    fn client_command_target_uses_character_name() {
-        let app = App::new();
-        let client = test_client(42, "Frostreaver");
-        let target = app.client_command_target(&client);
-        assert_eq!(target, "Frostreaver");
-    }
-
-    #[test]
-    fn client_command_target_privacy_mode_redacts() {
-        let mut app = App::new();
-        app.clients.push(test_client(42, "Frostreaver01"));
-        app.privacy_mode = true;
-        let target = app.client_command_target(&app.clients[0]);
-        assert_eq!(target, "Toon-01");
-    }
-
-    #[test]
-    fn client_command_target_no_name_uses_pid() {
-        let app = App::new();
-        let client = ClientState::new(42, 0);
-        let target = app.client_command_target(&client);
-        assert_eq!(target, "PID 42");
-    }
-
-    #[test]
-    fn sync_from_selected_client_copies_fields() {
-        let mut app = App::new();
-        let mut c = test_client(42, "Test");
-        c.eq_base = 0x1000;
-        app.clients.push(c);
-        app.sync_from_selected_client();
-        assert!(app.local_player.is_some());
-        assert_eq!(app.attached_pid, Some(42));
-        assert_eq!(app.eq_base, 0x1000);
-    }
-
-    #[test]
-    fn sync_from_selected_client_clears_on_empty() {
-        let mut app = App::new();
-        app.local_player = Some(test_spawn("old"));
-        app.sync_from_selected_client();
-        assert!(app.local_player.is_none());
-    }
-
-    #[test]
-    fn expand_selected_character_sets_screen() {
-        let mut app = App::new();
-        app.active_screen = ActiveScreen::Debug;
-        app.expand_selected_character();
-        assert_eq!(app.active_screen, ActiveScreen::Overview);
-        assert_eq!(app.active_panel, ActivePanel::OverviewCharacter);
-        assert!(!app.overview_state.character_collapsed);
-    }
-
-    #[test]
-    fn build_live_groups_empty_clients() {
-        let app = App::new();
-        let (groups, ungrouped) = app.build_live_groups();
-        assert!(groups.is_empty());
-        assert!(ungrouped.is_empty());
-    }
-
-    #[test]
-    fn clients_in_group_idx_out_of_bounds() {
-        let app = App::new();
-        let result = app.clients_in_group_idx(999);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn toggle_focused_section_noop_for_roster() {
-        let mut app = App::new();
-        app.active_panel = ActivePanel::OverviewRoster;
-        app.toggle_focused_section();
-        assert!(app.status_message.contains("does not collapse"));
-    }
-
-    #[test]
-    fn default_panel_for_all_screens() {
-        assert_eq!(
-            App::default_panel_for_screen(ActiveScreen::Overview),
-            ActivePanel::OverviewRoster
-        );
-        assert_eq!(
-            App::default_panel_for_screen(ActiveScreen::Tactical),
-            ActivePanel::TacticalMap
-        );
-        assert_eq!(
-            App::default_panel_for_screen(ActiveScreen::Navigation),
-            ActivePanel::TacticalNavigation
-        );
-        assert_eq!(
-            App::default_panel_for_screen(ActiveScreen::Debug),
-            ActivePanel::DebugSpawns
-        );
-    }
-
-    // --- Privacy mode / redaction tests ---
-
-    #[test]
-    fn toggle_privacy_flips_mode() {
-        let mut app = App::new();
-        assert!(!app.privacy_mode);
-        app.toggle_privacy();
-        assert!(app.privacy_mode);
-        assert!(app.status_message.contains("ON"));
-        app.toggle_privacy();
-        assert!(!app.privacy_mode);
-        assert!(app.status_message.contains("OFF"));
-    }
-
-    #[test]
-    fn redact_name_passthrough_when_off() {
-        let app = App::new();
-        assert_eq!(app.redact_name("Frostreaver"), "Frostreaver");
-    }
-
-    #[test]
-    fn redact_name_redacts_own_characters() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "Frostreaver"));
-        app.privacy_mode = true;
-        assert_eq!(app.redact_name("Frostreaver").as_ref(), "Toon-01");
-    }
-
-    #[test]
-    fn redact_name_preserves_unknown_names() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "Frostreaver"));
-        app.privacy_mode = true;
-        assert_eq!(app.redact_name("SomeStranger"), "SomeStranger");
-    }
-
-    #[test]
-    fn display_server_hidden_in_privacy_mode() {
-        let mut app = App::new();
-        assert_eq!(app.display_server(), "Firiona Vie");
-        app.privacy_mode = true;
-        assert_eq!(app.display_server(), "[Hidden Server]");
-    }
-
-    // --- Spawn list navigation tests ---
-
-    #[test]
-    fn cycle_spawn_filter_updates_message() {
-        let mut app = App::new();
-        app.cycle_spawn_filter();
-        assert!(app.status_message.contains("Filter:"));
-    }
-
-    #[test]
-    fn spawn_selected_default_zero() {
-        let app = App::new();
-        assert_eq!(app.spawn_selected(), 0);
-    }
-
-    #[test]
-    fn hex_scroll_down_increments() {
-        let mut app = App::new();
-        let initial = app.hex_state.hex_address;
-        app.hex_scroll_down();
-        assert_eq!(app.hex_state.hex_address, initial.wrapping_add(0x100));
-    }
-
-    #[test]
-    fn hex_scroll_up_decrements() {
-        let mut app = App::new();
-        app.hex_state.hex_address = 0x1000;
-        app.hex_scroll_up();
-        assert_eq!(app.hex_state.hex_address, 0x0F00);
-    }
-
-    // --- Find client by name ---
-
-    #[test]
-    fn find_client_by_name_found() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "Alpha"));
-        app.clients.push(test_client(2, "Bravo"));
-        let found = app.find_client_by_name("Bravo");
-        assert!(found.is_some());
-        assert_eq!(found.unwrap().pid, 2);
-    }
-
-    #[test]
-    fn find_client_by_name_not_found() {
-        let mut app = App::new();
-        app.clients.push(test_client(1, "Alpha"));
-        assert!(app.find_client_by_name("Zulu").is_none());
-    }
-
-    // --- Track / Untrack spawns ---
-
-    #[test]
-    fn track_spawn_adds_as_unknown() {
-        let mut app = App::new();
-        app.track_spawn("Lady Vox");
-        assert!(app.tracked_spawns.contains_key("lady vox"));
-        let ts = &app.tracked_spawns["lady vox"];
-        assert_eq!(ts.status, TrackedStatus::Unknown);
-        assert!(ts.last_seen_tick.is_none());
-    }
-
-    #[test]
-    fn track_spawn_duplicate_warns() {
-        let mut app = App::new();
-        app.track_spawn("Lady Vox");
-        app.track_spawn("Lady Vox");
-        assert!(app.status_message.contains("Already tracking"));
-    }
-
-    #[test]
-    fn untrack_spawn_removes() {
-        let mut app = App::new();
-        app.track_spawn("Nagafen");
-        assert!(app.tracked_spawns.contains_key("nagafen"));
-        app.untrack_spawn("Nagafen");
-        assert!(!app.tracked_spawns.contains_key("nagafen"));
-        assert!(app.status_message.contains("Untracked"));
-    }
-
-    #[test]
-    fn untrack_spawn_missing_warns() {
-        let mut app = App::new();
-        app.untrack_spawn("NonExistent");
-        assert!(app.status_message.contains("Not tracking"));
-    }
-
-    // --- Clear filter ---
-
-    #[test]
-    fn clear_filter_resets_state() {
-        let mut app = App::new();
-        app.spawns_state.spawn_filter = "test".into();
-        app.spawns_state.search_mode = true;
-        app.clear_filter();
-        assert!(app.spawns_state.spawn_filter.is_empty());
-        assert!(!app.spawns_state.search_mode);
-    }
-
-    // --- Filtered spawns ---
-
-    fn test_spawn_info(name: &str, stype: SpawnType) -> SpawnInfo {
-        SpawnInfo {
-            name: name.into(),
-            displayed_name: name.into(),
-            lastname: String::new(),
-            spawn_id: 1,
-            spawn_type: stype,
-            level: 50,
-            class_id: 1,
-            class: None,
-            stand_state: StandState::Standing,
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            heading: 0.0,
-            hp_current: 100,
-            hp_max: 100,
-            mana_current: 0,
-            mana_max: 0,
-            endurance_current: 100,
-            endurance_max: 100,
-            is_gm: false,
-            race_id: 1,
-            buff_slots: Vec::new(),
-            cast_state: None,
+    fn known_commands_has_all_expected_commands() {
+        let names: Vec<&str> = KNOWN_COMMANDS.iter().map(|(n, _)| *n).collect();
+        for expected in &[
+            "help", "commands", "status", "camp", "nav", "loot", "login",
+            "launch", "stop", "restart", "track", "untrack", "mode", "ma",
+            "mt", "engage", "disengage", "invite", "accept", "heal", "ch",
+            "inject", "all",
+        ] {
+            assert!(
+                names.contains(expected),
+                "KNOWN_COMMANDS missing '{expected}'"
+            );
         }
-    }
-
-    #[test]
-    fn filtered_spawns_all_returns_all() {
-        let mut app = App::new();
-        app.spawns.push(test_spawn_info("a rat", SpawnType::Npc));
-        app.spawns.push(test_spawn_info("Player1", SpawnType::Player));
-        assert_eq!(app.filtered_spawns().len(), 2);
-    }
-
-    #[test]
-    fn filtered_spawns_pc_only() {
-        let mut app = App::new();
-        app.spawns.push(test_spawn_info("a rat", SpawnType::Npc));
-        app.spawns.push(test_spawn_info("Player1", SpawnType::Player));
-        app.spawns_state.spawn_type_filter = SpawnFilter::Pc;
-        assert_eq!(app.filtered_spawns().len(), 1);
-        assert_eq!(
-            app.filtered_spawns()[0].spawn_type,
-            SpawnType::Player
-        );
-    }
-
-    #[test]
-    fn filtered_spawns_named_filters_common_mobs() {
-        let mut app = App::new();
-        app.spawns.push(test_spawn_info("a gnoll", SpawnType::Npc));
-        app.spawns.push(test_spawn_info("Lord Nagafen", SpawnType::Npc));
-        app.spawns_state.spawn_type_filter = SpawnFilter::Named;
-        let filtered = app.filtered_spawns();
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].displayed_name, "Lord Nagafen");
-    }
-
-    // --- Cycle theme ---
-
-    #[test]
-    fn cycle_theme_changes_kind() {
-        let mut app = App::new();
-        let initial = app.theme_kind;
-        app.cycle_theme();
-        assert_ne!(app.theme_kind, initial);
-    }
-
-    // --- Help toggle ---
-
-    #[test]
-    fn help_visible_toggle() {
-        let mut app = App::new();
-        assert!(!app.help_visible);
-        app.help_visible = true;
-        assert!(app.help_visible);
     }
 }

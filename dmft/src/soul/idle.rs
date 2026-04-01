@@ -9,6 +9,7 @@ use crate::soul::personality::SoulContext;
 /// An active idle behavior with its remaining duration.
 #[derive(Debug, Clone)]
 pub struct ActiveBehavior {
+    /// The type of idle behavior being performed.
     pub behavior: IdleBehaviorType,
     /// Ticks remaining before this behavior ends.
     pub ticks_remaining: u32,
@@ -19,7 +20,9 @@ pub struct ActiveBehavior {
 /// A behavior with its computed weight for selection.
 #[derive(Debug, Clone)]
 pub struct PrioritizedBehavior {
+    /// The idle behavior type.
     pub behavior: IdleBehaviorType,
+    /// Computed selection weight based on personality and context.
     pub weight: f32,
 }
 
@@ -32,8 +35,11 @@ pub enum IdleTransition {
     Start(ActiveBehavior),
     /// Stop idling entirely (e.g., combat started).
     Stop,
-    /// LogOffToSleep: character "logs off" — remove from active rotation.
-    LogOff { return_after_secs: u64 },
+    /// `LogOffToSleep`: character "logs off" — remove from active rotation.
+    LogOff {
+        /// Seconds until the character returns from the "logged off" state.
+        return_after_secs: u64,
+    },
 }
 
 /// Drives idle behavior selection and timing for a single character.
@@ -49,12 +55,14 @@ pub struct IdleScheduler {
 }
 
 impl IdleScheduler {
+    /// Create a new idle scheduler seeded from the client ID.
+    #[must_use]
     pub fn new(client_id: u32, config: &SoulConfig) -> Self {
         // Convert config seconds to ticks (soul tick = 5s by default)
         let tick_secs = config.idle_tick_secs.max(1);
         let min_ticks = (config.min_chat_interval_secs / tick_secs).max(1) as u32;
         let max_ticks =
-            (config.max_chat_interval_secs / tick_secs).max(min_ticks as u64 + 1u64) as u32;
+            (config.max_chat_interval_secs / tick_secs).max(u64::from(min_ticks) + 1u64) as u32;
 
         Self {
             rng: Xorshift32::from_client_id(client_id.wrapping_mul(7919)),
@@ -118,6 +126,7 @@ impl IdleScheduler {
     }
 
     /// Get the current active behavior, if any.
+    #[must_use]
     pub fn current_behavior(&self) -> Option<&ActiveBehavior> {
         self.current.as_ref()
     }
@@ -128,7 +137,7 @@ impl IdleScheduler {
         self.ticks_idle = 0;
     }
 
-    /// Compute weighted behavior list using personality engine's idle_weights.
+    /// Compute weighted behavior list using personality engine's `idle_weights`.
     fn compute_weights(&self, ctx: &SoulContext<'_>) -> Vec<PrioritizedBehavior> {
         let t = ctx.traits;
         let mood = ctx.mood;
@@ -272,7 +281,7 @@ impl IdleScheduler {
         (base_secs + jitter).max(600.0) as u64
     }
 
-    /// Generate flavor text for the behavior start using the TraitDrivenResponder.
+    /// Generate flavor text for the behavior start using the `TraitDrivenResponder`.
     fn generate_flavor_text(
         &mut self,
         behavior: &IdleBehaviorType,

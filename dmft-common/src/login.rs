@@ -1,38 +1,76 @@
 use serde::{Deserialize, Serialize};
 
+/// Current phase of the automated login state machine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LoginPhase {
+    /// Login has not been initiated.
     NotStarted,
+    /// EQ process is being launched.
     ProcessLaunching,
+    /// At the EQ login screen (eqmain.dll loaded).
     AtLoginScreen,
+    /// Typing account name and password into login fields.
     EnteringCredentials,
+    /// Navigating the server selection screen.
     ServerSelecting,
+    /// At the character select screen, picking a character.
     CharacterSelecting,
+    /// Character is zoning into the game world.
     Zoning,
+    /// Character is fully in-world.
     InWorld,
+    /// Running post-login setup (buffs, group join, camp positioning).
     PostLoginSetup,
+    /// Login complete, client is ready for orchestration.
     Ready,
-    Failed { reason: LoginError },
+    /// Login failed with an error.
+    Failed {
+        /// The error that caused login to fail.
+        reason: LoginError,
+    },
 }
 
+/// Errors that can occur during the automated login process.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LoginError {
+    /// Authentication failed (bad password).
     WrongPassword,
+    /// Account is locked or suspended.
     AccountLocked,
+    /// Target server is down.
     ServerDown,
+    /// Target server is at capacity.
     ServerFull,
-    CharacterNotFound { expected: String, found: String },
-    Timeout { phase: String },
+    /// Expected character was not found at character select.
+    CharacterNotFound {
+        /// Character name we were looking for.
+        expected: String,
+        /// What was actually found (may be empty or a different name).
+        found: String,
+    },
+    /// A phase exceeded its timeout.
+    Timeout {
+        /// Name of the phase that timed out.
+        phase: String,
+    },
+    /// Multiple clients failed simultaneously (circuit breaker triggered).
     MassFailure,
 }
 
+/// Per-character account and server metadata for login orchestration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountInfo {
+    /// Login account name.
     pub account_name: String,
+    /// Character name to select at character select.
     pub character_name: String,
+    /// EQ class name (e.g. "Warrior", "Cleric").
     pub class_name: String,
+    /// Character level.
     pub level: u8,
+    /// Logical group ID for post-login grouping.
     pub group_id: u32,
+    /// Target server name (e.g. "Teek", "FV").
     pub server_name: String,
 }
 

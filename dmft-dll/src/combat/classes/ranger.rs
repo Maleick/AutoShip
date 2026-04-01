@@ -7,7 +7,7 @@ use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 /// Ranger strategy: ranged/melee hybrid DPS with tracking and bow pulling.
 ///
 /// Rangers operate in two stances:
-/// - **Ranged**: Use bow attacks and DoT spells from distance (default when pulling)
+/// - **Ranged**: Use bow attacks and `DoT` spells from distance (default when pulling)
 /// - **Melee**: Switch to melee when target is close, use kicks and backstab-style abilities
 ///
 /// Rangers also provide: tracking (find mobs), snare (Snare/Ensnare),
@@ -36,8 +36,7 @@ impl RangerStrategy {
     /// Whether we're in melee range of the target.
     fn in_melee_range(&self, ctx: &CombatContext) -> bool {
         ctx.target
-            .map(|t| self.distance_to(ctx.player, t) <= self.melee_range)
-            .unwrap_or(false)
+            .is_some_and(|t| self.distance_to(ctx.player, t) <= self.melee_range)
     }
 }
 

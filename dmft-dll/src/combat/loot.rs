@@ -1,7 +1,7 @@
 //! Loot automation — detect nearby corpses and loot them.
 //!
 //! Uses EQ's slash commands (`/loot`, `/lootall`) to interact with corpses.
-//! Corpse detection walks the spawn list looking for spawn_type == 2 (corpse)
+//! Corpse detection walks the spawn list looking for `spawn_type` == 2 (corpse)
 //! within loot range.
 
 use dmft_common::nav::Waypoint;
@@ -31,8 +31,8 @@ pub fn loot_all_items() {
 
 /// Find lootable corpses within range from the spawn list.
 ///
-/// Returns spawn IDs of corpses within LOOT_RANGE of the player.
-/// Corpses have spawn_type == 2 in EQ's spawn list.
+/// Returns spawn IDs of corpses within `LOOT_RANGE` of the player.
+/// Corpses have `spawn_type` == 2 in EQ's spawn list.
 pub fn find_lootable_corpses(player: &SpawnData, spawns: &[SpawnData]) -> Vec<u32> {
     spawns
         .iter()
@@ -56,7 +56,7 @@ pub fn has_lootable_corpses(player: &SpawnData, spawns: &[SpawnData]) -> bool {
 
 /// Loot sequence: target corpse by ID, then /loot, then /lootall.
 /// This is a multi-step sequence that should be called over several ticks:
-/// 1. First tick: /target id {corpse_id}
+/// 1. First tick: /target id {`corpse_id`}
 /// 2. Wait ~10 ticks for target to register
 /// 3. Second tick: /loot
 /// 4. Wait ~20 ticks for loot window to open
