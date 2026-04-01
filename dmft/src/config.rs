@@ -413,4 +413,143 @@ character = "Foo"
             }
         }
     }
+
+    #[test]
+    fn discord_config_defaults() {
+        let cfg = DiscordConfig::default();
+        assert!(cfg.webhook_url.is_empty());
+        assert!(cfg.alert_hvt);
+        assert!(cfg.alert_crashes);
+        assert!(cfg.alert_mass_failures);
+        assert!(!cfg.alert_status);
+    }
+
+    #[test]
+    fn accounts_for_group_returns_empty_for_no_match() {
+        let cfg = parse_sample();
+        let g0 = cfg.accounts_for_group(0);
+        assert!(g0.is_empty());
+    }
+
+    #[test]
+    fn find_account_returns_correct_entry() {
+        let cfg = parse_sample();
+        let acct = cfg.find_account("frostreaver02").unwrap();
+        assert_eq!(acct.character, "Zisdarenu");
+        assert_eq!(acct.class, "SHM");
+        assert_eq!(acct.group, 1);
+    }
+
+    #[test]
+    fn to_account_info_level_defaults_to_one() {
+        let cfg = parse_sample();
+        let info = AccountsConfig::to_account_info(&cfg.accounts[0]);
+        assert_eq!(info.level, 1);
+    }
+
+    #[test]
+    fn app_config_default_has_empty_eq_path() {
+        let cfg = AppConfig::default_config();
+        assert!(cfg.launch.eq_path.is_empty());
+    }
+
+    #[test]
+    fn app_config_full_toml_parse() {
+        let toml_str = r#"
+            process_name = "custom.exe"
+            max_spawns = 500
+
+            [server]
+            name = "TestServer"
+            status_check_timeout_secs = 30
+
+            [retry]
+            max_retries = 5
+            base_backoff_secs = 10
+            mass_failure_threshold = 3
+            mass_failure_window_secs = 120
+
+            [launch]
+            eq_path = "C:/EQ"
+            stagger_min_secs = 5
+            stagger_max_secs = 20
+            max_concurrent_launches = 6
+            max_working_set_mb = 1024
+
+            [discord]
+            webhook_url = "https://example.com/webhook"
+            alert_hvt = false
+            alert_crashes = true
+            alert_mass_failures = false
+            alert_status = true
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.process_name, "custom.exe");
+        assert_eq!(cfg.max_spawns, 500);
+        assert_eq!(cfg.server.name, "TestServer");
+        assert_eq!(cfg.server.status_check_timeout_secs, 30);
+        assert_eq!(cfg.retry.max_retries, 5);
+        assert_eq!(cfg.retry.base_backoff_secs, 10);
+        assert_eq!(cfg.launch.eq_path, "C:/EQ");
+        assert_eq!(cfg.launch.max_concurrent_launches, 6);
+        assert_eq!(cfg.launch.max_working_set_mb, 1024);
+        assert_eq!(cfg.discord.webhook_url, "https://example.com/webhook");
+        assert!(!cfg.discord.alert_hvt);
+        assert!(cfg.discord.alert_crashes);
+        assert!(!cfg.discord.alert_mass_failures);
+        assert!(cfg.discord.alert_status);
+    }
+
+    #[test]
+    fn app_config_with_groups() {
+        let toml_str = r#"
+            [[group]]
+            id = 1
+            name = "Group Alpha"
+
+            [[group.toon]]
+            name = "Tank"
+            class = "WAR"
+            role = "tank"
+
+            [[group.toon]]
+            name = "Healer"
+            class = "CLR"
+            role = "healer"
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.group.len(), 1);
+        assert_eq!(cfg.group[0].id, 1);
+        assert_eq!(cfg.group[0].name, "Group Alpha");
+        assert_eq!(cfg.group[0].toon.len(), 2);
+        assert_eq!(cfg.group[0].toon[0].name, "Tank");
+        assert_eq!(cfg.group[0].toon[0].role, "tank");
+    }
+
+    #[test]
+    fn toon_config_optional_fields_default() {
+        let toml_str = r#"
+            [[group]]
+            id = 1
+            name = "Test"
+
+            [[group.toon]]
+            name = "Foo"
+            class = "WAR"
+            role = "dps"
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert!(cfg.group[0].toon[0].eq_window_title.is_empty());
+        assert!(cfg.group[0].toon[0].account.is_none());
+    }
+
+    #[test]
+    fn default_process_name_fn() {
+        assert_eq!(default_process_name(), "eqgame.exe");
+    }
+
+    #[test]
+    fn default_max_spawns_fn() {
+        assert_eq!(default_max_spawns(), 2048);
+    }
 }

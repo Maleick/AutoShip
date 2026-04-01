@@ -180,4 +180,75 @@ mod tests {
         let config: CampConfig = toml::from_str(toml_str).unwrap();
         assert!(config.pull_mob_names.is_empty());
     }
+
+    #[test]
+    fn test_serialize_deserialize_burn_mobs() {
+        let mut config = sample_config();
+        config.burn_mob_names = vec!["Emperor Crush".into(), "King Doric".into()];
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let loaded: CampConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(loaded.burn_mob_names.len(), 2);
+        assert!(loaded.burn_mob_names.contains(&"Emperor Crush".to_string()));
+        assert!(loaded.burn_mob_names.contains(&"King Doric".to_string()));
+    }
+
+    #[test]
+    fn test_mana_pct_values() {
+        let config = sample_config();
+        assert_eq!(config.rest_mana_pct, 60);
+        assert_eq!(config.pull_mana_pct, 30);
+        assert!(config.rest_mana_pct > config.pull_mana_pct);
+    }
+
+    #[test]
+    fn test_level_range_ordering() {
+        let config = sample_config();
+        assert!(config.level_range[0] <= config.level_range[1]);
+    }
+
+    #[test]
+    fn test_prev_camp_chain() {
+        let mut config = sample_config();
+        config.prev_camp = Some("crushbone_entrance".into());
+        config.next_camp = Some("crushbone_inner".into());
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let loaded: CampConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(loaded.prev_camp.as_deref(), Some("crushbone_entrance"));
+        assert_eq!(loaded.next_camp.as_deref(), Some("crushbone_inner"));
+    }
+
+    #[test]
+    fn test_ignore_mob_names_roundtrip() {
+        let config = sample_config();
+        assert_eq!(config.ignore_mob_names, vec!["Ambassador DVinn"]);
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let loaded: CampConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(loaded.ignore_mob_names, vec!["Ambassador DVinn"]);
+    }
+
+    #[test]
+    fn test_camps_dir_path() {
+        let dir = CampConfig::camps_dir();
+        assert!(dir.ends_with("config/camps"));
+    }
+
+    #[test]
+    fn test_zero_radius_config() {
+        let toml_str = r#"
+            name = "tiny_camp"
+            zone = "arena"
+            camp_center = [0.0, 0.0, 0.0]
+            pull_point = [0.0, 0.0, 0.0]
+            pull_radius = 0.0
+            camp_radius = 0.0
+            leash_radius = 0.0
+            rest_mana_pct = 0
+            pull_mana_pct = 0
+            level_range = [1, 1]
+        "#;
+        let config: CampConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.pull_radius, 0.0);
+        assert_eq!(config.camp_radius, 0.0);
+        assert_eq!(config.rest_mana_pct, 0);
+    }
 }
