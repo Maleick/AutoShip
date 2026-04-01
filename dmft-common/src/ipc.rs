@@ -179,8 +179,8 @@ pub enum Response {
 pub type ZoneGraphEntry = (u16, String, i32, i32, Vec<(u16, u8, bool)>);
 
 /// Random session token generated at injection time for IPC authentication.
-/// The orchestrator writes this to shared memory; the DLL reads it and
-/// validates it on every pipe connection.
+/// The orchestrator stages this in a temp file before injection; the DLL reads
+/// it during initialization and validates it on every pipe connection.
 pub type SessionToken = [u8; 32];
 
 /// Size of shared memory region allocated per client (64 KB)
@@ -217,7 +217,7 @@ pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
     let token = generate_random_token();
 
     std::fs::write(&token_path, token)?;
-    // Also cache in memory for later --login-pid calls in the same process
+    // Also cache a copy for later CLI commands that reconnect to the injected client.
     let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
     std::fs::write(&login_token_path, token)?;
 

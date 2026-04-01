@@ -61,11 +61,7 @@ enum Commands {
         z: f32,
     },
     /// Navigate ALL clients to coordinates
-    NavAll {
-        x: f32,
-        y: f32,
-        z: f32,
-    },
+    NavAll { x: f32, y: f32, z: f32 },
     /// Navigate between zones
     NavPath {
         zone: String,

@@ -20,7 +20,7 @@ pub struct CommandPipe {
 impl CommandPipe {
     /// Connect to the named pipe for a specific client.
     ///
-    /// Pipe name: `\\.\pipe\dmft_cmd_{client_id}`
+    /// Pipe name: `\\.\pipe\{session_id:x}_cmd_{client_id}`
     ///
     /// IMPORTANT: `client_id` must be the EQ process PID, not a sequential
     /// index. The injected DLL creates its pipe using `std::process::id()`
