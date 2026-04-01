@@ -2678,8 +2678,12 @@ impl App {
     fn execute_ch_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
         match args.first().copied() {
             None | Some("status") => {
-                if orchestrator.combat.ch_chain_active() {
-                    let chain = orchestrator.combat.ch_chain.as_ref().unwrap();
+                if let Some(chain) = orchestrator
+                    .combat
+                    .ch_chain
+                    .as_ref()
+                    .filter(|c| c.is_active())
+                {
                     let members = chain.members().len();
                     let interval = chain.interval_secs();
                     let adaptive = if chain.is_adaptive() {
@@ -3153,7 +3157,7 @@ fn generate_demo_hex_data(name: &str, spawn_id: u32) -> Vec<u8> {
 }
 
 /// Extract account number from a character name or window title.
-/// Looks for trailing digits (e.g., "frostreaver05" → 5).
+/// Looks for trailing digits (e.g., "player05" → 5).
 pub fn extract_account_number(name: &str) -> Option<u8> {
     let digits: String = name
         .chars()

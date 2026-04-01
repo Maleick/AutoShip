@@ -605,7 +605,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         // ── Configuration Files ──
         Line::from(Span::styled(" Configuration Files", head_s)),
         Line::from(""),
-        kv("frostreaver", "config/frostreaver.toml (main config)"),
+        kv("dmft", "config/dmft.toml (main config)"),
         kv("accounts", "config/accounts.toml (login accounts)"),
         kv("camps", "config/camps/<name>.toml (camp positions)"),
         Line::from(""),
