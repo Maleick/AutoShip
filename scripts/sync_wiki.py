@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 import subprocess
 import sys
@@ -116,7 +117,7 @@ def git_remote_repo_full_name() -> str:
     except subprocess.CalledProcessError as exc:
         fail(f"Unable to determine origin remote: {exc.stderr.strip()}")
 
-    normalized = origin.removesuffix(".git")
+    normalized = origin.rstrip("/").removesuffix(".git")
     for prefix in ("https://github.com/", "git@github.com:", "ssh://git@github.com/"):
         if normalized.startswith(prefix):
             return normalized[len(prefix) :]
@@ -140,14 +141,34 @@ def github_token() -> str:
     return token
 
 
-def wiki_urls(repo_full_name: str, token: str) -> tuple[str, str]:
-    auth_url = f"https://x-access-token:{token}@github.com/{repo_full_name}.wiki.git"
-    display_url = f"https://github.com/{repo_full_name}.wiki.git"
-    return auth_url, display_url
+def wiki_display_url(repo_full_name: str) -> str:
+    return f"https://github.com/{repo_full_name}.wiki.git"
 
 
-def wiki_remote_exists(auth_url: str) -> bool:
-    result = run(["git", "ls-remote", auth_url, "HEAD"], cwd=REPO_ROOT, check=False)
+def git_auth_config(token: str) -> str:
+    basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
+    return f"http.extraheader=AUTHORIZATION: basic {basic}"
+
+
+def run_git_authenticated(
+    args: list[str],
+    *,
+    token: str,
+    cwd: Path | None = None,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    # Use an in-memory auth header for this process invocation so persistent wiki
+    # clones can keep a plain https remote URL without writing tokens to .git/config.
+    return run(["git", "-c", git_auth_config(token), *args], cwd=cwd, check=check)
+
+
+def wiki_remote_exists(display_url: str, token: str) -> bool:
+    result = run_git_authenticated(
+        ["ls-remote", display_url, "HEAD"],
+        token=token,
+        cwd=REPO_ROOT,
+        check=False,
+    )
     return result.returncode == 0
 
 
@@ -155,12 +176,26 @@ def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def prepare_wiki_checkout(target_dir: Path, auth_url: str, remote_exists: bool) -> None:
+def ensure_origin_remote(target_dir: Path, display_url: str) -> None:
+    remotes = run(["git", "remote"], cwd=target_dir).stdout.split()
+    if "origin" in remotes:
+        run(["git", "remote", "set-url", "origin", display_url], cwd=target_dir)
+    else:
+        run(["git", "remote", "add", "origin", display_url], cwd=target_dir)
+
+
+def prepare_wiki_checkout(
+    target_dir: Path,
+    display_url: str,
+    remote_exists: bool,
+    token: str,
+) -> None:
     ensure_dir(target_dir.parent)
 
     if (target_dir / ".git").is_dir():
+        ensure_origin_remote(target_dir, display_url)
         if remote_exists:
-            run(["git", "fetch", "origin"], cwd=target_dir)
+            run_git_authenticated(["fetch", "origin"], token=token, cwd=target_dir)
             run(["git", "checkout", PUBLISH_BRANCH], cwd=target_dir)
             run(["git", "reset", "--hard", f"origin/{PUBLISH_BRANCH}"], cwd=target_dir)
         return
@@ -170,13 +205,13 @@ def prepare_wiki_checkout(target_dir: Path, auth_url: str, remote_exists: bool) 
 
     if remote_exists:
         target_dir.rmdir()
-        run(["git", "clone", auth_url, str(target_dir)], cwd=REPO_ROOT)
+        run_git_authenticated(["clone", display_url, str(target_dir)], token=token, cwd=REPO_ROOT)
         run(["git", "checkout", PUBLISH_BRANCH], cwd=target_dir)
         return
 
     run(["git", "init", str(target_dir)], cwd=REPO_ROOT)
     run(["git", "checkout", "-B", PUBLISH_BRANCH], cwd=target_dir)
-    run(["git", "remote", "add", "origin", auth_url], cwd=target_dir)
+    ensure_origin_remote(target_dir, display_url)
 
 
 def sync_files(source_files: dict[str, Path], wiki_dir: Path) -> list[str]:
@@ -215,8 +250,13 @@ def commit_changes(wiki_dir: Path) -> None:
     run(["git", "commit", "-m", COMMIT_MESSAGE], cwd=wiki_dir)
 
 
-def push_changes(wiki_dir: Path, display_url: str) -> None:
-    result = run(["git", "push", "-u", "origin", PUBLISH_BRANCH], cwd=wiki_dir, check=False)
+def push_changes(wiki_dir: Path, display_url: str, token: str) -> None:
+    result = run_git_authenticated(
+        ["push", "-u", "origin", PUBLISH_BRANCH],
+        token=token,
+        cwd=wiki_dir,
+        check=False,
+    )
     if result.returncode == 0:
         return
     stderr = result.stderr.strip()
@@ -251,8 +291,8 @@ def main() -> int:
 
     repo_full_name = git_remote_repo_full_name()
     token = github_token()
-    auth_url, display_url = wiki_urls(repo_full_name, token)
-    remote_exists = wiki_remote_exists(auth_url)
+    display_url = wiki_display_url(repo_full_name)
+    remote_exists = wiki_remote_exists(display_url, token)
 
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     if args.wiki_dir:
@@ -263,7 +303,7 @@ def main() -> int:
         wiki_dir = Path(temp_dir.name) / "wiki"
         ensure_dir(wiki_dir)
 
-    prepare_wiki_checkout(wiki_dir, auth_url, remote_exists)
+    prepare_wiki_checkout(wiki_dir, display_url, remote_exists, token)
     actions = sync_files(source_files, wiki_dir)
 
     if args.dry_run:
@@ -276,7 +316,7 @@ def main() -> int:
     commit_changes(wiki_dir)
     if has_git_changes(wiki_dir):
         fail("Wiki checkout still has uncommitted changes after commit attempt.")
-    push_changes(wiki_dir, display_url)
+    push_changes(wiki_dir, display_url, token)
     print(f"Wiki publish complete: {display_url}")
     return 0
 
