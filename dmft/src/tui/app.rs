@@ -663,10 +663,10 @@ impl App {
     pub fn toggle_tactical_navmesh_overlay(&mut self) {
         let enabled = self.map_state.toggle_navmesh();
         if enabled {
-            if let Some(zone) = self.current_zone_short_name() {
-                if self.map_state.navmesh_overlay.is_none() {
-                    self.load_zone_navmesh_overlay(&zone);
-                }
+            if let Some(zone) = self.current_zone_short_name()
+                && self.map_state.navmesh_overlay.is_none()
+            {
+                self.load_zone_navmesh_overlay(&zone);
             }
             let segment_count = self
                 .map_state
@@ -3203,11 +3203,11 @@ fn edit_distance(a: &str, b: &str) -> usize {
     let b_len = b.len();
     let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
 
-    for i in 0..=a_len {
-        matrix[i][0] = i;
+    for (i, row) in matrix.iter_mut().enumerate().take(a_len + 1) {
+        row[0] = i;
     }
-    for j in 0..=b_len {
-        matrix[0][j] = j;
+    for (j, cell) in matrix[0].iter_mut().enumerate().take(b_len + 1) {
+        *cell = j;
     }
 
     for (i, ca) in a.chars().enumerate() {
@@ -3231,10 +3231,8 @@ fn did_you_mean(input: &str) -> Option<&'static str> {
         let dist = edit_distance(&input_lower, cmd);
         // Only suggest if distance is at most 2 (or 3 for longer commands)
         let max_dist = if cmd.len() > 5 { 3 } else { 2 };
-        if dist <= max_dist {
-            if best.is_none() || dist < best.unwrap().1 {
-                best = Some((cmd, dist));
-            }
+        if dist <= max_dist && best.is_none_or(|(_, best_dist)| dist < best_dist) {
+            best = Some((cmd, dist));
         }
     }
 

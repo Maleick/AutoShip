@@ -123,7 +123,7 @@ mod tests {
         let p = LlmPriority::Medium;
         let c = p; // Copy
         assert_eq!(p, c);
-        let cl = p.clone();
+        let cl = p;
         assert_eq!(p, cl);
     }
 

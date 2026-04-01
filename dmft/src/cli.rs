@@ -1169,7 +1169,6 @@ fn dump_hex_region(
 /// # Errors
 ///
 /// Returns an error if the operation fails.
-
 pub fn load_config() -> Result<config::AppConfig> {
     let config_path = Path::new("config/frostreaver.toml");
     if config_path.exists() {

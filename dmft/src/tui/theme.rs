@@ -637,7 +637,7 @@ mod tests {
     fn theme_kind_clone_and_copy() {
         let a = ThemeKind::Dracula;
         let b = a;
-        let c = a.clone();
+        let c = a;
         assert_eq!(a, b);
         assert_eq!(a, c);
     }

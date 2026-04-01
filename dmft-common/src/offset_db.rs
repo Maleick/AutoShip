@@ -37,7 +37,6 @@ impl OffsetDatabase {
     /// # Errors
     ///
     /// Returns an error if the operation fails.
-
     /// Serialize and write this database to a JSON file.
     pub fn save_to_file(&self, path: &Path) -> anyhow::Result<()> {
         let content = serde_json::to_string_pretty(self)?;

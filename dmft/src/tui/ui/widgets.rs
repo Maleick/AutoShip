@@ -602,10 +602,9 @@ pub fn find_command_hint(input: &str) -> Option<&'static str> {
         if trimmed.starts_with(hint.prefix)
             && (trimmed.len() == hint.prefix.len()
                 || trimmed.as_bytes().get(hint.prefix.len()) == Some(&b' '))
+            && best.is_none_or(|current| hint.prefix.len() > current.prefix.len())
         {
-            if best.is_none() || hint.prefix.len() > best.unwrap().prefix.len() {
-                best = Some(hint);
-            }
+            best = Some(hint);
         }
     }
 
@@ -772,7 +771,7 @@ impl CommandPalette {
         for window in haystack_bytes.windows(needle_bytes.len()) {
             let mut all_match = true;
             for (a, b) in window.iter().zip(needle_bytes.iter()) {
-                if a.to_ascii_lowercase() != b.to_ascii_lowercase() {
+                if !a.eq_ignore_ascii_case(b) {
                     all_match = false;
                     break;
                 }
