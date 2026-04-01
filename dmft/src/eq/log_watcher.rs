@@ -155,4 +155,101 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], LogEvent::Kill { ref mob } if mob == "a bat"));
     }
+
+    #[test]
+    fn test_new_starts_at_eof() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("eqlog.txt");
+        {
+            let mut f = File::create(&path).unwrap();
+            writeln!(f, "old line 1").unwrap();
+            writeln!(f, "old line 2").unwrap();
+        }
+        let watcher = LogWatcher::new(path);
+        // Fresh watcher should have empty database
+        assert_eq!(watcher.database().total_xp_events, 0);
+    }
+
+    #[test]
+    fn test_poll_empty_file_returns_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("eqlog.txt");
+        File::create(&path).unwrap();
+        let mut watcher = LogWatcher::new(path);
+        let events = watcher.poll();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_poll_unrecognized_lines_filtered() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("eqlog.txt");
+        File::create(&path).unwrap();
+        let mut watcher = LogWatcher::new(path.clone());
+        // Append unrecognized lines
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
+            writeln!(f, "Random combat message that is not parsed").unwrap();
+            writeln!(f, "Another line that means nothing").unwrap();
+        }
+        let events = watcher.poll();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_poll_successive_calls_no_duplicates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("eqlog.txt");
+        File::create(&path).unwrap();
+        let mut watcher = LogWatcher::new(path.clone());
+
+        // First append
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
+            writeln!(f, "You gain experience!").unwrap();
+        }
+        let events = watcher.poll();
+        assert_eq!(events.len(), 1);
+
+        // Second poll without new data
+        let events = watcher.poll();
+        assert!(events.is_empty());
+
+        // Second append
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
+            writeln!(f, "You gain party experience!").unwrap();
+        }
+        let events = watcher.poll();
+        assert_eq!(events.len(), 1);
+        assert_eq!(watcher.database().total_xp_events, 2);
+    }
+
+    #[test]
+    fn test_database_accessor() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("eqlog.txt");
+        File::create(&path).unwrap();
+        let mut watcher = LogWatcher::new(path.clone());
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
+            writeln!(f, "You have slain a rat!").unwrap();
+            writeln!(f, "You have slain a rat!").unwrap();
+        }
+        watcher.poll();
+        let db = watcher.database();
+        assert_eq!(db.kills["a rat"], 2);
+    }
 }
