@@ -49,6 +49,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     match app.active_screen {
         ActiveScreen::Overview => dashboard::draw_dashboard(frame, outer[1], app),
         ActiveScreen::Tactical => map::draw_map_screen(frame, outer[1], app),
+        ActiveScreen::Navigation => navigation::draw_navigation_screen(frame, outer[1], app),
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
     }
 
@@ -164,7 +165,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
     // ── Left pane ─────────────────────────────────────────────────────
     let hints: Vec<Span<'_>> = vec![
-        Span::styled("1-3", t.statusbar_key),
+        Span::styled("1-4", t.statusbar_key),
         Span::styled(" screen  ", t.statusbar_dim),
         Span::styled("⇧1-6", t.statusbar_key),
         Span::styled(" group  ", t.statusbar_dim),
@@ -182,6 +183,8 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(" filter  ", t.statusbar_dim),
         Span::styled("+/-", t.statusbar_key),
         Span::styled(" depth  ", t.statusbar_dim),
+        Span::styled("m", t.statusbar_key),
+        Span::styled(" map  ", t.statusbar_dim),
         Span::styled("T", t.statusbar_key),
         Span::styled(" theme  ", t.statusbar_dim),
         Span::styled("?", t.statusbar_key),
@@ -290,18 +293,19 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let text = vec![
         Line::from(Span::styled(" Keybindings", head_s)),
         Line::from(""),
-        kv("1-3", "Overview, Tactical, Debug"),
+        kv("1-4", "Characters, Map, Navigation, Debug"),
         kv("Shift+1-6", "Focus group G1–G6"),
         kv("Shift+0", "All groups"),
         kv("Tab", "Cycle focused pane"),
         kv("[ ]", "Cycle clients"),
         kv("/", "Search spawns"),
         kv("f", "Filter spawn type"),
-        kv("Enter", "Open selected spawn in Debug"),
+        kv("Enter", "Expand or open focused detail"),
         kv("g", "Toggle group section"),
         kv("v", "Toggle filter section"),
         kv("z", "Collapse focused section"),
         kv("+/-", "Adjust Tactical Z slice"),
+        kv("m", "Maximize Tactical map"),
         kv("p", "Privacy mode"),
         kv("T", "Cycle theme"),
         kv(":", "Command mode"),

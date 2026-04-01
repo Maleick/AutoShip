@@ -150,6 +150,10 @@ pub fn handle_events(
                 return Ok(true);
             }
             (KeyCode::Char('3'), _) => {
+                app.set_active_screen(ActiveScreen::Navigation);
+                return Ok(true);
+            }
+            (KeyCode::Char('4'), _) => {
                 app.set_active_screen(ActiveScreen::Debug);
                 return Ok(true);
             }
@@ -206,6 +210,10 @@ pub fn handle_events(
                 app.cycle_theme();
                 return Ok(true);
             }
+            (KeyCode::Char('m' | 'M'), _) if app.active_screen == ActiveScreen::Tactical => {
+                app.toggle_tactical_map_maximized();
+                return Ok(true);
+            }
             (KeyCode::Esc, _) => {
                 if app.active_group.is_some() {
                     app.set_active_group(None);
@@ -233,7 +241,10 @@ pub fn handle_events(
 
         if matches!(
             app.active_screen,
-            ActiveScreen::Overview | ActiveScreen::Tactical | ActiveScreen::Debug
+            ActiveScreen::Overview
+                | ActiveScreen::Tactical
+                | ActiveScreen::Navigation
+                | ActiveScreen::Debug
         ) {
             match key.code {
                 KeyCode::Char('r') => {
@@ -290,6 +301,39 @@ pub fn handle_events(
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.prev_client();
+                    return Ok(true);
+                }
+                KeyCode::Enter => {
+                    app.expand_selected_character();
+                    return Ok(true);
+                }
+                _ => {}
+            },
+            ActivePanel::TacticalMap => match key.code {
+                KeyCode::Enter => {
+                    app.toggle_tactical_map_maximized();
+                    return Ok(true);
+                }
+                _ => {}
+            },
+            ActivePanel::TacticalNavigation => match key.code {
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.next_client();
+                    return Ok(true);
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.prev_client();
+                    return Ok(true);
+                }
+                KeyCode::Enter => {
+                    if app.active_screen == ActiveScreen::Navigation {
+                        app.set_active_screen(ActiveScreen::Tactical);
+                        app.active_panel = ActivePanel::TacticalNavigation;
+                        app.status_message = String::from("Navigation: returned to Map screen");
+                    } else {
+                        app.set_active_screen(ActiveScreen::Navigation);
+                        app.status_message = String::from("Navigation: full status window opened");
+                    }
                     return Ok(true);
                 }
                 _ => {}

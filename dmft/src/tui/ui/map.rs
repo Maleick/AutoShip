@@ -30,6 +30,11 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         .sum::<u16>()
         .max(6);
 
+    if app.tactical_state.map_maximized {
+        draw_maximized_map_screen(frame, area, app, &sections, sidebar_height);
+        return;
+    }
+
     if area.width < WIDTH_MAP_STACK {
         let rows = Layout::default()
             .direction(Direction::Vertical)
@@ -80,6 +85,47 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     draw_tactical_sidebar(frame, cols[2], app, &sections);
 }
 
+fn draw_maximized_map_screen(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &mut App,
+    sections: &[(TacticalSectionKind, Constraint)],
+    sidebar_height: u16,
+) {
+    let dock_height = (sidebar_height + 9)
+        .min(area.height.saturating_sub(12))
+        .max(8);
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(14), Constraint::Length(dock_height)])
+        .split(area);
+
+    draw_map_view(frame, rows[0], app);
+
+    if area.width < WIDTH_MAP_NARROW {
+        let dock = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(6), Constraint::Length(sidebar_height.max(6))])
+            .split(rows[1]);
+        spawns::draw_spawn_list(frame, dock[0], app);
+        draw_tactical_sidebar(frame, dock[1], app, sections);
+        return;
+    }
+
+    let dock_sidebar_width = if area.width >= WIDTH_SIDEBAR_WIDE {
+        40
+    } else {
+        34
+    };
+    let dock = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(34), Constraint::Length(dock_sidebar_width)])
+        .split(rows[1]);
+
+    spawns::draw_spawn_list(frame, dock[0], app);
+    draw_tactical_sidebar(frame, dock[1], app, sections);
+}
+
 // ─── Map view ────────────────────────────────────────────────────────────────
 
 fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
@@ -106,7 +152,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .as_ref()
         .map(|m| {
             format!(
-                " Map: {} ({} lines, {} labels){} | Z filter: {:.0} [+/-] ",
+                " Map: {} ({} lines, {} labels){} | Z filter: {:.0} [+/-] | m maximize ",
                 zone_label,
                 m.lines.len(),
                 m.points.len(),
@@ -116,7 +162,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         })
         .unwrap_or_else(|| {
             format!(
-                " Map: {} (no map data){} | Z filter: {:.0} [+/-] ",
+                " Map: {} (no map data){} | Z filter: {:.0} [+/-] | m maximize ",
                 zone_label, player_pos_label, z_range
             )
         });
@@ -139,19 +185,33 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let mut grid: Vec<Vec<(char, Color)>> = vec![vec![(' ', t.map_lines); w]; h];
 
     let (center_x, center_y, scale_x, scale_y) = if let Some(map) = &app.map_state.zone_map {
-        let (cx, cy) = if let Some(player) = &app.local_player {
+        if let Some(player) = &app.local_player {
             let player_map_x = -player.y;
             let player_map_y = -player.x;
-            if map_contains_player(map, player_map_x, player_map_y) {
-                (player_map_x, player_map_y)
+            if map_contains_player(map, player_map_x, player_map_y)
+                && should_use_local_view(map, app)
+            {
+                local_map_transform(player_map_x, player_map_y, w, h, app)
             } else {
-                (map.bounds.center_x(), map.bounds.center_y())
+                let scale = ((w as f32 - 2.0) / map.bounds.width())
+                    .min((h as f32 - 2.0) / map.bounds.height());
+                (
+                    map.bounds.center_x(),
+                    map.bounds.center_y(),
+                    scale,
+                    scale,
+                )
             }
         } else {
-            (map.bounds.center_x(), map.bounds.center_y())
-        };
-        let s = ((w as f32 - 2.0) / map.bounds.width()).min((h as f32 - 2.0) / map.bounds.height());
-        (cx, cy, s, s)
+            let scale = ((w as f32 - 2.0) / map.bounds.width())
+                .min((h as f32 - 2.0) / map.bounds.height());
+            (
+                map.bounds.center_x(),
+                map.bounds.center_y(),
+                scale,
+                scale,
+            )
+        }
     } else {
         let spawns = &app.spawns;
         if spawns.is_empty() {
@@ -423,6 +483,29 @@ fn color_run_spans(row: Vec<(char, Color)>) -> Vec<Span<'static>> {
     }
 
     spans
+}
+
+fn should_use_local_view(map: &crate::eq::map_parser::ZoneMap, app: &App) -> bool {
+    app.tactical_state.map_maximized || map.bounds.width().max(map.bounds.height()) > 1_200.0
+}
+
+fn local_map_transform(
+    player_x: f32,
+    player_y: f32,
+    w: usize,
+    h: usize,
+    app: &App,
+) -> (f32, f32, f32, f32) {
+    let half_height = if app.tactical_state.map_maximized {
+        260.0
+    } else {
+        180.0
+    };
+    let aspect = (w as f32 / h.max(1) as f32).clamp(1.0, 2.6);
+    let half_width = half_height * aspect;
+    let scale = ((w as f32 - 2.0) / (half_width * 2.0))
+        .min((h as f32 - 2.0) / (half_height * 2.0));
+    (player_x, player_y, scale, scale)
 }
 
 fn map_contains_player(map: &crate::eq::map_parser::ZoneMap, x: f32, y: f32) -> bool {
@@ -877,6 +960,10 @@ fn draw_navigation_summary(
         Line::from(vec![
             Span::styled(":nav ", Style::default().fg(t.text_accent)),
             Span::styled("<zone>", Style::default().fg(t.text_normal)),
+        ]),
+        Line::from(vec![
+            Span::styled("Enter ", Style::default().fg(t.text_highlight)),
+            Span::styled("full navigation window", Style::default().fg(t.text_secondary)),
         ]),
     ];
 

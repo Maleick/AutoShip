@@ -1,4 +1,4 @@
-//! Overview screen — fleet roster with adaptive operational sections.
+//! Character screen — roster, groups, and selected character detail.
 
 use ratatui::{
     Frame,
@@ -61,16 +61,16 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
         Some(idx) => {
             if let Some(group) = app.groups.get(idx) {
                 format!(
-                    " Command Center — G{} {} ({}) ",
+                    " Characters — G{} {} ({}) ",
                     group.id,
                     group.name,
                     visible.len()
                 )
             } else {
-                format!(" Command Center — Group {} ({}) ", idx + 1, visible.len())
+                format!(" Characters — Group {} ({}) ", idx + 1, visible.len())
             }
         }
-        None => format!(" Command Center — All Groups ({}) ", visible.len()),
+        None => format!(" Characters — All Groups ({}) ", visible.len()),
     };
 
     let border_style = if app.is_panel_focused(ActivePanel::OverviewRoster) {
@@ -454,7 +454,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     } else {
         t.border_primary
     };
-    let title = section_title("Character", None, collapsed);
+    let title = section_title("Selected", Some("Enter"), collapsed);
     let blk = panel(title.as_str(), border_style, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);

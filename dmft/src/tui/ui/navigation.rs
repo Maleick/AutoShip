@@ -11,7 +11,10 @@ use ratatui::{
 use super::widgets::{panel, themed_header_row};
 use crate::tui::app::App;
 
-fn nav_status_color(status: &dmft_common::nav::NavStatus, t: &crate::tui::theme::Theme) -> ratatui::style::Color {
+fn nav_status_color(
+    status: &dmft_common::nav::NavStatus,
+    t: &crate::tui::theme::Theme,
+) -> ratatui::style::Color {
     if status.is_moving() {
         t.text_highlight
     } else if status.is_arrived() {
@@ -36,8 +39,17 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         .split(area);
 
     // ── Left: per-character nav status ────────────────────────────────
-    let blk = panel(" Navigation Status ", t.border_primary, t);
+    let blk = panel(
+        " Navigation Status ",
+        if app.is_panel_focused(crate::tui::app::ActivePanel::TacticalNavigation) {
+            t.border_active
+        } else {
+            t.border_primary
+        },
+        t,
+    );
     let visible = app.visible_clients();
+    let selected_pid = app.active_client().map(|client| client.pid);
 
     if visible.is_empty() {
         frame.render_widget(
@@ -51,9 +63,8 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
         let rows: Vec<Row> = visible
             .iter()
-            .enumerate()
-            .map(|(i, client)| {
-                let is_sel = i == app.nav_state.nav_selected;
+            .map(|client| {
+                let is_sel = Some(client.pid) == selected_pid;
                 let marker = if is_sel { "▶" } else { " " };
                 let name = client
                     .local_player
@@ -132,6 +143,12 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 &mode_str,
                 Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
             ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Focus: ", Style::default().fg(t.text_muted)),
+            Span::styled("[ ] / j k", Style::default().fg(t.text_highlight)),
+            Span::styled("  Enter", Style::default().fg(t.text_muted)),
+            Span::styled(" back to map", Style::default().fg(t.text_secondary)),
         ]),
     ];
 

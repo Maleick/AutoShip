@@ -104,6 +104,7 @@ impl OverviewScreenState {
 
 /// State for the composite Tactical screen.
 pub struct TacticalScreenState {
+    pub map_maximized: bool,
     pub show_named: bool,
     pub show_navigation: bool,
     pub named_collapsed: bool,
@@ -113,6 +114,7 @@ pub struct TacticalScreenState {
 impl TacticalScreenState {
     pub fn new() -> Self {
         Self {
+            map_maximized: false,
             show_named: true,
             show_navigation: true,
             named_collapsed: false,

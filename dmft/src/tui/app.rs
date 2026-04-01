@@ -24,19 +24,26 @@ pub use super::state::{
 pub enum ActiveScreen {
     Overview,
     Tactical,
+    Navigation,
     Debug,
 }
 
 impl ActiveScreen {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Overview => "Overview",
-            Self::Tactical => "Tactical",
+            Self::Overview => "Characters",
+            Self::Tactical => "Map",
+            Self::Navigation => "Navigation",
             Self::Debug => "Debug",
         }
     }
 
-    pub const ALL: [ActiveScreen; 3] = [Self::Overview, Self::Tactical, Self::Debug];
+    pub const ALL: [ActiveScreen; 4] = [
+        Self::Overview,
+        Self::Tactical,
+        Self::Navigation,
+        Self::Debug,
+    ];
 }
 
 /// Which panel is currently focused for keyboard input.
@@ -368,7 +375,8 @@ impl App {
     fn default_panel_for_screen(screen: ActiveScreen) -> ActivePanel {
         match screen {
             ActiveScreen::Overview => ActivePanel::OverviewRoster,
-            ActiveScreen::Tactical => ActivePanel::TacticalSpawns,
+            ActiveScreen::Tactical => ActivePanel::TacticalMap,
+            ActiveScreen::Navigation => ActivePanel::TacticalNavigation,
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
         }
     }
@@ -397,6 +405,7 @@ impl App {
                 }
                 panels
             }
+            ActiveScreen::Navigation => vec![ActivePanel::TacticalNavigation],
             ActiveScreen::Debug => {
                 vec![ActivePanel::DebugSpawns, ActivePanel::DebugHexDump]
             }
@@ -496,6 +505,30 @@ impl App {
             Some((label, false)) => format!("{label}: expanded"),
             None => String::from("Focused pane does not collapse"),
         };
+    }
+
+    pub fn toggle_tactical_map_maximized(&mut self) {
+        self.tactical_state.map_maximized = !self.tactical_state.map_maximized;
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.status_message = if self.tactical_state.map_maximized {
+            String::from("Map: maximized view enabled")
+        } else {
+            String::from("Map: split view restored")
+        };
+        self.ensure_panel_focus();
+    }
+
+    pub fn expand_selected_character(&mut self) {
+        self.overview_state.character_collapsed = false;
+        self.active_screen = ActiveScreen::Overview;
+        self.active_panel = ActivePanel::OverviewCharacter;
+        self.status_message = self
+            .active_client()
+            .and_then(|client| client.local_player.as_ref())
+            .map(|player| format!("Character: {}", self.redact_name(&player.displayed_name)))
+            .unwrap_or_else(|| String::from("Character: no client selected"));
+        self.ensure_panel_focus();
     }
 
     /// Build default group definitions. If accounts config exists, derives groups
