@@ -1460,6 +1460,236 @@ pub enum BadgeVariant {
     Muted,
 }
 
+// ─── Scrollable list ────────────────────────────────────────────────────────
+
+/// A stateful scrollable list with position tracking and viewport management.
+pub struct ScrollableList {
+    /// Total number of items.
+    pub total: usize,
+    /// Index of the currently selected item.
+    pub selected: usize,
+    /// Index of the first visible item (scroll offset).
+    pub offset: usize,
+    /// Number of visible rows in the viewport.
+    pub viewport_height: usize,
+}
+
+impl ScrollableList {
+    /// Create a new scrollable list.
+    #[must_use]
+    pub fn new(total: usize, viewport_height: usize) -> Self {
+        Self {
+            total,
+            selected: 0,
+            offset: 0,
+            viewport_height,
+        }
+    }
+
+    /// Move selection down, adjusting scroll offset if needed.
+    pub fn select_next(&mut self) {
+        if self.selected + 1 < self.total {
+            self.selected += 1;
+            if self.selected >= self.offset + self.viewport_height {
+                self.offset = self.selected + 1 - self.viewport_height;
+            }
+        }
+    }
+
+    /// Move selection up, adjusting scroll offset if needed.
+    pub fn select_previous(&mut self) {
+        if self.selected > 0 {
+            self.selected -= 1;
+            if self.selected < self.offset {
+                self.offset = self.selected;
+            }
+        }
+    }
+
+    /// Jump to the first item.
+    pub fn select_first(&mut self) {
+        self.selected = 0;
+        self.offset = 0;
+    }
+
+    /// Jump to the last item.
+    pub fn select_last(&mut self) {
+        if self.total > 0 {
+            self.selected = self.total - 1;
+            self.offset = self.total.saturating_sub(self.viewport_height);
+        }
+    }
+
+    /// Page down — move viewport_height items forward.
+    pub fn page_down(&mut self) {
+        self.selected = (self.selected + self.viewport_height).min(self.total.saturating_sub(1));
+        self.offset = self.selected.saturating_sub(self.viewport_height / 2);
+    }
+
+    /// Page up — move viewport_height items backward.
+    pub fn page_up(&mut self) {
+        self.selected = self.selected.saturating_sub(self.viewport_height);
+        self.offset = self.selected.saturating_sub(self.viewport_height / 2);
+    }
+
+    /// Get the visible range of indices.
+    #[must_use]
+    pub fn visible_range(&self) -> std::ops::Range<usize> {
+        let end = (self.offset + self.viewport_height).min(self.total);
+        self.offset..end
+    }
+
+    /// Whether a scrollbar should be shown (more items than viewport).
+    #[must_use]
+    pub fn needs_scrollbar(&self) -> bool {
+        self.total > self.viewport_height
+    }
+
+    /// Get the scroll position as a ratio (0.0..=1.0) for scrollbar rendering.
+    #[must_use]
+    pub fn scroll_ratio(&self) -> f64 {
+        if self.total <= self.viewport_height {
+            0.0
+        } else {
+            self.offset as f64 / (self.total - self.viewport_height) as f64
+        }
+    }
+}
+
+/// Render a vertical scrollbar indicator.
+#[must_use]
+pub fn render_scrollbar(height: u16, scroll_ratio: f64, t: &Theme) -> Vec<Span<'static>> {
+    let usable = height as usize;
+    let thumb_pos = (scroll_ratio * (usable.saturating_sub(1)) as f64).round() as usize;
+
+    (0..usable)
+        .map(|i| {
+            if i == thumb_pos {
+                Span::styled("\u{2588}", Style::default().fg(t.text_accent))
+            } else {
+                Span::styled("\u{2502}", Style::default().fg(t.text_muted))
+            }
+        })
+        .collect()
+}
+
+// ─── Info panel (key-value detail view) ─────────────────────────────────────
+
+/// A structured info panel that displays key-value pairs.
+pub struct InfoPanel {
+    /// Title of the panel.
+    pub title: String,
+    /// Key-value entries.
+    pub entries: Vec<(String, String)>,
+}
+
+impl InfoPanel {
+    /// Create a new info panel.
+    #[must_use]
+    pub fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            entries: Vec::new(),
+        }
+    }
+
+    /// Add a key-value entry.
+    pub fn add(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.entries.push((key.into(), value.into()));
+    }
+
+    /// Builder method to add a key-value entry.
+    #[must_use]
+    pub fn with_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.add(key, value);
+        self
+    }
+}
+
+/// Render an info panel as styled lines.
+#[must_use]
+pub fn render_info_panel(panel_data: &InfoPanel, t: &Theme) -> Vec<Line<'static>> {
+    let key_width = panel_data
+        .entries
+        .iter()
+        .map(|(k, _)| k.len())
+        .max()
+        .unwrap_or(0);
+
+    let mut lines = vec![Line::from(Span::styled(
+        panel_data.title.clone(),
+        Style::default()
+            .fg(t.text_accent)
+            .add_modifier(Modifier::BOLD),
+    ))];
+
+    for (key, value) in &panel_data.entries {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!(" {key:<width$}  ", width = key_width),
+                Style::default().fg(t.text_muted),
+            ),
+            Span::styled(value.clone(), Style::default().fg(t.text_normal)),
+        ]));
+    }
+
+    lines
+}
+
+// ─── Sparkline (inline mini chart) ──────────────────────────────────────────
+
+/// A mini inline sparkline for showing trends.
+pub struct Sparkline {
+    /// Data points.
+    pub data: Vec<f64>,
+    /// Maximum value for scaling (auto-detected if None).
+    pub max_val: Option<f64>,
+}
+
+impl Sparkline {
+    /// Create a sparkline from data points.
+    #[must_use]
+    pub fn new(data: Vec<f64>) -> Self {
+        Self {
+            data,
+            max_val: None,
+        }
+    }
+
+    /// Set an explicit maximum value.
+    #[must_use]
+    pub fn with_max(mut self, max: f64) -> Self {
+        self.max_val = Some(max);
+        self
+    }
+}
+
+/// Render a sparkline as a styled span using Unicode block elements.
+#[must_use]
+pub fn render_sparkline(spark: &Sparkline, color: Color) -> Span<'static> {
+    const BLOCKS: [char; 8] = [' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}'];
+
+    let max = spark
+        .max_val
+        .unwrap_or_else(|| spark.data.iter().copied().fold(f64::NEG_INFINITY, f64::max));
+
+    let chars: String = if max <= 0.0 {
+        spark.data.iter().map(|_| BLOCKS[0]).collect()
+    } else {
+        spark
+            .data
+            .iter()
+            .map(|&v| {
+                let ratio = (v / max).clamp(0.0, 1.0);
+                let idx = (ratio * 7.0).round() as usize;
+                BLOCKS[idx]
+            })
+            .collect()
+    };
+
+    Span::styled(chars, Style::default().fg(color))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1899,5 +2129,103 @@ mod tests {
         let t = dark_modern();
         let b = status_badge("ERR", BadgeVariant::Danger, &t);
         assert!(!b.content.is_empty());
+    }
+
+    #[test]
+    fn scrollable_list_navigation() {
+        let mut sl = ScrollableList::new(20, 5);
+        assert_eq!(sl.selected, 0);
+        assert_eq!(sl.offset, 0);
+        for _ in 0..6 {
+            sl.select_next();
+        }
+        assert_eq!(sl.selected, 6);
+        assert!(sl.offset > 0);
+    }
+
+    #[test]
+    fn scrollable_list_select_first_last() {
+        let mut sl = ScrollableList::new(20, 5);
+        sl.select_last();
+        assert_eq!(sl.selected, 19);
+        sl.select_first();
+        assert_eq!(sl.selected, 0);
+        assert_eq!(sl.offset, 0);
+    }
+
+    #[test]
+    fn scrollable_list_page_down_up() {
+        let mut sl = ScrollableList::new(100, 10);
+        sl.page_down();
+        assert_eq!(sl.selected, 10);
+        sl.page_up();
+        assert_eq!(sl.selected, 0);
+    }
+
+    #[test]
+    fn scrollable_list_visible_range() {
+        let sl = ScrollableList::new(20, 5);
+        assert_eq!(sl.visible_range(), 0..5);
+    }
+
+    #[test]
+    fn scrollable_list_needs_scrollbar() {
+        let sl = ScrollableList::new(20, 5);
+        assert!(sl.needs_scrollbar());
+        let sl2 = ScrollableList::new(3, 5);
+        assert!(!sl2.needs_scrollbar());
+    }
+
+    #[test]
+    fn scrollable_list_scroll_ratio() {
+        let sl = ScrollableList::new(20, 5);
+        assert!((sl.scroll_ratio() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn render_scrollbar_has_entries() {
+        let t = dark_modern();
+        let spans = render_scrollbar(10, 0.5, &t);
+        assert_eq!(spans.len(), 10);
+    }
+
+    #[test]
+    fn info_panel_builder() {
+        let p = InfoPanel::new("Player")
+            .with_entry("Name", "Warrior")
+            .with_entry("Level", "50");
+        assert_eq!(p.entries.len(), 2);
+        assert_eq!(p.title, "Player");
+    }
+
+    #[test]
+    fn render_info_panel_lines() {
+        let t = dark_modern();
+        let p = InfoPanel::new("Stats")
+            .with_entry("HP", "1000")
+            .with_entry("Mana", "500");
+        let lines = render_info_panel(&p, &t);
+        assert_eq!(lines.len(), 3); // title + 2 entries
+    }
+
+    #[test]
+    fn sparkline_creation() {
+        let s = Sparkline::new(vec![1.0, 2.0, 3.0, 2.0, 1.0]);
+        assert_eq!(s.data.len(), 5);
+        assert!(s.max_val.is_none());
+    }
+
+    #[test]
+    fn sparkline_with_max() {
+        let s = Sparkline::new(vec![1.0, 2.0]).with_max(10.0);
+        assert_eq!(s.max_val, Some(10.0));
+    }
+
+    #[test]
+    fn render_sparkline_chars() {
+        let t = dark_modern();
+        let s = Sparkline::new(vec![0.0, 0.5, 1.0, 0.5, 0.0]).with_max(1.0);
+        let span = render_sparkline(&s, t.text_accent);
+        assert_eq!(span.content.chars().count(), 5);
     }
 }
