@@ -446,8 +446,6 @@ impl App {
 
             discord_webhook: None,
             discord_bridge: None,
-<<<<<<< ours
-<<<<<<< ours
 
             menu_state: MenuState::new(),
             wizard_state: WizardState::new(),
@@ -457,12 +455,9 @@ impl App {
             command_aliases: Self::build_default_aliases(),
             toast_message: None,
             toast_set_tick: 0,
-        }
-=======
         };
         app.cmd_state.load_history_from_disk();
         app
->>>>>>> theirs
     }
 
     /// Build default command aliases.
@@ -492,11 +487,6 @@ impl App {
         {
             self.toast_message = None;
         }
-=======
-        };
-        app.cmd_state.load_history_from_disk();
-        app
->>>>>>> theirs
     }
 
     /// Initialize Discord integration from config.
@@ -2194,12 +2184,9 @@ impl App {
         if input.is_empty() {
             return;
         }
-        let input = normalize_command_alias(&input);
-<<<<<<< ours
-
-        // Resolve aliases: if the first token matches an alias, expand it
         let input = {
-            let parts: Vec<&str> = input.splitn(2, ' ').collect();
+            let normalized = normalize_command_alias(&input);
+            let parts: Vec<&str> = normalized.splitn(2, ' ').collect();
             if let Some(expanded) = self.command_aliases.get(parts[0]) {
                 if parts.len() > 1 {
                     format!("{expanded} {}", parts[1])
@@ -2207,11 +2194,9 @@ impl App {
                     expanded.clone()
                 }
             } else {
-                input
+                normalized
             }
         };
-=======
->>>>>>> theirs
 
         // Save to history and track frequency for favorites
         self.cmd_state.command_history.push(input.clone());
@@ -2516,11 +2501,6 @@ impl App {
                 self.running = false;
                 self.status_message = String::from("Shutting down DMFT TUI...");
             }
-            "config" => {
-                self.status_message = String::from(
-                    "Config panel is not yet available in this build. Use config/*.toml for now.",
-                );
-            }
             "all" => {
                 if let Some(slash_cmd) = parts.get(1) {
                     let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
@@ -2571,9 +2551,6 @@ impl App {
                 self.toggle_privacy();
                 let state = if self.privacy_mode { "ON" } else { "OFF" };
                 self.status_message = format!("Privacy mode: {state}");
-            }
-            "quit" => {
-                self.running = false;
             }
             _ => {
                 // Try to parse first token as PID
@@ -3305,11 +3282,7 @@ fn generate_demo_hex_data(name: &str, spawn_id: u32) -> Vec<u8> {
 }
 
 /// Extract account number from a character name or window title.
-<<<<<<< ours
 /// Looks for trailing digits (e.g., "player05" → 5).
-=======
-/// Looks for trailing digits (e.g., "dmft05" → 5).
->>>>>>> theirs
 pub fn extract_account_number(name: &str) -> Option<u8> {
     let digits: String = name
         .chars()
@@ -3351,23 +3324,12 @@ const KNOWN_COMMANDS: &[(&str, &str)] = &[
     ("ch", "CH chain: start|stop|add|rm|interval|adaptive|status"),
     ("inject", "Request DLL injection"),
     ("all", "Broadcast: all <slash_command>"),
-<<<<<<< ours
-<<<<<<< ours
     ("wizard", "Run the setup wizard"),
     ("config", "Open configuration panel"),
     ("theme", "Cycle color theme"),
     ("privacy", "Toggle privacy mode"),
-    ("quit", "Exit the application"),
-=======
     ("cmds", "Alias for commands"),
-    ("quit", "Quit TUI (alias: q)"),
-    ("config", "Open config panel (alias: cfg)"),
->>>>>>> theirs
-=======
-    ("cmds", "Alias for commands"),
-    ("quit", "Quit TUI (alias: q)"),
-    ("config", "Open config panel (alias: cfg)"),
->>>>>>> theirs
+    ("quit", "Quit TUI"),
 ];
 
 /// Levenshtein edit distance between two strings.
@@ -3399,8 +3361,6 @@ fn edit_distance(a: &str, b: &str) -> usize {
 /// Also checks for prefix matches (e.g., "hel" → "help").
 fn did_you_mean(input: &str) -> Option<&'static str> {
     let input_lower = input.to_lowercase();
-<<<<<<< ours
-<<<<<<< ours
 
     // Prefix match first (higher priority)
     let prefix_matches: Vec<&str> = KNOWN_COMMANDS
@@ -3412,34 +3372,20 @@ fn did_you_mean(input: &str) -> Option<&'static str> {
         return Some(prefix_matches[0]);
     }
 
-    // Fall back to edit distance
-=======
-=======
->>>>>>> theirs
     for &(cmd, _) in KNOWN_COMMANDS {
         if cmd.starts_with(&input_lower) {
             return Some(cmd);
         }
     }
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
     let mut best: Option<(&str, usize)> = None;
 
     for &(cmd, _) in KNOWN_COMMANDS {
         let dist = edit_distance(&input_lower, cmd);
         // Only suggest if distance is at most 2 (or 3 for longer commands)
         let max_dist = if cmd.len() > 5 { 3 } else { 2 };
-<<<<<<< ours
-<<<<<<< ours
-        if dist <= max_dist && best.is_none_or(|(_, best_dist)| dist < best_dist) {
-=======
-        if dist <= max_dist && (best.is_none() || dist < best.unwrap().1) {
->>>>>>> theirs
-=======
-        if dist <= max_dist && (best.is_none() || dist < best.unwrap().1) {
->>>>>>> theirs
+        if dist <= max_dist
+            && (best.is_none() || dist < best.map_or(usize::MAX, |(_, best_dist)| best_dist))
+        {
             best = Some((cmd, dist));
         }
     }
@@ -3447,9 +3393,7 @@ fn did_you_mean(input: &str) -> Option<&'static str> {
     best.map(|(cmd, _)| cmd)
 }
 
-<<<<<<< ours
-<<<<<<< ours
-/// Get a command syntax hint for the given partial input.
+/// Get a command syntax hint for the <command> input fragment.
 pub fn command_syntax_hint(input: &str) -> Option<&'static str> {
     let trimmed = input.trim();
     let first_word = trimmed.split_whitespace().next().unwrap_or("");
@@ -3469,9 +3413,10 @@ pub fn command_syntax_hint(input: &str) -> Option<&'static str> {
         "stop" => Some("stop <name|all>"),
         "restart" => Some("restart <name|all>"),
         "heal" => Some("heal cancel"),
-=======
-=======
->>>>>>> theirs
+        _ => None,
+    }
+}
+
 fn normalize_command_alias(input: &str) -> String {
     match input.trim() {
         "h" => String::from("help"),
@@ -3506,14 +3451,10 @@ fn command_help_detail(command: &str) -> Option<&'static str> {
         "ma" => Some("ma [name] — set or show main assist; sends /assist when target is provided."),
         "mt" => Some("mt [name] — set or show main tank."),
         "all" => Some("all <slash_command> — broadcast a slash command to all connected clients."),
-        "config" | "cfg" => {
-            Some("config — placeholder for the forthcoming config panel (alias: cfg).")
-        }
+        "config" | "cfg" => Some(
+            "config — open the interactive configuration panel, or use :status for live state summary. (alias: cfg)",
+        ),
         "quit" | "q" => Some("quit — exit the TUI immediately (alias: q)."),
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
         _ => None,
     }
 }
