@@ -274,6 +274,10 @@ pub fn generate_random_token() -> SessionToken {
 
 /// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
 /// Must be called BEFORE injection.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
     let token_dir = std::env::temp_dir().join("dmft");
     std::fs::create_dir_all(&token_dir)?;

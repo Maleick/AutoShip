@@ -7,6 +7,10 @@ use crate::orchestrator::Orchestrator;
 
 /// Poll for keyboard events and update app state.
 /// Returns true if an event was handled.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn handle_events(
     app: &mut App,
     timeout: Duration,

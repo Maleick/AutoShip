@@ -38,6 +38,10 @@ const LOG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Initialize crossterm, run the TUI loop, and clean up on exit.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_tui(mut app: App, mut orchestrator: Orchestrator) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;

@@ -43,6 +43,10 @@ fn shared_state_reader_for_pid(pid: u32) -> Result<ipc::shared::SharedStateReade
 }
 
 /// TUI mode — the default. Shows ShowEQ-inspired live dashboard.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_tui_mode() -> Result<()> {
     let mut app = tui::app::App::new();
     let config = load_config()?;
@@ -110,6 +114,10 @@ pub fn run_tui_mode() -> Result<()> {
 }
 
 /// Inject mode (--inject) — find eqgame.exe processes and inject `dmft_dll.dll` into each.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_inject_mode() -> Result<()> {
     info!("DMFT inject mode — finding EQ processes...");
 
@@ -190,6 +198,10 @@ pub fn run_inject_mode() -> Result<()> {
 }
 
 /// Zones mode (--zones <PID>) — query the zone adjacency graph from an injected client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_zones_mode(pid: u32) -> Result<()> {
     use dmft_common::ipc::{Command, Response};
     use dmft_common::nav::ZoneGraph;
@@ -263,6 +275,10 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
 }
 
 /// Status mode (--status <PID>) — read shared memory and print player state.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_status_mode(pid: u32) -> Result<()> {
     let reader = shared_state_reader_for_pid(pid)?;
 
@@ -307,6 +323,10 @@ pub fn run_status_mode(pid: u32) -> Result<()> {
 }
 
 /// Status-all mode (--statusall) — read shared memory for all EQ clients and print a summary table.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_statusall_mode() -> Result<()> {
     let pids = process::memory::find_processes_by_name("eqgame.exe")?;
 
@@ -383,6 +403,10 @@ pub fn run_statusall_mode() -> Result<()> {
 }
 
 /// Navigate mode (--nav <PID> <x> <y> <z>) — send `NavigateTo` to a specific client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
@@ -459,6 +483,10 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
 }
 
 /// Navigate ALL EQ clients to a destination using navmesh pathfinding.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
@@ -557,6 +585,10 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
 }
 
 /// Inject mode targeting a specific PID (--inject-pid <PID>).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     info!(pid, "DMFT inject-pid mode — targeting single process");
 
@@ -582,6 +614,10 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
 }
 
 /// Login mode targeting a specific PID (--login-pid <PID> <account> <password> [server] [character]).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_login_pid_mode(
     pid: u32,
     account: &str,
@@ -610,6 +646,10 @@ pub fn run_login_pid_mode(
 }
 
 /// Login mode (--login <account> <password> [server] [character]) — send `StartLogin` to all injected EQ clients.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
@@ -651,6 +691,10 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
 }
 
 /// Calibrate mode (--calibrate) — find all EQ processes and send `calibrate_login` to each.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_calibrate_mode() -> Result<()> {
     use dmft_common::ipc::Command;
 
@@ -685,6 +729,10 @@ pub fn run_calibrate_mode() -> Result<()> {
 }
 
 /// Command mode (--cmd <pid> <command>) — send a slash command to an injected client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
@@ -704,6 +752,10 @@ pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 }
 
 /// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> Result<()> {
     info!("Navpath mode: zone={zone} from={from:?} to={to:?}");
     println!("Loading navmesh for zone '{zone}'...");
@@ -737,6 +789,10 @@ pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) 
 }
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_dump_mode() -> Result<()> {
     info!(
         "Frostreaver v{} — EQ Memory Reader (dump mode)",
@@ -1102,6 +1158,10 @@ fn dump_hex_region(
         ),
     }
 }
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 
 pub fn load_config() -> Result<config::AppConfig> {
     let config_path = Path::new("config/frostreaver.toml");

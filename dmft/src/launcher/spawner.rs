@@ -6,6 +6,10 @@ pub struct SpawnedProcess {
 }
 
 /// Launch an EQ client process with login and server args.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn spawn_eq_client(
     eq_path: &Path,

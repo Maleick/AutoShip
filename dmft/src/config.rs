@@ -35,6 +35,10 @@ pub struct AccountsConfig {
 
 impl AccountsConfig {
     /// Load account definitions from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read accounts config: {}", path.display()))?;
@@ -234,6 +238,10 @@ fn default_max_spawns() -> usize {
 }
 
 impl AppConfig {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;

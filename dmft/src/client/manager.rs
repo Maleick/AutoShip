@@ -24,6 +24,10 @@ impl ClientManager {
     }
 
     /// Discover running EQ processes and create sessions for new ones.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn discover(&mut self) -> Result<Vec<ClientId>> {
         let pids = crate::process::memory::find_processes_by_name(&self.eq_process_name)?;
         let mut new_clients = Vec::new();
@@ -44,6 +48,10 @@ impl ClientManager {
     }
 
     /// Inject the DLL into a specific client.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn inject(&mut self, client_id: ClientId, dll_source: &Path) -> Result<()> {
         let session = self
             .sessions

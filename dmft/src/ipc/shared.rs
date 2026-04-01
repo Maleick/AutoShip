@@ -38,6 +38,10 @@ impl SharedStateReader {
     ///
     /// Uses `OpenFileMappingW` + `FILE_MAP_READ` — the orchestrator has no need
     /// for write access to the DLL-owned mapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn new(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {

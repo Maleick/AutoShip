@@ -37,6 +37,10 @@ struct WatchlistFile {
 
 impl HvtWatchlist {
     /// Load the watchlist from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let file: WatchlistFile = toml::from_str(&content)?;

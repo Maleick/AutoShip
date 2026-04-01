@@ -4,6 +4,10 @@ use anyhow::{Context, Result};
 
 /// Copy the compiled DLL to a temp directory with a randomized name
 /// that looks like a plausible system component.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn prepare_dll(source_dll: &Path) -> Result<PathBuf> {
     let target_dir = std::env::temp_dir().join("dmft_payloads");
     std::fs::create_dir_all(&target_dir)?;

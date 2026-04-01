@@ -340,6 +340,10 @@ fn default_query_filter() -> recastnavigation_sys::dtQueryFilter {
 // ---------------------------------------------------------------------------
 
 /// Download a zone's navmesh file from mqmesh.com, caching to disk.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     let cache_path = mesh_cache_path(zone_short_name);
 
@@ -378,6 +382,10 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
 
 /// Parse the raw .navmesh file bytes: validate header, decompress if needed,
 /// decode protobuf payload.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     if data.len() < 8 {
         bail!("Navmesh file too small ({} bytes)", data.len());
@@ -459,6 +467,10 @@ pub struct RoutePlan {
 }
 
 /// Load a parsed navmesh into Detour, returning a query-ready object.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     let tile_set = proto
         .tile_set
@@ -521,6 +533,10 @@ fn detour_to_eq(d: &[f32; 3]) -> (f32, f32, f32) {
 /// Find a path between two EQ positions using a loaded navmesh.
 /// Positions are in EQ coordinate space (x=east/west, y=north/south, z=up).
 /// Returns a list of EQ waypoint positions (x, y, z).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn find_path(
     loaded: &LoadedNavMesh,
     from: (f32, f32, f32),
@@ -577,6 +593,10 @@ pub fn find_path(
 }
 
 /// End-to-end convenience: download (or load from cache), parse, and load a zone mesh.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_zone(zone_short_name: &str) -> Result<LoadedNavMesh> {
     let data = download_zone_mesh(zone_short_name)?;
     let proto = parse_navmesh(&data)?;

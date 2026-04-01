@@ -43,6 +43,10 @@ pub struct SoulCoordinator {
 
 impl SoulCoordinator {
     /// Create a new `SoulCoordinator` from config.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn new(config: SoulConfig, db_path: &Path) -> Result<Self> {
         let memory = MemoryStore::open(db_path)?;
         let social = SocialGraph::from_seeds(&config.relationship);

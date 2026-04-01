@@ -59,6 +59,10 @@ pub struct NamedMobDatabase {
 
 impl NamedMobDatabase {
     /// Load all zone TOML files from a directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(dir: &Path) -> Result<Self> {
         let mut entries = HashMap::new();
         let mut by_zone: HashMap<String, Vec<NamedMobEntry>> = HashMap::new();

@@ -67,6 +67,10 @@ pub struct LlmResponse {
 pub trait LlmProvider {
     /// Generate a response for the given request.
     /// Returns Ok(response) or Err if generation fails entirely.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     fn generate(&mut self, request: &LlmRequest) -> Result<LlmResponse>;
 
     /// Provider name for logging/diagnostics.

@@ -12,6 +12,10 @@ pub struct WindowHandle {
 
 /// Find all windows matching a title substring (case-insensitive).
 /// Returns (HWND, title, PID) tuples.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
     use std::sync::Mutex;

@@ -34,11 +34,19 @@ pub struct CampDatabase {
 
 impl CampDatabase {
     /// Load all `.toml` files from `config/camps/` into memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load() -> Result<Self> {
         Self::load_from(Path::new("config/camps"))
     }
 
     /// Load from a specific directory (for testing).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load_from(dir: &Path) -> Result<Self> {
         let mut camps = HashMap::new();
 

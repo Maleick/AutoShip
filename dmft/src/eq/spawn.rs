@@ -6,6 +6,10 @@ use dmft_common::offsets::{
 };
 
 /// Read a single spawn's data from the process at the given `PlayerClient` address.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
     // Critical fields — hard fail if any are unreadable (corrupt memory → skip spawn)
     let name = proc
@@ -105,6 +109,10 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
 }
 
 /// Read the local player's spawn info, including buff slots and cast state.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo> {
     let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)
         .context("rebase underflow for pinstLocalPlayer")?;
@@ -203,6 +211,10 @@ pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> 
 }
 
 /// Read the current target's spawn info, if any.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInfo>> {
     let target_ptr_addr = offsets::rebase(offsets::PINST_TARGET, eq_base)
         .context("rebase underflow for pinstTarget")?;
@@ -220,6 +232,10 @@ pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInf
 
 /// Iterate all spawns in the spawn manager's linked list.
 /// Returns up to `max_count` spawns to prevent infinite loops on corrupt data.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_all_spawns(
     proc: &ProcessHandle,
     eq_base: u64,
@@ -299,6 +315,10 @@ fn read_cxstr(proc: &ProcessHandle, cxstr_addr: usize, max_len: usize) -> Result
 ///
 /// Path: pLocalPC -> +0x2EB0 (`CGroup`*) -> `CGroupBase` members array.
 /// Each `CGroupMember` has a `CXStr` Name at offset 0x08.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<GroupInfo>> {
     // Read pLocalPC
     let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)
@@ -354,6 +374,10 @@ pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<Grou
 
 /// Read the current zone's long name from the zoneHeader struct in memory.
 /// Returns the display name (e.g., "Queynos Hills") or an error if not zoned in.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_zone_name(proc: &ProcessHandle, eq_base: u64) -> Result<String> {
     let zone_addr = offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)
         .context("rebase underflow for instEQZoneInfo")?;
@@ -371,6 +395,10 @@ pub fn read_zone_name(proc: &ProcessHandle, eq_base: u64) -> Result<String> {
 
 /// Read the current zone's short name from the zoneHeader struct in memory.
 /// Returns the internal name (e.g., "qey2hh1") or an error if not zoned in.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_zone_short_name(proc: &ProcessHandle, eq_base: u64) -> Result<String> {
     let zone_addr = offsets::rebase(zone_info::INST_EQ_ZONE_INFO, eq_base)
         .context("rebase underflow for instEQZoneInfo")?;
@@ -391,6 +419,10 @@ pub fn read_zone_short_name(proc: &ProcessHandle, eq_base: u64) -> Result<String
 /// Given a spawn address and an offset range, reads `len` bytes starting at
 /// `spawn_addr + start_offset`. Returns the bytes as a `Vec<u8>`.
 /// Useful for hex-dumping around suspected offsets in the TUI.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn read_spawn_bytes(
     proc: &ProcessHandle,
     spawn_addr: usize,

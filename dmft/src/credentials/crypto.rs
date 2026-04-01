@@ -14,6 +14,10 @@ fn argon2_instance() -> Result<Argon2<'static>> {
 }
 
 /// Derive a 32-byte encryption key from a master password and salt using Argon2id.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     let argon2 = argon2_instance()?;
     let mut key = Zeroizing::new([0u8; 32]);
@@ -24,6 +28,10 @@ pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 3
 }
 
 /// Derive a per-account encryption key from the master key and a per-account salt using Argon2id.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn derive_key_from_master(master_key: &[u8; 32], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     let argon2 = argon2_instance()?;
     let mut key = Zeroizing::new([0u8; 32]);
@@ -34,6 +42,10 @@ pub fn derive_key_from_master(master_key: &[u8; 32], salt: &[u8]) -> Result<Zero
 }
 
 /// Encrypt plaintext using AES-256-GCM. Returns (ciphertext, nonce).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
     let cipher = Aes256Gcm::new(key.into());
 
@@ -49,6 +61,10 @@ pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
 }
 
 /// Decrypt ciphertext using AES-256-GCM.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn decrypt(ciphertext: &[u8], key: &[u8; 32], nonce: &[u8]) -> Result<Vec<u8>> {
     let cipher = Aes256Gcm::new(key.into());
     #[allow(deprecated)] // from_slice needed for runtime-length nonce slices

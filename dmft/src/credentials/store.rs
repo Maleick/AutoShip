@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS meta (
 
 impl CredentialStore {
     /// Open (or create) the credential store at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn open(path: &Path, master_key: Zeroizing<[u8; 32]>) -> Result<Self> {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open credential store at {}", path.display()))?;
@@ -49,6 +53,10 @@ impl CredentialStore {
     }
 
     /// Add or update an account's encrypted password.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn add_account(&self, account_name: &str, password: &str) -> Result<()> {
         let salt = crypto::generate_salt();
         let account_key = crypto::derive_key_from_master(&self.master_key, &salt)?;
@@ -74,6 +82,10 @@ impl CredentialStore {
     }
 
     /// Retrieve and decrypt the password for a given account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn get_password(&self, account_name: &str) -> Result<Zeroizing<String>> {
         let conn = self
             .conn
@@ -97,6 +109,10 @@ impl CredentialStore {
     }
 
     /// List all stored account names.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn list_accounts(&self) -> Result<Vec<String>> {
         let conn = self
             .conn
@@ -110,6 +126,10 @@ impl CredentialStore {
     }
 
     /// Remove an account from the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn remove_account(&self, account_name: &str) -> Result<()> {
         let conn = self
             .conn

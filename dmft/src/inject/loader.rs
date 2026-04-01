@@ -6,6 +6,10 @@ use anyhow::bail;
 
 /// Inject a DLL into a target process by PID.
 /// Uses `CreateRemoteThread` + `LoadLibraryW` (classic injection technique).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
@@ -137,6 +141,10 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
 ///
 /// Finds the DLL's module base address in the target process using a Toolhelp snapshot,
 /// then spawns a remote thread calling `FreeLibrary` on that address.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 #[allow(dead_code)] // Will be used by graceful eject command path
 pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {

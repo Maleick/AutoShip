@@ -75,6 +75,10 @@ pub struct BotBridge {
 #[allow(dead_code)] // Public API — used by Discord bot integration
 impl BotBridge {
     /// Send a command to the TUI for execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn send_command(
         &self,
         command: BridgeCommand,

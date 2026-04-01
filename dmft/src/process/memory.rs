@@ -11,6 +11,10 @@ pub struct ProcessHandle {
 
 impl ProcessHandle {
     /// Open a process by PID with read access.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     #[cfg(windows)]
     pub fn open(pid: u32) -> Result<Self> {
         use windows::Win32::System::Threading::{
@@ -34,6 +38,10 @@ impl ProcessHandle {
     }
 
     /// Get the base address of the main executable module in the target process.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     #[cfg(windows)]
     pub fn module_base(&self) -> Result<u64> {
         use windows::Win32::Foundation::HMODULE;
@@ -60,6 +68,10 @@ impl ProcessHandle {
     }
 
     /// Read a value of type T from the process at the given address.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     #[cfg(windows)]
     pub fn read<T: Copy>(&self, address: usize) -> Result<T> {
         use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
@@ -98,12 +110,20 @@ impl ProcessHandle {
     }
 
     /// Read a pointer (usize) from the process at the given address.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn read_ptr(&self, address: usize) -> Result<usize> {
         self.read::<u64>(address).map(|v| v as usize)
     }
 
     /// Chase a pointer chain: read base, then follow each offset.
     /// Example: `chase_ptr(base`, &[0x10, 0x08]) reads *(*base + 0x10) + 0x08
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn chase_ptr(&self, base: usize, offsets: &[usize]) -> Result<usize> {
         let mut addr = base;
         for (i, &offset) in offsets.iter().enumerate() {
@@ -119,6 +139,10 @@ impl ProcessHandle {
 
     /// Read N bytes from the process at the given address.
     /// Useful for diagnostic hex dumps when debugging offset issues.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     #[cfg(windows)]
     pub fn read_bytes(&self, address: usize, count: usize) -> Result<Vec<u8>> {
         use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
@@ -153,6 +177,10 @@ impl ProcessHandle {
     }
 
     /// Read a null-terminated string from the process at the given address.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     #[allow(unused_variables, unused_mut)]
     pub fn read_string(&self, address: usize, max_len: usize) -> Result<String> {
         let mut buffer = vec![0u8; max_len];
@@ -189,6 +217,10 @@ impl Drop for ProcessHandle {
 }
 
 /// Find all PIDs for processes matching the given name (e.g., "eqgame.exe").
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
     use windows::Win32::Foundation::CloseHandle;

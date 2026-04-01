@@ -24,11 +24,19 @@ pub struct OffsetDatabase {
 
 impl OffsetDatabase {
     /// Load an offset database from a JSON file on disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load_from_file(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let db: Self = serde_json::from_str(&content)?;
         Ok(db)
     }
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
 
     /// Serialize and write this database to a JSON file.
     pub fn save_to_file(&self, path: &Path) -> anyhow::Result<()> {

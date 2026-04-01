@@ -16,6 +16,10 @@ pub enum ProcessPriority {
 }
 
 /// Apply CPU affinity and process priority to a running process.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
     use windows::Win32::Foundation::CloseHandle;
@@ -56,6 +60,10 @@ pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
 ///
 /// Uses `SetProcessWorkingSetSizeEx` with `QUOTA_LIMITS_HARDWS_MAX_ENABLE`
 /// to enforce a hard maximum — Windows will page out memory beyond the limit.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn apply_working_set_limit(pid: u32, max_working_set_mb: u32) -> Result<()> {
     use windows::Win32::Foundation::CloseHandle;

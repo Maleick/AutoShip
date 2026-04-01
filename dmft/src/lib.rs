@@ -41,6 +41,10 @@ use anyhow::Result;
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
 /// Get the base address of eqgame.exe module in the target process.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
     use windows::Win32::Foundation::CloseHandle;

@@ -96,6 +96,10 @@ impl MapBounds {
 
 /// Load a zone map from all layer files in the given directory.
 /// Looks for `zone.txt`, `zone_1.txt`, `zone_2.txt`, `zone_3.txt`.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
     let mut lines = Vec::new();
     let mut points = Vec::new();

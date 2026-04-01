@@ -76,6 +76,10 @@ fn default_rest_command() -> String {
 
 impl ClassConfig {
     /// Load a class config from the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> Result<Self> {
         let contents = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read class config: {}", path.display()))?;
@@ -85,6 +89,10 @@ impl ClassConfig {
     }
 
     /// Save this class config to the given path (creates parent dirs).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
