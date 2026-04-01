@@ -250,7 +250,7 @@ pub struct App {
 #[derive(Debug, Clone)]
 pub struct NavClientStatus {
     pub destination: String,
-    pub status: String,
+    pub status: dmft_common::nav::NavStatus,
     #[allow(dead_code)]
     pub eta_secs: Option<u32>,
     /// Active navigation waypoints for map overlay rendering.

@@ -80,6 +80,29 @@ pub enum NavStatus {
     Arrived,
 }
 
+impl NavStatus {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Idle => "Idle",
+            Self::Moving { .. } => "Navigating",
+            Self::Stuck { .. } => "Stuck",
+            Self::Arrived => "Arrived",
+        }
+    }
+
+    pub fn is_moving(&self) -> bool {
+        matches!(self, Self::Moving { .. })
+    }
+
+    pub fn is_stuck(&self) -> bool {
+        matches!(self, Self::Stuck { .. })
+    }
+
+    pub fn is_arrived(&self) -> bool {
+        matches!(self, Self::Arrived)
+    }
+}
+
 /// A generic indexed cursor over a `Vec<T>`.
 ///
 /// Provides sequential traversal with `current()` / `advance()` semantics.
