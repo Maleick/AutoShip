@@ -1409,7 +1409,7 @@ pub fn render_filter_input(filter: &FilterInput, t: &Theme) -> Line<'static> {
 #[must_use]
 pub fn keybinding_hint<'a>(key: &'a str, description: &'a str, t: &Theme) -> Vec<Span<'a>> {
     vec![
-        Span::styled(key.to_string(), t.statusbar_key),
+        Span::styled(key, t.statusbar_key),
         Span::styled(format!(" {description}  "), t.statusbar_dim),
     ]
 }
