@@ -239,6 +239,6 @@ mod tests {
     fn process_priority_clone() {
         let p = ProcessPriority::AboveNormal;
         let p2 = p.clone();
-        assert!(matches!(p2, ProcessPriority::AboveNormal));
+        assert_eq!(p, p2);
     }
 }
