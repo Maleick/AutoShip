@@ -2831,4 +2831,436 @@ mod tests {
             "unexpected error: {error:#}"
         );
     }
+
+    // --- extract_account_number tests ---
+
+    #[test]
+    fn extract_account_number_trailing_digits() {
+        assert_eq!(extract_account_number("Frostreaver01"), Some(1));
+        assert_eq!(extract_account_number("Iceweaver02"), Some(2));
+        assert_eq!(extract_account_number("Warrior36"), Some(36));
+    }
+
+    #[test]
+    fn extract_account_number_no_digits() {
+        assert_eq!(extract_account_number("Frostreaver"), None);
+        assert_eq!(extract_account_number(""), None);
+    }
+
+    #[test]
+    fn extract_account_number_all_digits() {
+        assert_eq!(extract_account_number("42"), Some(42));
+    }
+
+    #[test]
+    fn extract_account_number_only_trailing_digits_used() {
+        // "Test1Name2" -> trailing digits are "2"
+        assert_eq!(extract_account_number("Test1Name2"), Some(2));
+    }
+
+    // --- SpawnFilter tests ---
+
+    #[test]
+    fn spawn_filter_next_cycles_all_variants() {
+        let f = SpawnFilter::All;
+        let f = f.next();
+        assert_eq!(f, SpawnFilter::Pc);
+        let f = f.next();
+        assert_eq!(f, SpawnFilter::Npc);
+        let f = f.next();
+        assert_eq!(f, SpawnFilter::Named);
+        let f = f.next();
+        assert_eq!(f, SpawnFilter::All);
+    }
+
+    #[test]
+    fn spawn_filter_labels() {
+        assert_eq!(SpawnFilter::All.label(), "All");
+        assert_eq!(SpawnFilter::Pc.label(), "PC");
+        assert_eq!(SpawnFilter::Npc.label(), "NPC");
+        assert_eq!(SpawnFilter::Named.label(), "Named");
+    }
+
+    // --- TrackedStatus tests ---
+
+    #[test]
+    fn tracked_status_labels() {
+        assert_eq!(TrackedStatus::Up.label(), "UP");
+        assert_eq!(TrackedStatus::Down.label(), "DOWN");
+        assert_eq!(TrackedStatus::Unknown.label(), "???");
+    }
+
+    #[test]
+    fn tracked_status_colors_are_distinct() {
+        let up = TrackedStatus::Up.color();
+        let down = TrackedStatus::Down.color();
+        let unknown = TrackedStatus::Unknown.color();
+        assert_ne!(up, down);
+        assert_ne!(up, unknown);
+        assert_ne!(down, unknown);
+    }
+
+    // --- ActiveScreen tests ---
+
+    #[test]
+    fn active_screen_labels() {
+        assert_eq!(ActiveScreen::Overview.label(), "Characters");
+        assert_eq!(ActiveScreen::Tactical.label(), "Map");
+        assert_eq!(ActiveScreen::Navigation.label(), "Navigation");
+        assert_eq!(ActiveScreen::Debug.label(), "Debug");
+    }
+
+    #[test]
+    fn active_screen_all_has_four() {
+        assert_eq!(ActiveScreen::ALL.len(), 4);
+    }
+
+    // --- TrackedSpawn tests ---
+
+    #[test]
+    fn tracked_spawn_construction() {
+        let ts = TrackedSpawn {
+            name: "Lady Vox".into(),
+            status: TrackedStatus::Up,
+            last_seen_tick: Some(100),
+            last_x: 1.0,
+            last_y: 2.0,
+            last_z: 3.0,
+        };
+        assert_eq!(ts.name, "Lady Vox");
+        assert_eq!(ts.status, TrackedStatus::Up);
+        assert_eq!(ts.last_seen_tick, Some(100));
+    }
+
+    #[test]
+    fn tracked_spawn_unknown_not_seen() {
+        let ts = TrackedSpawn {
+            name: "Nagafen".into(),
+            status: TrackedStatus::Unknown,
+            last_seen_tick: None,
+            last_x: 0.0,
+            last_y: 0.0,
+            last_z: 0.0,
+        };
+        assert!(ts.last_seen_tick.is_none());
+    }
+
+    // --- GroupDef / LiveGroup / ChChainStatus tests ---
+
+    #[test]
+    fn group_def_construction() {
+        let g = GroupDef {
+            id: 1,
+            name: "Group 1".into(),
+            account_range: (1, 6),
+            default_camp: "permafrost".into(),
+        };
+        assert_eq!(g.id, 1);
+        assert_eq!(g.account_range, (1, 6));
+    }
+
+    #[test]
+    fn live_group_construction() {
+        let lg = LiveGroup {
+            leader: "Tank01".into(),
+            member_names: vec!["Tank01".into(), "Healer01".into()],
+            zone: "permafrost".into(),
+        };
+        assert_eq!(lg.leader, "Tank01");
+        assert_eq!(lg.member_names.len(), 2);
+    }
+
+    #[test]
+    fn ch_chain_status_construction() {
+        let s = ChChainStatus {
+            members: 4,
+            interval_secs: 3.0,
+            is_adaptive: true,
+            target_id: 99,
+        };
+        assert_eq!(s.members, 4);
+        assert!(s.is_adaptive);
+    }
+
+    // --- App navigation tests ---
+
+    #[test]
+    fn new_app_defaults() {
+        let app = App::new();
+        assert!(app.running);
+        assert_eq!(app.active_screen, ActiveScreen::Overview);
+        assert_eq!(app.active_panel, ActivePanel::OverviewRoster);
+        assert!(app.clients.is_empty());
+        assert_eq!(app.selected_client, 0);
+        assert!(app.active_group.is_none());
+        assert!(!app.privacy_mode);
+        assert!(!app.help_visible);
+    }
+
+    #[test]
+    fn active_client_none_when_empty() {
+        let app = App::new();
+        assert!(app.active_client().is_none());
+    }
+
+    #[test]
+    fn active_client_returns_selected() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Alpha01"));
+        app.clients.push(test_client(2, "Bravo02"));
+        app.selected_client = 1;
+        assert_eq!(app.active_client().unwrap().pid, 2);
+    }
+
+    #[test]
+    fn next_client_cycles() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "A01"));
+        app.clients.push(test_client(2, "B02"));
+        app.clients.push(test_client(3, "C03"));
+        assert_eq!(app.selected_client, 0);
+        app.next_client();
+        assert_eq!(app.selected_client, 1);
+        app.next_client();
+        assert_eq!(app.selected_client, 2);
+        app.next_client();
+        assert_eq!(app.selected_client, 0); // wraps
+    }
+
+    #[test]
+    fn prev_client_cycles() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "A01"));
+        app.clients.push(test_client(2, "B02"));
+        assert_eq!(app.selected_client, 0);
+        app.prev_client();
+        assert_eq!(app.selected_client, 1); // wraps to end
+        app.prev_client();
+        assert_eq!(app.selected_client, 0);
+    }
+
+    #[test]
+    fn next_client_noop_when_empty() {
+        let mut app = App::new();
+        app.next_client();
+        assert_eq!(app.selected_client, 0);
+    }
+
+    #[test]
+    fn prev_client_noop_when_empty() {
+        let mut app = App::new();
+        app.prev_client();
+        assert_eq!(app.selected_client, 0);
+    }
+
+    #[test]
+    fn set_active_screen_updates_panel() {
+        let mut app = App::new();
+        app.set_active_screen(ActiveScreen::Tactical);
+        assert_eq!(app.active_screen, ActiveScreen::Tactical);
+        assert_eq!(app.active_panel, ActivePanel::TacticalMap);
+
+        app.set_active_screen(ActiveScreen::Debug);
+        assert_eq!(app.active_screen, ActiveScreen::Debug);
+        assert_eq!(app.active_panel, ActivePanel::DebugSpawns);
+    }
+
+    #[test]
+    fn is_panel_focused_true_for_active() {
+        let app = App::new();
+        assert!(app.is_panel_focused(ActivePanel::OverviewRoster));
+        assert!(!app.is_panel_focused(ActivePanel::TacticalMap));
+    }
+
+    #[test]
+    fn toggle_panel_cycles_through_visible() {
+        let mut app = App::new();
+        let initial = app.active_panel;
+        app.toggle_panel();
+        // Should have moved to next panel
+        assert_ne!(app.active_panel, initial);
+    }
+
+    #[test]
+    fn toggle_groups_visibility() {
+        let mut app = App::new();
+        let initial = app.overview_state.show_groups;
+        app.toggle_groups_visibility();
+        assert_ne!(app.overview_state.show_groups, initial);
+        app.toggle_groups_visibility();
+        assert_eq!(app.overview_state.show_groups, initial);
+    }
+
+    #[test]
+    fn toggle_filters_visibility() {
+        let mut app = App::new();
+        let initial = app.overview_state.show_filters;
+        app.toggle_filters_visibility();
+        assert_ne!(app.overview_state.show_filters, initial);
+        app.toggle_filters_visibility();
+        assert_eq!(app.overview_state.show_filters, initial);
+    }
+
+    #[test]
+    fn toggle_focused_section_collapses_character() {
+        let mut app = App::new();
+        app.active_panel = ActivePanel::OverviewCharacter;
+        app.toggle_focused_section();
+        assert!(app.overview_state.character_collapsed);
+        assert!(app.status_message.contains("collapsed"));
+        app.toggle_focused_section();
+        assert!(!app.overview_state.character_collapsed);
+        assert!(app.status_message.contains("expanded"));
+    }
+
+    #[test]
+    fn toggle_tactical_map_maximized() {
+        let mut app = App::new();
+        assert!(!app.tactical_state.map_maximized);
+        app.toggle_tactical_map_maximized();
+        assert!(app.tactical_state.map_maximized);
+        assert_eq!(app.active_screen, ActiveScreen::Tactical);
+        assert!(app.status_message.contains("maximized"));
+        app.toggle_tactical_map_maximized();
+        assert!(!app.tactical_state.map_maximized);
+        assert!(app.status_message.contains("restored"));
+    }
+
+    #[test]
+    fn set_active_group_none_shows_all() {
+        let mut app = App::new();
+        app.active_group = Some(0);
+        app.set_active_group(None);
+        assert!(app.active_group.is_none());
+        assert!(app.status_message.contains("All Groups"));
+    }
+
+    #[test]
+    fn group_focus_label_all_groups() {
+        let app = App::new();
+        assert_eq!(app.group_focus_label(), "All Groups");
+    }
+
+    #[test]
+    fn visible_clients_all_when_no_group() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "A01"));
+        app.clients.push(test_client(2, "B02"));
+        let visible = app.visible_clients();
+        assert_eq!(visible.len(), 2);
+    }
+
+    #[test]
+    fn focused_pids_returns_all_pids() {
+        let mut app = App::new();
+        app.clients.push(test_client(100, "A01"));
+        app.clients.push(test_client(200, "B02"));
+        let pids = app.focused_pids();
+        assert_eq!(pids, vec![100, 200]);
+    }
+
+    #[test]
+    fn has_live_group_data_false_initially() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "A01"));
+        assert!(!app.has_live_group_data());
+    }
+
+    #[test]
+    fn client_command_target_uses_character_name() {
+        let app = App::new();
+        let client = test_client(42, "Frostreaver");
+        let target = app.client_command_target(&client);
+        assert_eq!(target, "Frostreaver");
+    }
+
+    #[test]
+    fn client_command_target_privacy_mode_redacts() {
+        let mut app = App::new();
+        app.clients.push(test_client(42, "Frostreaver01"));
+        app.privacy_mode = true;
+        let target = app.client_command_target(&app.clients[0]);
+        assert_eq!(target, "Toon-01");
+    }
+
+    #[test]
+    fn client_command_target_no_name_uses_pid() {
+        let app = App::new();
+        let client = ClientState::new(42, 0);
+        let target = app.client_command_target(&client);
+        assert_eq!(target, "PID 42");
+    }
+
+    #[test]
+    fn sync_from_selected_client_copies_fields() {
+        let mut app = App::new();
+        let mut c = test_client(42, "Test");
+        c.eq_base = 0x1000;
+        app.clients.push(c);
+        app.sync_from_selected_client();
+        assert!(app.local_player.is_some());
+        assert_eq!(app.attached_pid, Some(42));
+        assert_eq!(app.eq_base, 0x1000);
+    }
+
+    #[test]
+    fn sync_from_selected_client_clears_on_empty() {
+        let mut app = App::new();
+        app.local_player = Some(test_spawn("old"));
+        app.sync_from_selected_client();
+        assert!(app.local_player.is_none());
+    }
+
+    #[test]
+    fn expand_selected_character_sets_screen() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Debug;
+        app.expand_selected_character();
+        assert_eq!(app.active_screen, ActiveScreen::Overview);
+        assert_eq!(app.active_panel, ActivePanel::OverviewCharacter);
+        assert!(!app.overview_state.character_collapsed);
+    }
+
+    #[test]
+    fn build_live_groups_empty_clients() {
+        let app = App::new();
+        let (groups, ungrouped) = app.build_live_groups();
+        assert!(groups.is_empty());
+        assert!(ungrouped.is_empty());
+    }
+
+    #[test]
+    fn clients_in_group_idx_out_of_bounds() {
+        let app = App::new();
+        let result = app.clients_in_group_idx(999);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn toggle_focused_section_noop_for_roster() {
+        let mut app = App::new();
+        app.active_panel = ActivePanel::OverviewRoster;
+        app.toggle_focused_section();
+        assert!(app.status_message.contains("does not collapse"));
+    }
+
+    #[test]
+    fn default_panel_for_all_screens() {
+        assert_eq!(
+            App::default_panel_for_screen(ActiveScreen::Overview),
+            ActivePanel::OverviewRoster
+        );
+        assert_eq!(
+            App::default_panel_for_screen(ActiveScreen::Tactical),
+            ActivePanel::TacticalMap
+        );
+        assert_eq!(
+            App::default_panel_for_screen(ActiveScreen::Navigation),
+            ActivePanel::TacticalNavigation
+        );
+        assert_eq!(
+            App::default_panel_for_screen(ActiveScreen::Debug),
+            ActivePanel::DebugSpawns
+        );
+    }
 }
