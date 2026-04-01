@@ -968,7 +968,7 @@ impl App {
         self.ch_chain_panel_state.chain_delay_secs = chain.interval_secs();
         self.ch_chain_panel_state.adaptive = chain.is_adaptive();
 
-        let active_index = chain.active_index();
+        let cast_progress = chain.cast_progress();
         self.ch_chain_panel_state.clerics = chain
             .members()
             .iter()
@@ -986,8 +986,10 @@ impl App {
                     pid,
                     position: (index as u8) + 1,
                     timing_offset_ms: 0,
-                    cast_state: if chain.is_active() && active_index == Some(index) {
-                        CastState::Casting(0.5)
+                    cast_state: if let Some((active_index, progress)) = cast_progress
+                        && active_index == index
+                    {
+                        CastState::Casting(progress)
                     } else {
                         CastState::Idle
                     },

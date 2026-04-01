@@ -31,10 +31,14 @@ pub struct ChChain {
     interval_secs: f32,
     /// Current position in the chain.
     current_index: usize,
+    /// Last caster index that fired a cast.
+    last_fired_index: Option<usize>,
     /// Whether the chain is active.
     active: bool,
     /// Frame counter for timing (one frame ≈ 50ms at ~20fps).
     frame_count: u64,
+    /// Frame index when the last cast started.
+    last_fire_frame: Option<u64>,
     /// Frames between each CH cast (computed from `interval_secs` × `FRAMES_PER_SECOND`).
     frames_per_interval: u64,
     /// The spawn ID of the CH target (usually the main tank).
@@ -59,8 +63,10 @@ impl ChChain {
             members,
             interval_secs,
             current_index: 0,
+            last_fired_index: None,
             active: false,
             frame_count: 0,
+            last_fire_frame: None,
             frames_per_interval: (interval_secs * FRAMES_PER_SECOND as f32) as u64,
             target_id,
             spell_slot,
@@ -79,6 +85,8 @@ impl ChChain {
         self.active = true;
         self.frame_count = 0;
         self.current_index = 0;
+        self.last_fired_index = None;
+        self.last_fire_frame = None;
     }
 
     /// Resume the chain without resetting position or timing.
@@ -91,6 +99,8 @@ impl ChChain {
     /// Stop the chain. No more CH casts will fire until `start()` or `resume()`.
     pub fn stop(&mut self) {
         self.active = false;
+        self.last_fired_index = None;
+        self.last_fire_frame = None;
     }
 
     /// Advance the chain by one frame. Returns the PID that should start
@@ -101,13 +111,17 @@ impl ChChain {
         }
 
         let should_fire = self.frame_count.is_multiple_of(self.frames_per_interval);
-        self.frame_count += 1;
-
+        let tick_id = self.frame_count;
         if should_fire {
-            let pid = self.members[self.current_index];
+            let index = self.current_index;
+            let pid = self.members[index];
+            self.last_fired_index = Some(index);
+            self.last_fire_frame = Some(tick_id);
             self.current_index = (self.current_index + 1) % self.members.len();
+            self.frame_count += 1;
             Some(pid)
         } else {
+            self.frame_count += 1;
             None
         }
     }
@@ -139,6 +153,7 @@ impl ChChain {
         if filtered.is_empty() {
             self.members.clear();
             self.current_index = 0;
+            self.last_fired_index = None;
             return;
         }
 
@@ -156,6 +171,15 @@ impl ChChain {
         if self.current_index >= self.members.len() {
             self.current_index = 0;
         }
+
+        if let Some(pid) = self
+            .last_fired_index
+            .and_then(|index| self.members.get(index).copied())
+        {
+            self.last_fired_index = self.members.iter().position(|member| *member == pid);
+        } else if self.last_fired_index.is_some() {
+            self.last_fired_index = None;
+        }
     }
 
     /// Remove a cleric from the chain (e.g., on death). Adjusts rotation index.
@@ -164,8 +188,16 @@ impl ChChain {
             self.members.remove(pos);
             if self.members.is_empty() || self.current_index >= self.members.len() {
                 self.current_index = 0;
+                self.last_fired_index = None;
             } else if pos < self.current_index {
                 self.current_index -= 1;
+            }
+            if let Some(index) = self.last_fired_index {
+                if index == pos {
+                    self.last_fired_index = None;
+                } else if pos < index {
+                    self.last_fired_index = Some(index - 1);
+                }
             }
         }
     }
@@ -179,10 +211,20 @@ impl ChChain {
     /// Current active index in the chain rotation.
     #[must_use]
     pub fn active_index(&self) -> Option<usize> {
-        if self.members.is_empty() {
+        self.last_fired_index
+    }
+
+    /// Current casting member and normalized cast progress (`0.0` → `1.0`).
+    /// Progress resets to `None` after the expected cast window elapses.
+    pub fn cast_progress(&self) -> Option<(usize, f32)> {
+        let index = self.last_fired_index?;
+        let last_fire_frame = self.last_fire_frame?;
+        let window = self.frames_per_interval.max(1) as f32;
+        let frame_delta = (self.frame_count.saturating_sub(last_fire_frame)) as f32;
+        if frame_delta >= window {
             None
         } else {
-            Some(self.current_index % self.members.len())
+            Some((index, (frame_delta / window).clamp(0.0, 1.0)))
         }
     }
 

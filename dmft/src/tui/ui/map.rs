@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Paragraph, Row, Table},
+    widgets::{Clear, Paragraph, Row, Table},
 };
 
 use super::{
@@ -171,8 +171,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             format!(
                 " | Sel {} y:{:.0} x:{:.0} z:{:.0}",
                 app.redact_name(&spawn.displayed_name),
-                -spawn.y,
-                -spawn.x,
+                spawn.y,
+                spawn.x,
                 spawn.z
             )
         })
@@ -212,16 +212,60 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     } else {
         t.border_dim
     };
-    let base_block = panel("", border_style, t);
-    let inner = base_block.inner(area);
+    let map_bounds = combined_bounds(app);
+    let provisional_block = panel("", border_style, t);
+    let provisional_inner = provisional_block.inner(area);
+    let provisional_view_transform = map_bounds.as_ref().and_then(|bounds| {
+        map_transform(
+            app,
+            bounds,
+            provisional_inner.width.max(1).into(),
+            provisional_inner.height.max(1).into(),
+        )
+    });
+    let provisional_view_label = provisional_view_transform
+        .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
+        .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
+    let provisional_view_center = provisional_view_transform
+        .map(|transform| {
+            format!(
+                " center:{:.0},{:.0}",
+                transform.center_x, transform.center_y
+            )
+        })
+        .unwrap_or_default();
+    let provisional_map_info = app
+        .map_state
+        .zone_map
+        .as_ref()
+        .map_or_else(
+            || {
+                format!(
+                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{provisional_view_center} | {layer_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
+                )
+            },
+            |m| {
+                format!(
+                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {provisional_view_center} | {layer_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
+                    zone_label,
+                    m.lines.len(),
+                    m.points.len(),
+                    player_pos_label,
+                    selected_spawn_label,
+                    provisional_view_label,
+                    app.map_state.zoom,
+                    z_range,
+                )
+            },
+        );
 
+    let blk_for_size = panel(provisional_map_info.as_str(), border_style, t);
+    let inner = blk_for_size.inner(area);
     let w = inner.width as usize;
     let h = inner.height as usize;
     if w == 0 || h == 0 {
         return;
     }
-
-    let map_bounds = combined_bounds(app);
     let map_view_transform = map_bounds
         .as_ref()
         .and_then(|bounds| map_transform(app, bounds, w.max(1), h.max(1)));
@@ -260,7 +304,6 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 )
             },
         );
-
     let blk = panel(map_info.as_str(), border_style, t);
     frame.render_widget(blk, area);
 
@@ -321,7 +364,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 } else {
                     mp.label.chars().next().unwrap_or('*')
                 };
-                grid[row as usize][col as usize] = (marker, map_rgb_to_color(mp.r, mp.g, mp.b, t));
+                let point_color = map_rgb_to_color(mp.r, mp.g, mp.b, t);
+                grid[row as usize][col as usize] = (marker, point_color);
 
                 if show_labels {
                     let label_budget = if app.map_state.zoom > 1.8 {
@@ -342,7 +386,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     {
                         let lc = col as usize + 1 + i;
                         if lc < w && grid[row as usize][lc].0 == ' ' {
-                            grid[row as usize][lc] = (c, map_rgb_to_color(mp.r, mp.g, mp.b, t));
+                            grid[row as usize][lc] = (c, point_color);
                         }
                     }
                 }
@@ -653,7 +697,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             .map(|spawn| (-spawn.y, -spawn.x, spawn.spawn_id));
         if let Some(bounds) = map_bounds.as_ref() {
             let (mini_title, mini_lines) =
-                draw_minimap_widget(bounds, app, selected_spawn, &transform);
+                draw_minimap_widget(bounds, mini_bounds, app, selected_spawn, &transform);
+            frame.render_widget(Clear, mini_bounds);
             frame.render_widget(
                 Paragraph::new(mini_lines).block(panel(mini_title.as_str(), t.border_dim, t)),
                 mini_bounds,
@@ -940,13 +985,14 @@ fn clamp_view_center(center: f32, min: f32, max: f32, scale: f32, view_size: usi
 
 fn draw_minimap_widget(
     bounds: &ViewBounds,
+    mini_area: ratatui::layout::Rect,
     app: &App,
     selected_spawn: Option<(f32, f32, u32)>,
     main_transform: &MapTransform,
 ) -> (String, Vec<Line<'static>>) {
     let t = &app.theme;
-    let mini_width = (bounds.width() * 0.22) as usize;
-    let mini_height = (bounds.height() * 0.22) as usize;
+    let mini_width = mini_area.width.saturating_sub(2).max(1) as usize;
+    let mini_height = mini_area.height.saturating_sub(2).max(1) as usize;
     let mini_width = mini_width.clamp(10, 28);
     let mini_height = mini_height.clamp(6, 16);
     let mut mini_grid: Vec<Vec<(char, Color)>> =
@@ -980,6 +1026,7 @@ fn draw_minimap_widget(
             if let Some((x1, y1)) = to_mini(segment.x1, segment.y1)
                 && let Some((x2, y2)) = to_mini(segment.x2, segment.y2)
             {
+                let line_color = map_rgb_to_color(segment.r, segment.g, segment.b, t);
                 bresenham_line(
                     x1 as i32,
                     y1 as i32,
@@ -988,7 +1035,7 @@ fn draw_minimap_widget(
                     mini_width,
                     mini_height,
                     &mut mini_grid,
-                    map_rgb_to_color(segment.r, segment.g, segment.b, t),
+                    line_color,
                     LinePaintMode::OverwriteLinework,
                 );
             }
@@ -1001,7 +1048,8 @@ fn draw_minimap_widget(
         for point in &map.points {
             if let Some((col, row)) = to_mini(point.x, point.y) {
                 let marker = point.label.chars().next().unwrap_or('*');
-                mini_grid[row][col] = (marker, map_rgb_to_color(point.r, point.g, point.b, t));
+                let point_color = map_rgb_to_color(point.r, point.g, point.b, t);
+                mini_grid[row][col] = (marker, point_color);
             }
         }
     }
@@ -1031,9 +1079,7 @@ fn draw_minimap_widget(
 
     let header = format!(
         "Mini ({:.0},{:.0} | z:{:.2}x)",
-        main_transform.center_x,
-        main_transform.center_y,
-        main_transform.scale_x / main_transform.scale_y.max(0.001)
+        main_transform.center_x, main_transform.center_y, app.map_state.zoom
     );
     let mini_lines: Vec<Line<'static>> = mini_grid
         .into_iter()

@@ -279,6 +279,8 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled(" paths  ", t.statusbar_dim),
             Span::styled("Alt+4", t.statusbar_key),
             Span::styled(" mesh  ", t.statusbar_dim),
+            Span::styled("n", t.statusbar_key),
+            Span::styled(" navmesh  ", t.statusbar_dim),
             Span::styled("Alt+5", t.statusbar_key),
             Span::styled(" labels  ", t.statusbar_dim),
             Span::styled("v", t.statusbar_key),
@@ -715,7 +717,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         // ── Configuration Files ──
         Line::from(Span::styled(" Configuration Files", head_s)),
         Line::from(""),
-        kv("dmft", "config/dmft.toml (main config)"),
+        kv("dmft", "config/frostreaver.toml (main config)"),
         kv("accounts", "config/accounts.toml (login accounts)"),
         kv("camps", "config/camps/<name>.toml (camp positions)"),
         Line::from(""),
