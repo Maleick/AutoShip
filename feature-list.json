@@ -28,6 +28,20 @@
         "cargo test"
       ],
       "notes": "Character-name targeting is now wired into the TUI command bar and Characters screen copy. The audit of MQ mesh loading/path queries is documented in the codebase. All automated checks (fmt, clippy, tests) are passing."
+    },
+    {
+      "id": "tactical-map-navmesh-overlay",
+      "name": "Tactical map navmesh overlay and viewport controls",
+      "status": "complete",
+      "acceptance_tests": [
+        "Tactical map supports explicit auto/local/global viewport modes",
+        "Focused Tactical map pane supports pan, zoom, and viewport reset controls",
+        "Actual navmesh polygon edges render as a cached Tactical overlay when mesh data is available",
+        "cargo fmt --check",
+        "cargo clippy -- -D warnings",
+        "cargo test"
+      ],
+      "notes": "The Tactical map now caches Detour-derived navmesh edge geometry per zone, renders outer and inner mesh lines over the Brewall vector map, and exposes map-pane controls for manual pan, zoom, view mode cycling, and overlay toggling. No local 'simplify' executable was available in this environment."
     }
   ]
 }

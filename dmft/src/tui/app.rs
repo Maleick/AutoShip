@@ -16,8 +16,8 @@ use anyhow::Context;
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
 pub use super::state::{
-    CommandBarState, HexDumpState, MapScreenState, NavigationScreenState, OverviewScreenState,
-    SpawnsScreenState, TacticalScreenState,
+    CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
+    OverviewScreenState, SpawnsScreenState, TacticalScreenState,
 };
 
 /// Which screen is currently displayed.
@@ -537,6 +537,124 @@ impl App {
             String::from("Map: split view restored")
         };
         self.ensure_panel_focus();
+    }
+
+    pub fn cycle_tactical_map_view(&mut self) {
+        let mode = self.map_state.cycle_viewport_mode();
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.status_message = format!("Map: {} view", mode.label());
+        self.ensure_panel_focus();
+    }
+
+    pub fn zoom_tactical_map_in(&mut self) {
+        self.map_state.zoom_in();
+        self.status_message = format!("Map: zoom {:.2}x", self.map_state.zoom);
+    }
+
+    pub fn zoom_tactical_map_out(&mut self) {
+        self.map_state.zoom_out();
+        self.status_message = format!("Map: zoom {:.2}x", self.map_state.zoom);
+    }
+
+    pub fn reset_tactical_map_view(&mut self) {
+        self.map_state.reset_viewport();
+        self.status_message = format!("Map: {} view reset", self.map_state.viewport_mode.label());
+    }
+
+    pub fn pan_tactical_map_left(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(-step, 0.0);
+    }
+
+    pub fn pan_tactical_map_right(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(step, 0.0);
+    }
+
+    pub fn pan_tactical_map_up(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(0.0, -step);
+    }
+
+    pub fn pan_tactical_map_down(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(0.0, step);
+    }
+
+    pub fn toggle_tactical_navmesh_overlay(&mut self) {
+        let enabled = self.map_state.toggle_navmesh();
+        if enabled {
+            if let Some(zone) = self.current_zone_short_name() {
+                if self.map_state.navmesh_overlay.is_none() {
+                    self.load_zone_navmesh_overlay(&zone);
+                }
+            }
+            let segment_count = self
+                .map_state
+                .navmesh_overlay
+                .as_ref()
+                .map_or(0, |overlay| overlay.segment_count());
+            self.status_message = if segment_count > 0 {
+                format!("Map: navmesh overlay on ({segment_count} segments)")
+            } else {
+                String::from("Map: navmesh overlay enabled (no mesh available)")
+            };
+        } else {
+            self.status_message = String::from("Map: navmesh overlay hidden");
+        }
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.ensure_panel_focus();
+    }
+
+    fn pan_tactical_map(&mut self, delta_x: f32, delta_y: f32) {
+        self.map_state.pan(delta_x, delta_y);
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+    }
+
+    fn map_pan_step(&self) -> f32 {
+        let zoom = self.map_state.zoom.max(0.35);
+        let global_step = (self.current_map_max_dimension() / 12.0).clamp(45.0, 320.0);
+        let local_step = if self.tactical_state.map_maximized {
+            70.0
+        } else {
+            45.0
+        };
+        let base_step = match self.map_state.viewport_mode {
+            MapViewportMode::Local => local_step,
+            MapViewportMode::Global => global_step,
+            MapViewportMode::Auto => {
+                if self.map_auto_uses_local_view() {
+                    local_step
+                } else {
+                    global_step
+                }
+            }
+        };
+        base_step / zoom
+    }
+
+    fn map_auto_uses_local_view(&self) -> bool {
+        self.tactical_state.map_maximized || self.current_map_max_dimension() > 1_200.0
+    }
+
+    fn current_map_max_dimension(&self) -> f32 {
+        let map_dim = self
+            .map_state
+            .zone_map
+            .as_ref()
+            .map(|map| map.bounds.width().max(map.bounds.height()))
+            .unwrap_or(0.0);
+        let mesh_dim = self
+            .map_state
+            .navmesh_overlay
+            .as_ref()
+            .map(|overlay| overlay.bounds.max_dimension())
+            .unwrap_or(0.0);
+
+        map_dim.max(mesh_dim).max(600.0)
     }
 
     pub fn expand_selected_character(&mut self) {
@@ -1627,6 +1745,12 @@ impl App {
                 self.map_state.zone_map = None;
             }
         }
+
+        self.map_state.reset_viewport();
+        self.map_state.navmesh_overlay = None;
+        if self.map_state.show_navmesh {
+            self.load_zone_navmesh_overlay(zone_short_name);
+        }
     }
 
     /// Reload the zone map for the currently selected client's zone.
@@ -1635,6 +1759,31 @@ impl App {
         if let Some(client) = self.clients.get(self.selected_client) {
             let zone = super::run::zone_to_short_name(&client.zone_name);
             self.load_zone_map(&zone);
+        }
+    }
+
+    fn load_zone_navmesh_overlay(&mut self, zone_short_name: &str) {
+        match crate::nav::mesh::load_zone_overlay(zone_short_name) {
+            Ok(overlay) if !overlay.is_empty() => {
+                tracing::info!(
+                    zone = zone_short_name,
+                    outer_lines = overlay.outer_lines.len(),
+                    inner_lines = overlay.inner_lines.len(),
+                    "Loaded navmesh overlay"
+                );
+                self.map_state.navmesh_overlay = Some(overlay);
+            }
+            Ok(_) => {
+                tracing::debug!(
+                    zone = zone_short_name,
+                    "Navmesh overlay contained no segments"
+                );
+                self.map_state.navmesh_overlay = None;
+            }
+            Err(error) => {
+                tracing::warn!(zone = zone_short_name, %error, "Failed to load navmesh overlay");
+                self.map_state.navmesh_overlay = None;
+            }
         }
     }
 

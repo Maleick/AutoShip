@@ -58,4 +58,14 @@ dtStatus shim_dtNavMeshQuery_findStraightPath(
         straightPathCount, maxStraightPath, options);
 }
 
+int shim_dtNavMesh_getMaxTiles(const dtNavMesh* nav)
+{
+    return nav ? nav->getMaxTiles() : 0;
+}
+
+const dtMeshTile* shim_dtNavMesh_getTile(const dtNavMesh* nav, int index)
+{
+    return nav ? nav->getTile(index) : nullptr;
+}
+
 } // extern "C"
