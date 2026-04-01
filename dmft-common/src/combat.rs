@@ -1,86 +1,154 @@
 use serde::{Deserialize, Serialize};
 
+/// Current state of a character in the combat FSM.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum CombatStatus {
+    /// Not in combat, no pending actions.
     Idle,
-    Engaging { target_id: u32 },
-    Casting { spell_slot: u8, target_id: u32 },
+    /// Actively attacking a target.
+    Engaging {
+        /// Spawn ID of the mob being engaged.
+        target_id: u32,
+    },
+    /// Casting a spell on a target.
+    Casting {
+        /// Memorized spell slot (0-indexed).
+        spell_slot: u8,
+        /// Spawn ID of the cast target.
+        target_id: u32,
+    },
+    /// Waiting for the global cooldown to expire.
     OnGcd,
-    Pulling { target_id: u32 },
+    /// Pulling a mob back to camp.
+    Pulling {
+        /// Spawn ID of the mob being pulled.
+        target_id: u32,
+    },
+    /// Post-combat recovery (regen, med, rebuff).
     Recovering,
+    /// Running away from danger.
     Fleeing,
+    /// Character is dead, awaiting resurrect or respawn.
     Dead,
 }
 
+/// Role a character fills in the group combat formation.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CombatRole {
+    /// Primary tank — holds aggro on the main target.
     MainTank,
+    /// Secondary tank — picks up adds or swap targets.
     OffTank,
+    /// Healer — keeps the group alive.
     Healer,
+    /// Puller — brings mobs to camp.
     Puller,
+    /// Melee DPS — fights in melee range.
     DpsMelee,
+    /// Ranged DPS — nukes or uses ranged attacks.
     DpsRanged,
+    /// Crowd control — mezzes, roots, or charms adds.
     CrowdControl,
+    /// Support — buffs, debuffs, utility (bard, shaman, etc.).
     Support,
 }
 
+/// How the puller initiates a pull.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum PullMethod {
-    SpellPull { spell_slot: u8 },
+    /// Pull with a spell from the given memorized slot.
+    SpellPull {
+        /// Memorized spell slot to cast.
+        spell_slot: u8,
+    },
+    /// Pull with a bow/ranged attack.
     BowPull,
+    /// Walk close enough for the mob to aggro.
     ProximityPull,
 }
 
+/// How multiple DPS characters divide their targets.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum AssistMode {
+    /// Everyone assists the main assist target.
     AssistTrain,
+    /// DPS split across multiple targets.
     SplitDps,
+    /// Each character picks its own target.
     Solo,
 }
 
+/// A memorized spell available for the combat rotation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpellEntry {
+    /// Memorized spell slot (0-indexed gem number).
     pub slot: u8,
     /// EQ spell ID — used by CastSpell FFI. 0 = use whatever is memorized in slot.
     #[serde(default)]
     pub spell_id: i32,
+    /// Human-readable spell name for logging/config.
     pub name: String,
+    /// Minimum mana % required to cast this spell.
     pub min_mana_pct: f32,
+    /// Priority in the rotation (lower = higher priority).
     pub priority: u8,
+    /// Whether this spell is area-of-effect.
     pub is_aoe: bool,
 }
 
+/// Boolean expression tree for evaluating combat conditions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConditionExpr {
+    /// All sub-conditions must be true.
     And(Vec<ConditionExpr>),
+    /// At least one sub-condition must be true.
     Or(Vec<ConditionExpr>),
+    /// Character HP is below the given percentage.
     HpBelow(f32),
+    /// Character mana is below the given percentage.
     ManaBelow(f32),
+    /// Current target HP is above the given percentage.
     TargetHpAbove(f32),
+    /// Current target HP is below the given percentage.
     TargetHpBelow(f32),
+    /// The character has aggro from a mob.
     AggroOnMe,
+    /// Always true — unconditional trigger.
     Always,
 }
 
+/// An emergency reaction rule that fires when conditions are met.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HolyShitCondition {
+    /// Evaluation priority (lower = checked first).
     pub priority: u8,
+    /// Boolean condition tree that triggers this rule.
     pub condition: ConditionExpr,
+    /// Action to take when the condition is true.
     pub action: HolyShitAction,
 }
 
+/// Emergency action to execute when a HolyShit condition fires.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HolyShitAction {
+    /// Cast a spell from the given memorized slot.
     CastSpell(u8),
+    /// Use a combat ability by ID.
     UseAbility(u32),
+    /// Use an inventory item by ID.
     UseItem(u32),
+    /// Run away from combat.
     Flee,
 }
 
+/// A warrior/monk/etc discipline (activated combat ability with a reuse timer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisciplineEntry {
+    /// Human-readable discipline name.
     pub name: String,
+    /// EQ spell ID for the discipline.
     pub spell_id: i32,
+    /// Priority relative to other disciplines (lower = higher priority).
     pub priority: u8,
     /// Cooldown in game ticks (~20 ticks/sec). Disciplines have long reuse timers.
     pub cooldown_ticks: u32,
@@ -92,15 +160,24 @@ pub struct DisciplineEntry {
     pub min_endurance_pct: f32,
 }
 
+/// Per-character combat configuration (role, spells, rules).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CombatConfig {
+    /// This character's combat role.
     pub role: CombatRole,
+    /// How this character pulls (if puller role).
     pub pull_method: Option<PullMethod>,
+    /// How DPS targets are divided.
     pub assist_mode: AssistMode,
+    /// Spell rotation entries.
     pub spells: Vec<SpellEntry>,
+    /// Discipline rotation entries.
     pub disciplines: Vec<DisciplineEntry>,
+    /// Emergency reaction rules evaluated each tick.
     pub holyshit_rules: Vec<HolyShitCondition>,
+    /// Mana % floor — stop casting below this.
     pub mana_floor: f32,
+    /// Minimum mob count to trigger AoE spells.
     pub aoe_threshold: u8,
 }
 
