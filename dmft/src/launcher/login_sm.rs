@@ -21,8 +21,10 @@ pub struct LoginStateMachine {
 /// Events that drive login state transitions.
 pub enum LoginEvent {
     /// EQ process has been spawned with the given PID.
-    ProcessStarted { /// OS process ID.
-        pid: u32 },
+    ProcessStarted {
+        /// OS process ID.
+        pid: u32,
+    },
     /// Login screen UI is visible and ready for input.
     LoginScreenDetected,
     /// Account/password have been entered.
