@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use super::config_panel::ConfigPanelState;
 use super::menu::MenuState;
 use super::theme::{Theme, ThemeKind};
-use super::ui::ch_chain::ChChainPanelState;
+use super::ui::ch_chain::{CastState, ChChainPanelState, ChainCleric, ChainStats};
 use super::wizard::WizardState;
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
@@ -465,7 +465,9 @@ impl App {
         let pairs = [
             ("h", "help"),
             ("q", "quit"),
+            ("chui", "chui"),
             ("cmds", "commands"),
+            ("overview", "status overview"),
             ("cfg", "config"),
             ("s", "status"),
         ];
@@ -943,6 +945,67 @@ impl App {
         };
     }
 
+    /// Sync CH chain data into the dedicated CH chain management panel.
+    pub fn sync_ch_chain_panel_state(&mut self, orchestrator: &Orchestrator) {
+        let Some(chain) = orchestrator.combat.ch_chain.as_ref() else {
+            self.ch_chain_panel_state.clerics.clear();
+            self.ch_chain_panel_state.selected = 0;
+            self.ch_chain_panel_state.target_id = 0;
+            self.ch_chain_panel_state.target_name.clear();
+            self.ch_chain_panel_state.cast_time_secs = 10.0;
+            self.ch_chain_panel_state.overlap_buffer_secs = 0.5;
+            self.ch_chain_panel_state.chain_delay_secs = 0.0;
+            self.ch_chain_panel_state.adaptive = false;
+            self.ch_chain_panel_state.stats = ChainStats::default();
+            return;
+        };
+
+        self.ch_chain_panel_state.target_id = chain.target_id();
+        self.ch_chain_panel_state.target_name =
+            self.find_spawn_name(chain.target_id()).unwrap_or_default();
+        self.ch_chain_panel_state.cast_time_secs = 10.0;
+        self.ch_chain_panel_state.overlap_buffer_secs = 0.5;
+        self.ch_chain_panel_state.chain_delay_secs = chain.interval_secs();
+        self.ch_chain_panel_state.adaptive = chain.is_adaptive();
+
+        let active_index = chain.active_index();
+        self.ch_chain_panel_state.clerics = chain
+            .members()
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(index, pid)| {
+                let mut name = self
+                    .client_name_for_pid(pid)
+                    .unwrap_or_else(|| format!("PID {pid}"));
+                if name.is_empty() {
+                    name = format!("PID {pid}");
+                }
+                ChainCleric {
+                    name,
+                    pid,
+                    position: (index as u8) + 1,
+                    timing_offset_ms: 0,
+                    cast_state: if chain.is_active() && active_index == Some(index) {
+                        CastState::Casting(0.5)
+                    } else {
+                        CastState::Idle
+                    },
+                }
+            })
+            .collect();
+
+        if self.ch_chain_panel_state.selected >= self.ch_chain_panel_state.clerics.len() {
+            self.ch_chain_panel_state.selected = 0;
+        }
+    }
+
+    /// Sync all CH chain summaries and management panel model state.
+    pub fn sync_ch_chain_state(&mut self, orchestrator: &Orchestrator) {
+        self.sync_ch_chain_status(orchestrator);
+        self.sync_ch_chain_panel_state(orchestrator);
+    }
+
     /// Cycle to the next client.
     pub fn next_client(&mut self) {
         if !self.clients.is_empty() {
@@ -1197,6 +1260,44 @@ impl App {
     pub fn find_client_by_name(&self, name: &str) -> Option<&ClientState> {
         self.find_client_index_by_name(name)
             .and_then(|idx| self.clients.get(idx))
+    }
+
+    fn client_name_for_pid(&self, pid: u32) -> Option<String> {
+        for client in &self.clients {
+            if client.pid != pid {
+                continue;
+            }
+
+            if !client.character_name.is_empty() {
+                return Some(client.character_name.clone());
+            }
+
+            if let Some(player) = &client.local_player {
+                if !player.displayed_name.is_empty() {
+                    return Some(player.displayed_name.clone());
+                }
+                if !player.name.is_empty() {
+                    return Some(player.name.clone());
+                }
+            }
+
+            break;
+        }
+
+        None
+    }
+
+    fn find_spawn_name(&self, spawn_id: u32) -> Option<String> {
+        self.clients.iter().find_map(|client| {
+            if let Some(player) = &client.local_player
+                && player.spawn_id == spawn_id
+            {
+                return Some(player.displayed_name.clone());
+            }
+            client.spawns.iter().find_map(|spawn| {
+                (spawn.spawn_id == spawn_id).then(|| spawn.displayed_name.clone())
+            })
+        })
     }
 
     /// Returns spawns filtered by type and text search criteria.
@@ -1524,6 +1625,12 @@ impl App {
             return;
         }
 
+        if let Some(rest) = prefix.strip_prefix("chui ") {
+            let subs: Vec<String> = vec!["open".into(), "close".into(), "toggle".into()];
+            self.complete_with_candidates("chui ", rest, &subs);
+            return;
+        }
+
         // Common slash commands shared by :all and :G1-G6 completions
         let slash_cmds: Vec<String> = ["/sit", "/stand", "/camp", "/follow", "/assist", "/disband"]
             .iter()
@@ -1618,6 +1725,7 @@ impl App {
             "accept".into(),
             "heal".into(),
             "ch".into(),
+            "chui".into(),
             "loot".into(),
             "G1".into(),
             "G2".into(),
@@ -1884,29 +1992,44 @@ impl App {
 
     /// Load the zone map for the given zone short name from the map directory.
     pub fn load_zone_map(&mut self, zone_short_name: &str) {
-        // Skip if already loaded for this zone
-        if self.map_state.loaded_zone == zone_short_name {
+        let zone_short_name = zone_short_name.trim().to_ascii_lowercase();
+        if zone_short_name.is_empty() {
+            self.map_state.loaded_zone.clear();
+            self.map_state.zone_map = None;
+            self.map_state.navmesh_overlay = None;
+            self.map_state.reset_viewport();
             return;
         }
-        match crate::eq::map_parser::load_zone_map(&self.map_state.map_dir, zone_short_name) {
+
+        // Skip if already loaded for this zone.
+        if self.map_state.loaded_zone == zone_short_name {
+            if self.map_state.show_navmesh && self.map_state.navmesh_overlay.is_none() {
+                self.load_zone_navmesh_overlay(&zone_short_name);
+            }
+            return;
+        }
+        match crate::eq::map_parser::load_zone_map(&self.map_state.map_dir, &zone_short_name) {
             Ok(map) if !map.lines.is_empty() || !map.points.is_empty() => {
                 tracing::info!(
-                    zone = zone_short_name,
+                    zone = zone_short_name.as_str(),
                     lines = map.lines.len(),
                     points = map.points.len(),
                     "Loaded zone map"
                 );
-                self.map_state.loaded_zone = zone_short_name.to_string();
+                self.map_state.loaded_zone = zone_short_name.clone();
                 self.map_state.zone_map = Some(map);
             }
             Ok(_) => {
-                tracing::debug!(zone = zone_short_name, "No map data found for zone");
-                self.map_state.loaded_zone = zone_short_name.to_string();
+                tracing::debug!(
+                    zone = zone_short_name.as_str(),
+                    "No map data found for zone"
+                );
+                self.map_state.loaded_zone = zone_short_name.clone();
                 self.map_state.zone_map = None;
             }
             Err(e) => {
-                tracing::warn!(zone = zone_short_name, error = %e, "Failed to load zone map");
-                self.map_state.loaded_zone = zone_short_name.to_string();
+                tracing::warn!(zone = zone_short_name.as_str(), error = %e, "Failed to load zone map");
+                self.map_state.loaded_zone = zone_short_name.clone();
                 self.map_state.zone_map = None;
             }
         }
@@ -1914,7 +2037,7 @@ impl App {
         self.map_state.reset_viewport();
         self.map_state.navmesh_overlay = None;
         if self.map_state.show_navmesh {
-            self.load_zone_navmesh_overlay(zone_short_name);
+            self.load_zone_navmesh_overlay(&zone_short_name);
         }
     }
 
@@ -2320,12 +2443,39 @@ impl App {
             "status" => {
                 let client_count = self.clients.len();
                 let visible_count = self.visible_clients().len();
-                if self.active_group.is_some() {
-                    self.status_message = format!(
-                        "{visible_count} visible / {client_count} total client(s) connected"
-                    );
-                } else {
-                    self.status_message = format!("{client_count} client(s) connected");
+                let status_arg = parts.get(1).map(|s| s.to_ascii_lowercase());
+                match status_arg.as_deref() {
+                    Some("overview") => {
+                        let zone = self
+                            .active_client()
+                            .map_or_else(String::new, |client| client.zone_name.clone());
+                        let active_screen = self.active_screen.label();
+                        let active_mode = self.operating_mode;
+                        let clients_in_filter = if self.active_group.is_some() {
+                            visible_count
+                        } else {
+                            client_count
+                        };
+                        let map_zone = self.map_state.loaded_zone.clone();
+                        self.status_message = format!(
+                            "Overview: {client_count} connected, {clients_in_filter} visible | zone={zone} | mode={active_mode:?} | screen={active_screen} | map={map_zone}",
+                        );
+                        if self.wizard_state.active {
+                            self.status_message.push_str(" | wizard active");
+                        }
+                        if self.config_panel_state.active {
+                            self.status_message.push_str(" | config panel open");
+                        }
+                    }
+                    _ => {
+                        if self.active_group.is_some() {
+                            self.status_message = format!(
+                                "{visible_count} visible / {client_count} total client(s) connected"
+                            );
+                        } else {
+                            self.status_message = format!("{client_count} client(s) connected");
+                        }
+                    }
                 }
             }
             "login" | "launch" => {
@@ -2543,6 +2693,51 @@ impl App {
                     self.status_message = String::from("Configuration panel closed");
                 }
             }
+            "chui" => match parts.get(1).copied() {
+                Some("open") => {
+                    self.ch_chain_panel_state.active = true;
+                    self.sync_ch_chain_panel_state(orchestrator);
+                    self.status_message = String::from("CH chain panel opened");
+                }
+                Some("close") => {
+                    self.ch_chain_panel_state.active = false;
+                    self.status_message = String::from("CH chain panel closed");
+                }
+                Some("toggle") => {
+                    self.ch_chain_panel_state.active = !self.ch_chain_panel_state.active;
+                    if self.ch_chain_panel_state.active {
+                        self.sync_ch_chain_panel_state(orchestrator);
+                        self.status_message = String::from("CH chain panel opened");
+                    } else {
+                        self.status_message = String::from("CH chain panel closed");
+                    }
+                }
+                Some("status") => {
+                    if let Some(chain) = &self.ch_chain_status {
+                        self.status_message = format!(
+                            "CH chain: {} clerics, {:.1}s interval ({})",
+                            chain.members,
+                            chain.interval_secs,
+                            if chain.is_adaptive {
+                                "adaptive"
+                            } else {
+                                "fixed"
+                            }
+                        );
+                    } else {
+                        self.status_message = String::from("CH chain inactive. Use :ch start.");
+                    }
+                }
+                _ => {
+                    self.ch_chain_panel_state.active = !self.ch_chain_panel_state.active;
+                    if self.ch_chain_panel_state.active {
+                        self.sync_ch_chain_panel_state(orchestrator);
+                        self.status_message = String::from("CH chain panel opened");
+                    } else {
+                        self.status_message = String::from("CH chain panel closed");
+                    }
+                }
+            },
             "theme" => {
                 self.cycle_theme();
                 self.set_toast(format!("Theme: {}", self.theme_kind.label()));
@@ -2960,7 +3155,7 @@ impl App {
             }
         }
         // Sync cached display state after any CH chain mutation
-        self.sync_ch_chain_status(orchestrator);
+        self.sync_ch_chain_state(orchestrator);
     }
 
     /// Handle `login <subcommand>` from the command bar.
@@ -3300,7 +3495,10 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
 const KNOWN_COMMANDS: &[(&str, &str)] = &[
     ("help", "Show help overlay"),
     ("commands", "List all commands with usage"),
-    ("status", "Show connected client count"),
+    (
+        "status",
+        "Show connected client count and `status overview`",
+    ),
     (
         "camp",
         "Camp management: start|stop|status|list|add|remove|next|prev",
@@ -3322,6 +3520,7 @@ const KNOWN_COMMANDS: &[(&str, &str)] = &[
     ("accept", "Accept pending group invite"),
     ("heal", "Heal options: heal cancel"),
     ("ch", "CH chain: start|stop|add|rm|interval|adaptive|status"),
+    ("chui", "Open the CH chain management panel"),
     ("inject", "Request DLL injection"),
     ("all", "Broadcast: all <slash_command>"),
     ("wizard", "Run the setup wizard"),
@@ -3403,7 +3602,9 @@ pub fn command_syntax_hint(input: &str) -> Option<&'static str> {
         "login" | "launch" => Some("login [all|G<n>|<name>]"),
         "ma" => Some("ma <character_name>"),
         "mt" => Some("mt <character_name>"),
+        "status" => Some("status [overview]"),
         "ch" => Some("ch [start|stop|add|rm|interval|adaptive|status]"),
+        "chui" => Some("chui [open|close|toggle]"),
         "mode" => Some("mode <camp|hunt>"),
         "track" => Some("track <spawn_name> | track list"),
         "untrack" => Some("untrack <spawn_name>"),
@@ -3421,8 +3622,11 @@ fn normalize_command_alias(input: &str) -> String {
     match input.trim() {
         "h" => String::from("help"),
         "q" => String::from("quit"),
+        "chui" => String::from("chui"),
+        "s" => String::from("status"),
         "cfg" => String::from("config"),
         "cmds" => String::from("commands"),
+        "overview" => String::from("status overview"),
         other => other.to_string(),
     }
 }
@@ -3444,10 +3648,13 @@ fn command_help_detail(command: &str) -> Option<&'static str> {
         "login" | "launch" => {
             Some("login [all|G<n>|name] — queue account launches and login automation.")
         }
-        "status" => Some("status — show connected client counts and current scope visibility."),
+        "status" => {
+            Some("status [overview] — show connected client counts or a compact runtime summary.")
+        }
         "ch" => Some(
             "ch <start|stop|add|rm|interval|adaptive|status> — control Complete Heal chain rotation.",
         ),
+        "chui" => Some("chui [open|close|toggle] — CH chain management panel."),
         "ma" => Some("ma [name] — set or show main assist; sends /assist when target is provided."),
         "mt" => Some("mt [name] — set or show main tank."),
         "all" => Some("all <slash_command> — broadcast a slash command to all connected clients."),
@@ -3506,6 +3713,7 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "accept"
             | "heal"
             | "ch"
+            | "chui"
             | "inject"
             | "all"
     )
@@ -3661,8 +3869,11 @@ mod tests {
     fn normalize_command_aliases() {
         assert_eq!(normalize_command_alias("h"), "help");
         assert_eq!(normalize_command_alias("q"), "quit");
+        assert_eq!(normalize_command_alias("chui"), "chui");
         assert_eq!(normalize_command_alias("cfg"), "config");
         assert_eq!(normalize_command_alias("cmds"), "commands");
+        assert_eq!(normalize_command_alias("s"), "status");
+        assert_eq!(normalize_command_alias("overview"), "status overview");
         assert_eq!(normalize_command_alias("camp start"), "camp start");
     }
 
@@ -3699,6 +3910,7 @@ mod tests {
             "accept",
             "heal",
             "ch",
+            "chui",
             "inject",
             "all",
             "cmds",

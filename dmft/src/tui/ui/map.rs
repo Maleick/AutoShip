@@ -164,6 +164,19 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             )
         })
         .unwrap_or_default();
+    let selected_spawn_label = app
+        .filtered_spawns()
+        .get(app.spawn_selected())
+        .map(|spawn| {
+            format!(
+                " | Sel {} y:{:.0} x:{:.0} z:{:.0}",
+                app.redact_name(&spawn.displayed_name),
+                -spawn.y,
+                -spawn.x,
+                spawn.z
+            )
+        })
+        .unwrap_or_else(|| String::from(" | Sel none"));
     let mesh_cache_label = app
         .current_zone_has_cached_mesh()
         .map(|cached| if cached { "cached" } else { "on-demand" })
@@ -177,46 +190,30 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     } else {
         String::from("off")
     };
-    // Compute bounds and transform once so they can be reused for both the
-    // view label and the actual map rendering logic.
-    let map_bounds = combined_bounds(app);
-    let map_view_transform = map_bounds
-        .as_ref()
-        .and_then(|bounds| map_transform(app, bounds, 80, 30));
-    let view_label = map_view_transform
-        .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
-        .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
-    let _mesh_label = format!(" | Mesh: {} {} [n]", mesh_cache_label, overlay_label);
-    let map_info = app
-        .map_state
-        .zone_map
-        .as_ref().map_or_else(|| {
-            format!(
-                " Map: {zone_label} (no map data){player_pos_label}{mesh_cache_label} | Z filter: {z_range:.0} [+/-] | m maximize "
-            )
-        }, |m| {
-            format!(
-                " Map: {} ({} lines, {} labels){} | View: {} {:.2}x | Z: {:.0} [+/-] | Mesh: {} {} [n] | m maximize ",
-                zone_label,
-                m.lines.len(),
-                m.points.len(),
-                player_pos_label,
-                view_label,
-                app.map_state.zoom,
-                z_range,
-                mesh_cache_label,
-                overlay_label,
-            )
-        });
+    let layer_label = format!(
+        " layers[{}{}{}{}{}]",
+        if app.map_state.show_geometry {
+            "G"
+        } else {
+            "-"
+        },
+        if app.map_state.show_spawns { "S" } else { "-" },
+        if app.map_state.show_nav_paths {
+            "P"
+        } else {
+            "-"
+        },
+        if app.map_state.show_navmesh { "M" } else { "-" },
+        if app.map_state.show_labels { "L" } else { "-" },
+    );
 
     let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
         t.border_active
     } else {
         t.border_dim
     };
-    let blk = panel(map_info.as_str(), border_style, t);
-    let inner = blk.inner(area);
-    frame.render_widget(blk, area);
+    let base_block = panel("", border_style, t);
+    let inner = base_block.inner(area);
 
     let w = inner.width as usize;
     let h = inner.height as usize;
@@ -224,18 +221,52 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         return;
     }
 
+    let map_bounds = combined_bounds(app);
+    let map_view_transform = map_bounds
+        .as_ref()
+        .and_then(|bounds| map_transform(app, bounds, w.max(1), h.max(1)));
+    let view_label = map_view_transform
+        .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
+        .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
+    let view_center = map_view_transform
+        .map(|transform| {
+            format!(
+                " center:{:.0},{:.0}",
+                transform.center_x, transform.center_y
+            )
+        })
+        .unwrap_or_default();
+    let map_info = app
+        .map_state
+        .zone_map
+        .as_ref()
+        .map_or_else(
+            || {
+                format!(
+                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{view_center} | {layer_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
+                )
+            },
+            |m| {
+                format!(
+                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {view_center} | {layer_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
+                    zone_label,
+                    m.lines.len(),
+                    m.points.len(),
+                    player_pos_label,
+                    selected_spawn_label,
+                    view_label,
+                    app.map_state.zoom,
+                    z_range,
+                )
+            },
+        );
+
+    let blk = panel(map_info.as_str(), border_style, t);
+    frame.render_widget(blk, area);
+
     let mut grid: Vec<Vec<(char, Color)>> = vec![vec![(' ', t.map_lines); w]; h];
 
-    let Some(bounds) = combined_bounds(app) else {
-        frame.render_widget(
-            Paragraph::new("No map, navmesh, or spawn data")
-                .style(Style::default().fg(t.text_muted)),
-            inner,
-        );
-        return;
-    };
-
-    let Some(transform) = map_transform(app, &bounds, w, h) else {
+    let Some(transform) = map_view_transform else {
         frame.render_widget(
             Paragraph::new("Map transform unavailable").style(Style::default().fg(t.text_muted)),
             inner,
@@ -273,26 +304,45 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 LinePaintMode::BlankOnly,
             );
         }
-        // Render labels only when zoom is high enough to avoid clutter
-        let show_labels = app.map_state.show_labels && app.map_state.zoom >= 0.8;
+    }
+
+    if app.map_state.show_labels
+        && let Some(map) = &app.map_state.zone_map
+    {
+        let show_labels = app.map_state.zoom >= 0.8;
         for mp in &map.points {
             if !visible_region.contains_point(mp.x, mp.y) {
                 continue;
             }
             let (col, row) = to_grid(mp.x, mp.y);
             if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
-                let color = map_rgb_to_color(mp.r, mp.g, mp.b, t);
-                let ch = if mp.label.is_empty() {
+                let marker = if mp.label.is_empty() {
                     '*'
                 } else {
                     mp.label.chars().next().unwrap_or('*')
                 };
-                grid[row as usize][col as usize] = (ch, color);
+                grid[row as usize][col as usize] = (marker, map_rgb_to_color(mp.r, mp.g, mp.b, t));
+
                 if show_labels {
-                    for (i, c) in mp.label.chars().take(12).enumerate() {
+                    let label_budget = if app.map_state.zoom > 1.8 {
+                        20
+                    } else if app.map_state.zoom > 1.1 {
+                        16
+                    } else if w > 120 {
+                        12
+                    } else {
+                        8
+                    };
+                    let max_label_len = w.saturating_sub(col as usize + 1);
+                    for (i, c) in mp
+                        .label
+                        .chars()
+                        .take(max_label_len.min(label_budget))
+                        .enumerate()
+                    {
                         let lc = col as usize + 1 + i;
                         if lc < w && grid[row as usize][lc].0 == ' ' {
-                            grid[row as usize][lc] = (c, color);
+                            grid[row as usize][lc] = (c, map_rgb_to_color(mp.r, mp.g, mp.b, t));
                         }
                     }
                 }
@@ -365,6 +415,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     if app.map_state.show_spawns {
         // Spawn clustering: count spawns per grid cell when zoomed out
         let mut spawn_counts: HashMap<(usize, usize), u16> = HashMap::new();
+        let use_clustering = app.map_state.zoom <= 0.95;
 
         for spawn in &app.spawns {
             // EQ Z = altitude; filter spawns more than z_range units above/below player.
@@ -396,7 +447,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 let count = spawn_counts.get(&key).copied().unwrap_or(1);
 
                 // Show count badge when multiple spawns overlap at zoomed-out view
-                if count > 2 && app.map_state.zoom < 0.8 {
+                if count > 2 && use_clustering {
                     let digit = if count > 9 {
                         '+'
                     } else {
@@ -594,6 +645,21 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             }
         })
         .collect();
+
+    if let Some(mini_bounds) = minimap_area(inner, w, h) {
+        let selected_spawn = app
+            .filtered_spawns()
+            .get(app.spawn_selected())
+            .map(|spawn| (-spawn.y, -spawn.x, spawn.spawn_id));
+        if let Some(bounds) = map_bounds.as_ref() {
+            let (mini_title, mini_lines) =
+                draw_minimap_widget(bounds, app, selected_spawn, &transform);
+            frame.render_widget(
+                Paragraph::new(mini_lines).block(panel(mini_title.as_str(), t.border_dim, t)),
+                mini_bounds,
+            );
+        }
+    }
 
     frame.render_widget(Paragraph::new(lines), inner);
 }
@@ -821,16 +887,159 @@ fn map_transform(app: &App, bounds: &ViewBounds, w: usize, h: usize) -> Option<M
         (bounds.center_x(), bounds.center_y(), scale)
     };
 
+    let scale = base_scale * app.map_state.zoom;
     center_x += app.map_state.pan_x;
     center_y += app.map_state.pan_y;
+    center_x = clamp_view_center(center_x, bounds.min_x, bounds.max_x, scale, w);
+    center_y = clamp_view_center(center_y, bounds.min_y, bounds.max_y, scale, h);
 
     Some(MapTransform {
         center_x,
         center_y,
-        scale_x: base_scale * app.map_state.zoom,
-        scale_y: base_scale * app.map_state.zoom,
+        scale_x: scale,
+        scale_y: scale,
         using_local_view,
     })
+}
+
+fn minimap_area(
+    outer: ratatui::layout::Rect,
+    map_w: usize,
+    map_h: usize,
+) -> Option<ratatui::layout::Rect> {
+    if map_w < 32 || map_h < 16 {
+        return None;
+    }
+    let width = (map_w / 4).clamp(16, 34) as u16;
+    let height = ((width as f32 * 0.58).round() as u16).max(8);
+    if outer.width < width.saturating_add(2) || outer.height < height.saturating_add(2) {
+        return None;
+    }
+    Some(ratatui::layout::Rect {
+        x: outer.x.saturating_add(outer.width - width - 1),
+        y: outer.y.saturating_add(1),
+        width,
+        height,
+    })
+}
+
+fn clamp_view_center(center: f32, min: f32, max: f32, scale: f32, view_size: usize) -> f32 {
+    let half = if view_size == 0 {
+        0.0
+    } else {
+        (view_size as f32) / (2.0 * scale.max(0.001))
+    };
+    let allowed_min = min + half;
+    let allowed_max = max - half;
+    if allowed_min <= allowed_max {
+        center.clamp(allowed_min, allowed_max)
+    } else {
+        (min + max) / 2.0
+    }
+}
+
+fn draw_minimap_widget(
+    bounds: &ViewBounds,
+    app: &App,
+    selected_spawn: Option<(f32, f32, u32)>,
+    main_transform: &MapTransform,
+) -> (String, Vec<Line<'static>>) {
+    let t = &app.theme;
+    let mini_width = (bounds.width() * 0.22) as usize;
+    let mini_height = (bounds.height() * 0.22) as usize;
+    let mini_width = mini_width.clamp(10, 28);
+    let mini_height = mini_height.clamp(6, 16);
+    let mut mini_grid: Vec<Vec<(char, Color)>> =
+        vec![vec![(' ', t.map_lines); mini_width]; mini_height];
+
+    let span_x = bounds.width().max(1.0);
+    let span_y = bounds.height().max(1.0);
+    let scale =
+        ((mini_width as f32 - 1.0) / span_x).min((mini_height as f32 - 1.0) / span_y) * 0.95;
+    let to_mini = |mx: f32, my: f32| -> Option<(usize, usize)> {
+        if scale <= 0.0 {
+            return None;
+        }
+        let col = ((mx - bounds.min_x) * scale) as i32;
+        let row = ((my - bounds.min_y) * scale) as i32;
+        if col < 0 || row < 0 {
+            return None;
+        }
+        let (col, row) = (col as usize, row as usize);
+        if col >= mini_width || row >= mini_height {
+            None
+        } else {
+            Some((col, row))
+        }
+    };
+
+    if app.map_state.show_geometry
+        && let Some(map) = &app.map_state.zone_map
+    {
+        for segment in &map.lines {
+            if let Some((x1, y1)) = to_mini(segment.x1, segment.y1)
+                && let Some((x2, y2)) = to_mini(segment.x2, segment.y2)
+            {
+                bresenham_line(
+                    x1 as i32,
+                    y1 as i32,
+                    x2 as i32,
+                    y2 as i32,
+                    mini_width,
+                    mini_height,
+                    &mut mini_grid,
+                    map_rgb_to_color(segment.r, segment.g, segment.b, t),
+                    LinePaintMode::OverwriteLinework,
+                );
+            }
+        }
+    }
+
+    if app.map_state.show_labels
+        && let Some(map) = &app.map_state.zone_map
+    {
+        for point in &map.points {
+            if let Some((col, row)) = to_mini(point.x, point.y) {
+                let marker = point.label.chars().next().unwrap_or('*');
+                mini_grid[row][col] = (marker, map_rgb_to_color(point.r, point.g, point.b, t));
+            }
+        }
+    }
+
+    if let Some(player) = &app.local_player
+        && let Some((col, row)) = to_mini(-player.y, -player.x)
+    {
+        mini_grid[row][col] = ('◆', t.map_you);
+    }
+    if let Some((_x, _y, spawn_id)) = selected_spawn
+        && let Some((col, row)) = app
+            .filtered_spawns()
+            .iter()
+            .find(|s| s.spawn_id == spawn_id)
+            .and_then(|s| to_mini(-s.y, -s.x))
+    {
+        mini_grid[row][col] = ('◎', t.text_highlight);
+    }
+
+    if let Some(client) = app.active_client()
+        && let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
+        && let Some(dest) = nav.waypoints.last()
+        && let Some((col, row)) = to_mini(-dest.y, -dest.x)
+    {
+        mini_grid[row][col] = ('★', t.text_accent);
+    }
+
+    let header = format!(
+        "Mini ({:.0},{:.0} | z:{:.2}x)",
+        main_transform.center_x,
+        main_transform.center_y,
+        main_transform.scale_x / main_transform.scale_y.max(0.001)
+    );
+    let mini_lines: Vec<Line<'static>> = mini_grid
+        .into_iter()
+        .map(|row| Line::from(color_run_spans(row)))
+        .collect();
+    (header, mini_lines)
 }
 
 fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {

@@ -125,6 +125,39 @@ impl ChChain {
         }
     }
 
+    /// Replace the entire chain member order.
+    pub fn set_members(&mut self, members: Vec<u32>) {
+        // Keep the member order but avoid duplicates and zero PIDs.
+        let mut filtered = Vec::new();
+        for pid in members {
+            if pid == 0 || filtered.contains(&pid) {
+                continue;
+            }
+            filtered.push(pid);
+        }
+
+        if filtered.is_empty() {
+            self.members.clear();
+            self.current_index = 0;
+            return;
+        }
+
+        let prev_member = self.members.get(self.current_index).copied();
+        self.members = filtered;
+
+        self.current_index = if let Some(prev_pid) = prev_member {
+            self.members
+                .iter()
+                .position(|pid| *pid == prev_pid)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        if self.current_index >= self.members.len() {
+            self.current_index = 0;
+        }
+    }
+
     /// Remove a cleric from the chain (e.g., on death). Adjusts rotation index.
     pub fn remove_member(&mut self, pid: u32) {
         if let Some(pos) = self.members.iter().position(|&p| p == pid) {
@@ -141,6 +174,16 @@ impl ChChain {
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.active
+    }
+
+    /// Current active index in the chain rotation.
+    #[must_use]
+    pub fn active_index(&self) -> Option<usize> {
+        if self.members.is_empty() {
+            None
+        } else {
+            Some(self.current_index % self.members.len())
+        }
     }
 
     /// The spawn ID of the current CH target.

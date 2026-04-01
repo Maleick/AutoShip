@@ -109,6 +109,23 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         );
     }
 
+    // CH chain panel overlay
+    if app.ch_chain_panel_state.active {
+        use crate::tui::ui::ch_chain::ChChainWidget;
+        let popup_w = (area.width as f32 * 0.75).max(60.0).min(area.width as f32) as u16;
+        let popup_h = (area.height as f32 * 0.75)
+            .max(18.0)
+            .min(area.height as f32) as u16;
+        let popup_x = area.x + (area.width.saturating_sub(popup_w)) / 2;
+        let popup_y = area.y + (area.height.saturating_sub(popup_h)) / 2;
+        let popup_area = Rect::new(popup_x, popup_y, popup_w, popup_h);
+        frame.render_widget(Clear, popup_area);
+        frame.render_widget(
+            ChChainWidget::new(&app.ch_chain_panel_state).accent_color(app.theme.text_accent),
+            popup_area,
+        );
+    }
+
     // Wizard overlay
     if app.wizard_state.active {
         use crate::tui::wizard::WizardWidget;
@@ -254,10 +271,18 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled(" pane  ", t.statusbar_dim),
             Span::styled("[ ]", t.statusbar_key),
             Span::styled(" client  ", t.statusbar_dim),
+            Span::styled("Alt+1", t.statusbar_key),
+            Span::styled(" geo  ", t.statusbar_dim),
+            Span::styled("Alt+2", t.statusbar_key),
+            Span::styled(" spawns  ", t.statusbar_dim),
+            Span::styled("Alt+3", t.statusbar_key),
+            Span::styled(" paths  ", t.statusbar_dim),
+            Span::styled("Alt+4", t.statusbar_key),
+            Span::styled(" mesh  ", t.statusbar_dim),
+            Span::styled("Alt+5", t.statusbar_key),
+            Span::styled(" labels  ", t.statusbar_dim),
             Span::styled("v", t.statusbar_key),
             Span::styled(" view  ", t.statusbar_dim),
-            Span::styled("n", t.statusbar_key),
-            Span::styled(" mesh  ", t.statusbar_dim),
             Span::styled("PgUp/Dn", t.statusbar_key),
             Span::styled(" zoom  ", t.statusbar_dim),
             Span::styled("←↑↓→", t.statusbar_key),

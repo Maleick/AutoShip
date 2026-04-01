@@ -212,7 +212,7 @@ fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoi
                 false
             }
         } else {
-            true
+            false
         };
 
         if !parsed {
@@ -239,10 +239,19 @@ fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoi
 
 fn parse_u8_channel(value: &str) -> Option<u8> {
     value
+        .trim()
         .parse::<u16>()
         .ok()
         .filter(|&v| v <= u8::MAX as u16)
         .and_then(|v| u8::try_from(v).ok())
+}
+
+fn parse_finite_f32(value: &str) -> Option<f32> {
+    value
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|value| value.is_finite())
 }
 
 fn parse_l_line(line: &str) -> Option<MapLine> {
@@ -253,12 +262,12 @@ fn parse_l_line(line: &str) -> Option<MapLine> {
         return None;
     }
     Some(MapLine {
-        x1: parts[0].parse().ok()?,
-        y1: parts[1].parse().ok()?,
-        z1: parts[2].parse().ok()?,
-        x2: parts[3].parse().ok()?,
-        y2: parts[4].parse().ok()?,
-        z2: parts[5].parse().ok()?,
+        x1: parse_finite_f32(parts[0])?,
+        y1: parse_finite_f32(parts[1])?,
+        z1: parse_finite_f32(parts[2])?,
+        x2: parse_finite_f32(parts[3])?,
+        y2: parse_finite_f32(parts[4])?,
+        z2: parse_finite_f32(parts[5])?,
         r: parse_u8_channel(parts[6])?,
         g: parse_u8_channel(parts[7])?,
         b: parse_u8_channel(parts[8])?,
@@ -276,9 +285,9 @@ fn parse_p_line(line: &str) -> Option<MapPoint> {
     // Replace underscores with spaces in label (Brewall convention)
     let label = parts[7].replace('_', " ");
     Some(MapPoint {
-        x: parts[0].parse().ok()?,
-        y: parts[1].parse().ok()?,
-        z: parts[2].parse().ok()?,
+        x: parse_finite_f32(parts[0])?,
+        y: parse_finite_f32(parts[1])?,
+        z: parse_finite_f32(parts[2])?,
         r: parse_u8_channel(parts[3])?,
         g: parse_u8_channel(parts[4])?,
         b: parse_u8_channel(parts[5])?,
