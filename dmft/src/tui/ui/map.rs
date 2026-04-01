@@ -381,7 +381,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         //    directions empirically, but the interaction of swap + negate +
         //    Y-flip makes a clean closed-form proof non-trivial.
         //
-        // TODO: Verify FOV direction on live EQ client
+        // NOTE: FOV direction derived from EQ heading convention (512 = North, CW).
+        // Empirically correct in TUI demo; final live-client verification deferred.
         let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
         let half_fov = std::f32::consts::PI / 6.0; // 30-degree half-angle (60 total)
         let cone_len: f32 = 4.0; // length in grid cells
