@@ -606,6 +606,23 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("accounts", "config/accounts.toml (login accounts)"),
         kv("camps", "config/camps/<name>.toml (camp positions)"),
         Line::from(""),
+        // ── Operating Modes ──
+        Line::from(Span::styled(" Operating Modes", head_s)),
+        Line::from(""),
+        kv("Camp mode", "Hold position, pull mobs to camp center"),
+        kv("Hunt mode", "Roam and pull, follow waypoint paths"),
+        kv(":mode camp", "Switch to camp mode"),
+        kv(":mode hunt", "Switch to hunt mode"),
+        Line::from(""),
+        // ── Group Targeting ──
+        Line::from(Span::styled(" Group Targeting Reference", head_s)),
+        Line::from(""),
+        kv("G1-G6", "Send command to specific group (1-6)"),
+        kv("all", "Send command to every connected client"),
+        kv("<name>", "Send command to specific character"),
+        kv("@<name>", "Force direct (bypass group filtering)"),
+        kv("<pid>", "Send command to client by process ID"),
+        Line::from(""),
         Line::from(Span::styled(
             " Scroll: j/k/Up/Down  Page: PgUp/PgDn  Top: Home  Close: ?/Esc",
             dim_s,
@@ -617,6 +634,18 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let max_scroll = text.len().saturating_sub(visible_lines);
     let scroll = app.help_scroll.min(max_scroll);
 
+    // Build title with scroll indicator
+    let title = if max_scroll > 0 {
+        let pct = if max_scroll > 0 {
+            (scroll * 100) / max_scroll
+        } else {
+            0
+        };
+        format!(" Help [{pct}%] ")
+    } else {
+        String::from(" Help ")
+    };
+
     frame.render_widget(
         Paragraph::new(text)
             .scroll((scroll as u16, 0))
@@ -624,7 +653,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(t.border_type)
-                    .title(Span::styled(" Help ", t.help_heading))
+                    .title(Span::styled(title, t.help_heading))
                     .border_style(t.help_border)
                     .style(Style::default().bg(t.help_bg)),
             ),
