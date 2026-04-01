@@ -230,7 +230,7 @@ mod tests {
     fn post_login_phase_clone() {
         let p = PostLoginPhase::Buffing;
         let c = p.clone();
-        assert!(matches!(c, PostLoginPhase::Buffing));
+        assert_eq!(p, c);
     }
 
     #[test]
