@@ -663,21 +663,54 @@ impl CommandPalette {
         self.visible = false;
     }
 
+    /// ASCII case-insensitive substring search: returns true if `needle`
+    /// occurs in `haystack`, ignoring ASCII case.
+    fn contains_ascii_case_insensitive(haystack: &str, needle: &str) -> bool {
+        let haystack_bytes = haystack.as_bytes();
+        let needle_bytes = needle.as_bytes();
+
+        if needle_bytes.is_empty() {
+            return true;
+        }
+        if needle_bytes.len() > haystack_bytes.len() {
+            return false;
+        }
+
+        for window in haystack_bytes.windows(needle_bytes.len()) {
+            let mut all_match = true;
+            for (a, b) in window.iter().zip(needle_bytes.iter()) {
+                if a.to_ascii_lowercase() != b.to_ascii_lowercase() {
+                    all_match = false;
+                    break;
+                }
+            }
+            if all_match {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Get filtered command hints matching the current filter text.
     #[must_use]
     pub fn filtered_commands(&self) -> Vec<&'static CommandHint> {
         static HINTS: std::sync::LazyLock<Vec<CommandHint>> =
             std::sync::LazyLock::new(command_hints);
 
+        // Fast path: no filter, return all hints.
         if self.filter.is_empty() {
             HINTS.iter().collect()
         } else {
-            let lower = self.filter.to_lowercase();
+            // Since prefixes/descriptions are ASCII, we can safely use ASCII-only
+            // lowercasing and a custom case-insensitive `contains` that avoids
+            // per-item allocations.
+            let needle = self.filter.to_ascii_lowercase();
             HINTS
                 .iter()
                 .filter(|h| {
-                    h.prefix.contains(&lower)
-                        || h.description.to_lowercase().contains(&lower)
+                    contains_ascii_case_insensitive(h.prefix, &needle)
+                        || contains_ascii_case_insensitive(h.description, &needle)
                 })
                 .collect()
         }
