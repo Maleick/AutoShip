@@ -25,6 +25,8 @@ credentials.db*
 *.md
 !README.md
 !CLAUDE.md
+!docs/wiki/
+!docs/wiki/*.md
 
 # Playwright MCP
 .playwright-mcp/
