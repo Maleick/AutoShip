@@ -328,7 +328,7 @@ mod tests {
             priority: 0,
         };
         let cloned = cc.clone();
-        assert_eq!(cloned.name, "Stun");
+        assert_eq!(cloned, cc);
         let dbg = format!("{:?}", cc);
         assert!(dbg.contains("stun"));
     }
