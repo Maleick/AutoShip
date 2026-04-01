@@ -3552,7 +3552,13 @@ impl App {
                         false,
                     );
                 } else {
-                    self.usage_feedback("ch start", "No CH chain is active.");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from(
+                            "CH chain inactive. Start one with :ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot].",
+                        ),
+                        false,
+                    );
                 }
             }
             Some("start") => {
@@ -4427,5 +4433,18 @@ mod tests {
             app.toast.is_none(),
             "warning should clear once ttl is exceeded"
         );
+    }
+
+    #[test]
+    fn ch_status_feedback_is_informational_when_inactive() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+
+        app.cmd_state.command_buffer = String::from("ch status");
+        app.execute_command(&mut orchestrator);
+
+        assert_eq!(app.toast, None);
+        assert!(app.status_message.contains("CH chain inactive."));
+        assert!(app.status_message.contains(":ch start <pid1,pid2,...>"));
     }
 }
