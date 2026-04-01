@@ -351,8 +351,7 @@ mod tests {
     fn class_config_clone_and_debug() {
         let config = sample_warrior();
         let cloned = config.clone();
-        assert_eq!(cloned.class_name, "warrior");
-        assert_eq!(cloned.combat_abilities.len(), 2);
+        assert_eq!(cloned, config);
         let dbg = format!("{:?}", config);
         assert!(dbg.contains("warrior"));
     }
