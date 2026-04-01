@@ -188,7 +188,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .zone_map
         .as_ref().map_or_else(|| {
             format!(
-                " Map: {zone_label} (no map data){player_pos_label}{mesh_label} | Z filter: {z_range:.0} [+/-] | m maximize "
+                " Map: {zone_label} (no map data){player_pos_label}{mesh_cache_label} | Z filter: {z_range:.0} [+/-] | m maximize "
             )
         }, |m| {
             format!(
