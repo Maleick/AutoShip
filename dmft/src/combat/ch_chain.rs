@@ -23,6 +23,7 @@ const MAX_INTERVAL_SECS: f32 = 8.0;
 /// How many HP-delta samples to keep for averaging damage rate.
 const DAMAGE_WINDOW_SIZE: usize = 10;
 
+/// Complete Heal chain — rotates CH casts across clerics with adaptive timing.
 pub struct ChChain {
     /// Cleric PIDs in chain order.
     members: Vec<u32>,
@@ -51,6 +52,7 @@ pub struct ChChain {
 }
 
 impl ChChain {
+    /// Creates a new CH chain with the given clerics, interval, target, and spell gem.
     #[must_use]
     pub fn new(members: Vec<u32>, interval_secs: f32, target_id: u32, spell_slot: u8) -> Self {
         Self {
@@ -86,6 +88,7 @@ impl ChChain {
         self.active = true;
     }
 
+    /// Stop the chain. No more CH casts will fire until `start()` or `resume()`.
     pub fn stop(&mut self) {
         self.active = false;
     }
@@ -109,17 +112,20 @@ impl ChChain {
         }
     }
 
+    /// Change the interval between CH casts (in seconds).
     pub fn set_interval(&mut self, secs: f32) {
         self.interval_secs = secs;
         self.frames_per_interval = (secs * FRAMES_PER_SECOND as f32) as u64;
     }
 
+    /// Add a cleric to the end of the chain rotation.
     pub fn add_member(&mut self, pid: u32) {
         if !self.members.contains(&pid) {
             self.members.push(pid);
         }
     }
 
+    /// Remove a cleric from the chain (e.g., on death). Adjusts rotation index.
     pub fn remove_member(&mut self, pid: u32) {
         if let Some(pos) = self.members.iter().position(|&p| p == pid) {
             self.members.remove(pos);
@@ -131,25 +137,30 @@ impl ChChain {
         }
     }
 
+    /// Whether the chain is currently running.
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.active
     }
 
+    /// The spawn ID of the current CH target.
     #[must_use]
     pub fn target_id(&self) -> u32 {
         self.target_id
     }
 
+    /// Change the CH target to a different spawn.
     pub fn set_target(&mut self, target_id: u32) {
         self.target_id = target_id;
     }
 
+    /// The spell gem slot used for Complete Heal.
     #[must_use]
     pub fn spell_slot(&self) -> u8 {
         self.spell_slot
     }
 
+    /// The cleric PIDs in chain rotation order.
     #[must_use]
     pub fn members(&self) -> &[u32] {
         &self.members
@@ -165,6 +176,7 @@ impl ChChain {
         }
     }
 
+    /// Whether the chain auto-adjusts interval based on incoming damage.
     #[must_use]
     pub fn is_adaptive(&self) -> bool {
         self.adaptive

@@ -66,21 +66,33 @@ impl Relationship {
 #[derive(Debug, Clone)]
 pub enum SocialEvent {
     /// Characters fought together
-    FoughtTogether { zone: String },
+    FoughtTogether {
+        /// Zone where the combat took place.
+        zone: String,
+    },
     /// Character healed/saved another
     Saved,
     /// Character let another die (failed to heal, etc.)
     LetDie,
     /// Shared loot
-    SharedLoot { item: String },
+    SharedLoot {
+        /// Name of the shared item.
+        item: String,
+    },
     /// Ninja'd loot
-    NinjaLoot { item: String },
+    NinjaLoot {
+        /// Name of the stolen item.
+        item: String,
+    },
     /// Had a positive conversation
     PositiveChat,
     /// Had a negative conversation
     NegativeChat,
     /// Gossiped about a third party
-    Gossip { about: String },
+    Gossip {
+        /// Name of the character being gossiped about.
+        about: String,
+    },
     /// Spent idle time together
     IdleTogether,
     /// One character mentored another
@@ -95,6 +107,7 @@ pub struct SocialGraph {
 }
 
 impl SocialGraph {
+    /// Create an empty social graph with no relationships.
     #[must_use]
     pub fn new() -> Self {
         Self {

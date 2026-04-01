@@ -31,8 +31,11 @@ impl AlertLevel {
 /// A Discord alert to be sent via webhook.
 #[derive(Debug, Clone)]
 pub struct DiscordAlert {
+    /// Alert title (shown as embed title in Discord).
     pub title: String,
+    /// Alert body text.
     pub message: String,
+    /// Severity level controlling the embed color.
     pub level: AlertLevel,
 }
 

@@ -62,6 +62,7 @@ fn zone_anchor(zone: &str) -> Option<DemoAnchor> {
     }
 }
 
+/// Generate a demo player position for a given zone and group slot index.
 #[must_use]
 pub fn demo_player_position(zone: &str, slot: usize) -> Option<(f32, f32, f32, f32)> {
     let anchor = zone_anchor(zone)?;

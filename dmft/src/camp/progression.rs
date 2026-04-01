@@ -10,18 +10,29 @@ use std::path::Path;
 pub enum CampProgressionEvent {
     /// Group has outleveled the current camp — advance to next.
     AdvanceToNext {
+        /// Name of the camp being left.
         from_camp: String,
+        /// Name of the camp to advance to.
         to_camp: String,
+        /// Current average group level.
         avg_level: f32,
     },
     /// Group is underleveled for current camp — fall back to previous.
     FallbackToPrev {
+        /// Name of the camp being left.
         from_camp: String,
+        /// Name of the camp to fall back to.
         to_camp: String,
+        /// Current average group level.
         avg_level: f32,
     },
     /// No next/prev camp configured — end of progression chain.
-    EndOfChain { camp: String, avg_level: f32 },
+    EndOfChain {
+        /// Name of the current (terminal) camp.
+        camp: String,
+        /// Current average group level.
+        avg_level: f32,
+    },
 }
 
 /// Database of all known camp configurations, loaded from `config/camps/`.

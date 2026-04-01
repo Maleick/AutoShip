@@ -474,13 +474,21 @@ impl MemoryStore {
 /// A row from the memories table.
 #[derive(Debug, Clone)]
 pub struct MemoryRow {
+    /// Database row ID.
     pub id: i64,
+    /// Event type label (e.g., "kill", "death", "loot").
     pub event_type: String,
+    /// Serialized JSON of the `SoulEvent`.
     pub event_json: String,
+    /// Zone where the event occurred, if applicable.
     pub zone: Option<String>,
+    /// Mood state at the time of the event.
     pub mood_at_time: String,
+    /// Memory importance score (decays over time, boosted by rehearsal).
     pub importance: f32,
+    /// ISO timestamp when the memory was created.
     pub created_at: String,
+    /// Whether this memory has been pruned via decay.
     pub decayed: bool,
 }
 
@@ -511,12 +519,19 @@ impl MemoryRow {
 /// A row from the conversations table.
 #[derive(Debug, Clone)]
 pub struct ConversationRow {
+    /// Database row ID.
     pub id: i64,
+    /// Name of the speaker.
     pub speaker: String,
+    /// True if the speaker is a real player (not a bot).
     pub is_player: bool,
+    /// Chat channel (say, group, tell, etc.).
     pub channel: String,
+    /// The message text.
     pub message: String,
+    /// Sentiment score (-1.0 to 1.0), if analyzed.
     pub sentiment: Option<f32>,
+    /// ISO timestamp when the conversation was recorded.
     pub created_at: String,
 }
 

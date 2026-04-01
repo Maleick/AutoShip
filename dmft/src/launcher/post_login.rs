@@ -13,13 +13,18 @@ pub struct PostLoginSequencer {
     camp_waypoints: Vec<dmft_common::nav::Waypoint>,
 }
 
+/// Events that advance the post-login sequencer.
 pub enum PostLoginEvent {
+    /// Client successfully joined the designated group.
     GroupJoined,
+    /// All required buffs have been applied.
     BuffsApplied,
+    /// Client has arrived at the camp location.
     CampReached,
 }
 
 impl PostLoginSequencer {
+    /// Creates a new sequencer for the given client, group, and camp route.
     #[must_use]
     pub fn new(
         client_id: ClientId,
@@ -96,21 +101,25 @@ impl PostLoginSequencer {
         }
     }
 
+    /// The current post-login phase.
     #[must_use]
     pub fn phase(&self) -> &PostLoginPhase {
         &self.phase
     }
 
+    /// Whether the post-login sequence is complete and the client is ready.
     #[must_use]
     pub fn is_ready(&self) -> bool {
         matches!(self.phase, PostLoginPhase::Ready)
     }
 
+    /// The client ID this sequencer manages.
     #[must_use]
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }
 
+    /// Time elapsed since the sequencer was created.
     #[must_use]
     pub fn elapsed(&self) -> std::time::Duration {
         self.started_at.elapsed()

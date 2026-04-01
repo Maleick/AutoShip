@@ -6,6 +6,7 @@ use std::mem;
 pub struct ProcessHandle {
     #[cfg(windows)]
     handle: windows::Win32::Foundation::HANDLE,
+    /// Process ID of the opened process.
     pub pid: u32,
 }
 

@@ -34,11 +34,22 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CampEvent {
     /// A charm has broken — immediate emergency CC needed.
-    CharmBreak { spawn_id: u32 },
+    CharmBreak {
+        /// Spawn ID of the mob whose charm broke.
+        spawn_id: u32,
+    },
     /// A new add has spawned or aggroed within camp radius.
-    AddSpawned { spawn_id: u32, name: String },
+    AddSpawned {
+        /// Spawn ID of the new add.
+        spawn_id: u32,
+        /// Display name of the add.
+        name: String,
+    },
     /// A CC effect is about to expire on a mob.
-    CcExpiring { spawn_id: u32 },
+    CcExpiring {
+        /// Spawn ID of the mob whose CC is about to expire.
+        spawn_id: u32,
+    },
 }
 
 /// Real-time game state snapshot for the camp loop.
@@ -46,9 +57,13 @@ pub enum CampEvent {
 /// instead of fixed tick timers.
 #[derive(Debug, Clone)]
 pub struct CampSnapshot {
+    /// Healer's current mana as a percentage (0.0-100.0).
     pub healer_mana_pct: f32,
+    /// Tank's current HP as a percentage (0.0-100.0).
     pub tank_hp_pct: f32,
+    /// Current target's HP percentage, if a target exists.
     pub target_hp_pct: Option<f32>,
+    /// Whether the current target is dead.
     pub target_is_dead: bool,
     /// Spawn ID of the tank's current target (for `CombatEngage` commands).
     pub target_spawn_id: Option<u32>,
@@ -65,7 +80,10 @@ pub enum CampAction {
     /// A slash command string (e.g., "/attack", "/assist Tankname").
     Slash(String),
     /// Engage the Combatant FSM against a specific spawn.
-    CombatEngage { target_id: u32 },
+    CombatEngage {
+        /// Spawn ID of the target to engage.
+        target_id: u32,
+    },
     /// Disengage the Combatant FSM.
     CombatDisengage,
 }
@@ -116,31 +134,52 @@ impl PartialEq<str> for CampAction {
 /// Current phase of the camp loop.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CampState {
+    /// Waiting for the next pull cycle.
     Idle,
-    Pulling { started_tick: u64 },
-    Fighting { started_tick: u64 },
-    Looting { started_tick: u64 },
-    Medding { started_tick: u64 },
-    Buffing { started_tick: u64 },
+    /// Puller is out pulling a mob back to camp.
+    Pulling { /// Tick when pull started.
+        started_tick: u64 },
+    /// Group is actively fighting a mob.
+    Fighting { /// Tick when fight started.
+        started_tick: u64 },
+    /// Looting corpses after a kill.
+    Looting { /// Tick when loot phase started.
+        started_tick: u64 },
+    /// Medding up mana/HP between pulls.
+    Medding { /// Tick when med phase started.
+        started_tick: u64 },
+    /// Applying pre-pull buffs.
+    Buffing { /// Tick when buff phase started.
+        started_tick: u64 },
 }
 
 /// Role a group member fills in the camp loop.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
+    /// Main tank — holds aggro and takes damage.
     Tank,
+    /// Primary healer — keeps the tank alive.
     Healer,
+    /// Crowd control — mezzes and roots adds.
     CC,
+    /// Damage dealer — kills the target.
     Dps,
+    /// Puller — fetches mobs back to camp.
     Puller,
+    /// Bard — songs, crowd control, and pulling support.
     Bard,
 }
 
 /// A single member of the camp group.
 #[derive(Debug, Clone)]
 pub struct CampMember {
+    /// OS process ID for this member's EQ client.
     pub pid: u32,
+    /// Character name.
     pub name: String,
+    /// Assigned role in the camp group.
     pub role: Role,
+    /// Personality profile for humanization and idle behavior.
     pub personality: PersonalityProfile,
 }
 
@@ -171,13 +210,21 @@ const CC_REMEZ_BUFFER: u64 = 3;
 /// The camp loop state machine. Each `tick()` call advances state and
 /// returns slash commands to send to EQ clients via IPC.
 pub struct CampLoop {
+    /// Camp configuration (pull range, med threshold, etc.).
     pub config: CampConfig,
+    /// Current camp loop phase.
     pub state: CampState,
+    /// Group members participating in this camp.
     pub members: Vec<CampMember>,
+    /// Monotonic tick counter for phase timing.
     pub tick: u64,
+    /// Name of the last mob pulled.
     pub last_pull_target: String,
+    /// Crowd control state tracker for mezz/root durations.
     pub cc_tracker: CcTracker,
+    /// Members designated for CC duty.
     pub cc_members: Vec<CcMember>,
+    /// Queued events to process on the next tick.
     pub pending_events: Vec<CampEvent>,
     /// Loot configuration for the camp.
     pub loot_config: LootConfig,
@@ -196,6 +243,7 @@ pub struct CampLoop {
 }
 
 impl CampLoop {
+    /// Creates a new camp loop with the given config and group members.
     #[must_use]
     pub fn new(config: CampConfig, members: Vec<CampMember>) -> Self {
         let recovery_members: Vec<(u32, String)> =

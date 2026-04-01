@@ -7,10 +7,15 @@ use std::path::Path;
 /// A single ability a class can use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassAbility {
+    /// Ability name for display/logging.
     pub name: String,
+    /// Slash command to execute this ability (e.g., "/kick").
     pub command: String,
+    /// Recast cooldown in seconds.
     pub cooldown_secs: f32,
+    /// Priority ordering (lower = higher priority).
     pub priority: u8,
+    /// Optional condition expression for when to use this ability.
     #[serde(default)]
     pub condition: Option<String>,
     /// Buff duration in seconds. For `buff_abilities`, this is how long the buff
@@ -31,38 +36,56 @@ impl ClassAbility {
 /// A crowd control ability (mez, stun, charm, snare, root).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcAbilityConfig {
+    /// Ability name for display/logging.
     pub name: String,
+    /// CC type string (e.g., "mez", "stun", "charm").
     pub cc_type: String,
+    /// Slash command to cast the CC.
     pub command: String,
+    /// Recast cooldown in seconds.
     pub cooldown_secs: f32,
+    /// How long the CC effect lasts in seconds.
     pub duration_secs: f32,
+    /// Priority ordering (lower = higher priority).
     pub priority: u8,
 }
 
 /// A resist debuff ability (Tash, Malo) that lands before CC.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebuffAbilityConfig {
+    /// Debuff name (e.g., "Tash", "Malo").
     pub name: String,
+    /// Slash command to cast the debuff.
     pub command: String,
+    /// Recast cooldown in seconds.
     pub cooldown_secs: f32,
+    /// Cast order (lower = cast first).
     pub order: u8,
 }
 
 /// Full ability configuration for one EQ class.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassConfig {
+    /// EQ class name (e.g., "warrior", "cleric").
     pub class_name: String,
+    /// Role this class fills (e.g., "tank", "healer", "cc").
     pub role: String,
+    /// Abilities to use during active combat.
     #[serde(default)]
     pub combat_abilities: Vec<ClassAbility>,
+    /// Buff spells to maintain on group members.
     #[serde(default)]
     pub buff_abilities: Vec<ClassAbility>,
+    /// Emergency abilities (heal, defensive cooldowns).
     #[serde(default)]
     pub emergency_abilities: Vec<ClassAbility>,
+    /// Crowd control abilities (mez, stun, charm).
     #[serde(default)]
     pub cc_abilities: Vec<CcAbilityConfig>,
+    /// Resist debuffs to land before CC (Tash, Malo).
     #[serde(default)]
     pub debuff_abilities: Vec<DebuffAbilityConfig>,
+    /// Command to enter rest mode between pulls.
     #[serde(default = "default_rest_command")]
     pub rest_command: String,
     /// Bard twist interval in seconds (only meaningful for bards).

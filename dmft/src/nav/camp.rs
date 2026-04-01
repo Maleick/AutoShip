@@ -13,6 +13,7 @@ pub struct CampManager {
 }
 
 impl CampManager {
+    /// Create a new camp manager with no active camp.
     #[must_use]
     pub fn new() -> Self {
         Self {

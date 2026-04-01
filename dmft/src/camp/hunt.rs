@@ -11,7 +11,9 @@ use super::state::{CampMember, Role};
 /// Operating mode for a group — camp (stationary) or hunt (roaming).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperatingMode {
+    /// Stationary camp — group anchors and pulls mobs to a fixed position.
     Camp,
+    /// Roaming hunt — tank moves through the zone engaging mobs in place.
     Hunt,
 }
 
@@ -30,26 +32,39 @@ pub enum HuntState {
     /// Tank is roaming, looking for the next mob.
     Roaming,
     /// Tank has found a mob and is closing distance to engage.
-    Engaging { started_tick: u64 },
+    Engaging {
+        /// Tick when engagement started.
+        started_tick: u64,
+    },
     /// Group is fighting the current target.
-    Fighting { started_tick: u64 },
+    Fighting {
+        /// Tick when combat started.
+        started_tick: u64,
+    },
     /// Looting the corpse after a kill.
-    Looting { started_tick: u64 },
+    Looting {
+        /// Tick when looting started.
+        started_tick: u64,
+    },
 }
 
 /// Position in 2D space (EQ x, y).
 #[derive(Debug, Clone, Copy)]
 pub struct Pos2D {
+    /// X coordinate in EQ world units.
     pub x: f32,
+    /// Y coordinate in EQ world units.
     pub y: f32,
 }
 
 impl Pos2D {
+    /// Creates a new 2D position.
     #[must_use]
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
+    /// Euclidean distance to another 2D position.
     #[must_use]
     pub fn distance_to(&self, other: &Pos2D) -> f32 {
         distance_2d(self.x, self.y, other.x, other.y)
@@ -106,10 +121,12 @@ impl Default for FormationConfig {
 
 /// Manages group formation relative to the tank.
 pub struct FormationManager {
+    /// Configuration for role-based follow distances.
     pub config: FormationConfig,
 }
 
 impl FormationManager {
+    /// Creates a new formation manager with the given distance config.
     #[must_use]
     pub fn new(config: FormationConfig) -> Self {
         Self { config }
@@ -193,19 +210,26 @@ const LOOT_DURATION: u64 = 3;
 /// The hunt loop state machine. Each `tick()` call advances state and returns
 /// slash commands to send to EQ clients.
 pub struct HuntLoop {
+    /// Camp configuration for this hunt group.
     pub config: CampConfig,
+    /// Current FSM state.
     pub state: HuntState,
+    /// Group members participating in the hunt.
     pub members: Vec<CampMember>,
+    /// Formation manager for non-tank positioning.
     pub formation: FormationManager,
+    /// Current tick counter.
     pub tick: u64,
     /// Waypoint patrol route for the tank (if set).
     pub patrol_waypoints: Vec<Pos2D>,
     /// Current index into `patrol_waypoints`.
     pub patrol_idx: usize,
+    /// Name of the last mob killed.
     pub last_kill_target: String,
 }
 
 impl HuntLoop {
+    /// Creates a new hunt loop with the given config and group members.
     #[must_use]
     pub fn new(config: CampConfig, members: Vec<CampMember>) -> Self {
         Self {

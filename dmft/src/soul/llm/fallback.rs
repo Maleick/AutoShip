@@ -13,6 +13,7 @@ pub struct TraitDrivenResponder {
 }
 
 impl TraitDrivenResponder {
+    /// Create a new trait-driven responder seeded from the client ID.
     #[must_use]
     pub fn new(client_id: u32, edginess: EdginessLevel) -> Self {
         Self {

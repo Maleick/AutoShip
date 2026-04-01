@@ -26,6 +26,7 @@ fn nav_status_color(
     }
 }
 
+/// Draw the navigation screen with waypoint list and status.
 pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     // Adaptive: narrow terminals get more space for nav status

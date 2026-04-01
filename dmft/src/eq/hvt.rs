@@ -6,20 +6,29 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HvtPriority {
+    /// Raid-level targets — immediate response required.
     Critical,
+    /// Named mobs with valuable drops.
     High,
+    /// Worth killing if convenient.
     Medium,
+    /// Informational tracking only.
     Low,
 }
 
 /// A single high-value target entry from the watchlist.
 #[derive(Debug, Clone, Deserialize)]
 pub struct HvtTarget {
+    /// Mob display name (case-sensitive in config, case-insensitive in lookup).
     pub name: String,
+    /// Zone where this target spawns.
     pub zone: String,
+    /// How urgently to respond when spotted.
     pub priority: HvtPriority,
+    /// Whether to send a Discord webhook alert when spotted.
     #[serde(default)]
     pub alert_discord: bool,
+    /// Free-text note (drops, strategy, etc.).
     #[serde(default)]
     pub note: String,
 }

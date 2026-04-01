@@ -18,6 +18,7 @@ pub struct BuffTracker {
 }
 
 impl BuffTracker {
+    /// Creates an empty buff tracker with no recorded casts.
     #[must_use]
     pub fn new() -> Self {
         Self {

@@ -15,6 +15,7 @@ pub struct TokenBudget {
 }
 
 impl TokenBudget {
+    /// Create a new token budget with the given hourly limit.
     #[must_use]
     pub fn new(max_tokens_per_hour: u32) -> Self {
         Self {
@@ -97,6 +98,7 @@ pub struct LlmRequestQueue {
 }
 
 impl LlmRequestQueue {
+    /// Create a new request queue with the given hourly token budget.
     #[must_use]
     pub fn new(max_tokens_per_hour: u32) -> Self {
         Self {

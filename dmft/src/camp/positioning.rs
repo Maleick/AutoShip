@@ -22,7 +22,7 @@ pub fn needs_reposition(
 }
 
 /// Generate movement commands to get a melee character to their target.
-/// Returns Vec<String> of slash commands to execute.
+/// Returns a list of slash commands to execute.
 ///
 /// - If in melee range: just `/face` to stay oriented on the target.
 /// - If out of range: `/face` then `/nav target` to close the gap.

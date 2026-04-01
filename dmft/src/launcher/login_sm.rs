@@ -2,36 +2,89 @@ use dmft_common::login::{AccountInfo, LoginError, LoginPhase};
 use dmft_common::types::ClientId;
 use std::time::{Duration, Instant};
 
+/// State machine driving a single client through the EQ login flow.
 pub struct LoginStateMachine {
+    /// Unique identifier for this client session.
     pub client_id: ClientId,
+    /// Account credentials and target character/server.
     pub account_info: AccountInfo,
+    /// Current phase of the login process.
     pub phase: LoginPhase,
+    /// Number of retry attempts so far.
     pub attempts: u32,
+    /// Timestamp of the last phase transition (for timeout detection).
     pub last_transition: Instant,
+    /// Maximum time allowed in the current phase before timeout.
     pub phase_timeout: Duration,
 }
 
+/// Events that drive login state transitions.
 pub enum LoginEvent {
-    ProcessStarted { pid: u32 },
+    /// EQ process has been spawned with the given PID.
+    ProcessStarted {
+        /// OS process ID.
+        pid: u32,
+    },
+    /// Login screen UI is visible and ready for input.
     LoginScreenDetected,
+    /// Account/password have been entered.
     CredentialsSent,
+    /// Server has been chosen from the server list.
     ServerSelected,
+    /// Character has been selected from the character list.
     CharacterSelected,
+    /// Client has finished zoning into the world.
     ZoneInComplete,
-    PlayerDataConfirmed { name: String, class_name: String },
-    ErrorDetected { error: LoginError },
-    DllReported { phase: LoginPhase },
+    /// Player data confirmed from in-game memory.
+    PlayerDataConfirmed {
+        /// Character name read from memory.
+        name: String,
+        /// Class name read from memory.
+        class_name: String,
+    },
+    /// An error occurred during the login process.
+    ErrorDetected {
+        /// The specific login error.
+        error: LoginError,
+    },
+    /// The injected DLL reported a phase change.
+    DllReported {
+        /// Phase reported by the DLL.
+        phase: LoginPhase,
+    },
 }
 
+/// Actions the login coordinator should perform in response to state transitions.
 pub enum LoginAction {
+    /// No action needed.
     None,
+    /// Enter account credentials into the login screen.
     SendCredentials,
-    SelectServer { name: String },
-    SelectCharacter { name: String },
+    /// Select the target server by name.
+    SelectServer {
+        /// Server name to select.
+        name: String,
+    },
+    /// Select the target character by name.
+    SelectCharacter {
+        /// Character name to select.
+        name: String,
+    },
+    /// Wait for the client to finish zoning in.
     WaitForZone,
+    /// Start the post-login sequence (group invites, buffs, etc.).
     BeginPostLogin,
-    Retry { after: Duration },
-    Abort { reason: LoginError },
+    /// Retry the current phase after a delay.
+    Retry {
+        /// How long to wait before retrying.
+        after: Duration,
+    },
+    /// Abort the login attempt with an error.
+    Abort {
+        /// Reason for the abort.
+        reason: LoginError,
+    },
+    /// Pause all login operations (mass failure detected).
     PauseAll,
 }
 
@@ -40,6 +93,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const RETRY_DELAY: Duration = Duration::from_secs(5);
 
 impl LoginStateMachine {
+    /// Creates a new login state machine for the given client and account.
     #[must_use]
     pub fn new(client_id: ClientId, account_info: AccountInfo) -> Self {
         Self {
@@ -52,6 +106,7 @@ impl LoginStateMachine {
         }
     }
 
+    /// Processes an event and returns the action the coordinator should take.
     pub fn advance(&mut self, event: LoginEvent) -> LoginAction {
         match event {
             LoginEvent::ProcessStarted { pid: _ } => {
@@ -119,6 +174,7 @@ impl LoginStateMachine {
         }
     }
 
+    /// Checks for phase timeout and returns a retry or abort action if needed.
     pub fn tick(&mut self) -> Option<LoginAction> {
         // No timeout checks for terminal or not-yet-started states
         if self.is_terminal() {
@@ -148,6 +204,7 @@ impl LoginStateMachine {
         }
     }
 
+    /// Returns `true` if the login is in a terminal state (Ready or Failed).
     #[must_use]
     pub fn is_terminal(&self) -> bool {
         matches!(self.phase, LoginPhase::Ready | LoginPhase::Failed { .. })

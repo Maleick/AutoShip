@@ -23,13 +23,18 @@ pub use super::state::{
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveScreen {
+    /// Character roster and group overview.
     Overview,
+    /// Map and spawn list tactical view.
     Tactical,
+    /// Waypoint navigation management.
     Navigation,
+    /// Debug panels (raw spawns, hex dump).
     Debug,
 }
 
 impl ActiveScreen {
+    /// Returns the human-readable label for this screen tab.
     #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
@@ -40,6 +45,7 @@ impl ActiveScreen {
         }
     }
 
+    /// All screen variants for iteration.
     pub const ALL: [ActiveScreen; 4] = [
         Self::Overview,
         Self::Tactical,
@@ -51,30 +57,47 @@ impl ActiveScreen {
 /// Which panel is currently focused for keyboard input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivePanel {
+    /// Character roster list on the overview screen.
     OverviewRoster,
+    /// Selected character detail panel.
     OverviewCharacter,
+    /// Group membership panel.
     OverviewGroups,
+    /// Spawn filter/scope panel.
     OverviewFilters,
+    /// Combat status panel (assist, CH chain).
     OverviewCombat,
+    /// Session statistics panel (uptime, loot).
     OverviewSession,
+    /// Zone map display on tactical screen.
     TacticalMap,
+    /// Spawn list on tactical screen.
     TacticalSpawns,
+    /// Named mob tracker on tactical screen.
     TacticalNamed,
+    /// Navigation waypoints panel.
     TacticalNavigation,
+    /// Raw spawn data table (debug).
     DebugSpawns,
+    /// Memory hex dump panel (debug).
     DebugHexDump,
 }
 
 /// Spawn type filter for the spawn list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnFilter {
+    /// Show all spawn types.
     All,
+    /// Show only player characters.
     Pc,
+    /// Show only non-player characters.
     Npc,
+    /// Show only named (rare) mobs.
     Named,
 }
 
 impl SpawnFilter {
+    /// Cycles to the next filter variant.
     #[must_use]
     pub fn next(self) -> Self {
         match self {
@@ -85,6 +108,7 @@ impl SpawnFilter {
         }
     }
 
+    /// Returns the display label for this filter.
     #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
@@ -99,12 +123,16 @@ impl SpawnFilter {
 /// Status of a user-tracked spawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackedStatus {
+    /// Spawn is currently alive in the zone.
     Up,
+    /// Spawn has despawned or been killed.
     Down,
+    /// Spawn status cannot be determined.
     Unknown,
 }
 
 impl TrackedStatus {
+    /// Returns the short status label (UP, DOWN, ???).
     #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
@@ -114,6 +142,7 @@ impl TrackedStatus {
         }
     }
 
+    /// Returns the color for rendering this status.
     #[must_use]
     pub fn color(&self) -> ratatui::style::Color {
         use ratatui::style::Color;
@@ -128,20 +157,30 @@ impl TrackedStatus {
 /// A user-tracked spawn (via :track command).
 #[derive(Debug, Clone)]
 pub struct TrackedSpawn {
+    /// Spawn name being tracked.
     pub name: String,
+    /// Current up/down/unknown status.
     pub status: TrackedStatus,
+    /// Tick count when this spawn was last seen alive.
     pub last_seen_tick: Option<u64>,
+    /// Last known X coordinate.
     pub last_x: f32,
+    /// Last known Y coordinate.
     pub last_y: f32,
+    /// Last known Z coordinate.
     pub last_z: f32,
 }
 
 /// Definition for a logical group of accounts.
 #[derive(Debug, Clone)]
 pub struct GroupDef {
+    /// Numeric group identifier (1-based).
     pub id: u8,
+    /// Human-readable group name (e.g., "Alpha").
     pub name: String,
+    /// Inclusive range of account numbers in this group.
     pub account_range: (u8, u8),
+    /// Default camp assignment for this group.
     #[allow(dead_code)]
     pub default_camp: String,
 }
@@ -160,114 +199,142 @@ pub struct LiveGroup {
 /// Cached CH chain status for TUI display (avoids reaching into Orchestrator).
 #[derive(Clone, Debug)]
 pub struct ChChainStatus {
+    /// Number of clerics in the chain.
     pub members: usize,
+    /// Interval between heals in seconds.
     pub interval_secs: f32,
+    /// Whether the chain dynamically adjusts timing.
     pub is_adaptive: bool,
+    /// Spawn ID of the heal target.
     pub target_id: u32,
 }
 
 /// Application state for the TUI command center.
 pub struct App {
+    /// Whether the application is still running (false triggers shutdown).
     pub running: bool,
+    /// Currently displayed screen tab.
     pub active_screen: ActiveScreen,
+    /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
 
-    // Multi-client state
+    /// Connected EQ client states.
     pub clients: Vec<ClientState>,
+    /// Index of the currently selected client in `clients`.
     pub selected_client: usize,
 
-    // Group definitions (6 groups of 6 accounts each)
+    /// Configured group definitions (6 groups of 6 accounts each).
     pub groups: Vec<GroupDef>,
 
-    // Active group focus: None = aggregate view, Some(0..5) = focused on group
+    /// Active group focus: `None` = aggregate view, `Some(idx)` = single group.
     pub active_group: Option<usize>,
 
-    // Server name from config
+    /// EQ server name from config.
     pub server_name: String,
 
-    // Legacy single-client fields kept for compatibility
+    /// Legacy: local player from the selected client (kept for backward compat).
     pub local_player: Option<SpawnInfo>,
+    /// Legacy: target of the selected client.
     pub target: Option<SpawnInfo>,
+    /// Legacy: spawn list from the selected client.
     pub spawns: Vec<SpawnInfo>,
+    /// Status bar message displayed at the bottom of the TUI.
     pub status_message: String,
+    /// Monotonic tick counter incremented each refresh cycle.
     pub tick_count: u64,
 
-    // Per-screen state
+    /// Overview screen UI state (collapse flags, selection).
     pub overview_state: OverviewScreenState,
+    /// Debug spawn list UI state (table selection, filters).
     pub spawns_state: SpawnsScreenState,
+    /// Hex dump panel state (address, cursor).
     pub hex_state: HexDumpState,
 
-    // Refresh timing
+    /// TUI refresh interval in milliseconds.
     pub refresh_rate_ms: u64,
 
-    // EQ connection info (legacy — first client)
+    /// EQ module base address (legacy, from first attached client).
     pub eq_base: u64,
+    /// PID of the attached EQ process (legacy, first client).
     pub attached_pid: Option<u32>,
 
-    // Soul Engine
+    /// Soul Engine coordinator for LLM-driven character personalities.
     pub soul_coordinator: Option<SoulCoordinator>,
+    /// Tick counter for soul engine update throttling.
     pub soul_tick_counter: u64,
 
+    /// Map panel state (zoom, pan, overlays).
     pub map_state: MapScreenState,
+    /// Tactical screen state (named/nav panel visibility, collapse flags).
     pub tactical_state: TacticalScreenState,
 
-    // Privacy mode — hides own character names and server for screenshots
+    /// Privacy mode — hides character names and server for screenshots.
     pub privacy_mode: bool,
 
+    /// Command bar state (input text, history, visibility).
     pub cmd_state: CommandBarState,
 
-    // Named spawn tracking
+    /// Named mob tracker for rare spawn monitoring.
     pub named_tracker: NamedTracker,
 
-    // User-tracked spawns (via :track command)
+    /// User-tracked spawns registered via the `:track` command.
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
 
-    // Help overlay
+    /// Whether the help overlay is currently visible.
     pub help_visible: bool,
     pub help_scroll: usize,
 
-    // Operating mode (camp vs hunt)
+    /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
 
-    // Combat roles
+    /// Name of the main assist character, if set.
     pub main_assist: Option<String>,
+    /// Name of the main tank character, if set.
     pub main_tank: Option<String>,
 
-    // Heal-cancel toggle (cleric duck on high HP during cast)
+    /// Whether heal-cancel is enabled (cleric ducks on high HP during cast).
     pub heal_cancel_enabled: bool,
 
     /// Cached CH chain status (updated each tick from Orchestrator).
     pub ch_chain_status: Option<ChChainStatus>,
 
-    // Account config for login automation
+    /// Account configuration for login automation.
     pub accounts_config: Option<AccountsConfig>,
 
-    // Log parsing / session stats
+    /// Accumulated loot data from log parsing.
     pub loot_database: LootDatabase,
+    /// Per-client log file watchers for chat/loot events.
     pub log_watchers: Vec<LogWatcher>,
+    /// Timestamp when this TUI session started.
     pub session_start: std::time::Instant,
     /// Ring buffer of recent chat events (capped at 200).
     pub chat_events: VecDeque<ChatEvent>,
 
+    /// Navigation screen state (waypoint list, route display).
     pub nav_state: NavigationScreenState,
 
     /// EQ install path for launch operations (from config or default).
     pub launch_eq_path: String,
 
-    // Theme
+    /// Active theme variant identifier.
     pub theme_kind: ThemeKind,
+    /// Resolved theme colors and styles.
     pub theme: Theme,
 
-    // Discord integration
+    /// Discord webhook sender for alerts, if configured.
     pub discord_webhook: Option<crate::discord::webhook::WebhookSender>,
+    /// Discord bridge for bidirectional chat relay.
     pub discord_bridge: Option<crate::discord::bridge::TuiBridge>,
 }
 
 /// Navigation status for a single client.
 #[derive(Debug, Clone)]
 pub struct NavClientStatus {
+    /// Name of the navigation destination.
     pub destination: String,
+    /// Current navigator state (idle, moving, stuck, arrived).
     pub status: dmft_common::nav::NavStatus,
+    /// Estimated time of arrival in seconds, if calculable.
     #[allow(dead_code)]
     pub eta_secs: Option<u32>,
     /// Active navigation waypoints for map overlay rendering.
@@ -283,6 +350,7 @@ struct FocusedNavClient {
 }
 
 impl App {
+    /// Create a new TUI application with default state.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -434,16 +502,19 @@ impl App {
         }
     }
 
+    /// Returns `true` if the given panel currently has keyboard focus.
     pub fn is_panel_focused(&self, panel: ActivePanel) -> bool {
         self.active_panel == panel
     }
 
+    /// Switches to the given screen and resets panel focus.
     pub fn set_active_screen(&mut self, screen: ActiveScreen) {
         self.active_screen = screen;
         self.active_panel = Self::default_panel_for_screen(screen);
         self.ensure_panel_focus();
     }
 
+    /// Ensures the active panel is visible; resets to first visible if not.
     pub fn ensure_panel_focus(&mut self) {
         let visible = self.visible_panels();
         if !visible.contains(&self.active_panel)
@@ -453,6 +524,7 @@ impl App {
         }
     }
 
+    /// Cycles focus to the next visible panel on the current screen.
     pub fn toggle_panel(&mut self) {
         let visible = self.visible_panels();
         if visible.is_empty() {
@@ -466,6 +538,7 @@ impl App {
         self.active_panel = visible[(current + 1) % visible.len()];
     }
 
+    /// Toggles the group section visibility on the overview screen.
     pub fn toggle_groups_visibility(&mut self) {
         self.overview_state.show_groups = !self.overview_state.show_groups;
         if self.overview_state.show_groups {
@@ -477,6 +550,7 @@ impl App {
         self.ensure_panel_focus();
     }
 
+    /// Toggles the scope/filter section visibility on the overview screen.
     pub fn toggle_filters_visibility(&mut self) {
         self.overview_state.show_filters = !self.overview_state.show_filters;
         if self.overview_state.show_filters {
@@ -488,6 +562,7 @@ impl App {
         self.ensure_panel_focus();
     }
 
+    /// Collapses or expands the currently focused panel section.
     pub fn toggle_focused_section(&mut self) {
         let state = match self.active_panel {
             ActivePanel::OverviewCharacter => {
@@ -529,6 +604,7 @@ impl App {
         };
     }
 
+    /// Toggles the tactical map between maximized and split view.
     pub fn toggle_tactical_map_maximized(&mut self) {
         self.tactical_state.map_maximized = !self.tactical_state.map_maximized;
         self.active_screen = ActiveScreen::Tactical;
@@ -736,16 +812,19 @@ impl App {
         self.clients.get(self.selected_client)
     }
 
+    /// Returns the short zone name for the selected client's current zone.
     pub fn current_zone_short_name(&self) -> Option<String> {
         self.active_client()
             .map(|client| super::run::zone_to_short_name(&client.zone_name))
     }
 
+    /// Checks whether the selected client's zone has a cached navmesh.
     pub fn current_zone_has_cached_mesh(&self) -> Option<bool> {
         self.current_zone_short_name()
             .map(|zone| crate::nav::mesh::has_cached_zone_mesh(&zone))
     }
 
+    /// Returns the display name for a client, redacted if privacy mode is on.
     pub fn client_command_target(&self, client: &ClientState) -> String {
         let name = if !client.character_name.is_empty() {
             client.character_name.as_str()
@@ -1060,6 +1139,7 @@ impl App {
             .and_then(|idx| self.clients.get(idx))
     }
 
+    /// Returns spawns filtered by type and text search criteria.
     pub fn filtered_spawns(&self) -> Vec<&SpawnInfo> {
         self.spawns
             .iter()
@@ -1089,12 +1169,14 @@ impl App {
             .collect()
     }
 
+    /// Cycles the spawn type filter (All -> PC -> NPC -> Named).
     pub fn cycle_spawn_filter(&mut self) {
         self.spawns_state.spawn_type_filter = self.spawns_state.spawn_type_filter.next();
         self.spawns_state.table_state.select(Some(0));
         self.status_message = format!("Filter: {}", self.spawns_state.spawn_type_filter.label());
     }
 
+    /// Moves the spawn list selection down by one row.
     pub fn spawn_list_down(&mut self) {
         let count = self.filtered_spawns().len();
         self.spawns_state.table_state.select_next();
@@ -1108,10 +1190,12 @@ impl App {
         }
     }
 
+    /// Moves the spawn list selection up by one row.
     pub fn spawn_list_up(&mut self) {
         self.spawns_state.table_state.select_previous();
     }
 
+    /// Moves the spawn list selection down by one page.
     pub fn spawn_list_page_down(&mut self) {
         let page_size = Self::dynamic_page_size();
         let max = self.filtered_spawns().len().saturating_sub(1);
@@ -1121,6 +1205,7 @@ impl App {
             .select(Some((current + page_size).min(max)));
     }
 
+    /// Moves the spawn list selection up by one page.
     pub fn spawn_list_page_up(&mut self) {
         let page_size = Self::dynamic_page_size();
         let current = self.spawn_selected();
@@ -1146,10 +1231,12 @@ impl App {
         self.spawns_state.table_state.selected().unwrap_or(0)
     }
 
+    /// Scrolls the hex dump view down by 256 bytes.
     pub fn hex_scroll_down(&mut self) {
         self.hex_state.hex_address = self.hex_state.hex_address.wrapping_add(0x100);
     }
 
+    /// Scrolls the hex dump view up by 256 bytes.
     pub fn hex_scroll_up(&mut self) {
         self.hex_state.hex_address = self.hex_state.hex_address.wrapping_sub(0x100);
     }
@@ -1221,12 +1308,14 @@ impl App {
         Vec::new()
     }
 
+    /// Clears the spawn list text filter and resets selection.
     pub fn clear_filter(&mut self) {
         self.spawns_state.spawn_filter.clear();
         self.spawns_state.search_mode = false;
         self.spawns_state.table_state.select(Some(0));
     }
 
+    /// Toggles privacy mode, which hides character names and server.
     pub fn toggle_privacy(&mut self) {
         self.privacy_mode = !self.privacy_mode;
         self.status_message = if self.privacy_mode {
@@ -1656,6 +1745,7 @@ impl App {
     }
 
     /// Update user-tracked spawns against the current spawn list.
+    /// Updates tracked spawn statuses against the current spawn list.
     pub fn update_tracked_spawns(&mut self) {
         for tracked in self.tracked_spawns.values_mut() {
             let found = self

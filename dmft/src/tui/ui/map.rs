@@ -19,6 +19,7 @@ use crate::eq::structs::SpawnType;
 use crate::tui::app::{ActivePanel, App, MapViewportMode};
 use crate::tui::theme::Theme;
 
+/// Draw the zone map screen with spawn positions and navigation overlay.
 pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let sections = tactical_sections(app);
     let sidebar_height = sections
