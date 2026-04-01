@@ -311,6 +311,20 @@ Run `scripts\optimize_ini.ps1` to apply minimal settings:
 - `docs/roadmap-review.md` — Milestone priorities, risk assessment
 - `docs/code-review-session3.md` — Code audit findings
 
+## Wiki
+
+The long-lived operator and developer wiki is source-controlled in `docs/wiki/` and published to
+the GitHub wiki with `scripts/sync_wiki.py`.
+
+```bash
+python3 scripts/sync_wiki.py --check
+python3 scripts/sync_wiki.py --dry-run
+python3 scripts/sync_wiki.py --push
+```
+
+Update the repo-side source files in `docs/wiki/` in the same PRs that change behavior, then
+publish the wiki snapshot after review.
+
 ## Requirements
 
 - **Rust** (edition 2024; nightly MSVC toolchain currently required on Windows because `retour` uses unstable features)
