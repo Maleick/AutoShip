@@ -392,10 +392,16 @@ impl StatusHistory {
 
     /// Push a new status message, evicting the oldest if at capacity.
     pub fn push(&mut self, message: impl Into<String>) {
+        // If capacity is zero, treat this as a no-op to avoid panicking on remove(0).
+        if self.capacity == 0 {
+            return;
+        }
         if self.messages.len() >= self.capacity {
             self.messages.remove(0);
         }
-        self.messages.push((message.into(), std::time::Instant::now()));
+        self
+            .messages
+            .push((message.into(), std::time::Instant::now()));
     }
 
     /// Get all messages (oldest first).
