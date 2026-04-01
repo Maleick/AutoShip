@@ -1442,6 +1442,7 @@ impl App {
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
             "help".into(),
+            "commands".into(),
             "camp".into(),
             "nav".into(),
             "login".into(),
@@ -2085,6 +2086,14 @@ impl App {
         match parts[0] {
             "help" => {
                 self.help_visible = true;
+                self.help_scroll = 0;
+            }
+            "commands" => {
+                let listing: Vec<String> = KNOWN_COMMANDS
+                    .iter()
+                    .map(|(cmd, desc)| format!("{cmd}: {desc}"))
+                    .collect();
+                self.status_message = listing.join(" | ");
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
@@ -2312,8 +2321,13 @@ impl App {
                     } else {
                         self.status_message = format!("Usage: {pid} <slash command>");
                     }
+                } else if let Some(suggestion) = did_you_mean(parts[0]) {
+                    self.status_message =
+                        format!("Unknown command: '{input}'. Did you mean '{suggestion}'?");
                 } else {
-                    self.status_message = format!("Unknown command: {input}");
+                    self.status_message = format!(
+                        "Unknown command: '{input}'. Type :help or :commands for available commands."
+                    );
                 }
             }
         }
@@ -3030,6 +3044,77 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
     }
     let digits: String = digits.chars().rev().collect();
     digits.parse().ok()
+}
+
+/// All known top-level commands for suggestions and the :commands listing.
+const KNOWN_COMMANDS: &[(&str, &str)] = &[
+    ("help", "Show help overlay"),
+    ("commands", "List all commands with usage"),
+    ("status", "Show connected client count"),
+    ("camp", "Camp management: start|stop|status|list|add|remove|next|prev"),
+    ("nav", "Navigate: nav <camp_name|x y z|zone>"),
+    ("loot", "Loot nearby corpses"),
+    ("login", "Login management: login [all|G<n>|<name>]"),
+    ("launch", "Alias for login"),
+    ("stop", "Stop client: stop <name|all>"),
+    ("restart", "Restart client: restart <name|all>"),
+    ("track", "Track spawn: track <name> | track list"),
+    ("untrack", "Stop tracking: untrack <name>"),
+    ("mode", "Switch mode: mode <camp|hunt>"),
+    ("ma", "Main Assist: ma [name]"),
+    ("mt", "Main Tank: mt [name]"),
+    ("engage", "Start combat: engage [target_id]"),
+    ("disengage", "Stop combat for focused clients"),
+    ("invite", "Group invite: invite <name>"),
+    ("accept", "Accept pending group invite"),
+    ("heal", "Heal options: heal cancel"),
+    ("ch", "CH chain: start|stop|add|rm|interval|adaptive|status"),
+    ("inject", "Request DLL injection"),
+    ("all", "Broadcast: all <slash_command>"),
+];
+
+/// Levenshtein edit distance between two strings.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a_len = a.len();
+    let b_len = b.len();
+    let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
+
+    for i in 0..=a_len {
+        matrix[i][0] = i;
+    }
+    for j in 0..=b_len {
+        matrix[0][j] = j;
+    }
+
+    for (i, ca) in a.chars().enumerate() {
+        for (j, cb) in b.chars().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            matrix[i + 1][j + 1] = (matrix[i][j + 1] + 1)
+                .min(matrix[i + 1][j] + 1)
+                .min(matrix[i][j] + cost);
+        }
+    }
+
+    matrix[a_len][b_len]
+}
+
+/// Find the closest matching command to the given input, within a max edit distance.
+fn did_you_mean(input: &str) -> Option<&'static str> {
+    let input_lower = input.to_lowercase();
+    let mut best: Option<(&str, usize)> = None;
+
+    for &(cmd, _) in KNOWN_COMMANDS {
+        let dist = edit_distance(&input_lower, cmd);
+        // Only suggest if distance is at most 2 (or 3 for longer commands)
+        let max_dist = if cmd.len() > 5 { 3 } else { 2 };
+        if dist <= max_dist {
+            if best.is_none() || dist < best.unwrap().1 {
+                best = Some((cmd, dist));
+            }
+        }
+    }
+
+    best.map(|(cmd, _)| cmd)
 }
 
 /// Send a slash command to a specific PID via named pipe.
