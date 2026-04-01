@@ -16,7 +16,7 @@ use super::{
     },
 };
 use crate::eq::structs::SpawnType;
-use crate::tui::app::{ActivePanel, App};
+use crate::tui::app::{ActivePanel, App, MapViewportMode};
 use crate::tui::theme::Theme;
 
 /// Draw the zone map screen with spawn positions and navigation overlay.
@@ -151,6 +151,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .active_client()
         .map_or("Unknown", |c| c.zone_name.as_str());
     let z_range = app.map_state.z_filter_range;
+    let player_z = app.local_player.as_ref().map(|p| p.z);
     let player_pos_label = app
         .local_player
         .as_ref()
@@ -161,26 +162,48 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             )
         })
         .unwrap_or_default();
-    let mesh_label = app
+    let mesh_cache_label = app
         .current_zone_has_cached_mesh()
-        .map(|cached| format!(" | Mesh: {}", if cached { "cached" } else { "on-demand" }))
-        .unwrap_or_default();
+        .map(|cached| if cached { "cached" } else { "on-demand" })
+        .unwrap_or("n/a");
+    let overlay_label = if app.map_state.show_navmesh {
+        app.map_state
+            .navmesh_overlay
+            .as_ref()
+            .map(|overlay| format!("{} segs", overlay.segment_count()))
+            .unwrap_or_else(|| String::from("unavailable"))
+    } else {
+        String::from("off")
+    };
+    // Compute bounds and transform once so they can be reused for both the
+    // view label and the actual map rendering logic.
+    let map_bounds = combined_bounds(app);
+    let map_view_transform = map_bounds
+        .as_ref()
+        .and_then(|bounds| map_transform(app, bounds, 80, 30));
+    let view_label = map_view_transform
+        .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
+        .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
+    let mesh_label = format!(" | Mesh: {} {} [n]", mesh_cache_label, overlay_label);
     let map_info = app
         .map_state
         .zone_map
         .as_ref().map_or_else(|| {
             format!(
-                " Map: {zone_label} (no map data){player_pos_label}{mesh_label} | Z filter: {z_range:.0} [+/-] | m maximize "
+                " Map: {zone_label} (no map data){player_pos_label}{mesh_cache_label} | Z filter: {z_range:.0} [+/-] | m maximize "
             )
         }, |m| {
             format!(
-                " Map: {} ({} lines, {} labels){}{} | Z filter: {:.0} [+/-] | m maximize ",
+                " Map: {} ({} lines, {} labels){} | View: {} {:.2}x | Z: {:.0} [+/-] | Mesh: {} {} [n] | m maximize ",
                 zone_label,
                 m.lines.len(),
                 m.points.len(),
                 player_pos_label,
-                mesh_label,
+                view_label,
+                app.map_state.zoom,
                 z_range,
+                mesh_cache_label,
+                overlay_label,
             )
         });
 
@@ -201,63 +224,55 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let mut grid: Vec<Vec<(char, Color)>> = vec![vec![(' ', t.map_lines); w]; h];
 
-    let (center_x, center_y, scale_x, scale_y) = if let Some(map) = &app.map_state.zone_map {
-        if let Some(player) = &app.local_player {
-            let player_map_x = -player.y;
-            let player_map_y = -player.x;
-            if map_contains_player(map, player_map_x, player_map_y)
-                && should_use_local_view(map, app)
-            {
-                local_map_transform(player_map_x, player_map_y, w, h, app)
-            } else {
-                let scale = ((w as f32 - 2.0) / map.bounds.width())
-                    .min((h as f32 - 2.0) / map.bounds.height());
-                (map.bounds.center_x(), map.bounds.center_y(), scale, scale)
-            }
-        } else {
-            let scale =
-                ((w as f32 - 2.0) / map.bounds.width()).min((h as f32 - 2.0) / map.bounds.height());
-            (map.bounds.center_x(), map.bounds.center_y(), scale, scale)
-        }
-    } else {
-        let spawns = &app.spawns;
-        if spawns.is_empty() {
-            frame.render_widget(
-                Paragraph::new("No map or spawn data").style(Style::default().fg(t.text_muted)),
-                inner,
-            );
-            return;
-        }
-        let (mut min_x, mut max_x, mut min_y, mut max_y) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
-        for s in spawns {
-            let mx = -s.y;
-            let my = -s.x;
-            min_x = min_x.min(mx);
-            max_x = max_x.max(mx);
-            min_y = min_y.min(my);
-            max_y = max_y.max(my);
-        }
-        let cx = (min_x + max_x) / 2.0;
-        let cy = (min_y + max_y) / 2.0;
-        let u = ((w as f32 - 2.0) / (max_x - min_x).max(1.0))
-            .min((h as f32 - 2.0) / (max_y - min_y).max(1.0));
-        (cx, cy, u, u)
+    let Some(bounds) = combined_bounds(app) else {
+        frame.render_widget(
+            Paragraph::new("No map, navmesh, or spawn data")
+                .style(Style::default().fg(t.text_muted)),
+            inner,
+        );
+        return;
     };
 
+    let Some(transform) = map_transform(app, &bounds, w, h) else {
+        frame.render_widget(
+            Paragraph::new("Map transform unavailable").style(Style::default().fg(t.text_muted)),
+            inner,
+        );
+        return;
+    };
+
+    let visible_region = VisibleMapRegion::from_transform(&transform, w, h);
+
     let to_grid = |mx: f32, my: f32| -> (i32, i32) {
-        let col = ((mx - center_x) * scale_x + w as f32 / 2.0) as i32;
-        let row = ((my - center_y) * scale_y + h as f32 / 2.0) as i32;
+        let col = ((mx - transform.center_x) * transform.scale_x + w as f32 / 2.0) as i32;
+        let row = ((my - transform.center_y) * transform.scale_y + h as f32 / 2.0) as i32;
         (col, row)
     };
 
     if let Some(map) = &app.map_state.zone_map {
         for ml in &map.lines {
+            if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
+                continue;
+            }
             let (c1, r1) = to_grid(ml.x1, ml.y1);
             let (c2, r2) = to_grid(ml.x2, ml.y2);
             let color = map_rgb_to_color(ml.r, ml.g, ml.b, t);
-            bresenham_line(c1, r1, c2, r2, w, h, &mut grid, color);
+            bresenham_line(
+                c1,
+                r1,
+                c2,
+                r2,
+                w,
+                h,
+                &mut grid,
+                color,
+                LinePaintMode::BlankOnly,
+            );
         }
         for mp in &map.points {
+            if !visible_region.contains_point(mp.x, mp.y) {
+                continue;
+            }
             let (col, row) = to_grid(mp.x, mp.y);
             if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
                 let color = map_rgb_to_color(mp.r, mp.g, mp.b, t);
@@ -277,8 +292,63 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         }
     }
 
-    let player_z = app.local_player.as_ref().map(|p| p.z);
-    let z_range = app.map_state.z_filter_range;
+    if app.map_state.show_navmesh
+        && let Some(overlay) = &app.map_state.navmesh_overlay
+    {
+        let draw_inner_lines = transform.using_local_view || app.map_state.zoom >= 1.35;
+        for segment in &overlay.outer_lines {
+            if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
+                continue;
+            }
+            if let Some(pz) = player_z
+                && (segment.z1 - pz).abs() > z_range
+                && (segment.z2 - pz).abs() > z_range
+            {
+                continue;
+            }
+            let (c1, r1) = to_grid(segment.x1, segment.y1);
+            let (c2, r2) = to_grid(segment.x2, segment.y2);
+            bresenham_line(
+                c1,
+                r1,
+                c2,
+                r2,
+                w,
+                h,
+                &mut grid,
+                t.text_secondary,
+                LinePaintMode::OverwriteLinework,
+            );
+        }
+
+        if draw_inner_lines {
+            for segment in &overlay.inner_lines {
+                if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
+                    continue;
+                }
+                if let Some(pz) = player_z
+                    && (segment.z1 - pz).abs() > z_range
+                    && (segment.z2 - pz).abs() > z_range
+                {
+                    continue;
+                }
+                let (c1, r1) = to_grid(segment.x1, segment.y1);
+                let (c2, r2) = to_grid(segment.x2, segment.y2);
+                bresenham_line(
+                    c1,
+                    r1,
+                    c2,
+                    r2,
+                    w,
+                    h,
+                    &mut grid,
+                    t.text_muted,
+                    LinePaintMode::OverwriteLinework,
+                );
+            }
+        }
+    }
+
     let selected_spawn_id = app
         .filtered_spawns()
         .get(app.spawn_selected())
@@ -335,7 +405,17 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         for pair in nav.waypoints.windows(2) {
             let (c1, r1) = to_grid(-pair[0].y, -pair[0].x);
             let (c2, r2) = to_grid(-pair[1].y, -pair[1].x);
-            bresenham_line(c1, r1, c2, r2, w, h, &mut grid, nav_color);
+            bresenham_line(
+                c1,
+                r1,
+                c2,
+                r2,
+                w,
+                h,
+                &mut grid,
+                nav_color,
+                LinePaintMode::OverwriteLinework,
+            );
         }
         // Mark the final destination with a special symbol.
         if let Some(dest) = nav.waypoints.last() {
@@ -382,7 +462,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         //    directions empirically, but the interaction of swap + negate +
         //    Y-flip makes a clean closed-form proof non-trivial.
         //
-        // TODO: Verify FOV direction on live EQ client
+        // NOTE: FOV direction derived from EQ heading convention (0 ≡ 512 = North, CW; 512 units = full circle).
+        // Empirically correct in TUI demo; final live-client verification deferred.
         let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
         let half_fov = std::f32::consts::PI / 6.0; // 30-degree half-angle (60 total)
         let cone_len: f32 = 4.0; // length in grid cells
@@ -399,6 +480,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 h,
                 &mut grid,
                 t.map_you,
+                LinePaintMode::OverwriteLinework,
             );
         }
 
@@ -454,6 +536,14 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     ]);
                 }
 
+                if app.map_state.show_navmesh && app.map_state.navmesh_overlay.is_some() {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("▦ ", Style::default().fg(t.text_secondary)),
+                        Span::styled("Mesh", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
                 Line::from(spans)
             } else {
                 Line::from(color_run_spans(row))
@@ -492,35 +582,224 @@ fn color_run_spans(row: Vec<(char, Color)>) -> Vec<Span<'static>> {
     spans
 }
 
-fn should_use_local_view(map: &crate::eq::map_parser::ZoneMap, app: &App) -> bool {
-    app.tactical_state.map_maximized || map.bounds.width().max(map.bounds.height()) > 1_200.0
+#[derive(Debug, Clone, Copy)]
+struct ViewBounds {
+    min_x: f32,
+    max_x: f32,
+    min_y: f32,
+    max_y: f32,
 }
 
-fn local_map_transform(
-    player_x: f32,
-    player_y: f32,
-    w: usize,
-    h: usize,
-    app: &App,
-) -> (f32, f32, f32, f32) {
-    let half_height = if app.tactical_state.map_maximized {
-        260.0
-    } else {
-        180.0
+impl ViewBounds {
+    fn from_zone_map(map: &crate::eq::map_parser::ZoneMap) -> Self {
+        Self {
+            min_x: map.bounds.min_x,
+            max_x: map.bounds.max_x,
+            min_y: map.bounds.min_y,
+            max_y: map.bounds.max_y,
+        }
+    }
+
+    fn from_navmesh_overlay(overlay: &crate::nav::mesh::NavMeshOverlay) -> Option<Self> {
+        if overlay.bounds.is_empty() {
+            None
+        } else {
+            Some(Self {
+                min_x: overlay.bounds.min_x,
+                max_x: overlay.bounds.max_x,
+                min_y: overlay.bounds.min_y,
+                max_y: overlay.bounds.max_y,
+            })
+        }
+    }
+
+    fn from_spawns(spawns: &[crate::eq::structs::SpawnInfo]) -> Option<Self> {
+        let mut bounds: Option<Self> = None;
+        for spawn in spawns {
+            let x = -spawn.y;
+            let y = -spawn.x;
+            if let Some(existing) = &mut bounds {
+                existing.include_point(x, y);
+            } else {
+                bounds = Some(Self {
+                    min_x: x,
+                    max_x: x,
+                    min_y: y,
+                    max_y: y,
+                });
+            }
+        }
+        bounds
+    }
+
+    fn include(&mut self, other: Self) {
+        self.min_x = self.min_x.min(other.min_x);
+        self.max_x = self.max_x.max(other.max_x);
+        self.min_y = self.min_y.min(other.min_y);
+        self.max_y = self.max_y.max(other.max_y);
+    }
+
+    fn include_point(&mut self, x: f32, y: f32) {
+        self.min_x = self.min_x.min(x);
+        self.max_x = self.max_x.max(x);
+        self.min_y = self.min_y.min(y);
+        self.max_y = self.max_y.max(y);
+    }
+
+    fn width(&self) -> f32 {
+        (self.max_x - self.min_x).max(1.0)
+    }
+
+    fn height(&self) -> f32 {
+        (self.max_y - self.min_y).max(1.0)
+    }
+
+    fn center_x(&self) -> f32 {
+        (self.min_x + self.max_x) / 2.0
+    }
+
+    fn center_y(&self) -> f32 {
+        (self.min_y + self.max_y) / 2.0
+    }
+
+    fn max_dimension(&self) -> f32 {
+        self.width().max(self.height())
+    }
+
+    fn contains_with_margin(&self, x: f32, y: f32) -> bool {
+        let margin_x = self.width() * 0.20;
+        let margin_y = self.height() * 0.20;
+        x >= self.min_x - margin_x
+            && x <= self.max_x + margin_x
+            && y >= self.min_y - margin_y
+            && y <= self.max_y + margin_y
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MapTransform {
+    center_x: f32,
+    center_y: f32,
+    scale_x: f32,
+    scale_y: f32,
+    using_local_view: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VisibleMapRegion {
+    min_x: f32,
+    max_x: f32,
+    min_y: f32,
+    max_y: f32,
+}
+
+impl VisibleMapRegion {
+    fn from_transform(transform: &MapTransform, w: usize, h: usize) -> Self {
+        let half_width = (w as f32 / (transform.scale_x.max(0.001) * 2.0)).max(1.0);
+        let half_height = (h as f32 / (transform.scale_y.max(0.001) * 2.0)).max(1.0);
+        Self {
+            min_x: transform.center_x - half_width,
+            max_x: transform.center_x + half_width,
+            min_y: transform.center_y - half_height,
+            max_y: transform.center_y + half_height,
+        }
+    }
+
+    fn contains_line(&self, x1: f32, y1: f32, x2: f32, y2: f32) -> bool {
+        let line_min_x = x1.min(x2);
+        let line_max_x = x1.max(x2);
+        let line_min_y = y1.min(y2);
+        let line_max_y = y1.max(y2);
+        !(line_max_x < self.min_x
+            || line_min_x > self.max_x
+            || line_max_y < self.min_y
+            || line_min_y > self.max_y)
+    }
+
+    fn contains_point(&self, x: f32, y: f32) -> bool {
+        x >= self.min_x && x <= self.max_x && y >= self.min_y && y <= self.max_y
+    }
+}
+
+fn combined_bounds(app: &App) -> Option<ViewBounds> {
+    let mut bounds = app
+        .map_state
+        .zone_map
+        .as_ref()
+        .map(ViewBounds::from_zone_map);
+
+    if app.map_state.show_navmesh
+        && let Some(overlay) = &app.map_state.navmesh_overlay
+        && let Some(navmesh_bounds) = ViewBounds::from_navmesh_overlay(overlay)
+    {
+        if let Some(existing) = &mut bounds {
+            existing.include(navmesh_bounds);
+        } else {
+            bounds = Some(navmesh_bounds);
+        }
+    }
+
+    if bounds.is_none() {
+        bounds = ViewBounds::from_spawns(&app.spawns);
+    }
+
+    bounds
+}
+
+fn map_transform(app: &App, bounds: &ViewBounds, w: usize, h: usize) -> Option<MapTransform> {
+    let player_pos = app
+        .local_player
+        .as_ref()
+        .map(|player| (-player.y, -player.x));
+    let auto_prefers_local = app.tactical_state.map_maximized || bounds.max_dimension() > 1_200.0;
+    let using_local_view = match app.map_state.viewport_mode {
+        MapViewportMode::Auto => player_pos
+            .map(|(x, y)| bounds.contains_with_margin(x, y) && auto_prefers_local)
+            .unwrap_or(false),
+        MapViewportMode::Local => player_pos.is_some(),
+        MapViewportMode::Global => false,
     };
-    let aspect = (w as f32 / h.max(1) as f32).clamp(1.0, 2.6);
-    let half_width = half_height * aspect;
-    let scale = ((w as f32 - 2.0) / (half_width * 2.0)).min((h as f32 - 2.0) / (half_height * 2.0));
-    (player_x, player_y, scale, scale)
+
+    let (mut center_x, mut center_y, base_scale) = if using_local_view {
+        let (player_x, player_y) = player_pos?;
+        let half_height = if app.tactical_state.map_maximized {
+            260.0
+        } else {
+            180.0
+        };
+        let aspect = (w as f32 / h.max(1) as f32).clamp(1.0, 2.6);
+        let half_width = half_height * aspect;
+        let scale =
+            ((w as f32 - 2.0) / (half_width * 2.0)).min((h as f32 - 2.0) / (half_height * 2.0));
+        (player_x, player_y, scale)
+    } else {
+        let scale = ((w as f32 - 2.0) / bounds.width()).min((h as f32 - 2.0) / bounds.height());
+        (bounds.center_x(), bounds.center_y(), scale)
+    };
+
+    center_x += app.map_state.pan_x;
+    center_y += app.map_state.pan_y;
+
+    Some(MapTransform {
+        center_x,
+        center_y,
+        scale_x: base_scale * app.map_state.zoom,
+        scale_y: base_scale * app.map_state.zoom,
+        using_local_view,
+    })
 }
 
-fn map_contains_player(map: &crate::eq::map_parser::ZoneMap, x: f32, y: f32) -> bool {
-    let margin_x = map.bounds.width() * 0.20;
-    let margin_y = map.bounds.height() * 0.20;
-    x >= map.bounds.min_x - margin_x
-        && x <= map.bounds.max_x + margin_x
-        && y >= map.bounds.min_y - margin_y
-        && y <= map.bounds.max_y + margin_y
+fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {
+    match mode {
+        MapViewportMode::Auto => {
+            if using_local_view {
+                String::from("auto/local")
+            } else {
+                String::from("auto/global")
+            }
+        }
+        _ => mode.label().to_string(),
+    }
 }
 
 fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {
@@ -529,6 +808,12 @@ fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {
     } else {
         ratatui::style::Color::Rgb(r, g, b)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LinePaintMode {
+    BlankOnly,
+    OverwriteLinework,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -541,6 +826,7 @@ fn bresenham_line(
     h: usize,
     grid: &mut [Vec<(char, ratatui::style::Color)>],
     color: ratatui::style::Color,
+    paint_mode: LinePaintMode,
 ) {
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
@@ -554,7 +840,7 @@ fn bresenham_line(
     for _ in 0..max_steps {
         if cx >= 0 && cx < w as i32 && cy >= 0 && cy < h as i32 {
             let (ux, uy) = (cx as usize, cy as usize);
-            if grid[uy][ux].0 == ' ' {
+            if can_paint_line_cell(grid[uy][ux].0, paint_mode) {
                 grid[uy][ux] = (line_char(x0, y0, x1, y1), color);
             }
         }
@@ -570,6 +856,13 @@ fn bresenham_line(
             err += dx;
             cy += sy;
         }
+    }
+}
+
+fn can_paint_line_cell(ch: char, paint_mode: LinePaintMode) -> bool {
+    match paint_mode {
+        LinePaintMode::BlankOnly => ch == ' ',
+        LinePaintMode::OverwriteLinework => matches!(ch, ' ' | '·' | '─' | '│' | '╱' | '╲'),
     }
 }
 
@@ -627,7 +920,12 @@ fn draw_tactical_sidebar(
                 draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed);
             }
             TacticalSectionKind::Navigation => {
-                draw_navigation_summary(frame, *chunk, app, app.tactical_state.navigation_collapsed);
+                draw_navigation_summary(
+                    frame,
+                    *chunk,
+                    app,
+                    app.tactical_state.navigation_collapsed,
+                );
             }
         }
     }
@@ -909,18 +1207,21 @@ fn draw_navigation_summary(
 
     let selected_name = app
         .active_client()
-        .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("No client"), |player| app.redact_name(&player.displayed_name).into_owned());
+        .and_then(|client| client.local_player.as_ref())
+        .map_or_else(
+            || String::from("No client"),
+            |player| app.redact_name(&player.displayed_name).into_owned(),
+        );
 
     let selected_nav = app
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid));
     let selected_status = selected_nav.map_or("Idle", |nav| nav.status.label());
-    let selected_dest = selected_nav
-        .map_or("—", |nav| nav.destination.as_str());
+    let selected_dest = selected_nav.map_or("—", |nav| nav.destination.as_str());
     let selected_waypoints = selected_nav.map_or(0, |nav| nav.waypoints.len());
-    let mesh_status = app
-        .current_zone_short_name()
-        .map_or_else(|| String::from("—"), |zone| {
+    let mesh_status = app.current_zone_short_name().map_or_else(
+        || String::from("—"),
+        |zone| {
             format!(
                 "{} ({zone})",
                 if crate::nav::mesh::has_cached_zone_mesh(&zone) {
@@ -929,7 +1230,8 @@ fn draw_navigation_summary(
                     "on-demand"
                 },
             )
-        });
+        },
+    );
 
     let status_color = match selected_nav.map(|nav| &nav.status) {
         Some(s) if s.is_moving() => t.text_highlight,

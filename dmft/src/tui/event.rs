@@ -82,7 +82,25 @@ pub fn handle_events(
 
         if app.help_visible {
             match key.code {
-                KeyCode::Char('?') | KeyCode::Esc => app.help_visible = false,
+                KeyCode::Char('?') | KeyCode::Esc => {
+                    app.help_visible = false;
+                    app.help_scroll = 0;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.help_scroll = app.help_scroll.saturating_add(1);
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.help_scroll = app.help_scroll.saturating_sub(1);
+                }
+                KeyCode::PageDown => {
+                    app.help_scroll = app.help_scroll.saturating_add(10);
+                }
+                KeyCode::PageUp => {
+                    app.help_scroll = app.help_scroll.saturating_sub(10);
+                }
+                KeyCode::Home => {
+                    app.help_scroll = 0;
+                }
                 _ => {}
             }
             return Ok(true);
@@ -224,14 +242,17 @@ pub fn handle_events(
             }
             (KeyCode::F(n), _) if (1..=9).contains(&n) => {
                 let idx = (n - 1) as usize;
-                if let Some(cmd) = app.cmd_state.get_favorite(idx).map(std::string::ToString::to_string) {
+                if let Some(cmd) = app
+                    .cmd_state
+                    .get_favorite(idx)
+                    .map(std::string::ToString::to_string)
+                {
                     app.cmd_state.command_buffer = cmd;
                     app.execute_command(orchestrator);
                     app.cmd_state.command_buffer.clear();
                 } else {
-                    app.status_message = format!(
-                        "F{n}: no favorite assigned (use commands to build frequency)"
-                    );
+                    app.status_message =
+                        format!("F{n}: no favorite assigned (use commands to build frequency)");
                 }
                 return Ok(true);
             }
@@ -308,11 +329,10 @@ pub fn handle_events(
                 }
                 _ => {}
             },
-            ActivePanel::TacticalMap
-                if key.code == KeyCode::Enter => {
-                    app.toggle_tactical_map_maximized();
-                    return Ok(true);
-                }
+            ActivePanel::TacticalMap if key.code == KeyCode::Enter => {
+                app.toggle_tactical_map_maximized();
+                return Ok(true);
+            }
             ActivePanel::TacticalNavigation => match key.code {
                 KeyCode::Down | KeyCode::Char('j') => {
                     app.next_client();

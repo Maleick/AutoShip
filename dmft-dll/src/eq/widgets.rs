@@ -370,7 +370,9 @@ pub unsafe fn alloc_cstrrep(text: &str) -> Option<usize> {
     let alloc_size = text_len + 64; // extra room
     let total_size = off::CSTRREP_DATA + alloc_size;
 
-    let heap = if let Ok(h) = GetProcessHeap() { h } else {
+    let heap = if let Ok(h) = GetProcessHeap() {
+        h
+    } else {
         tracing::error!("GetProcessHeap failed");
         return None;
     };

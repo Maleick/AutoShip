@@ -32,7 +32,11 @@ pub enum ProcessPriority {
 #[cfg(windows)]
 pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_INFORMATION, SetProcessAffinityMask, IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, ABOVE_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS, SetPriorityClass};
+    use windows::Win32::System::Threading::{
+        ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
+        IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, OpenProcess, PROCESS_SET_INFORMATION,
+        SetPriorityClass, SetProcessAffinityMask,
+    };
 
     unsafe {
         let handle = OpenProcess(PROCESS_SET_INFORMATION, false, pid)?;
@@ -76,7 +80,9 @@ pub fn apply_affinity(pid: u32, config: &AffinityConfig) -> Result<()> {
 #[cfg(windows)]
 pub fn apply_working_set_limit(pid: u32, max_working_set_mb: u32) -> Result<()> {
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_INFORMATION, SetProcessWorkingSetSize};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_SET_INFORMATION, SetProcessWorkingSetSize,
+    };
 
     const MIN_WORKING_SET_MB: u32 = 128;
 

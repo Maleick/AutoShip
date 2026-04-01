@@ -16,8 +16,8 @@ use anyhow::Context;
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
 pub use super::state::{
-    CommandBarState, HexDumpState, MapScreenState, NavigationScreenState, OverviewScreenState,
-    SpawnsScreenState, TacticalScreenState,
+    CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
+    OverviewScreenState, SpawnsScreenState, TacticalScreenState,
 };
 
 /// Which screen is currently displayed.
@@ -282,6 +282,7 @@ pub struct App {
 
     /// Whether the help overlay is currently visible.
     pub help_visible: bool,
+    pub help_scroll: usize,
 
     /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
@@ -399,6 +400,7 @@ impl App {
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
+            help_scroll: 0,
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
@@ -615,14 +617,135 @@ impl App {
         self.ensure_panel_focus();
     }
 
-    /// Expands the character detail panel for the selected client.
+    pub fn cycle_tactical_map_view(&mut self) {
+        let mode = self.map_state.cycle_viewport_mode();
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.status_message = format!("Map: {} view", mode.label());
+        self.ensure_panel_focus();
+    }
+
+    pub fn zoom_tactical_map_in(&mut self) {
+        self.map_state.zoom_in();
+        self.status_message = format!("Map: zoom {:.2}x", self.map_state.zoom);
+    }
+
+    pub fn zoom_tactical_map_out(&mut self) {
+        self.map_state.zoom_out();
+        self.status_message = format!("Map: zoom {:.2}x", self.map_state.zoom);
+    }
+
+    pub fn reset_tactical_map_view(&mut self) {
+        self.map_state.reset_viewport();
+        self.status_message = format!("Map: {} view reset", self.map_state.viewport_mode.label());
+    }
+
+    pub fn pan_tactical_map_left(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(-step, 0.0);
+    }
+
+    pub fn pan_tactical_map_right(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(step, 0.0);
+    }
+
+    pub fn pan_tactical_map_up(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(0.0, -step);
+    }
+
+    pub fn pan_tactical_map_down(&mut self) {
+        let step = self.map_pan_step();
+        self.pan_tactical_map(0.0, step);
+    }
+
+    pub fn toggle_tactical_navmesh_overlay(&mut self) {
+        let enabled = self.map_state.toggle_navmesh();
+        if enabled {
+            if let Some(zone) = self.current_zone_short_name() {
+                if self.map_state.navmesh_overlay.is_none() {
+                    self.load_zone_navmesh_overlay(&zone);
+                }
+            }
+            let segment_count = self
+                .map_state
+                .navmesh_overlay
+                .as_ref()
+                .map_or(0, |overlay| overlay.segment_count());
+            self.status_message = if segment_count > 0 {
+                format!("Map: navmesh overlay on ({segment_count} segments)")
+            } else {
+                String::from("Map: navmesh overlay enabled (no mesh available)")
+            };
+        } else {
+            self.status_message = String::from("Map: navmesh overlay hidden");
+        }
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.ensure_panel_focus();
+    }
+
+    fn pan_tactical_map(&mut self, delta_x: f32, delta_y: f32) {
+        self.map_state.pan(delta_x, delta_y);
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+    }
+
+    fn map_pan_step(&self) -> f32 {
+        let zoom = self.map_state.zoom.max(0.35);
+        let global_step = (self.current_map_max_dimension() / 12.0).clamp(45.0, 320.0);
+        let local_step = if self.tactical_state.map_maximized {
+            70.0
+        } else {
+            45.0
+        };
+        let base_step = match self.map_state.viewport_mode {
+            MapViewportMode::Local => local_step,
+            MapViewportMode::Global => global_step,
+            MapViewportMode::Auto => {
+                if self.map_auto_uses_local_view() {
+                    local_step
+                } else {
+                    global_step
+                }
+            }
+        };
+        base_step / zoom
+    }
+
+    fn map_auto_uses_local_view(&self) -> bool {
+        self.tactical_state.map_maximized || self.current_map_max_dimension() > 1_200.0
+    }
+
+    fn current_map_max_dimension(&self) -> f32 {
+        let map_dim = self
+            .map_state
+            .zone_map
+            .as_ref()
+            .map(|map| map.bounds.width().max(map.bounds.height()))
+            .unwrap_or(0.0);
+        let mesh_dim = self
+            .map_state
+            .navmesh_overlay
+            .as_ref()
+            .map(|overlay| overlay.bounds.max_dimension())
+            .unwrap_or(0.0);
+
+        map_dim.max(mesh_dim).max(600.0)
+    }
+
     pub fn expand_selected_character(&mut self) {
         self.overview_state.character_collapsed = false;
         self.active_screen = ActiveScreen::Overview;
         self.active_panel = ActivePanel::OverviewCharacter;
         self.status_message = self
             .active_client()
-            .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("Character: no client selected"), |player| format!("Character: {}", self.redact_name(&player.displayed_name)));
+            .and_then(|client| client.local_player.as_ref())
+            .map_or_else(
+                || String::from("Character: no client selected"),
+                |player| format!("Character: {}", self.redact_name(&player.displayed_name)),
+            );
         self.ensure_panel_focus();
     }
 
@@ -653,8 +776,10 @@ impl App {
                         let lo = account_nums.iter().copied().min().unwrap_or(1);
                         let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
-                        let name = default_names
-                            .get((id - 1) as usize).map_or_else(|| format!("Group {id}"), std::string::ToString::to_string);
+                        let name = default_names.get((id - 1) as usize).map_or_else(
+                            || format!("Group {id}"),
+                            std::string::ToString::to_string,
+                        );
 
                         GroupDef {
                             id: id as u8,
@@ -1157,8 +1282,7 @@ impl App {
             && let Ok(proc) = ProcessHandle::open(client.pid)
         {
             // Find the spawn address by walking the spawn list
-            let Some(mgr_ptr_addr) =
-                offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base)
+            let Some(mgr_ptr_addr) = offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base)
             else {
                 return Vec::new();
             };
@@ -1244,7 +1368,8 @@ impl App {
             } else if let Some(add_rest) = rest.strip_prefix("add ") {
                 // Suggest zone-based name
                 let zone = self
-                    .active_client().map_or_else(|| "camp".into(), |c| c.zone_name.clone());
+                    .active_client()
+                    .map_or_else(|| "camp".into(), |c| c.zone_name.clone());
                 let suggestion = vec![zone];
                 self.complete_with_candidates("camp add ", add_rest, &suggestion);
             } else {
@@ -1406,6 +1531,7 @@ impl App {
         // --- Top-level command completion ---
         let mut candidates: Vec<String> = vec![
             "help".into(),
+            "commands".into(),
             "camp".into(),
             "nav".into(),
             "login".into(),
@@ -1718,6 +1844,12 @@ impl App {
                 self.map_state.zone_map = None;
             }
         }
+
+        self.map_state.reset_viewport();
+        self.map_state.navmesh_overlay = None;
+        if self.map_state.show_navmesh {
+            self.load_zone_navmesh_overlay(zone_short_name);
+        }
     }
 
     /// Reload the zone map for the currently selected client's zone.
@@ -1726,6 +1858,31 @@ impl App {
         if let Some(client) = self.clients.get(self.selected_client) {
             let zone = super::run::zone_to_short_name(&client.zone_name);
             self.load_zone_map(&zone);
+        }
+    }
+
+    fn load_zone_navmesh_overlay(&mut self, zone_short_name: &str) {
+        match crate::nav::mesh::load_zone_overlay(zone_short_name) {
+            Ok(overlay) if !overlay.is_empty() => {
+                tracing::info!(
+                    zone = zone_short_name,
+                    outer_lines = overlay.outer_lines.len(),
+                    inner_lines = overlay.inner_lines.len(),
+                    "Loaded navmesh overlay"
+                );
+                self.map_state.navmesh_overlay = Some(overlay);
+            }
+            Ok(_) => {
+                tracing::debug!(
+                    zone = zone_short_name,
+                    "Navmesh overlay contained no segments"
+                );
+                self.map_state.navmesh_overlay = None;
+            }
+            Err(error) => {
+                tracing::warn!(zone = zone_short_name, %error, "Failed to load navmesh overlay");
+                self.map_state.navmesh_overlay = None;
+            }
         }
     }
 
@@ -1989,9 +2146,7 @@ impl App {
                     Err(_) => fail += 1,
                 }
             }
-            self.status_message = format!(
-                "{group_name} {slash_cmd} → sent to {ok}, failed {fail}"
-            );
+            self.status_message = format!("{group_name} {slash_cmd} → sent to {ok}, failed {fail}");
             return;
         }
 
@@ -2021,6 +2176,14 @@ impl App {
         match parts[0] {
             "help" => {
                 self.help_visible = true;
+                self.help_scroll = 0;
+            }
+            "commands" => {
+                let listing: Vec<String> = KNOWN_COMMANDS
+                    .iter()
+                    .map(|(cmd, desc)| format!("{cmd}: {desc}"))
+                    .collect();
+                self.status_message = listing.join(" | ");
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
@@ -2054,7 +2217,13 @@ impl App {
             }
             "loot" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
-                self.status_message = format!("Loot → sent to {ok} clients");
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Loot: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message = format!("Loot → sent to {ok} clients");
+                }
             }
             "status" => {
                 let client_count = self.clients.len();
@@ -2145,12 +2314,25 @@ impl App {
                 let ok = self
                     .send_ipc_to_focused(&dmft_common::ipc::Command::CombatEngage { target_id });
                 tracing::info!(target_id, sent = ok, "Combat engage sent");
-                self.status_message = format!("Engage → {ok} clients (target_id={target_id})");
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Engage: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message =
+                        format!("Engage → {ok} clients (target_id={target_id})");
+                }
             }
             "disengage" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
-                self.status_message = format!("Disengage → {ok} clients");
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Disengage: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message = format!("Disengage → {ok} clients");
+                }
             }
             "invite" => {
                 if let Some(name) = parts.get(1) {
@@ -2191,34 +2373,48 @@ impl App {
                     self.status_message = String::from("No active client to accept on");
                 }
             }
-            "heal" => if let Some("cancel") = parts.get(1).copied() {
-                self.heal_cancel_enabled = !self.heal_cancel_enabled;
-                let state = if self.heal_cancel_enabled {
-                    "ON"
+            "heal" => {
+                if let Some("cancel") = parts.get(1).copied() {
+                    self.heal_cancel_enabled = !self.heal_cancel_enabled;
+                    let state = if self.heal_cancel_enabled {
+                        "ON"
+                    } else {
+                        "OFF"
+                    };
+                    tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
+                    self.status_message = format!("Heal-cancel: {state}");
                 } else {
-                    "OFF"
-                };
-                tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
-                self.status_message = format!("Heal-cancel: {state}");
-            } else {
-                let state = if self.heal_cancel_enabled {
-                    "ON"
-                } else {
-                    "OFF"
-                };
-                self.status_message = format!(
-                    "Heal-cancel is {state}. Usage: heal cancel (toggles on/off)"
-                );
-            },
+                    let state = if self.heal_cancel_enabled {
+                        "ON"
+                    } else {
+                        "OFF"
+                    };
+                    self.status_message =
+                        format!("Heal-cancel is {state}. Usage: heal cancel (toggles on/off)");
+                }
+            }
             "ch" => {
                 self.execute_ch_command(&parts[1..], orchestrator);
             }
             "inject" => {
-                self.status_message = String::from("Inject requested (not yet wired)");
+                if self.clients.is_empty() {
+                    self.status_message =
+                        String::from("Inject: no clients connected. Connect a client first.");
+                } else {
+                    self.status_message = String::from(
+                        "Inject: DLL injection placeholder (not yet wired). Will inject into active client.",
+                    );
+                }
             }
             "all" => {
                 if let Some(slash_cmd) = parts.get(1) {
                     let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                    if pids.is_empty() {
+                        self.status_message = format!(
+                            "all {slash_cmd}: no clients connected. Use :login to connect first."
+                        );
+                        return;
+                    }
                     let mut ok = 0usize;
                     let mut fail = 0usize;
                     for pid in &pids {
@@ -2227,8 +2423,7 @@ impl App {
                             Err(_) => fail += 1,
                         }
                     }
-                    self.status_message =
-                        format!("all {slash_cmd} → sent to {ok}, failed {fail}");
+                    self.status_message = format!("all {slash_cmd} → sent to {ok}, failed {fail}");
                 } else {
                     self.status_message = String::from("Usage: all <slash command>");
                 }
@@ -2248,8 +2443,13 @@ impl App {
                     } else {
                         self.status_message = format!("Usage: {pid} <slash command>");
                     }
+                } else if let Some(suggestion) = did_you_mean(parts[0]) {
+                    self.status_message =
+                        format!("Unknown command: '{input}'. Did you mean '{suggestion}'?");
                 } else {
-                    self.status_message = format!("Unknown command: {input}");
+                    self.status_message = format!(
+                        "Unknown command: '{input}'. Type :help or :commands for available commands."
+                    );
                 }
             }
         }
@@ -2264,10 +2464,11 @@ impl App {
                 );
             }
             Some("start") => {
-                let camp_name = if let Some(name) = args.get(1) { *name } else {
-                    self.status_message = String::from(
-                        "Usage: camp start <name>  (loads config/camps/<name>.toml)",
-                    );
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
+                    self.status_message =
+                        String::from("Usage: camp start <name>  (loads config/camps/<name>.toml)");
                     return;
                 };
 
@@ -2305,7 +2506,9 @@ impl App {
                 }
             }
             Some("add") => {
-                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
                     self.status_message =
                         String::from("Usage: camp add <name>  (saves current position)");
                     return;
@@ -2313,7 +2516,8 @@ impl App {
 
                 let (center, zone) = if let Some(player) = &self.local_player {
                     let zone = self
-                        .active_client().map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
+                        .active_client()
+                        .map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
                     ([player.x, player.y, player.z], zone)
                 } else {
                     self.status_message =
@@ -2352,7 +2556,9 @@ impl App {
                 }
             }
             Some("remove") => {
-                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
                     self.status_message = String::from("Usage: camp remove <name>");
                     return;
                 };
@@ -2637,9 +2843,10 @@ impl App {
     ///   login G<n>        — launch all accounts in group n
     ///   login <name>      — launch a single account by name
     fn execute_login_command(&mut self, args: &[&str]) {
-        let accounts = if let Some(cfg) = &self.accounts_config { cfg.clone() } else {
-            self.status_message =
-                String::from("No accounts config — create config/accounts.toml");
+        let accounts = if let Some(cfg) = &self.accounts_config {
+            cfg.clone()
+        } else {
+            self.status_message = String::from("No accounts config — create config/accounts.toml");
             return;
         };
 
@@ -2795,9 +3002,8 @@ impl App {
                     orchestrator.eject_client(pid);
                     // Re-launch via login
                     self.execute_login_command(&[name]);
-                    self.status_message = format!(
-                        "Restarting {char_name} (PID {pid}) — ejected, re-launching..."
-                    );
+                    self.status_message =
+                        format!("Restarting {char_name} (PID {pid}) — ejected, re-launching...");
                 } else {
                     // Maybe the client isn't connected but the account exists — just launch
                     self.execute_login_command(&[name]);
@@ -2888,9 +3094,8 @@ impl App {
             }
         }
 
-        self.status_message = format!(
-            "Login: launched {launched}, failed {failed} of {count} queued"
-        );
+        self.status_message =
+            format!("Login: launched {launched}, failed {failed} of {count} queued");
     }
 
     /// Build camp members from connected clients using simple role assignment.
@@ -2963,6 +3168,77 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
     digits.parse().ok()
 }
 
+/// All known top-level commands for suggestions and the :commands listing.
+const KNOWN_COMMANDS: &[(&str, &str)] = &[
+    ("help", "Show help overlay"),
+    ("commands", "List all commands with usage"),
+    ("status", "Show connected client count"),
+    ("camp", "Camp management: start|stop|status|list|add|remove|next|prev"),
+    ("nav", "Navigate: nav <camp_name|x y z|zone>"),
+    ("loot", "Loot nearby corpses"),
+    ("login", "Login management: login [all|G<n>|<name>]"),
+    ("launch", "Alias for login"),
+    ("stop", "Stop client: stop <name|all>"),
+    ("restart", "Restart client: restart <name|all>"),
+    ("track", "Track spawn: track <name> | track list"),
+    ("untrack", "Stop tracking: untrack <name>"),
+    ("mode", "Switch mode: mode <camp|hunt>"),
+    ("ma", "Main Assist: ma [name]"),
+    ("mt", "Main Tank: mt [name]"),
+    ("engage", "Start combat: engage [target_id]"),
+    ("disengage", "Stop combat for focused clients"),
+    ("invite", "Group invite: invite <name>"),
+    ("accept", "Accept pending group invite"),
+    ("heal", "Heal options: heal cancel"),
+    ("ch", "CH chain: start|stop|add|rm|interval|adaptive|status"),
+    ("inject", "Request DLL injection"),
+    ("all", "Broadcast: all <slash_command>"),
+];
+
+/// Levenshtein edit distance between two strings.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a_len = a.len();
+    let b_len = b.len();
+    let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
+
+    for i in 0..=a_len {
+        matrix[i][0] = i;
+    }
+    for j in 0..=b_len {
+        matrix[0][j] = j;
+    }
+
+    for (i, ca) in a.chars().enumerate() {
+        for (j, cb) in b.chars().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            matrix[i + 1][j + 1] = (matrix[i][j + 1] + 1)
+                .min(matrix[i + 1][j] + 1)
+                .min(matrix[i][j] + cost);
+        }
+    }
+
+    matrix[a_len][b_len]
+}
+
+/// Find the closest matching command to the given input, within a max edit distance.
+fn did_you_mean(input: &str) -> Option<&'static str> {
+    let input_lower = input.to_lowercase();
+    let mut best: Option<(&str, usize)> = None;
+
+    for &(cmd, _) in KNOWN_COMMANDS {
+        let dist = edit_distance(&input_lower, cmd);
+        // Only suggest if distance is at most 2 (or 3 for longer commands)
+        let max_dist = if cmd.len() > 5 { 3 } else { 2 };
+        if dist <= max_dist {
+            if best.is_none() || dist < best.unwrap().1 {
+                best = Some((cmd, dist));
+            }
+        }
+    }
+
+    best.map(|(cmd, _)| cmd)
+}
+
 /// Send a slash command to a specific PID via named pipe.
 fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
     use dmft_common::ipc::Command;
@@ -2978,9 +3254,7 @@ fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result
     use crate::ipc::pipe::CommandPipe;
 
     let token = crate::ipc::load_session_token(pid).with_context(|| {
-        format!(
-            "missing session token for PID {pid}; inject the DLL before sending commands"
-        )
+        format!("missing session token for PID {pid}; inject the DLL before sending commands")
     })?;
     let session_id = dmft_common::ipc::session_id_from_token(&token);
     let pipe = CommandPipe::connect(pid, session_id)?;
@@ -3112,5 +3386,64 @@ mod tests {
                 .contains("missing session token for PID 4294967288"),
             "unexpected error: {error:#}"
         );
+    }
+
+    #[test]
+    fn edit_distance_identical_strings() {
+        assert_eq!(edit_distance("hello", "hello"), 0);
+    }
+
+    #[test]
+    fn edit_distance_one_substitution() {
+        assert_eq!(edit_distance("camp", "came"), 1);
+    }
+
+    #[test]
+    fn edit_distance_insertion_and_deletion() {
+        assert_eq!(edit_distance("nav", "navi"), 1);
+        assert_eq!(edit_distance("engage", "engag"), 1);
+    }
+
+    #[test]
+    fn edit_distance_empty_strings() {
+        assert_eq!(edit_distance("", ""), 0);
+        assert_eq!(edit_distance("abc", ""), 3);
+        assert_eq!(edit_distance("", "xyz"), 3);
+    }
+
+    #[test]
+    fn did_you_mean_close_match() {
+        assert_eq!(did_you_mean("campp"), Some("camp"));
+        assert_eq!(did_you_mean("navv"), Some("nav"));
+        assert_eq!(did_you_mean("engge"), Some("engage"));
+        assert_eq!(did_you_mean("disengag"), Some("disengage"));
+    }
+
+    #[test]
+    fn did_you_mean_no_match() {
+        assert_eq!(did_you_mean("xyzzy"), None);
+        assert_eq!(did_you_mean("foobarqux"), None);
+    }
+
+    #[test]
+    fn did_you_mean_exact_match_returns_itself() {
+        assert_eq!(did_you_mean("help"), Some("help"));
+        assert_eq!(did_you_mean("status"), Some("status"));
+    }
+
+    #[test]
+    fn known_commands_has_all_expected_commands() {
+        let names: Vec<&str> = KNOWN_COMMANDS.iter().map(|(n, _)| *n).collect();
+        for expected in &[
+            "help", "commands", "status", "camp", "nav", "loot", "login",
+            "launch", "stop", "restart", "track", "untrack", "mode", "ma",
+            "mt", "engage", "disengage", "invite", "accept", "heal", "ch",
+            "inject", "all",
+        ] {
+            assert!(
+                names.contains(expected),
+                "KNOWN_COMMANDS missing '{expected}'"
+            );
+        }
     }
 }

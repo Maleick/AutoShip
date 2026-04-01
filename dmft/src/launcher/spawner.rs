@@ -22,7 +22,9 @@ pub fn spawn_eq_client(
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{STARTUPINFOW, PROCESS_INFORMATION, CreateProcessW, PROCESS_CREATION_FLAGS};
+    use windows::Win32::System::Threading::{
+        CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW,
+    };
 
     let cmd = format!(
         "\"{}\" patchme /login:{} /server:{}{}",

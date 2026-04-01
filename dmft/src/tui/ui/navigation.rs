@@ -67,17 +67,16 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             .map(|client| {
                 let is_sel = Some(client.pid) == selected_pid;
                 let marker = if is_sel { "▶" } else { " " };
-                let name = client
-                    .local_player
-                    .as_ref()
-                    .map_or_else(|| app.client_command_target(client), |p| app.redact_name(&p.displayed_name).into_owned());
+                let name = client.local_player.as_ref().map_or_else(
+                    || app.client_command_target(client),
+                    |p| app.redact_name(&p.displayed_name).into_owned(),
+                );
 
                 let nav = app.nav_state.nav_statuses.get(&client.pid);
                 let status = nav.map_or("Idle", |s| s.status.label());
                 let dest = nav.map_or("—", |s| s.destination.as_str());
 
-                let status_color = nav
-                    .map_or(t.text_muted, |s| nav_status_color(&s.status, t));
+                let status_color = nav.map_or(t.text_muted, |s| nav_status_color(&s.status, t));
 
                 let row_style = if is_sel {
                     Style::default()

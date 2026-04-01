@@ -19,14 +19,19 @@ static NAVIGATOR: Mutex<Option<Navigator>> = Mutex::new(None);
 
 /// Initialize the global navigator with the player base address.
 pub fn init(player_base: usize, client_id: u32) {
-    let mut nav = NAVIGATOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut nav = NAVIGATOR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     *nav = Some(Navigator::new(player_base, client_id));
     tracing::info!(client_id, "Navigator initialized");
 }
 
 /// Run one navigation tick. Call from `on_game_tick()`.
 pub fn tick() {
-    if let Some(ref mut nav) = *NAVIGATOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
+    if let Some(ref mut nav) = *NAVIGATOR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    {
         nav.tick();
     }
 }
@@ -42,7 +47,10 @@ pub fn status() -> NavStatus {
 
 /// Handle a navigation command from IPC.
 pub fn handle_command(cmd: NavCommand) {
-    if let Some(ref mut nav) = *NAVIGATOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
+    if let Some(ref mut nav) = *NAVIGATOR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    {
         match cmd {
             NavCommand::Navigate(waypoints) => nav.navigate(waypoints),
             NavCommand::SetCamp(spot) => nav.set_camp(spot),

@@ -174,10 +174,10 @@ impl Orchestrator {
             .map_or(100.0, dmft_common::types::SpawnData::mana_pct);
 
         // Use the tank's target for target HP and spawn ID
-        let (target_hp_pct, target_is_dead, target_spawn_id) = tank_state
-            .target
-            .as_ref()
-            .map_or((None, false, None), |t| (Some(t.hp_pct()), t.hp_current <= 0, Some(t.spawn_id)));
+        let (target_hp_pct, target_is_dead, target_spawn_id) =
+            tank_state.target.as_ref().map_or((None, false, None), |t| {
+                (Some(t.hp_pct()), t.hp_current <= 0, Some(t.spawn_id))
+            });
 
         // Collect per-member HP for death detection
         let member_hp: Vec<(u32, i32)> = camp
@@ -657,7 +657,9 @@ impl Orchestrator {
             .get(&pid)
             .map_or("?", std::string::String::as_str);
 
-        let token = if let Some(t) = self.session_tokens.get(&pid) { *t } else {
+        let token = if let Some(t) = self.session_tokens.get(&pid) {
+            *t
+        } else {
             tracing::warn!(pid, name, "No session token for client — skipping");
             return None;
         };

@@ -161,9 +161,7 @@ fn chrono_now_iso() -> String {
     let day_of_year = days % 365;
     let month = day_of_year / 30 + 1;
     let day = day_of_year % 30 + 1;
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
 }
 
 #[cfg(test)]

@@ -479,7 +479,9 @@ fn on_game_tick() {
         let enter_fn = PENDING_ENTER_WORLD_FN.load(std::sync::atomic::Ordering::Acquire);
         // Re-scan for CCharacterListWnd fresh — the pointer stored in Stage 1
         // may be stale if the window was destroyed/recreated during the wait.
-        let wnd = if let Some(w) = rescan_char_list_wnd() { w } else {
+        let wnd = if let Some(w) = rescan_char_list_wnd() {
+            w
+        } else {
             // Rescan failed — CXWndManager may be in a transitional state.
             // Do NOT fall back to stored pointer (could be stale/freed).
             // Retry next tick up to ~5 seconds, then abort.
@@ -489,8 +491,7 @@ fn on_game_tick() {
                 ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
                 return;
             }
-            let retries =
-                ENTER_WORLD_RETRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let retries = ENTER_WORLD_RETRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if retries >= 150 {
                 tracing::error!("Phase 3: rescan failed after 150 retries — aborting");
                 ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
@@ -1278,12 +1279,15 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
-            let response = unsafe { crate::nav::zone_graph::read_zone_graph(eq_base) }.map_or_else(|| dmft_common::ipc::Response::Error {
+            let response = unsafe { crate::nav::zone_graph::read_zone_graph(eq_base) }.map_or_else(
+                || dmft_common::ipc::Response::Error {
                     message: "Failed to read zone graph from memory".into(),
-                }, |graph| {
+                },
+                |graph| {
                     let zones = crate::nav::zone_graph::zone_graph_to_ipc(&graph);
                     dmft_common::ipc::Response::ZoneGraph { zones }
-                });
+                },
+            );
             crate::ipc::send_response(response);
         }
         Command::Ping => {

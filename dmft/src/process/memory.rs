@@ -93,9 +93,7 @@ impl ProcessHandle {
 
         match success {
             Ok(()) if bytes_read == size => Ok(buffer),
-            Ok(()) => bail!(
-                "ReadProcessMemory at {address:#x}: read {bytes_read} of {size} bytes"
-            ),
+            Ok(()) => bail!("ReadProcessMemory at {address:#x}: read {bytes_read} of {size} bytes"),
             Err(e) => Err(e).context(format!("ReadProcessMemory failed at {address:#x}")),
         }
     }
@@ -129,9 +127,7 @@ impl ProcessHandle {
         let mut addr = base;
         for (i, &offset) in offsets.iter().enumerate() {
             addr = self.read_ptr(addr).with_context(|| {
-                format!(
-                    "chase_ptr: failed at step {i} (addr={addr:#x}, offset={offset:#x})"
-                )
+                format!("chase_ptr: failed at step {i} (addr={addr:#x}, offset={offset:#x})")
             })?;
             addr += offset;
         }
@@ -159,9 +155,7 @@ impl ProcessHandle {
                 Some(&mut bytes_read),
             )
         }
-        .context(format!(
-            "ReadProcessMemory (bytes) failed at {address:#x}"
-        ))?;
+        .context(format!("ReadProcessMemory (bytes) failed at {address:#x}"))?;
         buffer.truncate(bytes_read);
         Ok(buffer)
     }
@@ -199,9 +193,7 @@ impl ProcessHandle {
                     Some(&mut bytes_read),
                 )
             }
-            .context(format!(
-                "ReadProcessMemory (string) failed at {address:#x}"
-            ))?;
+            .context(format!("ReadProcessMemory (string) failed at {address:#x}"))?;
         }
 
         let end = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
