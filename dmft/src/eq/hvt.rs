@@ -248,9 +248,7 @@ priority = "{v}"
         let wl = HvtWatchlist::load(&path).unwrap();
         let target = wl.is_hvt("Emperor Crush").unwrap();
         let cloned = target.clone();
-        assert_eq!(cloned.name, target.name);
-        assert_eq!(cloned.zone, target.zone);
-        assert_eq!(cloned.priority, target.priority);
+        assert_eq!(cloned, *target);
     }
 
     #[test]
