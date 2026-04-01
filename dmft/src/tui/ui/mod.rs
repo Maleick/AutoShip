@@ -478,6 +478,18 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("G1-G6 /cmd", "Send slash command to entire group"),
         kv("all /cmd", "Broadcast slash command to all clients"),
         Line::from(""),
+        // ── Common Slash Commands ──
+        Line::from(Span::styled(" Common Slash Commands (via targeting)", head_s)),
+        Line::from(""),
+        kv("/sit", "Sit down (meditate for mana)"),
+        kv("/stand", "Stand up"),
+        kv("/camp", "Camp out (log out to char select)"),
+        kv("/follow <n>", "Auto-follow target"),
+        kv("/assist <n>", "Assist target (match their target)"),
+        kv("/disband", "Leave current group"),
+        kv("/target <n>", "Target a specific mob or player"),
+        kv("/cast <slot>", "Cast spell from gem slot number"),
+        Line::from(""),
         // ── General Commands ──
         Line::from(Span::styled(" General Commands", head_s)),
         Line::from(""),

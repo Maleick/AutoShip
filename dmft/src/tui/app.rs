@@ -2127,7 +2127,13 @@ impl App {
             }
             "loot" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
-                self.status_message = format!("Loot → sent to {ok} clients");
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Loot: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message = format!("Loot → sent to {ok} clients");
+                }
             }
             "status" => {
                 let client_count = self.clients.len();
@@ -2218,12 +2224,25 @@ impl App {
                 let ok = self
                     .send_ipc_to_focused(&dmft_common::ipc::Command::CombatEngage { target_id });
                 tracing::info!(target_id, sent = ok, "Combat engage sent");
-                self.status_message = format!("Engage → {ok} clients (target_id={target_id})");
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Engage: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message =
+                        format!("Engage → {ok} clients (target_id={target_id})");
+                }
             }
             "disengage" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
-                self.status_message = format!("Disengage → {ok} clients");
+                if ok == 0 {
+                    self.status_message = String::from(
+                        "Disengage: no clients received command. Check connection with :status",
+                    );
+                } else {
+                    self.status_message = format!("Disengage → {ok} clients");
+                }
             }
             "invite" => {
                 if let Some(name) = parts.get(1) {
@@ -2288,11 +2307,24 @@ impl App {
                 self.execute_ch_command(&parts[1..], orchestrator);
             }
             "inject" => {
-                self.status_message = String::from("Inject requested (not yet wired)");
+                if self.clients.is_empty() {
+                    self.status_message =
+                        String::from("Inject: no clients connected. Connect a client first.");
+                } else {
+                    self.status_message = String::from(
+                        "Inject: DLL injection placeholder (not yet wired). Will inject into active client.",
+                    );
+                }
             }
             "all" => {
                 if let Some(slash_cmd) = parts.get(1) {
                     let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
+                    if pids.is_empty() {
+                        self.status_message = format!(
+                            "all {slash_cmd}: no clients connected. Use :login to connect first."
+                        );
+                        return;
+                    }
                     let mut ok = 0usize;
                     let mut fail = 0usize;
                     for pid in &pids {
