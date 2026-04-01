@@ -3265,4 +3265,63 @@ mod tests {
             "unexpected error: {error:#}"
         );
     }
+
+    #[test]
+    fn edit_distance_identical_strings() {
+        assert_eq!(edit_distance("hello", "hello"), 0);
+    }
+
+    #[test]
+    fn edit_distance_one_substitution() {
+        assert_eq!(edit_distance("camp", "came"), 1);
+    }
+
+    #[test]
+    fn edit_distance_insertion_and_deletion() {
+        assert_eq!(edit_distance("nav", "navi"), 1);
+        assert_eq!(edit_distance("engage", "engag"), 1);
+    }
+
+    #[test]
+    fn edit_distance_empty_strings() {
+        assert_eq!(edit_distance("", ""), 0);
+        assert_eq!(edit_distance("abc", ""), 3);
+        assert_eq!(edit_distance("", "xyz"), 3);
+    }
+
+    #[test]
+    fn did_you_mean_close_match() {
+        assert_eq!(did_you_mean("campp"), Some("camp"));
+        assert_eq!(did_you_mean("navv"), Some("nav"));
+        assert_eq!(did_you_mean("engge"), Some("engage"));
+        assert_eq!(did_you_mean("disengag"), Some("disengage"));
+    }
+
+    #[test]
+    fn did_you_mean_no_match() {
+        assert_eq!(did_you_mean("xyzzy"), None);
+        assert_eq!(did_you_mean("foobarqux"), None);
+    }
+
+    #[test]
+    fn did_you_mean_exact_match_returns_itself() {
+        assert_eq!(did_you_mean("help"), Some("help"));
+        assert_eq!(did_you_mean("status"), Some("status"));
+    }
+
+    #[test]
+    fn known_commands_has_all_expected_commands() {
+        let names: Vec<&str> = KNOWN_COMMANDS.iter().map(|(n, _)| *n).collect();
+        for expected in &[
+            "help", "commands", "status", "camp", "nav", "loot", "login",
+            "launch", "stop", "restart", "track", "untrack", "mode", "ma",
+            "mt", "engage", "disengage", "invite", "accept", "heal", "ch",
+            "inject", "all",
+        ] {
+            assert!(
+                names.contains(expected),
+                "KNOWN_COMMANDS missing '{expected}'"
+            );
+        }
+    }
 }

@@ -453,6 +453,22 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("Enter", "Execute command"),
         kv("Esc", "Cancel and exit command mode"),
         Line::from(""),
+        // ── Panel Focus Guide ──
+        Line::from(Span::styled(" Panel Focus Guide (Tab to cycle)", head_s)),
+        Line::from(""),
+        kv("[1] Overview", "Roster, Character, Groups, Filters, Combat, Session"),
+        kv("[2] Map", "Map, Spawns, Named, Navigation"),
+        kv("[3] Navigation", "Client list, Navigation status"),
+        kv("[4] Debug", "Spawn list, Hex dump"),
+        Line::from(""),
+        // ── Search & Filter ──
+        Line::from(Span::styled(" Search & Filter", head_s)),
+        Line::from(""),
+        kv("/", "Open spawn search (text filter, live update)"),
+        kv("Esc / Enter", "Close search (keeps filter active)"),
+        kv("f", "Cycle type filter: All -> PC -> NPC -> Named"),
+        kv("Esc (no srch)", "Clear active spawn filter"),
+        Line::from(""),
         // ── Targeting Commands ──
         Line::from(Span::styled(" Targeting Commands", head_s)),
         Line::from(""),
