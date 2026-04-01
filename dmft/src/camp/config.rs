@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 /// Configuration for a single XP camp location.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CampConfig {
     /// Camp name used as the file stem (e.g., `crushbone_entrance`).
     pub name: String,

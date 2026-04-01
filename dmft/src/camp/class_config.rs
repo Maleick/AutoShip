@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// A single ability a class can use.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClassAbility {
     /// Ability name for display/logging.
     pub name: String,
@@ -34,7 +34,7 @@ impl ClassAbility {
 }
 
 /// A crowd control ability (mez, stun, charm, snare, root).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CcAbilityConfig {
     /// Ability name for display/logging.
     pub name: String,
@@ -51,7 +51,7 @@ pub struct CcAbilityConfig {
 }
 
 /// A resist debuff ability (Tash, Malo) that lands before CC.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DebuffAbilityConfig {
     /// Debuff name (e.g., "Tash", "Malo").
     pub name: String,
@@ -64,7 +64,7 @@ pub struct DebuffAbilityConfig {
 }
 
 /// Full ability configuration for one EQ class.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClassConfig {
     /// EQ class name (e.g., "warrior", "cleric").
     pub class_name: String,

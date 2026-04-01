@@ -58,7 +58,7 @@ pub enum LoginError {
 }
 
 /// Per-character account and server metadata for login orchestration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AccountInfo {
     /// Login account name.
     pub account_name: String,

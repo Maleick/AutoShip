@@ -17,7 +17,7 @@ pub enum HvtPriority {
 }
 
 /// A single high-value target entry from the watchlist.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct HvtTarget {
     /// Mob display name (case-sensitive in config, case-insensitive in lookup).
     pub name: String,
@@ -34,7 +34,7 @@ pub struct HvtTarget {
 }
 
 /// Container for the full HVT watchlist, indexed by lowercase name for fast lookup.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HvtWatchlist {
     targets: HashMap<String, HvtTarget>,
 }

@@ -713,8 +713,8 @@ impl CommandPalette {
             HINTS
                 .iter()
                 .filter(|h| {
-                    contains_ascii_case_insensitive(h.prefix, &needle)
-                        || contains_ascii_case_insensitive(h.description, &needle)
+                    Self::contains_ascii_case_insensitive(h.prefix, &needle)
+                        || Self::contains_ascii_case_insensitive(h.description, &needle)
                 })
                 .collect()
         }

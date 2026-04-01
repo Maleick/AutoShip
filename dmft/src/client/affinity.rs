@@ -10,7 +10,7 @@ pub struct AffinityConfig {
 }
 
 /// Windows process priority classes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProcessPriority {
     /// Lowest priority — only runs when system is idle.
     Idle,

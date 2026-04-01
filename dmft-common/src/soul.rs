@@ -124,7 +124,7 @@ pub enum SocialTag {
 }
 
 /// Per-character speech style that evolves over time.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpeechStyle {
     /// Vocabulary tier: 0.0 = simple, 1.0 = elaborate
     #[serde(default = "default_half")]

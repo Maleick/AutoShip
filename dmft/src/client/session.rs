@@ -5,7 +5,7 @@ use dmft_common::types::{ClientId, GameState, HookStatus};
 use std::path::PathBuf;
 
 /// Post-login setup phases after a client reaches `InWorld`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PostLoginPhase {
     /// Post-login setup has not begun.
     NotStarted,
