@@ -1,5 +1,7 @@
 //! Map screen — zone map renderer, spawn position list, named tracker panel.
 
+use std::collections::HashMap;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
@@ -249,7 +251,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         (col, row)
     };
 
-    if let Some(map) = &app.map_state.zone_map {
+    if app.map_state.show_geometry
+        && let Some(map) = &app.map_state.zone_map
+    {
         for ml in &map.lines {
             if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
                 continue;
@@ -269,6 +273,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 LinePaintMode::BlankOnly,
             );
         }
+        // Render labels only when zoom is high enough to avoid clutter
+        let show_labels = app.map_state.show_labels && app.map_state.zoom >= 0.8;
         for mp in &map.points {
             if !visible_region.contains_point(mp.x, mp.y) {
                 continue;
@@ -282,10 +288,12 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     mp.label.chars().next().unwrap_or('*')
                 };
                 grid[row as usize][col as usize] = (ch, color);
-                for (i, c) in mp.label.chars().take(12).enumerate() {
-                    let lc = col as usize + 1 + i;
-                    if lc < w && grid[row as usize][lc].0 == ' ' {
-                        grid[row as usize][lc] = (c, color);
+                if show_labels {
+                    for (i, c) in mp.label.chars().take(12).enumerate() {
+                        let lc = col as usize + 1 + i;
+                        if lc < w && grid[row as usize][lc].0 == ' ' {
+                            grid[row as usize][lc] = (c, color);
+                        }
                     }
                 }
             }
@@ -354,36 +362,71 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .get(app.spawn_selected())
         .map(|spawn| spawn.spawn_id);
 
-    for spawn in &app.spawns {
-        // EQ Z = altitude; filter spawns more than z_range units above/below player.
-        if let Some(pz) = player_z
-            && (spawn.z - pz).abs() > z_range
-        {
-            continue;
+    if app.map_state.show_spawns {
+        // Spawn clustering: count spawns per grid cell when zoomed out
+        let mut spawn_counts: HashMap<(usize, usize), u16> = HashMap::new();
+
+        for spawn in &app.spawns {
+            // EQ Z = altitude; filter spawns more than z_range units above/below player.
+            if let Some(pz) = player_z
+                && (spawn.z - pz).abs() > z_range
+            {
+                continue;
+            }
+            let mx = -spawn.y;
+            let my = -spawn.x;
+            let (col, row) = to_grid(mx, my);
+            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+                let key = (row as usize, col as usize);
+                *spawn_counts.entry(key).or_insert(0) += 1;
+            }
         }
-        let mx = -spawn.y;
-        let my = -spawn.x;
-        let (col, row) = to_grid(mx, my);
-        if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
-            let (ch, color) = if Some(spawn.spawn_id) == selected_spawn_id {
-                ('◎', t.text_highlight)
-            } else {
-                match spawn.spawn_type {
-                    SpawnType::Player => ('@', t.map_pc),
-                    SpawnType::Npc => {
-                        if !spawn.displayed_name.starts_with("a ")
-                            && !spawn.displayed_name.starts_with("an ")
-                        {
-                            ('!', t.map_named)
-                        } else {
-                            ('·', t.map_npc)
+
+        for spawn in &app.spawns {
+            if let Some(pz) = player_z
+                && (spawn.z - pz).abs() > z_range
+            {
+                continue;
+            }
+            let mx = -spawn.y;
+            let my = -spawn.x;
+            let (col, row) = to_grid(mx, my);
+            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+                let key = (row as usize, col as usize);
+                let count = spawn_counts.get(&key).copied().unwrap_or(1);
+
+                // Show count badge when multiple spawns overlap at zoomed-out view
+                if count > 2 && app.map_state.zoom < 0.8 {
+                    let digit = if count > 9 {
+                        '+'
+                    } else {
+                        char::from_digit(count as u32, 10).unwrap_or('+')
+                    };
+                    grid[row as usize][col as usize] = (digit, t.text_highlight);
+                    // Only render once per cell
+                    spawn_counts.insert(key, 0);
+                } else if count > 0 {
+                    let (ch, color) = if Some(spawn.spawn_id) == selected_spawn_id {
+                        ('◎', t.text_highlight)
+                    } else {
+                        match spawn.spawn_type {
+                            SpawnType::Player => ('@', t.map_pc),
+                            SpawnType::Npc => {
+                                if !spawn.displayed_name.starts_with("a ")
+                                    && !spawn.displayed_name.starts_with("an ")
+                                {
+                                    ('!', t.map_named)
+                                } else {
+                                    ('·', t.map_npc)
+                                }
+                            }
+                            SpawnType::Corpse => ('.', t.map_corpse),
+                            SpawnType::Unknown(_) => ('?', t.spawn_unknown),
                         }
-                    }
-                    SpawnType::Corpse => ('.', t.map_corpse),
-                    SpawnType::Unknown(_) => ('?', t.spawn_unknown),
+                    };
+                    grid[row as usize][col as usize] = (ch, color);
                 }
-            };
-            grid[row as usize][col as usize] = (ch, color);
+            }
         }
     }
 
@@ -397,7 +440,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     }
 
     // ─── Nav path overlay ─────────────────────────────────────────────────
-    if let Some(client) = app.active_client()
+    if app.map_state.show_nav_paths
+        && let Some(client) = app.active_client()
         && let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
         && nav.waypoints.len() >= 2
     {

@@ -8,6 +8,7 @@
 //! - [`navigation`]  — nav status + commands reference
 //! - [`widgets`]     — shared helpers (`panel`, `themed_header_row`, colour fns …)
 
+pub mod ch_chain;
 pub mod dashboard;
 pub mod groups;
 pub mod map;
@@ -55,8 +56,83 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     draw_status_bar(frame, outer[2], app);
 
+    // ── Overlays (rendered last, on top) ──
+
+    // Menu bar and dropdown
+    if app.menu_state.active {
+        use crate::tui::menu::{MenuBar, MenuDropdown};
+        let menu_area = Rect::new(area.x, area.y, area.width, 1);
+        frame.render_widget(
+            MenuBar::new(&app.menu_state)
+                .highlight_style(Style::default().fg(Color::Black).bg(app.theme.text_accent))
+                .normal_style(Style::default().fg(app.theme.text_secondary)),
+            menu_area,
+        );
+        let dropdown = MenuDropdown::new(&app.menu_state);
+        let dd_rect = dropdown.dropdown_rect(menu_area);
+        // Clamp dropdown to screen bounds
+        let clamped = Rect::new(
+            dd_rect.x,
+            dd_rect.y,
+            dd_rect
+                .width
+                .min(area.width.saturating_sub(dd_rect.x - area.x)),
+            dd_rect
+                .height
+                .min(area.height.saturating_sub(dd_rect.y - area.y)),
+        );
+        frame.render_widget(Clear, clamped);
+        frame.render_widget(
+            MenuDropdown::new(&app.menu_state)
+                .highlight_style(Style::default().fg(Color::Black).bg(app.theme.text_accent)),
+            clamped,
+        );
+    }
+
+    // Help overlay
     if app.help_visible {
         draw_help_overlay(frame, frame.area(), app);
+    }
+
+    // Config panel overlay
+    if app.config_panel_state.active {
+        use crate::tui::config_panel::ConfigPanelWidget;
+        let popup_w = (area.width as f32 * 0.6).max(40.0).min(area.width as f32) as u16;
+        let popup_h = (area.height as f32 * 0.7).max(15.0).min(area.height as f32) as u16;
+        let popup_x = area.x + (area.width.saturating_sub(popup_w)) / 2;
+        let popup_y = area.y + (area.height.saturating_sub(popup_h)) / 2;
+        let popup_area = Rect::new(popup_x, popup_y, popup_w, popup_h);
+        frame.render_widget(Clear, popup_area);
+        frame.render_widget(
+            ConfigPanelWidget::new(&app.config_panel_state).accent_color(app.theme.text_accent),
+            popup_area,
+        );
+    }
+
+    // Wizard overlay
+    if app.wizard_state.active {
+        use crate::tui::wizard::WizardWidget;
+        frame.render_widget(Clear, frame.area());
+        frame.render_widget(
+            WizardWidget::new(&app.wizard_state).accent_color(app.theme.text_accent),
+            frame.area(),
+        );
+    }
+
+    // Toast notification
+    if let Some(ref toast) = app.toast_message {
+        let toast_width = (toast.len() + 4).min(area.width as usize) as u16;
+        let toast_x = area.x + area.width.saturating_sub(toast_width) - 1;
+        let toast_y = area.y + 1;
+        let toast_area = Rect::new(toast_x, toast_y, toast_width, 1);
+        frame.render_widget(Clear, toast_area);
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                format!(" {toast} "),
+                Style::default().fg(Color::Black).bg(app.theme.text_accent),
+            ))),
+            toast_area,
+        );
     }
 }
 
@@ -116,7 +192,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let mut spans: Vec<Span<'_>> = vec![
-        Span::styled(" FROST ", t.header_title),
+        Span::styled(" DMFT ", t.header_title),
         Span::styled("│", t.border_dim),
         Span::styled(&client_str, t.header_client_count),
         Span::styled(" │", t.border_dim),
@@ -143,14 +219,21 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
 
-    // Command mode: full-width input line
+    // Command mode: full-width input line with syntax hint
     if app.cmd_state.command_mode {
+        let input_text = format!(": {}_", app.cmd_state.command_buffer);
+        let mut spans = vec![Span::styled(&input_text, t.statusbar_cmd)];
+
+        // Show syntax hint for known commands
+        if let Some(hint) = crate::tui::app::command_syntax_hint(&app.cmd_state.command_buffer) {
+            spans.push(Span::styled(
+                format!("  ({hint})"),
+                Style::default().fg(t.text_muted),
+            ));
+        }
+
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                format!(": {}_", app.cmd_state.command_buffer),
-                t.statusbar_cmd,
-            )))
-            .block(widgets::panel("", t.border_active, t)),
+            Paragraph::new(Line::from(spans)).block(widgets::panel("", t.border_active, t)),
             area,
         );
         return;
@@ -212,6 +295,8 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled(" map  ", t.statusbar_dim),
             Span::styled("T", t.statusbar_key),
             Span::styled(" theme  ", t.statusbar_dim),
+            Span::styled("F10", t.statusbar_key),
+            Span::styled(" menu  ", t.statusbar_dim),
             Span::styled("?", t.statusbar_key),
             Span::styled(" help", t.statusbar_dim),
         ]
@@ -605,7 +690,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         // ── Configuration Files ──
         Line::from(Span::styled(" Configuration Files", head_s)),
         Line::from(""),
-        kv("frostreaver", "config/frostreaver.toml (main config)"),
+        kv("dmft", "config/dmft.toml (main config)"),
         kv("accounts", "config/accounts.toml (login accounts)"),
         kv("camps", "config/camps/<name>.toml (camp positions)"),
         Line::from(""),

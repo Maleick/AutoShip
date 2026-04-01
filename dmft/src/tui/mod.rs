@@ -4,10 +4,14 @@
 pub mod app;
 /// TUI client wrapper — connects process reading to app state updates.
 pub mod client;
+/// Configuration panel with tree view and inline editing.
+pub mod config_panel;
 /// Demo data generator — synthetic spawns and player data for macOS development.
 pub mod demo_data;
 /// Event handling — keyboard input mapping and command dispatch.
 pub mod event;
+/// Dropdown menu bar system for accessible command navigation.
+pub mod menu;
 /// TUI run loop — terminal setup, tick/render cycle, graceful shutdown.
 pub mod run;
 /// ASCII sprite definitions for the map overlay.
@@ -18,3 +22,5 @@ pub mod state;
 pub mod theme;
 /// UI renderers — per-panel drawing functions for each dashboard section.
 pub mod ui;
+/// Onboarding wizard for first-run setup.
+pub mod wizard;

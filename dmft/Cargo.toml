@@ -27,6 +27,12 @@ prost = "0.13"
 flate2 = "1"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 recastnavigation-sys = { version = "1.0.3", features = ["detour_large_nav_meshes"] }
+tui-menu = "0.3"
+tui-tree-widget = "0.24"
+tui-widget-list = "0.15"
+tui-scrollview = "0.6"
+tui-big-text = "0.8"
+tui-popup = "0.7"
 
 [build-dependencies]
 cc = "1"

@@ -98,6 +98,11 @@ pub struct MapScreenState {
     pub pan_y: f32,
     pub show_navmesh: bool,
     pub navmesh_overlay: Option<NavMeshOverlay>,
+    /// Map layer visibility flags.
+    pub show_geometry: bool,
+    pub show_spawns: bool,
+    pub show_nav_paths: bool,
+    pub show_labels: bool,
 }
 
 impl MapScreenState {
@@ -116,6 +121,10 @@ impl MapScreenState {
             pan_y: 0.0,
             show_navmesh: true,
             navmesh_overlay: None,
+            show_geometry: true,
+            show_spawns: true,
+            show_nav_paths: true,
+            show_labels: true,
         }
     }
 
@@ -157,6 +166,45 @@ impl MapScreenState {
     pub fn toggle_navmesh(&mut self) -> bool {
         self.show_navmesh = !self.show_navmesh;
         self.show_navmesh
+    }
+
+    /// Toggle a map layer by number (1=geometry, 2=spawns, 3=nav paths, 4=mesh).
+    pub fn toggle_layer(&mut self, layer: u8) -> &'static str {
+        match layer {
+            1 => {
+                self.show_geometry = !self.show_geometry;
+                if self.show_geometry {
+                    "Geometry ON"
+                } else {
+                    "Geometry OFF"
+                }
+            }
+            2 => {
+                self.show_spawns = !self.show_spawns;
+                if self.show_spawns {
+                    "Spawns ON"
+                } else {
+                    "Spawns OFF"
+                }
+            }
+            3 => {
+                self.show_nav_paths = !self.show_nav_paths;
+                if self.show_nav_paths {
+                    "Nav paths ON"
+                } else {
+                    "Nav paths OFF"
+                }
+            }
+            4 => {
+                self.show_navmesh = !self.show_navmesh;
+                if self.show_navmesh {
+                    "Navmesh ON"
+                } else {
+                    "Navmesh OFF"
+                }
+            }
+            _ => "Unknown layer",
+        }
     }
 }
 

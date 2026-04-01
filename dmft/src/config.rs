@@ -9,7 +9,7 @@ use crate::soul::config::SoulConfig;
 /// A single account entry from config/accounts.toml.
 #[derive(Debug, Deserialize, Clone)]
 pub struct AccountEntry {
-    /// Account login name (e.g., "frostreaver01").
+    /// Account login name (e.g., "account01").
     pub name: String,
     /// Target server name (e.g., "Firiona Vie").
     pub server: String,
