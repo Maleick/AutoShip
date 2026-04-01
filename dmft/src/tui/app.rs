@@ -245,6 +245,9 @@ pub struct App {
 
     pub nav_state: NavigationScreenState,
 
+    /// EQ install path for launch operations (from config or default).
+    pub launch_eq_path: String,
+
     // Theme
     pub theme_kind: ThemeKind,
     pub theme: Theme,
@@ -331,6 +334,8 @@ impl App {
             chat_events: VecDeque::with_capacity(200),
 
             nav_state: NavigationScreenState::new(),
+
+            launch_eq_path: String::from(r"C:\EverQuest"),
 
             theme_kind: ThemeKind::DarkModern,
             theme: ThemeKind::DarkModern.build(),
@@ -963,22 +968,32 @@ impl App {
     }
 
     pub fn spawn_list_page_down(&mut self) {
-        // TODO: make page size dynamic based on terminal height when available
-        const PAGE_SIZE: usize = 25;
+        let page_size = Self::dynamic_page_size();
         let max = self.filtered_spawns().len().saturating_sub(1);
         let current = self.spawn_selected();
         self.spawns_state
             .table_state
-            .select(Some((current + PAGE_SIZE).min(max)));
+            .select(Some((current + page_size).min(max)));
     }
 
     pub fn spawn_list_page_up(&mut self) {
-        // TODO: make page size dynamic based on terminal height when available
-        const PAGE_SIZE: usize = 25;
+        let page_size = Self::dynamic_page_size();
         let current = self.spawn_selected();
         self.spawns_state
             .table_state
-            .select(Some(current.saturating_sub(PAGE_SIZE)));
+            .select(Some(current.saturating_sub(page_size)));
+    }
+
+    /// Compute page size from terminal height. Uses the spawn table area
+    /// (terminal height minus chrome: header, status bar, column headers, borders).
+    /// Falls back to 25 rows if terminal size cannot be determined.
+    fn dynamic_page_size() -> usize {
+        const CHROME_ROWS: u16 = 8; // header + tabs + column header + borders + status bar
+        const FALLBACK: usize = 25;
+        match crossterm::terminal::size() {
+            Ok((_w, h)) => (h.saturating_sub(CHROME_ROWS) as usize).max(5),
+            Err(_) => FALLBACK,
+        }
     }
 
     /// Convenience accessor for the current spawn selection index.
@@ -2577,8 +2592,7 @@ impl App {
         let mut failed = 0u32;
         for entry in entries {
             let info = AccountsConfig::to_account_info(entry);
-            let eq_path = std::path::Path::new("C:\\EverQuest");
-            // TODO: Read eq_path from AppConfig.launch.eq_path instead of hardcoding
+            let eq_path = std::path::Path::new(&self.launch_eq_path);
             match crate::launcher::spawner::spawn_eq_client(
                 eq_path,
                 &info.account_name,
@@ -2593,9 +2607,10 @@ impl App {
                         "Launched EQ client for login"
                     );
                     launched += 1;
-                    // TODO: Wire into LaunchCoordinator for staggered launch + state tracking
-                    // TODO: After window title shows "[DMFT] EQ - <CharName>", auto-inject DLL
-                    // TODO: After DLL injection, auto-form groups + set camp
+                    // Post-launch automation (M2.5 roadmap):
+                    // 1. Wire into LaunchCoordinator for staggered launch + state tracking
+                    // 2. After window title shows "[DMFT] EQ - <CharName>", auto-inject DLL
+                    // 3. After DLL injection, auto-form groups + set camp
                 }
                 Err(e) => {
                     tracing::error!(account = "[redacted]", %e, "Failed to launch EQ client");

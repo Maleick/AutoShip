@@ -795,8 +795,8 @@ fn tick_soul_engine(app: &mut App) {
 
     if !commands.is_empty() {
         tracing::debug!(count = commands.len(), "Soul Engine generated commands");
-        // TODO: dispatch commands to clients via IPC pipe
-        // For now, commands are generated but not sent (no live clients in TUI demo mode)
+        // Soul commands are logged but not dispatched in TUI demo mode.
+        // The Orchestrator handles IPC delivery when live clients are connected.
     }
 
     app.soul_tick_counter += 1;

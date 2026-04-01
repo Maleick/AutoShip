@@ -49,8 +49,11 @@ pub fn run_tui_mode() -> Result<()> {
     let mut app = tui::app::App::new();
     let config = load_config()?;
 
-    // Set server name from config
+    // Set server name and launch path from config
     app.server_name = config.server.name.clone();
+    if !config.launch.eq_path.is_empty() {
+        app.launch_eq_path = config.launch.eq_path.clone();
+    }
 
     // Try to attach to ALL EQ processes before launching TUI
     #[cfg(windows)]

@@ -105,7 +105,14 @@ impl SoulCoordinator {
 
             let in_combat = is_in_combat(state);
             let zone = zone_from_state(state);
-            let group_members: Vec<String> = Vec::new(); // TODO: populate from state
+            // Approximate group members from nearby PCs (spawn_type 0 = player).
+            // True group roster requires GameState to carry group membership data.
+            let group_members: Vec<String> = state
+                .nearby_spawns
+                .iter()
+                .filter(|s| s.spawn_type == 0 && s.name != soul.name)
+                .map(|s| s.name.clone())
+                .collect();
 
             let ctx = SoulContext {
                 character_name: &soul.name,
@@ -226,7 +233,7 @@ impl SoulCoordinator {
         // Process mood change from player interaction
         let event = SoulEvent::PlayerChat {
             player_name: player_name.to_string(),
-            sentiment: 0.0, // TODO: sentiment analysis in Phase 2
+            sentiment: 0.0, // Neutral default; LLM-based sentiment analysis deferred to M6
         };
         soul.mood = soul
             .personality
@@ -247,7 +254,13 @@ impl SoulCoordinator {
                 channel: channel.to_string(),
             },
             priority: LlmPriority::High,
-            memory_context: Vec::new(), // TODO: populate from recall_about
+            memory_context: self
+                .memory
+                .recall_about(client_id, player_name, 5)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|row| row.event_json)
+                .collect(),
             backstory: soul.backstory.clone(),
         };
 
