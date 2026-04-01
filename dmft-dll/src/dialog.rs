@@ -72,11 +72,11 @@ pub unsafe fn check_dialogs() {
     }
 
     // Get eqgame CXWndManager
-    let mgr_ptr_addr =
-        match dmft_common::offsets::rebase(dmft_common::offsets::PINST_CXWND_MANAGER, eq_base) {
-            Some(addr) => addr,
-            None => return,
-        };
+    let Some(mgr_ptr_addr) =
+        dmft_common::offsets::rebase(dmft_common::offsets::PINST_CXWND_MANAGER, eq_base)
+    else {
+        return;
+    };
 
     let mgr = *(mgr_ptr_addr as *const usize);
     if mgr == 0 {

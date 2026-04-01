@@ -150,9 +150,8 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     #[cfg(windows)]
     {
         use dmft_common::offsets::buff_slots as bs;
-        let pc_ptr_addr = match offsets::rebase(offsets::PINST_LOCAL_PC, eq_base) {
-            Some(a) => a,
-            None => return Vec::new(),
+        let Some(pc_ptr_addr) = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base) else {
+            return Vec::new();
         };
         let pc_addr = match proc.read_ptr(pc_ptr_addr) {
             Ok(a) if a != 0 => a,

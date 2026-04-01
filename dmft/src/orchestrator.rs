@@ -327,9 +327,8 @@ impl Orchestrator {
             return Vec::new();
         }
 
-        let sell_cycle = match &mut self.sell_cycle {
-            Some(sc) => sc,
-            None => return Vec::new(),
+        let Some(sell_cycle) = &mut self.sell_cycle else {
+            return Vec::new();
         };
 
         // Check if we need to start a sell cycle
@@ -350,13 +349,11 @@ impl Orchestrator {
 
     /// Check camp progression and set `suggested_camp` if the group has outleveled.
     fn check_camp_progression(&mut self) {
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
-        let db = match &self.camp_db {
-            Some(db) => db,
-            None => return,
+        let Some(db) = &self.camp_db else {
+            return;
         };
 
         // Calculate average level from game states of camp members
@@ -410,9 +407,8 @@ impl Orchestrator {
     /// Produce camp events by comparing current state to previous tick state.
     /// Detects charm breaks, new adds, and expiring CC.
     fn produce_camp_events(&mut self, _snapshot: &Option<CampSnapshot>) {
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
 
         // Only produce events during active combat phases
@@ -447,9 +443,8 @@ impl Orchestrator {
 
         // --- Add detection: new NPCs within camp radius ---
         // Use the tank's nearby_spawns as the source
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
         let tank = camp.members.iter().find(|m| m.role == Role::Tank);
         if let Some(tank) = tank
@@ -476,9 +471,8 @@ impl Orchestrator {
         }
 
         // --- CC expiry detection ---
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
         let tick = camp.tick;
         let expiring: Vec<u32> = camp

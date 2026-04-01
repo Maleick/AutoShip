@@ -1069,9 +1069,10 @@ impl App {
             && let Ok(proc) = ProcessHandle::open(client.pid)
         {
             // Find the spawn address by walking the spawn list
-            let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
-                Some(a) => a,
-                None => return Vec::new(),
+            let Some(mgr_ptr_addr) =
+                offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base)
+            else {
+                return Vec::new();
             };
             let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
                 Ok(a) if a != 0 => a,
@@ -2402,7 +2403,7 @@ impl App {
             }
             Some("start") => {
                 // ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
-                let pids_str = if let Some(s) = args.get(1) { s } else {
+                let Some(pids_str) = args.get(1) else {
                     self.status_message = String::from(
                         "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
                     );

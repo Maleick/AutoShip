@@ -97,14 +97,12 @@ impl SoulCoordinator {
         let client_ids: Vec<ClientId> = self.souls.keys().copied().collect();
 
         for client_id in client_ids {
-            let soul = match self.souls.get_mut(&client_id) {
-                Some(s) => s,
-                None => continue,
+            let Some(soul) = self.souls.get_mut(&client_id) else {
+                continue;
             };
 
-            let state = match states.get(&client_id) {
-                Some(s) => s,
-                None => continue,
+            let Some(state) = states.get(&client_id) else {
+                continue;
             };
 
             let in_combat = is_in_combat(state);
@@ -220,9 +218,8 @@ impl SoulCoordinator {
             return;
         }
 
-        let soul = match self.souls.get_mut(&client_id) {
-            Some(s) => s,
-            None => return,
+        let Some(soul) = self.souls.get_mut(&client_id) else {
+            return;
         };
 
         // Record the conversation
@@ -272,9 +269,8 @@ impl SoulCoordinator {
 
     /// Handle a game event (kill, death, loot, zone change, etc.).
     pub fn on_game_event(&mut self, client_id: ClientId, event: SoulEvent) {
-        let soul = match self.souls.get_mut(&client_id) {
-            Some(s) => s,
-            None => return,
+        let Some(soul) = self.souls.get_mut(&client_id) else {
+            return;
         };
 
         // Capture mood before event processing for accurate memory recording

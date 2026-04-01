@@ -187,9 +187,8 @@ fn scan_for_clients_live(app: &mut App) {
     use super::app::ClientState;
     use crate::process::memory::{ProcessHandle, find_processes_by_name};
 
-    let pids = match find_processes_by_name("eqgame.exe") {
-        Ok(p) => p,
-        Err(_) => return,
+    let Ok(pids) = find_processes_by_name("eqgame.exe") else {
+        return;
     };
 
     // Track which PIDs we already have
@@ -784,9 +783,8 @@ pub(super) fn zone_to_short_name(zone_name: &str) -> String {
 /// Tick the Soul Engine coordinator (if enabled).
 /// Generates soul commands (idle behaviors, chat, emotes) for all registered characters.
 fn tick_soul_engine(app: &mut App) {
-    let coordinator = match app.soul_coordinator.as_mut() {
-        Some(c) => c,
-        None => return,
+    let Some(coordinator) = app.soul_coordinator.as_mut() else {
+        return;
     };
 
     // Build game states from current app data

@@ -28,14 +28,12 @@ impl LogWatcher {
     pub fn poll(&mut self) -> Vec<LogEvent> {
         let mut events = Vec::new();
 
-        let file = match File::open(&self.path) {
-            Ok(f) => f,
-            Err(_) => return events, // File not found — graceful on macOS
+        let Ok(file) = File::open(&self.path) else {
+            return events; // File not found — graceful on macOS
         };
 
-        let metadata = match file.metadata() {
-            Ok(m) => m,
-            Err(_) => return events,
+        let Ok(metadata) = file.metadata() else {
+            return events;
         };
 
         // If the file shrank (log rotation), reset to beginning
