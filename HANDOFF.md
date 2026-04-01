@@ -4,6 +4,10 @@
 
 Read this file + check memories (`MEMORY.md`) for full project context.
 
+MacroQuest reference code now lives in local git submodules at `third_party/eqlib`
+and `third_party/macroquest`. After checkout, run
+`git submodule update --init --recursive` before doing offset or struct work.
+
 ## Session Stats (Cumulative)
 - ~40,700 lines across 3 crates
 - ~175+ commits (~20 this session)
@@ -99,8 +103,9 @@ cargo build --release
 | ZONE_GUIDE_MANAGER | 0x1403571F0 | eqgame |
 
 ## Key References
-- MQ2 Login: https://github.com/macroquest/macroquest/tree/master/src/login
-- MQ2 Routing: https://github.com/macroquest/macroquest/tree/master/src/routing
+- Local eqlib reference: `third_party/eqlib`
+- Local MacroQuest reference: `third_party/macroquest`
+- MacroQuest login code: `third_party/macroquest/src/login`
+- MacroQuest routing code: `third_party/macroquest/src/routing`
 - MQ2Nav: https://github.com/brainiac/MQ2Nav
-- eqlib: https://github.com/macroquest/eqlib
 - mqmesh.com — navmesh downloads + updater.json manifest

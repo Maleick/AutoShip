@@ -29,8 +29,8 @@ TOTAL_COMMITS=$(git rev-list --count HEAD)
 echo "- **Branch:** \`$BRANCH\`"
 echo "- **Total commits:** $TOTAL_COMMITS"
 
-# Line counts (exclude target/ and mq2-reference/)
-LINES=$(find . -name '*.rs' -not -path './target/*' -not -path './mq2-reference/*' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+# Line counts (exclude build output and third-party reference submodules)
+LINES=$(find . -name '*.rs' -not -path './target/*' -not -path './third_party/eqlib/*' -not -path './third_party/macroquest/*' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
 echo "- **Rust lines:** ~${LINES}"
 
 echo ""
@@ -102,6 +102,7 @@ cat <<'BUILDEOF'
 
 ```bash
 # macOS/Linux (development — demo mode)
+git submodule update --init --recursive
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 cargo build
 cargo run        # TUI with demo data
@@ -126,9 +127,10 @@ BUILDEOF
 cat <<'REFEOF'
 ## Key References
 
-- MQ2 Login: https://github.com/macroquest/macroquest/tree/master/src/login
-- MQ2 Routing: https://github.com/macroquest/macroquest/tree/master/src/routing
+- Local eqlib reference: `third_party/eqlib`
+- Local MacroQuest reference: `third_party/macroquest`
+- MacroQuest login code: `third_party/macroquest/src/login`
+- MacroQuest routing code: `third_party/macroquest/src/routing`
 - MQ2Nav: https://github.com/brainiac/MQ2Nav
-- eqlib: https://github.com/macroquest/eqlib
 - mqmesh.com — navmesh downloads + updater.json manifest
 REFEOF

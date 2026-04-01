@@ -3,7 +3,7 @@
 // At runtime, subtract the preferred base and add the actual base
 // (obtained via GetModuleInformation or EnumProcessModules).
 //
-// Source: mq2-reference/src/eqlib/include/eqlib/offsets/eqgame.h
+// Source: third_party/eqlib/include/eqlib/offsets/eqgame.h
 // Client date: 20260310 (March 10, 2026)
 
 /// Preferred base address of eqgame.exe (64-bit)
@@ -273,7 +273,7 @@ pub mod eqgame {
     pub const CSIDL_SCREEN_WND_SIDL_TEXT: usize = 0x270;
 
     // ─── CListWnd offsets (for character list reading) ───
-    // Source: mq2-reference UI.h — CListWnd inherits CSidlScreenWnd
+    // Source: third_party/eqlib/include/eqlib/game/UI.h — CListWnd inherits CSidlScreenWnd
 
     /// `CListWnd::ItemsArray` (`ArrayClass<SListWndLine>`) — row count (int at +0x270)
     pub const CLISTWND_ITEMS_COUNT: usize = 0x270;
@@ -303,7 +303,7 @@ pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
-// Source: mq2-reference/src/eqlib/include/eqlib/game/PlayerClient.h
+// Source: third_party/eqlib/include/eqlib/game/PlayerClient.h
 
 /// Offsets within `PlayerBase` (base class of `PlayerClient`)
 pub mod player_base {
@@ -342,7 +342,7 @@ pub mod player_base {
 }
 
 /// Buff slot offsets within `CharacterZoneClient`.
-/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h (`EQ_Affect` array).
+/// Source: third_party/eqlib/include/eqlib/game/PcClient.h (`EQ_Affect` array).
 /// TODO: calibrate exact `BUFF_ARRAY_OFFSET` against live 20260310 client hex dump.
 pub mod buff_slots {
     /// Total buff slots (long buffs + short buffs).
@@ -434,7 +434,7 @@ pub mod actor_client {
 }
 
 /// Group-related offsets
-/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h
+/// Source: third_party/eqlib/include/eqlib/game/PcClient.h
 pub mod group {
     /// Offset of `CGroup`* pointer within `PcClient` struct
     /// PcClient.Group at 0x2EB0
@@ -470,7 +470,7 @@ pub mod group {
 }
 
 /// Zone info offsets (zoneHeader / ZONEINFO struct)
-/// Source: mq2-reference/src/eqlib/include/eqlib/game/EverQuest.h (zoneHeader)
+/// Source: third_party/eqlib/include/eqlib/game/EverQuest.h (zoneHeader)
 pub mod zone_info {
     /// Address of the zoneHeader struct (instEQZoneInfo).
     /// This is NOT a pointer — it's the struct itself at this address.

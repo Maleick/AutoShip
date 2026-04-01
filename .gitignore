@@ -1,6 +1,3 @@
-# MQ2 reference clone (not part of our project)
-mq2-reference/
-
 # Rust build artifacts
 target/
 
