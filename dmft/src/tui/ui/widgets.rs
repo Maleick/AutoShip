@@ -713,7 +713,7 @@ pub fn render_command_palette(
 
     let filtered = palette.filtered_commands();
     let item_count = filtered.len() as u16;
-    let popup_h = (item_count + 4).min(area.height * 70 / 100).max(6);
+    let popup_h = (item_count + 4).min(area.height * 70 / 100).max(6).min(area.height);
     let popup_w = (area.width * 60 / 100).clamp(40.min(area.width), 60.min(area.width));
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
