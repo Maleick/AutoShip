@@ -137,20 +137,30 @@ pub enum CampState {
     /// Waiting for the next pull cycle.
     Idle,
     /// Puller is out pulling a mob back to camp.
-    Pulling { /// Tick when pull started.
-        started_tick: u64 },
+    Pulling {
+        /// Tick when pull started.
+        started_tick: u64,
+    },
     /// Group is actively fighting a mob.
-    Fighting { /// Tick when fight started.
-        started_tick: u64 },
+    Fighting {
+        /// Tick when fight started.
+        started_tick: u64,
+    },
     /// Looting corpses after a kill.
-    Looting { /// Tick when loot phase started.
-        started_tick: u64 },
+    Looting {
+        /// Tick when loot phase started.
+        started_tick: u64,
+    },
     /// Medding up mana/HP between pulls.
-    Medding { /// Tick when med phase started.
-        started_tick: u64 },
+    Medding {
+        /// Tick when med phase started.
+        started_tick: u64,
+    },
     /// Applying pre-pull buffs.
-    Buffing { /// Tick when buff phase started.
-        started_tick: u64 },
+    Buffing {
+        /// Tick when buff phase started.
+        started_tick: u64,
+    },
 }
 
 /// Role a group member fills in the camp loop.

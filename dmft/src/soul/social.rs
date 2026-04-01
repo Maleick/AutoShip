@@ -570,9 +570,7 @@ mod tests {
     fn event_deltas_all_events() {
         // Verify all event types return non-zero deltas
         let events = [
-            SocialEvent::FoughtTogether {
-                zone: "guk".into(),
-            },
+            SocialEvent::FoughtTogether { zone: "guk".into() },
             SocialEvent::Saved,
             SocialEvent::LetDie,
             SocialEvent::SharedLoot {
@@ -591,8 +589,16 @@ mod tests {
         ];
         for event in &events {
             let (faction, trust) = event_deltas(event);
-            assert_ne!(faction, 0, "event {:?} should have non-zero faction delta", event);
-            assert!(trust.abs() > 0.001, "event {:?} should have non-zero trust delta", event);
+            assert_ne!(
+                faction, 0,
+                "event {:?} should have non-zero faction delta",
+                event
+            );
+            assert!(
+                trust.abs() > 0.001,
+                "event {:?} should have non-zero trust delta",
+                event
+            );
         }
     }
 
@@ -608,9 +614,9 @@ mod tests {
         let seeds = vec![RelationshipSeed {
             from: "A".into(),
             to: "B".into(),
-            faction: 5000,  // Over max
+            faction: 5000, // Over max
             tags: vec![],
-            trust: 2.0,     // Over max
+            trust: 2.0, // Over max
         }];
         let graph = SocialGraph::from_seeds(&seeds);
         let rel = graph.get("A", "B").unwrap();

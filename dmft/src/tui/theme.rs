@@ -613,7 +613,11 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_spawn_colors() {
-        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+        ] {
             let theme = kind.build();
             // PC and corpse should always be visually distinct
             assert_ne!(
@@ -654,7 +658,11 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_state_colors() {
-        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+        ] {
             let theme = kind.build();
             assert_ne!(
                 theme.state_dead, theme.state_normal,
@@ -676,7 +684,11 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_map_colors() {
-        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+        ] {
             let theme = kind.build();
             assert_ne!(
                 theme.map_you, theme.map_npc,
@@ -693,7 +705,11 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_mode_colors() {
-        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+        ] {
             let theme = kind.build();
             assert_ne!(
                 theme.mode_camp, theme.mode_hunt,
@@ -705,7 +721,11 @@ mod tests {
 
     #[test]
     fn all_themes_hp_colors_are_distinct() {
-        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+        ] {
             let theme = kind.build();
             assert_ne!(theme.hp_high, theme.hp_mid, "{:?} hp_high == hp_mid", kind);
             assert_ne!(theme.hp_mid, theme.hp_low, "{:?} hp_mid == hp_low", kind);
@@ -715,7 +735,11 @@ mod tests {
 
     #[test]
     fn all_themes_have_six_con_colors() {
-        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+        ] {
             let theme = kind.build();
             let cons = [
                 theme.con_red,
@@ -775,7 +799,11 @@ mod tests {
 
     #[test]
     fn all_themes_text_accent_differs_from_normal() {
-        for kind in [ThemeKind::DarkModern, ThemeKind::Classic, ThemeKind::Dracula] {
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+        ] {
             let theme = kind.build();
             assert_ne!(
                 theme.text_accent, theme.text_normal,

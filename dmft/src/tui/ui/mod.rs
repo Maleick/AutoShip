@@ -328,10 +328,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 .bg(t.text_accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            " -- keys for this screen shown below",
-            dim_s,
-        ),
+        Span::styled(" -- keys for this screen shown below", dim_s),
     ]));
     text.push(Line::from(""));
 
@@ -456,7 +453,10 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         // ── Panel Focus Guide ──
         Line::from(Span::styled(" Panel Focus Guide (Tab to cycle)", head_s)),
         Line::from(""),
-        kv("[1] Overview", "Roster, Character, Groups, Filters, Combat, Session"),
+        kv(
+            "[1] Overview",
+            "Roster, Character, Groups, Filters, Combat, Session",
+        ),
         kv("[2] Map", "Map, Spawns, Named, Navigation"),
         kv("[3] Navigation", "Client list, Navigation status"),
         kv("[4] Debug", "Spawn list, Hex dump"),
@@ -479,7 +479,10 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("all /cmd", "Broadcast slash command to all clients"),
         Line::from(""),
         // ── Common Slash Commands ──
-        Line::from(Span::styled(" Common Slash Commands (via targeting)", head_s)),
+        Line::from(Span::styled(
+            " Common Slash Commands (via targeting)",
+            head_s,
+        )),
         Line::from(""),
         kv("/sit", "Sit down (meditate for mana)"),
         kv("/stand", "Stand up"),
@@ -647,16 +650,14 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     frame.render_widget(
-        Paragraph::new(text)
-            .scroll((scroll as u16, 0))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(t.border_type)
-                    .title(Span::styled(title, t.help_heading))
-                    .border_style(t.help_border)
-                    .style(Style::default().bg(t.help_bg)),
-            ),
+        Paragraph::new(text).scroll((scroll as u16, 0)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(t.border_type)
+                .title(Span::styled(title, t.help_heading))
+                .border_style(t.help_border)
+                .style(Style::default().bg(t.help_bg)),
+        ),
         popup_area,
     );
 }
