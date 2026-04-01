@@ -100,15 +100,15 @@ pub fn class_sprite(class: Option<&EqClass>, state: &StandState, tick: u64) -> V
 
 fn class_palette(class: Option<&EqClass>) -> Palette {
     match class {
-        Some(EqClass::Warrior) | Some(EqClass::Berserker) => PAL_WARRIOR,
+        Some(EqClass::Warrior | EqClass::Berserker) => PAL_WARRIOR,
         Some(EqClass::Cleric) => PAL_CLERIC,
         Some(EqClass::Paladin) => PAL_PALADIN,
         Some(EqClass::ShadowKnight) => PAL_SHADOWKNIGHT,
-        Some(EqClass::Ranger) | Some(EqClass::Druid) | Some(EqClass::Beastlord) => PAL_RANGER,
-        Some(EqClass::Monk) | Some(EqClass::Rogue) => PAL_MONK,
+        Some(EqClass::Ranger | EqClass::Druid | EqClass::Beastlord) => PAL_RANGER,
+        Some(EqClass::Monk | EqClass::Rogue) => PAL_MONK,
         Some(EqClass::Bard) => PAL_BARD,
         Some(EqClass::Enchanter) => PAL_ENCHANTER,
-        Some(EqClass::Wizard) | Some(EqClass::Magician) => PAL_WIZARD,
+        Some(EqClass::Wizard | EqClass::Magician) => PAL_WIZARD,
         Some(EqClass::Necromancer) => PAL_NECROMANCER,
         Some(EqClass::Shaman) => PAL_SHAMAN,
         None => PAL_GENERIC,
@@ -117,15 +117,15 @@ fn class_palette(class: Option<&EqClass>) -> Palette {
 
 fn class_sprites(class: Option<&EqClass>) -> &'static [Sprite] {
     match class {
-        Some(EqClass::Warrior) | Some(EqClass::Berserker) => &SPRITE_WARRIOR,
+        Some(EqClass::Warrior | EqClass::Berserker) => &SPRITE_WARRIOR,
         Some(EqClass::Cleric) => &SPRITE_CLERIC,
         Some(EqClass::Paladin) => &SPRITE_PALADIN,
         Some(EqClass::ShadowKnight) => &SPRITE_SHADOWKNIGHT,
-        Some(EqClass::Ranger) | Some(EqClass::Druid) | Some(EqClass::Beastlord) => &SPRITE_RANGER,
-        Some(EqClass::Monk) | Some(EqClass::Rogue) => &SPRITE_MONK,
+        Some(EqClass::Ranger | EqClass::Druid | EqClass::Beastlord) => &SPRITE_RANGER,
+        Some(EqClass::Monk | EqClass::Rogue) => &SPRITE_MONK,
         Some(EqClass::Bard) => &SPRITE_BARD,
         Some(EqClass::Enchanter) => &SPRITE_ENCHANTER,
-        Some(EqClass::Wizard) | Some(EqClass::Magician) => &SPRITE_WIZARD,
+        Some(EqClass::Wizard | EqClass::Magician) => &SPRITE_WIZARD,
         Some(EqClass::Necromancer) => &SPRITE_NECROMANCER,
         Some(EqClass::Shaman) => &SPRITE_SHAMAN,
         None => &SPRITE_GENERIC,

@@ -623,10 +623,10 @@ fn draw_tactical_sidebar(
     for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
         match section {
             TacticalSectionKind::Named => {
-                draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed)
+                draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed);
             }
             TacticalSectionKind::Navigation => {
-                draw_navigation_summary(frame, *chunk, app, app.tactical_state.navigation_collapsed)
+                draw_navigation_summary(frame, *chunk, app, app.tactical_state.navigation_collapsed);
             }
         }
     }

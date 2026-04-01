@@ -60,7 +60,7 @@ impl OffsetDatabase {
 
     /// Create from the current compile-time constants in offsets.rs
     pub fn from_compiled_offsets() -> Self {
-        use crate::offsets::*;
+        use crate::offsets::{PINST_LOCAL_PLAYER, PINST_CONTROLLED_PLAYER, PINST_TARGET, PINST_SPAWN_MANAGER, PINST_LOCAL_PC, PINST_SPELL_MANAGER, PINST_CDISPLAY, PINST_CEVERQUEST, player_base, player_zone, spawn_manager, EQ_PREFERRED_BASE};
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
         globals.insert("pinstControlledPlayer".to_string(), PINST_CONTROLLED_PLAYER);

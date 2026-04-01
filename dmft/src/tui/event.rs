@@ -280,11 +280,11 @@ pub fn handle_events(
 
         if app.active_screen == ActiveScreen::Tactical {
             match key.code {
-                KeyCode::Char('+') | KeyCode::Char('=') => {
+                KeyCode::Char('+' | '=') => {
                     app.map_state.increase_z_filter();
                     return Ok(true);
                 }
-                KeyCode::Char('-') | KeyCode::Char('_') => {
+                KeyCode::Char('-' | '_') => {
                     app.map_state.decrease_z_filter();
                     return Ok(true);
                 }

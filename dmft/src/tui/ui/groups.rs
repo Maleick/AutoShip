@@ -122,7 +122,7 @@ fn draw_live_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: 
     let t = &app.theme;
     let (live_groups, ungrouped) = app.build_live_groups();
 
-    let total_panels = live_groups.len() + if ungrouped.is_empty() { 0 } else { 1 };
+    let total_panels = live_groups.len() + usize::from(!ungrouped.is_empty());
 
     if total_panels == 0 {
         frame.render_widget(

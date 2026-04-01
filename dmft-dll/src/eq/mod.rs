@@ -425,7 +425,7 @@ pub const CMD_ATTACK: u32 = 0x17;
 ///
 /// `enable`: `true` to turn auto-attack on, `false` to turn it off.
 pub fn toggle_auto_attack(enable: bool) {
-    let active = if enable { 1 } else { 0 };
+    let active = i32::from(enable);
     tracing::info!(enable, "Toggling auto-attack");
     execute_cmd(CMD_ATTACK, active);
 }

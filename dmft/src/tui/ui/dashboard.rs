@@ -474,19 +474,19 @@ fn draw_dashboard_sidebar(
     for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
         match section {
             OverviewSectionKind::Character => {
-                draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed)
+                draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed);
             }
             OverviewSectionKind::Groups => {
-                draw_group_ops_summary(frame, *chunk, app, app.overview_state.groups_collapsed)
+                draw_group_ops_summary(frame, *chunk, app, app.overview_state.groups_collapsed);
             }
             OverviewSectionKind::Filters => {
-                draw_scope_summary(frame, *chunk, app, app.overview_state.filters_collapsed)
+                draw_scope_summary(frame, *chunk, app, app.overview_state.filters_collapsed);
             }
             OverviewSectionKind::Combat => {
-                draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed)
+                draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed);
             }
             OverviewSectionKind::Session => {
-                draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed)
+                draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed);
             }
         }
     }
