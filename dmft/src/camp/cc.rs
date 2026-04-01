@@ -12,10 +12,15 @@ use std::collections::HashMap;
 /// Types of crowd control, ordered by priority (lower discriminant = higher priority).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CcType {
+    /// Instant stun — highest priority CC.
     Stun,
+    /// Mesmerize — long-duration control.
     Mez,
+    /// Snare — slows movement speed.
     Snare,
+    /// Charm — permanent control via re-charm.
     Charm,
+    /// Root — immobilizes in place.
     Root,
 }
 
@@ -36,18 +41,26 @@ impl CcType {
 /// A CC ability available to a group member.
 #[derive(Debug, Clone)]
 pub struct CcAbility {
+    /// Type of CC this ability applies.
     pub cc_type: CcType,
+    /// Slash command to cast this CC (e.g., "/cast 3").
     pub command: String,
+    /// Minimum ticks between casts.
     pub cooldown_ticks: u64,
+    /// How many ticks the CC lasts.
     pub duration_ticks: u64,
+    /// Priority weight (lower = preferred).
     pub priority: u8,
 }
 
 /// A debuff ability (Tash, Malo) that should land before CC.
 #[derive(Debug, Clone)]
 pub struct DebuffAbility {
+    /// Debuff name (e.g., "Tash", "Malo").
     pub name: String,
+    /// Slash command to cast the debuff.
     pub command: String,
+    /// Minimum ticks between casts.
     pub cooldown_ticks: u64,
     /// Lower = lands first (Tash before Malo).
     pub order: u8,
@@ -56,30 +69,43 @@ pub struct DebuffAbility {
 /// A mob being tracked for CC.
 #[derive(Debug, Clone)]
 pub struct CcTarget {
+    /// Spawn ID of the mob being CC'd.
     pub spawn_id: u32,
+    /// Mob name for logging/display.
     pub name: String,
+    /// Type of CC currently active on this mob, if any.
     pub cc_applied: Option<CcType>,
+    /// Tick at which the current CC expires.
     pub cc_expiry_tick: u64,
+    /// PID of the member assigned to CC this mob.
     pub assigned_to_pid: Option<u32>,
+    /// Whether debuffs (Tash/Malo) have been applied.
     pub debuffed: bool,
 }
 
 /// A group member with CC capabilities.
 #[derive(Debug, Clone)]
 pub struct CcMember {
+    /// OS process ID for this member's EQ client.
     pub pid: u32,
+    /// Character name.
     pub name: String,
+    /// CC abilities this member can use.
     pub cc_abilities: Vec<CcAbility>,
+    /// Debuff abilities to land before CC.
     pub debuff_abilities: Vec<DebuffAbility>,
+    /// Tick of the last CC cast (for cooldown tracking).
     pub last_cast_tick: u64,
 }
 
 /// Tracks all CC targets and assignments for a camp group.
 pub struct CcTracker {
+    /// All mobs currently being tracked for CC.
     pub targets: Vec<CcTarget>,
 }
 
 impl CcTracker {
+    /// Creates a new empty CC tracker.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -108,6 +134,7 @@ impl CcTracker {
         }
     }
 
+    /// Updates CC targets based on current spawns, expiring old CC and adding new mobs.
     pub fn update(
         &mut self,
         current_spawns: &[(u32, String)],

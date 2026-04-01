@@ -6,45 +6,70 @@ use std::path::Path;
 /// A line segment from an EQ map file (L line).
 #[derive(Debug, Clone)]
 pub struct MapLine {
+    /// Start X coordinate.
     pub x1: f32,
+    /// Start Y coordinate.
     pub y1: f32,
+    /// Start Z coordinate.
     pub z1: f32,
+    /// End X coordinate.
     pub x2: f32,
+    /// End Y coordinate.
     pub y2: f32,
+    /// End Z coordinate.
     pub z2: f32,
+    /// Red color component (0-255).
     pub r: u8,
+    /// Green color component (0-255).
     pub g: u8,
+    /// Blue color component (0-255).
     pub b: u8,
 }
 
 /// A labeled point from an EQ map file (P line).
 #[derive(Debug, Clone)]
 pub struct MapPoint {
+    /// X coordinate.
     pub x: f32,
+    /// Y coordinate.
     pub y: f32,
+    /// Z coordinate.
     pub z: f32,
+    /// Red color component (0-255).
     pub r: u8,
+    /// Green color component (0-255).
     pub g: u8,
+    /// Blue color component (0-255).
     pub b: u8,
+    /// Display size for the point marker.
     pub size: u8,
+    /// Text label for the point (e.g., zone connection name).
     pub label: String,
 }
 
 /// All data for a single zone map.
 #[derive(Debug, Clone)]
 pub struct ZoneMap {
+    /// Zone short name.
     pub name: String,
+    /// All line segments from the map files.
     pub lines: Vec<MapLine>,
+    /// All labeled points from the map files.
     pub points: Vec<MapPoint>,
+    /// Bounding box enclosing all map geometry.
     pub bounds: MapBounds,
 }
 
 /// Axis-aligned bounding box for the map data.
 #[derive(Debug, Clone, Copy)]
 pub struct MapBounds {
+    /// Minimum X coordinate in the map.
     pub min_x: f32,
+    /// Maximum X coordinate in the map.
     pub max_x: f32,
+    /// Minimum Y coordinate in the map.
     pub min_y: f32,
+    /// Maximum Y coordinate in the map.
     pub max_y: f32,
 }
 
@@ -73,21 +98,25 @@ impl MapBounds {
         }
     }
 
+    /// Returns the width of the bounding box (X axis).
     #[must_use]
     pub fn width(&self) -> f32 {
         (self.max_x - self.min_x).max(1.0)
     }
 
+    /// Returns the height of the bounding box (Y axis).
     #[must_use]
     pub fn height(&self) -> f32 {
         (self.max_y - self.min_y).max(1.0)
     }
 
+    /// Returns the X coordinate of the bounding box center.
     #[must_use]
     pub fn center_x(&self) -> f32 {
         (self.min_x + self.max_x) / 2.0
     }
 
+    /// Returns the Y coordinate of the bounding box center.
     #[must_use]
     pub fn center_y(&self) -> f32 {
         (self.min_y + self.max_y) / 2.0

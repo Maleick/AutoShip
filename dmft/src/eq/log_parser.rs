@@ -4,50 +4,79 @@ use std::time::Instant;
 /// EQ chat channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatChannel {
+    /// Local /say channel.
     Say,
+    /// Incoming /tell (private message).
     Tell,
+    /// Outgoing /tell sent by the player.
     TellOut,
+    /// Group chat channel.
     Group,
+    /// Guild chat channel.
     Guild,
+    /// Raid chat channel.
     Raid,
+    /// Zone-wide /shout channel.
     Shout,
+    /// Out-of-character chat channel.
     Ooc,
+    /// /auction channel.
     Auction,
 }
 
 /// A parsed chat message.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChatEvent {
+    /// Which chat channel this message was on.
     pub channel: ChatChannel,
+    /// Name of the sender (or "You" for outgoing).
     pub sender: String,
+    /// The message text.
     pub message: String,
 }
 
 /// Events parsed from EQ log lines.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LogEvent {
+    /// An item was looted from a corpse.
     Loot {
+        /// Character who looted (empty if self).
         character: String,
+        /// Name of the looted item.
         item: String,
     },
+    /// A mob was killed.
     Kill {
+        /// Name of the slain mob.
         mob: String,
     },
+    /// Currency was looted from a corpse.
     Money {
+        /// Platinum coins.
         plat: u32,
+        /// Gold coins.
         gold: u32,
+        /// Silver coins.
         silver: u32,
+        /// Copper coins.
         copper: u32,
     },
+    /// An experience gain event.
     Experience {
+        /// Whether this was party (group) experience.
         party: bool,
     },
+    /// The player died.
     Death {
+        /// Name of what killed the player.
         killed_by: String,
     },
+    /// Entered a new zone.
     ZoneEnter {
+        /// Name of the zone entered.
         zone: String,
     },
+    /// A chat message was received.
     Chat(ChatEvent),
 }
 
@@ -239,6 +268,7 @@ pub struct LootDatabase {
 }
 
 impl LootDatabase {
+    /// Creates a new empty loot database.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
