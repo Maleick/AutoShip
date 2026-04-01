@@ -18,6 +18,10 @@ cat <<EOF
 
 Read this file + check memories (\`MEMORY.md\`) for full project context.
 
+MacroQuest reference code now lives in local git submodules at \`third_party/eqlib\`
+and \`third_party/macroquest\`. After checkout, run
+\`git submodule update --init --recursive\` before doing offset or struct work.
+
 ## Repository Stats
 
 EOF
@@ -29,8 +33,10 @@ TOTAL_COMMITS=$(git rev-list --count HEAD)
 echo "- **Branch:** \`$BRANCH\`"
 echo "- **Total commits:** $TOTAL_COMMITS"
 
-# Line counts (exclude target/ and mq2-reference/)
-LINES=$(find . -name '*.rs' -not -path './target/*' -not -path './mq2-reference/*' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+# Line counts (exclude build output and third-party reference submodules)
+LINES=$(find . \
+    \( -path './target' -o -path './third_party/eqlib' -o -path './third_party/macroquest' \) -prune -o \
+    -name '*.rs' -exec cat {} + | wc -l | awk '{print $1}')
 echo "- **Rust lines:** ~${LINES}"
 
 echo ""
@@ -101,6 +107,9 @@ cat <<'BUILDEOF'
 ## Build Requirements
 
 ```bash
+# One-time (all platforms): fetch reference trees used for offset/struct work
+git submodule update --init --recursive
+
 # macOS/Linux (development — demo mode)
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 cargo build
@@ -126,9 +135,10 @@ BUILDEOF
 cat <<'REFEOF'
 ## Key References
 
-- MQ2 Login: https://github.com/macroquest/macroquest/tree/master/src/login
-- MQ2 Routing: https://github.com/macroquest/macroquest/tree/master/src/routing
+- Local eqlib reference: `third_party/eqlib`
+- Local MacroQuest reference: `third_party/macroquest`
+- MacroQuest login code: `third_party/macroquest/src/login`
+- MacroQuest routing code: `third_party/macroquest/src/routing`
 - MQ2Nav: https://github.com/brainiac/MQ2Nav
-- eqlib: https://github.com/macroquest/eqlib
 - mqmesh.com — navmesh downloads + updater.json manifest
 REFEOF

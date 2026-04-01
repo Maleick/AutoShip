@@ -6,9 +6,11 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Row},
 };
 
-use crate::eq::structs::{SpawnInfo, SpawnType};
-use crate::tui::cast::CastDisplay;
-use crate::tui::theme::Theme;
+use crate::{
+    combat::spell_db,
+    eq::structs::{CastState, SpawnInfo, SpawnType},
+    tui::{cast::CastDisplay, theme::Theme},
+};
 
 // ─── Layout breakpoints ─────────────────────────────────────────────────────
 // Named constants for width-based layout transitions so dashboard.rs and map.rs
@@ -138,6 +140,32 @@ pub fn spawn_row_style(
     }
 }
 
+/// Human-readable cast label for a `LaunchSpellData` snapshot.
+#[must_use]
+pub fn cast_summary(cast: &CastState) -> String {
+    let spell_name = u32::try_from(cast.spell_id)
+        .ok()
+        .and_then(spell_db::get)
+        .map(|spell| spell.name.to_string())
+        .unwrap_or_else(|| format!("Spell {}", cast.spell_id));
+
+    match cast.spell_gem() {
+        Some(gem) => format!("G{gem} {spell_name}"),
+        None => spell_name,
+    }
+}
+
+/// Format remaining cast time in a compact user-facing form.
+#[must_use]
+pub fn cast_time_remaining_label(cast: &CastState) -> Option<String> {
+    let remaining_ms = cast.cast_time_remaining_ms()?;
+    if remaining_ms >= 1_000 {
+        Some(format!("{:.1}s", f64::from(remaining_ms) / 1_000.0))
+    } else {
+        Some(format!("{remaining_ms}ms"))
+    }
+}
+
 // ─── Spawn info lines ────────────────────────────────────────────────────────
 
 /// Render a `SpawnInfo` as a list of styled lines (used by target panel and character screen).
@@ -151,7 +179,7 @@ pub fn spawn_info_lines(
     let name = redact(&spawn.displayed_name).into_owned();
     let rawname = redact(&spawn.name).into_owned();
 
-    vec![
+    let mut lines = vec![
         Line::from(vec![
             Span::styled(
                 name,
@@ -202,7 +230,34 @@ pub fn spawn_info_lines(
             ),
             Span::styled(rawname, Style::default().fg(t.text_secondary)),
         ]),
-    ]
+    ];
+
+    if let Some(cast) = spawn.cast_state.as_ref().filter(|cast| cast.is_casting()) {
+        let mut spans = vec![
+            Span::styled("Cast ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                cast_summary(cast),
+                Style::default()
+                    .fg(t.text_highlight)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ];
+        if cast.target_id != 0 {
+            spans.push(Span::styled(
+                format!("  -> {}", cast.target_id),
+                Style::default().fg(t.text_secondary),
+            ));
+        }
+        if let Some(remaining) = cast_time_remaining_label(cast) {
+            spans.push(Span::styled(
+                format!("  {remaining}"),
+                Style::default().fg(t.text_muted),
+            ));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    lines
 }
 
 // ─── Confirm dialog ─────────────────────────────────────────────────────────

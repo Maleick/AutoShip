@@ -1,5 +1,7 @@
 use std::fmt;
 
+use dmft_common::offsets::launch_spell_data;
+
 /// EQ character class IDs.
 /// These are the numeric values stored in `CharClass` field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,23 +260,51 @@ impl BuffSlot {
     }
 }
 
-/// Active spell cast state for the local player.
-/// Read from `CharacterZoneClient` via `PINST_LOCAL_PC`.
+/// Active spell cast state for a spawn.
+/// Backed by `PlayerZoneClient::CastingData`; local spawns may also include gem timers.
 #[derive(Debug, Clone)]
 pub struct CastState {
-    /// Active gem slot (0-based). 0xFF = not currently casting.
-    pub spell_slot: u8,
+    /// Active spell ID (`-1` = not currently casting).
+    pub spell_id: i32,
+    /// Target spawn ID for the current cast.
+    pub target_id: u32,
     /// Server timestamp when cast completes (0 = not casting).
     pub spell_eta: u32,
-    /// Per-gem recast timestamps (15 entries, 0 = ready).
-    pub gem_etas: [u32; 15],
+    /// Casting item ID, if the spell came from an item click.
+    pub item_id: i32,
+    /// Active gem slot (0-based). `0xFF` = not currently using a spell gem.
+    pub spell_slot: u8,
+    /// Remaining cast time in milliseconds, if the display timestamp was available.
+    pub remaining_ms: Option<u32>,
+    /// Per-gem recast timestamps (15 entries, 0 = ready) for the local player only.
+    pub gem_etas: Option<[u32; 15]>,
 }
 
 impl CastState {
     /// True if actively casting a spell right now.
     #[must_use]
     pub fn is_casting(&self) -> bool {
-        self.spell_slot != 0xFF && self.spell_eta != 0
+        self.spell_id != launch_spell_data::NOT_CASTING_SPELL_ID
+    }
+
+    /// Active spell gem number (1-based), if the cast is coming from a memorized gem.
+    #[must_use]
+    pub fn spell_gem(&self) -> Option<u8> {
+        if self.is_casting() && self.spell_slot != launch_spell_data::NOT_CASTING_SPELL_SLOT {
+            Some(self.spell_slot + 1)
+        } else {
+            None
+        }
+    }
+
+    /// Remaining cast time in milliseconds, if known.
+    #[must_use]
+    pub fn cast_time_remaining_ms(&self) -> Option<u32> {
+        if self.is_casting() {
+            self.remaining_ms
+        } else {
+            None
+        }
     }
 }
 
@@ -337,7 +367,7 @@ pub struct SpawnInfo {
     pub race_id: u32,
     /// Active buff slots (populated only for local player via `read_buff_slots`).
     pub buff_slots: Vec<BuffSlot>,
-    /// Cast state (populated only for local player via `read_cast_state`).
+    /// Cast state for this spawn. Local player snapshots also include gem recast timers.
     pub cast_state: Option<CastState>,
 }
 
@@ -481,31 +511,45 @@ mod tests {
     #[test]
     fn cast_state_is_casting_true() {
         let cs = CastState {
-            spell_slot: 0,
+            spell_id: 123,
+            target_id: 456,
             spell_eta: 12345,
-            gem_etas: [0; 15],
+            item_id: 0,
+            spell_slot: 0,
+            remaining_ms: Some(900),
+            gem_etas: Some([0; 15]),
         };
         assert!(cs.is_casting());
+        assert_eq!(cs.spell_gem(), Some(1));
     }
 
     #[test]
-    fn cast_state_not_casting_when_slot_ff() {
+    fn cast_state_not_casting_when_spell_id_minus_one() {
         let cs = CastState {
+            spell_id: -1,
+            target_id: 0,
+            spell_eta: 0,
+            item_id: 0,
             spell_slot: 0xFF,
-            spell_eta: 0,
-            gem_etas: [0; 15],
+            remaining_ms: None,
+            gem_etas: Some([0; 15]),
         };
         assert!(!cs.is_casting());
     }
 
     #[test]
-    fn cast_state_not_casting_when_eta_zero() {
+    fn cast_state_item_click_can_cast_without_spell_slot() {
         let cs = CastState {
-            spell_slot: 0,
+            spell_id: 444,
+            target_id: 77,
             spell_eta: 0,
-            gem_etas: [0; 15],
+            item_id: 999,
+            spell_slot: 0xFF,
+            remaining_ms: Some(0),
+            gem_etas: None,
         };
-        assert!(!cs.is_casting());
+        assert!(cs.is_casting());
+        assert_eq!(cs.spell_gem(), None);
     }
 
     #[test]
@@ -722,13 +766,17 @@ mod tests {
     }
 
     #[test]
-    fn cast_state_slot_nonff_but_eta_zero_not_casting() {
+    fn cast_state_remaining_ms_none_when_unknown() {
         let cs = CastState {
+            spell_id: 55,
+            target_id: 0,
+            spell_eta: 1000,
+            item_id: 0,
             spell_slot: 5,
-            spell_eta: 0,
-            gem_etas: [0; 15],
+            remaining_ms: None,
+            gem_etas: None,
         };
-        assert!(!cs.is_casting());
+        assert_eq!(cs.cast_time_remaining_ms(), None);
     }
 
     // --- SpawnType::as_str tests ---
@@ -847,22 +895,45 @@ mod tests {
     #[test]
     fn cast_state_last_gem_slot() {
         let cs = CastState {
-            spell_slot: 14,
+            spell_id: 999,
+            target_id: 999,
             spell_eta: 99999,
-            gem_etas: [0; 15],
+            item_id: 0,
+            spell_slot: 14,
+            remaining_ms: Some(5000),
+            gem_etas: Some([0; 15]),
         };
         assert!(cs.is_casting());
+        assert_eq!(cs.spell_gem(), Some(15));
     }
 
     #[test]
-    fn cast_state_slot_0xfe_not_casting() {
-        // 0xFE is NOT 0xFF, so this should be casting if eta is nonzero
+    fn cast_state_slot_0xfe_still_reports_a_gem() {
         let cs = CastState {
-            spell_slot: 0xFE,
+            spell_id: 1,
+            target_id: 1,
             spell_eta: 100,
-            gem_etas: [0; 15],
+            item_id: 0,
+            spell_slot: 0xFE,
+            remaining_ms: Some(50),
+            gem_etas: Some([0; 15]),
         };
         assert!(cs.is_casting());
+        assert_eq!(cs.spell_gem(), Some(0xFF));
+    }
+
+    #[test]
+    fn cast_state_reports_remaining_ms_when_known() {
+        let cs = CastState {
+            spell_id: 11,
+            target_id: 123,
+            spell_eta: 1200,
+            item_id: 0,
+            spell_slot: 2,
+            remaining_ms: Some(250),
+            gem_etas: None,
+        };
+        assert_eq!(cs.cast_time_remaining_ms(), Some(250));
     }
 
     // --- SpawnInfo display edge cases ---

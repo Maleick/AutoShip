@@ -6,6 +6,7 @@
 use crate::eq::named_tracker::is_named;
 use crate::eq::structs::{CastState as EqCastState, EqClass, SpawnInfo, SpawnType, StandState};
 use dmft_common::nav::{NavStatus, Waypoint};
+use dmft_common::offsets::launch_spell_data;
 
 /// Spawn definition tuple: (name, level, `class_id`, `spawn_type`, hp, `hp_max`, `stand_state`).
 type SpawnDef<'a> = (&'a str, u8, u8, SpawnType, i64, i64, StandState);
@@ -403,15 +404,40 @@ pub fn demo_client_cast_active(name: &str, pid: u32, tick_count: u64) -> Option<
 pub fn demo_eq_cast_state(cast: Option<DemoCastInfo>) -> EqCastState {
     match cast {
         Some(cast) => EqCastState {
+            spell_id: demo_spell_id(cast.spell_label),
+            target_id: 0,
             spell_slot: cast.spell_slot,
             spell_eta: cast.remaining_ms.max(1),
-            gem_etas: [0; 15],
+            item_id: 0,
+            remaining_ms: Some(cast.remaining_ms.max(1)),
+            gem_etas: Some([0; 15]),
         },
         None => EqCastState {
-            spell_slot: 0xFF,
+            spell_id: launch_spell_data::NOT_CASTING_SPELL_ID,
+            target_id: 0,
+            spell_slot: launch_spell_data::NOT_CASTING_SPELL_SLOT,
             spell_eta: 0,
-            gem_etas: [0; 15],
+            item_id: 0,
+            remaining_ms: None,
+            gem_etas: Some([0; 15]),
         },
+    }
+}
+
+#[must_use]
+fn demo_spell_id(spell_label: &str) -> i32 {
+    match spell_label {
+        "Complete Heal" => 201,
+        "Greater Heal" => 202,
+        "Light Heal" => 203,
+        "Mesmerize" => 301,
+        "Color Flux" => 302,
+        "Slow" => 401,
+        "Haste" => 402,
+        "Ice Comet" => 501,
+        "Fire" => 502,
+        "Spirit of Wolf" => 601,
+        _ => 1,
     }
 }
 
