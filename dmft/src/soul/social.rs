@@ -528,8 +528,10 @@ mod tests {
 
     #[test]
     fn standing_boundary_values() {
-        let mut rel = Relationship::default();
-        rel.faction_score = 750;
+        let mut rel = Relationship {
+            faction_score: 750,
+            ..Relationship::default()
+        };
         assert_eq!(rel.standing(), "ally");
         rel.faction_score = 749;
         assert_eq!(rel.standing(), "warmly");
