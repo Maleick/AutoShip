@@ -131,6 +131,7 @@ pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
 // eqmain.dll has its own base address; use `eqmain::rebase()` to convert.
 // Source: MQ2 AutoLogin / eqmain offsets, client date 20260310
 
+/// Offsets within eqmain.dll (login/server select UI module).
 pub mod eqmain {
     /// Preferred base address of eqmain.dll (64-bit)
     pub const EQMAIN_PREFERRED_BASE: u64 = 0x180000000;
@@ -175,13 +176,13 @@ pub mod eqmain {
     /// EQLogin::hEQWnd (HWND) at offset 0x408
     pub const EQLOGIN_HWND: usize = 0x408;
 
-    /// EQLogin::Login[0x80] (char array) at offset 0x414
+    /// `EQLogin::Login` (char\[0x80\] array) at offset 0x414
     pub const EQLOGIN_USERNAME: usize = 0x414;
 
-    /// EQLogin::PW[0x80] (char array) at offset 0x494
+    /// `EQLogin::PW` (char\[0x80\] array) at offset 0x494
     pub const EQLOGIN_PASSWORD: usize = 0x494;
 
-    /// EQLogin::Character[0x40] (char array) at offset 0x97C
+    /// `EQLogin::Character` (char\[0x40\] array) at offset 0x97C
     pub const EQLOGIN_CHARACTER: usize = 0x97C;
 
     /// Maximum length of login/password fields (0x80 = 128 bytes, use 0x7F for null terminator)
@@ -252,6 +253,7 @@ pub mod eqmain {
 // ─── eqgame.exe CXWndManager offsets ───
 // NOTE: These differ from eqmain.dll! eqgame.exe has CXWndManager::pWindows at +0x008,
 // while eqmain.dll has it at +0x010 (different struct layout).
+/// Offsets within eqgame.exe (in-game UI and window manager).
 pub mod eqgame {
     /// CXWndManager::pWindows.m_length in eqgame.exe
     /// ArrayClass layout: m_length at +0x00, m_array at +0x08 within the ArrayClass
@@ -271,14 +273,14 @@ pub mod eqgame {
     // ─── CListWnd offsets (for character list reading) ───
     // Source: mq2-reference UI.h — CListWnd inherits CSidlScreenWnd
 
-    /// CListWnd::ItemsArray (ArrayClass<SListWndLine>) — row count (int at +0x270)
+    /// `CListWnd::ItemsArray` (`ArrayClass<SListWndLine>`) — row count (int at +0x270)
     pub const CLISTWND_ITEMS_COUNT: usize = 0x270;
     /// CListWnd::ItemsArray.m_array — pointer to SListWndLine array (at +0x278)
     pub const CLISTWND_ITEMS_ARRAY: usize = 0x278;
 
     /// sizeof(SListWndLine) — each row in the list
     pub const SLISTWNDLINE_SIZE: usize = 0x138;
-    /// SListWndLine::Cells.m_length (ArrayClass<SListWndCell> at +0x00)
+    /// `SListWndLine::Cells.m_length` (`ArrayClass<SListWndCell>` at +0x00)
     pub const SLISTWNDLINE_CELLS_COUNT: usize = 0x000;
     /// SListWndLine::Cells.m_array (pointer at +0x08)
     pub const SLISTWNDLINE_CELLS_ARRAY: usize = 0x008;
@@ -317,9 +319,9 @@ pub mod player_base {
     pub const Z: usize = 0x07c;
     /// float — heading/rotation
     pub const HEADING: usize = 0x090;
-    /// char[64] — internal name (e.g., "priest_of_discord00")
+    /// char\[64\] — internal name (e.g., "priest_of_discord00")
     pub const NAME: usize = 0x0b4;
-    /// char[64] — displayed name (e.g., "Priest of Discord")
+    /// char\[64\] — displayed name (e.g., "Priest of Discord")
     pub const DISPLAYED_NAME: usize = 0x0f4;
     /// float — SpeedX (lateral speed component)
     pub const SPEED_CURRENT: usize = 0x084;
@@ -333,7 +335,7 @@ pub mod player_base {
     pub const TYPE: usize = 0x135;
     /// uint32_t — unique spawn ID
     pub const SPAWN_ID: usize = 0x168;
-    /// char[32] — last name
+    /// char\[32\] — last name
     pub const LASTNAME: usize = 0x048;
 }
 
@@ -375,7 +377,7 @@ pub mod character_zone {
     /// uint8_t — active spell gem slot (0xFF = not casting)
     /// Source: PlayerClient.h offset 0x039 (CharacterZoneClient::SpellSlot)
     pub const SPELL_SLOT: usize = 0x039;
-    /// uint32_t[15] — per-gem recast timestamp array
+    /// uint32_t\[15\] — per-gem recast timestamp array
     /// Source: PlayerClient.h offset 0x3B0 (CharacterZoneClient::SpellGemETA)
     pub const SPELL_GEM_ETA: usize = 0x3B0;
 }
@@ -440,7 +442,7 @@ pub mod group {
     pub const MAX_GROUP_SIZE: usize = 6;
 
     // ─── CGroupBase layout (vtable at 0x00) ───
-    /// CGroupMember* m_groupMembers[6] — array of 6 member pointers
+    /// `CGroupMember*` m_groupMembers\[6\] — array of 6 member pointers
     pub const GROUP_MEMBERS: usize = 0x08;
     /// CGroupMember* m_groupLeader — pointer to leader member
     pub const GROUP_LEADER: usize = 0x38;
@@ -472,10 +474,10 @@ pub mod zone_info {
     /// This is NOT a pointer — it's the struct itself at this address.
     pub const INST_EQ_ZONE_INFO: u64 = 0x140E95CD4;
 
-    /// char[128] — zone short name (e.g., "qey2hh1")
+    /// char\[128\] — zone short name (e.g., "qey2hh1")
     pub const SHORT_NAME: usize = 0x000;
 
-    /// char[128] — zone long name (e.g., "Queynos Hills")
+    /// char\[128\] — zone long name (e.g., "Queynos Hills")
     pub const LONG_NAME: usize = 0x080;
 }
 
@@ -495,7 +497,7 @@ pub mod zone_guide {
     // ─── ZoneGuideManagerBase layout ───
     // vtable at +0x00 (8 bytes), zones array starts at +0x08
 
-    /// Offset of zones[0] within ZoneGuideManagerBase.
+    /// Offset of `zones\[0\]` within ZoneGuideManagerBase.
     pub const ZONES_OFFSET: usize = 0x0008;
 
     // ─── ZoneGuideZone layout (0x48 bytes each) ───
@@ -513,9 +515,10 @@ pub mod zone_guide {
     pub const ZONE_MIN_LEVEL: usize = 0x14;
     /// int maxLevel (+0x18)
     pub const ZONE_MAX_LEVEL: usize = 0x18;
-    /// ArrayClass<ZoneGuideConnection> zoneConnections at +0x30
+    /// `ArrayClass<ZoneGuideConnection>` zoneConnections at +0x30
     /// ArrayClass layout: m_length (int) at +0x00, m_array (ptr) at +0x08
     pub const ZONE_CONNECTIONS_COUNT: usize = 0x30;
+    /// ArrayClass connections pointer at +0x38
     pub const ZONE_CONNECTIONS_ARRAY: usize = 0x38;
 
     // ─── ZoneGuideConnection layout (0x14 bytes each) ───
