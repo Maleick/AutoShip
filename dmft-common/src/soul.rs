@@ -6,17 +6,28 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersonalityTraits {
     // Big Five
+    /// Openness to experience (curiosity, creativity).
     pub openness: f32,
+    /// Conscientiousness (discipline, organization).
     pub conscientiousness: f32,
+    /// Extraversion (sociability, talkativeness).
     pub extraversion: f32,
+    /// Agreeableness (cooperativeness, empathy).
     pub agreeableness: f32,
+    /// Neuroticism (emotional instability, anxiety).
     pub neuroticism: f32,
     // EQ-themed traits
+    /// Eagerness for combat encounters.
     pub battle_hunger: f32,
+    /// Devotion to deity and role-play religiosity.
     pub piety: f32,
+    /// Desire for loot and wealth accumulation.
     pub greed: f32,
+    /// Urge to explore new zones and wander.
     pub wanderlust: f32,
+    /// Devotion to groupmates and guild.
     pub loyalty: f32,
+    /// Tendency toward pranks and playful behavior.
     pub mischief: f32,
 }
 
@@ -41,45 +52,74 @@ impl Default for PersonalityTraits {
 /// Current mood of a character. Affects combat style, social behavior, idle choices.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MoodState {
+    /// Baseline emotional state.
     #[default]
     Neutral,
+    /// Positive mood — more social, generous behavior.
     Happy,
+    /// Aggressive mood — more combat-hungry, less patient.
     Angry,
+    /// Nervous mood — cautious pulls, avoids risk.
     Anxious,
+    /// Bored — triggers idle behaviors and wandering.
     Bored,
+    /// High energy — fast actions, more emotes.
     Excited,
+    /// Sad mood — quieter, introspective behavior.
     Melancholy,
+    /// Concentrated — efficient combat, minimal chat.
     Focused,
+    /// Lighthearted — jokes, pranks, random emotes.
     Playful,
+    /// Fatigued — slower actions, may AFK or log off.
     Exhausted,
 }
 
 /// Types of idle behavior a character can perform when not in combat or traveling.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IdleBehaviorType {
+    /// Sit down to regen mana/HP.
     Sit,
+    /// Wander randomly near camp.
     Wander,
+    /// Perform a random emote.
     Emote,
+    /// Go fishing at a nearby water source.
     Fish,
+    /// Craft items (tradeskills).
     Craft,
+    /// Browse a nearby vendor's inventory.
     VendorBrowse,
+    /// Chat about zone lore or tell stories.
     LoreChatter,
+    /// Announce a bio break (AFK message).
     BioBrk,
+    /// Log off the character to simulate sleep.
     LogOffToSleep,
+    /// Jump randomly in place (fidget behavior).
     RandomJump,
+    /// Inspect a nearby player's gear.
     Inspect,
 }
 
 /// Tags for social relationships between characters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SocialTag {
+    /// Positive relationship — groupmate, ally.
     Friend,
+    /// Competitive relationship — contested camps, loot rivalry.
     Rival,
+    /// Teaches or guides this character.
     Mentor,
+    /// Learns from this character.
     Mentee,
+    /// Family bond (shared account/player lore).
     Sibling,
+    /// Casual contact — met once, no strong bond.
     Acquaintance,
+    /// Hostile relationship — KOS, grief history.
     Nemesis,
+    /// Romantic interest (RP flavor).
     Crush,
 }
 
@@ -126,46 +166,93 @@ impl Default for SpeechStyle {
 /// Events that the Soul Engine tracks for character memory and mood evolution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SoulEvent {
-    /// Character died
+    /// Character died.
     Death {
+        /// Zone short name where death occurred.
         zone: String,
+        /// Name of the mob/player that killed us, if known.
         killer: Option<String>,
     },
-    /// Character got a notable kill
-    Kill { target: String, zone: String },
-    /// Received loot
-    Loot { item: String, zone: String },
-    /// Had a conversation with a real player
-    PlayerChat { player_name: String, sentiment: f32 },
-    /// Had a conversation with another bot
-    BotChat { character_name: String },
-    /// Witnessed something notable
-    Witnessed { description: String },
-    /// Mood shifted
+    /// Character got a notable kill.
+    Kill {
+        /// Name of the killed mob.
+        target: String,
+        /// Zone short name.
+        zone: String,
+    },
+    /// Received loot.
+    Loot {
+        /// Item name that was looted.
+        item: String,
+        /// Zone short name.
+        zone: String,
+    },
+    /// Had a conversation with a real player.
+    PlayerChat {
+        /// Name of the real player.
+        player_name: String,
+        /// Sentiment score (-1.0 hostile .. 1.0 friendly).
+        sentiment: f32,
+    },
+    /// Had a conversation with another bot.
+    BotChat {
+        /// Character name of the other bot.
+        character_name: String,
+    },
+    /// Witnessed something notable.
+    Witnessed {
+        /// Free-text description of the event.
+        description: String,
+    },
+    /// Mood shifted.
     MoodShift {
+        /// Previous mood state.
         from: MoodState,
+        /// New mood state.
         to: MoodState,
+        /// Why the mood changed.
         reason: String,
     },
-    /// Entered a new zone
-    ZoneEnter { zone: String },
-    /// Level gained
-    LevelUp { new_level: u8 },
-    /// Group wipe
-    GroupWipe { zone: String },
-    /// Relationship changed with another character
-    RelationshipChange { character: String, delta: f32 },
+    /// Entered a new zone.
+    ZoneEnter {
+        /// Zone short name.
+        zone: String,
+    },
+    /// Level gained.
+    LevelUp {
+        /// The new level reached.
+        new_level: u8,
+    },
+    /// Group wipe.
+    GroupWipe {
+        /// Zone short name where the wipe occurred.
+        zone: String,
+    },
+    /// Relationship changed with another character.
+    RelationshipChange {
+        /// Name of the other character.
+        character: String,
+        /// Change in relationship score (-1.0 .. 1.0).
+        delta: f32,
+    },
 }
 
 /// EQ chat channels for Say/Emote commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SayChannel {
+    /// /say — local area chat.
     Say,
+    /// /shout — zone-wide broadcast.
     Shout,
+    /// /ooc — out-of-character zone chat.
     Ooc,
+    /// /gu — guild chat channel.
     Guild,
+    /// /g — group chat channel.
     Group,
+    /// /tell — private message to a player.
     Tell,
+    /// /auction — zone-wide trade channel.
     Auction,
 }
 
