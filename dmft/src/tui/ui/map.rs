@@ -3,14 +3,17 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Paragraph, Row, Table},
 };
 
 use super::{
     spawns,
-    widgets::{panel, themed_header_row},
+    widgets::{
+        WIDTH_MAP_EXTRA_WIDE, WIDTH_MAP_NARROW, WIDTH_MAP_STACK, WIDTH_MAP_WIDE_RIGHT,
+        WIDTH_SIDEBAR_WIDE, panel, themed_header_row,
+    },
 };
 use crate::eq::structs::SpawnType;
 use crate::tui::app::{ActivePanel, App};
@@ -27,7 +30,7 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         .sum::<u16>()
         .max(6);
 
-    if area.width < 100 {
+    if area.width < WIDTH_MAP_STACK {
         let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(11), Constraint::Length(sidebar_height + 10)])
@@ -44,8 +47,8 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         return;
     }
 
-    if area.width < 140 {
-        let right_width = if area.width >= 126 { 52 } else { 46 };
+    if area.width < WIDTH_MAP_NARROW {
+        let right_width = if area.width >= WIDTH_MAP_WIDE_RIGHT { 52 } else { 46 };
         let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(40), Constraint::Length(right_width)])
@@ -61,8 +64,8 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         return;
     }
 
-    let sidebar_width = if area.width >= 180 { 30 } else { 26 };
-    let spawn_width = if area.width >= 170 { 52 } else { 46 };
+    let sidebar_width = if area.width >= WIDTH_MAP_EXTRA_WIDE { 30 } else { 26 };
+    let spawn_width = if area.width >= WIDTH_SIDEBAR_WIDE { 52 } else { 46 };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -386,18 +389,40 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
                 Line::from(spans)
             } else {
-                Line::from(
-                    row.into_iter()
-                        .map(|(ch, color)| {
-                            Span::styled(String::from(ch), Style::default().fg(color))
-                        })
-                        .collect::<Vec<_>>(),
-                )
+                Line::from(color_run_spans(row))
             }
         })
         .collect();
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Collapse a row of `(char, Color)` cells into spans grouped by consecutive color runs.
+/// Produces ~10-30 spans per row instead of one per cell, avoiding thousands of heap allocations.
+fn color_run_spans(row: Vec<(char, Color)>) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut buf = String::new();
+    let mut current_color: Option<Color> = None;
+
+    for (ch, color) in row {
+        if current_color == Some(color) {
+            buf.push(ch);
+        } else {
+            if let Some(c) = current_color {
+                spans.push(Span::styled(
+                    std::mem::take(&mut buf),
+                    Style::default().fg(c),
+                ));
+            }
+            buf.push(ch);
+            current_color = Some(color);
+        }
+    }
+    if let Some(c) = current_color {
+        spans.push(Span::styled(buf, Style::default().fg(c)));
+    }
+
+    spans
 }
 
 fn map_contains_player(map: &crate::eq::map_parser::ZoneMap, x: f32, y: f32) -> bool {
@@ -759,7 +784,7 @@ fn draw_navigation_summary(
             app.nav_state
                 .nav_statuses
                 .get(&client.pid)
-                .is_some_and(|nav| nav.status == "Navigating")
+                .is_some_and(|nav| nav.status.is_moving())
         })
         .count();
     let arrived = visible
@@ -768,7 +793,7 @@ fn draw_navigation_summary(
             app.nav_state
                 .nav_statuses
                 .get(&client.pid)
-                .is_some_and(|nav| nav.status == "Arrived")
+                .is_some_and(|nav| nav.status.is_arrived())
         })
         .count();
     let stuck = visible
@@ -777,7 +802,7 @@ fn draw_navigation_summary(
             app.nav_state
                 .nav_statuses
                 .get(&client.pid)
-                .is_some_and(|nav| nav.status == "Stuck")
+                .is_some_and(|nav| nav.status.is_stuck())
         })
         .count();
     let idle = visible.len().saturating_sub(navigating + arrived + stuck);
@@ -803,17 +828,17 @@ fn draw_navigation_summary(
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid));
     let selected_status = selected_nav
-        .map(|nav| nav.status.as_str())
+        .map(|nav| nav.status.label())
         .unwrap_or("Idle");
     let selected_dest = selected_nav
         .map(|nav| nav.destination.as_str())
         .unwrap_or("—");
     let selected_waypoints = selected_nav.map(|nav| nav.waypoints.len()).unwrap_or(0);
 
-    let status_color = match selected_status {
-        "Navigating" => t.text_highlight,
-        "Arrived" => t.hp_high,
-        "Stuck" => t.hp_low,
+    let status_color = match selected_nav.map(|nav| &nav.status) {
+        Some(s) if s.is_moving() => t.text_highlight,
+        Some(s) if s.is_arrived() => t.hp_high,
+        Some(s) if s.is_stuck() => t.hp_low,
         _ => t.text_muted,
     };
 

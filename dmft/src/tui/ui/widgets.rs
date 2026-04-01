@@ -9,6 +9,32 @@ use ratatui::{
 use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::tui::theme::Theme;
 
+// ─── Layout breakpoints ─────────────────────────────────────────────────────
+// Named constants for width-based layout transitions so dashboard.rs and map.rs
+// stay in sync when thresholds are tuned.
+
+/// Below this width the overview switches from side-by-side to stacked layout.
+pub const WIDTH_OVERVIEW_STACK: u16 = 118;
+/// Above this width sidebars get medium expansion.
+pub const WIDTH_SIDEBAR_MEDIUM: u16 = 145;
+/// Above this width sidebars and spawn lists get full expansion.
+pub const WIDTH_SIDEBAR_WIDE: u16 = 170;
+/// Below this width the map screen uses a vertical stacked layout.
+pub const WIDTH_MAP_STACK: u16 = 100;
+/// Below this width the map uses a 2-column layout instead of 3.
+pub const WIDTH_MAP_NARROW: u16 = 140;
+/// Above this width the map's right panel gets expanded width.
+pub const WIDTH_MAP_WIDE_RIGHT: u16 = 126;
+/// Above this width the tactical sidebar gets extra room.
+pub const WIDTH_MAP_EXTRA_WIDE: u16 = 180;
+
+/// Minimum width to show the Group column in the overview roster.
+pub const WIDTH_SHOW_GROUP_COL: u16 = 78;
+/// Minimum width to show the Class column in the overview roster.
+pub const WIDTH_SHOW_CLASS_COL: u16 = 88;
+/// Minimum width to show the Zone column in the overview roster.
+pub const WIDTH_SHOW_ZONE_COL: u16 = 104;
+
 // ─── Block / panel helper ────────────────────────────────────────────────────
 
 /// Build a `Block` with the project's standard chrome: border type + style + title.

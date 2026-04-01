@@ -11,6 +11,18 @@ use ratatui::{
 use super::widgets::{panel, themed_header_row};
 use crate::tui::app::App;
 
+fn nav_status_color(status: &dmft_common::nav::NavStatus, t: &crate::tui::theme::Theme) -> ratatui::style::Color {
+    if status.is_moving() {
+        t.text_highlight
+    } else if status.is_arrived() {
+        t.hp_high
+    } else if status.is_stuck() {
+        t.hp_low
+    } else {
+        t.text_muted
+    }
+}
+
 pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     // Adaptive: narrow terminals get more space for nav status
@@ -50,15 +62,14 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                     .unwrap_or_else(|| format!("PID {}", client.pid));
 
                 let nav = app.nav_state.nav_statuses.get(&client.pid);
-                let status = nav.map(|s| s.status.as_str()).unwrap_or("Idle");
+                let status = nav
+                    .map(|s| s.status.label())
+                    .unwrap_or("Idle");
                 let dest = nav.map(|s| s.destination.as_str()).unwrap_or("—");
 
-                let status_color = match status {
-                    "Navigating" => t.text_highlight,
-                    "Arrived" => t.hp_high,
-                    "Stuck" => t.hp_low,
-                    _ => t.text_muted,
-                };
+                let status_color = nav
+                    .map(|s| nav_status_color(&s.status, t))
+                    .unwrap_or(t.text_muted);
 
                 let row_style = if is_sel {
                     Style::default()
@@ -159,10 +170,12 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             for member_name in &group.member_names {
                 if let Some(client) = app.find_client_by_name(member_name) {
                     if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
-                        match nav.status.as_str() {
-                            "Navigating" => navigating += 1,
-                            "Arrived" => arrived += 1,
-                            _ => idle += 1,
+                        if nav.status.is_moving() {
+                            navigating += 1;
+                        } else if nav.status.is_arrived() {
+                            arrived += 1;
+                        } else {
+                            idle += 1;
                         }
                         if !nav.destination.is_empty() && nav.destination != "\u{2014}" {
                             match dest {

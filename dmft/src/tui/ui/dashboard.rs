@@ -8,7 +8,11 @@ use ratatui::{
     widgets::{Cell, Gauge, Paragraph, Row, Table, Wrap},
 };
 
-use super::widgets::{hp_color, panel, stand_state_color, themed_header_row};
+use super::widgets::{
+    WIDTH_OVERVIEW_STACK, WIDTH_SHOW_CLASS_COL, WIDTH_SHOW_GROUP_COL, WIDTH_SHOW_ZONE_COL,
+    WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, hp_color, panel, stand_state_color,
+    themed_header_row,
+};
 use crate::eq::structs::{EqClass, StandState};
 use crate::tui::app::{ActivePanel, App, ClientState};
 
@@ -19,7 +23,7 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
         .map(|(_, constraint)| preferred_height(*constraint))
         .sum::<u16>();
 
-    let chunks = if area.width < 118 {
+    let chunks = if area.width < WIDTH_OVERVIEW_STACK {
         let sidebar_height = natural_sidebar_height
             .min(area.height.saturating_sub(10))
             .max(3);
@@ -28,9 +32,9 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
             .constraints([Constraint::Min(10), Constraint::Length(sidebar_height)])
             .split(area)
     } else {
-        let sidebar_width = if area.width >= 170 {
+        let sidebar_width = if area.width >= WIDTH_SIDEBAR_WIDE {
             46
-        } else if area.width >= 145 {
+        } else if area.width >= WIDTH_SIDEBAR_MEDIUM {
             42
         } else {
             38
@@ -86,9 +90,9 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let show_group = area.width >= 78;
-    let show_class = area.width >= 88;
-    let show_zone = area.width >= 104;
+    let show_group = area.width >= WIDTH_SHOW_GROUP_COL;
+    let show_class = area.width >= WIDTH_SHOW_CLASS_COL;
+    let show_zone = area.width >= WIDTH_SHOW_ZONE_COL;
 
     let mut headers = vec!["", "Name"];
     if show_group {
@@ -244,25 +248,22 @@ fn client_activity(app: &App, client: &ClientState) -> (&'static str, Style) {
     let t = &app.theme;
 
     if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
-        match nav.status.as_str() {
-            "Navigating" => {
-                return (
-                    "➜ Nav",
-                    Style::default()
-                        .fg(t.text_highlight)
-                        .add_modifier(Modifier::BOLD),
-                );
-            }
-            "Arrived" => {
-                return ("✓ Arr", Style::default().fg(t.hp_high));
-            }
-            "Stuck" => {
-                return (
-                    "! Stuck",
-                    Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
-                );
-            }
-            _ => {}
+        if nav.status.is_moving() {
+            return (
+                "➜ Nav",
+                Style::default()
+                    .fg(t.text_highlight)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
+        if nav.status.is_arrived() {
+            return ("✓ Arr", Style::default().fg(t.hp_high));
+        }
+        if nav.status.is_stuck() {
+            return (
+                "! Stuck",
+                Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+            );
         }
     }
 
