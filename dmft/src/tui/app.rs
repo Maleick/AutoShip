@@ -580,7 +580,9 @@ impl App {
         let enabled = self.map_state.toggle_navmesh();
         if enabled {
             if let Some(zone) = self.current_zone_short_name() {
-                self.load_zone_navmesh_overlay(&zone);
+                if self.map_state.navmesh_overlay.is_none() {
+                    self.load_zone_navmesh_overlay(&zone);
+                }
             }
             let segment_count = self
                 .map_state
