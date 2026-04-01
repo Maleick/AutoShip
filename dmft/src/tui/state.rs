@@ -4,6 +4,7 @@ use ratatui::widgets::TableState;
 
 use super::app::{NavClientStatus, SpawnFilter};
 use crate::eq::map_parser::ZoneMap;
+use crate::nav::mesh::NavMeshOverlay;
 
 // ─── Per-screen state sub-structs ────────────────────────────────────────────
 
@@ -45,6 +46,31 @@ impl HexDumpState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapViewportMode {
+    Auto,
+    Local,
+    Global,
+}
+
+impl MapViewportMode {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Auto => Self::Local,
+            Self::Local => Self::Global,
+            Self::Global => Self::Auto,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Local => "local",
+            Self::Global => "global",
+        }
+    }
+}
+
 /// State for the Map screen.
 pub struct MapScreenState {
     pub zone_map: Option<ZoneMap>,
@@ -53,6 +79,12 @@ pub struct MapScreenState {
     pub loaded_zone: String,
     /// Z-depth filter range — spawns farther than this from the player's Z are hidden.
     pub z_filter_range: f32,
+    pub viewport_mode: MapViewportMode,
+    pub zoom: f32,
+    pub pan_x: f32,
+    pub pan_y: f32,
+    pub show_navmesh: bool,
+    pub navmesh_overlay: Option<NavMeshOverlay>,
 }
 
 impl MapScreenState {
@@ -63,6 +95,12 @@ impl MapScreenState {
             map_dir,
             loaded_zone: String::new(),
             z_filter_range: 50.0,
+            viewport_mode: MapViewportMode::Auto,
+            zoom: 1.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+            show_navmesh: true,
+            navmesh_overlay: None,
         }
     }
 
@@ -74,6 +112,36 @@ impl MapScreenState {
     /// Decrease Z filter range by 10 (min 10).
     pub fn decrease_z_filter(&mut self) {
         self.z_filter_range = (self.z_filter_range - 10.0).max(10.0);
+    }
+
+    pub fn zoom_in(&mut self) {
+        self.zoom = (self.zoom * 1.25).min(4.0);
+    }
+
+    pub fn zoom_out(&mut self) {
+        self.zoom = (self.zoom / 1.25).max(0.35);
+    }
+
+    pub fn pan(&mut self, delta_x: f32, delta_y: f32) {
+        self.pan_x += delta_x;
+        self.pan_y += delta_y;
+    }
+
+    pub fn reset_viewport(&mut self) {
+        self.zoom = 1.0;
+        self.pan_x = 0.0;
+        self.pan_y = 0.0;
+    }
+
+    pub fn cycle_viewport_mode(&mut self) -> MapViewportMode {
+        self.viewport_mode = self.viewport_mode.next();
+        self.reset_viewport();
+        self.viewport_mode
+    }
+
+    pub fn toggle_navmesh(&mut self) -> bool {
+        self.show_navmesh = !self.show_navmesh;
+        self.show_navmesh
     }
 }
 
@@ -308,5 +376,39 @@ mod tests {
             "ma Warrior"
         );
         assert_eq!(CommandBarState::normalize_command("engage 100"), "engage");
+    }
+
+    #[test]
+    fn map_viewport_mode_cycles() {
+        let mut state = MapScreenState::new();
+        assert_eq!(state.viewport_mode, MapViewportMode::Auto);
+        assert_eq!(state.cycle_viewport_mode(), MapViewportMode::Local);
+        assert_eq!(state.cycle_viewport_mode(), MapViewportMode::Global);
+        assert_eq!(state.cycle_viewport_mode(), MapViewportMode::Auto);
+    }
+
+    #[test]
+    fn map_zoom_is_clamped() {
+        let mut state = MapScreenState::new();
+        for _ in 0..20 {
+            state.zoom_in();
+        }
+        assert!((state.zoom - 4.0).abs() < f32::EPSILON);
+
+        for _ in 0..40 {
+            state.zoom_out();
+        }
+        assert!((state.zoom - 0.35).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_reset_viewport_clears_pan_and_zoom() {
+        let mut state = MapScreenState::new();
+        state.zoom_in();
+        state.pan(42.0, -18.0);
+        state.reset_viewport();
+        assert!((state.zoom - 1.0).abs() < f32::EPSILON);
+        assert!((state.pan_x - 0.0).abs() < f32::EPSILON);
+        assert!((state.pan_y - 0.0).abs() < f32::EPSILON);
     }
 }

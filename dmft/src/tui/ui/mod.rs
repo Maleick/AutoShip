@@ -23,7 +23,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-use crate::tui::app::{ActiveScreen, App};
+use crate::tui::app::{ActivePanel, ActiveScreen, App};
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -164,32 +164,59 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
         .split(area);
 
     // ── Left pane ─────────────────────────────────────────────────────
-    let hints: Vec<Span<'_>> = vec![
-        Span::styled("1-4", t.statusbar_key),
-        Span::styled(" screen  ", t.statusbar_dim),
-        Span::styled("⇧1-6", t.statusbar_key),
-        Span::styled(" group  ", t.statusbar_dim),
-        Span::styled("Tab", t.statusbar_key),
-        Span::styled(" pane  ", t.statusbar_dim),
-        Span::styled("[ ]", t.statusbar_key),
-        Span::styled(" client  ", t.statusbar_dim),
-        Span::styled("g/v", t.statusbar_key),
-        Span::styled(" sections  ", t.statusbar_dim),
-        Span::styled("z", t.statusbar_key),
-        Span::styled(" collapse  ", t.statusbar_dim),
-        Span::styled("/", t.statusbar_key),
-        Span::styled(" search  ", t.statusbar_dim),
-        Span::styled("f", t.statusbar_key),
-        Span::styled(" filter  ", t.statusbar_dim),
-        Span::styled("+/-", t.statusbar_key),
-        Span::styled(" depth  ", t.statusbar_dim),
-        Span::styled("m", t.statusbar_key),
-        Span::styled(" map  ", t.statusbar_dim),
-        Span::styled("T", t.statusbar_key),
-        Span::styled(" theme  ", t.statusbar_dim),
-        Span::styled("?", t.statusbar_key),
-        Span::styled(" help", t.statusbar_dim),
-    ];
+    let hints: Vec<Span<'_>> = if app.active_panel == ActivePanel::TacticalMap {
+        vec![
+            Span::styled("1-4", t.statusbar_key),
+            Span::styled(" screen  ", t.statusbar_dim),
+            Span::styled("Tab", t.statusbar_key),
+            Span::styled(" pane  ", t.statusbar_dim),
+            Span::styled("[ ]", t.statusbar_key),
+            Span::styled(" client  ", t.statusbar_dim),
+            Span::styled("v", t.statusbar_key),
+            Span::styled(" view  ", t.statusbar_dim),
+            Span::styled("n", t.statusbar_key),
+            Span::styled(" mesh  ", t.statusbar_dim),
+            Span::styled("PgUp/Dn", t.statusbar_key),
+            Span::styled(" zoom  ", t.statusbar_dim),
+            Span::styled("←↑↓→", t.statusbar_key),
+            Span::styled(" pan  ", t.statusbar_dim),
+            Span::styled("+/-", t.statusbar_key),
+            Span::styled(" depth  ", t.statusbar_dim),
+            Span::styled("Home", t.statusbar_key),
+            Span::styled(" reset  ", t.statusbar_dim),
+            Span::styled("m", t.statusbar_key),
+            Span::styled(" map  ", t.statusbar_dim),
+            Span::styled("?", t.statusbar_key),
+            Span::styled(" help", t.statusbar_dim),
+        ]
+    } else {
+        vec![
+            Span::styled("1-4", t.statusbar_key),
+            Span::styled(" screen  ", t.statusbar_dim),
+            Span::styled("⇧1-6", t.statusbar_key),
+            Span::styled(" group  ", t.statusbar_dim),
+            Span::styled("Tab", t.statusbar_key),
+            Span::styled(" pane  ", t.statusbar_dim),
+            Span::styled("[ ]", t.statusbar_key),
+            Span::styled(" client  ", t.statusbar_dim),
+            Span::styled("g/v", t.statusbar_key),
+            Span::styled(" sections  ", t.statusbar_dim),
+            Span::styled("z", t.statusbar_key),
+            Span::styled(" collapse  ", t.statusbar_dim),
+            Span::styled("/", t.statusbar_key),
+            Span::styled(" search  ", t.statusbar_dim),
+            Span::styled("f", t.statusbar_key),
+            Span::styled(" filter  ", t.statusbar_dim),
+            Span::styled("+/-", t.statusbar_key),
+            Span::styled(" depth  ", t.statusbar_dim),
+            Span::styled("m", t.statusbar_key),
+            Span::styled(" map  ", t.statusbar_dim),
+            Span::styled("T", t.statusbar_key),
+            Span::styled(" theme  ", t.statusbar_dim),
+            Span::styled("?", t.statusbar_key),
+            Span::styled(" help", t.statusbar_dim),
+        ]
+    };
 
     let left_spans: Vec<Span<'_>> = std::iter::once(Span::raw(" "))
         .chain(std::iter::once(Span::styled(
@@ -305,6 +332,11 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("v", "Toggle scope section"),
         kv("z", "Collapse focused section"),
         kv("+/-", "Adjust Tactical Z slice"),
+        kv("PgUp/PgDn", "Zoom Tactical map"),
+        kv("Arrow keys", "Pan Tactical map"),
+        kv("Home", "Reset Tactical viewport"),
+        kv("v (Map pane)", "Cycle auto/local/global view"),
+        kv("n (Map pane)", "Toggle navmesh overlay"),
         kv("m", "Maximize Tactical map"),
         kv("p", "Privacy mode"),
         kv("T", "Cycle theme"),
