@@ -339,26 +339,40 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ActiveScreen::Overview => {
             text.push(kv("g", "Toggle group roster section"));
             text.push(kv("v", "Toggle scope/filters section"));
+            text.push(kv("z", "Collapse or expand focused section"));
             text.push(kv("j/k / Up/Dn", "Navigate client roster"));
             text.push(kv("Enter", "Expand selected character detail"));
+            text.push(kv("e / d / l", "Engage / Disengage / Loot (quick keys)"));
+            text.push(kv("r", "Repeat last command"));
         }
         ActiveScreen::Tactical => {
             text.push(kv("+/-", "Adjust Z-depth slice filter"));
             text.push(kv("Arrows", "Pan map viewport"));
             text.push(kv("PgUp/PgDn", "Zoom map in/out"));
             text.push(kv("Home", "Reset map viewport"));
-            text.push(kv("m / M", "Toggle map maximize"));
-            text.push(kv("v (map)", "Cycle viewport mode"));
-            text.push(kv("n (map)", "Toggle navmesh overlay"));
+            text.push(kv("m / M", "Toggle map maximize (full screen)"));
+            text.push(kv("v (map)", "Cycle viewport: auto/local/global"));
+            text.push(kv("n (map)", "Toggle navmesh overlay on map"));
+            text.push(kv("Enter (map)", "Toggle map maximize"));
+            text.push(kv("/", "Search spawns in spawn list"));
+            text.push(kv("f", "Cycle spawn type filter"));
+            text.push(kv("j/k", "Navigate spawn list"));
+            text.push(kv("Enter (list)", "Inspect selected spawn"));
         }
         ActiveScreen::Navigation => {
             text.push(kv("j/k / Up/Dn", "Navigate client list"));
             text.push(kv("Enter", "Toggle full nav status view"));
+            text.push(kv("e / d", "Engage / Disengage (quick keys)"));
+            text.push(kv(":nav <dest>", "Send navigation command"));
         }
         ActiveScreen::Debug => {
-            text.push(kv("Up/Down", "Scroll hex dump"));
+            text.push(kv("Up/Down", "Scroll hex dump view"));
             text.push(kv("j/k", "Navigate spawn list"));
+            text.push(kv("PgUp/PgDn", "Page through spawn list"));
+            text.push(kv("Home / End", "Jump to first/last spawn"));
             text.push(kv("Enter", "Inspect spawn in hex view"));
+            text.push(kv("/", "Search spawns by name"));
+            text.push(kv("f", "Cycle spawn type filter"));
         }
     }
     text.push(Line::from(""));
