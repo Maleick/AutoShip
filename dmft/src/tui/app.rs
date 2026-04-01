@@ -459,9 +459,9 @@ impl App {
         self.overview_state.show_filters = !self.overview_state.show_filters;
         if self.overview_state.show_filters {
             self.active_panel = ActivePanel::OverviewFilters;
-            self.status_message = String::from("Overview: filter section shown");
+            self.status_message = String::from("Overview: scope section shown");
         } else {
-            self.status_message = String::from("Overview: filter section hidden");
+            self.status_message = String::from("Overview: scope section hidden");
         }
         self.ensure_panel_focus();
     }
@@ -478,7 +478,7 @@ impl App {
             }
             ActivePanel::OverviewFilters => {
                 self.overview_state.filters_collapsed = !self.overview_state.filters_collapsed;
-                Some(("Filters", self.overview_state.filters_collapsed))
+                Some(("Scope", self.overview_state.filters_collapsed))
             }
             ActivePanel::OverviewCombat => {
                 self.overview_state.combat_collapsed = !self.overview_state.combat_collapsed;
@@ -592,6 +592,27 @@ impl App {
     /// Get the currently selected client, if any.
     pub fn active_client(&self) -> Option<&ClientState> {
         self.clients.get(self.selected_client)
+    }
+
+    pub fn client_command_target(&self, client: &ClientState) -> String {
+        if !client.character_name.is_empty() {
+            client.character_name.clone()
+        } else if let Some(player) = &client.local_player {
+            player.displayed_name.clone()
+        } else {
+            format!("PID {}", client.pid)
+        }
+    }
+
+    fn select_client_idx(&mut self, idx: usize) {
+        if idx >= self.clients.len() {
+            return;
+        }
+
+        self.selected_client = idx;
+        self.sync_from_selected_client();
+        self.spawns_state.table_state.select(Some(0));
+        self.reload_map_for_selected_client();
     }
 
     /// Sync the legacy single-client fields from the selected client.
@@ -867,10 +888,9 @@ impl App {
         (groups, ungrouped)
     }
 
-    /// Find a client by character name (case-insensitive).
-    pub fn find_client_by_name(&self, name: &str) -> Option<&ClientState> {
+    fn find_client_index_by_name(&self, name: &str) -> Option<usize> {
         let lower = name.to_lowercase();
-        self.clients.iter().find(|c| {
+        self.clients.iter().position(|c| {
             if !c.character_name.is_empty() {
                 return c.character_name.to_lowercase() == lower;
             }
@@ -879,6 +899,12 @@ impl App {
             }
             false
         })
+    }
+
+    /// Find a client by character name (case-insensitive).
+    pub fn find_client_by_name(&self, name: &str) -> Option<&ClientState> {
+        self.find_client_index_by_name(name)
+            .and_then(|idx| self.clients.get(idx))
     }
 
     pub fn filtered_spawns(&self) -> Vec<&SpawnInfo> {
@@ -1284,9 +1310,10 @@ impl App {
         ];
 
         for client in &self.clients {
-            candidates.push(client.pid.to_string());
             if !client.character_name.is_empty() {
                 candidates.push(client.character_name.clone());
+            } else if let Some(player) = &client.local_player {
+                candidates.push(player.displayed_name.clone());
             }
         }
 
@@ -1441,8 +1468,13 @@ impl App {
         let mut names: Vec<String> = self
             .clients
             .iter()
-            .filter(|c| !c.character_name.is_empty())
-            .map(|c| c.character_name.clone())
+            .filter_map(|c| {
+                if !c.character_name.is_empty() {
+                    Some(c.character_name.clone())
+                } else {
+                    c.local_player.as_ref().map(|p| p.displayed_name.clone())
+                }
+            })
             .collect();
         names.sort();
         names.dedup();
@@ -1585,6 +1617,17 @@ impl App {
         None
     }
 
+    /// Parse a direct client target from the first word.
+    /// Examples: `Tank`, `cleric01 /sit`.
+    fn parse_client_prefix<'a>(&self, input: &'a str) -> Option<(usize, &'a str)> {
+        let trimmed = input.trim();
+        let mut parts = trimmed.splitn(2, char::is_whitespace);
+        let target = parts.next()?;
+        let rest = parts.next().map(str::trim).unwrap_or("");
+        self.find_client_index_by_name(target)
+            .map(|idx| (idx, rest))
+    }
+
     /// Get PIDs for a specific group index (0-based).
     fn pids_for_group(&self, group_idx: usize) -> Vec<u32> {
         self.clients_in_group_idx(group_idx)
@@ -1631,6 +1674,28 @@ impl App {
                 "{} {} → sent to {}, failed {}",
                 group_name, slash_cmd, ok, fail
             );
+            return;
+        }
+
+        if let Some((client_idx, rest)) = self.parse_client_prefix(&input) {
+            let target_name = self.client_command_target(&self.clients[client_idx]);
+            if rest.is_empty() {
+                self.select_client_idx(client_idx);
+                self.expand_selected_character();
+                self.status_message = format!("Focused client: {}", target_name);
+                return;
+            }
+
+            let pid = self.clients[client_idx].pid;
+            self.select_client_idx(client_idx);
+            match send_slash_command(pid, rest) {
+                Ok(()) => {
+                    self.status_message = format!("{} → {}", target_name, rest);
+                }
+                Err(e) => {
+                    self.status_message = format!("Error sending to {}: {}", target_name, e);
+                }
+            }
             return;
         }
 
@@ -1773,7 +1838,8 @@ impl App {
                         match send_slash_command(pid, &slash) {
                             Ok(()) => {
                                 tracing::info!(target = %name, pid, "Group invite sent");
-                                self.status_message = format!("Invited {} (via PID {})", name, pid);
+                                let from = self.client_command_target(client);
+                                self.status_message = format!("Invited {} from {}", name, from);
                             }
                             Err(e) => {
                                 self.status_message = format!("Invite failed: {}", e);
@@ -1792,7 +1858,8 @@ impl App {
                     match send_slash_command(pid, "/accept") {
                         Ok(()) => {
                             tracing::info!(pid, "Group invite accepted");
-                            self.status_message = format!("Accepted group invite (PID {})", pid);
+                            let on_client = self.client_command_target(client);
+                            self.status_message = format!("Accepted group invite on {}", on_client);
                         }
                         Err(e) => {
                             self.status_message = format!("Accept failed: {}", e);
