@@ -30,6 +30,7 @@ pub enum ActiveScreen {
 }
 
 impl ActiveScreen {
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Overview => "Characters",
@@ -74,6 +75,7 @@ pub enum SpawnFilter {
 }
 
 impl SpawnFilter {
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Self::All => Self::Pc,
@@ -83,6 +85,7 @@ impl SpawnFilter {
         }
     }
 
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::All => "All",
@@ -102,6 +105,7 @@ pub enum TrackedStatus {
 }
 
 impl TrackedStatus {
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Up => "UP",
@@ -110,6 +114,7 @@ impl TrackedStatus {
         }
     }
 
+    #[must_use]
     pub fn color(&self) -> ratatui::style::Color {
         use ratatui::style::Color;
         match self {
@@ -277,6 +282,7 @@ struct FocusedNavClient {
 }
 
 impl App {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             running: true,

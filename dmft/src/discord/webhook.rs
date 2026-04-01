@@ -49,6 +49,7 @@ pub struct WebhookSender {
 impl WebhookSender {
     /// Create a new webhook sender for the given URL.
     /// Spawns a background thread that processes the alert queue.
+    #[must_use]
     pub fn new(webhook_url: String) -> Self {
         let (tx, rx) = mpsc::channel::<DiscordAlert>();
 

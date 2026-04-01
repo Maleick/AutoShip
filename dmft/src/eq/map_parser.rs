@@ -73,18 +73,22 @@ impl MapBounds {
         }
     }
 
+    #[must_use]
     pub fn width(&self) -> f32 {
         (self.max_x - self.min_x).max(1.0)
     }
 
+    #[must_use]
     pub fn height(&self) -> f32 {
         (self.max_y - self.min_y).max(1.0)
     }
 
+    #[must_use]
     pub fn center_x(&self) -> f32 {
         (self.min_x + self.max_x) / 2.0
     }
 
+    #[must_use]
     pub fn center_y(&self) -> f32 {
         (self.min_y + self.max_y) / 2.0
     }

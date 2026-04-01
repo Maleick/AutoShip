@@ -27,6 +27,7 @@ pub struct PersonalityProfile {
 impl PersonalityProfile {
     /// Generate a deterministic personality from a character name.
     /// The same name always produces the same profile.
+    #[must_use]
     pub fn generate(character_name: &str) -> Self {
         let hash = name_hash(character_name);
         let mut rng = Xorshift32::new(if hash == 0 { 1 } else { hash });
@@ -53,12 +54,14 @@ impl PersonalityProfile {
     }
 
     /// Apply `reaction_speed` multiplier to a tick delay.
+    #[must_use]
     pub fn adjust_delay(&self, base_ticks: u64) -> u64 {
         let adjusted = (base_ticks as f32 * self.reaction_speed).round() as u64;
         adjusted.max(1) // never zero
     }
 
     /// Apply `med_threshold_jitter` to a mana percentage threshold.
+    #[must_use]
     pub fn adjust_mana_threshold(&self, base_pct: f32) -> f32 {
         (base_pct + self.med_threshold_jitter).clamp(0.0, 100.0)
     }

@@ -24,6 +24,7 @@ pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, bincode::error::EncodeEr
 ///
 /// Returns `Some((message, bytes_consumed))` on success, or `None` if `data`
 /// does not yet contain a complete frame.
+#[must_use]
 pub fn decode<T: DeserializeOwned>(data: &[u8]) -> Option<(T, usize)> {
     if data.len() < 4 {
         return None;

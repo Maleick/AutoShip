@@ -11,11 +11,13 @@ pub struct Xorshift32 {
 
 impl Xorshift32 {
     /// Create a new PRNG with the given seed. Seed must not be 0 (use `from_client_id` for safe seeding).
+    #[must_use]
     pub fn new(seed: u32) -> Self {
         Self { state: seed }
     }
 
     /// Create a PRNG seeded deterministically from a client PID via Knuth hash.
+    #[must_use]
     pub fn from_client_id(client_id: u32) -> Self {
         let seed = client_id.wrapping_mul(KNUTH_HASH);
         // Xorshift with seed 0 is a fixed point — every call returns 0 forever.
@@ -49,16 +51,19 @@ pub struct Waypoint {
 
 impl Waypoint {
     /// Create a waypoint at the given coordinates.
+    #[must_use]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
 
     /// 2D distance (XY plane) to another waypoint.
+    #[must_use]
     pub fn distance_2d(&self, other: &Waypoint) -> f32 {
         ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt()
     }
 
     /// 3D distance to another waypoint.
+    #[must_use]
     pub fn distance_3d(&self, other: &Waypoint) -> f32 {
         ((other.x - self.x).powi(2) + (other.y - self.y).powi(2) + (other.z - self.z).powi(2))
             .sqrt()
@@ -90,6 +95,7 @@ pub enum NavStatus {
 
 impl NavStatus {
     /// Human-readable label for the current navigation state.
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Idle => "Idle",
@@ -100,16 +106,19 @@ impl NavStatus {
     }
 
     /// Returns true if currently navigating toward a waypoint.
+    #[must_use]
     pub fn is_moving(&self) -> bool {
         matches!(self, Self::Moving { .. })
     }
 
     /// Returns true if stuck and attempting recovery.
+    #[must_use]
     pub fn is_stuck(&self) -> bool {
         matches!(self, Self::Stuck { .. })
     }
 
     /// Returns true if arrived at the final waypoint.
+    #[must_use]
     pub fn is_arrived(&self) -> bool {
         matches!(self, Self::Arrived)
     }
@@ -132,6 +141,7 @@ impl<T> Default for IndexedQueue<T> {
 
 impl<T> IndexedQueue<T> {
     /// Create an empty queue.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
@@ -146,6 +156,7 @@ impl<T> IndexedQueue<T> {
     }
 
     /// Get the current item, if any remain.
+    #[must_use]
     pub fn current(&self) -> Option<&T> {
         self.items.get(self.index)
     }
@@ -161,16 +172,19 @@ impl<T> IndexedQueue<T> {
     }
 
     /// Current index in the queue.
+    #[must_use]
     pub fn index(&self) -> usize {
         self.index
     }
 
     /// Total number of items.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
     /// Whether the queue is empty (no items loaded).
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
@@ -221,6 +235,7 @@ impl ZoneGraph {
     /// BFS shortest path from one zone to another.
     /// Returns the sequence of zone IDs to traverse (including start and end),
     /// or `None` if no path exists.
+    #[must_use]
     pub fn find_path(&self, from_zone_id: u16, to_zone_id: u16) -> Option<Vec<u16>> {
         if from_zone_id == to_zone_id {
             return Some(vec![from_zone_id]);

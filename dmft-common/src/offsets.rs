@@ -121,6 +121,7 @@ pub const ZONE_GUIDE_MANAGER: u64 = 0x0001_4035_71F0;
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
 /// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would underflow).
+#[must_use]
 pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
     let offset = preferred_addr.checked_sub(EQ_PREFERRED_BASE)?;
     Some((actual_base + offset) as usize)
@@ -244,6 +245,7 @@ pub mod eqmain {
     pub const CSTRREP_DATA: usize = 0x18;
 
     /// Convert a preferred-base eqmain.dll offset to an actual address.
+    #[must_use]
     pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
         let offset = preferred_addr.checked_sub(EQMAIN_PREFERRED_BASE)?;
         Some((actual_base + offset) as usize)

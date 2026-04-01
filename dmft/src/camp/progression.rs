@@ -76,26 +76,31 @@ impl CampDatabase {
     }
 
     /// Get a camp config by name.
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&CampConfig> {
         self.camps.get(name)
     }
 
     /// List all camp names, sorted by minimum level.
+    #[must_use]
     pub fn list_by_level(&self) -> &[String] {
         &self.by_level
     }
 
     /// Number of loaded camps.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.camps.len()
     }
 
     /// Whether the database is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.camps.is_empty()
     }
 
     /// Find the best camp for a given average level.
+    #[must_use]
     pub fn best_camp_for_level(&self, avg_level: f32) -> Option<&CampConfig> {
         let level = avg_level as u8;
         // Find the highest-min-level camp whose range contains the level.
@@ -107,6 +112,7 @@ impl CampDatabase {
     }
 
     /// Get the next camp in the progression chain from a given camp.
+    #[must_use]
     pub fn next_camp(&self, current: &str) -> Option<&CampConfig> {
         let config = self.camps.get(current)?;
         let next_name = config.next_camp.as_deref()?;
@@ -114,6 +120,7 @@ impl CampDatabase {
     }
 
     /// Get the previous camp in the progression chain from a given camp.
+    #[must_use]
     pub fn prev_camp(&self, current: &str) -> Option<&CampConfig> {
         let config = self.camps.get(current)?;
         let prev_name = config.prev_camp.as_deref()?;
@@ -122,6 +129,7 @@ impl CampDatabase {
 }
 
 /// Checks whether a camp progression event should fire based on average group level.
+#[must_use]
 pub fn check_progression(
     current_camp: &CampConfig,
     avg_level: f32,

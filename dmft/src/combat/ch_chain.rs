@@ -51,6 +51,7 @@ pub struct ChChain {
 }
 
 impl ChChain {
+    #[must_use]
     pub fn new(members: Vec<u32>, interval_secs: f32, target_id: u32, spell_slot: u8) -> Self {
         Self {
             members,
@@ -130,10 +131,12 @@ impl ChChain {
         }
     }
 
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.active
     }
 
+    #[must_use]
     pub fn target_id(&self) -> u32 {
         self.target_id
     }
@@ -142,10 +145,12 @@ impl ChChain {
         self.target_id = target_id;
     }
 
+    #[must_use]
     pub fn spell_slot(&self) -> u8 {
         self.spell_slot
     }
 
+    #[must_use]
     pub fn members(&self) -> &[u32] {
         &self.members
     }
@@ -160,6 +165,7 @@ impl ChChain {
         }
     }
 
+    #[must_use]
     pub fn is_adaptive(&self) -> bool {
         self.adaptive
     }
@@ -239,6 +245,7 @@ impl ChChain {
     }
 
     /// Get the current effective interval in seconds.
+    #[must_use]
     pub fn interval_secs(&self) -> f32 {
         self.interval_secs
     }

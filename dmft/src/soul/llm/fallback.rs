@@ -13,6 +13,7 @@ pub struct TraitDrivenResponder {
 }
 
 impl TraitDrivenResponder {
+    #[must_use]
     pub fn new(client_id: u32, edginess: EdginessLevel) -> Self {
         Self {
             rng: Xorshift32::from_client_id(client_id),

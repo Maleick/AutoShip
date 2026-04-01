@@ -45,10 +45,12 @@ pub struct Pos2D {
 }
 
 impl Pos2D {
+    #[must_use]
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
+    #[must_use]
     pub fn distance_to(&self, other: &Pos2D) -> f32 {
         distance_2d(self.x, self.y, other.x, other.y)
     }
@@ -108,6 +110,7 @@ pub struct FormationManager {
 }
 
 impl FormationManager {
+    #[must_use]
     pub fn new(config: FormationConfig) -> Self {
         Self { config }
     }
@@ -117,6 +120,7 @@ impl FormationManager {
     ///
     /// Movement uses discrete steps: /face toward tank, hold forward key, release when close.
     /// Does NOT use /follow to avoid EQ's rubber-banding behavior.
+    #[must_use]
     pub fn formation_commands(
         &self,
         member: &CampMember,
@@ -148,6 +152,7 @@ impl FormationManager {
     }
 
     /// Check if a member is close enough to stop moving toward tank.
+    #[must_use]
     pub fn is_in_position(&self, role: &Role, dist_to_tank: f32) -> bool {
         if matches!(role, Role::Tank | Role::Puller) {
             return true; // tank/puller don't follow themselves
@@ -201,6 +206,7 @@ pub struct HuntLoop {
 }
 
 impl HuntLoop {
+    #[must_use]
     pub fn new(config: CampConfig, members: Vec<CampMember>) -> Self {
         Self {
             config,

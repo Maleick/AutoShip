@@ -22,6 +22,7 @@ pub struct ClassAbility {
 
 impl ClassAbility {
     /// Effective buff duration — uses explicit `duration_secs` if set, else `cooldown_secs`.
+    #[must_use]
     pub fn effective_duration_secs(&self) -> f32 {
         self.duration_secs.unwrap_or(self.cooldown_secs)
     }

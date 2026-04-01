@@ -9,6 +9,7 @@ pub struct SpellInfo {
 }
 
 /// Lookup spell info by ID. Returns None for unknown spells.
+#[must_use]
 pub fn get(spell_id: u32) -> Option<&'static SpellInfo> {
     SPELLS.iter().find(|s| s.spell_id == spell_id)
 }

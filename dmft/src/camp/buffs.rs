@@ -18,6 +18,7 @@ pub struct BuffTracker {
 }
 
 impl BuffTracker {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             last_cast: HashMap::new(),
@@ -30,6 +31,7 @@ impl BuffTracker {
     }
 
     /// Check if a buff has expired for a member.
+    #[must_use]
     pub fn is_expired(
         &self,
         pid: u32,
@@ -44,6 +46,7 @@ impl BuffTracker {
     }
 
     /// Ticks remaining on a buff, or 0 if expired.
+    #[must_use]
     pub fn remaining(
         &self,
         pid: u32,
@@ -90,6 +93,7 @@ fn buff_priority(buff_name: &str) -> u8 {
 ///
 /// Only returns rebuff commands when the camp is in Idle or Medding state.
 /// Buffs are prioritized: haste > HP buff > mana regen > stat buffs.
+#[must_use]
 pub fn check_buffs(
     tracker: &BuffTracker,
     members: &[CampMember],

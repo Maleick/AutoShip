@@ -12,6 +12,7 @@ pub struct LogWatcher {
 }
 
 impl LogWatcher {
+    #[must_use]
     pub fn new(path: PathBuf) -> Self {
         // Start at the end of the file so we only capture new events
         let last_position = std::fs::metadata(&path).map_or(0, |m| m.len());
@@ -69,6 +70,7 @@ impl LogWatcher {
         events
     }
 
+    #[must_use]
     pub fn database(&self) -> &LootDatabase {
         &self.database
     }

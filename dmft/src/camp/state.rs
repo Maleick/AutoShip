@@ -72,6 +72,7 @@ pub enum CampAction {
 
 impl CampAction {
     /// Helper to convert a vec of slash command strings into `CampActions`.
+    #[must_use]
     pub fn from_slash_vec(cmds: Vec<(u32, String)>) -> Vec<(u32, CampAction)> {
         cmds.into_iter()
             .map(|(pid, cmd)| (pid, CampAction::Slash(cmd)))
@@ -79,6 +80,7 @@ impl CampAction {
     }
 
     /// Extract the slash command string, if this is a Slash action.
+    #[must_use]
     pub fn as_slash(&self) -> Option<&str> {
         match self {
             CampAction::Slash(s) => Some(s),
@@ -87,11 +89,13 @@ impl CampAction {
     }
 
     /// Check if this action's slash text contains a substring.
+    #[must_use]
     pub fn contains(&self, needle: &str) -> bool {
         self.as_slash().is_some_and(|s| s.contains(needle))
     }
 
     /// Check if this action's slash text starts with a prefix.
+    #[must_use]
     pub fn starts_with(&self, prefix: &str) -> bool {
         self.as_slash().is_some_and(|s| s.starts_with(prefix))
     }
@@ -142,6 +146,7 @@ pub struct CampMember {
 
 impl CampMember {
     /// Create a new camp member with an auto-generated personality from their name.
+    #[must_use]
     pub fn new(pid: u32, name: String, role: Role) -> Self {
         let personality = PersonalityProfile::generate(&name);
         Self {
@@ -191,6 +196,7 @@ pub struct CampLoop {
 }
 
 impl CampLoop {
+    #[must_use]
     pub fn new(config: CampConfig, members: Vec<CampMember>) -> Self {
         let recovery_members: Vec<(u32, String)> =
             members.iter().map(|m| (m.pid, m.name.clone())).collect();

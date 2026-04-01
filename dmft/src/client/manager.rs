@@ -14,6 +14,7 @@ pub struct ClientManager {
 }
 
 impl ClientManager {
+    #[must_use]
     pub fn new(process_name: &str) -> Self {
         Self {
             sessions: HashMap::new(),
@@ -92,6 +93,7 @@ impl ClientManager {
     }
 
     /// Get a reference to a session.
+    #[must_use]
     pub fn get(&self, client_id: ClientId) -> Option<&EqSession> {
         self.sessions.get(&client_id)
     }
@@ -102,11 +104,13 @@ impl ClientManager {
     }
 
     /// Get all active sessions.
+    #[must_use]
     pub fn active_sessions(&self) -> Vec<&EqSession> {
         self.sessions.values().filter(|s| s.is_active()).collect()
     }
 
     /// Total number of managed sessions.
+    #[must_use]
     pub fn session_count(&self) -> usize {
         self.sessions.len()
     }

@@ -20,6 +20,7 @@ pub struct CombatCoordinator {
 }
 
 impl CombatCoordinator {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             assist_target: None,
@@ -36,6 +37,7 @@ impl CombatCoordinator {
         self.main_tank_id = Some(client_id);
     }
 
+    #[must_use]
     pub fn camp_loop(&self) -> &CampLoop {
         &self.camp_loop
     }

@@ -112,6 +112,7 @@ pub struct LootCycle {
 }
 
 impl LootCycle {
+    #[must_use]
     pub fn new(config: LootConfig, corpses: Vec<CorpseEntry>) -> Self {
         let phase = if corpses.is_empty() {
             LootPhase::Done
@@ -127,6 +128,7 @@ impl LootCycle {
     }
 
     /// Is the loot cycle complete?
+    #[must_use]
     pub fn is_done(&self) -> bool {
         self.phase == LootPhase::Done
     }
@@ -239,6 +241,7 @@ pub enum ItemAction {
 }
 
 /// Classify an item based on loot rules.
+#[must_use]
 pub fn classify_item(item_name: &str, rules: &LootRules) -> ItemAction {
     if rules.destroy_items.contains(item_name) {
         return ItemAction::Destroy;

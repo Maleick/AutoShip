@@ -60,6 +60,7 @@ pub fn decrypt(ciphertext: &[u8], key: &[u8; 32], nonce: &[u8]) -> Result<Vec<u8
 }
 
 /// Generate a random 32-byte salt.
+#[must_use]
 pub fn generate_salt() -> [u8; 32] {
     let mut salt = [0u8; 32];
     OsRng.fill_bytes(&mut salt);

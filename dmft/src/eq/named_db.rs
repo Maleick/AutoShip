@@ -29,11 +29,13 @@ pub struct NamedMobEntry {
 
 impl NamedMobEntry {
     /// Convert `respawn_min_minutes` to ticks (at 250ms per tick = 4 ticks/sec).
+    #[must_use]
     pub fn respawn_min_ticks(&self) -> u64 {
         u64::from(self.respawn_min_minutes) * 60 * 4
     }
 
     /// Convert `respawn_max_minutes` to ticks.
+    #[must_use]
     pub fn respawn_max_ticks(&self) -> u64 {
         u64::from(self.respawn_max_minutes) * 60 * 4
     }
@@ -92,6 +94,7 @@ impl NamedMobDatabase {
     }
 
     /// Look up a named mob by zone and name (case-insensitive).
+    #[must_use]
     pub fn get(&self, zone: &str, name: &str) -> Option<&NamedMobEntry> {
         self.entries
             .get(&(zone.to_ascii_lowercase(), name.to_ascii_lowercase()))
@@ -106,16 +109,19 @@ impl NamedMobDatabase {
     }
 
     /// Total number of entries.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Whether the database is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Number of zones loaded.
+    #[must_use]
     pub fn zone_count(&self) -> usize {
         self.by_zone.len()
     }

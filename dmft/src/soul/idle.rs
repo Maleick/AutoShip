@@ -49,6 +49,7 @@ pub struct IdleScheduler {
 }
 
 impl IdleScheduler {
+    #[must_use]
     pub fn new(client_id: u32, config: &SoulConfig) -> Self {
         // Convert config seconds to ticks (soul tick = 5s by default)
         let tick_secs = config.idle_tick_secs.max(1);
@@ -118,6 +119,7 @@ impl IdleScheduler {
     }
 
     /// Get the current active behavior, if any.
+    #[must_use]
     pub fn current_behavior(&self) -> Option<&ActiveBehavior> {
         self.current.as_ref()
     }

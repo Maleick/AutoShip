@@ -13,6 +13,7 @@ pub struct CampManager {
 }
 
 impl CampManager {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             active_camp: None,
@@ -43,6 +44,7 @@ impl CampManager {
     }
 
     /// Get the camp spot for a specific client.
+    #[must_use]
     pub fn get_spot(&self, client_id: ClientId) -> Option<&CampSpot> {
         let role = self.assignments.get(&client_id)?;
         self.active_camp
@@ -59,6 +61,7 @@ impl CampManager {
     }
 
     /// Whether a camp is active.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.active_camp.is_some()
     }
@@ -66,6 +69,7 @@ impl CampManager {
 
 /// Helper: create a basic group camp with standard EQ positioning.
 /// Tank in front, healer behind, DPS spread in a semicircle.
+#[must_use]
 pub fn create_standard_camp(center: Waypoint, pull_heading: f32, num_dps: usize) -> CampDefinition {
     let mut spots = Vec::new();
 

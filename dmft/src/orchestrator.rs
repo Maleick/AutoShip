@@ -69,6 +69,7 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             client_pids: Vec::new(),
@@ -94,6 +95,7 @@ impl Orchestrator {
 
     /// Get the latest game state for a client PID.
     #[allow(dead_code)]
+    #[must_use]
     pub fn get_client_state(&self, pid: u32) -> Option<&GameState> {
         self.game_states.get(&pid)
     }
@@ -562,6 +564,7 @@ impl Orchestrator {
     }
 
     /// Return the current camp/hunt state for display.
+    #[must_use]
     pub fn camp_status(&self) -> String {
         match self.operating_mode {
             OperatingMode::Hunt => match &self.active_hunt {

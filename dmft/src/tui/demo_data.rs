@@ -62,6 +62,7 @@ fn zone_anchor(zone: &str) -> Option<DemoAnchor> {
     }
 }
 
+#[must_use]
 pub fn demo_player_position(zone: &str, slot: usize) -> Option<(f32, f32, f32, f32)> {
     let anchor = zone_anchor(zone)?;
     let (dx, dy) = PLAYER_OFFSETS[slot % PLAYER_OFFSETS.len()];
@@ -142,6 +143,7 @@ fn make_demo_spawns(zone: &str, data: &[SpawnDef<'_>]) -> Vec<SpawnInfo> {
 ///
 /// Recognized zones: "Permafrost", "Eastern Wastes", "Great Divide".
 /// Returns an empty vec for unknown zones.
+#[must_use]
 pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
     match zone {
         "Permafrost" => make_demo_spawns(

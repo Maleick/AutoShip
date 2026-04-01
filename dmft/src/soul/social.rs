@@ -47,6 +47,7 @@ impl Relationship {
     }
 
     /// Human-readable faction standing label (EQ-style).
+    #[must_use]
     pub fn standing(&self) -> &'static str {
         match self.faction_score {
             750..=1000 => "ally",
@@ -94,6 +95,7 @@ pub struct SocialGraph {
 }
 
 impl SocialGraph {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             edges: HashMap::new(),
@@ -101,6 +103,7 @@ impl SocialGraph {
     }
 
     /// Initialize from a list of relationship seeds (from config).
+    #[must_use]
     pub fn from_seeds(seeds: &[RelationshipSeed]) -> Self {
         let mut graph = Self::new();
         for seed in seeds {
@@ -119,6 +122,7 @@ impl SocialGraph {
     }
 
     /// Get the relationship from `from` to `to`, if any.
+    #[must_use]
     pub fn get(&self, from: &str, to: &str) -> Option<&Relationship> {
         self.edges.get(&(from.to_string(), to.to_string()))
     }
@@ -146,6 +150,7 @@ impl SocialGraph {
     }
 
     /// Whether `from` should defer to `to` (based on mentor tag or high trust).
+    #[must_use]
     pub fn should_defer(&self, from: &str, to: &str) -> bool {
         match self.get(from, to) {
             Some(rel) => {
@@ -158,6 +163,7 @@ impl SocialGraph {
 
     /// Find the character that `from` is most likely to gossip about
     /// (strongest opinion, positive or negative).
+    #[must_use]
     pub fn most_likely_to_gossip_about(&self, from: &str) -> Option<String> {
         let prefix = from.to_string();
         self.edges
@@ -168,6 +174,7 @@ impl SocialGraph {
     }
 
     /// Build a one-line relationship summary for use in LLM context.
+    #[must_use]
     pub fn build_relationship_summary(&self, from: &str, to: &str) -> String {
         match self.get(from, to) {
             Some(rel) => {
@@ -193,6 +200,7 @@ impl SocialGraph {
     }
 
     /// List all characters that `from` has relationships with.
+    #[must_use]
     pub fn relationships_for(&self, from: &str) -> Vec<(&str, &Relationship)> {
         let prefix = from.to_string();
         self.edges

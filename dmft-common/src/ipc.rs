@@ -258,11 +258,13 @@ pub const SHARED_MEMORY_NAME_PREFIX: &str = "dmft_state_";
 /// Derive a deterministic `u64` session ID from a 32-byte session token.
 /// Uses the first 8 bytes interpreted as little-endian. Both the DLL and
 /// orchestrator call this on the same token to produce matching IPC names.
+#[must_use]
 pub fn session_id_from_token(token: &SessionToken) -> u64 {
     u64::from_le_bytes(token[..8].try_into().unwrap())
 }
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
+#[must_use]
 pub fn generate_random_token() -> SessionToken {
     use rand::RngCore;
     let mut token = [0u8; 32];
@@ -288,6 +290,7 @@ pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
 }
 
 /// Read the session token for authenticating with an already-injected DLL.
+#[must_use]
 pub fn load_session_token(pid: u32) -> Option<SessionToken> {
     let token_path = std::env::temp_dir()
         .join("dmft")
@@ -305,12 +308,14 @@ pub fn load_session_token(pid: u32) -> Option<SessionToken> {
 
 /// Build a per-client pipe name incorporating a random session ID.
 /// Format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
+#[must_use]
 pub fn pipe_name(session_id: u64, client_id: u32) -> String {
     format!(r"\\.\pipe\{session_id:x}_cmd_{client_id}")
 }
 
 /// Build a per-client shared memory name incorporating a random session ID.
 /// Format: `{session_id:x}_state_{client_id}`
+#[must_use]
 pub fn shared_memory_name(session_id: u64, client_id: u32) -> String {
     format!("{session_id:x}_state_{client_id}")
 }

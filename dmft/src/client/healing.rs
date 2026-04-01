@@ -25,6 +25,7 @@ pub struct HealthMonitor {
 }
 
 impl HealthMonitor {
+    #[must_use]
     pub fn new(client_id: ClientId, pid: u32) -> Self {
         Self {
             client_id,
@@ -39,6 +40,7 @@ impl HealthMonitor {
     }
 
     /// Check if the process is still running.
+    #[must_use]
     pub fn is_process_alive(&self) -> bool {
         is_process_running(self.pid)
     }
@@ -62,11 +64,13 @@ impl HealthMonitor {
     }
 
     /// Return current health without re-checking (non-mutating).
+    #[must_use]
     pub fn current_health(&self) -> &ClientHealth {
         &self.health
     }
 
     /// Whether this client should be restarted.
+    #[must_use]
     pub fn should_restart(&self) -> bool {
         matches!(
             self.health,
@@ -92,18 +96,22 @@ impl HealthMonitor {
         self.health = ClientHealth::Healthy;
     }
 
+    #[must_use]
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }
 
+    #[must_use]
     pub fn pid(&self) -> u32 {
         self.pid
     }
 
+    #[must_use]
     pub fn restart_count(&self) -> u32 {
         self.restart_count
     }
 
+    #[must_use]
     pub fn ping_interval(&self) -> Duration {
         self.ping_interval
     }

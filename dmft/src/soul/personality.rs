@@ -22,6 +22,7 @@ pub struct PersonalityEngine {
 }
 
 impl PersonalityEngine {
+    #[must_use]
     pub fn new(client_id: u32) -> Self {
         Self {
             rng: Xorshift32::from_client_id(client_id),

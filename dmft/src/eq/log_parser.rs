@@ -239,6 +239,7 @@ pub struct LootDatabase {
 }
 
 impl LootDatabase {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -285,6 +286,7 @@ impl LootDatabase {
     }
 
     /// XP events per hour within the last `window` duration.
+    #[must_use]
     pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
         let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
         let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;

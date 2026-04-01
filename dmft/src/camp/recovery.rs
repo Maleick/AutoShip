@@ -16,6 +16,7 @@ pub struct RecoveryTracker {
 }
 
 impl RecoveryTracker {
+    #[must_use]
     pub fn new(members: &[(u32, String)]) -> Self {
         Self {
             members: members
@@ -59,6 +60,7 @@ impl RecoveryTracker {
     }
 
     /// Returns true if any member is not Alive (camp loop should pause).
+    #[must_use]
     pub fn recovery_in_progress(&self) -> bool {
         self.members
             .iter()
@@ -66,6 +68,7 @@ impl RecoveryTracker {
     }
 
     /// Returns true when all members are alive (safe to resume camp loop).
+    #[must_use]
     pub fn all_alive(&self) -> bool {
         self.members
             .iter()
@@ -73,6 +76,7 @@ impl RecoveryTracker {
     }
 
     /// Get list of dead member pids.
+    #[must_use]
     pub fn dead_members(&self) -> Vec<u32> {
         self.members
             .iter()

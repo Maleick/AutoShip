@@ -20,6 +20,7 @@ pub struct ClientState {
 }
 
 impl ClientState {
+    #[must_use]
     pub fn new(pid: u32, eq_base: u64) -> Self {
         Self {
             pid,

@@ -16,6 +16,7 @@ pub struct SpawnsScreenState {
 }
 
 impl SpawnsScreenState {
+    #[must_use]
     pub fn new() -> Self {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
@@ -36,6 +37,7 @@ pub struct HexDumpState {
 }
 
 impl HexDumpState {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             hex_address: 0,
@@ -56,6 +58,7 @@ pub struct MapScreenState {
 }
 
 impl MapScreenState {
+    #[must_use]
     pub fn new() -> Self {
         let map_dir = resolve_map_dir();
         Self {
@@ -89,6 +92,7 @@ pub struct OverviewScreenState {
 }
 
 impl OverviewScreenState {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             show_groups: true,
@@ -112,6 +116,7 @@ pub struct TacticalScreenState {
 }
 
 impl TacticalScreenState {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             map_maximized: false,
@@ -155,6 +160,7 @@ pub struct NavigationScreenState {
 }
 
 impl NavigationScreenState {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             nav_selected: 0,
@@ -176,6 +182,7 @@ pub struct CommandBarState {
 }
 
 impl CommandBarState {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             command_mode: false,

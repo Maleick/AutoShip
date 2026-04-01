@@ -42,6 +42,7 @@ pub enum CoordinatorEvent {
 }
 
 impl LaunchCoordinator {
+    #[must_use]
     pub fn new(config: LaunchConfig, retry: RetryConfig, server: ServerConfig) -> Self {
         let next_stagger =
             compute_stagger_between(config.stagger_min_secs, config.stagger_max_secs);
@@ -222,14 +223,17 @@ impl LaunchCoordinator {
         tracing::info!("Launch coordinator resumed");
     }
 
+    #[must_use]
     pub fn is_paused(&self) -> bool {
         self.paused
     }
 
+    #[must_use]
     pub fn pending_count(&self) -> usize {
         self.launch_queue.len()
     }
 
+    #[must_use]
     pub fn active_count(&self) -> usize {
         self.active_logins
             .iter()

@@ -86,6 +86,7 @@ impl SharedStateReader {
     /// [sequence: u64 LE][payload_len: u32 LE][payload: bincode bytes]
     /// ```
     /// A zero sequence number means the DLL hasn't written yet.
+    #[must_use]
     pub fn read(&self) -> Option<GameState> {
         #[cfg(windows)]
         {

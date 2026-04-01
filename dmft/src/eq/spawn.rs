@@ -132,6 +132,7 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
 
 /// Read buff slots for the local player via `PINST_LOCAL_PC`.
 /// On non-Windows builds returns an empty vec (stub).
+#[must_use]
 pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     #[cfg(not(windows))]
     {
@@ -169,6 +170,7 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
 
 /// Read cast state for the local player via `PINST_LOCAL_PC`.
 /// On non-Windows builds returns None (stub).
+#[must_use]
 pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> {
     #[cfg(not(windows))]
     {

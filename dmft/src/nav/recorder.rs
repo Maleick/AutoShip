@@ -15,6 +15,7 @@ pub struct WaypointRecorder {
 }
 
 impl WaypointRecorder {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             waypoints: Vec::new(),
@@ -67,11 +68,13 @@ impl WaypointRecorder {
     }
 
     /// Whether currently recording.
+    #[must_use]
     pub fn is_recording(&self) -> bool {
         self.start_time.is_some()
     }
 
     /// Number of waypoints recorded so far.
+    #[must_use]
     pub fn waypoint_count(&self) -> usize {
         self.waypoints.len()
     }
@@ -79,6 +82,7 @@ impl WaypointRecorder {
 
 /// Simplify a recorded path by removing redundant collinear points.
 /// Uses the Ramer-Douglas-Peucker algorithm in 2D.
+#[must_use]
 pub fn simplify_path(waypoints: &[Waypoint], epsilon: f32) -> Vec<Waypoint> {
     if waypoints.len() <= 2 {
         return waypoints.to_vec();

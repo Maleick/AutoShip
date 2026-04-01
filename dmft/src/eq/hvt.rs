@@ -48,16 +48,19 @@ impl HvtWatchlist {
     }
 
     /// Check if a spawn name matches an HVT entry (case-insensitive).
+    #[must_use]
     pub fn is_hvt(&self, name: &str) -> Option<&HvtTarget> {
         self.targets.get(&name.to_lowercase())
     }
 
     /// Number of targets in the watchlist.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.targets.len()
     }
 
     /// Whether the watchlist is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.targets.is_empty()
     }

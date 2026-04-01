@@ -97,6 +97,7 @@ pub fn apply_working_set_limit(pid: u32, max_working_set_mb: u32) -> Result<()> 
 
 /// Distribute clients evenly across available CPUs.
 /// Reserves CPU 0 for the orchestrator process.
+#[must_use]
 pub fn compute_affinity_assignments(client_count: usize, total_cpus: usize) -> Vec<AffinityConfig> {
     let available_cpus = if total_cpus > 1 { total_cpus - 1 } else { 1 };
     let mut assignments = Vec::with_capacity(client_count);

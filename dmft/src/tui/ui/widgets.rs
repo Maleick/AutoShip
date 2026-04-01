@@ -54,6 +54,7 @@ pub fn panel<'a>(
 // ─── Table helpers ───────────────────────────────────────────────────────────
 
 /// Build a table header row with all cells styled using `theme.table_header`.
+#[must_use]
 pub fn themed_header_row<'a>(cells: Vec<&'a str>, t: &Theme) -> Row<'a> {
     Row::new(
         cells
@@ -67,6 +68,7 @@ pub fn themed_header_row<'a>(cells: Vec<&'a str>, t: &Theme) -> Row<'a> {
 
 // ─── Color helpers ───────────────────────────────────────────────────────────
 
+#[must_use]
 pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
     if hp_pct > 75.0 {
         t.hp_high
@@ -77,6 +79,7 @@ pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
     }
 }
 
+#[must_use]
 pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> Color {
     use crate::eq::structs::StandState;
     match state {
@@ -88,6 +91,7 @@ pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> C
     }
 }
 
+#[must_use]
 pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
     match st {
         SpawnType::Player => t.spawn_pc,
@@ -99,6 +103,7 @@ pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
 
 /// EQ con color — level delta from player perspective.
 /// delta = `mob_level` - `player_level`
+#[must_use]
 pub fn con_color(player_level: u8, mob_level: u8, t: &Theme) -> Color {
     let delta = i16::from(mob_level) - i16::from(player_level);
     match delta {
@@ -111,6 +116,7 @@ pub fn con_color(player_level: u8, mob_level: u8, t: &Theme) -> Color {
     }
 }
 
+#[must_use]
 pub fn spawn_row_style(
     spawn: &SpawnInfo,
     player_level: Option<u8>,

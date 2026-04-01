@@ -75,6 +75,7 @@ pub enum CampEvent {
 }
 
 impl CampLoop {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: CampState::Idle,
@@ -92,10 +93,12 @@ impl CampLoop {
         self.puller_id = Some(client_id);
     }
 
+    #[must_use]
     pub fn state(&self) -> &CampState {
         &self.state
     }
 
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.active
     }

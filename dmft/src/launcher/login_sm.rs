@@ -40,6 +40,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const RETRY_DELAY: Duration = Duration::from_secs(5);
 
 impl LoginStateMachine {
+    #[must_use]
     pub fn new(client_id: ClientId, account_info: AccountInfo) -> Self {
         Self {
             client_id,
@@ -147,6 +148,7 @@ impl LoginStateMachine {
         }
     }
 
+    #[must_use]
     pub fn is_terminal(&self) -> bool {
         matches!(self.phase, LoginPhase::Ready | LoginPhase::Failed { .. })
     }

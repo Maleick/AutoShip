@@ -24,6 +24,7 @@ pub enum EqClass {
 }
 
 impl EqClass {
+    #[must_use]
     pub fn from_id(id: u8) -> Option<Self> {
         match id {
             1 => Some(Self::Warrior),
@@ -46,6 +47,7 @@ impl EqClass {
         }
     }
 
+    #[must_use]
     pub fn short_name(&self) -> &'static str {
         match self {
             Self::Warrior => "WAR",
@@ -84,6 +86,7 @@ pub enum SpawnType {
 }
 
 impl SpawnType {
+    #[must_use]
     pub fn from_id(id: u8) -> Self {
         match id {
             0 => Self::Player,
@@ -95,6 +98,7 @@ impl SpawnType {
 
     /// Return a static string label suitable for display and filtering.
     /// Avoids a heap allocation compared to `to_string()`.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Player => "PC",
@@ -130,6 +134,7 @@ pub enum StandState {
 }
 
 impl StandState {
+    #[must_use]
     pub fn from_id(id: u8) -> Self {
         match id {
             0 => Self::Standing,
@@ -144,6 +149,7 @@ impl StandState {
     }
 
     /// Small ASCII sprite representing the character's current state.
+    #[must_use]
     pub fn sprite(&self) -> &'static str {
         match self {
             Self::Standing => " O \n/|\\\n/ \\",
@@ -157,6 +163,7 @@ impl StandState {
         }
     }
 
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Standing => "Stand",
@@ -189,16 +196,19 @@ pub struct BuffSlot {
 }
 
 impl BuffSlot {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.spell_id == 0xFFFF || self.spell_id == 0
     }
 
     /// Duration in seconds.
+    #[must_use]
     pub fn duration_secs(&self) -> i32 {
         self.duration_ticks * 6
     }
 
     /// Formatted duration "M:SS", "Xs", or "PERM" for permanent buffs.
+    #[must_use]
     pub fn duration_str(&self) -> String {
         if self.duration_ticks <= 0 {
             return "PERM".to_string();
@@ -228,6 +238,7 @@ pub struct CastState {
 
 impl CastState {
     /// True if actively casting a spell right now.
+    #[must_use]
     pub fn is_casting(&self) -> bool {
         self.spell_slot != 0xFF && self.spell_eta != 0
     }
@@ -274,6 +285,7 @@ pub struct SpawnInfo {
 }
 
 impl SpawnInfo {
+    #[must_use]
     pub fn hp_pct(&self) -> f64 {
         if self.hp_max > 0 {
             (self.hp_current as f64 / self.hp_max as f64) * 100.0
@@ -282,6 +294,7 @@ impl SpawnInfo {
         }
     }
 
+    #[must_use]
     pub fn mana_pct(&self) -> f64 {
         if self.mana_max > 0 {
             (f64::from(self.mana_current) / f64::from(self.mana_max)) * 100.0
@@ -290,6 +303,7 @@ impl SpawnInfo {
         }
     }
 
+    #[must_use]
     pub fn class_str(&self) -> String {
         self.class
             .as_ref()
@@ -299,6 +313,7 @@ impl SpawnInfo {
     }
 
     /// Human-readable race name from the numeric race ID.
+    #[must_use]
     pub fn race_name(&self) -> String {
         match self.race_id {
             1 => "Human".to_string(),
