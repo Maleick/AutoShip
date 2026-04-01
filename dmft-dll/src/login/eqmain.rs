@@ -16,8 +16,7 @@ pub fn find_eqmain() -> u64 {
         // The handle is used only as an integer base address.
         unsafe {
             GetModuleHandleW(w!("eqmain.dll"))
-                .map(|h| h.0 as u64)
-                .unwrap_or(0)
+                .map_or(0, |h| h.0 as u64)
         }
     }
 

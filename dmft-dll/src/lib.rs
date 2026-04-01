@@ -176,7 +176,7 @@ fn resolve_eq_base() -> u64 {
         // SAFETY: GetModuleHandleW(None) is always safe to call — it returns the
         // base address of the hosting executable (eqgame.exe). The handle is used
         // only as an integer base address, not as a loadable module reference.
-        unsafe { GetModuleHandleW(None).map(|h| h.0 as u64).unwrap_or(0) }
+        unsafe { GetModuleHandleW(None).map_or(0, |h| h.0 as u64) }
     }
 
     #[cfg(not(windows))]

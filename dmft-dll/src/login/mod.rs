@@ -56,8 +56,7 @@ pub fn phase() -> LoginPhase {
     let guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     guard
         .as_ref()
-        .map(|fsm| fsm.phase.clone())
-        .unwrap_or(LoginPhase::NotStarted)
+        .map_or(LoginPhase::NotStarted, |fsm| fsm.phase.clone())
 }
 
 /// Check if the login FSM has completed (in world, error, or idle after completion).
@@ -65,8 +64,7 @@ pub fn is_done() -> bool {
     let guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     guard
         .as_ref()
-        .map(|fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))
-        .unwrap_or(true)
+        .map_or(true, |fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))
 }
 
 /// Internal states for the login FSM — more granular than the IPC-facing LoginPhase.

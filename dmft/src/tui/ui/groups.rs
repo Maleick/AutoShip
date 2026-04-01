@@ -384,8 +384,7 @@ pub fn clients_in_group<'a>(
                 return false;
             };
             extract_account_number(name)
-                .map(|n| n >= lo && n <= hi)
-                .unwrap_or(false)
+                .is_some_and(|n| n >= lo && n <= hi)
         })
         .collect()
 }
@@ -422,8 +421,7 @@ fn draw_config_group_panel(
 
     let zone = members
         .first()
-        .map(|c| c.zone_name.as_str())
-        .unwrap_or("---");
+        .map_or("---", |c| c.zone_name.as_str());
     let title = format!(
         " G{} {} ({}/{}) {} ",
         group.id, group.name, online, total, zone

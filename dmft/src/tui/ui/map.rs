@@ -148,8 +148,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let zone_label = app
         .active_client()
-        .map(|c| c.zone_name.as_str())
-        .unwrap_or("Unknown");
+        .map_or("Unknown", |c| c.zone_name.as_str());
     let z_range = app.map_state.z_filter_range;
     let player_pos_label = app
         .local_player
@@ -168,8 +167,11 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let map_info = app
         .map_state
         .zone_map
-        .as_ref()
-        .map(|m| {
+        .as_ref().map_or_else(|| {
+            format!(
+                " Map: {zone_label} (no map data){player_pos_label}{mesh_label} | Z filter: {z_range:.0} [+/-] | m maximize "
+            )
+        }, |m| {
             format!(
                 " Map: {} ({} lines, {} labels){}{} | Z filter: {:.0} [+/-] | m maximize ",
                 zone_label,
@@ -178,11 +180,6 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 player_pos_label,
                 mesh_label,
                 z_range,
-            )
-        })
-        .unwrap_or_else(|| {
-            format!(
-                " Map: {zone_label} (no map data){player_pos_label}{mesh_label} | Z filter: {z_range:.0} [+/-] | m maximize "
             )
         });
 
@@ -911,32 +908,27 @@ fn draw_navigation_summary(
 
     let selected_name = app
         .active_client()
-        .and_then(|client| client.local_player.as_ref())
-        .map(|player| app.redact_name(&player.displayed_name).into_owned())
-        .unwrap_or_else(|| String::from("No client"));
+        .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("No client"), |player| app.redact_name(&player.displayed_name).into_owned());
 
     let selected_nav = app
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid));
-    let selected_status = selected_nav.map(|nav| nav.status.label()).unwrap_or("Idle");
+    let selected_status = selected_nav.map_or("Idle", |nav| nav.status.label());
     let selected_dest = selected_nav
-        .map(|nav| nav.destination.as_str())
-        .unwrap_or("—");
-    let selected_waypoints = selected_nav.map(|nav| nav.waypoints.len()).unwrap_or(0);
+        .map_or("—", |nav| nav.destination.as_str());
+    let selected_waypoints = selected_nav.map_or(0, |nav| nav.waypoints.len());
     let mesh_status = app
         .current_zone_short_name()
-        .map(|zone| {
+        .map_or_else(|| String::from("—"), |zone| {
             format!(
-                "{} ({})",
+                "{} ({zone})",
                 if crate::nav::mesh::has_cached_zone_mesh(&zone) {
                     "cached"
                 } else {
                     "on-demand"
                 },
-                zone
             )
-        })
-        .unwrap_or_else(|| String::from("—"));
+        });
 
     let status_color = match selected_nav.map(|nav| &nav.status) {
         Some(s) if s.is_moving() => t.text_highlight,

@@ -345,14 +345,12 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let pull_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map(|h| {
+                    .map_or(self.config.pull_mana_pct as f32, |h| {
                         h.personality
                             .adjust_mana_threshold(self.config.pull_mana_pct as f32)
-                    })
-                    .unwrap_or(self.config.pull_mana_pct as f32);
+                    });
                 let healer_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= pull_threshold)
-                    .unwrap_or(true);
+                    .map_or(true, |s| s.healer_mana_pct >= pull_threshold);
                 if healer_ready {
                     self.transition_to_pulling(&mut commands);
                 }
@@ -428,14 +426,12 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let med_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map(|h| {
+                    .map_or(self.config.pull_mana_pct as f32, |h| {
                         h.personality
                             .adjust_mana_threshold(self.config.pull_mana_pct as f32)
-                    })
-                    .unwrap_or(self.config.pull_mana_pct as f32);
+                    });
                 let mana_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= med_threshold)
-                    .unwrap_or(false);
+                    .is_some_and(|s| s.healer_mana_pct >= med_threshold);
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
                 if mana_ready || timer_expired {
                     // Check if any buffs need refreshing before going idle

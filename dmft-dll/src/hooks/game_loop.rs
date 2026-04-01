@@ -576,8 +576,7 @@ fn on_game_tick() {
                     // SAFETY: addr is rebased PINST_LOCAL_PLAYER — a committed
                     // global in eqgame.exe. Reading a usize from it yields the
                     // local player pointer (0 = not logged in).
-                    .map(|addr| unsafe { *(addr as *const usize) } != 0)
-                    .unwrap_or(false)
+                    .is_some_and(|addr| unsafe { *(addr as *const usize) } != 0)
             } else {
                 false
             };
@@ -1082,8 +1081,7 @@ fn read_nearby_spawns(
 fn current_time_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// Check if our window is the foreground window. Used for render skipping —
@@ -1283,13 +1281,11 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
-            let response = unsafe { crate::nav::zone_graph::read_zone_graph(eq_base) }
-                .map(|graph| {
+            let response = unsafe { crate::nav::zone_graph::read_zone_graph(eq_base) }.map_or_else(|| dmft_common::ipc::Response::Error {
+                    message: "Failed to read zone graph from memory".into(),
+                }, |graph| {
                     let zones = crate::nav::zone_graph::zone_graph_to_ipc(&graph);
                     dmft_common::ipc::Response::ZoneGraph { zones }
-                })
-                .unwrap_or_else(|| dmft_common::ipc::Response::Error {
-                    message: "Failed to read zone graph from memory".into(),
                 });
             crate::ipc::send_response(response);
         }

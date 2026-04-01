@@ -126,7 +126,7 @@ impl ClassStrategy for ShamanStrategy {
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {
-        let new_target = ctx.target.map(|t| t.spawn_id).unwrap_or(0);
+        let new_target = ctx.target.map_or(0, |t| t.spawn_id);
         if new_target != self.last_target_id {
             self.target_slowed = false;
             self.last_target_id = new_target;

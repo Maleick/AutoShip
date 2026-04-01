@@ -243,8 +243,7 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
                     let dest_name = zones
                         .iter()
                         .find(|(id, _, _, _, _)| *id == *dest_id)
-                        .map(|(_, n, _, _, _)| n.as_str())
-                        .unwrap_or("???");
+                        .map_or("???", |(_, n, _, _, _)| n.as_str());
                     let disabled_str = if *disabled { " [DISABLED]" } else { "" };
                     println!(
                         "      -> [{dest_id:>3}] {dest_name} via {tt_name}{disabled_str}"

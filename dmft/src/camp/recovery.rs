@@ -131,8 +131,7 @@ pub fn death_commands_with_roles(
                 role_map
                     .iter()
                     .find(|(p, _)| p == pid)
-                    .map(|(_, role)| rez_priority(role))
-                    .unwrap_or(3)
+                    .map_or(3, |(_, role)| rez_priority(role))
             });
         }
 

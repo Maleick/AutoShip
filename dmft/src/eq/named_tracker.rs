@@ -161,8 +161,7 @@ impl NamedTracker {
                     .db
                     .as_ref()
                     .and_then(|db| db.get(&self.zone, &status.name))
-                    .map(|entry| (entry.respawn_min_ticks(), entry.respawn_max_ticks()))
-                    .unwrap_or((DEFAULT_RESPAWN_TICKS, DEFAULT_RESPAWN_TICKS));
+                    .map_or((DEFAULT_RESPAWN_TICKS, DEFAULT_RESPAWN_TICKS), |entry| (entry.respawn_min_ticks(), entry.respawn_max_ticks()));
 
                 status.estimated_respawn_tick = Some(tick + min_ticks);
                 status.respawn_window_end_tick = Some(tick + max_ticks);

@@ -539,9 +539,7 @@ impl App {
         self.active_panel = ActivePanel::OverviewCharacter;
         self.status_message = self
             .active_client()
-            .and_then(|client| client.local_player.as_ref())
-            .map(|player| format!("Character: {}", self.redact_name(&player.displayed_name)))
-            .unwrap_or_else(|| String::from("Character: no client selected"));
+            .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("Character: no client selected"), |player| format!("Character: {}", self.redact_name(&player.displayed_name)));
         self.ensure_panel_focus();
     }
 
@@ -573,9 +571,7 @@ impl App {
                         let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
                         let name = default_names
-                            .get((id - 1) as usize)
-                            .map(std::string::ToString::to_string)
-                            .unwrap_or_else(|| format!("Group {id}"));
+                            .get((id - 1) as usize).map_or_else(|| format!("Group {id}"), std::string::ToString::to_string);
 
                         GroupDef {
                             id: id as u8,
@@ -742,8 +738,7 @@ impl App {
                     let zone = self
                         .clients_in_group_idx(idx)
                         .first()
-                        .map(|c| c.zone_name.as_str())
-                        .unwrap_or("???");
+                        .map_or("???", |c| c.zone_name.as_str());
                     format!("G{} {} ({})", g.id, g.name, zone)
                 } else {
                     String::from("All Groups")
@@ -1152,9 +1147,7 @@ impl App {
             } else if let Some(add_rest) = rest.strip_prefix("add ") {
                 // Suggest zone-based name
                 let zone = self
-                    .active_client()
-                    .map(|c| c.zone_name.clone())
-                    .unwrap_or_else(|| "camp".into());
+                    .active_client().map_or_else(|| "camp".into(), |c| c.zone_name.clone());
                 let suggestion = vec![zone];
                 self.complete_with_candidates("camp add ", add_rest, &suggestion);
             } else {
@@ -1659,7 +1652,7 @@ impl App {
         let trimmed = input.trim();
         let mut parts = trimmed.splitn(2, char::is_whitespace);
         let raw_target = parts.next()?;
-        let rest = parts.next().map(str::trim).unwrap_or("");
+        let rest = parts.next().map_or("", str::trim);
         let forced = raw_target.starts_with('@');
         let target = raw_target.trim_start_matches('@');
 
@@ -2232,9 +2225,7 @@ impl App {
                 let (center, zone) = match &self.local_player {
                     Some(player) => {
                         let zone = self
-                            .active_client()
-                            .map(|c| c.zone_name.clone())
-                            .unwrap_or_else(|| "unknown".into());
+                            .active_client().map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
                         ([player.x, player.y, player.z], zone)
                     }
                     None => {

@@ -120,7 +120,7 @@ impl SoulCoordinator {
                 mood: soul.mood,
                 edginess: soul.edginess,
                 zone,
-                level: state.local_player.as_ref().map(|p| p.level).unwrap_or(1),
+                level: state.local_player.as_ref().map_or(1, |p| p.level),
                 in_combat,
                 group_members: &group_members,
             };
@@ -171,8 +171,7 @@ impl SoulCoordinator {
         // Process any queued LLM requests
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs());
 
         // Drain all ready requests, then process each with the matching soul's responder
         // In Phase 2, this will use a real LLM provider instead of per-soul fallback responders

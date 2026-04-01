@@ -37,8 +37,7 @@ pub fn status() -> NavStatus {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .as_ref()
-        .map(state::Navigator::status)
-        .unwrap_or(NavStatus::Idle)
+        .map_or(NavStatus::Idle, state::Navigator::status)
 }
 
 /// Handle a navigation command from IPC.

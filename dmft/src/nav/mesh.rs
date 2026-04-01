@@ -472,8 +472,7 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     let origin = params_proto
         .origin
         .as_ref()
-        .map(|o| [o.x, o.y, o.z])
-        .unwrap_or([0.0; 3]);
+        .map_or([0.0; 3], |o| [o.x, o.y, o.z]);
 
     let params = recastnavigation_sys::dtNavMeshParams {
         orig: origin,

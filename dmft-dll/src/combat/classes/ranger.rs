@@ -36,8 +36,7 @@ impl RangerStrategy {
     /// Whether we're in melee range of the target.
     fn in_melee_range(&self, ctx: &CombatContext) -> bool {
         ctx.target
-            .map(|t| self.distance_to(ctx.player, t) <= self.melee_range)
-            .unwrap_or(false)
+            .is_some_and(|t| self.distance_to(ctx.player, t) <= self.melee_range)
     }
 }
 

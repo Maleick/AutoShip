@@ -120,8 +120,7 @@ pub fn spawn_row_style(
         SpawnType::Player => Style::default().fg(t.spawn_pc),
         SpawnType::Npc => {
             let color = player_level
-                .map(|pl| con_color(pl, spawn.level, t))
-                .unwrap_or(t.spawn_npc);
+                .map_or(t.spawn_npc, |pl| con_color(pl, spawn.level, t));
             Style::default().fg(color)
         }
         SpawnType::Corpse => Style::default().fg(t.spawn_corpse),

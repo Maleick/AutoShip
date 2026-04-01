@@ -75,9 +75,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let selected_str = if let Some(client) = app.active_client() {
         let name = client
             .local_player
-            .as_ref()
-            .map(|p| app.redact_name(&p.displayed_name).into_owned())
-            .unwrap_or_else(|| "???".into());
+            .as_ref().map_or_else(|| "???".into(), |p| app.redact_name(&p.displayed_name).into_owned());
         format!(" [{}/{}] {} ", app.selected_client + 1, client_count, name)
     } else {
         " No client ".into()
@@ -85,15 +83,13 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 
     let server_str = format!(" {} ", app.display_server());
     let zone_str = app
-        .active_client()
-        .map(|c| {
+        .active_client().map_or_else(|| "No Zone".into(), |c| {
             if c.zone_name.is_empty() {
                 "Unknown Zone".into()
             } else {
                 c.zone_name.clone()
             }
-        })
-        .unwrap_or_else(|| "No Zone".into());
+        });
 
     // Tab bar — current screen is highlighted with accent bg
     let mut tabs: Vec<Span<'_>> = vec![Span::raw("  ")];

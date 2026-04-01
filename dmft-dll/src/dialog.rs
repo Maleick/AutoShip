@@ -65,8 +65,7 @@ pub unsafe fn check_dialogs() {
     // Only scan when in-world (local player exists)
     let local_player =
         dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
-            .map(|addr| *(addr as *const usize))
-            .unwrap_or(0);
+            .map_or(0, |addr| *(addr as *const usize));
 
     if local_player == 0 {
         return;

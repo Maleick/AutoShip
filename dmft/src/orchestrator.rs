@@ -106,8 +106,7 @@ impl Orchestrator {
                 let session_id = self
                     .session_tokens
                     .get(&pid)
-                    .map(dmft_common::ipc::session_id_from_token)
-                    .unwrap_or(0);
+                    .map_or(0, dmft_common::ipc::session_id_from_token);
                 match SharedStateReader::new(pid, session_id) {
                     Ok(reader) => {
                         e.insert(reader);
@@ -159,21 +158,18 @@ impl Orchestrator {
         let tank_hp_pct = tank_state
             .local_player
             .as_ref()
-            .map(dmft_common::types::SpawnData::hp_pct)
-            .unwrap_or(100.0);
+            .map_or(100.0, dmft_common::types::SpawnData::hp_pct);
 
         let healer_mana_pct = healer_state
             .local_player
             .as_ref()
-            .map(dmft_common::types::SpawnData::mana_pct)
-            .unwrap_or(100.0);
+            .map_or(100.0, dmft_common::types::SpawnData::mana_pct);
 
         // Use the tank's target for target HP and spawn ID
         let (target_hp_pct, target_is_dead, target_spawn_id) = tank_state
             .target
             .as_ref()
-            .map(|t| (Some(t.hp_pct()), t.hp_current <= 0, Some(t.spawn_id)))
-            .unwrap_or((None, false, None));
+            .map_or((None, false, None), |t| (Some(t.hp_pct()), t.hp_current <= 0, Some(t.spawn_id)));
 
         // Collect per-member HP for death detection
         let member_hp: Vec<(u32, i32)> = camp
@@ -656,8 +652,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(std::string::String::as_str)
-            .unwrap_or("?");
+            .map_or("?", std::string::String::as_str);
 
         let token = match self.session_tokens.get(&pid) {
             Some(t) => *t,
@@ -695,8 +690,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(std::string::String::as_str)
-            .unwrap_or("?")
+            .map_or("?", std::string::String::as_str)
             .to_string();
 
         let Some(pipe) = self.get_pipe(pid) else {
@@ -719,8 +713,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(std::string::String::as_str)
-            .unwrap_or("?")
+            .map_or("?", std::string::String::as_str)
             .to_string();
         tracing::info!(pid, name = %name, "Ejecting client");
 
@@ -746,8 +739,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(std::string::String::as_str)
-            .unwrap_or("?")
+            .map_or("?", std::string::String::as_str)
             .to_string();
 
         let Some(pipe) = self.get_pipe(pid) else {

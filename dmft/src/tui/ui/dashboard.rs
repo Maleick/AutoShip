@@ -259,9 +259,7 @@ fn group_scope_entries(app: &App) -> Vec<GroupScopeEntry> {
             GroupScopeEntry {
                 label: format!("G{} {}", group.id, group.name),
                 zone: members
-                    .first()
-                    .map(|client| client.zone_name.clone())
-                    .unwrap_or_else(|| String::from("—")),
+                    .first().map_or_else(|| String::from("—"), |client| client.zone_name.clone()),
                 connected: members.len(),
                 members: usize::from(hi.saturating_sub(lo).saturating_add(1)),
                 active: app.active_group == Some(idx),
@@ -610,14 +608,17 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     };
     let target_name = client
         .target
-        .as_ref()
-        .map(|target| app.redact_name(&target.displayed_name).into_owned())
-        .unwrap_or_else(|| String::from("—"));
+        .as_ref().map_or_else(|| String::from("—"), |target| app.redact_name(&target.displayed_name).into_owned());
     let (nav_label, nav_style, nav_destination) = app
         .nav_state
         .nav_statuses
-        .get(&client.pid)
-        .map(|nav| {
+        .get(&client.pid).map_or_else(|| {
+            (
+                String::from("Idle"),
+                Style::default().fg(t.text_muted),
+                String::from("—"),
+            )
+        }, |nav| {
             let style = if nav.status.is_moving() {
                 Style::default().fg(t.text_highlight)
             } else if nav.status.is_arrived() {
@@ -633,13 +634,6 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                 nav.destination.clone()
             };
             (nav.status.label().to_string(), style, destination)
-        })
-        .unwrap_or_else(|| {
-            (
-                String::from("Idle"),
-                Style::default().fg(t.text_muted),
-                String::from("—"),
-            )
         });
 
     let lines = if collapsed {
