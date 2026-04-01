@@ -343,7 +343,7 @@ mod tests {
             order: 2,
         };
         let cloned = debuff.clone();
-        assert_eq!(cloned.order, 2);
+        assert_eq!(cloned, debuff);
         let dbg = format!("{:?}", debuff);
         assert!(dbg.contains("Malo"));
     }
