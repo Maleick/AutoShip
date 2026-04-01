@@ -1,10 +1,2 @@
-run_id	iteration	commit	metric	delta	guard	status	description	duration_sec
-autoresearch/20260331-1200	0	7314e8f	892	-	pass	baseline	Initial state	0
-autoresearch/20260331-1200	1	e9c9a53	784	-108	pass	keep	Add doc comments to tui/app.rs public items	60
-autoresearch/20260331-1200	2	82e382e	724	-60	pass	keep	Add doc comments to eq/structs.rs public items	45
-autoresearch/20260331-1200	3	8a5f639	670	-54	pass	keep	Add doc comments to tui/theme.rs public items	50
-autoresearch/20260331-1200	4	2090582	630	-40	pass	keep	Add doc comments to launcher/login_sm.rs	40
-autoresearch/20260331-1200	5	75ca491	534	-96	pass	keep	Add docs to camp/state, tui/state, config	90
-autoresearch/20260331-1200	6	9935369	448	-86	pass	keep	Add docs to eq/log_parser, eq/map_parser, camp/cc	80
-autoresearch/20260331-1200	7	95879b2	392	-56	pass	keep	Add docs to class_config, cli, lib.rs; fix HTML warnings	70
-autoresearch/20260331-1200	8	62a18b7	354	-38	pass	keep	Add docs to nav/mesh.rs and launcher/coordinator.rs	60
+# This file previously contained generated doc-coverage automation results.
+# It is intentionally left empty to avoid committing run artifacts to the repository.
