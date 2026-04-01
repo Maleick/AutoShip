@@ -251,7 +251,6 @@ mod tests {
             server_name: "FV".into(),
         };
         let cloned = info.clone();
-        assert_eq!(cloned.account_name, info.account_name);
-        assert_eq!(cloned.group_id, info.group_id);
+        assert_eq!(cloned, info);
     }
 }
