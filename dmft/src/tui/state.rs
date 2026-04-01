@@ -9,13 +9,18 @@ use crate::eq::map_parser::ZoneMap;
 
 /// State for the Spawns screen — selection, filtering, and search.
 pub struct SpawnsScreenState {
+    /// Ratatui table widget state (tracks selected row and scroll offset).
     pub table_state: TableState,
+    /// Text search filter string for spawn names.
     pub spawn_filter: String,
+    /// Active spawn type filter (All, PC, NPC, Named).
     pub spawn_type_filter: SpawnFilter,
+    /// Whether the user is currently typing a search query.
     pub search_mode: bool,
 }
 
 impl SpawnsScreenState {
+    /// Creates a new spawn screen state with default filter settings.
     #[must_use]
     pub fn new() -> Self {
         let mut table_state = TableState::default();
@@ -31,12 +36,16 @@ impl SpawnsScreenState {
 
 /// State for the hex dump viewer panel.
 pub struct HexDumpState {
+    /// Base address for the hex dump display.
     pub hex_address: usize,
+    /// Raw bytes to display in the hex viewer.
     pub hex_data: Vec<u8>,
+    /// Label shown above the hex dump (e.g., spawn name).
     pub hex_label: String,
 }
 
 impl HexDumpState {
+    /// Creates a new hex dump state with no data loaded.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -49,7 +58,9 @@ impl HexDumpState {
 
 /// State for the Map screen.
 pub struct MapScreenState {
+    /// Parsed zone map data (lines and points), if loaded.
     pub zone_map: Option<ZoneMap>,
+    /// Directory path where map files are stored.
     pub map_dir: std::path::PathBuf,
     /// The zone short name currently loaded, used to avoid redundant reloads.
     pub loaded_zone: String,
@@ -58,6 +69,7 @@ pub struct MapScreenState {
 }
 
 impl MapScreenState {
+    /// Creates a new map state, resolving the map directory path.
     #[must_use]
     pub fn new() -> Self {
         let map_dir = resolve_map_dir();
@@ -82,16 +94,24 @@ impl MapScreenState {
 
 /// State for the composite Overview screen.
 pub struct OverviewScreenState {
+    /// Whether the groups panel is visible.
     pub show_groups: bool,
+    /// Whether the filters/scope panel is visible.
     pub show_filters: bool,
+    /// Whether the character detail panel is collapsed.
     pub character_collapsed: bool,
+    /// Whether the groups panel is collapsed.
     pub groups_collapsed: bool,
+    /// Whether the filters panel is collapsed.
     pub filters_collapsed: bool,
+    /// Whether the combat panel is collapsed.
     pub combat_collapsed: bool,
+    /// Whether the session stats panel is collapsed.
     pub session_collapsed: bool,
 }
 
 impl OverviewScreenState {
+    /// Creates a new overview state with all panels visible and expanded.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -108,14 +128,20 @@ impl OverviewScreenState {
 
 /// State for the composite Tactical screen.
 pub struct TacticalScreenState {
+    /// Whether the map is in full-screen maximized mode.
     pub map_maximized: bool,
+    /// Whether the named mob tracker panel is visible.
     pub show_named: bool,
+    /// Whether the navigation panel is visible.
     pub show_navigation: bool,
+    /// Whether the named panel is collapsed.
     pub named_collapsed: bool,
+    /// Whether the navigation panel is collapsed.
     pub navigation_collapsed: bool,
 }
 
 impl TacticalScreenState {
+    /// Creates a new tactical state with side panels visible.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -155,11 +181,14 @@ fn resolve_map_dir() -> std::path::PathBuf {
 
 /// State for the Navigation screen.
 pub struct NavigationScreenState {
+    /// Currently selected navigation entry index.
     pub nav_selected: usize,
+    /// Per-client navigation statuses keyed by PID.
     pub nav_statuses: HashMap<u32, NavClientStatus>,
 }
 
 impl NavigationScreenState {
+    /// Creates a new navigation state with no active statuses.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -171,9 +200,13 @@ impl NavigationScreenState {
 
 /// State for the command bar (: mode).
 pub struct CommandBarState {
+    /// Whether the command bar is active (user is typing).
     pub command_mode: bool,
+    /// Current text in the command input buffer.
     pub command_buffer: String,
+    /// History of previously executed commands.
     pub command_history: Vec<String>,
+    /// Index into command history for up/down navigation.
     pub command_history_idx: Option<usize>,
     /// Command usage frequency — tracks how often each command is used.
     pub command_frequency: HashMap<String, u32>,
@@ -182,6 +215,7 @@ pub struct CommandBarState {
 }
 
 impl CommandBarState {
+    /// Creates a new command bar state with empty buffer and history.
     #[must_use]
     pub fn new() -> Self {
         Self {
