@@ -179,8 +179,8 @@ pub enum Response {
 pub type ZoneGraphEntry = (u16, String, i32, i32, Vec<(u16, u8, bool)>);
 
 /// Random session token generated at injection time for IPC authentication.
-/// The orchestrator writes this to shared memory; the DLL reads it and
-/// validates it on every pipe connection.
+/// The orchestrator stages this in a temp file before injection; the DLL reads
+/// it during initialization and validates it on every pipe connection.
 pub type SessionToken = [u8; 32];
 
 /// Size of shared memory region allocated per client (64 KB)
@@ -197,6 +197,47 @@ pub const SHARED_MEMORY_NAME_PREFIX: &str = "dmft_state_";
 /// orchestrator call this on the same token to produce matching IPC names.
 pub fn session_id_from_token(token: &SessionToken) -> u64 {
     u64::from_le_bytes(token[..8].try_into().unwrap())
+}
+
+/// Generate a cryptographically random 32-byte session token using OS entropy.
+pub fn generate_random_token() -> SessionToken {
+    use rand::RngCore;
+    let mut token = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut token);
+    token
+}
+
+/// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
+/// Must be called BEFORE injection.
+pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
+    let token_dir = std::env::temp_dir().join("dmft");
+    std::fs::create_dir_all(&token_dir)?;
+    let token_path = token_dir.join(format!("token_{}.bin", pid));
+
+    let token = generate_random_token();
+
+    std::fs::write(&token_path, token)?;
+    // Also persist a copy for later CLI commands that reconnect to the injected client.
+    let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
+    std::fs::write(&login_token_path, token)?;
+
+    Ok(())
+}
+
+/// Read the session token for authenticating with an already-injected DLL.
+pub fn load_session_token(pid: u32) -> Option<SessionToken> {
+    let token_path = std::env::temp_dir()
+        .join("dmft")
+        .join(format!("login_token_{}.bin", pid));
+
+    if let Ok(data) = std::fs::read(&token_path)
+        && data.len() == 32
+    {
+        let mut token = [0u8; 32];
+        token.copy_from_slice(&data);
+        return Some(token);
+    }
+    None
 }
 
 /// Build a per-client pipe name incorporating a random session ID.

@@ -1,11 +1,11 @@
-//! Character screen — roster, groups, and selected character detail.
+//! Character screen — operator roster, group scope, and selected character detail.
 
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Cell, Gauge, Paragraph, Row, Table, Wrap},
+    widgets::{Cell, Paragraph, Row, Table, Wrap},
 };
 
 use super::widgets::{
@@ -55,23 +55,24 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
 // ─── Character grid ──────────────────────────────────────────────────────────
 
 fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
+    let roster_area = if area.height >= 9 {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(5)])
+            .split(area);
+        draw_group_focus_strip(frame, chunks[0], app);
+        chunks[1]
+    } else {
+        area
+    };
+
     let t = &app.theme;
     let visible = app.visible_clients();
-    let title = match app.active_group {
-        Some(idx) => {
-            if let Some(group) = app.groups.get(idx) {
-                format!(
-                    " Characters — G{} {} ({}) ",
-                    group.id,
-                    group.name,
-                    visible.len()
-                )
-            } else {
-                format!(" Characters — Group {} ({}) ", idx + 1, visible.len())
-            }
-        }
-        None => format!(" Characters — All Groups ({}) ", visible.len()),
-    };
+    let title = format!(
+        " Ops Roster — {} ({}) ",
+        app.group_focus_label(),
+        visible.len()
+    );
 
     let border_style = if app.is_panel_focused(ActivePanel::OverviewRoster) {
         t.border_active
@@ -85,14 +86,14 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
             Paragraph::new("No characters connected")
                 .block(blk)
                 .style(Style::default().fg(t.text_muted)),
-            area,
+            roster_area,
         );
         return;
     }
 
-    let show_group = area.width >= WIDTH_SHOW_GROUP_COL;
-    let show_class = area.width >= WIDTH_SHOW_CLASS_COL;
-    let show_zone = area.width >= WIDTH_SHOW_ZONE_COL;
+    let show_group = app.active_group.is_none() && roster_area.width >= WIDTH_SHOW_GROUP_COL;
+    let show_class = roster_area.width >= WIDTH_SHOW_CLASS_COL;
+    let show_zone = roster_area.width >= WIDTH_SHOW_ZONE_COL;
 
     let mut headers = vec!["", "Name"];
     if show_group {
@@ -213,8 +214,126 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
             .header(header)
             .block(blk)
             .row_highlight_style(highlight_style),
-        area,
+        roster_area,
     );
+}
+
+struct GroupScopeEntry {
+    label: String,
+    zone: String,
+    connected: usize,
+    members: usize,
+    active: bool,
+}
+
+fn group_scope_entries(app: &App) -> Vec<GroupScopeEntry> {
+    if app.has_live_group_data() {
+        let (live_groups, _) = app.build_live_groups();
+        return live_groups
+            .iter()
+            .enumerate()
+            .map(|(idx, group)| GroupScopeEntry {
+                label: format!(
+                    "G{} {}",
+                    idx + 1,
+                    app.redact_name(&group.leader).into_owned()
+                ),
+                zone: group.zone.clone(),
+                connected: group
+                    .member_names
+                    .iter()
+                    .filter(|name| app.find_client_by_name(name).is_some())
+                    .count(),
+                members: group.member_names.len(),
+                active: app.active_group == Some(idx),
+            })
+            .collect();
+    }
+
+    app.groups
+        .iter()
+        .enumerate()
+        .map(|(idx, group)| {
+            let members = app.clients_in_group_idx(idx);
+            let (lo, hi) = group.account_range;
+            GroupScopeEntry {
+                label: format!("G{} {}", group.id, group.name),
+                zone: members
+                    .first()
+                    .map(|client| client.zone_name.clone())
+                    .unwrap_or_else(|| String::from("—")),
+                connected: members.len(),
+                members: usize::from(hi.saturating_sub(lo).saturating_add(1)),
+                active: app.active_group == Some(idx),
+            }
+        })
+        .collect()
+}
+
+fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let blk = panel(" Group Scope [Shift+0-6] ", t.border_dim, t);
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    if inner.height == 0 {
+        return;
+    }
+
+    let mut cards = vec![Span::styled(
+        format!("[All {}]", app.clients.len()),
+        if app.active_group.is_none() {
+            Style::default()
+                .fg(t.text_bright)
+                .bg(t.row_selected_bg)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.text_secondary)
+        },
+    )];
+
+    for entry in group_scope_entries(app) {
+        cards.push(Span::raw(" "));
+        cards.push(Span::styled(
+            format!("[{} {}/{}]", entry.label, entry.connected, entry.members),
+            if entry.active {
+                Style::default()
+                    .fg(t.text_bright)
+                    .bg(t.row_selected_bg)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.text_secondary)
+            },
+        ));
+    }
+
+    let selected = app
+        .active_client()
+        .and_then(|client| {
+            client
+                .local_player
+                .as_ref()
+                .map(|player| app.redact_name(&player.displayed_name).into_owned())
+                .or_else(|| Some(app.client_command_target(client)))
+        })
+        .unwrap_or_else(|| String::from("none"));
+
+    let mut lines = vec![Line::from(cards)];
+    if inner.height > 1 {
+        lines.push(Line::from(vec![
+            Span::styled("Focus ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                app.group_focus_label(),
+                Style::default()
+                    .fg(t.text_accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  Selected ", Style::default().fg(t.text_muted)),
+            Span::styled(selected, Style::default().fg(t.text_normal)),
+        ]));
+    }
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
 fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'static str, Style) {
@@ -360,10 +479,10 @@ fn draw_dashboard_sidebar(
                 draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed)
             }
             OverviewSectionKind::Groups => {
-                draw_group_health_gauges(frame, *chunk, app, app.overview_state.groups_collapsed)
+                draw_group_ops_summary(frame, *chunk, app, app.overview_state.groups_collapsed)
             }
             OverviewSectionKind::Filters => {
-                draw_filter_summary(frame, *chunk, app, app.overview_state.filters_collapsed)
+                draw_scope_summary(frame, *chunk, app, app.overview_state.filters_collapsed)
             }
             OverviewSectionKind::Combat => {
                 draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed)
@@ -381,18 +500,18 @@ fn overview_sections(app: &App) -> Vec<(OverviewSectionKind, Constraint)> {
         if app.overview_state.character_collapsed {
             Constraint::Length(3)
         } else {
-            Constraint::Length(7)
+            Constraint::Length(8)
         },
     )];
 
     if app.overview_state.show_groups {
-        let group_rows = app.visible_clients().len().min(5) as u16;
+        let group_rows = group_scope_entries(app).len().min(6) as u16;
         sections.push((
             OverviewSectionKind::Groups,
             if app.overview_state.groups_collapsed {
                 Constraint::Length(3)
             } else {
-                Constraint::Length(group_rows.saturating_add(2).max(4))
+                Constraint::Length(group_rows.saturating_add(2).max(5))
             },
         ));
     }
@@ -403,7 +522,7 @@ fn overview_sections(app: &App) -> Vec<(OverviewSectionKind, Constraint)> {
             if app.overview_state.filters_collapsed {
                 Constraint::Length(3)
             } else {
-                Constraint::Length(5)
+                Constraint::Length(6)
             },
         ));
     }
@@ -454,7 +573,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     } else {
         t.border_primary
     };
-    let title = section_title("Selected", Some("Enter"), collapsed);
+    let title = section_title("Character", Some("Enter"), collapsed);
     let blk = panel(title.as_str(), border_style, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
@@ -479,11 +598,49 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     let group_label = app.client_group_label(client).unwrap_or("--");
     let (condition_label, condition_style) = client_condition(client, t);
     let (activity_label, activity_style) = client_activity(app, client);
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_style = match mode_str.as_str() {
+        "Camp" => Style::default()
+            .fg(t.mode_camp)
+            .add_modifier(Modifier::BOLD),
+        "Hunt" => Style::default()
+            .fg(t.mode_hunt)
+            .add_modifier(Modifier::BOLD),
+        _ => Style::default().fg(t.text_muted),
+    };
     let target_name = client
         .target
         .as_ref()
         .map(|target| app.redact_name(&target.displayed_name).into_owned())
         .unwrap_or_else(|| String::from("—"));
+    let (nav_label, nav_style, nav_destination) = app
+        .nav_state
+        .nav_statuses
+        .get(&client.pid)
+        .map(|nav| {
+            let style = if nav.status.is_moving() {
+                Style::default().fg(t.text_highlight)
+            } else if nav.status.is_arrived() {
+                Style::default().fg(t.hp_high)
+            } else if nav.status.is_stuck() {
+                Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.text_muted)
+            };
+            let destination = if nav.destination.is_empty() {
+                String::from("—")
+            } else {
+                nav.destination.clone()
+            };
+            (nav.status.label().to_string(), style, destination)
+        })
+        .unwrap_or_else(|| {
+            (
+                String::from("Idle"),
+                Style::default().fg(t.text_muted),
+                String::from("—"),
+            )
+        });
 
     let lines = if collapsed {
         vec![Line::from(vec![
@@ -497,6 +654,11 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
             ),
             Span::styled("  ", Style::default()),
             Span::styled(activity_label, activity_style),
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                app.client_command_target(client),
+                Style::default().fg(t.text_muted),
+            ),
         ])]
     } else {
         vec![
@@ -515,6 +677,11 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                 ),
                 Span::styled("  ", Style::default()),
                 Span::styled(group_label, Style::default().fg(t.text_secondary)),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    app.client_command_target(client),
+                    Style::default().fg(t.text_muted),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Zone ", Style::default().fg(t.text_muted)),
@@ -545,12 +712,29 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                     player.stand_state.label(),
                     Style::default().fg(stand_state_color(&player.stand_state, t)),
                 ),
+                Span::styled("  Nav ", Style::default().fg(t.text_muted)),
+                Span::styled(nav_label, nav_style),
             ]),
             Line::from(vec![
                 Span::styled("Act  ", Style::default().fg(t.text_muted)),
                 Span::styled(activity_label, activity_style),
                 Span::styled("  Tgt ", Style::default().fg(t.text_muted)),
                 Span::styled(target_name, Style::default().fg(t.text_highlight)),
+            ]),
+            Line::from(vec![
+                Span::styled("Focus ", Style::default().fg(t.text_muted)),
+                Span::styled(app.group_focus_label(), Style::default().fg(t.text_accent)),
+                Span::styled("  Mode ", Style::default().fg(t.text_muted)),
+                Span::styled(mode_str, mode_style),
+            ]),
+            Line::from(vec![
+                Span::styled("Cmd  ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{} /cmd", app.client_command_target(client)),
+                    Style::default().fg(t.text_highlight),
+                ),
+                Span::styled("  To ", Style::default().fg(t.text_muted)),
+                Span::styled(nav_destination, Style::default().fg(t.text_secondary)),
             ]),
             Line::from(vec![
                 Span::styled("Pos  ", Style::default().fg(t.text_muted)),
@@ -565,8 +749,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-/// HP bars using ratatui's `Gauge` widget — one per visible character.
-fn draw_group_health_gauges(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewGroups) {
         t.border_active
@@ -578,9 +761,13 @@ fn draw_group_health_gauges(frame: &mut Frame, area: Rect, app: &App, collapsed:
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
-    let visible = app.visible_clients();
+    let entries = group_scope_entries(app);
     if collapsed {
-        let summary = format!("{} visible | {}", visible.len(), app.group_focus_label());
+        let summary = format!(
+            "{} | {} chars",
+            app.group_focus_label(),
+            app.focused_pids().len()
+        );
         frame.render_widget(
             Paragraph::new(summary).style(Style::default().fg(t.text_muted)),
             inner,
@@ -588,153 +775,123 @@ fn draw_group_health_gauges(frame: &mut Frame, area: Rect, app: &App, collapsed:
         return;
     }
 
-    if visible.is_empty() || inner.height == 0 {
+    if entries.is_empty() || inner.height == 0 {
         frame.render_widget(
-            Paragraph::new("No characters connected").style(Style::default().fg(t.text_muted)),
+            Paragraph::new("No group data").style(Style::default().fg(t.text_muted)),
             inner,
         );
         return;
     }
 
-    let n = visible.len().min(inner.height as usize);
-    let row_heights: Vec<Constraint> = (0..n).map(|_| Constraint::Length(1)).collect();
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(row_heights)
-        .split(inner);
-
-    for (i, client) in visible.iter().enumerate() {
-        if i >= rows.len() {
-            break;
-        }
-        let row = rows[i];
-
-        let global_idx = app
-            .clients
-            .iter()
-            .position(|c| c.pid == client.pid)
-            .unwrap_or(usize::MAX);
-        let is_sel = global_idx == app.selected_client;
-
-        if let Some(player) = &client.local_player {
-            let hp_pct = player.hp_pct().clamp(0.0, 100.0);
-            let name = app.redact_name(&player.displayed_name).into_owned();
-            let color = hp_color(hp_pct, t);
-
-            let marker_area = Rect {
-                x: row.x,
-                y: row.y,
-                width: 2,
-                height: 1,
-            };
-            let gauge_area = Rect {
-                x: row.x + 2,
-                y: row.y,
-                width: row.width.saturating_sub(2),
-                height: 1,
-            };
-
-            let marker_style = if is_sel {
+    let lines: Vec<Line<'_>> = entries
+        .into_iter()
+        .take(inner.height as usize)
+        .map(|entry| {
+            let count_label = format!("{}/{} up", entry.connected, entry.members.max(1));
+            let marker_style = if entry.active {
                 Style::default()
                     .fg(t.text_accent)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(t.text_muted)
             };
-            frame.render_widget(
-                Paragraph::new(if is_sel { "▶ " } else { "  " }).style(marker_style),
-                marker_area,
-            );
-
-            let label_str = format!("{:<12} {:>3.0}%", name, hp_pct);
-            let gauge = Gauge::default()
-                .gauge_style(Style::default().fg(color).bg(t.bar_empty))
-                .percent(hp_pct as u16)
-                .label(label_str)
-                .style(Style::default().fg(color));
-
-            frame.render_widget(gauge, gauge_area);
-        } else {
-            let label = if client.client_status.is_empty() {
-                format!("  PID {} …", client.pid)
+            let label_style = if entry.active {
+                Style::default()
+                    .fg(t.text_bright)
+                    .add_modifier(Modifier::BOLD)
             } else {
-                format!("  {}", client.client_status)
+                Style::default().fg(t.text_normal)
             };
-            let color = if client.client_status.contains("error")
-                || client.client_status.contains("Lost")
-            {
-                t.hp_low
+            let count_style = if entry.connected > 0 {
+                Style::default().fg(t.hp_high)
             } else {
-                t.text_muted
+                Style::default().fg(t.text_muted)
             };
-            frame.render_widget(
-                Paragraph::new(Span::styled(label, Style::default().fg(color))),
-                row,
-            );
-        }
-    }
+
+            Line::from(vec![
+                Span::styled(if entry.active { "▶ " } else { "  " }, marker_style),
+                Span::styled(format!("{:<14}", entry.label), label_style),
+                Span::styled(count_label, count_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(entry.zone, Style::default().fg(t.text_secondary)),
+            ])
+        })
+        .collect();
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-fn draw_filter_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewFilters) {
         t.border_active
     } else {
         t.border_dim
     };
-    let title = section_title("Filters", Some("v"), collapsed);
+    let title = section_title("Scope", Some("v"), collapsed);
     let blk = panel(title.as_str(), border_style, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
-    let search = if app.spawns_state.spawn_filter.is_empty() {
-        String::from("none")
+    let focus = app.group_focus_label();
+    let selected_cmd = if app.active_client().is_some() {
+        String::from("Selected /cmd")
     } else {
-        app.spawns_state.spawn_filter.clone()
+        String::from("Select a character")
     };
+    let mode_str = format!("{}", app.operating_mode);
+    let mode_color = match mode_str.as_str() {
+        "Camp" => t.mode_camp,
+        "Hunt" => t.mode_hunt,
+        _ => t.text_muted,
+    };
+    let focused_count = app.focused_pids().len();
 
     let lines = if collapsed {
         vec![Line::from(vec![
             Span::styled(
-                format!("{} ", app.spawns_state.spawn_type_filter.label()),
+                focus.clone(),
                 Style::default()
                     .fg(t.text_accent)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!("| {} | Z ±{:.0}", search, app.map_state.z_filter_range),
+                format!(" | {} | {} chars", mode_str, focused_count),
                 t.text_muted,
             ),
         ])]
     } else {
         vec![
             Line::from(vec![
-                Span::styled("Type   ", Style::default().fg(t.text_muted)),
+                Span::styled("Focus ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    app.spawns_state.spawn_type_filter.label(),
+                    focus,
                     Style::default()
                         .fg(t.text_accent)
                         .add_modifier(Modifier::BOLD),
                 ),
+                Span::styled("  Mode ", Style::default().fg(t.text_muted)),
+                Span::styled(&mode_str, Style::default().fg(mode_color)),
             ]),
             Line::from(vec![
-                Span::styled("Search ", Style::default().fg(t.text_muted)),
-                Span::styled(search, Style::default().fg(t.text_normal)),
+                Span::styled("Send  ", Style::default().fg(t.text_muted)),
+                Span::styled("all /cmd", Style::default().fg(t.text_highlight)),
+                Span::styled("  Group ", Style::default().fg(t.text_muted)),
+                Span::styled("G1-G6 /cmd", Style::default().fg(t.text_highlight)),
             ]),
             Line::from(vec![
-                Span::styled("Z slice", Style::default().fg(t.text_muted)),
+                Span::styled("Char  ", Style::default().fg(t.text_muted)),
+                Span::styled(selected_cmd, Style::default().fg(t.text_highlight)),
+                Span::styled("  Count ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    format!(" ±{:.0}", app.map_state.z_filter_range),
-                    Style::default().fg(t.text_highlight),
+                    focused_count.to_string(),
+                    Style::default().fg(t.text_normal),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("/", Style::default().fg(t.text_accent)),
-                Span::styled(" search  ", Style::default().fg(t.text_muted)),
-                Span::styled("f", Style::default().fg(t.text_accent)),
-                Span::styled(" type  ", Style::default().fg(t.text_muted)),
-                Span::styled("+/-", Style::default().fg(t.text_accent)),
-                Span::styled(" depth", Style::default().fg(t.text_muted)),
+                Span::styled("Ops   ", Style::default().fg(t.text_muted)),
+                Span::styled("nav <zone>", Style::default().fg(t.text_highlight)),
+                Span::styled("  mode camp|hunt", Style::default().fg(t.text_accent)),
             ]),
         ]
     };

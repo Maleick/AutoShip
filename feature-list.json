@@ -13,6 +13,21 @@
         "cargo test"
       ],
       "notes": "Overview now owns selected-character detail and activity-at-a-glance state, Tactical shows live map coordinates with zone-aligned demo data, and the third screen is effectively a debug inspector backed by a passing fmt/clippy/test run."
+    },
+    {
+      "id": "operator-tui-polish",
+      "name": "Operator TUI polish and navmesh audit",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "Characters screen shows group scope and roster-oriented detail instead of PID-first operator hints",
+        "Command bar accepts direct character-name targeting via '<name> /cmd'",
+        "Tactical screen retains live raster map lines and waypoint overlays",
+        "Map and navmesh gaps are documented with concrete next steps and MQ mesh source links",
+        "cargo fmt --check",
+        "cargo clippy -- -D warnings",
+        "cargo test"
+      ],
+      "notes": "Character-name targeting is now wired into the TUI command bar and Characters screen copy. The current audit confirms that MQ mesh loading/path queries already work in CLI flows, while the Tactical screen still renders Brewall maps plus waypoint overlays rather than navmesh geometry. See docs/tui-map-navmesh-audit-2026-03-31.md."
     }
   ]
 }

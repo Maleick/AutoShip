@@ -13,15 +13,12 @@ use crate::ipc::pipe::CommandPipe;
 use crate::ipc::shared::SharedStateReader;
 use dmft_common::ipc::{Command, SessionToken};
 use dmft_common::types::GameState;
-use rand::RngCore;
 use std::collections::HashMap;
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
 #[allow(dead_code)] // Used when IPC is wired up in later milestones
 fn generate_session_token() -> SessionToken {
-    let mut token = [0u8; 32];
-    rand::rngs::OsRng.fill_bytes(&mut token);
-    token
+    dmft_common::ipc::generate_random_token()
 }
 
 /// Maximum number of ticks a critical role's state can be stale before

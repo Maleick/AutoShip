@@ -126,8 +126,8 @@ DLL executes InterpretCmd with human-like jitter delay
 ```bash
 cargo build              # Debug build
 cargo run                # TUI with demo data (auto-detected on non-Windows)
-cargo test               # Run all 667 tests
-cargo clippy             # Lint (0 warnings)
+cargo test               # Run the full workspace test suite
+cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 **Demo mode** activates automatically when no live EQ process is found (always on macOS/Linux, on Windows when EQ isn't running). It populates the TUI with 18 simulated characters across 3 groups covering all 16 EQ classes:
@@ -256,7 +256,7 @@ Run `scripts\optimize_ini.ps1` to apply minimal settings:
 
 ## Requirements
 
-- **Rust** (edition 2024, stable MSVC toolchain on Windows)
+- **Rust** (edition 2024; nightly MSVC toolchain currently required on Windows because `retour` uses unstable features)
 - **Windows** for live EQ interaction (macOS/Linux for development only)
 - **EverQuest** client (March 2026 build confirmed)
 

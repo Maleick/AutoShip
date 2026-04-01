@@ -741,36 +741,40 @@ mod tests {
 
     #[test]
     fn player_base_offsets_are_ordered() {
-        // Name is at a lower offset than displayed name
-        assert!(player_base::NAME < player_base::DISPLAYED_NAME);
-        // Position fields are grouped together
-        assert!(player_base::Y < player_base::X);
-        assert!(player_base::X < player_base::Z);
+        const _: () = {
+            assert!(player_base::NAME < player_base::DISPLAYED_NAME);
+            assert!(player_base::Y < player_base::X);
+            assert!(player_base::X < player_base::Z);
+        };
     }
 
     #[test]
     fn buff_slots_constants_consistent() {
-        // Each buff entry has a size, and the array offset should be nonzero
-        assert!(buff_slots::BUFF_ENTRY_SIZE > 0);
-        assert!(buff_slots::BUFF_ARRAY_OFFSET > 0);
-        assert!(buff_slots::MAX_BUFF_SLOTS > 0);
+        const _: () = {
+            assert!(buff_slots::BUFF_ENTRY_SIZE > 0);
+            assert!(buff_slots::BUFF_ARRAY_OFFSET > 0);
+            assert!(buff_slots::MAX_BUFF_SLOTS > 0);
+        };
         assert_eq!(buff_slots::EMPTY_SPELL_ID, 0xFFFF);
     }
 
     #[test]
     fn zone_guide_constants_consistent() {
         assert_eq!(zone_guide::ZONE_COUNT, 888);
-        assert!(zone_guide::ZONE_SIZE > 0);
-        assert!(zone_guide::CONNECTION_SIZE > 0);
-        // Zone connections array offset should be within zone struct
-        assert!(zone_guide::ZONE_CONNECTIONS_COUNT < zone_guide::ZONE_SIZE);
+        const _: () = {
+            assert!(zone_guide::ZONE_SIZE > 0);
+            assert!(zone_guide::CONNECTION_SIZE > 0);
+            assert!(zone_guide::ZONE_CONNECTIONS_COUNT < zone_guide::ZONE_SIZE);
+        };
     }
 
     #[test]
     fn group_constants_valid() {
         assert_eq!(group::MAX_GROUP_SIZE, 6);
-        assert!(group::PC_CLIENT_GROUP_PTR > 0);
-        assert!(group::GROUP_MEMBERS < group::GROUP_LEADER);
+        const _: () = {
+            assert!(group::PC_CLIENT_GROUP_PTR > 0);
+            assert!(group::GROUP_MEMBERS < group::GROUP_LEADER);
+        };
     }
 
     #[test]

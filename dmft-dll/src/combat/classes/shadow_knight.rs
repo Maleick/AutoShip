@@ -136,11 +136,13 @@ mod tests {
     #[test]
     fn sk_lifetap_priority_when_low_hp() {
         let sk = ShadowKnightStrategy::new(5);
-        let mut player = dmft_common::types::SpawnData::default();
-        player.hp_current = 4000;
-        player.hp_max = 10000; // 40% HP
-        player.mana_current = 5000;
-        player.mana_max = 10000;
+        let player = dmft_common::types::SpawnData {
+            hp_current: 4000,
+            hp_max: 10000,
+            mana_current: 5000,
+            mana_max: 10000,
+            ..dmft_common::types::SpawnData::default()
+        };
         let config = dmft_common::combat::CombatConfig {
             spells: vec![
                 dmft_common::combat::SpellEntry {
@@ -179,14 +181,18 @@ mod tests {
     #[test]
     fn sk_snare_on_fleeing_mob() {
         let sk = ShadowKnightStrategy::new(5);
-        let mut player = dmft_common::types::SpawnData::default();
-        player.hp_current = 9000;
-        player.hp_max = 10000; // 90% HP (healthy, no lifetap)
-        player.mana_current = 5000;
-        player.mana_max = 10000;
-        let mut target = dmft_common::types::SpawnData::default();
-        target.hp_current = 1000;
-        target.hp_max = 10000; // 10% HP (below 15%, fleeing)
+        let player = dmft_common::types::SpawnData {
+            hp_current: 9000,
+            hp_max: 10000,
+            mana_current: 5000,
+            mana_max: 10000,
+            ..dmft_common::types::SpawnData::default()
+        };
+        let target = dmft_common::types::SpawnData {
+            hp_current: 1000,
+            hp_max: 10000,
+            ..dmft_common::types::SpawnData::default()
+        };
         let config = dmft_common::combat::CombatConfig {
             spells: vec![
                 dmft_common::combat::SpellEntry {
@@ -233,11 +239,13 @@ mod tests {
     #[test]
     fn sk_fallback_to_generic() {
         let sk = ShadowKnightStrategy::new(5);
-        let mut player = dmft_common::types::SpawnData::default();
-        player.hp_current = 9000;
-        player.hp_max = 10000;
-        player.mana_current = 5000;
-        player.mana_max = 10000;
+        let player = dmft_common::types::SpawnData {
+            hp_current: 9000,
+            hp_max: 10000,
+            mana_current: 5000,
+            mana_max: 10000,
+            ..dmft_common::types::SpawnData::default()
+        };
         let config = dmft_common::combat::CombatConfig {
             spells: vec![dmft_common::combat::SpellEntry {
                 slot: 1,

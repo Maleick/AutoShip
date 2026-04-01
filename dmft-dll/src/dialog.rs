@@ -134,9 +134,17 @@ pub unsafe fn check_dialogs() {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    fn auto_accept_test_lock() -> MutexGuard<'static, ()> {
+        static LOCK: Mutex<()> = Mutex::new(());
+        LOCK.lock().expect("dialog test lock poisoned")
+    }
 
     #[test]
     fn auto_accept_toggle() {
+        let _guard = auto_accept_test_lock();
+        set_enabled(true);
         set_enabled(false);
         assert!(!is_enabled());
         set_enabled(true);
@@ -190,7 +198,7 @@ mod tests {
 
     #[test]
     fn auto_accept_starts_enabled() {
-        // Reset to default state
+        let _guard = auto_accept_test_lock();
         set_enabled(true);
         assert!(is_enabled());
     }
