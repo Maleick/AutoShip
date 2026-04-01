@@ -4,7 +4,9 @@
 //! a curated spawn list mixing PCs, NPCs, and corpses appropriate to the zone.
 
 use crate::eq::named_tracker::is_named;
-use crate::eq::structs::{CastState as EqCastState, EqClass, SpawnInfo, SpawnType, StandState};
+use crate::eq::structs::{
+    CastDurationSource, CastState as EqCastState, EqClass, SpawnInfo, SpawnType, StandState,
+};
 use dmft_common::nav::{NavStatus, Waypoint};
 use dmft_common::offsets::launch_spell_data;
 
@@ -405,20 +407,26 @@ pub fn demo_eq_cast_state(cast: Option<DemoCastInfo>) -> EqCastState {
     match cast {
         Some(cast) => EqCastState {
             spell_id: demo_spell_id(cast.spell_label),
+            spell_name: Some(cast.spell_label.to_string()),
             target_id: 0,
             spell_slot: cast.spell_slot,
             spell_eta: cast.remaining_ms.max(1),
             item_id: 0,
             remaining_ms: Some(cast.remaining_ms.max(1)),
+            total_cast_ms: Some(cast.total_cast_ms.max(1)),
+            duration_source: CastDurationSource::ExactRuntime,
             gem_etas: Some([0; 15]),
         },
         None => EqCastState {
             spell_id: launch_spell_data::NOT_CASTING_SPELL_ID,
+            spell_name: None,
             target_id: 0,
             spell_slot: launch_spell_data::NOT_CASTING_SPELL_SLOT,
             spell_eta: 0,
             item_id: 0,
             remaining_ms: None,
+            total_cast_ms: None,
+            duration_source: CastDurationSource::Unknown,
             gem_etas: Some([0; 15]),
         },
     }

@@ -396,6 +396,10 @@ pub mod launch_spell_data {
     pub const SPELL_ETA: usize = 0x10;
     /// `int` — casting item ID, if any.
     pub const ITEM_ID: usize = 0x14;
+    /// `ItemGlobalIndex` — inventory location for item-origin casts.
+    pub const ITEM_LOCATION: usize = 0x2c;
+    /// `ItemSpellTypes` — which item spell slot is being activated.
+    pub const ITEM_CAST_TYPE: usize = 0x38;
     /// `uint8_t` — spell gem slot (`0xFF` when not using a gem).
     pub const SPELL_SLOT: usize = 0x39;
 
@@ -403,6 +407,61 @@ pub mod launch_spell_data {
     pub const NOT_CASTING_SPELL_ID: i32 = -1;
     /// Sentinel spell slot used by EQ when no spell gem is active.
     pub const NOT_CASTING_SPELL_SLOT: u8 = 0xFF;
+}
+
+/// Offsets within `ClientSpellManager`.
+/// Source: `third_party/eqlib/include/eqlib/game/Spells.h`
+pub mod client_spell_manager {
+    /// `int` — largest valid spell ID in the loaded spell database.
+    pub const MAX_SPELL_ID: usize = 0x0064;
+    /// `SoeUtil::HashMap<int, EQ_Spell>` — loaded spell records keyed by spell ID.
+    pub const SPELLS: usize = 0x2240;
+}
+
+/// Offsets within `EQ_Spell`.
+/// Source: `third_party/eqlib/include/eqlib/game/Spells.h`
+pub mod eq_spell {
+    /// `uint32_t` — base cast time from spell data (does not include live haste/focus modifiers).
+    pub const CAST_TIME: usize = 0x0010;
+    /// `int` — spell ID inside the record.
+    pub const ID: usize = 0x008c;
+    /// `char[64]` — spell name.
+    pub const NAME: usize = 0x0192;
+    /// `sizeof(EQ_Spell)` on the 2026-03-10 live client.
+    pub const SIZE: usize = 0x0218;
+}
+
+/// Offsets within `SoeUtil::HashMap<int, EQ_Spell>`.
+/// Source: `third_party/eqlib/include/eqlib/game/SoeUtil.h` + `EQ_Spell` size above.
+pub mod spell_hash_map {
+    const fn align_up(value: usize, alignment: usize) -> usize {
+        let remainder = value % alignment;
+        if remainder == 0 {
+            value
+        } else {
+            value + (alignment - remainder)
+        }
+    }
+
+    /// `size_t` — number of entries in the map.
+    pub const COUNT: usize = 0x08;
+    /// `Node*` — head of the linked list of values.
+    pub const HEAD: usize = 0x10;
+    /// `Node**` — bucket array for hash lookups.
+    pub const BUCKETS: usize = 0x20;
+    /// `size_t` — bucket count, always a power of two when populated.
+    pub const DYNAMIC_SIZE: usize = 0x28;
+
+    /// `int` — hash node key (`spell_id`).
+    pub const KEY: usize = 0x000;
+    /// `EQ_Spell` — hash node value payload.
+    pub const VALUE: usize = 0x004;
+    /// `Node*` — next entry within the same hash bucket.
+    pub const HASH_NEXT: usize = align_up(VALUE + super::eq_spell::SIZE, 0x08);
+    /// `Node*` — next entry in insertion order.
+    pub const NEXT: usize = HASH_NEXT + 0x08;
+    /// `Node*` — previous entry in insertion order.
+    pub const PREV: usize = NEXT + 0x08;
 }
 
 /// Offsets within `PlayerZoneClient` (extends `PlayerBase` at 0x01c8)
@@ -799,6 +858,8 @@ mod tests {
         assert_eq!(launch_spell_data::TARGET_ID, 0x04);
         assert_eq!(launch_spell_data::SPELL_ETA, 0x10);
         assert_eq!(launch_spell_data::ITEM_ID, 0x14);
+        assert_eq!(launch_spell_data::ITEM_LOCATION, 0x2c);
+        assert_eq!(launch_spell_data::ITEM_CAST_TYPE, 0x38);
         assert_eq!(launch_spell_data::SPELL_SLOT, 0x39);
         assert_eq!(launch_spell_data::NOT_CASTING_SPELL_ID, -1);
         assert_eq!(launch_spell_data::NOT_CASTING_SPELL_SLOT, 0xFF);
@@ -813,6 +874,33 @@ mod tests {
     #[test]
     fn character_zone_me_offset_matches_eqlib_live_20260310() {
         assert_eq!(character_zone::ME, 0x2798);
+    }
+
+    #[test]
+    fn spell_manager_offsets_match_eqlib_live_20260310() {
+        assert_eq!(client_spell_manager::MAX_SPELL_ID, 0x0064);
+        assert_eq!(client_spell_manager::SPELLS, 0x2240);
+    }
+
+    #[test]
+    fn eq_spell_offsets_match_eqlib_live_20260310() {
+        assert_eq!(eq_spell::CAST_TIME, 0x0010);
+        assert_eq!(eq_spell::ID, 0x008c);
+        assert_eq!(eq_spell::NAME, 0x0192);
+        assert_eq!(eq_spell::SIZE, 0x0218);
+    }
+
+    #[test]
+    fn spell_hash_map_offsets_match_eqlib_layout() {
+        assert_eq!(spell_hash_map::COUNT, 0x08);
+        assert_eq!(spell_hash_map::HEAD, 0x10);
+        assert_eq!(spell_hash_map::BUCKETS, 0x20);
+        assert_eq!(spell_hash_map::DYNAMIC_SIZE, 0x28);
+        assert_eq!(spell_hash_map::KEY, 0x000);
+        assert_eq!(spell_hash_map::VALUE, 0x004);
+        assert_eq!(spell_hash_map::HASH_NEXT, 0x220);
+        assert_eq!(spell_hash_map::NEXT, 0x228);
+        assert_eq!(spell_hash_map::PREV, 0x230);
     }
 
     #[test]

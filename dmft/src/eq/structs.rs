@@ -262,10 +262,33 @@ impl BuffSlot {
 
 /// Active spell cast state for a spawn.
 /// Backed by `PlayerZoneClient::CastingData`; local spawns may also include gem timers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CastDurationSource {
+    /// No trustworthy total cast duration is currently available.
+    Unknown,
+    /// Base spell data from `EQ_Spell::CastTime`.
+    ///
+    /// This is useful for labels and rough progress, but it does not include
+    /// live casting-speed modifiers such as haste, AAs, or focus effects.
+    SpellDataBase,
+    /// Exact runtime duration captured from a verified live source.
+    ExactRuntime,
+}
+
+impl CastDurationSource {
+    /// Returns `true` when the total cast duration is exact for the live cast in progress.
+    #[must_use]
+    pub fn is_exact(self) -> bool {
+        matches!(self, Self::ExactRuntime)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CastState {
     /// Active spell ID (`-1` = not currently casting).
     pub spell_id: i32,
+    /// Spell name resolved from the live spell database, if available.
+    pub spell_name: Option<String>,
     /// Target spawn ID for the current cast.
     pub target_id: u32,
     /// Server timestamp when cast completes (0 = not casting).
@@ -276,6 +299,10 @@ pub struct CastState {
     pub spell_slot: u8,
     /// Remaining cast time in milliseconds, if the display timestamp was available.
     pub remaining_ms: Option<u32>,
+    /// Total cast duration in milliseconds, when the backend can determine one.
+    pub total_cast_ms: Option<u32>,
+    /// Where `total_cast_ms` came from. This lets UI code avoid false precision.
+    pub duration_source: CastDurationSource,
     /// Per-gem recast timestamps (15 entries, 0 = ready) for the local player only.
     pub gem_etas: Option<[u32; 15]>,
 }
@@ -305,6 +332,42 @@ impl CastState {
         } else {
             None
         }
+    }
+
+    /// Total cast duration in milliseconds, if known.
+    #[must_use]
+    pub fn cast_time_total_ms(&self) -> Option<u32> {
+        if self.is_casting() {
+            self.total_cast_ms
+        } else {
+            None
+        }
+    }
+
+    /// Elapsed cast time in milliseconds, if both total and remaining durations are known.
+    #[must_use]
+    pub fn cast_time_elapsed_ms(&self) -> Option<u32> {
+        let total_ms = self.cast_time_total_ms()?;
+        let remaining_ms = self.cast_time_remaining_ms()?;
+        Some(total_ms.saturating_sub(remaining_ms))
+    }
+
+    /// Normalized cast progress from `0.0` to `1.0`, if both total and remaining are known.
+    #[must_use]
+    pub fn cast_progress(&self) -> Option<f64> {
+        let total_ms = self.cast_time_total_ms()?;
+        if total_ms == 0 {
+            return None;
+        }
+
+        let elapsed_ms = self.cast_time_elapsed_ms()?;
+        Some((f64::from(elapsed_ms) / f64::from(total_ms)).clamp(0.0, 1.0))
+    }
+
+    /// Returns `true` when `total_cast_ms` is exact for the current live cast.
+    #[must_use]
+    pub fn has_exact_total_cast_time(&self) -> bool {
+        self.is_casting() && self.duration_source.is_exact() && self.total_cast_ms.is_some()
     }
 }
 
@@ -454,6 +517,21 @@ impl fmt::Display for SpawnInfo {
 mod tests {
     use super::*;
 
+    fn make_cast_state() -> CastState {
+        CastState {
+            spell_id: 123,
+            spell_name: Some("Test Spell".to_string()),
+            target_id: 456,
+            spell_eta: 1_234,
+            item_id: 0,
+            spell_slot: 0,
+            remaining_ms: Some(900),
+            total_cast_ms: Some(1_200),
+            duration_source: CastDurationSource::SpellDataBase,
+            gem_etas: Some([0; 15]),
+        }
+    }
+
     #[test]
     fn buff_slot_empty_detection() {
         let empty = BuffSlot {
@@ -510,15 +588,7 @@ mod tests {
 
     #[test]
     fn cast_state_is_casting_true() {
-        let cs = CastState {
-            spell_id: 123,
-            target_id: 456,
-            spell_eta: 12345,
-            item_id: 0,
-            spell_slot: 0,
-            remaining_ms: Some(900),
-            gem_etas: Some([0; 15]),
-        };
+        let cs = make_cast_state();
         assert!(cs.is_casting());
         assert_eq!(cs.spell_gem(), Some(1));
     }
@@ -527,11 +597,14 @@ mod tests {
     fn cast_state_not_casting_when_spell_id_minus_one() {
         let cs = CastState {
             spell_id: -1,
+            spell_name: None,
             target_id: 0,
             spell_eta: 0,
             item_id: 0,
             spell_slot: 0xFF,
             remaining_ms: None,
+            total_cast_ms: None,
+            duration_source: CastDurationSource::Unknown,
             gem_etas: Some([0; 15]),
         };
         assert!(!cs.is_casting());
@@ -541,11 +614,14 @@ mod tests {
     fn cast_state_item_click_can_cast_without_spell_slot() {
         let cs = CastState {
             spell_id: 444,
+            spell_name: Some("Wand of Test".to_string()),
             target_id: 77,
             spell_eta: 0,
             item_id: 999,
             spell_slot: 0xFF,
             remaining_ms: Some(0),
+            total_cast_ms: None,
+            duration_source: CastDurationSource::Unknown,
             gem_etas: None,
         };
         assert!(cs.is_casting());
@@ -769,11 +845,14 @@ mod tests {
     fn cast_state_remaining_ms_none_when_unknown() {
         let cs = CastState {
             spell_id: 55,
+            spell_name: Some("Unknown Timing".to_string()),
             target_id: 0,
             spell_eta: 1000,
             item_id: 0,
             spell_slot: 5,
             remaining_ms: None,
+            total_cast_ms: Some(2_500),
+            duration_source: CastDurationSource::SpellDataBase,
             gem_etas: None,
         };
         assert_eq!(cs.cast_time_remaining_ms(), None);
@@ -896,11 +975,14 @@ mod tests {
     fn cast_state_last_gem_slot() {
         let cs = CastState {
             spell_id: 999,
+            spell_name: Some("Last Gem".to_string()),
             target_id: 999,
             spell_eta: 99999,
             item_id: 0,
             spell_slot: 14,
             remaining_ms: Some(5000),
+            total_cast_ms: Some(10_000),
+            duration_source: CastDurationSource::SpellDataBase,
             gem_etas: Some([0; 15]),
         };
         assert!(cs.is_casting());
@@ -911,11 +993,14 @@ mod tests {
     fn cast_state_slot_0xfe_still_reports_a_gem() {
         let cs = CastState {
             spell_id: 1,
+            spell_name: Some("Odd Slot".to_string()),
             target_id: 1,
             spell_eta: 100,
             item_id: 0,
             spell_slot: 0xFE,
             remaining_ms: Some(50),
+            total_cast_ms: Some(100),
+            duration_source: CastDurationSource::SpellDataBase,
             gem_etas: Some([0; 15]),
         };
         assert!(cs.is_casting());
@@ -926,14 +1011,33 @@ mod tests {
     fn cast_state_reports_remaining_ms_when_known() {
         let cs = CastState {
             spell_id: 11,
+            spell_name: Some("Remaining".to_string()),
             target_id: 123,
             spell_eta: 1200,
             item_id: 0,
             spell_slot: 2,
             remaining_ms: Some(250),
+            total_cast_ms: Some(3_000),
+            duration_source: CastDurationSource::SpellDataBase,
             gem_etas: None,
         };
         assert_eq!(cs.cast_time_remaining_ms(), Some(250));
+    }
+
+    #[test]
+    fn cast_state_reports_total_elapsed_and_progress_when_known() {
+        let cs = make_cast_state();
+        assert_eq!(cs.cast_time_total_ms(), Some(1_200));
+        assert_eq!(cs.cast_time_elapsed_ms(), Some(300));
+        assert_eq!(cs.cast_progress(), Some(0.25));
+        assert!(!cs.has_exact_total_cast_time());
+    }
+
+    #[test]
+    fn cast_duration_source_exact_runtime_is_exact() {
+        assert!(CastDurationSource::ExactRuntime.is_exact());
+        assert!(!CastDurationSource::Unknown.is_exact());
+        assert!(!CastDurationSource::SpellDataBase.is_exact());
     }
 
     // --- SpawnInfo display edge cases ---
