@@ -18,6 +18,10 @@ cat <<EOF
 
 Read this file + check memories (\`MEMORY.md\`) for full project context.
 
+MacroQuest reference code now lives in local git submodules at \`third_party/eqlib\`
+and \`third_party/macroquest\`. After checkout, run
+\`git submodule update --init --recursive\` before doing offset or struct work.
+
 ## Repository Stats
 
 EOF
@@ -30,7 +34,9 @@ echo "- **Branch:** \`$BRANCH\`"
 echo "- **Total commits:** $TOTAL_COMMITS"
 
 # Line counts (exclude build output and third-party reference submodules)
-LINES=$(find . -name '*.rs' -not -path './target/*' -not -path './third_party/eqlib/*' -not -path './third_party/macroquest/*' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+LINES=$(find . \
+    \( -path './target' -o -path './third_party/eqlib' -o -path './third_party/macroquest' \) -prune -o \
+    -name '*.rs' -exec cat {} + | wc -l | awk '{print $1}')
 echo "- **Rust lines:** ~${LINES}"
 
 echo ""
@@ -101,8 +107,10 @@ cat <<'BUILDEOF'
 ## Build Requirements
 
 ```bash
-# macOS/Linux (development — demo mode)
+# One-time (all platforms): fetch reference trees used for offset/struct work
 git submodule update --init --recursive
+
+# macOS/Linux (development — demo mode)
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 cargo build
 cargo run        # TUI with demo data
