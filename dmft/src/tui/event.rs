@@ -80,6 +80,114 @@ pub fn handle_events(
             }
         }
 
+        // ── Wizard modal ──
+        if app.wizard_state.active {
+            match key.code {
+                KeyCode::Enter => app.wizard_state.advance(),
+                KeyCode::Esc => {
+                    if app.wizard_state.step == super::wizard::WizardStep::Welcome {
+                        app.wizard_state.active = false;
+                    } else {
+                        app.wizard_state.go_back();
+                    }
+                }
+                KeyCode::Tab => {
+                    app.wizard_state.field_index += 1;
+                }
+                KeyCode::BackTab => {
+                    app.wizard_state.field_index = app.wizard_state.field_index.saturating_sub(1);
+                }
+                KeyCode::Up => {
+                    if app.wizard_state.step == super::wizard::WizardStep::CampConfiguration {
+                        app.wizard_state.selected_camp =
+                            app.wizard_state.selected_camp.saturating_sub(1);
+                    } else {
+                        app.wizard_state.field_index =
+                            app.wizard_state.field_index.saturating_sub(1);
+                    }
+                }
+                KeyCode::Down => {
+                    if app.wizard_state.step == super::wizard::WizardStep::CampConfiguration {
+                        let max = super::wizard::CAMP_TEMPLATES.len().saturating_sub(1);
+                        app.wizard_state.selected_camp =
+                            (app.wizard_state.selected_camp + 1).min(max);
+                    } else {
+                        app.wizard_state.field_index += 1;
+                    }
+                }
+                KeyCode::Char(c) => {
+                    app.wizard_state.input_buffer.push(c);
+                }
+                KeyCode::Backspace => {
+                    app.wizard_state.input_buffer.pop();
+                }
+                _ => {}
+            }
+            return Ok(true);
+        }
+
+        // ── Config panel modal ──
+        if app.config_panel_state.active {
+            if app.config_panel_state.editing {
+                match key.code {
+                    KeyCode::Esc => app.config_panel_state.cancel_edit(),
+                    KeyCode::Enter => app.config_panel_state.commit_edit(),
+                    KeyCode::Backspace => {
+                        app.config_panel_state.edit_buffer.pop();
+                    }
+                    KeyCode::Char(c) => {
+                        app.config_panel_state.edit_buffer.push(c);
+                    }
+                    _ => {}
+                }
+            } else {
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => {
+                        app.config_panel_state.active = false;
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => app.config_panel_state.select_prev(),
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        app.config_panel_state.select_next();
+                    }
+                    KeyCode::Enter => {
+                        let node = &app.config_panel_state.nodes[app.config_panel_state.selected];
+                        if node.value.is_none() {
+                            app.config_panel_state.toggle_expand();
+                        } else if node.is_toggle {
+                            app.config_panel_state.toggle_value();
+                        } else {
+                            app.config_panel_state.start_edit();
+                        }
+                    }
+                    KeyCode::Char(' ') => app.config_panel_state.toggle_value(),
+                    _ => {}
+                }
+            }
+            return Ok(true);
+        }
+
+        // ── Menu bar ──
+        if app.menu_state.active {
+            match key.code {
+                KeyCode::Esc | KeyCode::F(10) => {
+                    app.menu_state.active = false;
+                }
+                KeyCode::Left => app.menu_state.prev_category(),
+                KeyCode::Right => app.menu_state.next_category(),
+                KeyCode::Up => app.menu_state.prev_item(),
+                KeyCode::Down => app.menu_state.next_item(),
+                KeyCode::Enter => {
+                    let cmd = app.menu_state.selected_command().to_string();
+                    app.menu_state.active = false;
+                    app.cmd_state.command_buffer = cmd;
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                }
+                _ => {}
+            }
+            return Ok(true);
+        }
+
         if app.help_visible {
             match key.code {
                 KeyCode::Char('?') | KeyCode::Esc => {
@@ -238,6 +346,10 @@ pub fn handle_events(
                 } else {
                     app.clear_filter();
                 }
+                return Ok(true);
+            }
+            (KeyCode::F(10), _) => {
+                app.menu_state.toggle();
                 return Ok(true);
             }
             (KeyCode::F(n), _) if (1..=9).contains(&n) => {

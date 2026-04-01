@@ -1,6 +1,10 @@
 use std::collections::{HashMap, VecDeque};
 
+use super::config_panel::ConfigPanelState;
+use super::menu::MenuState;
 use super::theme::{Theme, ThemeKind};
+use super::ui::ch_chain::ChChainPanelState;
+use super::wizard::WizardState;
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
 use crate::config::AccountsConfig;
@@ -325,6 +329,22 @@ pub struct App {
     pub discord_webhook: Option<crate::discord::webhook::WebhookSender>,
     /// Discord bridge for bidirectional chat relay.
     pub discord_bridge: Option<crate::discord::bridge::TuiBridge>,
+
+    /// Dropdown menu bar state.
+    pub menu_state: MenuState,
+    /// Onboarding wizard state.
+    pub wizard_state: WizardState,
+    /// Configuration panel state.
+    pub config_panel_state: ConfigPanelState,
+    /// CH chain configuration panel state.
+    pub ch_chain_panel_state: ChChainPanelState,
+
+    /// Command aliases mapping (e.g., "h" → "help", "q" → "quit").
+    pub command_aliases: HashMap<String, String>,
+    /// Transient toast message for feedback (cleared after display timeout).
+    pub toast_message: Option<String>,
+    /// Tick when toast was set (for auto-dismiss).
+    pub toast_set_tick: u64,
 }
 
 /// Navigation status for a single client.
@@ -426,6 +446,44 @@ impl App {
 
             discord_webhook: None,
             discord_bridge: None,
+
+            menu_state: MenuState::new(),
+            wizard_state: WizardState::new(),
+            config_panel_state: ConfigPanelState::new(),
+            ch_chain_panel_state: ChChainPanelState::new(),
+
+            command_aliases: Self::build_default_aliases(),
+            toast_message: None,
+            toast_set_tick: 0,
+        }
+    }
+
+    /// Build default command aliases.
+    fn build_default_aliases() -> HashMap<String, String> {
+        let pairs = [
+            ("h", "help"),
+            ("q", "quit"),
+            ("cmds", "commands"),
+            ("cfg", "config"),
+            ("s", "status"),
+        ];
+        pairs
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    /// Set a transient toast notification message.
+    pub fn set_toast(&mut self, msg: String) {
+        self.toast_set_tick = self.tick_count;
+        self.toast_message = Some(msg);
+    }
+
+    /// Clear expired toast messages (auto-dismiss after ~40 ticks ≈ 10 seconds).
+    pub fn clear_expired_toast(&mut self) {
+        if self.toast_message.is_some() && self.tick_count.saturating_sub(self.toast_set_tick) > 40
+        {
+            self.toast_message = None;
         }
     }
 
@@ -2119,6 +2177,20 @@ impl App {
             return;
         }
 
+        // Resolve aliases: if the first token matches an alias, expand it
+        let input = {
+            let parts: Vec<&str> = input.splitn(2, ' ').collect();
+            if let Some(expanded) = self.command_aliases.get(parts[0]) {
+                if parts.len() > 1 {
+                    format!("{expanded} {}", parts[1])
+                } else {
+                    expanded.clone()
+                }
+            } else {
+                input
+            }
+        };
+
         // Save to history and track frequency for favorites
         self.cmd_state.command_history.push(input.clone());
         self.cmd_state.record_command(&input);
@@ -2426,6 +2498,38 @@ impl App {
                 } else {
                     self.status_message = String::from("Usage: all <slash command>");
                 }
+            }
+            "wizard" => {
+                self.wizard_state.start();
+                self.status_message = String::from("Starting setup wizard...");
+            }
+            "config" | "cfg" => {
+                self.config_panel_state.active = !self.config_panel_state.active;
+                if self.config_panel_state.active {
+                    self.config_panel_state.sync_from_app(
+                        self.theme_kind.label(),
+                        self.privacy_mode,
+                        self.main_assist.as_deref(),
+                        self.main_tank.as_deref(),
+                        self.heal_cancel_enabled,
+                        &format!("{}", self.operating_mode),
+                    );
+                    self.status_message = String::from("Configuration panel opened");
+                } else {
+                    self.status_message = String::from("Configuration panel closed");
+                }
+            }
+            "theme" => {
+                self.cycle_theme();
+                self.set_toast(format!("Theme: {}", self.theme_kind.label()));
+            }
+            "privacy" => {
+                self.toggle_privacy();
+                let state = if self.privacy_mode { "ON" } else { "OFF" };
+                self.status_message = format!("Privacy mode: {state}");
+            }
+            "quit" => {
+                self.running = false;
             }
             _ => {
                 // Try to parse first token as PID
@@ -3199,6 +3303,11 @@ const KNOWN_COMMANDS: &[(&str, &str)] = &[
     ("ch", "CH chain: start|stop|add|rm|interval|adaptive|status"),
     ("inject", "Request DLL injection"),
     ("all", "Broadcast: all <slash_command>"),
+    ("wizard", "Run the setup wizard"),
+    ("config", "Open configuration panel"),
+    ("theme", "Cycle color theme"),
+    ("privacy", "Toggle privacy mode"),
+    ("quit", "Exit the application"),
 ];
 
 /// Levenshtein edit distance between two strings.
@@ -3227,8 +3336,21 @@ fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 /// Find the closest matching command to the given input, within a max edit distance.
+/// Also checks for prefix matches (e.g., "hel" → "help").
 fn did_you_mean(input: &str) -> Option<&'static str> {
     let input_lower = input.to_lowercase();
+
+    // Prefix match first (higher priority)
+    let prefix_matches: Vec<&str> = KNOWN_COMMANDS
+        .iter()
+        .filter(|(cmd, _)| cmd.starts_with(&input_lower))
+        .map(|(cmd, _)| *cmd)
+        .collect();
+    if prefix_matches.len() == 1 {
+        return Some(prefix_matches[0]);
+    }
+
+    // Fall back to edit distance
     let mut best: Option<(&str, usize)> = None;
 
     for &(cmd, _) in KNOWN_COMMANDS {
@@ -3241,6 +3363,30 @@ fn did_you_mean(input: &str) -> Option<&'static str> {
     }
 
     best.map(|(cmd, _)| cmd)
+}
+
+/// Get a command syntax hint for the given partial input.
+pub fn command_syntax_hint(input: &str) -> Option<&'static str> {
+    let trimmed = input.trim();
+    let first_word = trimmed.split_whitespace().next().unwrap_or("");
+    match first_word {
+        "camp" => Some("camp [start|stop|status|list|add|remove|next|prev] [name]"),
+        "nav" => Some("nav <camp_name|x y z|zone>"),
+        "login" | "launch" => Some("login [all|G<n>|<name>]"),
+        "ma" => Some("ma <character_name>"),
+        "mt" => Some("mt <character_name>"),
+        "ch" => Some("ch [start|stop|add|rm|interval|adaptive|status]"),
+        "mode" => Some("mode <camp|hunt>"),
+        "track" => Some("track <spawn_name> | track list"),
+        "untrack" => Some("untrack <spawn_name>"),
+        "engage" => Some("engage [target_id]"),
+        "invite" => Some("invite <character_name>"),
+        "all" => Some("all <slash_command>"),
+        "stop" => Some("stop <name|all>"),
+        "restart" => Some("restart <name|all>"),
+        "heal" => Some("heal cancel"),
+        _ => None,
+    }
 }
 
 /// Send a slash command to a specific PID via named pipe.
