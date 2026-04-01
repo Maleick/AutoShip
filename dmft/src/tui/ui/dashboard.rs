@@ -13,7 +13,8 @@ use crate::eq::structs::{EqClass, StandState};
 use crate::tui::app::{ActivePanel, App, ClientState};
 
 pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
-    let natural_sidebar_height = overview_sections(app)
+    let sections = overview_sections(app);
+    let natural_sidebar_height = sections
         .iter()
         .map(|(_, constraint)| preferred_height(*constraint))
         .sum::<u16>();
@@ -44,7 +45,7 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     draw_dashboard_grid(frame, chunks[0], app);
-    draw_dashboard_sidebar(frame, chunks[1], app);
+    draw_dashboard_sidebar(frame, chunks[1], app, &sections);
 }
 
 // ─── Character grid ──────────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 }
                 if show_zone {
                     cells.push(
-                        Cell::from(client.zone_name.clone())
+                        Cell::from(client.zone_name.as_str())
                             .style(Style::default().fg(t.text_muted)),
                     );
                 }
@@ -176,7 +177,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                     cells.push(Cell::from("--"));
                 }
                 if show_zone {
-                    cells.push(Cell::from(client.zone_name.clone()));
+                    cells.push(Cell::from(client.zone_name.as_str()));
                 }
                 cells.push(Cell::from(" --"));
                 cells.push(Cell::from("Offline").style(Style::default().fg(t.hp_low)));
@@ -215,52 +216,49 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
     );
 }
 
-fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (String, Style) {
+fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'static str, Style) {
     let Some(player) = &client.local_player else {
-        return (String::from("Offline"), Style::default().fg(t.hp_low));
+        return ("Offline", Style::default().fg(t.hp_low));
     };
 
     if matches!(player.stand_state, StandState::Dead) {
-        return (String::from("Dead"), Style::default().fg(t.hp_low));
+        return ("Dead", Style::default().fg(t.hp_low));
     }
 
     let hp_pct = player.hp_pct();
     if hp_pct < 25.0 {
         (
-            String::from("Critical"),
+            "Critical",
             Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
         )
     } else if hp_pct < 60.0 {
-        (
-            String::from("Hurt"),
-            Style::default().fg(hp_color(hp_pct, t)),
-        )
+        ("Hurt", Style::default().fg(hp_color(hp_pct, t)))
     } else if matches!(player.stand_state, StandState::Sitting) || hp_pct < 90.0 {
-        (String::from("Recover"), Style::default().fg(t.mana_color))
+        ("Recover", Style::default().fg(t.mana_color))
     } else {
-        (String::from("Stable"), Style::default().fg(t.hp_high))
+        ("Stable", Style::default().fg(t.hp_high))
     }
 }
 
-fn client_activity(app: &App, client: &ClientState) -> (String, Style) {
+fn client_activity(app: &App, client: &ClientState) -> (&'static str, Style) {
     let t = &app.theme;
 
     if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
         match nav.status.as_str() {
             "Navigating" => {
                 return (
-                    String::from("➜ Nav"),
+                    "➜ Nav",
                     Style::default()
                         .fg(t.text_highlight)
                         .add_modifier(Modifier::BOLD),
                 );
             }
             "Arrived" => {
-                return (String::from("✓ Arr"), Style::default().fg(t.hp_high));
+                return ("✓ Arr", Style::default().fg(t.hp_high));
             }
             "Stuck" => {
                 return (
-                    String::from("! Stuck"),
+                    "! Stuck",
                     Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
                 );
             }
@@ -269,43 +267,37 @@ fn client_activity(app: &App, client: &ClientState) -> (String, Style) {
     }
 
     let Some(player) = &client.local_player else {
-        return (String::from("• Idle"), Style::default().fg(t.text_muted));
+        return ("• Idle", Style::default().fg(t.text_muted));
     };
 
     if matches!(player.stand_state, StandState::Dead) {
-        return (String::from("☠ Dead"), Style::default().fg(t.hp_low));
+        return ("☠ Dead", Style::default().fg(t.hp_low));
     }
     if matches!(player.stand_state, StandState::Feigned) {
-        return (String::from("⇣ FD"), Style::default().fg(t.text_secondary));
+        return ("⇣ FD", Style::default().fg(t.text_secondary));
     }
     if matches!(player.stand_state, StandState::Sitting) {
-        return (String::from("☾ Sit"), Style::default().fg(t.state_sitting));
+        return ("☾ Sit", Style::default().fg(t.state_sitting));
     }
     if matches!(player.stand_state, StandState::Looting) {
-        return (
-            String::from("⌕ Loot"),
-            Style::default().fg(t.text_highlight),
-        );
+        return ("⌕ Loot", Style::default().fg(t.text_highlight));
     }
 
     if let Some(cast) = &player.cast_state
         && cast.is_casting()
     {
         if is_healer_class(player.class) {
-            return (String::from("✚ Heal"), Style::default().fg(t.hp_high));
+            return ("✚ Heal", Style::default().fg(t.hp_high));
         }
         if is_debuffer_class(player.class) {
-            return (String::from("≈ Debuff"), Style::default().fg(t.text_accent));
+            return ("≈ Debuff", Style::default().fg(t.text_accent));
         }
-        return (
-            String::from("✦ Cast"),
-            Style::default().fg(t.text_highlight),
-        );
+        return ("✦ Cast", Style::default().fg(t.text_highlight));
     }
 
     if client.target.is_some() {
         return (
-            String::from("⚔ Fight"),
+            "⚔ Fight",
             Style::default()
                 .fg(t.text_server)
                 .add_modifier(Modifier::BOLD),
@@ -313,12 +305,9 @@ fn client_activity(app: &App, client: &ClientState) -> (String, Style) {
     }
 
     match player.stand_state {
-        StandState::Ducking => (
-            String::from("↧ Duck"),
-            Style::default().fg(t.text_secondary),
-        ),
-        StandState::Frozen => (String::from("■ Hold"), Style::default().fg(t.text_muted)),
-        _ => (String::from("• Ready"), Style::default().fg(t.text_muted)),
+        StandState::Ducking => ("↧ Duck", Style::default().fg(t.text_secondary)),
+        StandState::Frozen => ("■ Hold", Style::default().fg(t.text_muted)),
+        _ => ("• Ready", Style::default().fg(t.text_muted)),
     }
 }
 
@@ -347,8 +336,12 @@ enum OverviewSectionKind {
     Session,
 }
 
-fn draw_dashboard_sidebar(frame: &mut Frame, area: Rect, app: &App) {
-    let sections = overview_sections(app);
+fn draw_dashboard_sidebar(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    sections: &[(OverviewSectionKind, Constraint)],
+) {
     if sections.is_empty() {
         return;
     }

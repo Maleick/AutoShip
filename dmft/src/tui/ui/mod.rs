@@ -49,7 +49,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     match app.active_screen {
         ActiveScreen::Overview => dashboard::draw_dashboard(frame, outer[1], app),
         ActiveScreen::Tactical => map::draw_map_screen(frame, outer[1], app),
-        ActiveScreen::Inspect => spawns::draw_character_screen(frame, outer[1], app),
+        ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -297,6 +297,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("[ ]", "Cycle clients"),
         kv("/", "Search spawns"),
         kv("f", "Filter spawn type"),
+        kv("Enter", "Open selected spawn in Debug"),
         kv("g", "Toggle group section"),
         kv("v", "Toggle filter section"),
         kv("z", "Collapse focused section"),
@@ -322,6 +323,12 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("accept", "Accept invite"),
         kv("mode camp", "Camp mode"),
         kv("mode hunt", "Hunt mode"),
+        Line::from(""),
+        Line::from(Span::styled(" Status Glyphs", head_s)),
+        Line::from(""),
+        kv("⚔ / ✚ / ✦", "Fight, Heal, Cast"),
+        kv("➜ / ✓ / !", "Navigate, Arrived, Stuck"),
+        kv("☾ / ⇣ / ⌕", "Sit, Feign, Loot"),
         Line::from(""),
         Line::from(Span::styled(" CH Chain", head_s)),
         Line::from(""),

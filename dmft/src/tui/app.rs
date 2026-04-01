@@ -24,7 +24,7 @@ pub use super::state::{
 pub enum ActiveScreen {
     Overview,
     Tactical,
-    Inspect,
+    Debug,
 }
 
 impl ActiveScreen {
@@ -32,11 +32,11 @@ impl ActiveScreen {
         match self {
             Self::Overview => "Overview",
             Self::Tactical => "Tactical",
-            Self::Inspect => "Debug",
+            Self::Debug => "Debug",
         }
     }
 
-    pub const ALL: [ActiveScreen; 3] = [Self::Overview, Self::Tactical, Self::Inspect];
+    pub const ALL: [ActiveScreen; 3] = [Self::Overview, Self::Tactical, Self::Debug];
 }
 
 /// Which panel is currently focused for keyboard input.
@@ -52,8 +52,8 @@ pub enum ActivePanel {
     TacticalSpawns,
     TacticalNamed,
     TacticalNavigation,
-    InspectSpawns,
-    InspectHexDump,
+    DebugSpawns,
+    DebugHexDump,
 }
 
 /// Spawn type filter for the spawn list.
@@ -153,7 +153,7 @@ pub struct ChChainStatus {
     pub target_id: u32,
 }
 
-/// Application state for the TUI debugger.
+/// Application state for the TUI command center.
 pub struct App {
     pub running: bool,
     pub active_screen: ActiveScreen,
@@ -369,7 +369,7 @@ impl App {
         match screen {
             ActiveScreen::Overview => ActivePanel::OverviewRoster,
             ActiveScreen::Tactical => ActivePanel::TacticalSpawns,
-            ActiveScreen::Inspect => ActivePanel::InspectSpawns,
+            ActiveScreen::Debug => ActivePanel::DebugSpawns,
         }
     }
 
@@ -397,8 +397,8 @@ impl App {
                 }
                 panels
             }
-            ActiveScreen::Inspect => {
-                vec![ActivePanel::InspectSpawns, ActivePanel::InspectHexDump]
+            ActiveScreen::Debug => {
+                vec![ActivePanel::DebugSpawns, ActivePanel::DebugHexDump]
             }
         }
     }
@@ -930,8 +930,8 @@ impl App {
         self.hex_state.hex_address = self.hex_state.hex_address.wrapping_sub(0x100);
     }
 
-    /// Set the hex dump to view a specific spawn's raw memory.
-    pub fn inspect_selected_spawn(&mut self) {
+    /// Set the debug pane to view a specific spawn's raw memory.
+    pub fn debug_selected_spawn(&mut self) {
         // Extract data from the borrow before mutating self
         let sel = self.spawn_selected();
         let info: Option<(String, u32, usize)> = {
@@ -942,7 +942,7 @@ impl App {
         };
         if let Some((name, id, _idx)) = info {
             self.hex_state.hex_label = format!("Raw memory: {} (ID {})", name, id);
-            self.status_message = format!("Inspecting: {}", name);
+            self.status_message = format!("Debug: {}", name);
 
             // On Windows, read real spawn memory; on macOS, generate demo hex data
             #[cfg(windows)]
@@ -956,8 +956,8 @@ impl App {
                 self.hex_state.hex_address = 0x1000;
             }
 
-            self.set_active_screen(ActiveScreen::Inspect);
-            self.active_panel = ActivePanel::InspectHexDump;
+            self.set_active_screen(ActiveScreen::Debug);
+            self.active_panel = ActivePanel::DebugHexDump;
         }
     }
 

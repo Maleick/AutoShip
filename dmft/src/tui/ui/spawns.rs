@@ -20,7 +20,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     let t = &app.theme;
     let is_active = matches!(
         app.active_panel,
-        ActivePanel::TacticalSpawns | ActivePanel::InspectSpawns
+        ActivePanel::TacticalSpawns | ActivePanel::DebugSpawns
     );
     let border_style = if is_active {
         t.border_active
@@ -143,7 +143,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     frame.render_stateful_widget(table, area, &mut app.spawns_state.table_state);
 }
 
-// ─── Target / spawn panels (used from character screen) ─────────────────────
+// ─── Target / spawn panels (used from debug screen) ─────────────────────────
 
 pub fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
@@ -191,7 +191,7 @@ pub fn draw_spawn_panel(
 
 pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
-    let is_active = app.active_panel == ActivePanel::InspectHexDump;
+    let is_active = app.active_panel == ActivePanel::DebugHexDump;
     let border_style = if is_active {
         t.border_warn
     } else {
@@ -205,7 +205,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 
     if app.hex_state.hex_data.is_empty() {
         frame.render_widget(
-            Paragraph::new("Select a spawn and press Enter to inspect memory")
+            Paragraph::new("Select a spawn and press Enter to open Debug memory")
                 .block(blk)
                 .style(Style::default().fg(t.text_muted)),
             area,
@@ -252,9 +252,9 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     frame.render_widget(Paragraph::new(lines).block(blk), area);
 }
 
-// ─── Character screen layout ─────────────────────────────────────────────────
+// ─── Debug screen layout ─────────────────────────────────────────────────────
 
-pub fn draw_character_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+pub fn draw_debug_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     if area.width < 110 {
         let rows = Layout::default()
             .direction(Direction::Vertical)

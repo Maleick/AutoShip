@@ -17,7 +17,15 @@ use crate::tui::app::{ActivePanel, App};
 use crate::tui::theme::Theme;
 
 pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
-    let sidebar_height = tactical_sidebar_height(app);
+    let sections = tactical_sections(app);
+    let sidebar_height = sections
+        .iter()
+        .map(|(_, constraint)| match constraint {
+            Constraint::Length(h) | Constraint::Min(h) => *h,
+            _ => 3,
+        })
+        .sum::<u16>()
+        .max(6);
 
     if area.width < 100 {
         let rows = Layout::default()
@@ -32,7 +40,7 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             .split(rows[1]);
         draw_map_view(frame, rows[0], app);
         spawns::draw_spawn_list(frame, bottom[0], app);
-        draw_tactical_sidebar(frame, bottom[1], app);
+        draw_tactical_sidebar(frame, bottom[1], app, &sections);
         return;
     }
 
@@ -49,7 +57,7 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
 
         draw_map_view(frame, cols[0], app);
         spawns::draw_spawn_list(frame, right[0], app);
-        draw_tactical_sidebar(frame, right[1], app);
+        draw_tactical_sidebar(frame, right[1], app, &sections);
         return;
     }
 
@@ -66,7 +74,7 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
 
     draw_map_view(frame, cols[0], app);
     spawns::draw_spawn_list(frame, cols[1], app);
-    draw_tactical_sidebar(frame, cols[2], app);
+    draw_tactical_sidebar(frame, cols[2], app, &sections);
 }
 
 // ─── Map view ────────────────────────────────────────────────────────────────
@@ -329,13 +337,18 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         }
     }
 
+    let show_legend = h >= 12;
     let legend_row = h.saturating_sub(1);
+    let show_nav_destination = app
+        .active_client()
+        .and_then(|client| app.nav_state.nav_statuses.get(&client.pid))
+        .is_some_and(|nav| nav.waypoints.len() >= 2);
     let lines: Vec<Line<'_>> = grid
         .into_iter()
         .enumerate()
         .map(|(i, row)| {
-            if i == legend_row {
-                Line::from(vec![
+            if show_legend && i == legend_row {
+                let mut spans = vec![
                     Span::styled("◆ ", Style::default().fg(t.map_you)),
                     Span::styled("You", Style::default().fg(t.text_muted)),
                     Span::raw(" │ "),
@@ -353,7 +366,25 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     Span::raw(" │ "),
                     Span::styled(". ", Style::default().fg(t.map_corpse)),
                     Span::styled("Corpse", Style::default().fg(t.text_muted)),
-                ])
+                ];
+
+                if selected_spawn_id.is_some() {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("◎ ", Style::default().fg(t.text_highlight)),
+                        Span::styled("Sel", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
+                if show_nav_destination {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("★ ", Style::default().fg(t.text_accent)),
+                        Span::styled("Path", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
+                Line::from(spans)
             } else {
                 Line::from(
                     row.into_iter()

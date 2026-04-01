@@ -150,7 +150,7 @@ pub fn handle_events(
                 return Ok(true);
             }
             (KeyCode::Char('3'), _) => {
-                app.set_active_screen(ActiveScreen::Inspect);
+                app.set_active_screen(ActiveScreen::Debug);
                 return Ok(true);
             }
             (KeyCode::Tab, _) => {
@@ -233,7 +233,7 @@ pub fn handle_events(
 
         if matches!(
             app.active_screen,
-            ActiveScreen::Overview | ActiveScreen::Tactical | ActiveScreen::Inspect
+            ActiveScreen::Overview | ActiveScreen::Tactical | ActiveScreen::Debug
         ) {
             match key.code {
                 KeyCode::Char('r') => {
@@ -294,7 +294,7 @@ pub fn handle_events(
                 }
                 _ => {}
             },
-            ActivePanel::TacticalSpawns | ActivePanel::InspectSpawns => match key.code {
+            ActivePanel::TacticalSpawns | ActivePanel::DebugSpawns => match key.code {
                 KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
                 KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
                 KeyCode::PageDown => app.spawn_list_page_down(),
@@ -304,10 +304,10 @@ pub fn handle_events(
                     let max = app.filtered_spawns().len().saturating_sub(1);
                     app.spawns_state.table_state.select(Some(max));
                 }
-                KeyCode::Enter => app.inspect_selected_spawn(),
+                KeyCode::Enter => app.debug_selected_spawn(),
                 _ => {}
             },
-            ActivePanel::InspectHexDump => match key.code {
+            ActivePanel::DebugHexDump => match key.code {
                 KeyCode::Down => app.hex_scroll_down(),
                 KeyCode::Up => app.hex_scroll_up(),
                 _ => {}

@@ -1132,8 +1132,6 @@ mod tests {
 
     #[test]
     fn test_medding_to_idle_when_no_buffs_needed() {
-        use crate::camp::class_config::ClassConfig;
-
         let mut camp = CampLoop::new(test_config(), test_members());
         camp.state = CampState::Medding { started_tick: 0 };
         camp.tick = MED_DURATION;
