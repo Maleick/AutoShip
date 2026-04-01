@@ -1,6 +1,7 @@
 //! Shared widget-building helpers used across all screen modules.
 
 use ratatui::{
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Row},
@@ -37,6 +38,74 @@ pub const WIDTH_SHOW_GROUP_COL: u16 = 78;
 pub const WIDTH_SHOW_CLASS_COL: u16 = 88;
 /// Minimum width to show the Zone column in the overview roster.
 pub const WIDTH_SHOW_ZONE_COL: u16 = 104;
+/// Below this width global chrome uses aggressive compaction.
+pub const WIDTH_CHROME_MEDIUM: u16 = 96;
+/// Above this width global chrome can render in its full form.
+pub const WIDTH_CHROME_WIDE: u16 = 130;
+
+/// Shared width classes for header/footer/popups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidthClass {
+    Narrow,
+    Medium,
+    Wide,
+}
+
+/// Classify a width into narrow, medium, or wide chrome modes.
+#[must_use]
+pub fn classify_width(width: u16) -> WidthClass {
+    if width < WIDTH_CHROME_MEDIUM {
+        WidthClass::Narrow
+    } else if width < WIDTH_CHROME_WIDE {
+        WidthClass::Medium
+    } else {
+        WidthClass::Wide
+    }
+}
+
+/// Count the visible width of a span collection in terminal cells.
+#[must_use]
+pub fn spans_width(spans: &[Span<'_>]) -> usize {
+    spans.iter().map(|span| span.content.chars().count()).sum()
+}
+
+/// Count the visible width of a line in terminal cells.
+#[must_use]
+pub fn line_width(line: &Line<'_>) -> usize {
+    spans_width(&line.spans)
+}
+
+/// Build a centered popup rect with bounded margins on small terminals.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn centered_popup(
+    area: Rect,
+    width_pct: u16,
+    height_pct: u16,
+    min_width: u16,
+    min_height: u16,
+    max_width: u16,
+    max_height: u16,
+    margin: u16,
+) -> Rect {
+    let max_popup_width = area.width.saturating_sub(margin.saturating_mul(2)).max(1);
+    let max_popup_height = area.height.saturating_sub(margin.saturating_mul(2)).max(1);
+    let width_cap = max_popup_width.min(max_width.max(1));
+    let height_cap = max_popup_height.min(max_height.max(1));
+    let requested_width = ((u32::from(area.width) * u32::from(width_pct)) / 100) as u16;
+    let requested_height = ((u32::from(area.height) * u32::from(height_pct)) / 100) as u16;
+    let popup_width = requested_width
+        .max(min_width.min(width_cap))
+        .min(width_cap)
+        .max(1);
+    let popup_height = requested_height
+        .max(min_height.min(height_cap))
+        .min(height_cap)
+        .max(1);
+    let x = area.x + area.width.saturating_sub(popup_width) / 2;
+    let y = area.y + area.height.saturating_sub(popup_height) / 2;
+    Rect::new(x, y, popup_width, popup_height)
+}
 
 // ─── Block / panel helper ────────────────────────────────────────────────────
 
@@ -304,14 +373,10 @@ pub fn render_confirm_dialog(
 ) {
     use ratatui::{
         layout::{Constraint, Direction, Layout},
-        widgets::{Clear, Paragraph},
+        widgets::{Clear, Paragraph, Wrap},
     };
 
-    let popup_w = (area.width * 50 / 100).clamp(30.min(area.width), 50.min(area.width));
-    let popup_h = 7u16.min(area.height);
-    let x = area.x + area.width.saturating_sub(popup_w) / 2;
-    let y = area.y + area.height.saturating_sub(popup_h) / 2;
-    let popup_area = ratatui::layout::Rect::new(x, y, popup_w, popup_h);
+    let popup_area = centered_popup(area, 60, 42, 28, 6, 60, 9, 1);
 
     frame.render_widget(Clear, popup_area);
 
@@ -340,7 +405,9 @@ pub fn render_confirm_dialog(
         Style::default().fg(t.text_muted)
     };
 
-    let msg = Paragraph::new(dialog.message.as_str()).style(Style::default().fg(t.text_normal));
+    let msg = Paragraph::new(dialog.message.as_str())
+        .style(Style::default().fg(t.text_normal))
+        .wrap(Wrap { trim: true });
     frame.render_widget(msg, inner[0]);
 
     let buttons = Line::from(vec![
@@ -1363,10 +1430,23 @@ pub fn render_cast_bar(
     dim_color: Color,
 ) -> Line<'static> {
     let compact = available_width < 34;
+    let medium = (34..52).contains(&available_width);
     let wide = available_width >= 52;
     let ascii_safe = compact;
-    let label_prefix = if compact { "Cast:" } else { "Cast " };
-    let suffix = if wide {
+    let label_prefix = if compact { "Cast:" } else { "Cast" };
+    let bar_width_target = if compact {
+        8
+    } else if medium {
+        10
+    } else {
+        14
+    };
+    let minimum_bar_width = 4;
+    let max_bar_width = available_width
+        .saturating_sub(label_prefix.chars().count().saturating_add(5))
+        .max(minimum_bar_width);
+    let bar_width = bar_width_target.min(max_bar_width).max(minimum_bar_width);
+    let suffix_source = if wide {
         match (
             cast.elapsed_secs,
             cast.remaining_secs,
@@ -1385,31 +1465,47 @@ pub fn render_cast_bar(
             .or_else(|| cast.status_text.clone())
             .unwrap_or_else(|| String::from("casting"))
     };
-    let desired_bar_width = if compact {
+    let total_text_budget = available_width
+        .saturating_sub(label_prefix.chars().count())
+        .saturating_sub(bar_width)
+        .saturating_sub(3);
+    let label_hint = if compact {
+        2
+    } else if medium {
+        6
+    } else {
+        12
+    };
+    let mut suffix_budget = if wide {
+        total_text_budget.saturating_sub(label_hint + 1).min(22)
+    } else if medium {
+        total_text_budget.saturating_sub(label_hint + 1).min(10)
+    } else {
+        total_text_budget.saturating_sub(label_hint + 1).min(6)
+    };
+    let mut label_budget = total_text_budget
+        .saturating_sub(if suffix_budget > 0 {
+            suffix_budget + 1
+        } else {
+            0
+        })
+        .max(2);
+    let minimum_label_budget = if compact {
+        2
+    } else if medium {
+        4
+    } else {
         8
-    } else if wide {
-        14
-    } else {
-        10
     };
-    let minimum_static_width = label_prefix.len() + 1 + 2 + 1 + 2 + 1;
-    let bar_width = available_width
-        .saturating_sub(minimum_static_width)
-        .clamp(6, desired_bar_width);
-    let text_budget = available_width.saturating_sub(label_prefix.len() + bar_width + 4);
-    let suffix_budget = if wide {
-        text_budget.min(22)
-    } else {
-        text_budget.min(8)
-    };
-    let label_budget = text_budget
-        .saturating_sub(suffix_budget.saturating_add(1))
-        .max(2);
-    let suffix_budget = text_budget
-        .saturating_sub(label_budget.saturating_add(1))
-        .max(2);
-    let label = truncate_inline(cast.preferred_label(compact), label_budget);
-    let suffix = truncate_inline(&suffix, suffix_budget);
+    if label_budget < minimum_label_budget && suffix_budget > 0 {
+        let shift = (minimum_label_budget - label_budget).min(suffix_budget);
+        suffix_budget = suffix_budget.saturating_sub(shift);
+        label_budget += shift;
+    }
+    let preferred_label =
+        cast.preferred_label(compact || (medium && cast.label.chars().count() > 12));
+    let label = truncate_inline(preferred_label, label_budget);
+    let suffix = truncate_inline(&suffix_source, suffix_budget);
 
     let gauge = GaugeBar::new(cast.progress * 100.0, 100.0, bar_width).ascii_safe(ascii_safe);
     let filled = (gauge.ratio() * gauge.width as f64).round() as usize;
@@ -1432,8 +1528,10 @@ pub fn render_cast_bar(
         Span::raw(" "),
     ];
     spans.push(Span::styled(bar, Style::default().fg(filled_color)));
-    spans.push(Span::raw(" "));
-    spans.push(Span::styled(suffix, Style::default().fg(meta_color)));
+    if !suffix.is_empty() {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(suffix, Style::default().fg(meta_color)));
+    }
 
     Line::from(spans)
 }
@@ -2405,15 +2503,31 @@ mod tests {
             t.text_secondary,
             t.text_muted,
         );
-        let rendered: String = line
-            .spans
-            .iter()
-            .map(|span| span.content.as_ref())
-            .collect();
+        let rendered = render_line(&line);
 
         assert!(rendered.contains("Cast:"));
         assert!(rendered.contains("|"));
         assert!(rendered.contains("CH"));
+        assert_eq!(gauge_width(&rendered), Some(8));
+    }
+
+    #[test]
+    fn render_cast_bar_medium_keeps_fixed_gauge_width() {
+        let t = dark_modern();
+        let cast = crate::tui::cast::CastDisplay::exact_progress("Complete Heal", "CH", 0.4, 10.0);
+        let line = render_cast_bar(
+            &cast,
+            42,
+            t.hp_high,
+            t.text_accent,
+            t.text_secondary,
+            t.text_muted,
+        );
+        let rendered = render_line(&line);
+
+        assert!(rendered.contains("CH"));
+        assert!(rendered.contains("6.0s"));
+        assert_eq!(gauge_width(&rendered), Some(10));
     }
 
     #[test]
@@ -2428,14 +2542,11 @@ mod tests {
             t.text_secondary,
             t.text_muted,
         );
-        let rendered: String = line
-            .spans
-            .iter()
-            .map(|span| span.content.as_ref())
-            .collect();
+        let rendered = render_line(&line);
 
         assert!(rendered.contains("Complete Heal"));
         assert!(rendered.contains("2.5s/7.5s"));
+        assert_eq!(gauge_width(&rendered), Some(14));
     }
 
     #[test]
@@ -2443,6 +2554,28 @@ mod tests {
         let t = dark_modern();
         let spans = keybinding_hint("Tab", "switch pane", &t);
         assert_eq!(spans.len(), 2);
+    }
+
+    fn render_line(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
+
+    fn gauge_width(rendered: &str) -> Option<usize> {
+        let chars: Vec<char> = rendered.chars().collect();
+        if let Some(start) = chars.iter().position(|ch| *ch == '|')
+            && let Some(end) = chars[start + 1..].iter().position(|ch| *ch == '|')
+        {
+            return Some(end);
+        }
+        if let Some(start) = chars.iter().position(|ch| *ch == '│')
+            && let Some(end) = chars[start + 1..].iter().position(|ch| *ch == '│')
+        {
+            return Some(end);
+        }
+        None
     }
 
     #[test]
