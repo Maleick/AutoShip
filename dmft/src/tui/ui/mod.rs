@@ -319,7 +319,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         kv("G1-G6 /cmd", "Send to group"),
         kv("all /cmd", "Broadcast"),
         kv("camp <sub>", "start|stop|list|add|rm"),
-        kv("nav <zone>", "Navigate focused scope"),
+        kv("nav <dest>", "Camp, coords, or slash fallback"),
         kv("track <n>", "Track spawn"),
         kv("ma <name>", "Set Main Assist"),
         kv("mt <name>", "Set Main Tank"),

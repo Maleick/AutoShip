@@ -161,24 +161,29 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             )
         })
         .unwrap_or_default();
+    let mesh_label = app
+        .current_zone_has_cached_mesh()
+        .map(|cached| format!(" | Mesh: {}", if cached { "cached" } else { "on-demand" }))
+        .unwrap_or_default();
     let map_info = app
         .map_state
         .zone_map
         .as_ref()
         .map(|m| {
             format!(
-                " Map: {} ({} lines, {} labels){} | Z filter: {:.0} [+/-] | m maximize ",
+                " Map: {} ({} lines, {} labels){}{} | Z filter: {:.0} [+/-] | m maximize ",
                 zone_label,
                 m.lines.len(),
                 m.points.len(),
                 player_pos_label,
+                mesh_label,
                 z_range,
             )
         })
         .unwrap_or_else(|| {
             format!(
-                " Map: {} (no map data){} | Z filter: {:.0} [+/-] | m maximize ",
-                zone_label, player_pos_label, z_range
+                " Map: {} (no map data){}{} | Z filter: {:.0} [+/-] | m maximize ",
+                zone_label, player_pos_label, mesh_label, z_range
             )
         });
 
@@ -919,6 +924,20 @@ fn draw_navigation_summary(
         .map(|nav| nav.destination.as_str())
         .unwrap_or("—");
     let selected_waypoints = selected_nav.map(|nav| nav.waypoints.len()).unwrap_or(0);
+    let mesh_status = app
+        .current_zone_short_name()
+        .map(|zone| {
+            format!(
+                "{} ({})",
+                if crate::nav::mesh::has_cached_zone_mesh(&zone) {
+                    "cached"
+                } else {
+                    "on-demand"
+                },
+                zone
+            )
+        })
+        .unwrap_or_else(|| String::from("—"));
 
     let status_color = match selected_nav.map(|nav| &nav.status) {
         Some(s) if s.is_moving() => t.text_highlight,
@@ -947,6 +966,10 @@ fn draw_navigation_summary(
                 Style::default().fg(t.text_highlight),
             ),
         ]),
+        Line::from(vec![
+            Span::styled("Mesh     ", Style::default().fg(t.text_muted)),
+            Span::styled(mesh_status, Style::default().fg(t.text_secondary)),
+        ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("Fleet    ", Style::default().fg(t.text_muted)),
@@ -961,7 +984,7 @@ fn draw_navigation_summary(
         ]),
         Line::from(vec![
             Span::styled(":nav ", Style::default().fg(t.text_accent)),
-            Span::styled("<zone>", Style::default().fg(t.text_normal)),
+            Span::styled("<dest>", Style::default().fg(t.text_normal)),
         ]),
         Line::from(vec![
             Span::styled("Enter ", Style::default().fg(t.text_highlight)),

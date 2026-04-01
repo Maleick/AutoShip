@@ -2,6 +2,7 @@
 //! load into Detour for pathfinding.
 
 use anyhow::{Context, Result, bail};
+use dmft_common::nav::Waypoint;
 use flate2::read::ZlibDecoder;
 use prost::Message;
 use std::io::Read;
@@ -447,6 +448,19 @@ pub struct LoadedNavMesh {
     query: DetourNavMeshQuery,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteSource {
+    NavMesh,
+    StraightLineFallback,
+}
+
+#[derive(Debug, Clone)]
+pub struct RoutePlan {
+    pub waypoints: Vec<Waypoint>,
+    pub source: RouteSource,
+    pub mesh_cached: bool,
+}
+
 /// Load a parsed navmesh into Detour, returning a query-ready object.
 pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     let tile_set = proto
@@ -571,6 +585,51 @@ pub fn load_zone(zone_short_name: &str) -> Result<LoadedNavMesh> {
     let data = download_zone_mesh(zone_short_name)?;
     let proto = parse_navmesh(&data)?;
     load_navmesh(&proto)
+}
+
+pub fn has_cached_zone_mesh(zone_short_name: &str) -> bool {
+    mesh_cache_path(zone_short_name).exists()
+}
+
+pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> RoutePlan {
+    let mesh_cached = has_cached_zone_mesh(zone_short_name);
+
+    match load_zone(zone_short_name) {
+        Ok(loaded) => match find_path(&loaded, from, to) {
+            Ok(path) => RoutePlan {
+                waypoints: path
+                    .into_iter()
+                    .map(|(x, y, z)| Waypoint::new(x, y, z))
+                    .collect(),
+                source: RouteSource::NavMesh,
+                mesh_cached,
+            },
+            Err(error) => {
+                tracing::warn!(
+                    zone = zone_short_name,
+                    %error,
+                    "Navmesh path query failed; falling back to straight-line route"
+                );
+                RoutePlan {
+                    waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                    source: RouteSource::StraightLineFallback,
+                    mesh_cached,
+                }
+            }
+        },
+        Err(error) => {
+            tracing::warn!(
+                zone = zone_short_name,
+                %error,
+                "Navmesh load failed; falling back to straight-line route"
+            );
+            RoutePlan {
+                waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                source: RouteSource::StraightLineFallback,
+                mesh_cached,
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

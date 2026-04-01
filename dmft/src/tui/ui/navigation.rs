@@ -70,7 +70,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                     .local_player
                     .as_ref()
                     .map(|p| app.redact_name(&p.displayed_name).into_owned())
-                    .unwrap_or_else(|| format!("PID {}", client.pid));
+                    .unwrap_or_else(|| app.client_command_target(client));
 
                 let nav = app.nav_state.nav_statuses.get(&client.pid);
                 let status = nav.map(|s| s.status.label()).unwrap_or("Idle");
@@ -126,6 +126,20 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
     };
     let cmd_s = Style::default().fg(t.text_highlight);
     let lbl_s = Style::default().fg(t.text_secondary);
+    let mesh_status = app
+        .current_zone_short_name()
+        .map(|zone| {
+            format!(
+                "{} ({})",
+                if crate::nav::mesh::has_cached_zone_mesh(&zone) {
+                    "cached"
+                } else {
+                    "on-demand"
+                },
+                zone
+            )
+        })
+        .unwrap_or_else(|| String::from("—"));
 
     let mut lines: Vec<Line<'_>> = vec![
         Line::from(Span::styled(
@@ -141,6 +155,10 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 &mode_str,
                 Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
             ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Mesh: ", Style::default().fg(t.text_muted)),
+            Span::styled(mesh_status, Style::default().fg(t.text_secondary)),
         ]),
         Line::from(vec![
             Span::styled("  Focus: ", Style::default().fg(t.text_muted)),
@@ -249,6 +267,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
     lines.push(Line::from(""));
 
     for (cmd, desc) in &[
+        (":nav <dest>", "Mesh route or slash fallback"),
         (":mode camp ", "Camp mode"),
         (":mode hunt ", "Hunt mode"),
         (":camp start", "Start camp"),

@@ -268,6 +268,14 @@ pub struct NavClientStatus {
     pub waypoints: Vec<dmft_common::nav::Waypoint>,
 }
 
+struct FocusedNavClient {
+    pid: u32,
+    client_name: String,
+    zone_short: String,
+    position: (f32, f32, f32),
+    is_demo: bool,
+}
+
 impl App {
     pub fn new() -> Self {
         Self {
@@ -598,6 +606,16 @@ impl App {
     /// Get the currently selected client, if any.
     pub fn active_client(&self) -> Option<&ClientState> {
         self.clients.get(self.selected_client)
+    }
+
+    pub fn current_zone_short_name(&self) -> Option<String> {
+        self.active_client()
+            .map(|client| super::run::zone_to_short_name(&client.zone_name))
+    }
+
+    pub fn current_zone_has_cached_mesh(&self) -> Option<bool> {
+        self.current_zone_short_name()
+            .map(|zone| crate::nav::mesh::has_cached_zone_mesh(&zone))
     }
 
     pub fn client_command_target(&self, client: &ClientState) -> String {
@@ -1653,6 +1671,191 @@ impl App {
             .map(|idx| (idx, rest))
     }
 
+    fn resolve_nav_target(
+        &self,
+        args: &[&str],
+    ) -> Option<(String, dmft_common::nav::Waypoint, Option<String>)> {
+        let normalized: Vec<&str> = args
+            .iter()
+            .copied()
+            .filter(|part| !part.is_empty())
+            .collect();
+        if normalized.is_empty() {
+            return None;
+        }
+
+        if normalized.len() == 3
+            && let (Ok(x), Ok(y), Ok(z)) = (
+                normalized[0].parse::<f32>(),
+                normalized[1].parse::<f32>(),
+                normalized[2].parse::<f32>(),
+            )
+        {
+            return Some((
+                format!("{x:.0} {y:.0} {z:.0}"),
+                dmft_common::nav::Waypoint::new(x, y, z),
+                None,
+            ));
+        }
+
+        let destination = normalized.join(" ");
+        CampConfig::load(&destination).ok().map(|camp| {
+            (
+                destination,
+                dmft_common::nav::Waypoint::new(
+                    camp.camp_center[0],
+                    camp.camp_center[1],
+                    camp.camp_center[2],
+                ),
+                Some(super::run::zone_to_short_name(&camp.zone)),
+            )
+        })
+    }
+
+    fn execute_waypoint_navigation(
+        &mut self,
+        destination_label: &str,
+        target: dmft_common::nav::Waypoint,
+        zone_hint: Option<&str>,
+    ) {
+        let focused_clients: Vec<FocusedNavClient> = self
+            .visible_clients()
+            .into_iter()
+            .filter_map(|client| {
+                client.local_player.as_ref().map(|player| FocusedNavClient {
+                    pid: client.pid,
+                    client_name: self.client_command_target(client),
+                    zone_short: super::run::zone_to_short_name(&client.zone_name),
+                    position: (player.x, player.y, player.z),
+                    is_demo: client.is_demo,
+                })
+            })
+            .collect();
+
+        if focused_clients.is_empty() {
+            self.status_message = String::from("No focused clients with position data");
+            return;
+        }
+
+        let mut mesh_routes = 0usize;
+        let mut fallback_routes = 0usize;
+        let mut sent = 0usize;
+        let mut previews = 0usize;
+        let mut skipped = 0usize;
+        let mut failed = 0usize;
+
+        for focused_client in focused_clients {
+            if let Some(expected_zone) = zone_hint
+                && focused_client.zone_short != expected_zone
+            {
+                skipped += 1;
+                continue;
+            }
+
+            let route = crate::nav::mesh::plan_route(
+                &focused_client.zone_short,
+                focused_client.position,
+                (target.x, target.y, target.z),
+            );
+
+            match route.source {
+                crate::nav::mesh::RouteSource::NavMesh => mesh_routes += 1,
+                crate::nav::mesh::RouteSource::StraightLineFallback => fallback_routes += 1,
+            }
+
+            let delivered = if focused_client.is_demo {
+                previews += 1;
+                true
+            } else {
+                let cmd = dmft_common::ipc::Command::NavigateTo {
+                    waypoints: route.waypoints.clone(),
+                };
+                match send_ipc_command(focused_client.pid, &cmd) {
+                    Ok(()) => {
+                        sent += 1;
+                        true
+                    }
+                    Err(error) => {
+                        failed += 1;
+                        tracing::warn!(
+                            pid = focused_client.pid,
+                            client = %focused_client.client_name,
+                            %error,
+                            "Failed to send NavigateTo from TUI"
+                        );
+                        false
+                    }
+                }
+            };
+
+            if delivered {
+                let from = dmft_common::nav::Waypoint::new(
+                    focused_client.position.0,
+                    focused_client.position.1,
+                    focused_client.position.2,
+                );
+                let distance_remaining = from.distance_3d(&target);
+                let waypoint_count = route.waypoints.len().max(1);
+                let status = if distance_remaining <= 5.0 {
+                    dmft_common::nav::NavStatus::Arrived
+                } else {
+                    dmft_common::nav::NavStatus::Moving {
+                        waypoint_index: 0,
+                        waypoint_count,
+                        distance_remaining,
+                    }
+                };
+
+                self.nav_state.nav_statuses.insert(
+                    focused_client.pid,
+                    NavClientStatus {
+                        destination: destination_label.to_string(),
+                        status,
+                        eta_secs: None,
+                        waypoints: route.waypoints,
+                    },
+                );
+            }
+        }
+
+        let mut details = Vec::new();
+        if mesh_routes > 0 {
+            details.push(format!("{} mesh", mesh_routes));
+        }
+        if fallback_routes > 0 {
+            details.push(format!("{} fallback", fallback_routes));
+        }
+        if sent > 0 {
+            details.push(format!("{} sent", sent));
+        }
+        if previews > 0 {
+            details.push(format!("{} preview", previews));
+        }
+        if skipped > 0 {
+            details.push(format!("{} skipped", skipped));
+        }
+        if failed > 0 {
+            details.push(format!("{} failed", failed));
+        }
+
+        self.status_message = format!(
+            "Nav → {} ({})",
+            destination_label,
+            if details.is_empty() {
+                String::from("no clients routed")
+            } else {
+                details.join(", ")
+            }
+        );
+
+        if sent > 0 || previews > 0 {
+            self.set_active_screen(ActiveScreen::Tactical);
+            if self.tactical_state.show_navigation {
+                self.active_panel = ActivePanel::TacticalNavigation;
+            }
+        }
+    }
+
     /// Get PIDs for a specific group index (0-based).
     fn pids_for_group(&self, group_idx: usize) -> Vec<u32> {
         self.clients_in_group_idx(group_idx)
@@ -1733,7 +1936,15 @@ impl App {
                 self.execute_camp_command(&parts[1..], orchestrator);
             }
             "nav" => {
-                if let Some(destination) = parts.get(1) {
+                let destination = parts[1..].join(" ").trim().to_string();
+                if destination.is_empty() {
+                    self.status_message =
+                        String::from("Usage: nav <camp_name|x y z|zone>  (Tab for camps/zones)");
+                } else if let Some((label, target, zone_hint)) =
+                    self.resolve_nav_target(&parts[1..])
+                {
+                    self.execute_waypoint_navigation(&label, target, zone_hint.as_deref());
+                } else {
                     let cmd = dmft_common::ipc::Command::SlashCommand {
                         command: format!("/nav to {}", destination),
                     };
@@ -1741,17 +1952,14 @@ impl App {
                     if ok == 0 {
                         self.status_message = String::from("No clients connected for navigation");
                     } else {
-                        tracing::info!(destination, sent = ok, "Navigation command sent");
+                        tracing::info!(destination, sent = ok, "Navigation slash command sent");
                         self.status_message =
-                            format!("Nav → {} (sent to {} clients)", destination, ok);
+                            format!("Nav slash → {} (sent to {} clients)", destination, ok);
                         self.set_active_screen(ActiveScreen::Tactical);
                         if self.tactical_state.show_navigation {
                             self.active_panel = ActivePanel::TacticalNavigation;
                         }
                     }
-                } else {
-                    self.status_message =
-                        String::from("Usage: nav <zone|camp_name>  (Tab for zone autocomplete)");
                 }
             }
             "loot" => {
