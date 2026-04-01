@@ -252,10 +252,10 @@ mod tests {
     }
 
     #[test]
-    fn elapsed_is_non_zero_after_creation() {
+    fn elapsed_does_not_panic_after_creation() {
         let seq = PostLoginSequencer::new(1, 1, vec![]);
-        // Should be very small but not exactly zero (on most systems)
-        let _ = seq.elapsed(); // Just test it doesn't panic
+        // Ensure calling elapsed() immediately after creation does not panic.
+        let _ = seq.elapsed();
     }
 
     #[test]
