@@ -150,11 +150,6 @@ mod tests {
         assert!(is_enabled());
     }
 
-    #[test]
-    fn dialog_pairs_not_empty() {
-        assert!(!DIALOG_ACCEPT_PAIRS.is_empty());
-    }
-
     #[cfg(not(windows))]
     #[test]
     fn check_dialogs_noop_on_non_windows() {

@@ -403,7 +403,7 @@ fn load_demo_data(app: &mut App) {
     app.status_message = String::from("DEMO MODE — no EQ process");
 
     // 18 demo clients across 3 groups, covering all 16 EQ classes.
-    // Names use trailing digits (e.g., "Frostreaver01") so they match group slots
+    // Names use trailing digits (e.g., "Dmft01") so they match group slots
     // via extract_account_number().
     //
     // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state, zone, race_id)
@@ -424,7 +424,7 @@ fn load_demo_data(app: &mut App) {
         // ── Group 1: Permafrost ──────────────────────────────────────
         // (name, class, lv, hp, hp_max, mana, mana_max, stand, zone, race)
         (
-            "Frostreaver01",
+            "Dmft01",
             1,
             60,
             9500,
@@ -705,7 +705,7 @@ fn load_demo_data(app: &mut App) {
 
         for (i, client) in app.clients.iter_mut().enumerate() {
             let (leader, members) = if i < 6 {
-                ("Frostreaver01", &group1_members)
+                ("Dmft01", &group1_members)
             } else if i < 12 {
                 ("Shadowveil07", &group2_members)
             } else {

@@ -331,6 +331,8 @@ pub struct CommandBarState {
 }
 
 impl CommandBarState {
+    const HISTORY_FILE: &'static str = "config/.dmft_command_history";
+
     /// Creates a new command bar state with empty buffer and history.
     #[must_use]
     pub fn new() -> Self {
@@ -342,6 +344,36 @@ impl CommandBarState {
             command_frequency: HashMap::new(),
             favorites: Vec::new(),
         }
+    }
+
+    /// Load command history from disk and rebuild frequency favorites.
+    pub fn load_history_from_disk(&mut self) {
+        let Ok(content) = std::fs::read_to_string(Self::HISTORY_FILE) else {
+            return;
+        };
+        self.command_history = content
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+        self.command_frequency.clear();
+        for cmd in &self.command_history {
+            let normalized = Self::normalize_command(cmd);
+            if !normalized.is_empty() {
+                *self.command_frequency.entry(normalized).or_insert(0) += 1;
+            }
+        }
+        self.recalculate_favorites();
+    }
+
+    /// Persist command history to disk (best-effort).
+    pub fn save_history_to_disk(&self) -> std::io::Result<()> {
+        let mut payload = self.command_history.join("\n");
+        if !payload.is_empty() {
+            payload.push('\n');
+        }
+        std::fs::write(Self::HISTORY_FILE, payload)
     }
 
     /// Record a command execution and update favorites.

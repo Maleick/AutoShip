@@ -602,7 +602,15 @@ pub fn find_command_hint(input: &str) -> Option<&'static str> {
         if trimmed.starts_with(hint.prefix)
             && (trimmed.len() == hint.prefix.len()
                 || trimmed.as_bytes().get(hint.prefix.len()) == Some(&b' '))
+<<<<<<< ours
+<<<<<<< ours
             && best.is_none_or(|current| hint.prefix.len() > current.prefix.len())
+=======
+            && (best.is_none() || hint.prefix.len() > best.unwrap().prefix.len())
+>>>>>>> theirs
+=======
+            && (best.is_none() || hint.prefix.len() > best.unwrap().prefix.len())
+>>>>>>> theirs
         {
             best = Some(hint);
         }

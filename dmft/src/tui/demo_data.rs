@@ -153,7 +153,7 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
             zone,
             &[
                 (
-                    "Frostreaver01",
+                    "Dmft01",
                     60,
                     1,
                     SpawnType::Player,
