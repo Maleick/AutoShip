@@ -46,16 +46,18 @@ fn zone_anchor(zone: &str) -> Option<DemoAnchor> {
             z: -38.0,
             heading: 128.0,
         }),
+        // Near Ry'Gorr Keep area — matches EQ Atlas Eastern Wastes coordinates
         "Eastern Wastes" => Some(DemoAnchor {
-            x: 5_560.0,
-            y: 4_430.0,
-            z: 548.0,
+            x: -4_500.0,
+            y: -3_780.0,
+            z: 400.0,
             heading: 96.0,
         }),
+        // Near Wizard Spires — matches EQ Atlas Great Divide coordinates
         "Great Divide" => Some(DemoAnchor {
-            x: -3_215.0,
-            y: 5_995.0,
-            z: -108.0,
+            x: -1_910.0,
+            y: -2_710.0,
+            z: -300.0,
             heading: 144.0,
         }),
         _ => None,
@@ -402,17 +404,19 @@ mod tests {
         assert!(y < 0.0);
         assert!(z < 0.0);
 
+        // Eastern Wastes anchor is near Great Span: (-4500, -3780, 400)
         let (x, y, z, _) = demo_player_position("Eastern Wastes", 0).unwrap();
-        assert!(x > 4_000.0);
-        assert!(y > 4_000.0);
-        assert!(z > 100.0);
+        assert!(x < -4_000.0, "EW x should be near -4500, got {x}");
+        assert!(y < -3_000.0, "EW y should be near -3780, got {y}");
+        assert!(z > 100.0, "EW z should be ~400, got {z}");
     }
 
     #[test]
     fn demo_spawns_use_zone_anchor() {
+        // Great Divide anchor is near Wizard Spires: (-1910, -2710, -300)
         let spawns = demo_spawns_for_zone("Great Divide");
         assert!(!spawns.is_empty());
-        assert!(spawns.iter().all(|spawn| spawn.x < -3_000.0));
-        assert!(spawns.iter().all(|spawn| spawn.y > 5_900.0));
+        assert!(spawns.iter().all(|spawn| spawn.x < -1_800.0));
+        assert!(spawns.iter().all(|spawn| spawn.y < -2_600.0));
     }
 }

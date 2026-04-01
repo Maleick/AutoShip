@@ -441,10 +441,51 @@ pub fn handle_events(
                 }
                 _ => {}
             },
-            ActivePanel::TacticalMap if key.code == KeyCode::Enter => {
-                app.toggle_tactical_map_maximized();
-                return Ok(true);
-            }
+            ActivePanel::TacticalMap => match key.code {
+                KeyCode::Enter => {
+                    app.toggle_tactical_map_maximized();
+                    return Ok(true);
+                }
+                KeyCode::Left => {
+                    app.pan_tactical_map_left();
+                    return Ok(true);
+                }
+                KeyCode::Right => {
+                    app.pan_tactical_map_right();
+                    return Ok(true);
+                }
+                KeyCode::Up => {
+                    app.pan_tactical_map_up();
+                    return Ok(true);
+                }
+                KeyCode::Down => {
+                    app.pan_tactical_map_down();
+                    return Ok(true);
+                }
+                KeyCode::PageUp => {
+                    app.zoom_tactical_map_in();
+                    return Ok(true);
+                }
+                KeyCode::PageDown => {
+                    app.zoom_tactical_map_out();
+                    return Ok(true);
+                }
+                KeyCode::Home => {
+                    app.reset_tactical_map_view();
+                    return Ok(true);
+                }
+                KeyCode::Char('v') => {
+                    app.cycle_tactical_map_view();
+                    return Ok(true);
+                }
+                KeyCode::Char('n') => {
+                    let enabled = app.map_state.toggle_navmesh();
+                    app.status_message =
+                        format!("Navmesh overlay: {}", if enabled { "ON" } else { "OFF" });
+                    return Ok(true);
+                }
+                _ => {}
+            },
             ActivePanel::TacticalNavigation => match key.code {
                 KeyCode::Down | KeyCode::Char('j') => {
                     app.next_client();
