@@ -208,12 +208,13 @@ impl CommandBarState {
         let token_count = match parts.first().copied() {
             // Group broadcast + slash: "all /sit", "G1 /follow" → keep 2
             // Single meaningful arg: "ma Warrior", "mt Tank" → keep 2
-            Some("all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6") => 2,
-            Some("ma" | "mt" | "mode" | "login" | "nav" | "track") => 2,
+            Some(
+                "all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6" | "ma" | "mt" | "mode"
+                | "login" | "nav" | "track" | "ch",
+            ) => 2,
             Some("engage") => 1,
-            // Camp/CH subcommands: "camp start permafrost" → keep all 3, "ch start 1234,5678 3.0" → keep 2
+            // Camp subcommands: "camp start permafrost" → keep all 3
             Some("camp") => 3,
-            Some("ch") => 2,
             // Everything else: just the base command
             _ => return trimmed.to_string(),
         };

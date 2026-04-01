@@ -288,8 +288,7 @@ impl SoulCoordinator {
             SoulEvent::Kill { .. } | SoulEvent::Loot { .. } => 1.5,
             SoulEvent::PlayerChat { .. } => 3.0,
             SoulEvent::RelationshipChange { .. } => 2.0,
-            SoulEvent::ZoneEnter { .. } => 1.0,
-            _ => 1.0,
+            SoulEvent::ZoneEnter { .. } | _ => 1.0,
         };
 
         // Record memory with the mood as it was before the event changed it

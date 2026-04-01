@@ -56,13 +56,12 @@ impl LogWatcher {
         loop {
             line.clear();
             match reader.read_line(&mut line) {
-                Ok(0) => break, // EOF
+                Ok(0) | Err(_) => break, // EOF or error
                 Ok(_) => {
                     if let Some(event) = self.database.process_line(line.trim_end()) {
                         events.push(event);
                     }
                 }
-                Err(_) => break,
             }
         }
 

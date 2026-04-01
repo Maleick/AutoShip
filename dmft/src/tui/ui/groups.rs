@@ -522,8 +522,7 @@ fn draw_config_group_panel(
 /// Choose grid rows/cols for a given number of panels.
 fn grid_dims(panel_count: usize) -> (usize, usize) {
     match panel_count {
-        0 => (1, 1),
-        1 => (1, 1),
+        0 | 1 => (1, 1),
         2 => (1, 2),
         3 => (1, 3),
         4 => (2, 2),

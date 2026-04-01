@@ -86,11 +86,7 @@ pub fn handle_events(
 
         if app.spawns_state.search_mode {
             match key.code {
-                KeyCode::Esc => {
-                    app.spawns_state.search_mode = false;
-                    return Ok(true);
-                }
-                KeyCode::Enter => {
+                KeyCode::Esc | KeyCode::Enter => {
                     app.spawns_state.search_mode = false;
                     return Ok(true);
                 }

@@ -270,8 +270,7 @@ impl LootDatabase {
             LogEvent::Death { .. } => {
                 self.deaths += 1;
             }
-            LogEvent::ZoneEnter { .. } => {}
-            LogEvent::Chat(_) => {}
+            LogEvent::ZoneEnter { .. } | LogEvent::Chat(_) => {}
         }
     }
 
