@@ -36,7 +36,7 @@ pub enum CombatCommand {
 /// Called once during DLL setup after we know our class and client ID.
 pub fn init(class_id: u8, client_id: u32, config: CombatConfig) {
     let combatant = Combatant::new(class_id, client_id, config);
-    let mut guard = COMBATANT.lock().unwrap_or_else(|e| e.into_inner());
+    let mut guard = COMBATANT.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     *guard = Some(combatant);
     tracing::info!(class_id, client_id, "Combat system initialized");
 }
@@ -44,7 +44,7 @@ pub fn init(class_id: u8, client_id: u32, config: CombatConfig) {
 /// Advance the combat FSM by one game tick.
 /// Called from the game loop hook every frame.
 pub fn tick(player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]) {
-    let mut guard = COMBATANT.lock().unwrap_or_else(|e| e.into_inner());
+    let mut guard = COMBATANT.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(combatant) = guard.as_mut() {
         combatant.tick(player, target, nearby);
     }
@@ -52,7 +52,7 @@ pub fn tick(player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]
 
 /// Get the current combat status for IPC reporting.
 pub fn status() -> CombatStatus {
-    let guard = COMBATANT.lock().unwrap_or_else(|e| e.into_inner());
+    let guard = COMBATANT.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     match guard.as_ref() {
         Some(combatant) => combatant.status(),
         None => CombatStatus::Idle,
@@ -61,7 +61,7 @@ pub fn status() -> CombatStatus {
 
 /// Handle an incoming combat command.
 pub fn handle_command(cmd: CombatCommand) {
-    let mut guard = COMBATANT.lock().unwrap_or_else(|e| e.into_inner());
+    let mut guard = COMBATANT.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let Some(combatant) = guard.as_mut() else {
         tracing::warn!("Combat command received but combatant not initialized");
         return;

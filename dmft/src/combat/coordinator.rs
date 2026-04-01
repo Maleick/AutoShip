@@ -247,7 +247,7 @@ impl CombatCoordinator {
 
     /// Whether a CH chain is currently active.
     pub fn ch_chain_active(&self) -> bool {
-        self.ch_chain.as_ref().is_some_and(|c| c.is_active())
+        self.ch_chain.as_ref().is_some_and(super::ch_chain::ChChain::is_active)
     }
 
     /// Add a cleric to the active CH chain.

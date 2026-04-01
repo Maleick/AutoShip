@@ -101,7 +101,7 @@ impl NamedMobDatabase {
     pub fn for_zone(&self, zone: &str) -> &[NamedMobEntry] {
         self.by_zone
             .get(&zone.to_ascii_lowercase())
-            .map(|v| v.as_slice())
+            .map(std::vec::Vec::as_slice)
             .unwrap_or(&[])
     }
 

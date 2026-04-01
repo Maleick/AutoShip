@@ -234,7 +234,7 @@ impl CommandBarState {
 
     /// Get the favorite command at index (0-based, for F1=0, F2=1, etc.).
     pub fn get_favorite(&self, idx: usize) -> Option<&str> {
-        self.favorites.get(idx).map(|s| s.as_str())
+        self.favorites.get(idx).map(std::string::String::as_str)
     }
 }
 

@@ -159,13 +159,13 @@ impl Orchestrator {
         let tank_hp_pct = tank_state
             .local_player
             .as_ref()
-            .map(|p| p.hp_pct())
+            .map(dmft_common::types::SpawnData::hp_pct)
             .unwrap_or(100.0);
 
         let healer_mana_pct = healer_state
             .local_player
             .as_ref()
-            .map(|p| p.mana_pct())
+            .map(dmft_common::types::SpawnData::mana_pct)
             .unwrap_or(100.0);
 
         // Use the tank's target for target HP and spawn ID
@@ -656,7 +656,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .unwrap_or("?");
 
         let token = match self.session_tokens.get(&pid) {
@@ -695,7 +695,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .unwrap_or("?")
             .to_string();
 
@@ -719,7 +719,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .unwrap_or("?")
             .to_string();
         tracing::info!(pid, name = %name, "Ejecting client");
@@ -746,7 +746,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .unwrap_or("?")
             .to_string();
 

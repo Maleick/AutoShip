@@ -574,7 +574,7 @@ impl App {
 
                         let name = default_names
                             .get((id - 1) as usize)
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                             .unwrap_or_else(|| format!("Group {id}"));
 
                         GroupDef {
@@ -884,7 +884,7 @@ impl App {
         // Collect ungrouped clients (those not mentioned in any group)
         let all_grouped_names: std::collections::HashSet<&str> = groups_map
             .values()
-            .flat_map(|g| g.member_names.iter().map(|s| s.as_str()))
+            .flat_map(|g| g.member_names.iter().map(std::string::String::as_str))
             .collect();
 
         let ungrouped: Vec<usize> = self
@@ -1415,13 +1415,13 @@ impl App {
         let camps_dir = std::path::Path::new("config/camps");
         match std::fs::read_dir(camps_dir) {
             Ok(entries) => entries
-                .filter_map(|e| e.ok())
+                .filter_map(std::result::Result::ok)
                 .filter_map(|e| {
                     let path = e.path();
                     if path.extension().is_some_and(|ext| ext == "toml") {
                         path.file_stem()
                             .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                     } else {
                         None
                     }
@@ -1437,13 +1437,13 @@ impl App {
         let mesh_dir = std::path::Path::new("data/meshes");
         if let Ok(entries) = std::fs::read_dir(mesh_dir) {
             return entries
-                .filter_map(|e| e.ok())
+                .filter_map(std::result::Result::ok)
                 .filter_map(|e| {
                     let path = e.path();
                     if path.extension().is_some_and(|ext| ext == "navmesh") {
                         path.file_stem()
                             .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                     } else {
                         None
                     }
@@ -2886,7 +2886,7 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
     let digits: String = name
         .chars()
         .rev()
-        .take_while(|c| c.is_ascii_digit())
+        .take_while(char::is_ascii_digit)
         .collect();
     if digits.is_empty() {
         return None;
