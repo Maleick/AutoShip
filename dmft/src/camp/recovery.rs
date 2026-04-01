@@ -472,4 +472,70 @@ mod tests {
             .unwrap();
         assert!(target_cmd.1.contains("Warrior01"));
     }
+
+    // --- Additional edge cases ---
+
+    #[test]
+    fn test_rez_priority_function() {
+        assert_eq!(rez_priority("Healer"), 0);
+        assert_eq!(rez_priority("Tank"), 1);
+        assert_eq!(rez_priority("CC"), 2);
+        assert_eq!(rez_priority("DPS"), 3);
+        assert_eq!(rez_priority("Puller"), 3);
+        assert_eq!(rez_priority("Bard"), 3);
+        assert_eq!(rez_priority("Unknown"), 3);
+    }
+
+    #[test]
+    fn test_mark_rezzed_on_alive_no_change() {
+        let mut tracker = RecoveryTracker::new(&[(100, "Warrior01".into())]);
+        // Mark alive member as rezzed should do nothing
+        tracker.mark_rezzed(100);
+        assert_eq!(tracker.members[0].2, DeathState::Alive);
+    }
+
+    #[test]
+    fn test_mark_alive_unknown_pid_no_panic() {
+        let mut tracker = RecoveryTracker::new(&[(100, "Warrior01".into())]);
+        // Marking a nonexistent PID should not panic
+        tracker.mark_alive(999);
+        assert!(tracker.all_alive());
+    }
+
+    #[test]
+    fn test_death_state_equality() {
+        assert_eq!(DeathState::Alive, DeathState::Alive);
+        assert_eq!(DeathState::WaitingForRez, DeathState::WaitingForRez);
+        assert_eq!(DeathState::Rebuffing, DeathState::Rebuffing);
+        assert_ne!(DeathState::Alive, DeathState::WaitingForRez);
+        assert_ne!(DeathState::Alive, DeathState::Dead { died_at_tick: 0 });
+    }
+
+    #[test]
+    fn test_dead_members_empty_when_all_alive() {
+        let tracker = RecoveryTracker::new(&[(100, "Warrior01".into()), (101, "Cleric01".into())]);
+        assert!(tracker.dead_members().is_empty());
+    }
+
+    #[test]
+    fn test_full_recovery_cycle() {
+        let mut tracker = RecoveryTracker::new(&[
+            (100, "Warrior01".into()),
+            (101, "Cleric01".into()),
+        ]);
+
+        // 1. Warrior dies
+        tracker.update_hp(&[(100, 0)], 10);
+        assert!(tracker.recovery_in_progress());
+        assert_eq!(tracker.dead_members(), vec![100]);
+
+        // 2. Warrior gets rezzed
+        tracker.mark_rezzed(100);
+        assert!(tracker.recovery_in_progress()); // still rebuffing
+
+        // 3. Warrior stands up and is alive
+        tracker.mark_alive(100);
+        assert!(!tracker.recovery_in_progress());
+        assert!(tracker.all_alive());
+    }
 }
