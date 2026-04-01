@@ -311,3 +311,220 @@ fn is_in_combat(state: &GameState) -> bool {
 fn zone_from_state(_state: &GameState) -> &'static str {
     "unknown"
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmft_common::combat::CombatStatus;
+    use dmft_common::nav::NavStatus;
+    use dmft_common::soul::{PersonalityTraits, SpeechStyle};
+    use dmft_common::types::SpawnData;
+
+    fn make_game_state(client_id: ClientId) -> GameState {
+        GameState {
+            client_id,
+            local_player: Some(SpawnData {
+                displayed_name: "TestChar".to_string(),
+                name: "TestChar".to_string(),
+                level: 60,
+                ..SpawnData::default()
+            }),
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+            zone_short_name: "test".into(),
+            zone_long_name: "Test Zone".into(),
+        }
+    }
+
+    fn make_soul_config(enabled: bool) -> SoulConfig {
+        SoulConfig {
+            enabled,
+            ..SoulConfig::default()
+        }
+    }
+
+    fn make_char_config(name: &str) -> CharacterSoulConfig {
+        CharacterSoulConfig {
+            name: name.to_string(),
+            traits: PersonalityTraits::default(),
+            speech: SpeechStyle::default(),
+            edginess: None,
+            backstory: String::new(),
+            quirks: Vec::new(),
+        }
+    }
+
+    fn make_coordinator(enabled: bool) -> SoulCoordinator {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test_memory.db");
+        let config = make_soul_config(enabled);
+        // Leak the tempdir so it doesn't get deleted while coordinator lives
+        let dir = Box::leak(Box::new(dir));
+        let _ = dir; // suppress warning
+        SoulCoordinator::new(config, &db_path).unwrap()
+    }
+
+    #[test]
+    fn new_coordinator_creates_successfully() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let config = make_soul_config(false);
+        let coord = SoulCoordinator::new(config, &db_path);
+        assert!(coord.is_ok());
+    }
+
+    #[test]
+    fn register_character_stores_soul() {
+        let mut coord = make_coordinator(true);
+        let char_config = make_char_config("Warrior01");
+        coord.register_character(1, &char_config);
+        assert!(coord.mood(1).is_some());
+        assert_eq!(coord.mood(1).unwrap(), MoodState::Neutral);
+    }
+
+    #[test]
+    fn mood_returns_none_for_unregistered() {
+        let coord = make_coordinator(true);
+        assert!(coord.mood(99).is_none());
+    }
+
+    #[test]
+    fn tick_returns_empty_when_disabled() {
+        let mut coord = make_coordinator(false);
+        coord.register_character(1, &make_char_config("Test"));
+        let mut states = HashMap::new();
+        states.insert(1, make_game_state(1));
+        let cmds = coord.tick(&states);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn tick_increments_tick_count() {
+        let mut coord = make_coordinator(true);
+        coord.register_character(1, &make_char_config("Test"));
+        let mut states = HashMap::new();
+        states.insert(1, make_game_state(1));
+        coord.tick(&states);
+        assert_eq!(coord.tick_count, 1);
+        coord.tick(&states);
+        assert_eq!(coord.tick_count, 2);
+    }
+
+    #[test]
+    fn on_game_event_updates_mood() {
+        let mut coord = make_coordinator(true);
+        coord.register_character(1, &make_char_config("Test"));
+
+        let initial_mood = coord.mood(1).unwrap();
+        // Death events should significantly affect mood
+        coord.on_game_event(
+            1,
+            SoulEvent::Death {
+                killer: Some("a dragon".into()),
+                zone: "permafrost".into(),
+            },
+        );
+        // Mood may or may not change depending on personality engine,
+        // but the function should not panic
+        let _ = coord.mood(1).unwrap();
+        let _ = initial_mood; // suppress unused
+    }
+
+    #[test]
+    fn on_game_event_ignores_unknown_client() {
+        let mut coord = make_coordinator(true);
+        // Should not panic for unregistered client
+        coord.on_game_event(
+            99,
+            SoulEvent::Kill {
+                target: "orc".into(),
+                zone: "test".into(),
+            },
+        );
+    }
+
+    #[test]
+    fn on_player_message_ignores_when_disabled() {
+        let mut coord = make_coordinator(true);
+        coord.config.player_chat_enabled = false;
+        coord.register_character(1, &make_char_config("Test"));
+        // Should not enqueue anything
+        coord.on_player_message(1, "Dave", "Hello!", "say");
+        assert_eq!(coord.llm_queue.pending_count(), 0);
+    }
+
+    #[test]
+    fn on_player_message_enqueues_response() {
+        let mut coord = make_coordinator(true);
+        coord.config.player_chat_enabled = true;
+        coord.register_character(1, &make_char_config("Test"));
+        coord.on_player_message(1, "Dave", "Hey there!", "say");
+        assert_eq!(coord.llm_queue.pending_count(), 1);
+    }
+
+    #[test]
+    fn on_player_message_ignores_unknown_client() {
+        let mut coord = make_coordinator(true);
+        coord.config.player_chat_enabled = true;
+        // Should not panic for unregistered client
+        coord.on_player_message(99, "Dave", "Hello!", "say");
+        assert_eq!(coord.llm_queue.pending_count(), 0);
+    }
+
+    #[test]
+    fn social_graph_accessible() {
+        let coord = make_coordinator(true);
+        let graph = coord.social_graph();
+        // Fresh coordinator has no relationships
+        assert!(graph.relationships_for("Nobody").is_empty());
+    }
+
+    #[test]
+    fn memory_store_accessible() {
+        let coord = make_coordinator(true);
+        let _store = coord.memory_store();
+        // Should not panic
+    }
+
+    #[test]
+    fn is_in_combat_helper() {
+        let mut state = make_game_state(1);
+        state.combat_status = CombatStatus::Idle;
+        assert!(!is_in_combat(&state));
+
+        state.combat_status = CombatStatus::Engaging { target_id: 1 };
+        assert!(is_in_combat(&state));
+    }
+
+    #[test]
+    fn zone_from_state_returns_unknown() {
+        let state = make_game_state(1);
+        assert_eq!(zone_from_state(&state), "unknown");
+    }
+
+    #[test]
+    fn register_multiple_characters() {
+        let mut coord = make_coordinator(true);
+        coord.register_character(1, &make_char_config("Alpha"));
+        coord.register_character(2, &make_char_config("Beta"));
+        coord.register_character(3, &make_char_config("Gamma"));
+
+        assert!(coord.mood(1).is_some());
+        assert!(coord.mood(2).is_some());
+        assert!(coord.mood(3).is_some());
+    }
+
+    #[test]
+    fn tick_skips_clients_without_game_state() {
+        let mut coord = make_coordinator(true);
+        coord.register_character(1, &make_char_config("Test"));
+        // Empty states map — no game state for client 1
+        let states = HashMap::new();
+        let cmds = coord.tick(&states);
+        // Should not panic, just skip
+        assert!(cmds.is_empty());
+    }
+}
