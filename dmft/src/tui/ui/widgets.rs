@@ -810,7 +810,7 @@ pub fn render_command_palette(
             };
             ListItem::new(Line::from(vec![
                 Span::styled(format!(" {:<20}", hint.prefix), style),
-                Span::styled(hint.description.to_string(), desc_style),
+                Span::styled(hint.description, desc_style),
             ]))
         })
         .collect();
