@@ -4,41 +4,60 @@ use crate::types::ClientId;
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     // Movement
+    /// Move to an absolute world position.
     MoveTo {
+        /// World X coordinate.
         x: f32,
+        /// World Y coordinate.
         y: f32,
+        /// World Z coordinate.
         z: f32,
     },
+    /// Stop all movement immediately.
     StopMovement,
     // Combat
+    /// Cast a memorized spell on a target.
     CastSpell {
+        /// Memorized spell slot (0-indexed gem number).
         spell_slot: u8,
+        /// Spawn ID of the cast target.
         target_id: u32,
     },
+    /// Begin auto-attack on a target.
     Attack {
+        /// Spawn ID of the mob to attack.
         target_id: u32,
     },
+    /// Stop auto-attack.
     StopAttack,
     // Targeting
+    /// Set the current target by spawn ID.
     SetTarget {
+        /// Spawn ID to target.
         spawn_id: u32,
     },
+    /// Clear the current target.
     ClearTarget,
     // Utility
+    /// Sit down (mana/HP regen).
     Sit,
+    /// Stand up from sitting.
     Stand,
     // Navigation
     /// Follow a sequence of waypoints.
     NavigateTo {
+        /// Ordered list of waypoints to traverse.
         waypoints: Vec<crate::nav::Waypoint>,
     },
     /// Move to a camp spot and face heading.
     SetCamp {
+        /// Camp position and facing direction.
         spot: crate::nav::CampSpot,
     },
     /// Stop navigating, stay where you are.
     StopNavigation,
     // Login automation
+    /// Query the current login phase from the DLL.
     LoginPhaseQuery,
     /// Dump all login-related pointer addresses to the DLL log for calibration.
     /// Used to validate offsets on the live client before attempting auto-login.
@@ -47,29 +66,46 @@ pub enum Command {
     /// autonomously and reports progress via LoginPhaseUpdate responses.
     /// Password is zeroized in DLL memory immediately after use.
     StartLogin {
+        /// Account name for login.
         account_name: String,
+        /// Password (zeroized after use in DLL memory).
         password: String,
+        /// Target server name (e.g. "Teek").
         server_name: String,
+        /// Character name to select at character select.
         character_name: String,
     },
     // Post-login
+    /// Join a group by group ID.
     JoinGroup {
+        /// EQ group ID to join.
         group_id: u32,
     },
+    /// Apply standard buff rotation.
     ApplyBuffs,
+    /// Report that this client is ready for orchestration.
     ReportReady,
     // Combat
+    /// Engage a target in combat via the combat FSM.
     CombatEngage {
+        /// Spawn ID of the mob to engage.
         target_id: u32,
     },
+    /// Disengage from combat, return to idle.
     CombatDisengage,
+    /// Set the main assist target for this character.
     CombatSetAssistTarget {
+        /// Spawn ID of the assist target.
         spawn_id: u32,
     },
+    /// Force-use a specific combat ability.
     CombatForceAbility {
+        /// Ability ID to activate.
         ability_id: u32,
     },
+    /// Emergency heal a specific target.
     CombatEmergencyHeal {
+        /// Spawn ID of the character to heal.
         target_id: u32,
     },
     /// Loot the nearest corpse.
@@ -79,34 +115,45 @@ pub enum Command {
     // Soul Engine
     /// Send a chat message in-game.
     Say {
+        /// Chat channel to send on.
         channel: crate::soul::SayChannel,
+        /// Message text.
         message: String,
+        /// Target player name (for tells).
         target: Option<String>,
     },
     /// Perform an emote animation.
     Emote {
+        /// Emote name (e.g. "dance", "wave").
         emote: String,
     },
     /// Execute a soul action (idle behavior, etc.).
     SoulAction {
+        /// The soul action to perform.
         action: crate::soul::SoulAction,
     },
     /// Execute a slash command as if typed in the chat window.
     /// Uses EQ's InterpretCmd internally (e.g. "/target Camrene", "/follow").
     SlashCommand {
+        /// Full slash command string (e.g. "/target Mob").
         command: String,
     },
     // Zone graph
     /// Request the zone adjacency graph from ZoneGuideManagerClient.
     QueryZoneGraph,
     // System
+    /// Heartbeat ping — expects a Pong response.
     Ping,
+    /// Eject the DLL from the game process.
     Eject,
+    /// Enable or disable the game loop hook.
     SetHookState {
+        /// Whether hooks should be active.
         enabled: bool,
     },
     /// Enable or disable automatic dialog acceptance (group invite, trade, etc.).
     SetAutoAccept {
+        /// Whether auto-accept is enabled.
         enabled: bool,
     },
 }
@@ -138,15 +185,23 @@ impl std::fmt::Debug for Command {
 /// Responses sent from the DLL back to the manager
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Response {
+    /// Heartbeat response to a Ping command.
     Pong {
+        /// PID of the responding client.
         client_id: ClientId,
+        /// Timestamp in milliseconds when the pong was generated.
         timestamp_ms: u64,
     },
+    /// Generic result for a command execution.
     CommandResult {
+        /// Whether the command succeeded.
         success: bool,
+        /// Human-readable status or error message.
         message: String,
     },
+    /// Error response when a command fails.
     Error {
+        /// Error description.
         message: String,
     },
     /// Navigation status push notification from the DLL's nav state machine.
@@ -155,21 +210,29 @@ pub enum Response {
     /// `NavUpdate` is sent only on state transitions (Idle→Moving, Moving→Arrived, etc.)
     /// for low-latency notification without polling shared memory.
     NavUpdate {
+        /// Current navigation FSM state.
         status: crate::nav::NavStatus,
     },
+    /// Login phase transition notification.
     LoginPhaseUpdate {
+        /// Current login phase.
         phase: crate::login::LoginPhase,
     },
+    /// Notification that a client has completed post-login setup.
     PostLoginComplete {
+        /// PID of the client that finished post-login.
         client_id: crate::types::ClientId,
     },
+    /// Combat FSM state transition notification.
     CombatUpdate {
+        /// Current combat FSM state.
         status: crate::combat::CombatStatus,
     },
     /// Zone adjacency graph from ZoneGuideManagerClient.
     /// Simplified wire format: Vec of (zone_id, name, min_level, max_level, connections).
     /// Each connection is (dest_zone_id, transfer_type, disabled).
     ZoneGraph {
+        /// List of zone entries with connectivity data.
         zones: Vec<ZoneGraphEntry>,
     },
 }
