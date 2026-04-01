@@ -487,8 +487,12 @@ enum TacticalSectionKind {
     Navigation,
 }
 
-fn draw_tactical_sidebar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let sections = tactical_sections(app);
+fn draw_tactical_sidebar(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &App,
+    sections: &[(TacticalSectionKind, Constraint)],
+) {
     if sections.is_empty() {
         return;
     }
@@ -559,17 +563,6 @@ fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
     }
 
     sections
-}
-
-fn tactical_sidebar_height(app: &App) -> u16 {
-    tactical_sections(app)
-        .iter()
-        .map(|(_, constraint)| match constraint {
-            Constraint::Length(height) | Constraint::Min(height) => *height,
-            _ => 3,
-        })
-        .sum::<u16>()
-        .max(6)
 }
 
 fn tactical_section_title(label: &str, collapsed: bool) -> String {

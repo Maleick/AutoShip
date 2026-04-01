@@ -3,6 +3,7 @@
 //! Extracted from `run.rs` to reduce inline data duplication. Each zone gets
 //! a curated spawn list mixing PCs, NPCs, and corpses appropriate to the zone.
 
+use crate::eq::named_tracker::is_named;
 use crate::eq::structs::{EqClass, SpawnInfo, SpawnType, StandState};
 
 /// Spawn definition tuple: (name, level, class_id, spawn_type, hp, hp_max, stand_state).
@@ -73,10 +74,6 @@ pub fn demo_player_position(zone: &str, slot: usize) -> Option<(f32, f32, f32, f
     ))
 }
 
-fn is_named_spawn(name: &str) -> bool {
-    !name.starts_with("a ") && !name.starts_with("an ")
-}
-
 fn demo_spawn_position(
     zone: &str,
     index: usize,
@@ -94,7 +91,7 @@ fn demo_spawn_position(
     let scale = match spawn_type {
         SpawnType::Player => 0.55,
         SpawnType::Corpse => 1.15,
-        SpawnType::Npc if is_named_spawn(name) => 1.6,
+        SpawnType::Npc if is_named(name) => 1.6,
         _ => 1.0,
     };
 

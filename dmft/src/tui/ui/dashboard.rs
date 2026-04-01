@@ -130,11 +130,8 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 ];
                 if show_group {
                     cells.push(
-                        Cell::from(
-                            app.client_group_label(client)
-                                .unwrap_or_else(|| "--".into()),
-                        )
-                        .style(Style::default().fg(t.text_secondary)),
+                        Cell::from(app.client_group_label(client).unwrap_or("--"))
+                            .style(Style::default().fg(t.text_secondary)),
                     );
                 }
                 if show_class {
@@ -478,9 +475,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     };
 
     let name = app.redact_name(&player.displayed_name).into_owned();
-    let group_label = app
-        .client_group_label(client)
-        .unwrap_or_else(|| String::from("--"));
+    let group_label = app.client_group_label(client).unwrap_or("--");
     let (condition_label, condition_style) = client_condition(client, t);
     let (activity_label, activity_style) = client_activity(app, client);
     let target_name = client

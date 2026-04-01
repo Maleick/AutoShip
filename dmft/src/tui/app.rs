@@ -673,7 +673,9 @@ impl App {
     }
 
     /// Get a short display label for the client's configured group, if known.
-    pub fn client_group_label(&self, client: &ClientState) -> Option<String> {
+    pub fn client_group_label(&self, client: &ClientState) -> Option<&'static str> {
+        const LABELS: &[&str] = &["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9"];
+
         let name = if !client.character_name.is_empty() {
             client.character_name.as_str()
         } else if let Some(player) = &client.local_player {
@@ -689,7 +691,7 @@ impl App {
                 let (lo, hi) = group.account_range;
                 account_num >= lo && account_num <= hi
             })
-            .map(|group| format!("G{}", group.id))
+            .and_then(|group| LABELS.get(group.id as usize).copied())
     }
 
     /// Get clients belonging to the group at the given index (0-based).
