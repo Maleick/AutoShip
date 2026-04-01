@@ -33,7 +33,7 @@ pub mod tui;
 
 pub mod cli;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 /// Default path for the soul memory database.
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
