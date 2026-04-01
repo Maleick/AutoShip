@@ -1,24 +1,3 @@
-{
-  "run_id": "autoresearch/20260331-1200",
-  "branch": "autoresearch/20260331-1200",
-  "goal": "Add documentation comments to all public items in the dmft crate",
-  "scope": "dmft/src/**/*.rs",
-  "direction": "minimize",
-  "verify_cmd": "RUSTDOCFLAGS='-W missing_docs' cargo doc -p dmft --no-deps 2>&1 | grep 'warning:' | grep -v generated | wc -l",
-  "guard_cmd": "cargo test -p dmft -p dmft-common 2>&1 | grep -q '0 failed'",
-  "metric": "missing_docs_warnings",
-  "metric_pattern": null,
-  "target": null,
-  "timeout_sec": 300,
-  "iteration": 0,
-  "max_iterations": 100,
-  "duration_limit": "8h",
-  "start_time": "2026-03-31T12:00:00Z",
-  "previous_best": 892,
-  "baseline": 892,
-  "consecutive_discards": 0,
-  "consecutive_crashes": 0,
-  "last_phase_completed": "phase_0_preconditions",
-  "last_commit_sha": "PLACEHOLDER",
-  "status": "running"
-}
+  {
+    "_comment": "Ephemeral autoresearch state is not meant to be committed. This file is a placeholder; actual state should be generated at runtime and ignored by version control."
+  }
