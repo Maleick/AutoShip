@@ -217,7 +217,7 @@ pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
     let token = generate_random_token();
 
     std::fs::write(&token_path, token)?;
-    // Also cache a copy for later CLI commands that reconnect to the injected client.
+    // Also persist a copy for later CLI commands that reconnect to the injected client.
     let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
     std::fs::write(&login_token_path, token)?;
 
