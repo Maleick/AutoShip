@@ -57,8 +57,8 @@ pub struct SpawnData {
     pub mana_max: i32,
     /// Signed because EQ can drain endurance below zero internally.
     pub endurance_current: i32,
-    /// Unsigned in the EQ struct (PlayerZoneClient). Do not compare directly
-    /// with endurance_current without casting — signedness differs intentionally.
+    /// Unsigned in the EQ struct (`PlayerZoneClient`). Do not compare directly
+    /// with `endurance_current` without casting — signedness differs intentionally.
     pub endurance_max: u32,
 }
 

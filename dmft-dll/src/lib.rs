@@ -1,5 +1,5 @@
 //! DMFT injected DLL payload.
-//! This cdylib is loaded into eqgame.exe via CreateRemoteThread + LoadLibrary.
+//! This cdylib is loaded into eqgame.exe via `CreateRemoteThread` + `LoadLibrary`.
 //! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
 
 // Deeply nested unsafe FFI code with many conditional pointer checks — collapsing
@@ -35,8 +35,8 @@ pub static EQ_BASE: AtomicU64 = AtomicU64::new(0);
 /// Checked by long-running loops (IPC listener, nav ticks) to exit gracefully.
 pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
-/// Guard against double injection. Set to true on first DLL_PROCESS_ATTACH.
-/// If a second copy is loaded (randomized DLL names bypass LoadLibrary dedup),
+/// Guard against double injection. Set to true on first `DLL_PROCESS_ATTACH`.
+/// If a second copy is loaded (randomized DLL names bypass `LoadLibrary` dedup),
 /// the init thread exits immediately.
 #[cfg(windows)]
 static ALREADY_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -62,7 +62,7 @@ mod dll_main {
     }
 
     /// DLL entry point. Called by Windows when the DLL is loaded/unloaded.
-    /// IMPORTANT: DllMain runs under the loader lock — keep work minimal.
+    /// IMPORTANT: `DllMain` runs under the loader lock — keep work minimal.
     /// We use `CreateThread` (not `thread::spawn`) because `std::thread::spawn`
     /// internally calls `CreateThread` *and* may acquire internal locks that
     /// can deadlock under the loader lock.
@@ -292,7 +292,7 @@ fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
 }
 
-/// Full cleanup — call from the eject command handler, NOT from DLL_PROCESS_DETACH.
+/// Full cleanup — call from the eject command handler, NOT from `DLL_PROCESS_DETACH`.
 /// This runs outside the loader lock so it's safe to do I/O, remove hooks, etc.
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn graceful_shutdown() {

@@ -30,7 +30,7 @@ struct CharacterSoul {
 }
 
 /// Tick-driven orchestrator for all Soul Engine subsystems.
-/// Mirrors CombatCoordinator: called each tick, returns commands to dispatch.
+/// Mirrors `CombatCoordinator`: called each tick, returns commands to dispatch.
 pub struct SoulCoordinator {
     souls: HashMap<ClientId, CharacterSoul>,
     memory: MemoryStore,
@@ -42,7 +42,7 @@ pub struct SoulCoordinator {
 }
 
 impl SoulCoordinator {
-    /// Create a new SoulCoordinator from config.
+    /// Create a new `SoulCoordinator` from config.
     pub fn new(config: SoulConfig, db_path: &Path) -> Result<Self> {
         let memory = MemoryStore::open(db_path)?;
         let social = SocialGraph::from_seeds(&config.relationship);

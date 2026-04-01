@@ -3,7 +3,7 @@ use dmft_common::combat::{ConditionExpr, HolyShitAction, HolyShitCondition};
 use super::strategy::CombatContext;
 
 /// Evaluates emergency conditional ability rules each tick.
-/// HolyShit rules fire BEFORE normal rotation — they are the panic button.
+/// `HolyShit` rules fire BEFORE normal rotation — they are the panic button.
 pub struct HolyShitEvaluator {
     rules: Vec<HolyShitCondition>,
 }

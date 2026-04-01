@@ -95,9 +95,9 @@ pub fn check_melee_position(
     PositionAction::None
 }
 
-/// Check for AoE avoidance — returns a position to move to if needed.
-/// Requires integration with the navmesh for pathfinding away from AoE zones.
-/// Currently checks nearby enemies for large AoE clusters.
+/// Check for `AoE` avoidance — returns a position to move to if needed.
+/// Requires integration with the navmesh for pathfinding away from `AoE` zones.
+/// Currently checks nearby enemies for large `AoE` clusters.
 pub fn check_aoe_avoidance(
     player: &SpawnData,
     nearby_enemies: &[SpawnData],

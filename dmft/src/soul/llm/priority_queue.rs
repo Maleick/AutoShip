@@ -53,7 +53,7 @@ impl TokenBudget {
     }
 }
 
-/// Wrapper to make LlmRequest orderable by priority for the BinaryHeap.
+/// Wrapper to make `LlmRequest` orderable by priority for the `BinaryHeap`.
 struct PrioritizedRequest {
     request: LlmRequest,
     /// Sequence number for FIFO within same priority

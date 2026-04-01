@@ -210,7 +210,7 @@ pub struct ZoneNode {
     pub connections: Vec<ZoneConnection>,
 }
 
-/// Complete zone adjacency graph read from EQ's ZoneGuideManagerClient.
+/// Complete zone adjacency graph read from EQ's `ZoneGuideManagerClient`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ZoneGraph {
     /// Map of zone ID to zone node.

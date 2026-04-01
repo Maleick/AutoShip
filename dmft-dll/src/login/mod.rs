@@ -23,7 +23,7 @@ pub fn init() {
     tracing::info!("Login FSM initialized");
 }
 
-/// Run one login tick. Call from `on_game_tick()` when local_player is None.
+/// Run one login tick. Call from `on_game_tick()` when `local_player` is None.
 pub fn tick() -> Option<LoginPhase> {
     let mut guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(fsm) = guard.as_mut() {
@@ -33,7 +33,7 @@ pub fn tick() -> Option<LoginPhase> {
     }
 }
 
-/// Store credentials received from the orchestrator's StartLogin command.
+/// Store credentials received from the orchestrator's `StartLogin` command.
 pub fn start_login(
     account_name: String,
     password: String,
@@ -67,7 +67,7 @@ pub fn is_done() -> bool {
         .is_none_or(|fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))
 }
 
-/// Internal states for the login FSM — more granular than the IPC-facing LoginPhase.
+/// Internal states for the login FSM — more granular than the IPC-facing `LoginPhase`.
 #[derive(Debug, Clone, PartialEq)]
 enum State {
     Idle,
@@ -176,7 +176,7 @@ impl LoginFsm {
     /// Advance the FSM by one tick. Returns Some(phase) when the phase changes.
     ///
     /// The FSM detects which screen EQ is showing by scanning for visible SIDL
-    /// windows each tick (the MQ2 AutoLogin approach). This replaces the previous
+    /// windows each tick (the MQ2 `AutoLogin` approach). This replaces the previous
     /// timer-based polling that ran on a background thread.
     pub fn tick(&mut self) -> Option<LoginPhase> {
         let prev_phase = self.phase.clone();

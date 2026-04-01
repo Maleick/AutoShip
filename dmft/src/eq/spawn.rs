@@ -5,7 +5,7 @@ use dmft_common::offsets::{
     self, actor_client, group, player_base, player_zone, spawn_manager, zone_info,
 };
 
-/// Read a single spawn's data from the process at the given PlayerClient address.
+/// Read a single spawn's data from the process at the given `PlayerClient` address.
 pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
     // Critical fields — hard fail if any are unreadable (corrupt memory → skip spawn)
     let name = proc
@@ -130,7 +130,7 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
     Ok(spawn)
 }
 
-/// Read buff slots for the local player via PINST_LOCAL_PC.
+/// Read buff slots for the local player via `PINST_LOCAL_PC`.
 /// On non-Windows builds returns an empty vec (stub).
 pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     #[cfg(not(windows))]
@@ -167,7 +167,7 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     }
 }
 
-/// Read cast state for the local player via PINST_LOCAL_PC.
+/// Read cast state for the local player via `PINST_LOCAL_PC`.
 /// On non-Windows builds returns None (stub).
 pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> {
     #[cfg(not(windows))]
@@ -280,8 +280,8 @@ pub fn read_all_spawns(
     Ok(spawns)
 }
 
-/// Read a CXStr (EQ's string type) from memory.
-/// CXStr is a pointer to CStrRep; the UTF-8 data lives at CStrRep+0x18.
+/// Read a `CXStr` (EQ's string type) from memory.
+/// `CXStr` is a pointer to `CStrRep`; the UTF-8 data lives at `CStrRep`+0x18.
 fn read_cxstr(proc: &ProcessHandle, cxstr_addr: usize, max_len: usize) -> Result<String> {
     let rep_ptr = proc
         .read_ptr(cxstr_addr)
@@ -293,10 +293,10 @@ fn read_cxstr(proc: &ProcessHandle, cxstr_addr: usize, max_len: usize) -> Result
         .context("Failed to read CStrRep.utf8 data")
 }
 
-/// Read group membership info from the local PC's CGroup pointer.
+/// Read group membership info from the local PC's `CGroup` pointer.
 ///
-/// Path: pLocalPC -> +0x2EB0 (CGroup*) -> CGroupBase members array.
-/// Each CGroupMember has a CXStr Name at offset 0x08.
+/// Path: pLocalPC -> +0x2EB0 (`CGroup`*) -> `CGroupBase` members array.
+/// Each `CGroupMember` has a `CXStr` Name at offset 0x08.
 pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<GroupInfo>> {
     // Read pLocalPC
     let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)

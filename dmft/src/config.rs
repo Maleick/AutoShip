@@ -59,7 +59,7 @@ impl AccountsConfig {
             .find(|a| a.name.to_lowercase() == lower)
     }
 
-    /// Convert an AccountEntry into the AccountInfo used by the launch system.
+    /// Convert an `AccountEntry` into the `AccountInfo` used by the launch system.
     pub fn to_account_info(entry: &AccountEntry) -> dmft_common::login::AccountInfo {
         dmft_common::login::AccountInfo {
             account_name: entry.name.clone(),

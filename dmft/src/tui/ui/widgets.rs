@@ -98,7 +98,7 @@ pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
 }
 
 /// EQ con color — level delta from player perspective.
-/// delta = mob_level - player_level
+/// delta = `mob_level` - `player_level`
 pub fn con_color(player_level: u8, mob_level: u8, t: &Theme) -> Color {
     let delta = mob_level as i16 - player_level as i16;
     match delta {

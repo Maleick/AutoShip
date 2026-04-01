@@ -11,7 +11,7 @@ pub enum DeathState {
 
 /// Tracks death/recovery state for the entire group.
 pub struct RecoveryTracker {
-    /// (pid, character_name, death_state)
+    /// (pid, `character_name`, `death_state`)
     pub members: Vec<(u32, String, DeathState)>,
 }
 

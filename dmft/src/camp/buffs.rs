@@ -13,7 +13,7 @@ const PRIORITY_STAT: u8 = 3;
 
 /// Tracks when each buff was last cast per member.
 pub struct BuffTracker {
-    /// (pid, buff_name) -> last_cast_tick
+    /// (pid, `buff_name`) -> `last_cast_tick`
     pub last_cast: HashMap<(u32, String), u64>,
 }
 

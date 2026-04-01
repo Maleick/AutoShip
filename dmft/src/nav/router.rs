@@ -53,7 +53,7 @@ impl TravelPlan {
 }
 
 /// Generates stagger delays for a group of characters zoning together.
-/// Returns map of client_id -> delay in seconds.
+/// Returns map of `client_id` -> delay in seconds.
 pub fn generate_zone_staggers(
     client_ids: &[ClientId],
     min_secs: u32,
@@ -108,7 +108,7 @@ impl GroupRouter {
     /// Plan travel for a group of characters.
     ///
     /// When porters are available and the route is long-distance (multiple zone
-    /// transitions), the planner would prefer PortTo steps over walking. For now,
+    /// transitions), the planner would prefer `PortTo` steps over walking. For now,
     /// port-based routing is a future enhancement — all travel uses staggered
     /// zone transitions.
     pub fn plan_travel(

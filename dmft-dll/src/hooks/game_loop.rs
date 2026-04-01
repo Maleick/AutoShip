@@ -5,7 +5,7 @@
 //!   This is what `TICK_COUNT` counts and what all timing constants in the
 //!   combat/nav/login FSMs refer to as "ticks".
 //! - **Game tick**: EQ's internal 6-second pulse used for mana/HP regen,
-//!   DoT damage, buff duration, and poison counters. One game tick ≈ 120 frames.
+//!   `DoT` damage, buff duration, and poison counters. One game tick ≈ 120 frames.
 //!
 //! Runs our logic every frame after the original function completes.
 
@@ -24,7 +24,7 @@ mod inner {
         static MainLoopHook: unsafe extern "system" fn(*mut core::ffi::c_void);
     }
 
-    /// The detour function -- called instead of the original MainLoop.
+    /// The detour function -- called instead of the original `MainLoop`.
     fn main_loop_detour(this: *mut core::ffi::c_void) {
         // Call original first -- let EQ process normally.
         // SAFETY: `this` is the CEverQuest* pointer passed by EQ's dispatch mechanism.
@@ -103,23 +103,23 @@ static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
 static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Pending login button click — set by IPC thread, executed on game loop thread.
-/// Contains the CXWnd* address of the button to click, or 0 if none pending.
+/// Contains the `CXWnd`* address of the button to click, or 0 if none pending.
 static PENDING_BUTTON_CLICK: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
 /// Pending Enter World sequence — set by IPC thread, executed on game loop thread.
-/// Stage 0 = idle, 1 = SelectCharacter pending, 2 = waiting, 3 = EnterWorld pending.
+/// Stage 0 = idle, 1 = `SelectCharacter` pending, 2 = waiting, 3 = `EnterWorld` pending.
 static PENDING_ENTER_WORLD_WND: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
-/// The rebased EnterWorld function address.
+/// The rebased `EnterWorld` function address.
 static PENDING_ENTER_WORLD_FN: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
-/// The rebased SelectCharacter function address.
+/// The rebased `SelectCharacter` function address.
 static PENDING_SELECT_CHAR_FN: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 /// Enter World sequence stage (0=idle, 1=select, 2=wait, 3=enter).
 static ENTER_WORLD_STAGE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-/// Tick at which to advance from stage 2→3 (wait before EnterWorld).
+/// Tick at which to advance from stage 2→3 (wait before `EnterWorld`).
 static ENTER_WORLD_WAIT_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// Retry counter for stage 3 rescan (abort after 150 ticks / ~5 seconds).
 static ENTER_WORLD_RETRIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -133,7 +133,7 @@ pub fn queue_button_click(button_wnd: usize) {
     PENDING_BUTTON_CLICK.store(button_wnd, std::sync::atomic::Ordering::Release);
 }
 
-/// Queue a SelectCharacter → EnterWorld() sequence on the game loop thread.
+/// Queue a `SelectCharacter` → EnterWorld() sequence on the game loop thread.
 /// Called from the IPC thread during Phase 3 of login chain.
 /// The game loop will: (1) find character index by name, (2) call SelectCharacter(index),
 /// (3) wait ~90 ticks (~3s), (4) call EnterWorld(). All calls happen on the game loop thread.
@@ -159,8 +159,8 @@ pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize, character_
     ENTER_WORLD_STAGE.store(1, std::sync::atomic::Ordering::Release);
 }
 
-/// Re-scan CXWndManager for CCharacterListWnd by SidlText.
-/// Used in Stage 3 to validate the pointer is still valid before calling EnterWorld,
+/// Re-scan `CXWndManager` for `CCharacterListWnd` by `SidlText`.
+/// Used in Stage 3 to validate the pointer is still valid before calling `EnterWorld`,
 /// and by the login FSM to find the window for initial character selection.
 #[cfg(windows)]
 pub fn rescan_char_list_wnd() -> Option<usize> {
@@ -210,9 +210,9 @@ pub fn rescan_char_list_wnd() -> Option<usize> {
     None
 }
 
-/// Find the index of a character by name in the Character_List CListWnd.
+/// Find the index of a character by name in the `Character_List` `CListWnd`.
 ///
-/// Walks the CCharacterListWnd's child windows to find "Character_List" (a CListWnd),
+/// Walks the `CCharacterListWnd`'s child windows to find "`Character_List`" (a `CListWnd`),
 /// then reads each row's column 2 (character name) for a case-insensitive match.
 /// Returns the matched index, or 0 as fallback if the name is empty or not found.
 #[cfg(windows)]
@@ -363,7 +363,7 @@ fn process_pending_commands(current_tick: u64) {
     }
 }
 
-/// Called every frame (~20/sec) after the original MainLoop runs.
+/// Called every frame (~20/sec) after the original `MainLoop` runs.
 /// This is our main entry point for per-frame logic.
 fn on_game_tick() {
     let tick = TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -602,7 +602,7 @@ fn on_game_tick() {
     read_and_publish_state(tick);
 }
 
-/// Send Enter key to this EQ process's window via PostMessage.
+/// Send Enter key to this EQ process's window via `PostMessage`.
 /// Used at character select to click "Enter World".
 #[cfg(windows)]
 pub fn send_enter_to_eq() {
@@ -664,7 +664,7 @@ pub fn send_enter_to_eq() {}
 /// Local player + target are read every tick (fast — just pointer derefs).
 /// Nearby spawns are read every 30 ticks (~1 second) to reduce overhead.
 ///
-/// Uses a cached GameState to avoid cloning ~100 SpawnData (each with 2 String
+/// Uses a cached `GameState` to avoid cloning ~100 `SpawnData` (each with 2 String
 /// heap allocations) on the 29/30 ticks where spawns haven't changed. Only the
 /// cheap fields (player, target, timestamp, nav/combat status) are updated in place.
 fn read_and_publish_state(tick: u64) {
@@ -821,10 +821,10 @@ unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
     String::from_utf8_lossy(&buf[..len]).into_owned()
 }
 
-/// Build a `SpawnData` from a PlayerClient pointer (in-process direct read).
+/// Build a `SpawnData` from a `PlayerClient` pointer (in-process direct read).
 ///
 /// # Safety
-/// Caller must ensure `spawn_ptr` is a plausible PlayerClient address.
+/// Caller must ensure `spawn_ptr` is a plausible `PlayerClient` address.
 /// This function validates readability before dereferencing and returns
 /// `SpawnData::default()` for any invalid pointer.
 unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
@@ -1121,7 +1121,7 @@ pub fn is_foreground() -> bool {
 }
 
 /// Read character name + zone name from EQ memory and set the window title
-/// to "[DMFT] EQ - CharName (ZoneName)" so the orchestrator can identify clients by PID.
+/// to "[DMFT] EQ - `CharName` (`ZoneName`)" so the orchestrator can identify clients by PID.
 fn update_window_title() {
     #[cfg(windows)]
     {
@@ -1356,10 +1356,10 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
     }
 }
 
-/// Call EQ's InterpretCmd to execute a slash command string.
+/// Call EQ's `InterpretCmd` to execute a slash command string.
 /// CEverQuest::InterpretCmd is a member function:
 ///   void CEverQuest::InterpretCmd(PlayerClient* pChar, const char* szCmd)
-/// On x64 Windows: this=RCX (CEverQuest*), pChar=RDX, szCmd=R8.
+/// On x64 Windows: this=RCX (`CEverQuest`*), pChar=RDX, szCmd=R8.
 fn execute_slash_command(command: &str) {
     #[cfg(windows)]
     {

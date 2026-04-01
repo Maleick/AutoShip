@@ -64,7 +64,7 @@ impl PostLoginSequencer {
     }
 
     /// Mark that the current phase's command was dispatched.
-    /// Advances NotStarted -> JoiningGroup after the JoinGroup command is sent.
+    /// Advances `NotStarted` -> `JoiningGroup` after the `JoinGroup` command is sent.
     pub fn mark_dispatched(&mut self) {
         if matches!(self.phase, PostLoginPhase::NotStarted) {
             self.phase = PostLoginPhase::JoiningGroup;
@@ -114,7 +114,7 @@ impl PostLoginSequencer {
 /// Generate `/invite <name>` commands for forming groups.
 /// `leader_pid` is the PID of the group leader's EQ client.
 /// `member_names` are the character names to invite.
-/// Returns a list of SlashCommand to send to the leader's DLL.
+/// Returns a list of `SlashCommand` to send to the leader's DLL.
 pub fn group_invite_commands(member_names: &[&str]) -> Vec<Command> {
     member_names
         .iter()

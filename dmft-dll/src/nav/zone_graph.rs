@@ -1,8 +1,8 @@
-//! Read zone adjacency graph from EQ's ZoneGuideManagerClient.
+//! Read zone adjacency graph from EQ's `ZoneGuideManagerClient`.
 //!
-//! ZoneGuideManagerClient is a singleton containing a fixed-size array of 888
-//! ZoneGuideZone entries. Each zone has a name, level range, and an ArrayClass
-//! of ZoneGuideConnection entries describing how to reach neighboring zones.
+//! `ZoneGuideManagerClient` is a singleton containing a fixed-size array of 888
+//! `ZoneGuideZone` entries. Each zone has a name, level range, and an `ArrayClass`
+//! of `ZoneGuideConnection` entries describing how to reach neighboring zones.
 
 use dmft_common::nav::ZoneGraph;
 
@@ -10,7 +10,7 @@ use dmft_common::nav::ZoneGraph;
 ///
 /// # Safety
 /// Must be called from the EQ game process (injected DLL context) while the
-/// game is running and ZoneGuideManagerClient is initialized.
+/// game is running and `ZoneGuideManagerClient` is initialized.
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
@@ -106,7 +106,7 @@ pub unsafe fn read_zone_graph(_eq_base: u64) -> Option<ZoneGraph> {
     None
 }
 
-/// Convert a ZoneGraph into the simplified IPC wire format.
+/// Convert a `ZoneGraph` into the simplified IPC wire format.
 pub fn zone_graph_to_ipc(graph: &ZoneGraph) -> Vec<dmft_common::ipc::ZoneGraphEntry> {
     let mut result: Vec<_> = graph
         .zones

@@ -1,7 +1,7 @@
 //! Vendor/sell cycle — periodically sell loot to a nearby vendor.
 //!
 //! The sell cycle is a two-level FSM:
-//! - Outer: `SellState` — NotNeeded → TravelingToVendor → Selling → Returning
+//! - Outer: `SellState` — `NotNeeded` → `TravelingToVendor` → Selling → Returning
 //! - Inner: `VendorStep` — sub-states within `Selling` that drive the actual
 //!   vendor UI interaction (target, approach, open window, sell items, close).
 
@@ -13,7 +13,7 @@ pub struct VendorConfig {
     pub vendor_name: String,
     pub sell_interval_ticks: u64,
     pub keep_items: Vec<String>,
-    /// Ticks to wait in TravelingToVendor / Returning.
+    /// Ticks to wait in `TravelingToVendor` / Returning.
     pub travel_ticks: u64,
     /// Items to sell. If empty, sells everything not in `keep_items`.
     pub sellable_items: Vec<String>,

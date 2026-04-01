@@ -8,7 +8,7 @@ use std::collections::HashMap;
 pub struct CampManager {
     /// Current camp definition (if any).
     active_camp: Option<CampDefinition>,
-    /// client_id -> assigned role.
+    /// `client_id` -> assigned role.
     assignments: HashMap<ClientId, String>,
 }
 
@@ -21,7 +21,7 @@ impl CampManager {
     }
 
     /// Set the active camp and assign characters to spots based on their roles.
-    /// `role_map` maps client_id to their role string (e.g., "tank", "healer1").
+    /// `role_map` maps `client_id` to their role string (e.g., "tank", "healer1").
     pub fn set_camp(
         &mut self,
         camp: CampDefinition,

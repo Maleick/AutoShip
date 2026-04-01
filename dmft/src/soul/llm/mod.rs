@@ -63,7 +63,7 @@ pub struct LlmResponse {
 }
 
 /// Trait for LLM providers. Sync in Phase 1 (no async runtime).
-/// Implementations: TraitDrivenResponder (fallback), future Gemini/Claude API clients.
+/// Implementations: `TraitDrivenResponder` (fallback), future Gemini/Claude API clients.
 pub trait LlmProvider {
     /// Generate a response for the given request.
     /// Returns Ok(response) or Err if generation fails entirely.

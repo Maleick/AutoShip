@@ -49,7 +49,7 @@ impl MezQueue {
     }
 
     /// Get the next target that needs a mez refresh (or initial mez).
-    /// Returns the spawn_id of the mob that needs CC most urgently.
+    /// Returns the `spawn_id` of the mob that needs CC most urgently.
     pub fn next_refresh_target(&self, current_tick: u32) -> Option<u32> {
         self.targets
             .iter()

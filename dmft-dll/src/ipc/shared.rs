@@ -157,7 +157,7 @@ impl SharedStateWriter {
     }
 }
 
-/// Owns the SECURITY_ATTRIBUTES and its backing buffers (absolute security
+/// Owns the `SECURITY_ATTRIBUTES` and its backing buffers (absolute security
 /// descriptor + ACL).  Both buffers must outlive any Windows API call that
 /// reads the SA, because the kernel dereferences them synchronously before
 /// returning.  Moving this struct is safe: Vec stores its data on the heap,
@@ -176,7 +176,7 @@ impl SecuritySetup {
     }
 }
 
-/// Build SECURITY_ATTRIBUTES with a DACL granting only the current user
+/// Build `SECURITY_ATTRIBUTES` with a DACL granting only the current user
 /// `FILE_MAP_ALL_ACCESS` to the shared memory region.
 ///
 /// Returns `None` on any API failure; the caller falls back to the default

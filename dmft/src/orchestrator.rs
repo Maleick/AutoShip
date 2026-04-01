@@ -28,7 +28,7 @@ const STALE_TICK_THRESHOLD: u64 = 3;
 /// How often (in ticks) to check camp progression for level-based advances.
 const PROGRESSION_CHECK_INTERVAL: u64 = 50;
 
-/// Ticks before CC expiry to push a CcExpiring event.
+/// Ticks before CC expiry to push a `CcExpiring` event.
 const CC_EXPIRY_BUFFER: u64 = 3;
 
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
@@ -54,7 +54,7 @@ pub struct Orchestrator {
     // --- Integration fields ---
     /// Current operating mode: Camp (stationary) or Hunt (roaming).
     pub operating_mode: OperatingMode,
-    /// Active hunt loop (used when operating_mode == Hunt).
+    /// Active hunt loop (used when `operating_mode` == Hunt).
     pub active_hunt: Option<HuntLoop>,
     /// Vendor sell cycle (ticked during camp Idle/Medding).
     pub sell_cycle: Option<SellCycle>,
@@ -62,7 +62,7 @@ pub struct Orchestrator {
     pub camp_db: Option<CampDatabase>,
     /// Suggested camp from progression check (for TUI display).
     pub suggested_camp: Option<String>,
-    /// Previous CC state snapshot for charm break detection (spawn_id -> CcType).
+    /// Previous CC state snapshot for charm break detection (`spawn_id` -> `CcType`).
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
@@ -626,7 +626,7 @@ impl Orchestrator {
         token
     }
 
-    /// Dispatch a CampAction to the appropriate client via IPC.
+    /// Dispatch a `CampAction` to the appropriate client via IPC.
     fn dispatch_action(&mut self, pid: u32, action: &CampAction) {
         match action {
             CampAction::Slash(command) => {

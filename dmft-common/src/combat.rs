@@ -83,7 +83,7 @@ pub enum AssistMode {
 pub struct SpellEntry {
     /// Memorized spell slot (0-indexed gem number).
     pub slot: u8,
-    /// EQ spell ID — used by CastSpell FFI. 0 = use whatever is memorized in slot.
+    /// EQ spell ID — used by `CastSpell` FFI. 0 = use whatever is memorized in slot.
     #[serde(default)]
     pub spell_id: i32,
     /// Human-readable spell name for logging/config.

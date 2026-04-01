@@ -259,7 +259,7 @@ fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
     diff == 0
 }
 
-/// Owns the SECURITY_ATTRIBUTES and its backing buffers (absolute security
+/// Owns the `SECURITY_ATTRIBUTES` and its backing buffers (absolute security
 /// descriptor + ACL).  Both buffers must outlive any Windows API call that
 /// reads the SA, because the kernel dereferences them synchronously.
 #[cfg(windows)]
@@ -269,7 +269,7 @@ struct PipeSecuritySetup {
     sa: windows::Win32::Security::SECURITY_ATTRIBUTES,
 }
 
-/// Build SECURITY_ATTRIBUTES with a DACL granting only the current user
+/// Build `SECURITY_ATTRIBUTES` with a DACL granting only the current user
 /// full access to the named pipe.
 ///
 /// Returns `Err` on any API failure — the caller must abort pipe creation

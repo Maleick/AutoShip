@@ -63,7 +63,7 @@ pub enum Command {
     /// Used to validate offsets on the live client before attempting auto-login.
     CalibrateLogin,
     /// Start the automated login sequence. The DLL handles all UI steps
-    /// autonomously and reports progress via LoginPhaseUpdate responses.
+    /// autonomously and reports progress via `LoginPhaseUpdate` responses.
     /// Password is zeroized in DLL memory immediately after use.
     StartLogin {
         /// Account name for login.
@@ -133,13 +133,13 @@ pub enum Command {
         action: crate::soul::SoulAction,
     },
     /// Execute a slash command as if typed in the chat window.
-    /// Uses EQ's InterpretCmd internally (e.g. "/target Camrene", "/follow").
+    /// Uses EQ's `InterpretCmd` internally (e.g. "/target Camrene", "/follow").
     SlashCommand {
         /// Full slash command string (e.g. "/target Mob").
         command: String,
     },
     // Zone graph
-    /// Request the zone adjacency graph from ZoneGuideManagerClient.
+    /// Request the zone adjacency graph from `ZoneGuideManagerClient`.
     QueryZoneGraph,
     // System
     /// Heartbeat ping — expects a Pong response.
@@ -205,7 +205,7 @@ pub enum Response {
         message: String,
     },
     /// Navigation status push notification from the DLL's nav state machine.
-    /// Note: NavStatus is also available in `GameState.nav_status` (shared memory).
+    /// Note: `NavStatus` is also available in `GameState.nav_status` (shared memory).
     /// `GameState.nav_status` is authoritative — it is updated every tick.
     /// `NavUpdate` is sent only on state transitions (Idle→Moving, Moving→Arrived, etc.)
     /// for low-latency notification without polling shared memory.
@@ -228,17 +228,17 @@ pub enum Response {
         /// Current combat FSM state.
         status: crate::combat::CombatStatus,
     },
-    /// Zone adjacency graph from ZoneGuideManagerClient.
-    /// Simplified wire format: Vec of (zone_id, name, min_level, max_level, connections).
-    /// Each connection is (dest_zone_id, transfer_type, disabled).
+    /// Zone adjacency graph from `ZoneGuideManagerClient`.
+    /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).
+    /// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
     ZoneGraph {
         /// List of zone entries with connectivity data.
         zones: Vec<ZoneGraphEntry>,
     },
 }
 
-/// Wire-format for a single zone entry: (zone_id, name, min_level, max_level, connections).
-/// Each connection is (dest_zone_id, transfer_type, disabled).
+/// Wire-format for a single zone entry: (`zone_id`, name, `min_level`, `max_level`, connections).
+/// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
 pub type ZoneGraphEntry = (u16, String, i32, i32, Vec<(u16, u8, bool)>);
 
 /// Random session token generated at injection time for IPC authentication.

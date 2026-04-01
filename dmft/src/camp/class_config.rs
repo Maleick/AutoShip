@@ -13,15 +13,15 @@ pub struct ClassAbility {
     pub priority: u8,
     #[serde(default)]
     pub condition: Option<String>,
-    /// Buff duration in seconds. For buff_abilities, this is how long the buff
-    /// lasts on the target (NOT the recast cooldown). Defaults to cooldown_secs
+    /// Buff duration in seconds. For `buff_abilities`, this is how long the buff
+    /// lasts on the target (NOT the recast cooldown). Defaults to `cooldown_secs`
     /// if not specified, which is correct for abilities where cooldown ≈ duration.
     #[serde(default)]
     pub duration_secs: Option<f32>,
 }
 
 impl ClassAbility {
-    /// Effective buff duration — uses explicit duration_secs if set, else cooldown_secs.
+    /// Effective buff duration — uses explicit `duration_secs` if set, else `cooldown_secs`.
     pub fn effective_duration_secs(&self) -> f32 {
         self.duration_secs.unwrap_or(self.cooldown_secs)
     }

@@ -28,7 +28,7 @@ pub enum CampProgressionEvent {
 pub struct CampDatabase {
     /// Camp configs keyed by their file name (without `.toml`).
     camps: HashMap<String, CampConfig>,
-    /// Ordered list of camp names by level_range[0] (ascending).
+    /// Ordered list of camp names by `level_range`[0] (ascending).
     by_level: Vec<String>,
 }
 

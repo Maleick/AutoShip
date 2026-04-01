@@ -5,7 +5,7 @@ use anyhow::Result;
 use anyhow::bail;
 
 /// Inject a DLL into a target process by PID.
-/// Uses CreateRemoteThread + LoadLibraryW (classic injection technique).
+/// Uses `CreateRemoteThread` + `LoadLibraryW` (classic injection technique).
 #[cfg(windows)]
 pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;

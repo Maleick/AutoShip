@@ -156,7 +156,7 @@ impl FormationManager {
         dist_to_tank <= desired * 1.2
     }
 
-    /// Get (desired_distance, leash_distance) for a role.
+    /// Get (`desired_distance`, `leash_distance`) for a role.
     fn role_distances(&self, role: &Role) -> (f32, f32) {
         match role {
             Role::Tank | Role::Puller => (0.0, 0.0), // tank doesn't follow itself
@@ -195,7 +195,7 @@ pub struct HuntLoop {
     pub tick: u64,
     /// Waypoint patrol route for the tank (if set).
     pub patrol_waypoints: Vec<Pos2D>,
-    /// Current index into patrol_waypoints.
+    /// Current index into `patrol_waypoints`.
     pub patrol_idx: usize,
     pub last_kill_target: String,
 }

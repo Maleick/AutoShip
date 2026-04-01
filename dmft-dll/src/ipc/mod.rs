@@ -206,7 +206,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
     }
 }
 
-/// Find a button by WindowText in eqmain's CXWndManager.
+/// Find a button by `WindowText` in eqmain's `CXWndManager`.
 fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
     let cxwnd_mgr = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base)?;
     unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, target_text) }

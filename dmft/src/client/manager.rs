@@ -1,4 +1,4 @@
-//! ClientManager — discovers, tracks, and manages all EQ client sessions.
+//! `ClientManager` — discovers, tracks, and manages all EQ client sessions.
 
 use super::session::EqSession;
 use anyhow::Result;

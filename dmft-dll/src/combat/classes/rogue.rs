@@ -2,7 +2,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
-/// Rogue strategy: melee DPS, backstab priority, uses configured spells + UseSkill for backstab.
+/// Rogue strategy: melee DPS, backstab priority, uses configured spells + `UseSkill` for backstab.
 /// EQ class ID: 9
 pub struct RogueStrategy {
     class_id: u8,

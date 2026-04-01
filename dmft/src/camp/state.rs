@@ -10,7 +10,7 @@
 //!
 //! - **Combatant FSM** (`dmft-dll/src/combat/state.rs`, DLL-side): Handles micro-level
 //!   execution per character — class strategy spell rotations, melee skill firing, GCD
-//!   tracking, mana governance, and HolyShit emergency overrides.
+//!   tracking, mana governance, and `HolyShit` emergency overrides.
 //!
 //! Both are needed: the camp loop orchestrates the group, the combatant executes per-character
 //! combat logic. Integration point: `transition_to_fighting()` sends slash commands AND should
@@ -50,7 +50,7 @@ pub struct CampSnapshot {
     pub tank_hp_pct: f32,
     pub target_hp_pct: Option<f32>,
     pub target_is_dead: bool,
-    /// Spawn ID of the tank's current target (for CombatEngage commands).
+    /// Spawn ID of the tank's current target (for `CombatEngage` commands).
     pub target_spawn_id: Option<u32>,
     /// Per-member HP values: `(pid, current_hp)`. Used to detect deaths
     /// and trigger recovery (rez commands). Empty when HP data is unavailable.
@@ -71,7 +71,7 @@ pub enum CampAction {
 }
 
 impl CampAction {
-    /// Helper to convert a vec of slash command strings into CampActions.
+    /// Helper to convert a vec of slash command strings into `CampActions`.
     pub fn from_slash_vec(cmds: Vec<(u32, String)>) -> Vec<(u32, CampAction)> {
         cmds.into_iter()
             .map(|(pid, cmd)| (pid, CampAction::Slash(cmd)))

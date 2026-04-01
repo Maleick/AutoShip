@@ -3,7 +3,7 @@
 
 use dmft_common::nav::Xorshift32;
 
-/// Per-character movement personality. Values are seeded from the client_id
+/// Per-character movement personality. Values are seeded from the `client_id`
 /// so each character consistently moves differently.
 pub struct MovementPersonality {
     /// Speed multiplier variance (e.g., 0.93..1.07).

@@ -1,4 +1,4 @@
-//! Navmesh loading pipeline — download from mqmesh.com, parse MQ2Nav binary format,
+//! Navmesh loading pipeline — download from mqmesh.com, parse `MQ2Nav` binary format,
 //! load into Detour for pathfinding.
 
 use anyhow::{Context, Result, bail};
@@ -59,7 +59,7 @@ pub struct ProtoNavMeshTileSet {
 }
 
 /// nav.NavMeshFile — top-level container.
-/// Fields 3-6 (build_settings, convex_volumes, areas, connections) exist in the
+/// Fields 3-6 (`build_settings`, `convex_volumes`, areas, connections) exist in the
 /// proto but are not needed for pathfinding — prost silently skips unknown fields.
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshFile {
@@ -134,7 +134,7 @@ unsafe extern "C" {
 // Safe Detour wrappers
 // ---------------------------------------------------------------------------
 
-/// DT_TILE_FREE_DATA flag — tells Detour to free tile data when removing.
+/// `DT_TILE_FREE_DATA` flag — tells Detour to free tile data when removing.
 const DT_TILE_FREE_DATA: i32 = 0x01;
 
 /// Check if a Detour status indicates success.
@@ -142,7 +142,7 @@ fn dt_success(status: u32) -> bool {
     (status & 0x4000_0000) != 0
 }
 
-/// Owned Detour NavMesh.
+/// Owned Detour `NavMesh`.
 struct DetourNavMesh {
     ptr: *mut recastnavigation_sys::dtNavMesh,
 }
@@ -196,7 +196,7 @@ impl Drop for DetourNavMesh {
     }
 }
 
-/// Owned Detour NavMeshQuery.
+/// Owned Detour `NavMeshQuery`.
 struct DetourNavMeshQuery {
     ptr: *mut recastnavigation_sys::dtNavMeshQuery,
 }
@@ -508,7 +508,7 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
 }
 
 /// Convert EQ coordinates (x, y, z where Z=up) to Detour coordinates (x, z, y where Y=up).
-/// MQ2Nav stores meshes in Detour's native coordinate space: (eq_x, eq_z, eq_y).
+/// `MQ2Nav` stores meshes in Detour's native coordinate space: (`eq_x`, `eq_z`, `eq_y`).
 fn eq_to_detour(eq_x: f32, eq_y: f32, eq_z: f32) -> [f32; 3] {
     [eq_x, eq_z, eq_y]
 }

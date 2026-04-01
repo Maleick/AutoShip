@@ -262,8 +262,8 @@ fn scan_for_clients_live(app: &mut App) {
 }
 
 /// Parse character name and zone name from the DLL-renamed window title.
-/// Format: "[DMFT] EQ - CharName (ZoneName)" or "[DMFT] EQ - CharName"
-/// Falls back to the old EQ format: "EverQuest - Character - Zone"
+/// Format: "[DMFT] EQ - `CharName` (`ZoneName`)" or "[DMFT] EQ - `CharName`"
+/// Falls back to the old EQ format: "`EverQuest` - Character - Zone"
 #[cfg(windows)]
 fn parse_title_fields(title: &str) -> (String, String) {
     // Strip optional "[DMFT] " prefix before parsing.

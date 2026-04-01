@@ -1,5 +1,5 @@
 //! Movement control -- provides functions to move the player character.
-//! Writes directly to PlayerClient struct fields in EQ memory.
+//! Writes directly to `PlayerClient` struct fields in EQ memory.
 //! The game engine reads these values each tick to process movement.
 
 use dmft_common::nav::Waypoint;
@@ -7,7 +7,7 @@ use dmft_common::nav::Waypoint;
 /// Arrival threshold in game units (close enough to "be there").
 pub const ARRIVAL_DISTANCE: f32 = 15.0;
 
-/// EQ command IDs for ExecuteCmd.
+/// EQ command IDs for `ExecuteCmd`.
 pub const CMD_AUTORUN: u32 = 0;
 pub const CMD_JUMP: u32 = 1;
 pub const CMD_FORWARD: u32 = 2;
@@ -25,16 +25,16 @@ pub fn calc_heading(from: &Waypoint, to: &Waypoint) -> f32 {
 }
 
 /// Movement controller state -- holds a pointer to the local player's
-/// PlayerClient struct for direct memory writes.
+/// `PlayerClient` struct for direct memory writes.
 ///
 /// On non-Windows, all write operations are no-ops logged via tracing.
 pub struct MovementController {
-    /// Base address of the local PlayerClient struct.
+    /// Base address of the local `PlayerClient` struct.
     player_base: usize,
 }
 
 impl MovementController {
-    /// Create a new controller targeting the given PlayerClient address.
+    /// Create a new controller targeting the given `PlayerClient` address.
     pub fn new(player_base: usize) -> Self {
         Self { player_base }
     }
@@ -89,7 +89,7 @@ impl MovementController {
         tracing::trace!(heading, "write_speed_heading (stub)");
     }
 
-    /// Read current position from the PlayerClient struct.
+    /// Read current position from the `PlayerClient` struct.
     pub fn read_position(&self) -> Waypoint {
         #[cfg(windows)]
         // SAFETY: player_base is a validated PlayerClient*. X, Y, Z are known

@@ -7,7 +7,7 @@ use zeroize::Zeroizing;
 
 use super::crypto;
 
-/// Encrypted credential store backed by SQLite.
+/// Encrypted credential store backed by `SQLite`.
 pub struct CredentialStore {
     conn: Mutex<Connection>,
     master_key: Zeroizing<[u8; 32]>,

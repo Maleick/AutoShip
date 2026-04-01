@@ -47,7 +47,7 @@ impl WaypointRecorder {
     }
 
     /// Feed a position update from game state. Call this each time
-    /// the orchestrator reads a new GameState for the recorded character.
+    /// the orchestrator reads a new `GameState` for the recorded character.
     pub fn record_position(&mut self, x: f32, y: f32, z: f32) {
         if self.start_time.is_none() {
             return;

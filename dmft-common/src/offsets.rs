@@ -9,28 +9,28 @@
 /// Preferred base address of eqgame.exe (64-bit)
 pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 
-/// Pointer to local player (PlayerClient*)
+/// Pointer to local player (`PlayerClient`*)
 pub const PINST_LOCAL_PLAYER: u64 = 0x0001_40E8_E380;
 
-/// Pointer to controlled player (PlayerClient*)
+/// Pointer to controlled player (`PlayerClient`*)
 pub const PINST_CONTROLLED_PLAYER: u64 = 0x0001_40E8_E430;
 
-/// Pointer to current target (PlayerClient*)
+/// Pointer to current target (`PlayerClient`*)
 pub const PINST_TARGET: u64 = 0x0001_40E8_E428;
 
-/// Pointer to spawn manager (PlayerManagerClient*)
+/// Pointer to spawn manager (`PlayerManagerClient`*)
 pub const PINST_SPAWN_MANAGER: u64 = 0x0001_40F0_CD90;
 
-/// Pointer to local PC data (PcClient*)
+/// Pointer to local PC data (`PcClient`*)
 pub const PINST_LOCAL_PC: u64 = 0x0001_40E9_09A8;
 
 /// Pointer to spell manager
 pub const PINST_SPELL_MANAGER: u64 = 0x0001_40F0_E6F0;
 
-/// Pointer to CDisplay
+/// Pointer to `CDisplay`
 pub const PINST_CDISPLAY: u64 = 0x0001_40E8_E450;
 
-/// Pointer to CEverQuest
+/// Pointer to `CEverQuest`
 pub const PINST_CEVERQUEST: u64 = 0x0001_40F1_1758;
 
 // ─── EQ Internal Function Addresses ───
@@ -48,14 +48,14 @@ pub const CAST_SPELL: u64 = 0x0001_400D_9F20;
 pub const DO_COMBAT_ABILITY: u64 = 0x0001_402E_D490;
 
 /// CharacterZoneClient::UseSkill — use a skill on a target
-/// Signature: void UseSkill(unsigned char skill, PlayerZoneClient* Target, bool bAuto)
+/// Signature: void UseSkill(unsigned char skill, `PlayerZoneClient`* Target, bool bAuto)
 pub const USE_SKILL: u64 = 0x0001_4010_52A0;
 
 /// CharacterZoneClient::CanUseItem — check if an item is usable
 pub const CAN_USE_ITEM: u64 = 0x0001_400E_DDB0;
 
 /// PlayerZoneClient::DoAttack — perform a melee attack
-/// Signature: bool DoAttack(BYTE slot, BYTE skill, PlayerZoneClient* Target, ...)
+/// Signature: bool DoAttack(BYTE slot, BYTE skill, `PlayerZoneClient`* Target, ...)
 pub const DO_ATTACK: u64 = 0x0001_4031_B890;
 
 /// __ExecuteCmd — execute any EQ command by command ID (most versatile)
@@ -81,13 +81,13 @@ pub const CHAR_LIST_SELECT_CHAR: u64 = 0x0001_400D_5D20;
 pub const CLICKED_PLAYER: u64 = 0x0001_4027_24F0;
 
 /// CEverQuest::IssuePetCommand — issue a pet command
-/// Signature: void IssuePetCommand(ePetCommandType, int TargetID, bool bQuiet, ...)
+/// Signature: void IssuePetCommand(ePetCommandType, int `TargetID`, bool bQuiet, ...)
 pub const ISSUE_PET_COMMAND: u64 = 0x0001_4028_56A0;
 
 /// PcClient::GetConLevel — get consider level of target
 pub const GET_CON_LEVEL: u64 = 0x0001_402E_3C10;
 
-/// PlayerClient::GetPcClient — get PcClient from PlayerClient
+/// `PlayerClient`::GetPcClient — get `PcClient` from `PlayerClient`
 pub const GET_PC_CLIENT: u64 = 0x0001_4030_7970;
 
 /// __do_loot — main loot function (opens loot window on targeted corpse)
@@ -114,8 +114,8 @@ pub const FREE_TARGET_CAST_SPELL: u64 = 0x0001_402B_5740;
 /// PlayerZoneClient::ChangeHeight — change character height
 pub const CHANGE_HEIGHT: u64 = 0x0001_4031_AB80;
 
-/// ZoneGuideManagerClient singleton (preferred base)
-/// Source: eqgame.h ZoneGuideManagerClient__Instance_x
+/// `ZoneGuideManagerClient` singleton (preferred base)
+/// Source: eqgame.h `ZoneGuideManagerClient__Instance_x`
 pub const ZONE_GUIDE_MANAGER: u64 = 0x0001_4035_71F0;
 
 /// Convert a preferred-base offset to an actual address given the runtime base.
@@ -138,29 +138,29 @@ pub mod eqmain {
 
     // ─── Global pointer addresses (preferred base) ───
 
-    /// Pointer to CSidlManager instance
+    /// Pointer to `CSidlManager` instance
     pub const SIDL_MANAGER: u64 = 0x0001_8038_24C0;
 
-    /// Pointer to LoginServerAPI instance
+    /// Pointer to `LoginServerAPI` instance
     pub const LOGIN_SERVER_API: u64 = 0x0001_8017_F4D0;
 
-    /// Pointer to CXWndManager instance
+    /// Pointer to `CXWndManager` instance
     pub const CXWND_MANAGER: u64 = 0x0001_8038_24B8;
 
     /// LoginServerAPI::JoinServer function address
     pub const JOIN_SERVER: u64 = 0x0001_8001_8050;
 
-    /// LoginViewManager function address
+    /// `LoginViewManager` function address
     pub const LOGIN_VIEW_MANAGER: u64 = 0x0001_8001_B0E0;
 
     // ─── Login pointer addresses (preferred base) ───
 
-    /// Pointer to LoginClient instance (LoginClient*)
-    /// Source: eqmain.h EQMain__pinstLoginClient_x (derived from pinstCLoginViewManager - 8)
+    /// Pointer to `LoginClient` instance (`LoginClient`*)
+    /// Source: eqmain.h `EQMain__pinstLoginClient_x` (derived from pinstCLoginViewManager - 8)
     pub const PINST_LOGIN_CLIENT: u64 = 0x0001_8017_F4E0;
 
-    /// Pointer to LoginController instance
-    /// Source: eqmain.h EQMain__pinstLoginController_x
+    /// Pointer to `LoginController` instance
+    /// Source: eqmain.h `EQMain__pinstLoginController_x`
     pub const PINST_LOGIN_CONTROLLER: u64 = 0x0001_8017_F4F0;
 
     // ─── LoginClient struct field offsets ───
@@ -168,7 +168,7 @@ pub mod eqmain {
     /// LoginClient::pLoginData (EQLS::EQLogin*) at offset 0x010
     pub const LOGINCLIENT_LOGIN_DATA: usize = 0x010;
 
-    /// LoginClient::ServerList (DoublyLinkedList) at offset 0x178
+    /// LoginClient::ServerList (`DoublyLinkedList`) at offset 0x178
     pub const LOGINCLIENT_SERVER_LIST: usize = 0x178;
 
     // ─── EQLogin struct field offsets ───
@@ -190,20 +190,20 @@ pub mod eqmain {
 
     // ─── UI widget field offsets ───
 
-    /// CEditBaseWnd::InputText field offset (CXStr)
-    /// CXStr is a single pointer to CStrRep (8 bytes).
+    /// CEditBaseWnd::InputText field offset (`CXStr`)
+    /// `CXStr` is a single pointer to `CStrRep` (8 bytes).
     pub const CEDITBASEWND_INPUT_TEXT: usize = 0x278;
 
-    /// XWM_LCLICK notification code for button clicks
+    /// `XWM_LCLICK` notification code for button clicks
     pub const XWM_LCLICK: u32 = 1;
 
-    /// CXWnd vtable offset for SetWindowText (virtual void SetWindowText(const CXStr&))
-    /// From MQ2: CXWnd vtable layout has SetWindowText at /*0x280*/
+    /// `CXWnd` vtable offset for `SetWindowText` (virtual void `SetWindowText`(const `CXStr`&))
+    /// From MQ2: `CXWnd` vtable layout has `SetWindowText` at /*0x280*/
     pub const CXWND_VTABLE_SET_WINDOW_TEXT: usize = 0x280;
 
-    /// CXWnd vtable offset for WndNotification (eqmain.dll layout)
-    /// Signature: int WndNotification(CXWnd* sender, uint32_t message, void* data)
-    /// IMPORTANT: eqmain::CXWnd has this at 0x110, eqgame's CXWnd has it at 0x120!
+    /// `CXWnd` vtable offset for `WndNotification` (eqmain.dll layout)
+    /// Signature: int WndNotification(CXWnd* sender, `uint32_t` message, void* data)
+    /// IMPORTANT: eqmain::`CXWnd` has this at 0x110, eqgame's `CXWnd` has it at 0x120!
     /// This offset is for eqmain context (login/server screens).
     pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x110;
 
@@ -211,17 +211,17 @@ pub mod eqmain {
     // From MQ2: CXWndManager { /*0x008*/ ArrayClass<CXWnd*> pWindows; ... }
     // ArrayClass<T> = { T* m_array; int m_length; int m_alloc; }
 
-    /// CXWndManager::pWindows.m_array (pointer to CXWnd* array)
+    /// CXWndManager::pWindows.m_array (pointer to `CXWnd`* array)
     /// NOTE: eqmain.dll layout differs from eqgame.exe — calibrated from hex dump
     pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
     /// CXWndManager::pWindows.m_length (window count, u32)
     pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x018;
-    /// CXWndManager::FocusWindow (CXWnd*)
+    /// CXWndManager::FocusWindow (`CXWnd`*)
     pub const CXWNDMGR_FOCUS_WINDOW: usize = 0x090;
 
     // ─── CXWnd struct offsets ───
 
-    /// CXWnd::WindowText (CXStr at +0x078)
+    /// CXWnd::WindowText (`CXStr` at +0x078)
     pub const CXWND_WINDOW_TEXT: usize = 0x078;
     /// CXWnd::XMLIndex (int at +0x054 in eqmain, varies)
     pub const CXWND_XML_INDEX: usize = 0x054;
@@ -256,18 +256,18 @@ pub mod eqmain {
 /// Offsets within eqgame.exe (in-game UI and window manager).
 pub mod eqgame {
     /// CXWndManager::pWindows.m_length in eqgame.exe
-    /// ArrayClass layout: m_length at +0x00, m_array at +0x08 within the ArrayClass
-    /// pWindows ArrayClass starts at CXWndManager +0x008
+    /// `ArrayClass` layout: `m_length` at +0x00, `m_array` at +0x08 within the `ArrayClass`
+    /// pWindows `ArrayClass` starts at `CXWndManager` +0x008
     pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x008;
     /// CXWndManager::pWindows.m_array in eqgame.exe
     pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
 
-    /// CXWnd vtable offset for WndNotification in eqgame.exe context.
+    /// `CXWnd` vtable offset for `WndNotification` in eqgame.exe context.
     /// eqgame::CXWnd has this at 0x120 (vs eqmain::CXWnd at 0x110).
     pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x120;
 
-    /// CSidlScreenWnd::SidlText (CXStr at +0x270) — the SIDL window name
-    /// Used to find windows like "CharacterListWnd" by name
+    /// CSidlScreenWnd::SidlText (`CXStr` at +0x270) — the SIDL window name
+    /// Used to find windows like "`CharacterListWnd`" by name
     pub const CSIDL_SCREEN_WND_SIDL_TEXT: usize = 0x270;
 
     // ─── CListWnd offsets (for character list reading) ───
@@ -275,7 +275,7 @@ pub mod eqgame {
 
     /// `CListWnd::ItemsArray` (`ArrayClass<SListWndLine>`) — row count (int at +0x270)
     pub const CLISTWND_ITEMS_COUNT: usize = 0x270;
-    /// CListWnd::ItemsArray.m_array — pointer to SListWndLine array (at +0x278)
+    /// CListWnd::ItemsArray.m_array — pointer to `SListWndLine` array (at +0x278)
     pub const CLISTWND_ITEMS_ARRAY: usize = 0x278;
 
     /// sizeof(SListWndLine) — each row in the list
@@ -287,7 +287,7 @@ pub mod eqgame {
 
     /// sizeof(SListWndCell)
     pub const SLISTWNDCELL_SIZE: usize = 0x28;
-    /// SListWndCell::Text (CXStr at +0x08)
+    /// SListWndCell::Text (`CXStr` at +0x08)
     pub const SLISTWNDCELL_TEXT: usize = 0x08;
 }
 
@@ -303,12 +303,12 @@ pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 // These are byte offsets within the PlayerClient struct.
 // Source: mq2-reference/src/eqlib/include/eqlib/game/PlayerClient.h
 
-/// Offsets within PlayerBase (base class of PlayerClient)
+/// Offsets within `PlayerBase` (base class of `PlayerClient`)
 pub mod player_base {
-    /// PlayerClient* — next spawn in linked list (from TListNode)
-    /// Note: vtable pointer at 0x00 pushes TListNode fields down by 8
+    /// `PlayerClient`* — next spawn in linked list (from `TListNode`)
+    /// Note: vtable pointer at 0x00 pushes `TListNode` fields down by 8
     pub const NEXT: usize = 0x10;
-    /// PlayerClient* — previous spawn in linked list (from TListNode)
+    /// `PlayerClient`* — previous spawn in linked list (from `TListNode`)
     pub const PREV: usize = 0x08;
 
     /// float — Y position
@@ -319,34 +319,34 @@ pub mod player_base {
     pub const Z: usize = 0x07c;
     /// float — heading/rotation
     pub const HEADING: usize = 0x090;
-    /// char\[64\] — internal name (e.g., "priest_of_discord00")
+    /// char\[64\] — internal name (e.g., "`priest_of_discord00`")
     pub const NAME: usize = 0x0b4;
     /// char\[64\] — displayed name (e.g., "Priest of Discord")
     pub const DISPLAYED_NAME: usize = 0x0f4;
-    /// float — SpeedX (lateral speed component)
+    /// float — `SpeedX` (lateral speed component)
     pub const SPEED_CURRENT: usize = 0x084;
-    /// float — SpeedZ (vertical speed component)
+    /// float — `SpeedZ` (vertical speed component)
     pub const SPEED_Z: usize = 0x088;
-    /// float — SpeedRun (actual movement speed, includes modifiers)
+    /// float — `SpeedRun` (actual movement speed, includes modifiers)
     pub const SPEED_RUN: usize = 0x08c;
     /// float — speed heading (direction of movement)
     pub const SPEED_HEADING: usize = 0x09c;
-    /// uint8_t — spawn type (PC=0, NPC=1, Corpse=2, etc.)
+    /// `uint8_t` — spawn type (PC=0, NPC=1, Corpse=2, etc.)
     pub const TYPE: usize = 0x135;
-    /// uint32_t — unique spawn ID
+    /// `uint32_t` — unique spawn ID
     pub const SPAWN_ID: usize = 0x168;
     /// char\[32\] — last name
     pub const LASTNAME: usize = 0x048;
 }
 
-/// Buff slot offsets within CharacterZoneClient.
-/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h (EQ_Affect array).
-/// TODO: calibrate exact BUFF_ARRAY_OFFSET against live 20260310 client hex dump.
+/// Buff slot offsets within `CharacterZoneClient`.
+/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h (`EQ_Affect` array).
+/// TODO: calibrate exact `BUFF_ARRAY_OFFSET` against live 20260310 client hex dump.
 pub mod buff_slots {
     /// Total buff slots (long buffs + short buffs).
     pub const MAX_BUFF_SLOTS: usize = 42;
 
-    /// Offset of the EQ_Affect array within CharacterZoneClient (accessed via PINST_LOCAL_PC).
+    /// Offset of the `EQ_Affect` array within `CharacterZoneClient` (accessed via `PINST_LOCAL_PC`).
     /// TODO: verify against live client — MQ2 source suggests ~0x2BC0 for recent builds.
     pub const BUFF_ARRAY_OFFSET: usize = 0x2BC0;
 
@@ -365,67 +365,67 @@ pub mod buff_slots {
     /// EQ_Affect::CasterLevel (u8 at +0x14).
     pub const CASTER_LEVEL: usize = 0x14;
 
-    /// SpellID value indicating an empty buff slot.
+    /// `SpellID` value indicating an empty buff slot.
     pub const EMPTY_SPELL_ID: u32 = 0xFFFF;
 }
 
-/// Offsets within CharacterZoneClient (casting state)
+/// Offsets within `CharacterZoneClient` (casting state)
 pub mod character_zone {
-    /// uint32_t — cast completion ETA (server timestamp when spell finishes)
+    /// `uint32_t` — cast completion ETA (server timestamp when spell finishes)
     /// Source: PlayerClient.h offset 0x010 (CharacterZoneClient::SpellETA)
     pub const SPELL_ETA: usize = 0x010;
-    /// uint8_t — active spell gem slot (0xFF = not casting)
+    /// `uint8_t` — active spell gem slot (0xFF = not casting)
     /// Source: PlayerClient.h offset 0x039 (CharacterZoneClient::SpellSlot)
     pub const SPELL_SLOT: usize = 0x039;
-    /// uint32_t\[15\] — per-gem recast timestamp array
+    /// `uint32_t`\[15\] — per-gem recast timestamp array
     /// Source: PlayerClient.h offset 0x3B0 (CharacterZoneClient::SpellGemETA)
     pub const SPELL_GEM_ETA: usize = 0x3B0;
 }
 
-/// Offsets within PlayerZoneClient (extends PlayerBase at 0x01c8)
+/// Offsets within `PlayerZoneClient` (extends `PlayerBase` at 0x01c8)
 pub mod player_zone {
-    /// int64_t — maximum HP
+    /// `int64_t` — maximum HP
     pub const HP_MAX: usize = 0x0338;
-    /// int64_t — current HP
+    /// `int64_t` — current HP
     pub const HP_CURRENT: usize = 0x03a0;
-    /// int32_t — maximum mana (only valid for local player; other spawns have garbage)
+    /// `int32_t` — maximum mana (only valid for local player; other spawns have garbage)
     pub const MANA_MAX: usize = 0x03ac;
-    /// int32_t — current mana (only valid for local player; other spawns have garbage)
+    /// `int32_t` — current mana (only valid for local player; other spawns have garbage)
     pub const MANA_CURRENT: usize = 0x03fc;
-    /// uint8_t — character level
+    /// `uint8_t` — character level
     pub const LEVEL: usize = 0x03ef;
-    /// uint8_t — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
-    /// Source: PlayerZoneClient offset 0x0574 in PlayerClient.h
+    /// `uint8_t` — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
+    /// Source: `PlayerZoneClient` offset 0x0574 in PlayerClient.h
     /// TODO: 0x0574 reads 110 (FD) when character is sitting on March 10, 2026 build.
     /// Needs hex dump calibration scan on frostreaver to find correct offset.
     /// Old offset 0x0134 always read 0 (Standing). Neither is correct.
     pub const STANDSTATE: usize = 0x0574;
     /// char — GM flag (nonzero = GM). Source: PlayerClient.h offset 0x03ec
     pub const GM: usize = 0x03ec;
-    /// uint8_t — GM rank. Source: PlayerClient.h offset 0x0368
+    /// `uint8_t` — GM rank. Source: PlayerClient.h offset 0x0368
     pub const GM_RANK: usize = 0x0368;
-    /// uint8_t — character class ID (1=WAR, 2=CLR, ..., 16=BER)
-    /// Source: PlayerZoneClient offset 0x0420 in PlayerClient.h
-    /// This is the direct field — more reliable than the ActorClient path (0x0FDC)
+    /// `uint8_t` — character class ID (1=WAR, 2=CLR, ..., 16=BER)
+    /// Source: `PlayerZoneClient` offset 0x0420 in PlayerClient.h
+    /// This is the direct field — more reliable than the `ActorClient` path (0x0FDC)
     /// which requires traversing through mActorClient at 0x0FC0.
     pub const CHAR_CLASS: usize = 0x0420;
-    /// int32_t — current endurance
+    /// `int32_t` — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
-    /// uint32_t — maximum endurance
+    /// `uint32_t` — maximum endurance
     pub const ENDURANCE_MAX: usize = 0x0538;
     /// float — melee range radius
     /// Source: PlayerClient.h offset 0x11D8
     pub const MELEE_RADIUS: usize = 0x11D8;
 }
 
-/// Offsets within ActorClient (embedded in PlayerZoneClient at 0x0FC0)
+/// Offsets within `ActorClient` (embedded in `PlayerZoneClient` at 0x0FC0)
 pub mod actor_client {
-    /// int32_t — race ID (from ActorBase at offset 0x14)
+    /// `int32_t` — race ID (from `ActorBase` at offset 0x14)
     pub const RACE: usize = 0x0FD4;
-    /// int32_t — race override (illusions, etc.)
+    /// `int32_t` — race override (illusions, etc.)
     pub const RACE_OVERRIDE: usize = 0x0FD8;
-    /// int32_t — character class ID (from ActorBase at offset 0x1C)
-    /// Source: ActorClient at 0x0FC0 + ActorBase.Class at 0x1C = 0x0FDC
+    /// `int32_t` — character class ID (from `ActorBase` at offset 0x1C)
+    /// Source: `ActorClient` at 0x0FC0 + ActorBase.Class at 0x1C = 0x0FDC
     /// Note: Prefer player_zone::CHAR_CLASS (0x0420) for spawn reads — it's a
     /// direct field and less likely to break if struct layout shifts.
     pub const CHAR_CLASS: usize = 0x0FDC;
@@ -434,27 +434,27 @@ pub mod actor_client {
 /// Group-related offsets
 /// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h
 pub mod group {
-    /// Offset of CGroup* pointer within PcClient struct
+    /// Offset of `CGroup`* pointer within `PcClient` struct
     /// PcClient.Group at 0x2EB0
     pub const PC_CLIENT_GROUP_PTR: usize = 0x2EB0;
 
-    /// MAX_GROUP_SIZE = 6 (including self)
+    /// `MAX_GROUP_SIZE` = 6 (including self)
     pub const MAX_GROUP_SIZE: usize = 6;
 
     // ─── CGroupBase layout (vtable at 0x00) ───
-    /// `CGroupMember*` m_groupMembers\[6\] — array of 6 member pointers
+    /// `CGroupMember*` `m_groupMembers`\[6\] — array of 6 member pointers
     pub const GROUP_MEMBERS: usize = 0x08;
-    /// CGroupMember* m_groupLeader — pointer to leader member
+    /// `CGroupMember`* `m_groupLeader` — pointer to leader member
     pub const GROUP_LEADER: usize = 0x38;
-    /// uint32_t m_id — group ID
+    /// `uint32_t` `m_id` — group ID
     pub const GROUP_ID: usize = 0x40;
 
     // ─── CGroupMemberBase layout (vtable at 0x00) ───
-    /// CXStr Name — member name (CXStr = pointer to CStrRep)
+    /// `CXStr` Name — member name (`CXStr` = pointer to `CStrRep`)
     pub const MEMBER_NAME_CXSTR: usize = 0x08;
     /// short Type — player type (PC=0, NPC=1, etc.)
     pub const MEMBER_TYPE: usize = 0x10;
-    /// CXStr OwnerName — mercenary owner name
+    /// `CXStr` `OwnerName` — mercenary owner name
     pub const MEMBER_OWNER_CXSTR: usize = 0x18;
     /// int Level
     pub const MEMBER_LEVEL: usize = 0x20;
@@ -462,7 +462,7 @@ pub mod group {
     pub const MEMBER_IS_OFFLINE: usize = 0x24;
 
     // ─── CXStr / CStrRep layout ───
-    /// CXStr is a single pointer to CStrRep (m_data at offset 0x00)
+    /// `CXStr` is a single pointer to `CStrRep` (`m_data` at offset 0x00)
     /// CStrRep.utf8 string data starts at offset 0x18
     pub const CXSTR_REP_UTF8: usize = 0x18;
 }
@@ -481,14 +481,14 @@ pub mod zone_info {
     pub const LONG_NAME: usize = 0x080;
 }
 
-/// Offsets within SpawnManager (PlayerManagerBase)
+/// Offsets within `SpawnManager` (`PlayerManagerBase`)
 pub mod spawn_manager {
-    /// TList<PlayerClient*> — start of the player linked list
-    /// The TList itself contains m_pFirstNode at offset 0x00
+    /// `TList`<`PlayerClient`*> — start of the player linked list
+    /// The `TList` itself contains `m_pFirstNode` at offset 0x00
     pub const PLAYER_LIST: usize = 0x0010;
 }
 
-/// ZoneGuideManagerClient / ZoneGuideZone struct layout offsets.
+/// `ZoneGuideManagerClient` / `ZoneGuideZone` struct layout offsets.
 /// Source: mq2-eqlib/include/eqlib/game/UI.h, Containers.h
 pub mod zone_guide {
     /// Number of zone slots in the fixed array.
@@ -497,7 +497,7 @@ pub mod zone_guide {
     // ─── ZoneGuideManagerBase layout ───
     // vtable at +0x00 (8 bytes), zones array starts at +0x08
 
-    /// Offset of `zones\[0\]` within ZoneGuideManagerBase.
+    /// Offset of `zones`\[0\] within `ZoneGuideManagerBase`.
     pub const ZONES_OFFSET: usize = 0x0008;
 
     // ─── ZoneGuideZone layout (0x48 bytes each) ───
@@ -505,9 +505,9 @@ pub mod zone_guide {
     /// sizeof(ZoneGuideZone)
     pub const ZONE_SIZE: usize = 0x48;
 
-    /// EQZoneIndex zoneId (int at +0x00)
+    /// `EQZoneIndex` zoneId (int at +0x00)
     pub const ZONE_ID: usize = 0x00;
-    /// CXStr name (pointer at +0x08)
+    /// `CXStr` name (pointer at +0x08)
     pub const ZONE_NAME: usize = 0x08;
     /// int continentIndex (+0x10)
     pub const ZONE_CONTINENT: usize = 0x10;
@@ -516,7 +516,7 @@ pub mod zone_guide {
     /// int maxLevel (+0x18)
     pub const ZONE_MAX_LEVEL: usize = 0x18;
     /// `ArrayClass<ZoneGuideConnection>` zoneConnections at +0x30
-    /// ArrayClass layout: m_length (int) at +0x00, m_array (ptr) at +0x08
+    /// `ArrayClass` layout: `m_length` (int) at +0x00, `m_array` (ptr) at +0x08
     pub const ZONE_CONNECTIONS_COUNT: usize = 0x30;
     /// ArrayClass connections pointer at +0x38
     pub const ZONE_CONNECTIONS_ARRAY: usize = 0x38;
@@ -526,7 +526,7 @@ pub mod zone_guide {
     /// sizeof(ZoneGuideConnection)
     pub const CONNECTION_SIZE: usize = 0x14;
 
-    /// EQZoneIndex destZoneId (int at +0x00)
+    /// `EQZoneIndex` destZoneId (int at +0x00)
     pub const CONN_DEST_ZONE_ID: usize = 0x00;
     /// int transferTypeIndex (+0x04)
     pub const CONN_TRANSFER_TYPE: usize = 0x04;
@@ -535,7 +535,7 @@ pub mod zone_guide {
 
     // ─── ZoneGuideManagerClient extends ZoneGuideManagerBase ───
 
-    /// EQZoneIndex currentZone at +0xFA40
+    /// `EQZoneIndex` currentZone at +0xFA40
     pub const CURRENT_ZONE: usize = 0xFA40;
     /// bool zoneGuideDataSet at +0xFA48
     pub const DATA_SET: usize = 0xFA48;

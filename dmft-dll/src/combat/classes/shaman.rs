@@ -3,7 +3,7 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Shaman strategy: hybrid healer/slower/DoT. Prioritizes slow on new targets,
-/// heals when group HP is low, DoTs otherwise.
+/// heals when group HP is low, `DoTs` otherwise.
 /// EQ class ID: 10
 pub struct ShamanStrategy {
     class_id: u8,

@@ -1,8 +1,8 @@
 //! Combatant FSM — the per-character combat state machine.
 //!
 //! Each injected DLL runs one `Combatant` that drives a single EQ character
-//! through the Idle → Engaging → Casting → OnGcd → Engaging loop, with
-//! HolyShit emergency overrides evaluated every tick before the normal rotation.
+//! through the Idle → Engaging → Casting → `OnGcd` → Engaging loop, with
+//! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
 
 use std::collections::HashMap;
 
@@ -48,18 +48,18 @@ pub struct Combatant {
     mana_governor: ManaGovernor,
     holyshit: HolyShitEvaluator,
     assist_target: Option<u32>,
-    /// Set when a HolyShit Flee action fires. The orchestrator checks this
+    /// Set when a `HolyShit` Flee action fires. The orchestrator checks this
     /// via `status()` (which returns `CombatStatus::Fleeing`) to know it
     /// should send a flee waypoint to the navigator.
     flee_requested: bool,
-    /// True when we just entered Engaging state — triggers on_engage callback.
+    /// True when we just entered Engaging state — triggers `on_engage` callback.
     needs_on_engage: bool,
     /// Group member snapshots, populated by the orchestrator via IPC.
     /// Required for healer strategies (cleric, druid, shaman) to select
     /// heal targets. Empty until the orchestrator sends group state updates.
     group_members: Vec<GroupMemberState>,
     skill_cooldowns: SkillCooldownTracker,
-    /// Discipline cooldowns keyed by spell_id → ticks remaining.
+    /// Discipline cooldowns keyed by `spell_id` → ticks remaining.
     disc_cooldowns: HashMap<i32, u32>,
     dot_tracker: DotTracker,
     tick_count: u32,
@@ -493,7 +493,7 @@ impl Combatant {
         self.group_members = members;
     }
 
-    /// Whether a HolyShit Flee was triggered and not yet acknowledged.
+    /// Whether a `HolyShit` Flee was triggered and not yet acknowledged.
     pub fn flee_requested(&self) -> bool {
         self.flee_requested
     }

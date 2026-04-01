@@ -1632,7 +1632,7 @@ impl App {
     }
 
     /// Parse a group prefix like "G1", "G2", ..., "G6" from the first word.
-    /// Returns (group_idx 0-based, remaining command) if found.
+    /// Returns (`group_idx` 0-based, remaining command) if found.
     fn parse_group_prefix<'a>(&self, input: &'a str) -> Option<(usize, &'a str)> {
         let trimmed = input.trim();
         let bytes = trimmed.as_bytes();
@@ -2365,7 +2365,7 @@ impl App {
     /// Handle `ch <subcommand>` — CH chain management from the command bar.
     ///
     /// Subcommands:
-    ///   ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
+    ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
     ///   ch stop                  — Stop the running CH chain
     ///   ch add <pid>             — Add a cleric to the chain
     ///   ch rm <pid>              — Remove a cleric from the chain

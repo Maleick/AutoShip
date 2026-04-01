@@ -25,7 +25,7 @@ impl CommandPipe {
     ///
     /// IMPORTANT: `client_id` must be the EQ process PID, not a sequential
     /// index. The injected DLL creates its pipe using `std::process::id()`
-    /// (i.e., the PID) as the client_id. The orchestrator must match this
+    /// (i.e., the PID) as the `client_id`. The orchestrator must match this
     /// by passing the PID discovered via `find_processes_by_name`.
     pub fn connect(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]

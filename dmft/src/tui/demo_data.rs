@@ -6,7 +6,7 @@
 use crate::eq::named_tracker::is_named;
 use crate::eq::structs::{EqClass, SpawnInfo, SpawnType, StandState};
 
-/// Spawn definition tuple: (name, level, class_id, spawn_type, hp, hp_max, stand_state).
+/// Spawn definition tuple: (name, level, `class_id`, `spawn_type`, hp, `hp_max`, `stand_state`).
 type SpawnDef<'a> = (&'a str, u8, u8, SpawnType, i64, i64, StandState);
 
 #[derive(Clone, Copy)]

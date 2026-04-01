@@ -1,7 +1,7 @@
 use std::fmt;
 
 /// EQ character class IDs.
-/// These are the numeric values stored in CharClass field.
+/// These are the numeric values stored in `CharClass` field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum EqClass {
@@ -116,7 +116,7 @@ impl fmt::Display for SpawnType {
     }
 }
 
-/// Standing state values from STANDSTATE offset (0x0574 in PlayerZoneClient).
+/// Standing state values from STANDSTATE offset (0x0574 in `PlayerZoneClient`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StandState {
     Standing,
@@ -177,7 +177,7 @@ impl fmt::Display for StandState {
     }
 }
 
-/// A single active buff/song slot from the CharacterZoneClient buff array.
+/// A single active buff/song slot from the `CharacterZoneClient` buff array.
 #[derive(Debug, Clone)]
 pub struct BuffSlot {
     /// Spell ID (0xFFFF = empty).
@@ -215,7 +215,7 @@ impl BuffSlot {
 }
 
 /// Active spell cast state for the local player.
-/// Read from CharacterZoneClient via PINST_LOCAL_PC.
+/// Read from `CharacterZoneClient` via `PINST_LOCAL_PC`.
 #[derive(Debug, Clone)]
 pub struct CastState {
     /// Active gem slot (0-based). 0xFF = not currently casting.
@@ -233,7 +233,7 @@ impl CastState {
     }
 }
 
-/// Group membership info read from CGroup in memory.
+/// Group membership info read from `CGroup` in memory.
 #[derive(Debug, Clone)]
 pub struct GroupInfo {
     pub leader_name: String,
@@ -265,11 +265,11 @@ pub struct SpawnInfo {
     pub endurance_current: i32,
     pub endurance_max: u32,
     pub is_gm: bool,
-    /// Race ID from ActorClient (e.g., Human=1, Barbarian=2, etc.)
+    /// Race ID from `ActorClient` (e.g., Human=1, Barbarian=2, etc.)
     pub race_id: u32,
-    /// Active buff slots (populated only for local player via read_buff_slots).
+    /// Active buff slots (populated only for local player via `read_buff_slots`).
     pub buff_slots: Vec<BuffSlot>,
-    /// Cast state (populated only for local player via read_cast_state).
+    /// Cast state (populated only for local player via `read_cast_state`).
     pub cast_state: Option<CastState>,
 }
 

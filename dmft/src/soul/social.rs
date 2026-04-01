@@ -17,7 +17,7 @@ pub struct Relationship {
     pub trust: f32,
     /// Relationship tags
     pub tags: Vec<SocialTag>,
-    /// IDs of shared memories (references into MemoryStore)
+    /// IDs of shared memories (references into `MemoryStore`)
     pub shared_memory_ids: Vec<i64>,
     /// Per-pair communication style hint (e.g., "formal", "banter", "terse")
     pub communication_style: String,

@@ -52,13 +52,13 @@ impl PersonalityProfile {
         }
     }
 
-    /// Apply reaction_speed multiplier to a tick delay.
+    /// Apply `reaction_speed` multiplier to a tick delay.
     pub fn adjust_delay(&self, base_ticks: u64) -> u64 {
         let adjusted = (base_ticks as f32 * self.reaction_speed).round() as u64;
         adjusted.max(1) // never zero
     }
 
-    /// Apply med_threshold_jitter to a mana percentage threshold.
+    /// Apply `med_threshold_jitter` to a mana percentage threshold.
     pub fn adjust_mana_threshold(&self, base_pct: f32) -> f32 {
         (base_pct + self.med_threshold_jitter).clamp(0.0, 100.0)
     }

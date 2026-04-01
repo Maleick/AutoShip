@@ -28,12 +28,12 @@ pub struct NamedMobEntry {
 }
 
 impl NamedMobEntry {
-    /// Convert respawn_min_minutes to ticks (at 250ms per tick = 4 ticks/sec).
+    /// Convert `respawn_min_minutes` to ticks (at 250ms per tick = 4 ticks/sec).
     pub fn respawn_min_ticks(&self) -> u64 {
         self.respawn_min_minutes as u64 * 60 * 4
     }
 
-    /// Convert respawn_max_minutes to ticks.
+    /// Convert `respawn_max_minutes` to ticks.
     pub fn respawn_max_ticks(&self) -> u64 {
         self.respawn_max_minutes as u64 * 60 * 4
     }
@@ -49,7 +49,7 @@ struct ZoneFile {
 /// Database of all named mobs across all zones.
 #[derive(Debug, Clone)]
 pub struct NamedMobDatabase {
-    /// Keyed by (zone_lowercase, name_lowercase).
+    /// Keyed by (`zone_lowercase`, `name_lowercase`).
     entries: HashMap<(String, String), NamedMobEntry>,
     /// All entries for a given zone.
     by_zone: HashMap<String, Vec<NamedMobEntry>>,

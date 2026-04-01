@@ -5,8 +5,8 @@ use dmft_common::soul::{MoodState, SoulEvent, SpeechStyle};
 use dmft_common::types::ClientId;
 use rusqlite::{Connection, params};
 
-/// Autobiographical memory store backed by SQLite.
-/// One database per deployment, partitioned by character_id.
+/// Autobiographical memory store backed by `SQLite`.
+/// One database per deployment, partitioned by `character_id`.
 pub struct MemoryStore {
     conn: Connection,
 }
@@ -324,7 +324,7 @@ impl MemoryStore {
 
     /// Apply exponential decay to all non-decayed memories for a character.
     /// `decay_factor` is multiplied into importance each tick.
-    /// Typical half-life: if tick is every 30 min, decay_factor ≈ 0.99 gives
+    /// Typical half-life: if tick is every 30 min, `decay_factor` ≈ 0.99 gives
     /// half-life of ~69 ticks (~34.5 hours).
     pub fn decay_tick(&self, character_id: ClientId, decay_factor: f32) -> Result<usize> {
         let rows = self
@@ -474,7 +474,7 @@ impl ConversationRow {
     }
 }
 
-/// Extract a short label for the event type (used as event_type column).
+/// Extract a short label for the event type (used as `event_type` column).
 fn event_type_label(event: &SoulEvent) -> &'static str {
     match event {
         SoulEvent::Death { .. } => "death",

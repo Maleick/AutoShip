@@ -7,7 +7,7 @@ use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 /// Ranger strategy: ranged/melee hybrid DPS with tracking and bow pulling.
 ///
 /// Rangers operate in two stances:
-/// - **Ranged**: Use bow attacks and DoT spells from distance (default when pulling)
+/// - **Ranged**: Use bow attacks and `DoT` spells from distance (default when pulling)
 /// - **Melee**: Switch to melee when target is close, use kicks and backstab-style abilities
 ///
 /// Rangers also provide: tracking (find mobs), snare (Snare/Ensnare),

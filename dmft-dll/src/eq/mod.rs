@@ -124,7 +124,7 @@ fn validate_fn_ptr(_addr: usize, _name: &str) -> bool {
     true
 }
 
-/// Resolve the local player pointer (PlayerClient*).
+/// Resolve the local player pointer (`PlayerClient`*).
 /// Returns `None` if not logged in.
 fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
     let addr = dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)?;
@@ -369,7 +369,7 @@ pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
 /// `cmd_id`: the command constant (e.g., 0x17 for attack).
 /// `active`: 1 to activate, 0 to deactivate.
 ///
-/// Calls __ExecuteCmd(this=null, cmd_id, active, unknown=null).
+/// Calls __ExecuteCmd(this=null, `cmd_id`, active, unknown=null).
 pub fn execute_cmd(cmd_id: u32, active: i32) {
     #[cfg(windows)]
     {
@@ -421,7 +421,7 @@ pub fn execute_cmd(cmd_id: u32, active: i32) {
 /// EQ command ID for auto-attack toggle.
 pub const CMD_ATTACK: u32 = 0x17;
 
-/// Toggle auto-attack on or off via ExecuteCmd.
+/// Toggle auto-attack on or off via `ExecuteCmd`.
 ///
 /// `enable`: `true` to turn auto-attack on, `false` to turn it off.
 pub fn toggle_auto_attack(enable: bool) {

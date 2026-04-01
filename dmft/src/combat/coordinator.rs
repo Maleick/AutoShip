@@ -128,7 +128,7 @@ impl CombatCoordinator {
         commands
     }
 
-    /// Detect combat state changes from GameState and convert to CampEvents.
+    /// Detect combat state changes from `GameState` and convert to `CampEvents`.
     fn detect_camp_events(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<CampEvent> {
         let mut events = Vec::new();
 
