@@ -31,7 +31,7 @@ jobs:
           mkdir -p release
           cp target/release/dmft.exe release/
           cp target/release/dmft_dll.dll release/ 2>/dev/null || true
-          echo "Frostreaver ${{ github.ref_name }}" > release/VERSION.txt
+          echo "DMFT ${{ github.ref_name }}" > release/VERSION.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

@@ -305,10 +305,7 @@ mod tests {
     fn hook_status_equality() {
         assert_eq!(HookStatus::NotInjected, HookStatus::NotInjected);
         assert_ne!(HookStatus::NotInjected, HookStatus::Injected);
-        assert_ne!(
-            HookStatus::Error("a".into()),
-            HookStatus::Error("b".into())
-        );
+        assert_ne!(HookStatus::Error("a".into()), HookStatus::Error("b".into()));
     }
 
     #[test]
@@ -317,10 +314,7 @@ mod tests {
             client_id: 1,
             local_player: None,
             target: None,
-            nearby_spawns: vec![
-                make_spawn(100, 100, 0, 0),
-                make_spawn(200, 200, 0, 0),
-            ],
+            nearby_spawns: vec![make_spawn(100, 100, 0, 0), make_spawn(200, 200, 0, 0)],
             timestamp_ms: 0,
             nav_status: crate::nav::NavStatus::Idle,
             combat_status: crate::combat::CombatStatus::Idle,

@@ -2,7 +2,7 @@
 name = "dmft"
 version = "0.5.0"
 edition = "2024"
-description = "External process memory reader for EverQuest (Frostreaver TLP 36-box)"
+description = "External process memory reader and multibox controller for EverQuest (TLP 36-box)"
 
 [dependencies]
 dmft-common = { path = "../dmft-common" }

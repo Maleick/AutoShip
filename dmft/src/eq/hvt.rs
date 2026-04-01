@@ -315,9 +315,6 @@ priority = "high"
         let wl = HvtWatchlist::load(&path).unwrap();
         let mut names: Vec<String> = wl.iter().map(|t| t.name.clone()).collect();
         names.sort();
-        assert_eq!(
-            names,
-            vec!["Emperor Crush", "Lord Nagafen", "the Tangrin"]
-        );
+        assert_eq!(names, vec!["Emperor Crush", "Lord Nagafen", "the Tangrin"]);
     }
 }

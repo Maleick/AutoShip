@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Frostreaver** is a Rust-based EverQuest multibox controller (targeting a 36-box setup on a TLP server). It has two components: an external process that reads game state via `ReadProcessMemory` and displays it in a TUI dashboard, and an injected DLL (`cdylib`) that hooks internal EQ functions for direct control (movement, casting, navigation).
+**DMFT (Dave Mike Fun Times)** is a Rust-based EverQuest multibox controller (targeting a 36-box setup on a TLP server). It has two components: an external process that reads game state via `ReadProcessMemory` and displays it in a TUI dashboard, and an injected DLL (`cdylib`) that hooks internal EQ functions for direct control (movement, casting, navigation).
 
 ## Build Commands
 
@@ -20,7 +20,7 @@ cargo fmt --check        # Check formatting
 cargo test               # Run tests (macOS runs platform-independent subset)
 ```
 
-~698 platform-independent tests across 3 crates (481 dmft + 65 dmft-common + 152 dmft-dll). Additional Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024.
+~1250 platform-independent tests across 3 crates (625 dmft + 431 dmft-common + 172 dmft-dll). Additional Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024.
 
 ## Architecture
 
@@ -37,34 +37,34 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 
 **`dmft/` — Orchestrator (external process)**
 
-| Module            | Purpose                                                                                                                                             |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `process/`        | OS-level process interaction — open, read memory, find processes/windows                                                                            |
-| `eq/`             | EverQuest data layer — spawn structs, spawn linked list traversal                                                                                   |
-| tui/            | Terminal UI — app state, event handling, theme, sprites; ui/ subdir has per-panel renderers (dashboard, groups, hex dump, map, navigation, spawns, widgets) |
-| `config.rs`       | TOML config loading (`config/frostreaver.toml`)                                                                                                     |
-| `inject/`         | DLL injection and staging                                                                                                                           |
-| `ipc/`            | Named pipe server + shared memory setup                                                                                                             |
-| `client/`         | Multi-client management — sessions, self-healing monitor, CPU affinity                                                                              |
-| `nav/`            | Waypoint recording (RDP simplification), camp management, zone routing                                                                              |
-| `combat/`         | Assist target broadcasting, CC assignment, spell database                                                                                           |
-| `camp/`           | Camp loop state machine — buffs, CC, class config, hunt mode, loot, positioning, progression, puller, recovery, vendor                              |
-| `orchestrator.rs` | Wires camp loop state machine to IPC command delivery                                                                                               |
-| `launcher/`       | Login automation — per-client login FSM, staggered launch, process spawner, post-login sequencer                                                    |
-| `credentials/`    | Encrypted credential store — Argon2id + AES-256-GCM, SQLite backend                                                                                 |
-| `soul/`           | Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics                                                 |
+| Module            | Purpose                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `process/`        | OS-level process interaction — open, read memory, find processes/windows                                                                                    |
+| `eq/`             | EverQuest data layer — spawn structs, spawn linked list traversal                                                                                           |
+| tui/              | Terminal UI — app state, event handling, theme, sprites; ui/ subdir has per-panel renderers (dashboard, groups, hex dump, map, navigation, spawns, widgets) |
+| `config.rs`       | TOML config loading (`config/frostreaver.toml`)                                                                                                             |
+| `inject/`         | DLL injection and staging                                                                                                                                   |
+| `ipc/`            | Named pipe server + shared memory setup                                                                                                                     |
+| `client/`         | Multi-client management — sessions, self-healing monitor, CPU affinity                                                                                      |
+| `nav/`            | Waypoint recording (RDP simplification), camp management, zone routing                                                                                      |
+| `combat/`         | Assist target broadcasting, CC assignment, spell database                                                                                                   |
+| `camp/`           | Camp loop state machine — buffs, CC, class config, hunt mode, loot, positioning, progression, puller, recovery, vendor                                      |
+| `orchestrator.rs` | Wires camp loop state machine to IPC command delivery                                                                                                       |
+| `launcher/`       | Login automation — per-client login FSM, staggered launch, process spawner, post-login sequencer                                                            |
+| `credentials/`    | Encrypted credential store — Argon2id + AES-256-GCM, SQLite backend                                                                                         |
+| `soul/`           | Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics                                                         |
 
 **`dmft-dll/` — Injected DLL (cdylib)**
 
-| Module      | Purpose                                                                                                                                                                     |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hooks/`    | Game loop hooks — ProcessGameEvents, movement, casting, targeting                                                                                                           |
-| `eq/`       | EQ function bindings — UI widget primitives (CXWndManager, CXStr, button click via vtable)                                                                                  |
-| `ipc/`      | Shared memory + named pipe client                                                                                                                                           |
-| `nav/`      | Navigator FSM, stuck detection, movement humanization, waypoint queue                                                                                                       |
+| Module      | Purpose                                                                                                                                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hooks/`    | Game loop hooks — ProcessGameEvents, movement, casting, targeting                                                                                                                                          |
+| `eq/`       | EQ function bindings — UI widget primitives (CXWndManager, CXStr, button click via vtable)                                                                                                                 |
+| `ipc/`      | Shared memory + named pipe client                                                                                                                                                                          |
+| `nav/`      | Navigator FSM, stuck detection, movement humanization, waypoint queue                                                                                                                                      |
 | `combat/`   | Combatant FSM, ClassStrategy trait, class strategy implementations (including a generic DPS strategy), HolyShit conditions, GCD tracker, mana governor, puller FSM, aggro detection, loot, skill cooldowns |
-| `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                                       |
-| `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                          |
+| `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                                                                      |
+| `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                                                         |
 
 **`dmft-common/` — Shared types**
 

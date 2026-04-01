@@ -290,13 +290,7 @@ mod tests {
 
     #[test]
     fn test_filters_out_other_spawn_type() {
-        let spawns = vec![make_spawn(
-            1,
-            "a trap",
-            SpawnType::Other,
-            155.0,
-            255.0,
-        )];
+        let spawns = vec![make_spawn(1, "a trap", SpawnType::Other, 155.0, 255.0)];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &test_config(), &cc, &[]);
         assert_eq!(result, None);
@@ -304,9 +298,7 @@ mod tests {
 
     #[test]
     fn test_all_cc_tracked_returns_none() {
-        let spawns = vec![
-            make_spawn(1, "an orc pawn", SpawnType::Npc, 155.0, 255.0),
-        ];
+        let spawns = vec![make_spawn(1, "an orc pawn", SpawnType::Npc, 155.0, 255.0)];
         let mut cc = CcTracker::new();
         cc.update(&[(1, "an orc pawn".into())], None, 0);
         let result = select_pull_target(&spawns, &test_config(), &cc, &[]);

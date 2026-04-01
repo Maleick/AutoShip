@@ -1,8 +1,15 @@
-# Frostreaver (DMFT)
+# DMFT (Dave Mike Fun Times)
+
+[![CI](https://github.com/Maleick/DMFT/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/ci.yml)
+[![Release](https://github.com/Maleick/DMFT/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/release.yml)
+[![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
+[![Tests](https://img.shields.io/badge/tests-1250%2B%20passing-brightgreen?style=flat-square)](#testing)
+[![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
+[![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
 External process memory reader, DLL injector, and multibox controller for EverQuest, built in Rust.
 
-Frostreaver reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
+DMFT reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
 
 ## Status
 
@@ -18,57 +25,108 @@ Frostreaver reads live game state from EQ client memory, injects a DLL for direc
 - **IPC Pipeline** — Named pipes (commands) + shared memory (game state) with current-user DACL security
 - **Render Strobing** — Hooks `CDisplay::RealRender_World`, skips 3D rendering for background clients (~97% GPU savings)
 
-### TUI Dashboard (6 screens, 3 themes)
+### TUI Dashboard (4 screens, 3 themes)
 
-| Screen     | Key | Description                                                                        |
-| ---------- | --- | ---------------------------------------------------------------------------------- |
-| Dashboard  | `1` | All characters overview, group health bars, session stats (XP/hr, plat/hr)         |
-| Spawns     | `2` | Full spawn list with live search (`/`), type filter (`f`: All/PC/NPC/Named)        |
-| Character  | `3` | Selected character detail with pixel art class emblem sprites                      |
-| Map        | `4` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers |
-| Groups     | `5` | 6-group dashboard (2x3 grid) with member status                                    |
-| Navigation | `6` | Per-character nav status, operating mode, command reference                         |
+| Screen     | Key | Description                                                                                         |
+| ---------- | --- | --------------------------------------------------------------------------------------------------- |
+| Characters | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels |
+| Map        | `2` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers, Z-slice control |
+| Navigation | `3` | Per-character nav status, operating mode, waypoint queue                                            |
+| Debug      | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), hex dump, target detail           |
 
-**Themes:** Dark Modern (default), Dracula, Classic — cycle with `t`
+**Themes:** Dark Modern (default), Dracula, Classic — cycle with `T`
+
+**Widget library:** Sparklines, gauge bars, scrollable lists, tooltips, badges, notification area, inline hints, multi-option selectors, and scrollbar indicators. Context-sensitive help overlay with per-screen keybinding hints, did-you-mean suggestions for commands, and a comprehensive scrollable reference.
 
 ### TUI Controls
 
-| Key       | Action                                                |
-| --------- | ----------------------------------------------------- |
-| `1-5`     | Switch screens                                        |
-| `[` / `]` | Cycle between EQ clients                              |
-| `/`       | Search/filter spawns (live typing)                    |
-| `f`       | Cycle spawn type filter                               |
-| `p`       | Privacy mode (redacts names + server for screenshots) |
-| `:`       | Command mode (Tab completion, command history)        |
-| `?`       | Help overlay                                          |
-| `t`       | Cycle theme (Dark / Dracula / Classic)                |
-| `q`       | Quit                                                  |
+| Key         | Action                                                |
+| ----------- | ----------------------------------------------------- |
+| `1-4`       | Switch screens                                        |
+| `Shift+1-6` | Focus group G1-G6                                     |
+| `Shift+0`   | All groups (clear group focus)                        |
+| `Tab`       | Cycle focused pane                                    |
+| `[` / `]`   | Cycle between EQ clients                              |
+| `/`         | Search spawns (live typing)                           |
+| `f`         | Cycle spawn type filter                               |
+| `g`         | Toggle group section (Characters screen)              |
+| `v`         | Toggle scope section (Characters screen)              |
+| `z`         | Collapse focused section                              |
+| `+` / `-`   | Adjust Tactical Z slice                               |
+| `m`         | Maximize Tactical map                                 |
+| `p`         | Privacy mode (redacts names + server for screenshots) |
+| `T`         | Cycle theme                                           |
+| `:`         | Command mode                                          |
+| `?`         | Help overlay (scrollable, context-sensitive)          |
+| `q`         | Quit                                                  |
+
+**Status Glyphs:** `⚔`/`✚`/`✦` Fight/Heal/Cast · `➜`/`✓`/`!` Navigate/Arrived/Stuck · `☾`/`⇣`/`⌕` Sit/Feign/Loot
 
 ### Command Bar (`:` mode)
 
 ```
-:<pid> /sit              Send slash command to a PID
+:<name> /sit             Send slash command to character
+:G1-G6 /cmd             Send to group
 :all /sit                Broadcast to all clients
-:camp start <name>       Start camp loop from config
-:camp stop               Stop camp loop
-:camp status             Show camp state
-:login all               Launch all configured accounts
-:login G1                Launch group 1 accounts
+:camp start|stop|list    Camp loop control
+:camp add|rm             Add/remove camp config
+:nav <dest>              Navigate to camp, coords, or slash fallback
+:track <name>            Track a spawn
+:ma <name>               Set Main Assist
+:mt <name>               Set Main Tank
+:engage / :disengage     Start/stop combat
+:invite <name>           Group invite
+:accept                  Accept group invite
+:mode camp|hunt          Set operating mode
+:ch start <pids> <int>   Start CH chain
+:ch stop|add|rm          CH chain management
+:ch adaptive on|off      Adaptive CH timing
 :help                    Show all commands
 ```
 
 ### Camp Loop Automation
 
-- **5-phase state machine**: Idle → Pull → Fight → Loot → Med
+- **5-phase state machine**: Idle -> Pull -> Fight -> Loot -> Med
 - **Smart decisions** from real game state (HP/mana-driven, not timers)
 - **16 class ability configs** (TOML) with cooldowns, priorities, conditions
-- **CC system**: Charm/mez tracking, Tash→Malo debuff chain, charm break emergency response
+- **CC system**: Charm/mez tracking, Tash->Malo debuff chain, charm break emergency response
 - **Rogue backstab positioning**: Calculates behind-target position using EQ heading math
 - **Intelligent pull target selection**: Filters by distance/type, prefers HVT watchlist targets
 - **Buff maintenance**: Tracks durations, auto-rebuffs during idle/med
 - **Death recovery**: Detects deaths, cleric rez commands, rebuff sequence
 - **Sell/bank cycle**: Navigate to vendor, sell, return to camp
+
+### Soul Engine
+
+- **Personality system** — Per-character mood, traits, and behavioral profiles with deterministic personality engine
+- **Persistent memory** — SQLite-backed memory database for long-term character state
+- **Social dynamics** — Social graph tracking relationships between characters
+- **Idle behavior** — Personality-driven actions during downtime
+- **LLM integration** — Async request queue for Claude/Gemini-driven character responses (M6 — active development)
+
+### Login Automation
+
+- **Credential store** — Argon2id + AES-256-GCM encrypted credentials in SQLite
+- **Login FSM** — Automated login state machine: credential entry, server select, character select, Enter World
+- **Launch coordinator** — Staggered multi-client launch with post-login sequencing
+- **Process spawner** — Spawns and manages EQ client processes
+
+### Navigation
+
+- **Navmesh pathfinding** — Detour-based pathfinding via C++ FFI shim
+- **888-zone BFS routing** — Zone-to-zone route planning across the full EQ world
+- **Navigator FSM** — Waypoint following with stuck detection and recovery
+- **Movement humanization** — Natural-looking movement patterns
+- **Waypoint recording** — RDP simplification for path recording
+
+### Combat
+
+- **17 class strategies** — ClassStrategy trait with per-class implementations including generic DPS fallback
+- **Puller FSM** — Automated pull cycle with target selection and aggro management
+- **HolyShit system** — Emergency response conditions (low HP, charm break, adds)
+- **GCD tracker + mana governor** — Intelligent ability timing and resource management
+- **CH chain** — Coordinated Complete Heal rotation with adaptive timing
+- **Skill cooldown tracking** — Per-ability cooldown management across all classes
 
 ### Anti-Detection
 
@@ -97,9 +155,9 @@ Frostreaver reads live game state from EQ client memory, injects a DLL for direc
 ## Architecture
 
 ```
-DMFT Workspace (3 crates)
-├── dmft/           — Orchestrator: TUI, camp loop, process reading, injection
-├── dmft-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing
+DMFT Workspace (3 crates, ~57K lines of Rust)
+├── dmft/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
+├── dmft-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
 └── dmft-common/    — Shared types: IPC, offsets, combat/nav/soul types
 ```
 
@@ -132,11 +190,11 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 **Demo mode** activates automatically when no live EQ process is found (always on macOS/Linux, on Windows when EQ isn't running). It populates the TUI with 18 simulated characters across 3 groups covering all 16 EQ classes:
 
-| Group | Zone | Classes |
-|-------|------|---------|
-| G1 | Permafrost | WAR, CLR, ENC, BRD, RNG, WIZ |
-| G2 | Eastern Wastes | SK, SHM, DRU, ROG, NEC, MAG |
-| G3 | Great Divide | PAL, MNK, BST, BER, CLR, WIZ |
+| Group | Zone           | Classes                      |
+| ----- | -------------- | ---------------------------- |
+| G1    | Permafrost     | WAR, CLR, ENC, BRD, RNG, WIZ |
+| G2    | Eastern Wastes | SK, SHM, DRU, ROG, NEC, MAG  |
+| G3    | Great Divide   | PAL, MNK, BST, BER, CLR, WIZ |
 
 Each zone has NPC spawns (including named bosses like Lady Vox, Wuoshi, Garudon), corpses, and realistic HP/mana values. This lets you develop and test all TUI screens without a live EQ client.
 
@@ -146,17 +204,11 @@ Each zone has NPC spawns (including named bosses like Lady Vox, Wuoshi, Garudon)
 # Build
 cargo build --release
 
-# Launch EQ clients
-scripts\launch_eq.bat
-
 # Inject DLL into all running EQ clients
 target\release\dmft.exe --inject
 
 # Send a slash command to a specific client
 target\release\dmft.exe --cmd <pid> "/sit"
-
-# Broadcast to all clients
-scripts\cmd_all.bat "/sit"
 
 # Run TUI dashboard
 target\release\dmft.exe
@@ -167,13 +219,24 @@ target\release\dmft.exe
 - **Orchestrator:** `./logs/dmft.log` (daily rolling)
 - **DLL:** `%TEMP%/dmft/dmft-dll.log` (daily rolling)
 
+## Testing
+
+1,250+ tests across 3 crates (625 dmft + 172 dmft-dll + 431 dmft-common + doc-tests). CI runs on every push to master:
+
+| Platform | Jobs                      |
+| -------- | ------------------------- |
+| macOS    | fmt + clippy + test       |
+| Windows  | build (nightly toolchain) |
+
+Tag-triggered releases (`v*`) build Windows binaries and create GitHub Releases automatically.
+
 ## Configuration
 
 ### Accounts (`config/accounts.toml`)
 
 ```toml
 [[accounts]]
-name = "frostreaver01"
+name = "dmft01"
 server = "Firiona Vie"
 character = "Camrene"
 class = "WAR"
@@ -219,27 +282,20 @@ Run `scripts\optimize_ini.ps1` to apply minimal settings:
 ### Completed
 
 - [x] **M1** — External memory reading + TUI dashboard
-- [x] **M2** — DLL injection + function hooking + IPC
-- [x] **M2.5** — Login automation + credential store
-- [x] **M3** — Navigation — waypoint pathfinding, movement humanization
-- [x] **M4** — Combat automation — class strategies, puller FSM
-- [x] **M5** — Soul Engine — personality traits, persistent memory
+- [x] **M2** — DLL injection + function hooking + IPC + self-healing monitor
+- [x] **M2.5** — Login automation + encrypted credential store + launch coordinator
+- [x] **M3** — Navigation — navmesh pathfinding (Detour), 888-zone BFS routing, movement humanization
+- [x] **M4** — Combat automation — 17 class strategies, puller FSM, HolyShit system, CH chain
+- [x] **M5** — Soul Engine — personality traits, persistent memory, social dynamics, idle behavior
 
-### Active Development (Phase 1-6)
+### Next
 
-- [x] Phase 1: Command foundation (DLL injection, InterpretCmd, grouping)
-- [x] Phase 2: Camp loop (state machine, smart HP/mana decisions)
-- [x] Phase 3: Class configs + CC system + positioning
-- [x] Phase 4: Autonomy (sell/bank, death recovery, buff maintenance)
-- [x] Phase 5: Navigation (navmesh pathfinding via Detour, 888-zone BFS routing)
-- [ ] Phase 6: Anti-detection hardening (reflective injection, string obfuscation)
-- [ ] Phase 7: TLP launch readiness
+- [ ] **M6** — LLM Character AI — API integration (Gemini/Claude), in-game chat responses
 
 ### Future
 
-- [ ] **M6** — LLM-driven character optimization
-- [ ] **M7** — Reinforcement learning from camp data
-- [ ] **M8** — Economy automation (Krono farming loop)
+- [ ] **M7** — Learning/RL — behavioral cloning, RL fine-tuning
+- [ ] **M8** — Economy automation (vendor, EC tunnel trading, Bazaar, Krono farming)
 
 ## Research Docs
 

@@ -530,10 +530,8 @@ mod tests {
 
     #[test]
     fn test_full_recovery_cycle() {
-        let mut tracker = RecoveryTracker::new(&[
-            (100, "Warrior01".into()),
-            (101, "Cleric01".into()),
-        ]);
+        let mut tracker =
+            RecoveryTracker::new(&[(100, "Warrior01".into()), (101, "Cleric01".into())]);
 
         // 1. Warrior dies
         tracker.update_hp(&[(100, 0)], 10);
