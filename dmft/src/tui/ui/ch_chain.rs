@@ -3,6 +3,8 @@
 //! Provides a dedicated UI for managing the cleric heal chain,
 //! including chain ordering, timing, target selection, and real-time status.
 
+use crate::tui::cast::CastDisplay;
+use crate::tui::ui::widgets::{render_cast_bar, truncate_inline};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -22,6 +24,8 @@ pub struct ChainCleric {
     pub position: u8,
     /// Individual timing offset (ms) for lag compensation.
     pub timing_offset_ms: i32,
+    /// Optional exact/provisional cast strip for this cleric.
+    pub cast_display: Option<CastDisplay>,
     /// Current casting state.
     pub cast_state: CastState,
 }
@@ -281,12 +285,11 @@ impl ChChainWidget<'_> {
             return;
         }
 
+        let mut y = inner.y;
         for (i, cleric) in self.state.clerics.iter().enumerate() {
-            let y = inner.y + i as u16;
             if y >= inner.y + inner.height {
                 break;
             }
-
             let is_selected = i == self.state.selected;
             let base_style = if is_selected {
                 Style::default()
@@ -296,14 +299,6 @@ impl ChChainWidget<'_> {
             } else {
                 Style::default().fg(Color::White)
             };
-
-            // Position number
-            let pos_text = format!(" {}. ", cleric.position);
-            buf.set_string(inner.x, y, &pos_text, base_style);
-
-            // Name
-            let name_x = inner.x + pos_text.len() as u16;
-            buf.set_string(name_x, y, &cleric.name, base_style);
 
             // Cast state indicator
             let (state_char, state_color) = match cleric.cast_state {
@@ -320,24 +315,72 @@ impl ChChainWidget<'_> {
                 CastState::Completed => ("●", Color::Green),
                 CastState::Missed => ("✗", Color::Red),
             };
+            let pos_text = format!(" {}. ", cleric.position);
+            let offset_text = if cleric.timing_offset_ms != 0 {
+                format!(" {:+}ms", cleric.timing_offset_ms)
+            } else {
+                String::new()
+            };
+            let name_budget = inner.width.saturating_sub(
+                (pos_text.chars().count()
+                    + 2
+                    + state_char.chars().count()
+                    + offset_text.chars().count()) as u16,
+            ) as usize;
+            let name_label = truncate_inline(&cleric.name, name_budget);
+            let row = Line::from(vec![
+                Span::styled(pos_text, base_style),
+                Span::styled(name_label, base_style),
+                Span::styled("  ", base_style),
+                Span::styled(
+                    state_char,
+                    Style::default().fg(state_color).bg(if is_selected {
+                        self.accent_color
+                    } else {
+                        Color::Reset
+                    }),
+                ),
+                Span::styled(
+                    offset_text,
+                    Style::default().fg(Color::DarkGray).bg(if is_selected {
+                        self.accent_color
+                    } else {
+                        Color::Reset
+                    }),
+                ),
+            ]);
+            buf.set_line(inner.x, y, &row, inner.width);
+            y += 1;
 
-            let state_x = inner.x + inner.width - 10;
-            if state_x > name_x + cleric.name.len() as u16 {
-                buf.set_string(state_x, y, state_char, Style::default().fg(state_color));
-            }
-
-            // Timing offset
-            if cleric.timing_offset_ms != 0 {
-                let offset_text = format!("{:+}ms", cleric.timing_offset_ms);
-                let offset_x = inner.x + inner.width - 6;
-                if offset_x > state_x + 2 {
-                    buf.set_string(
-                        offset_x,
-                        y,
-                        &offset_text,
-                        Style::default().fg(Color::DarkGray),
-                    );
+            if let Some(cast_display) = &cleric.cast_display
+                && y < inner.y + inner.height
+            {
+                let mut cast_line = render_cast_bar(
+                    cast_display,
+                    inner.width.saturating_sub(2) as usize,
+                    if cast_display.exact {
+                        Color::Green
+                    } else {
+                        Color::White
+                    },
+                    if cast_display.exact {
+                        Color::Green
+                    } else {
+                        Color::Yellow
+                    },
+                    if cast_display.exact {
+                        Color::White
+                    } else {
+                        Color::Gray
+                    },
+                    Color::DarkGray,
+                );
+                cast_line.spans.insert(0, Span::raw("  "));
+                if is_selected {
+                    cast_line = apply_row_background(cast_line, self.accent_color);
                 }
+                buf.set_line(inner.x, y, &cast_line, inner.width);
+                y += 1;
             }
         }
     }
@@ -417,9 +460,21 @@ impl ChChainWidget<'_> {
     }
 }
 
+fn apply_row_background(mut line: Line<'static>, background: Color) -> Line<'static> {
+    for span in &mut line.spans {
+        span.style.bg = Some(background);
+        if span.style.fg.is_none() {
+            span.style.fg = Some(Color::Black);
+        }
+    }
+    line
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::buffer::Buffer;
+    use ratatui::layout::Rect;
 
     #[test]
     fn ch_panel_state_defaults() {
@@ -453,6 +508,7 @@ mod tests {
                 pid: 100,
                 position: 1,
                 timing_offset_ms: 0,
+                cast_display: None,
                 cast_state: CastState::Idle,
             },
             ChainCleric {
@@ -460,6 +516,7 @@ mod tests {
                 pid: 101,
                 position: 2,
                 timing_offset_ms: 0,
+                cast_display: None,
                 cast_state: CastState::Idle,
             },
         ];
@@ -485,5 +542,42 @@ mod tests {
         assert_eq!(state.focus, ChPanelFocus::Presets);
         state.cycle_focus();
         assert_eq!(state.focus, ChPanelFocus::ChainOrder);
+    }
+
+    #[test]
+    fn chain_widget_renders_cast_strip_for_active_cleric() {
+        let mut state = ChChainPanelState::new();
+        state.clerics.push(ChainCleric {
+            name: String::from("Cleric1"),
+            pid: 100,
+            position: 1,
+            timing_offset_ms: 0,
+            cast_display: Some(CastDisplay::exact_progress(
+                "Complete Heal",
+                "CH",
+                0.5,
+                10.0,
+            )),
+            cast_state: CastState::Casting(0.5),
+        });
+
+        let area = Rect::new(0, 0, 50, 12);
+        let mut buf = Buffer::empty(area);
+        ChChainWidget::new(&state).render(area, &mut buf);
+        let rendered = buffer_contents(&buf, area);
+
+        assert!(rendered.contains("Complete Heal") || rendered.contains("CH"));
+        assert!(rendered.contains("Cast"));
+    }
+
+    fn buffer_contents(buf: &Buffer, area: Rect) -> String {
+        (area.top()..area.bottom())
+            .map(|y| {
+                (area.left()..area.right())
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }

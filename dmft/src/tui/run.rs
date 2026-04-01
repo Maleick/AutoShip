@@ -4,7 +4,7 @@ use crossterm::terminal::{
 };
 use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -21,8 +21,12 @@ impl Drop for TerminalGuard {
 }
 
 use super::app::App;
+use super::app::{ChChainStatus, NavClientStatus};
+use super::cast::{CastDisplay, short_cast_label};
 use super::event::handle_events;
+use super::ui::ch_chain::{CastState as ChPanelCastState, ChainCleric};
 use super::ui::draw;
+use crate::eq::structs::SpawnInfo;
 use crate::orchestrator::Orchestrator;
 
 /// Soul Engine tick interval (5 seconds).
@@ -102,8 +106,14 @@ fn run_loop(
         if last_refresh.elapsed() >= refresh_interval {
             refresh_eq_data(app);
             app.tick_count += 1;
+            let demo_mode =
+                !app.clients.is_empty() && app.clients.iter().all(|client| client.is_demo);
+            if demo_mode {
+                apply_demo_scenario(app);
+            } else {
+                app.sync_ch_chain_state(orchestrator);
+            }
             app.update_tracked_spawns();
-            app.sync_ch_chain_state(orchestrator);
             last_refresh = Instant::now();
         }
 
@@ -257,12 +267,176 @@ fn scan_for_clients_live(app: &mut App) {
             if count == 1 { "" } else { "s" }
         );
     } else {
-        app.status_message = String::from("No EQ process found — scanning...");
+        app.status_message = String::from("No EQ process found - scanning...");
     }
 
-    // Sync legacy fields and reload map for current client
-    app.sync_from_selected_client();
+    // Apply the deterministic demo script immediately so the first frame is lively.
+    apply_demo_scenario(app);
     app.reload_map_for_selected_client();
+}
+
+fn apply_demo_scenario(app: &mut App) {
+    if app.clients.is_empty() || !app.clients.iter().all(|client| client.is_demo) {
+        return;
+    }
+
+    let tick_count = app.tick_count;
+    let refresh_rate_ms = app.refresh_rate_ms;
+    let demo_pids: HashSet<u32> = app
+        .clients
+        .iter()
+        .filter(|client| client.is_demo)
+        .map(|client| client.pid)
+        .collect();
+    app.nav_state
+        .nav_statuses
+        .retain(|pid, status| !demo_pids.contains(pid) || !status.is_demo_scripted);
+
+    let mut chain_clerics = Vec::new();
+    let mut chain_target_id = 0u32;
+    let mut chain_target_name = String::new();
+
+    for client in app.clients.iter_mut() {
+        let Some(snapshot) = super::demo_data::demo_client_snapshot(
+            &client.character_name,
+            client.pid,
+            tick_count,
+            refresh_rate_ms,
+        ) else {
+            continue;
+        };
+
+        if let Some(player) = client.local_player.as_mut() {
+            player.stand_state = snapshot.stand_state;
+            player.hp_current = snapshot.hp_current;
+            player.mana_current = snapshot.mana_current;
+            player.x = snapshot.position.0;
+            player.y = snapshot.position.1;
+            player.z = snapshot.position.2;
+            player.heading = snapshot.position.3;
+            player.cast_state = Some(super::demo_data::demo_eq_cast_state(snapshot.cast));
+        }
+
+        client.client_status = snapshot.status_line.clone();
+        client.target = snapshot
+            .target_spawn_name
+            .and_then(|target_name| demo_spawn_by_name(&client.spawns, target_name))
+            .map(|mut spawn| {
+                if let Some(label) = snapshot.target_label.clone() {
+                    spawn.displayed_name = label;
+                }
+                spawn
+            });
+
+        if let Some(nav) = snapshot.nav.as_ref() {
+            let has_manual_nav = app
+                .nav_state
+                .nav_statuses
+                .get(&client.pid)
+                .is_some_and(|status| !status.is_demo_scripted);
+            if !has_manual_nav {
+                app.nav_state.nav_statuses.insert(
+                    client.pid,
+                    NavClientStatus {
+                        destination: nav.destination.clone(),
+                        status: nav.status.clone(),
+                        eta_secs: None,
+                        waypoints: nav.waypoints.clone(),
+                        is_demo_scripted: true,
+                    },
+                );
+            }
+        }
+
+        if let Some(profile) =
+            super::demo_data::demo_client_profile(&client.character_name, client.pid)
+        {
+            match profile.role {
+                super::demo_data::DemoRole::MainTank => {
+                    if let Some(player) = client.local_player.as_ref() {
+                        chain_target_id = player.spawn_id;
+                    }
+                    chain_target_name = profile.name.to_string();
+                }
+                super::demo_data::DemoRole::ChainCleric
+                | super::demo_data::DemoRole::ChainClericTwo => {
+                    let cast_state = match (snapshot.action_state, snapshot.cast) {
+                        (super::demo_data::DemoActionState::Casting, Some(cast)) => {
+                            ChPanelCastState::Casting(cast.progress)
+                        }
+                        (super::demo_data::DemoActionState::Sitting, _) => {
+                            ChPanelCastState::Completed
+                        }
+                        (super::demo_data::DemoActionState::Feigned, _) => ChPanelCastState::Missed,
+                        _ => ChPanelCastState::Idle,
+                    };
+
+                    chain_clerics.push(ChainCleric {
+                        name: profile.name.to_string(),
+                        pid: client.pid,
+                        position: (chain_clerics.len() + 1) as u8,
+                        timing_offset_ms: 0,
+                        cast_display: snapshot.cast.map(|cast| {
+                            CastDisplay::exact_progress(
+                                cast.spell_label,
+                                short_cast_label(cast.spell_label),
+                                cast.progress as f64,
+                                cast.total_cast_ms as f32 / 1000.0,
+                            )
+                        }),
+                        cast_state,
+                    });
+                }
+                super::demo_data::DemoRole::Enchanter
+                | super::demo_data::DemoRole::Shaman
+                | super::demo_data::DemoRole::Druid
+                | super::demo_data::DemoRole::Wizard
+                | super::demo_data::DemoRole::RecoveryWizard => {}
+                _ => {}
+            }
+        }
+    }
+
+    if !chain_clerics.is_empty() {
+        app.ch_chain_panel_state.clerics = chain_clerics;
+        app.ch_chain_panel_state.selected = 0;
+        app.ch_chain_panel_state.target_id = chain_target_id;
+        app.ch_chain_panel_state.target_name = chain_target_name;
+        app.ch_chain_panel_state.cast_time_secs = 10.0;
+        app.ch_chain_panel_state.overlap_buffer_secs = 0.5;
+        app.ch_chain_panel_state.chain_delay_secs = 2.5;
+        app.ch_chain_panel_state.adaptive = true;
+        app.ch_chain_panel_state.stats.total_heals = tick_count as u32;
+        app.ch_chain_panel_state.stats.missed_heals = (tick_count as u32 / 48) % 2;
+        app.ch_chain_panel_state.stats.late_casts = (tick_count as u32 / 24) % 3;
+        app.ch_chain_panel_state.stats.avg_cast_time_ms = 9_980.0;
+        app.ch_chain_panel_state.stats.chain_uptime_pct = 97.5;
+
+        app.ch_chain_status = Some(ChChainStatus {
+            members: app.ch_chain_panel_state.clerics.len(),
+            interval_secs: 2.5,
+            is_adaptive: true,
+            target_id: chain_target_id,
+        });
+    } else {
+        app.ch_chain_panel_state.clerics.clear();
+        app.ch_chain_panel_state.selected = 0;
+        app.ch_chain_status = None;
+    }
+
+    app.status_message = format!(
+        "DEMO MODE - {} scripted clients",
+        app.clients.iter().filter(|client| client.is_demo).count()
+    );
+
+    app.sync_from_selected_client();
+}
+
+fn demo_spawn_by_name(spawns: &[SpawnInfo], target_name: &str) -> Option<SpawnInfo> {
+    spawns
+        .iter()
+        .find(|spawn| spawn.name == target_name || spawn.displayed_name == target_name)
+        .cloned()
 }
 
 /// Parse character name and zone name from the DLL-renamed window title.
@@ -401,7 +575,7 @@ fn load_demo_data(app: &mut App) {
     use super::app::ClientState;
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
 
-    app.status_message = String::from("DEMO MODE — no EQ process");
+    app.status_message = String::from("DEMO MODE - no EQ process");
 
     // 18 demo clients across 3 groups, covering all 16 EQ classes.
     // Names use trailing digits (e.g., "Dmft01") so they match group slots
@@ -743,6 +917,14 @@ fn load_demo_data(app: &mut App) {
 
     // Sync selected client to legacy fields
     app.sync_from_selected_client();
+
+    if app.main_tank.is_none() {
+        app.main_tank = Some(String::from("Dmft01"));
+    }
+    if app.main_assist.is_none() {
+        app.main_assist = Some(String::from("Iceweaver02"));
+    }
+    app.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
 
     // Load zone map for the selected client's zone
     app.reload_map_for_selected_client();

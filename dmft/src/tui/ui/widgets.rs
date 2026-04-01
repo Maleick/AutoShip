@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::eq::structs::{SpawnInfo, SpawnType};
+use crate::tui::cast::CastDisplay;
 use crate::tui::theme::Theme;
 
 // ─── Layout breakpoints ─────────────────────────────────────────────────────
@@ -1230,6 +1231,8 @@ pub struct GaugeBar {
     pub width: usize,
     /// Label shown to the left (optional).
     pub label: Option<String>,
+    /// Whether to render an ASCII-safe bar.
+    pub ascii_safe: bool,
 }
 
 impl GaugeBar {
@@ -1241,6 +1244,7 @@ impl GaugeBar {
             max,
             width,
             label: None,
+            ascii_safe: false,
         }
     }
 
@@ -1248,6 +1252,13 @@ impl GaugeBar {
     #[must_use]
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    /// Render with plain ASCII glyphs instead of Unicode block glyphs.
+    #[must_use]
+    pub fn ascii_safe(mut self, ascii_safe: bool) -> Self {
+        self.ascii_safe = ascii_safe;
         self
     }
 
@@ -1268,11 +1279,7 @@ pub fn render_gauge_bar(gauge: &GaugeBar, filled_color: Color, t: &Theme) -> Lin
     let ratio = gauge.ratio();
     let filled = (ratio * gauge.width as f64).round() as usize;
     let empty = gauge.width.saturating_sub(filled);
-    let bar = format!(
-        "\u{2502}{}{}\u{2502}",
-        "\u{2588}".repeat(filled),
-        "\u{2591}".repeat(empty)
-    );
+    let bar = gauge_bar_string(filled, empty, gauge.ascii_safe);
 
     let mut spans = Vec::new();
     if let Some(ref label) = gauge.label {
@@ -1288,6 +1295,121 @@ pub fn render_gauge_bar(gauge: &GaugeBar, filled_color: Color, t: &Theme) -> Lin
     ));
 
     Line::from(spans)
+}
+
+/// Render a compact cast strip with width-aware ASCII fallbacks.
+#[must_use]
+pub fn render_cast_bar(
+    cast: &CastDisplay,
+    available_width: usize,
+    label_color: Color,
+    filled_color: Color,
+    meta_color: Color,
+    dim_color: Color,
+) -> Line<'static> {
+    let compact = available_width < 34;
+    let wide = available_width >= 52;
+    let ascii_safe = compact;
+    let label_prefix = if compact { "Cast:" } else { "Cast " };
+    let suffix = if wide {
+        match (
+            cast.elapsed_secs,
+            cast.remaining_secs,
+            cast.status_text.as_deref(),
+        ) {
+            (Some(elapsed), Some(remaining), Some(status)) => {
+                format!("{elapsed:.1}s/{remaining:.1}s {status}")
+            }
+            (Some(_), Some(remaining), None) => format!("{remaining:.1}s"),
+            (_, _, Some(status)) => status.to_string(),
+            _ => String::from("casting"),
+        }
+    } else {
+        cast.remaining_secs
+            .map(|remaining| format!("{remaining:.1}s"))
+            .or_else(|| cast.status_text.clone())
+            .unwrap_or_else(|| String::from("casting"))
+    };
+    let desired_bar_width = if compact {
+        8
+    } else if wide {
+        14
+    } else {
+        10
+    };
+    let minimum_static_width = label_prefix.len() + 1 + 2 + 1 + 2 + 1;
+    let bar_width = available_width
+        .saturating_sub(minimum_static_width)
+        .clamp(6, desired_bar_width);
+    let text_budget = available_width.saturating_sub(label_prefix.len() + bar_width + 4);
+    let suffix_budget = if wide {
+        text_budget.min(22)
+    } else {
+        text_budget.min(8)
+    };
+    let label_budget = text_budget
+        .saturating_sub(suffix_budget.saturating_add(1))
+        .max(2);
+    let suffix_budget = text_budget
+        .saturating_sub(label_budget.saturating_add(1))
+        .max(2);
+    let label = truncate_inline(cast.preferred_label(compact), label_budget);
+    let suffix = truncate_inline(&suffix, suffix_budget);
+
+    let gauge = GaugeBar::new(cast.progress * 100.0, 100.0, bar_width).ascii_safe(ascii_safe);
+    let filled = (gauge.ratio() * gauge.width as f64).round() as usize;
+    let empty = gauge.width.saturating_sub(filled);
+    let bar = gauge_bar_string(filled, empty, gauge.ascii_safe);
+
+    let mut spans = vec![
+        Span::styled(label_prefix, Style::default().fg(dim_color)),
+        Span::raw(" "),
+        Span::styled(
+            label,
+            Style::default()
+                .fg(label_color)
+                .add_modifier(if cast.exact {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
+        ),
+        Span::raw(" "),
+    ];
+    spans.push(Span::styled(bar, Style::default().fg(filled_color)));
+    spans.push(Span::raw(" "));
+    spans.push(Span::styled(suffix, Style::default().fg(meta_color)));
+
+    Line::from(spans)
+}
+
+fn gauge_bar_string(filled: usize, empty: usize, ascii_safe: bool) -> String {
+    if ascii_safe {
+        format!("|{}{}|", "#".repeat(filled), "-".repeat(empty))
+    } else {
+        format!(
+            "\u{2502}{}{}\u{2502}",
+            "\u{2588}".repeat(filled),
+            "\u{2591}".repeat(empty)
+        )
+    }
+}
+
+pub(crate) fn truncate_inline(text: &str, max_chars: usize) -> String {
+    let char_count = text.chars().count();
+    if char_count <= max_chars {
+        return text.to_string();
+    }
+
+    match max_chars {
+        0 => String::new(),
+        1 | 2 => text.chars().take(max_chars).collect(),
+        _ => {
+            let mut truncated: String = text.chars().take(max_chars - 2).collect();
+            truncated.push_str("..");
+            truncated
+        }
+    }
 }
 
 // ─── Tooltip ────────────────────────────────────────────────────────────────
@@ -2214,6 +2336,51 @@ mod tests {
         fi.active = true;
         let line = render_filter_input(&fi, &t);
         assert!(line.spans.len() >= 3);
+    }
+
+    #[test]
+    fn render_cast_bar_compact_uses_ascii_bar() {
+        let t = dark_modern();
+        let cast = crate::tui::cast::CastDisplay::exact_progress("Complete Heal", "CH", 0.4, 10.0);
+        let line = render_cast_bar(
+            &cast,
+            28,
+            t.hp_high,
+            t.text_accent,
+            t.text_secondary,
+            t.text_muted,
+        );
+        let rendered: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+
+        assert!(rendered.contains("Cast:"));
+        assert!(rendered.contains("|"));
+        assert!(rendered.contains("CH"));
+    }
+
+    #[test]
+    fn render_cast_bar_wide_shows_elapsed_and_remaining_time() {
+        let t = dark_modern();
+        let cast = crate::tui::cast::CastDisplay::exact_progress("Complete Heal", "CH", 0.25, 10.0);
+        let line = render_cast_bar(
+            &cast,
+            72,
+            t.hp_high,
+            t.text_accent,
+            t.text_secondary,
+            t.text_muted,
+        );
+        let rendered: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+
+        assert!(rendered.contains("Complete Heal"));
+        assert!(rendered.contains("2.5s/7.5s"));
     }
 
     #[test]
