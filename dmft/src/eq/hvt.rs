@@ -260,7 +260,7 @@ priority = "{v}"
 
         let wl = HvtWatchlist::load(&path).unwrap();
         let cloned = wl.clone();
-        assert_eq!(cloned.len(), wl.len());
+        assert_eq!(cloned, wl);
     }
 
     #[test]
