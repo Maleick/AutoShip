@@ -175,8 +175,14 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     } else {
         String::from("off")
     };
-    let view_label = combined_bounds(app)
-        .and_then(|bounds| map_transform(app, &bounds, 80, 30))
+    // Compute bounds and transform once so they can be reused for both the
+    // view label and the actual map rendering logic.
+    let map_bounds = combined_bounds(app);
+    let map_view_transform =
+        map_bounds
+            .as_ref()
+            .and_then(|bounds| map_transform(app, bounds, 80, 30));
+    let view_label = map_view_transform
         .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
         .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
     let map_info = app
