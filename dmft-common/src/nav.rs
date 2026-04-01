@@ -237,14 +237,14 @@ impl ZoneGraph {
     /// or `None` if no path exists.
     #[must_use]
     pub fn find_path(&self, from_zone_id: u16, to_zone_id: u16) -> Option<Vec<u16>> {
+        use std::collections::{HashMap, VecDeque};
+
         if from_zone_id == to_zone_id {
             return Some(vec![from_zone_id]);
         }
         if !self.zones.contains_key(&from_zone_id) || !self.zones.contains_key(&to_zone_id) {
             return None;
         }
-
-        use std::collections::{HashMap, VecDeque};
 
         let mut visited: HashMap<u16, u16> = HashMap::new(); // child -> parent
         let mut queue = VecDeque::new();

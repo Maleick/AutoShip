@@ -24,9 +24,6 @@ pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
         EnumWindows, GetWindowTextW, GetWindowThreadProcessId,
     };
 
-    let substring_lower = substring.to_lowercase();
-    let results: Mutex<Vec<WindowHandle>> = Mutex::new(Vec::new());
-
     unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         unsafe {
             let data = &*(lparam.0 as *const (String, *const Mutex<Vec<WindowHandle>>));
@@ -49,6 +46,8 @@ pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
         }
     }
 
+    let substring_lower = substring.to_lowercase();
+    let results: Mutex<Vec<WindowHandle>> = Mutex::new(Vec::new());
     let data = (substring_lower, &results as *const _);
     unsafe { EnumWindows(Some(enum_callback), LPARAM(&data as *const _ as isize)) }.ok();
 
