@@ -3,7 +3,8 @@
 [![CI](https://github.com/Maleick/DMFT/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/DMFT/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Tests](https://img.shields.io/badge/tests-1250%2B%20passing-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-73%2C206-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-1%2C747%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -221,7 +222,7 @@ target\release\dmft.exe
 
 ## Testing
 
-1,250+ tests across 3 crates (625 dmft + 172 dmft-dll + 431 dmft-common + doc-tests). CI runs on every push to master:
+Current workspace totals: 73,206 Rust lines and 1,747 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. CI runs on every push to master:
 
 | Platform | Jobs                      |
 | -------- | ------------------------- |
