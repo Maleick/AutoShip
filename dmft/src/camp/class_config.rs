@@ -299,8 +299,7 @@ mod tests {
             duration_secs: Some(0.0),
         };
         let cloned = ability.clone();
-        assert_eq!(cloned.name, "Taunt");
-        assert_eq!(cloned.condition, Some("always".into()));
+        assert_eq!(cloned, ability);
     }
 
     #[test]
