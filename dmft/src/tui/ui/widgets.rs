@@ -953,7 +953,7 @@ pub fn render_multi_option(
     use ratatui::widgets::{Clear, List, ListItem, ListState};
 
     let item_count = selector.items.len() as u16;
-    let popup_h = (item_count + 3).min(area.height.saturating_sub(4)).max(5);
+    let popup_h = (item_count + 3).min(area.height.saturating_sub(4)).max(5).min(area.height);
     let popup_w = (area.width * 45 / 100).clamp(25.min(area.width), 50.min(area.width));
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
