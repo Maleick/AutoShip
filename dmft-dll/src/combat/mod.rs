@@ -23,6 +23,7 @@ use state::Combatant;
 static COMBATANT: Mutex<Option<Combatant>> = Mutex::new(None);
 
 /// Commands that can be sent to the combat FSM from IPC or other subsystems.
+#[derive(Clone, Copy)]
 pub enum CombatCommand {
     /// Start combat against a specific spawn.
     Engage { target_id: u32 },
