@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <PreBuildEvent>
+      <Command>if exist "$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), tools\build_scripts\Plugin_Versioning.ps1))\tools\build_scripts\Plugin_Versioning.ps1" powershell.exe -ExecutionPolicy Bypass -NoProfile -NonInteractive -File "$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), tools\build_scripts\Plugin_Versioning.ps1))\tools\build_scripts\Plugin_Versioning.ps1" -ProjectName "$(MSBuildProjectName)" -ProjectDirectory "$([MSBuild]::EnsureTrailingSlash('$(MSBuildThisFileDirectory)'))\"</Command>
+      <Message>Updating version resource for $(MSBuildProjectName)...</Message>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <PropertyGroup Label="Globals">
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{CF3A1DD3-1DC4-4238-A4B5-B3159599FCC0}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <PreBuildEventUseInBuild>true</PreBuildEventUseInBuild>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <PreBuildEventUseInBuild>true</PreBuildEventUseInBuild>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <PreBuildEventUseInBuild>true</PreBuildEventUseInBuild>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <PreBuildEventUseInBuild>true</PreBuildEventUseInBuild>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), src\Plugin.props))\src\Plugin.props" Condition=" '$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), src\Plugin.props))' != '' " />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(MQRoot)contrib\vcpkg\installed\x86-windows-static\include\luajit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PreprocessorDefinitions>SOL_EXCEPTIONS_SAFE_PROPAGATION=0;SOL_LUAJIT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>Async</ExceptionHandling>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>yaml-cppd.lib;lua51.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(MQRoot)contrib\vcpkg\installed\x64-windows-static\include\luajit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PreprocessorDefinitions>SOL_EXCEPTIONS_SAFE_PROPAGATION=0;SOL_LUAJIT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>Async</ExceptionHandling>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>yaml-cppd.lib;lua51.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(MQRoot)contrib\vcpkg\installed\x86-windows-static\include\luajit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SOL_EXCEPTIONS_SAFE_PROPAGATION=0;SOL_LUAJIT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>Async</ExceptionHandling>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>yaml-cpp.lib;lua51.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(MQRoot)contrib\vcpkg\installed\x64-windows-static\include\luajit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SOL_EXCEPTIONS_SAFE_PROPAGATION=0;SOL_LUAJIT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>Async</ExceptionHandling>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>yaml-cpp.lib;lua51.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Actor.pb.cc">
+      <DependentUpon>Actor.proto</DependentUpon>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="bindings\lua_Bit32.cpp" />
+    <ClCompile Include="bindings\lua_EQBindings.cpp" />
+    <ClCompile Include="bindings\lua_Globals.cpp" />
+    <ClCompile Include="bindings\lua_ImGuiCore.cpp" />
+    <ClCompile Include="bindings\lua_ImGuiCustom.cpp" />
+    <ClCompile Include="bindings\lua_ImGuiEnums.cpp" />
+    <ClCompile Include="bindings\lua_ImGuiWidgets.cpp" />
+    <ClCompile Include="bindings\lua_ImGuiUserTypes.cpp" />
+    <ClCompile Include="bindings\lua_ImAnim.cpp" />
+    <ClCompile Include="bindings\lua_ImPlot.cpp" />
+    <ClCompile Include="bindings\lua_MQBindings.cpp" />
+    <ClCompile Include="bindings\lua_MQMacroData.cpp" />
+    <ClCompile Include="bindings\lua_Zep.cpp" />
+    <ClCompile Include="LuaActor.cpp" />
+    <ClCompile Include="LuaCoroutine.cpp" />
+    <ClCompile Include="LuaEvent.cpp" />
+    <ClCompile Include="LuaImGui.cpp">
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="LuaModuleRegistry.cpp" />
+    <ClCompile Include="LuaThread.cpp" />
+    <ClCompile Include="MQ2Lua.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(MQRoot)src\main\MQ2Main.vcxproj">
+      <Project>{2a0a06a4-e9c6-4229-82ee-bd2d4e0a7221}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\imgui\imgui.vcxproj">
+      <Project>{1777e251-0f50-496a-b8c5-ec7f41a0b186}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Actor.pb.h">
+      <DependentUpon>Actor.proto</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="bindings\lua_Bindings.h" />
+    <ClInclude Include="bindings\lua_MQBindings.h" />
+    <ClInclude Include="LuaActor.h" />
+    <ClInclude Include="LuaCommon.h" />
+    <ClInclude Include="LuaEvent.h" />
+    <ClInclude Include="LuaCoroutine.h" />
+    <ClInclude Include="LuaImGui.h" />
+    <ClInclude Include="LuaModuleRegistry.h" />
+    <ClInclude Include="LuaThread.h" />
+    <ClInclude Include="LuaInterface.h" />
+    <ClInclude Include="pch.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="LuaJIT-x86.natvis">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </Natvis>
+    <Natvis Include="LuaJIT.natvis">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </Natvis>
+  </ItemGroup>
+  <ItemGroup>
+    <ProtocolBuffer Include="Actor.proto" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
