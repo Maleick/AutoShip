@@ -3263,4 +3263,229 @@ mod tests {
             ActivePanel::DebugSpawns
         );
     }
+
+    // --- Privacy mode / redaction tests ---
+
+    #[test]
+    fn toggle_privacy_flips_mode() {
+        let mut app = App::new();
+        assert!(!app.privacy_mode);
+        app.toggle_privacy();
+        assert!(app.privacy_mode);
+        assert!(app.status_message.contains("ON"));
+        app.toggle_privacy();
+        assert!(!app.privacy_mode);
+        assert!(app.status_message.contains("OFF"));
+    }
+
+    #[test]
+    fn redact_name_passthrough_when_off() {
+        let app = App::new();
+        assert_eq!(app.redact_name("Frostreaver"), "Frostreaver");
+    }
+
+    #[test]
+    fn redact_name_redacts_own_characters() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Frostreaver"));
+        app.privacy_mode = true;
+        assert_eq!(app.redact_name("Frostreaver").as_ref(), "Toon-01");
+    }
+
+    #[test]
+    fn redact_name_preserves_unknown_names() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Frostreaver"));
+        app.privacy_mode = true;
+        assert_eq!(app.redact_name("SomeStranger"), "SomeStranger");
+    }
+
+    #[test]
+    fn display_server_hidden_in_privacy_mode() {
+        let mut app = App::new();
+        assert_eq!(app.display_server(), "Firiona Vie");
+        app.privacy_mode = true;
+        assert_eq!(app.display_server(), "[Hidden Server]");
+    }
+
+    // --- Spawn list navigation tests ---
+
+    #[test]
+    fn cycle_spawn_filter_updates_message() {
+        let mut app = App::new();
+        app.cycle_spawn_filter();
+        assert!(app.status_message.contains("Filter:"));
+    }
+
+    #[test]
+    fn spawn_selected_default_zero() {
+        let app = App::new();
+        assert_eq!(app.spawn_selected(), 0);
+    }
+
+    #[test]
+    fn hex_scroll_down_increments() {
+        let mut app = App::new();
+        let initial = app.hex_state.hex_address;
+        app.hex_scroll_down();
+        assert_eq!(app.hex_state.hex_address, initial.wrapping_add(0x100));
+    }
+
+    #[test]
+    fn hex_scroll_up_decrements() {
+        let mut app = App::new();
+        app.hex_state.hex_address = 0x1000;
+        app.hex_scroll_up();
+        assert_eq!(app.hex_state.hex_address, 0x0F00);
+    }
+
+    // --- Find client by name ---
+
+    #[test]
+    fn find_client_by_name_found() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Alpha"));
+        app.clients.push(test_client(2, "Bravo"));
+        let found = app.find_client_by_name("Bravo");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().pid, 2);
+    }
+
+    #[test]
+    fn find_client_by_name_not_found() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Alpha"));
+        assert!(app.find_client_by_name("Zulu").is_none());
+    }
+
+    // --- Track / Untrack spawns ---
+
+    #[test]
+    fn track_spawn_adds_as_unknown() {
+        let mut app = App::new();
+        app.track_spawn("Lady Vox");
+        assert!(app.tracked_spawns.contains_key("lady vox"));
+        let ts = &app.tracked_spawns["lady vox"];
+        assert_eq!(ts.status, TrackedStatus::Unknown);
+        assert!(ts.last_seen_tick.is_none());
+    }
+
+    #[test]
+    fn track_spawn_duplicate_warns() {
+        let mut app = App::new();
+        app.track_spawn("Lady Vox");
+        app.track_spawn("Lady Vox");
+        assert!(app.status_message.contains("Already tracking"));
+    }
+
+    #[test]
+    fn untrack_spawn_removes() {
+        let mut app = App::new();
+        app.track_spawn("Nagafen");
+        assert!(app.tracked_spawns.contains_key("nagafen"));
+        app.untrack_spawn("Nagafen");
+        assert!(!app.tracked_spawns.contains_key("nagafen"));
+        assert!(app.status_message.contains("Untracked"));
+    }
+
+    #[test]
+    fn untrack_spawn_missing_warns() {
+        let mut app = App::new();
+        app.untrack_spawn("NonExistent");
+        assert!(app.status_message.contains("Not tracking"));
+    }
+
+    // --- Clear filter ---
+
+    #[test]
+    fn clear_filter_resets_state() {
+        let mut app = App::new();
+        app.spawns_state.spawn_filter = "test".into();
+        app.spawns_state.search_mode = true;
+        app.clear_filter();
+        assert!(app.spawns_state.spawn_filter.is_empty());
+        assert!(!app.spawns_state.search_mode);
+    }
+
+    // --- Filtered spawns ---
+
+    fn test_spawn_info(name: &str, stype: SpawnType) -> SpawnInfo {
+        SpawnInfo {
+            name: name.into(),
+            displayed_name: name.into(),
+            lastname: String::new(),
+            spawn_id: 1,
+            spawn_type: stype,
+            level: 50,
+            class_id: 1,
+            class: None,
+            stand_state: StandState::Standing,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 100,
+            endurance_max: 100,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: Vec::new(),
+            cast_state: None,
+        }
+    }
+
+    #[test]
+    fn filtered_spawns_all_returns_all() {
+        let mut app = App::new();
+        app.spawns.push(test_spawn_info("a rat", SpawnType::Npc));
+        app.spawns.push(test_spawn_info("Player1", SpawnType::Player));
+        assert_eq!(app.filtered_spawns().len(), 2);
+    }
+
+    #[test]
+    fn filtered_spawns_pc_only() {
+        let mut app = App::new();
+        app.spawns.push(test_spawn_info("a rat", SpawnType::Npc));
+        app.spawns.push(test_spawn_info("Player1", SpawnType::Player));
+        app.spawns_state.spawn_type_filter = SpawnFilter::Pc;
+        assert_eq!(app.filtered_spawns().len(), 1);
+        assert_eq!(
+            app.filtered_spawns()[0].spawn_type,
+            SpawnType::Player
+        );
+    }
+
+    #[test]
+    fn filtered_spawns_named_filters_common_mobs() {
+        let mut app = App::new();
+        app.spawns.push(test_spawn_info("a gnoll", SpawnType::Npc));
+        app.spawns.push(test_spawn_info("Lord Nagafen", SpawnType::Npc));
+        app.spawns_state.spawn_type_filter = SpawnFilter::Named;
+        let filtered = app.filtered_spawns();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].displayed_name, "Lord Nagafen");
+    }
+
+    // --- Cycle theme ---
+
+    #[test]
+    fn cycle_theme_changes_kind() {
+        let mut app = App::new();
+        let initial = app.theme_kind;
+        app.cycle_theme();
+        assert_ne!(app.theme_kind, initial);
+    }
+
+    // --- Help toggle ---
+
+    #[test]
+    fn help_visible_toggle() {
+        let mut app = App::new();
+        assert!(!app.help_visible);
+        app.help_visible = true;
+        assert!(app.help_visible);
+    }
 }
