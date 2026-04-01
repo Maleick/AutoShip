@@ -64,7 +64,7 @@ pub fn is_done() -> bool {
     let guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     guard
         .as_ref()
-        .map_or(true, |fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))
+        .is_none_or(|fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))
 }
 
 /// Internal states for the login FSM — more granular than the IPC-facing LoginPhase.

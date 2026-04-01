@@ -484,60 +484,54 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
 
     for &pid in &pids {
         // Read shared memory for position + zone
-        let waypoints = match shared_state_reader_for_pid(pid) {
-            Ok(reader) => match reader.read() {
-                Some(state) if !state.zone_short_name.is_empty() => {
-                    let player = match state.local_player.as_ref() {
-                        Some(p) => p,
-                        None => {
-                            println!("  PID {pid}: no player data — skipping");
-                            fail_count += 1;
-                            continue;
-                        }
-                    };
-                    let from = (player.x, player.y, player.z);
-                    let zone = &state.zone_short_name;
+        let waypoints = if let Ok(reader) = shared_state_reader_for_pid(pid) { match reader.read() {
+            Some(state) if !state.zone_short_name.is_empty() => {
+                let player = if let Some(p) = state.local_player.as_ref() { p } else {
+                    println!("  PID {pid}: no player data — skipping");
+                    fail_count += 1;
+                    continue;
+                };
+                let from = (player.x, player.y, player.z);
+                let zone = &state.zone_short_name;
 
-                    match nav::mesh::load_zone(zone) {
-                        Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
-                            Ok(path) => {
-                                println!(
-                                    "  PID {} ({}): navmesh path, {} waypoints",
-                                    pid,
-                                    player.name,
-                                    path.len()
-                                );
-                                path.iter()
-                                    .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
-                                    .collect()
-                            }
-                            Err(e) => {
-                                println!(
-                                    "  PID {} ({}): navmesh failed ({}), straight line",
-                                    pid, player.name, e
-                                );
-                                vec![Waypoint::new(x, y, z)]
-                            }
-                        },
+                match nav::mesh::load_zone(zone) {
+                    Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
+                        Ok(path) => {
+                            println!(
+                                "  PID {} ({}): navmesh path, {} waypoints",
+                                pid,
+                                player.name,
+                                path.len()
+                            );
+                            path.iter()
+                                .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
+                                .collect()
+                        }
                         Err(e) => {
                             println!(
-                                "  PID {} ({}): no mesh for '{}' ({}), straight line",
-                                pid, player.name, zone, e
+                                "  PID {} ({}): navmesh failed ({}), straight line",
+                                pid, player.name, e
                             );
                             vec![Waypoint::new(x, y, z)]
                         }
+                    },
+                    Err(e) => {
+                        println!(
+                            "  PID {} ({}): no mesh for '{}' ({}), straight line",
+                            pid, player.name, zone, e
+                        );
+                        vec![Waypoint::new(x, y, z)]
                     }
                 }
-                _ => {
-                    println!("  PID {pid}: no shared memory data — straight line");
-                    vec![Waypoint::new(x, y, z)]
-                }
-            },
-            Err(_) => {
-                println!("  PID {pid}: cannot read shared memory — skipping");
-                fail_count += 1;
-                continue;
             }
+            _ => {
+                println!("  PID {pid}: no shared memory data — straight line");
+                vec![Waypoint::new(x, y, z)]
+            }
+        } } else {
+            println!("  PID {pid}: cannot read shared memory — skipping");
+            fail_count += 1;
+            continue;
         };
 
         // Send via IPC
@@ -859,12 +853,9 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     info!("===================================================");
 
     // Step 1: Read SpawnManager pointer
-    let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base) {
-        Some(addr) => addr,
-        None => {
-            error!("Failed to rebase pinstSpawnManager");
-            return;
-        }
+    let mgr_ptr_addr = if let Some(addr) = offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base) { addr } else {
+        error!("Failed to rebase pinstSpawnManager");
+        return;
     };
     let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
         Ok(addr) => addr,
@@ -1041,10 +1032,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                     Ok(bytes) => info!("\n{}", format_hex_dump(alt, &bytes)),
                     Err(e) => error!("  Failed to read: {:#}", e),
                 }
-                match proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) {
-                    Ok(name) => info!("  Name: \"{}\"", name),
-                    Err(_) => info!("  (name unreadable)"),
-                }
+                if let Ok(name) = proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) { info!("  Name: \"{}\"", name) } else { info!("  (name unreadable)") }
             }
             Ok(alt) if alt == first_node => {
                 info!("SpawnManager+0x00 -> same node as PLAYER_LIST ({:#x})", alt);
@@ -1057,10 +1045,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
         match proc.read_ptr(mgr_addr + 0x08) {
             Ok(alt) if alt != 0 => {
                 info!("SpawnManager+0x08 -> {:#x}", alt);
-                match proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) {
-                    Ok(name) => info!("  Name: \"{}\"", name),
-                    Err(_) => info!("  (name unreadable)"),
-                }
+                if let Ok(name) = proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) { info!("  Name: \"{}\"", name) } else { info!("  (name unreadable)") }
             }
             _ => info!("SpawnManager+0x08 -> NULL or unreadable"),
         }

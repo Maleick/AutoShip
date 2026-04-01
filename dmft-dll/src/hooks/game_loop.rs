@@ -479,29 +479,26 @@ fn on_game_tick() {
         let enter_fn = PENDING_ENTER_WORLD_FN.load(std::sync::atomic::Ordering::Acquire);
         // Re-scan for CCharacterListWnd fresh — the pointer stored in Stage 1
         // may be stale if the window was destroyed/recreated during the wait.
-        let wnd = match rescan_char_list_wnd() {
-            Some(w) => w,
-            None => {
-                // Rescan failed — CXWndManager may be in a transitional state.
-                // Do NOT fall back to stored pointer (could be stale/freed).
-                // Retry next tick up to ~5 seconds, then abort.
-                let stored = PENDING_ENTER_WORLD_WND.load(std::sync::atomic::Ordering::Acquire);
-                if stored == 0 {
-                    tracing::error!("Phase 3: rescan failed and no stored pointer — aborting");
-                    ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
-                    return;
-                }
-                let retries =
-                    ENTER_WORLD_RETRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                if retries >= 150 {
-                    tracing::error!("Phase 3: rescan failed after 150 retries — aborting");
-                    ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
-                    ENTER_WORLD_RETRIES.store(0, std::sync::atomic::Ordering::Relaxed);
-                    return;
-                }
-                tracing::warn!(retries, "Phase 3: rescan failed — will retry next tick");
-                return; // Stay in stage 3, retry next tick
+        let wnd = if let Some(w) = rescan_char_list_wnd() { w } else {
+            // Rescan failed — CXWndManager may be in a transitional state.
+            // Do NOT fall back to stored pointer (could be stale/freed).
+            // Retry next tick up to ~5 seconds, then abort.
+            let stored = PENDING_ENTER_WORLD_WND.load(std::sync::atomic::Ordering::Acquire);
+            if stored == 0 {
+                tracing::error!("Phase 3: rescan failed and no stored pointer — aborting");
+                ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
+                return;
             }
+            let retries =
+                ENTER_WORLD_RETRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if retries >= 150 {
+                tracing::error!("Phase 3: rescan failed after 150 retries — aborting");
+                ENTER_WORLD_STAGE.store(0, std::sync::atomic::Ordering::Release);
+                ENTER_WORLD_RETRIES.store(0, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+            tracing::warn!(retries, "Phase 3: rescan failed — will retry next tick");
+            return; // Stay in stage 3, retry next tick
         };
         if enter_fn != 0 {
             tracing::info!(

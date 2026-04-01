@@ -300,30 +300,24 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     let t = &app.theme;
     let blk = panel(" Selected Character ", t.border_primary, t);
 
-    let client = match app.active_client() {
-        Some(c) => c,
-        None => {
-            frame.render_widget(
-                Paragraph::new("No client selected")
-                    .block(blk)
-                    .style(Style::default().fg(t.text_muted)),
-                area,
-            );
-            return;
-        }
+    let client = if let Some(c) = app.active_client() { c } else {
+        frame.render_widget(
+            Paragraph::new("No client selected")
+                .block(blk)
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
     };
 
-    let player = match &client.local_player {
-        Some(p) => p,
-        None => {
-            frame.render_widget(
-                Paragraph::new("Not logged in")
-                    .block(blk)
-                    .style(Style::default().fg(t.text_muted)),
-                area,
-            );
-            return;
-        }
+    let player = if let Some(p) = &client.local_player { p } else {
+        frame.render_widget(
+            Paragraph::new("Not logged in")
+                .block(blk)
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
     };
 
     let inner = blk.inner(area);

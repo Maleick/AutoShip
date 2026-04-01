@@ -2093,27 +2093,24 @@ impl App {
                     self.status_message = String::from("No active client to accept on");
                 }
             }
-            "heal" => match parts.get(1).copied() {
-                Some("cancel") => {
-                    self.heal_cancel_enabled = !self.heal_cancel_enabled;
-                    let state = if self.heal_cancel_enabled {
-                        "ON"
-                    } else {
-                        "OFF"
-                    };
-                    tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
-                    self.status_message = format!("Heal-cancel: {state}");
-                }
-                _ => {
-                    let state = if self.heal_cancel_enabled {
-                        "ON"
-                    } else {
-                        "OFF"
-                    };
-                    self.status_message = format!(
-                        "Heal-cancel is {state}. Usage: heal cancel (toggles on/off)"
-                    );
-                }
+            "heal" => if let Some("cancel") = parts.get(1).copied() {
+                self.heal_cancel_enabled = !self.heal_cancel_enabled;
+                let state = if self.heal_cancel_enabled {
+                    "ON"
+                } else {
+                    "OFF"
+                };
+                tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
+                self.status_message = format!("Heal-cancel: {state}");
+            } else {
+                let state = if self.heal_cancel_enabled {
+                    "ON"
+                } else {
+                    "OFF"
+                };
+                self.status_message = format!(
+                    "Heal-cancel is {state}. Usage: heal cancel (toggles on/off)"
+                );
             },
             "ch" => {
                 self.execute_ch_command(&parts[1..], orchestrator);
@@ -2169,14 +2166,11 @@ impl App {
                 );
             }
             Some("start") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message = String::from(
-                            "Usage: camp start <name>  (loads config/camps/<name>.toml)",
-                        );
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                    self.status_message = String::from(
+                        "Usage: camp start <name>  (loads config/camps/<name>.toml)",
+                    );
+                    return;
                 };
 
                 match CampConfig::load(camp_name) {
@@ -2213,26 +2207,20 @@ impl App {
                 }
             }
             Some("add") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message =
-                            String::from("Usage: camp add <name>  (saves current position)");
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                    self.status_message =
+                        String::from("Usage: camp add <name>  (saves current position)");
+                    return;
                 };
 
-                let (center, zone) = match &self.local_player {
-                    Some(player) => {
-                        let zone = self
-                            .active_client().map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
-                        ([player.x, player.y, player.z], zone)
-                    }
-                    None => {
-                        self.status_message =
-                            String::from("No player data — cannot save camp position");
-                        return;
-                    }
+                let (center, zone) = if let Some(player) = &self.local_player {
+                    let zone = self
+                        .active_client().map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
+                    ([player.x, player.y, player.z], zone)
+                } else {
+                    self.status_message =
+                        String::from("No player data — cannot save camp position");
+                    return;
                 };
 
                 let config = CampConfig {
@@ -2266,12 +2254,9 @@ impl App {
                 }
             }
             Some("remove") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message = String::from("Usage: camp remove <name>");
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                    self.status_message = String::from("Usage: camp remove <name>");
+                    return;
                 };
 
                 let path = std::path::Path::new("config/camps").join(format!("{camp_name}.toml"));
@@ -2411,14 +2396,11 @@ impl App {
             }
             Some("start") => {
                 // ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
-                let pids_str = match args.get(1) {
-                    Some(s) => s,
-                    None => {
-                        self.status_message = String::from(
-                            "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
-                        );
-                        return;
-                    }
+                let pids_str = if let Some(s) = args.get(1) { s } else {
+                    self.status_message = String::from(
+                        "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
+                    );
+                    return;
                 };
                 let pids: Vec<u32> = pids_str
                     .split(',')
@@ -2557,13 +2539,10 @@ impl App {
     ///   login G<n>        — launch all accounts in group n
     ///   login <name>      — launch a single account by name
     fn execute_login_command(&mut self, args: &[&str]) {
-        let accounts = match &self.accounts_config {
-            Some(cfg) => cfg.clone(),
-            None => {
-                self.status_message =
-                    String::from("No accounts config — create config/accounts.toml");
-                return;
-            }
+        let accounts = if let Some(cfg) = &self.accounts_config { cfg.clone() } else {
+            self.status_message =
+                String::from("No accounts config — create config/accounts.toml");
+            return;
         };
 
         match args.first().copied() {

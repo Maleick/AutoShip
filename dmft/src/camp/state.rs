@@ -350,7 +350,7 @@ impl CampLoop {
                             .adjust_mana_threshold(self.config.pull_mana_pct as f32)
                     });
                 let healer_ready = snapshot
-                    .map_or(true, |s| s.healer_mana_pct >= pull_threshold);
+                    .is_none_or(|s| s.healer_mana_pct >= pull_threshold);
                 if healer_ready {
                     self.transition_to_pulling(&mut commands);
                 }

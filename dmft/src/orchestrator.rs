@@ -654,12 +654,9 @@ impl Orchestrator {
             .get(&pid)
             .map_or("?", std::string::String::as_str);
 
-        let token = match self.session_tokens.get(&pid) {
-            Some(t) => *t,
-            None => {
-                tracing::warn!(pid, name, "No session token for client — skipping");
-                return None;
-            }
+        let token = if let Some(t) = self.session_tokens.get(&pid) { *t } else {
+            tracing::warn!(pid, name, "No session token for client — skipping");
+            return None;
         };
 
         // Reuse existing connection or create a new one.
