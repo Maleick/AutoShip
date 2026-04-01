@@ -6,33 +6,49 @@ use super::structs::{SpawnInfo, SpawnType};
 /// Status of a tracked named spawn.
 #[derive(Debug, Clone)]
 pub struct NamedSpawnStatus {
+    /// Display name of the named mob.
     pub name: String,
+    /// EQ spawn ID.
     pub spawn_id: u32,
+    /// Zone where this mob was tracked.
     pub zone: String,
+    /// Tick when this named mob was first seen.
     pub first_seen_tick: u64,
+    /// Whether the mob is currently alive.
     pub is_alive: bool,
+    /// Tick when the mob died (if dead).
     pub death_tick: Option<u64>,
+    /// Earliest estimated respawn tick (minimum of respawn window).
     pub estimated_respawn_tick: Option<u64>,
     /// End of the respawn window (max estimate). None if no database entry.
     pub respawn_window_end_tick: Option<u64>,
     /// Priority from the named mob database.
     pub priority: Option<NamedPriority>,
-    /// Last known position for map rendering of dead named spawns.
+    /// Last known X position for map rendering.
     pub last_x: f32,
+    /// Last known Y position for map rendering.
     pub last_y: f32,
+    /// Last known Z position for map rendering.
     pub last_z: f32,
 }
 
 /// Alert events emitted by the tracker.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NamedAlert {
+    /// A named mob has spawned or respawned.
     SpawnUp {
+        /// Name of the named mob.
         name: String,
+        /// Zone where it spawned.
         zone: String,
     },
+    /// A named mob has died or despawned.
     SpawnDown {
+        /// Name of the named mob.
         name: String,
+        /// Zone where it died.
         zone: String,
+        /// Estimated tick when it will respawn.
         respawn_estimate: u64,
     },
 }

@@ -10,8 +10,11 @@ use std::collections::HashSet;
 /// Configuration for the vendor sell cycle.
 #[derive(Debug, Clone)]
 pub struct VendorConfig {
+    /// Name of the vendor NPC to target.
     pub vendor_name: String,
+    /// Ticks between sell runs.
     pub sell_interval_ticks: u64,
+    /// Items to never sell (quest items, gear, etc.).
     pub keep_items: Vec<String>,
     /// Ticks to wait in `TravelingToVendor` / Returning.
     pub travel_ticks: u64,
@@ -41,17 +44,28 @@ pub enum VendorStep {
 /// Current state of the sell cycle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SellState {
+    /// No sell run needed right now.
     NotNeeded,
+    /// En route to the vendor NPC.
     TravelingToVendor,
-    Selling { step: VendorStep },
+    /// At the vendor, working through the vendor UI sub-FSM.
+    Selling {
+        /// Current sub-step of the vendor interaction.
+        step: VendorStep,
+    },
+    /// Returning to camp after selling.
     Returning,
 }
 
 /// Tracks the sell cycle for one camp group.
 pub struct SellCycle {
+    /// Vendor configuration.
     pub config: VendorConfig,
+    /// Current sell cycle state.
     pub state: SellState,
+    /// Tick when the last sell run completed.
     pub last_sell_tick: u64,
+    /// Tick when the current state was entered (for delay timing).
     pub state_entered_tick: u64,
     keep_set: HashSet<String>,
     /// Items queued for selling in the current cycle.
@@ -59,6 +73,7 @@ pub struct SellCycle {
 }
 
 impl SellCycle {
+    /// Creates a new sell cycle with the given vendor configuration.
     #[must_use]
     pub fn new(config: VendorConfig) -> Self {
         let keep_set: HashSet<String> = config.keep_items.iter().cloned().collect();

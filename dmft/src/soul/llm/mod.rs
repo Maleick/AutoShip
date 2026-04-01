@@ -1,4 +1,6 @@
+/// Trait-based fallback responder — generates text without an LLM API.
 pub mod fallback;
+/// Priority queue for LLM requests — ensures high-priority requests are processed first.
 pub mod priority_queue;
 
 use anyhow::Result;

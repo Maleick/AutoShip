@@ -8,20 +8,30 @@ use crate::eq::named_tracker::NamedTracker;
 /// Spawn type discriminator matching EQ's internal spawn types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnType {
+    /// A real player character.
     Player,
+    /// A non-player character (mob).
     Npc,
+    /// A player or NPC corpse.
     Corpse,
+    /// Other spawn type (objects, auras, etc.).
     Other,
 }
 
 /// A nearby spawn visible to the puller.
 #[derive(Debug, Clone)]
 pub struct NearbySpawn {
+    /// EQ spawn ID.
     pub spawn_id: u32,
+    /// Display name of the spawn.
     pub name: String,
+    /// Type of this spawn (player, NPC, corpse).
     pub spawn_type: SpawnType,
+    /// X coordinate in EQ world units.
     pub x: f32,
+    /// Y coordinate in EQ world units.
     pub y: f32,
+    /// Z coordinate in EQ world units.
     pub z: f32,
 }
 

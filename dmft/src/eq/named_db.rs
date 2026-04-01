@@ -9,21 +9,31 @@ use std::path::Path;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NamedPriority {
+    /// Kill on sight — rare drops, quest targets.
     High,
+    /// Worth pulling if nearby, but not worth hunting.
     Medium,
+    /// Track for information, low priority to engage.
     Low,
 }
 
 /// A single named mob entry from a zone TOML file.
 #[derive(Debug, Clone, Deserialize)]
 pub struct NamedMobEntry {
+    /// Display name of the named mob.
     pub name: String,
+    /// Expected level of the mob.
     pub level: u8,
+    /// Minimum respawn time in minutes.
     pub respawn_min_minutes: u32,
+    /// Maximum respawn time in minutes.
     pub respawn_max_minutes: u32,
+    /// Known spawn location as `[x, y, z]`.
     pub location: [f32; 3],
+    /// Notable drops from this mob.
     #[serde(default)]
     pub drops: Vec<String>,
+    /// Priority level for pull target selection.
     pub priority: NamedPriority,
 }
 

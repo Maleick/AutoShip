@@ -6,9 +6,16 @@ use std::time::{Duration, Instant};
 /// Health status of a monitored EQ client.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientHealth {
+    /// Client is responding to pings normally.
     Healthy,
-    Unresponsive { since: Instant },
+    /// Client stopped responding to pings.
+    Unresponsive {
+        /// When the client was first detected as unresponsive.
+        since: Instant,
+    },
+    /// Client process has exited.
     Crashed,
+    /// Client is being restarted by the self-healing monitor.
     Restarting,
 }
 
@@ -25,6 +32,7 @@ pub struct HealthMonitor {
 }
 
 impl HealthMonitor {
+    /// Creates a new health monitor for the given client and process.
     #[must_use]
     pub fn new(client_id: ClientId, pid: u32) -> Self {
         Self {
@@ -96,21 +104,25 @@ impl HealthMonitor {
         self.health = ClientHealth::Healthy;
     }
 
+    /// The client ID being monitored.
     #[must_use]
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }
 
+    /// The OS process ID of the monitored client.
     #[must_use]
     pub fn pid(&self) -> u32 {
         self.pid
     }
 
+    /// How many times this client has been restarted.
     #[must_use]
     pub fn restart_count(&self) -> u32 {
         self.restart_count
     }
 
+    /// The interval between health check pings.
     #[must_use]
     pub fn ping_interval(&self) -> Duration {
         self.ping_interval

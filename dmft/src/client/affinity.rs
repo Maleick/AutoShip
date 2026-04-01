@@ -1,17 +1,26 @@
 use anyhow::Result;
 
+/// CPU affinity and process priority settings for an EQ client.
 #[derive(Debug, Clone)]
 pub struct AffinityConfig {
+    /// Bitmask of CPU cores this process may run on.
     pub cpu_mask: u64,
+    /// Windows scheduling priority class.
     pub priority: ProcessPriority,
 }
 
+/// Windows process priority classes.
 #[derive(Debug, Clone)]
 pub enum ProcessPriority {
+    /// Lowest priority — only runs when system is idle.
     Idle,
+    /// Below normal priority.
     BelowNormal,
+    /// Default priority.
     Normal,
+    /// Above normal priority.
     AboveNormal,
+    /// High priority — use sparingly.
     High,
 }
 

@@ -3,9 +3,16 @@
 /// Death state for a single group member.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeathState {
+    /// Member is alive and functional.
     Alive,
-    Dead { died_at_tick: u64 },
+    /// Member is dead, awaiting resurrection.
+    Dead {
+        /// Tick when death occurred.
+        died_at_tick: u64,
+    },
+    /// Resurrection spell cast, waiting for the rez dialog to appear.
     WaitingForRez,
+    /// Just resurrected, needs to stand and rebuff.
     Rebuffing,
 }
 
@@ -16,6 +23,7 @@ pub struct RecoveryTracker {
 }
 
 impl RecoveryTracker {
+    /// Creates a new recovery tracker with all members starting alive.
     #[must_use]
     pub fn new(members: &[(u32, String)]) -> Self {
         Self {
