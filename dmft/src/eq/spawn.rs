@@ -450,9 +450,10 @@ fn read_spell_cast_metadata(
     let bucket_index = spell_id as usize & (dynamic_size - 1);
     let bucket_ptr_addr = buckets_addr + bucket_index * size_of::<usize>();
     let mut node_addr = proc.read_ptr(bucket_ptr_addr).ok().unwrap_or(0);
+    const MAX_HASH_MAP_HOPS: usize = 128;
     let mut hops = 0usize;
 
-    while node_addr != 0 && hops < 128 {
+    while node_addr != 0 && hops < MAX_HASH_MAP_HOPS {
         let node_key = proc.read::<i32>(node_addr + spell_hash_map::KEY).ok()?;
         if node_key == spell_id as i32 {
             let spell_addr = node_addr + spell_hash_map::VALUE;
