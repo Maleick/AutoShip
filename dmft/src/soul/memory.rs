@@ -826,4 +826,338 @@ mod tests {
         };
         assert_eq!(event_zone(&chat), None);
     }
+
+    #[test]
+    fn record_summary_inserts_successfully() {
+        let store = open_memory_store();
+        let result = store.record_summary(
+            1,
+            "2026-03-30 12:00",
+            "2026-03-30 14:00",
+            "Killed many gnolls in Blackburrow. Found a good camp spot.",
+            Some("Excited"),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn record_summary_without_mood_trend() {
+        let store = open_memory_store();
+        let result = store.record_summary(1, "start", "end", "Did things.", None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn record_shared_reference_inserts_successfully() {
+        let store = open_memory_store();
+        let id = store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        let result = store.record_shared_reference(1, 2, id, "Killed gnoll together");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn export_character_json_produces_valid_json() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Excited, 5.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "bb"), MoodState::Happy, 3.0)
+            .unwrap();
+        store
+            .record_conversation(1, "Dave", true, "say", "Hello!", Some(0.8))
+            .unwrap();
+
+        let json = store.export_character_json(1).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["character_id"], 1);
+        assert_eq!(parsed["memories"].as_array().unwrap().len(), 2);
+        assert_eq!(parsed["conversations"].as_array().unwrap().len(), 1);
+        assert!(parsed["speech_style"]["vocabulary_level"].is_number());
+    }
+
+    #[test]
+    fn export_character_json_empty_character() {
+        let store = open_memory_store();
+        let json = store.export_character_json(99).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["character_id"], 99);
+        assert!(parsed["memories"].as_array().unwrap().is_empty());
+        assert!(parsed["conversations"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn decay_tick_only_affects_specified_character() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 4.0)
+            .unwrap();
+        store
+            .record(2, &kill_event("orc", "cb"), MoodState::Neutral, 4.0)
+            .unwrap();
+
+        store.decay_tick(1, 0.5).unwrap();
+
+        let char1 = store.recall_recent(1, 10).unwrap();
+        let char2 = store.recall_recent(2, 10).unwrap();
+        assert!((char1[0].importance - 2.0).abs() < 0.01);
+        assert!((char2[0].importance - 4.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn prune_skips_already_decayed() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 0.01)
+            .unwrap();
+
+        // First prune should mark it decayed
+        let pruned = store.prune_low_importance(1, 0.1).unwrap();
+        assert_eq!(pruned, 1);
+
+        // Second prune should find nothing (already decayed)
+        let pruned = store.prune_low_importance(1, 0.1).unwrap();
+        assert_eq!(pruned, 0);
+    }
+
+    #[test]
+    fn prune_does_not_touch_high_importance() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 5.0)
+            .unwrap();
+
+        let pruned = store.prune_low_importance(1, 0.1).unwrap();
+        assert_eq!(pruned, 0);
+
+        let memories = store.recall_recent(1, 10).unwrap();
+        assert_eq!(memories.len(), 1);
+    }
+
+    #[test]
+    fn connection_accessor() {
+        let store = open_memory_store();
+        let conn = store.connection();
+        // Should be able to query via the raw connection
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM memories", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn recall_conversations_filters_by_character() {
+        let store = open_memory_store();
+        store
+            .record_conversation(1, "Alice", true, "say", "Hi", Some(0.5))
+            .unwrap();
+        store
+            .record_conversation(2, "Bob", true, "tell", "Hey", Some(0.6))
+            .unwrap();
+
+        let c1 = store.recall_conversations(1, 10).unwrap();
+        let c2 = store.recall_conversations(2, 10).unwrap();
+        assert_eq!(c1.len(), 1);
+        assert_eq!(c1[0].speaker, "Alice");
+        assert_eq!(c2.len(), 1);
+        assert_eq!(c2[0].speaker, "Bob");
+    }
+
+    #[test]
+    fn recall_conversations_respects_limit() {
+        let store = open_memory_store();
+        for i in 0..10 {
+            store
+                .record_conversation(
+                    1,
+                    &format!("Player{}", i),
+                    true,
+                    "say",
+                    "msg",
+                    Some(0.5),
+                )
+                .unwrap();
+        }
+        let convos = store.recall_conversations(1, 3).unwrap();
+        assert_eq!(convos.len(), 3);
+    }
+
+    #[test]
+    fn event_type_label_all_variants() {
+        assert_eq!(
+            event_type_label(&SoulEvent::Kill {
+                target: "".into(),
+                zone: "".into()
+            }),
+            "kill"
+        );
+        assert_eq!(
+            event_type_label(&SoulEvent::Loot {
+                item: "".into(),
+                zone: "".into()
+            }),
+            "loot"
+        );
+        assert_eq!(
+            event_type_label(&SoulEvent::ZoneEnter { zone: "".into() }),
+            "zone_enter"
+        );
+        assert_eq!(
+            event_type_label(&SoulEvent::PlayerChat {
+                player_name: "".into(),
+                sentiment: 0.0
+            }),
+            "player_chat"
+        );
+        assert_eq!(
+            event_type_label(&SoulEvent::MoodShift {
+                from: MoodState::Neutral,
+                to: MoodState::Happy,
+                reason: "test".into(),
+            }),
+            "mood_shift"
+        );
+        assert_eq!(
+            event_type_label(&SoulEvent::RelationshipChange {
+                character: "".into(),
+                delta: 0.0
+            }),
+            "relationship_change"
+        );
+    }
+
+    #[test]
+    fn event_zone_for_all_zone_events() {
+        assert_eq!(
+            event_zone(&SoulEvent::Kill {
+                target: "orc".into(),
+                zone: "cb".into()
+            }),
+            Some("cb".into())
+        );
+        assert_eq!(
+            event_zone(&SoulEvent::Loot {
+                item: "sword".into(),
+                zone: "guk".into()
+            }),
+            Some("guk".into())
+        );
+        assert_eq!(
+            event_zone(&SoulEvent::ZoneEnter {
+                zone: "befallen".into()
+            }),
+            Some("befallen".into())
+        );
+        assert_eq!(
+            event_zone(&SoulEvent::GroupWipe {
+                zone: "lower_guk".into()
+            }),
+            Some("lower_guk".into())
+        );
+    }
+
+    #[test]
+    fn event_zone_none_for_non_zone_events() {
+        assert_eq!(
+            event_zone(&SoulEvent::LevelUp { new_level: 50 }),
+            None
+        );
+        assert_eq!(
+            event_zone(&SoulEvent::MoodShift {
+                from: MoodState::Neutral,
+                to: MoodState::Angry,
+                reason: "test".into(),
+            }),
+            None
+        );
+        assert_eq!(
+            event_zone(&SoulEvent::RelationshipChange {
+                character: "Test".into(),
+                delta: 10.0
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn memory_row_decayed_flag() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 0.01)
+            .unwrap();
+
+        // Before pruning, should not be decayed
+        let conn = store.connection();
+        let decayed: bool = conn
+            .query_row(
+                "SELECT decayed FROM memories WHERE character_id = 1",
+                [],
+                |r| r.get::<_, i32>(0).map(|v| v != 0),
+            )
+            .unwrap();
+        assert!(!decayed);
+
+        store.prune_low_importance(1, 0.1).unwrap();
+
+        let decayed: bool = conn
+            .query_row(
+                "SELECT decayed FROM memories WHERE character_id = 1",
+                [],
+                |r| r.get::<_, i32>(0).map(|v| v != 0),
+            )
+            .unwrap();
+        assert!(decayed);
+    }
+
+    #[test]
+    fn conversation_row_clone_and_debug() {
+        let store = open_memory_store();
+        store
+            .record_conversation(1, "Dave", true, "say", "Hello", Some(0.9))
+            .unwrap();
+        let convos = store.recall_conversations(1, 1).unwrap();
+        let c = convos[0].clone();
+        assert_eq!(c.speaker, "Dave");
+        assert!(c.is_player);
+        assert_eq!(c.channel, "say");
+        assert_eq!(c.message, "Hello");
+        assert!((c.sentiment.unwrap() - 0.9).abs() < 0.01);
+        let _ = format!("{:?}", c);
+    }
+
+    #[test]
+    fn memory_row_clone_and_debug() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Excited, 3.0)
+            .unwrap();
+        let memories = store.recall_recent(1, 1).unwrap();
+        let m = memories[0].clone();
+        assert_eq!(m.event_type, "kill");
+        assert!(!m.decayed);
+        let _ = format!("{:?}", m);
+    }
+
+    #[test]
+    fn update_speech_patterns_overwrites() {
+        let store = open_memory_store();
+        let style1 = SpeechStyle {
+            vocabulary_level: 0.3,
+            ..Default::default()
+        };
+        store.update_speech_patterns(1, &style1).unwrap();
+
+        let style2 = SpeechStyle {
+            vocabulary_level: 0.9,
+            catchphrases: vec!["Indeed!".into()],
+            ..Default::default()
+        };
+        store.update_speech_patterns(1, &style2).unwrap();
+
+        let loaded = store.get_speech_patterns(1).unwrap();
+        assert!((loaded.vocabulary_level - 0.9).abs() < 0.01);
+        assert_eq!(loaded.catchphrases, vec!["Indeed!"]);
+    }
 }
