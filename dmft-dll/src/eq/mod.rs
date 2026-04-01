@@ -43,6 +43,14 @@ fn get_eq_base() -> Option<u64> {
 /// Returns `true` if the address looks valid, `false` otherwise (with a warning log).
 #[cfg(windows)]
 fn validate_fn_ptr(addr: usize, name: &str) -> bool {
+    use windows::Win32::System::Memory::{
+        MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
+        PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, VirtualQuery,
+    };
+
+    // eqgame.exe is typically ~50-80 MB. Use 256 MB as a generous upper bound.
+    const MAX_MODULE_SIZE: usize = 256 * 1024 * 1024;
+
     if addr == 0 {
         tracing::warn!(name, "Function pointer address is null");
         return false;
@@ -54,8 +62,6 @@ fn validate_fn_ptr(addr: usize, name: &str) -> bool {
         return false;
     }
 
-    // eqgame.exe is typically ~50-80 MB. Use 256 MB as a generous upper bound.
-    const MAX_MODULE_SIZE: usize = 256 * 1024 * 1024;
     if addr < eq_base || addr >= eq_base + MAX_MODULE_SIZE {
         tracing::warn!(
             name,
@@ -65,12 +71,6 @@ fn validate_fn_ptr(addr: usize, name: &str) -> bool {
         );
         return false;
     }
-
-    // Use VirtualQuery to verify the page is committed and executable.
-    use windows::Win32::System::Memory::{
-        MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
-        PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, VirtualQuery,
-    };
 
     let mut mbi = MEMORY_BASIC_INFORMATION::default();
     let result = unsafe {
@@ -154,6 +154,16 @@ fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
 pub fn cast_spell(gem_id: u8, spell_id: i32) {
     #[cfg(windows)]
     {
+        // CharacterZoneClient::CastSpell(this, gemid, spellid, item_ptr, item_guid)
+        // x64: this=RCX, gemid=DL, spellid=R8D, item_ptr=R9, item_guid=[stack]
+        type CastSpellFn = unsafe extern "C" fn(
+            *mut c_void, // this (CharacterZoneClient*)
+            u8,          // gem_id
+            i32,         // spell_id
+            *mut c_void, // item_ptr (null for normal casts)
+            u64,         // item_guid (0 for normal casts)
+        );
+
         let Some(eq_base) = get_eq_base() else {
             tracing::error!("EQ base not set");
             return;
@@ -171,16 +181,6 @@ pub fn cast_spell(gem_id: u8, spell_id: i32) {
         if !validate_fn_ptr(addr, "CastSpell") {
             return;
         }
-
-        // CharacterZoneClient::CastSpell(this, gemid, spellid, item_ptr, item_guid)
-        // x64: this=RCX, gemid=DL, spellid=R8D, item_ptr=R9, item_guid=[stack]
-        type CastSpellFn = unsafe extern "C" fn(
-            *mut c_void, // this (CharacterZoneClient*)
-            u8,          // gem_id
-            i32,         // spell_id
-            *mut c_void, // item_ptr (null for normal casts)
-            u64,         // item_guid (0 for normal casts)
-        );
         // SAFETY: addr was rebased from CAST_SPELL — a known function in
         // eqgame.exe. The transmute converts it to CharacterZoneClient::CastSpell's
         // calling convention. `player` is a validated non-null PlayerClient*.
@@ -212,6 +212,13 @@ pub fn cast_spell(gem_id: u8, spell_id: i32) {
 pub fn do_attack(attack_type: u8) {
     #[cfg(windows)]
     {
+        // PlayerZoneClient::DoAttack(this, slot, unknown)
+        type DoAttackFn = unsafe extern "C" fn(
+            *mut c_void, // this (PlayerZoneClient*)
+            u8,          // attack_type/slot
+            *mut c_void, // unknown (null)
+        );
+
         let Some(eq_base) = get_eq_base() else {
             tracing::error!("EQ base not set");
             return;
@@ -229,13 +236,6 @@ pub fn do_attack(attack_type: u8) {
         if !validate_fn_ptr(addr, "DoAttack") {
             return;
         }
-
-        // PlayerZoneClient::DoAttack(this, slot, unknown)
-        type DoAttackFn = unsafe extern "C" fn(
-            *mut c_void, // this (PlayerZoneClient*)
-            u8,          // attack_type/slot
-            *mut c_void, // unknown (null)
-        );
         // SAFETY: addr was rebased from DO_ATTACK. The transmute converts it
         // to PlayerZoneClient::DoAttack's calling convention. `player` is a
         // validated non-null PlayerClient*. Null unknown arg is the standard
@@ -266,6 +266,14 @@ pub fn do_attack(attack_type: u8) {
 pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
     #[cfg(windows)]
     {
+        // CharacterZoneClient::UseSkill(this, skill, target, bAuto)
+        type UseSkillFn = unsafe extern "C" fn(
+            *mut c_void, // this (CharacterZoneClient*)
+            u32,         // skill_id
+            *mut c_void, // target (PlayerZoneClient*)
+            bool,        // bAuto (false = manual activation)
+        );
+
         let Some(eq_base) = get_eq_base() else {
             tracing::error!("EQ base not set");
             return;
@@ -283,14 +291,6 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
         if !validate_fn_ptr(addr, "UseSkill") {
             return;
         }
-
-        // CharacterZoneClient::UseSkill(this, skill, target, bAuto)
-        type UseSkillFn = unsafe extern "C" fn(
-            *mut c_void, // this (CharacterZoneClient*)
-            u32,         // skill_id
-            *mut c_void, // target (PlayerZoneClient*)
-            bool,        // bAuto (false = manual activation)
-        );
         // SAFETY: addr was rebased from USE_SKILL. The transmute converts it
         // to CharacterZoneClient::UseSkill's calling convention. `player` is
         // validated non-null. target_ptr may be null (use current target).
@@ -318,6 +318,13 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
 pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
     #[cfg(windows)]
     {
+        // PcZoneClient::DoCombatAbility(this, spellID, allowLowerRank)
+        type DoCombatAbilityFn = unsafe extern "C" fn(
+            *mut c_void, // this (PcZoneClient*)
+            i32,         // spell_id
+            bool,        // allow_lower_rank
+        );
+
         let Some(eq_base) = get_eq_base() else {
             tracing::error!("EQ base not set");
             return;
@@ -336,13 +343,6 @@ pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
         if !validate_fn_ptr(addr, "DoCombatAbility") {
             return;
         }
-
-        // PcZoneClient::DoCombatAbility(this, spellID, allowLowerRank)
-        type DoCombatAbilityFn = unsafe extern "C" fn(
-            *mut c_void, // this (PcZoneClient*)
-            i32,         // spell_id
-            bool,        // allow_lower_rank
-        );
         // SAFETY: addr was rebased from DO_COMBAT_ABILITY. The transmute
         // converts it to PcZoneClient::DoCombatAbility's calling convention.
         // `player` is validated non-null. If the offset is wrong, EQ crashes.
@@ -373,6 +373,16 @@ pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
 pub fn execute_cmd(cmd_id: u32, active: i32) {
     #[cfg(windows)]
     {
+        // __ExecuteCmd(this, cmd_id, active, unknown)
+        // __ExecuteCmd is a free function but uses this-call convention with
+        // a dummy first arg in the MQ2 source.
+        type ExecuteCmdFn = unsafe extern "C" fn(
+            *mut c_void, // this (unused, pass null)
+            u32,         // cmd_id
+            i32,         // active (1=on, 0=off)
+            *mut c_void, // unknown (null)
+        );
+
         let Some(eq_base) = get_eq_base() else {
             tracing::error!("EQ base not set");
             return;
@@ -386,16 +396,6 @@ pub fn execute_cmd(cmd_id: u32, active: i32) {
         if !validate_fn_ptr(addr, "ExecuteCmd") {
             return;
         }
-
-        // __ExecuteCmd(this, cmd_id, active, unknown)
-        // __ExecuteCmd is a free function but uses this-call convention with
-        // a dummy first arg in the MQ2 source.
-        type ExecuteCmdFn = unsafe extern "C" fn(
-            *mut c_void, // this (unused, pass null)
-            u32,         // cmd_id
-            i32,         // active (1=on, 0=off)
-            *mut c_void, // unknown (null)
-        );
         // SAFETY: addr was rebased from EXECUTE_CMD. The transmute converts
         // it to __ExecuteCmd's calling convention. The first arg (this) is null
         // per MQ2 convention (free function with dummy this-call). If the offset
@@ -436,6 +436,13 @@ pub fn toggle_auto_attack(enable: bool) {
 pub fn slash_command(command: &str) {
     #[cfg(windows)]
     {
+        // CEverQuest::InterpretCmd(this, PlayerClient*, const char*)
+        type InterpretCmdFn = unsafe extern "C" fn(
+            *mut c_void, // this (CEverQuest*)
+            *mut c_void, // pChar (PlayerClient*)
+            *const i8,   // szCmd
+        );
+
         let Some(eq_base) = get_eq_base() else {
             tracing::error!("EQ base not set");
             return;
@@ -468,13 +475,6 @@ pub fn slash_command(command: &str) {
                 return;
             }
         };
-
-        // CEverQuest::InterpretCmd(this, PlayerClient*, const char*)
-        type InterpretCmdFn = unsafe extern "C" fn(
-            *mut c_void, // this (CEverQuest*)
-            *mut c_void, // pChar (PlayerClient*)
-            *const i8,   // szCmd
-        );
         let Some(interpret_addr) =
             dmft_common::offsets::rebase(dmft_common::offsets::INTERPRET_CMD, eq_base)
         else {
