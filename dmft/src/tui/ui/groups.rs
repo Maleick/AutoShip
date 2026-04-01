@@ -45,7 +45,7 @@ fn member_line<'a>(
 
     Line::from(vec![
         Span::styled(leader_marker, Style::default().fg(t.text_accent)),
-        Span::styled(format!("{:<12}", display_name), name_style),
+        Span::styled(format!("{display_name:<12}"), name_style),
         Span::styled(
             format!("{:<4}", player.class_str()),
             Style::default().fg(t.text_accent),
@@ -55,7 +55,7 @@ fn member_line<'a>(
             Style::default().fg(t.text_secondary),
         ),
         Span::styled(
-            format!(" {:>3.0}%", hp_pct),
+            format!(" {hp_pct:>3.0}%"),
             Style::default().fg(hp_color(hp_pct, t)),
         ),
         Span::styled(mana_str, Style::default().fg(t.mana_color)),
@@ -252,7 +252,7 @@ fn draw_live_group_panel(
             // Member not connected
             let display_name = app.redact_name(name).into_owned();
             lines.push(Line::from(vec![Span::styled(
-                format!("  {:<12} offline", display_name),
+                format!("  {display_name:<12} offline"),
                 Style::default().fg(t.text_muted),
             )]));
         }
@@ -298,20 +298,20 @@ fn draw_ungrouped_panel(
                     "     -".into()
                 };
                 lines.push(Line::from(vec![
-                    Span::styled(format!(" {:<12}", name), Style::default().fg(t.text_normal)),
+                    Span::styled(format!(" {name:<12}"), Style::default().fg(t.text_normal)),
                     Span::styled(
                         format!("{:<4}", player.class_str()),
                         Style::default().fg(t.text_accent),
                     ),
                     Span::styled(
-                        format!(" {:>3.0}%", hp_pct),
+                        format!(" {hp_pct:>3.0}%"),
                         Style::default().fg(hp_color(hp_pct, t)),
                     ),
                     Span::styled(mana_str, Style::default().fg(t.mana_color)),
                 ]));
             } else {
                 lines.push(Line::from(Span::styled(
-                    format!("  {} (loading…)", name),
+                    format!("  {name} (loading…)"),
                     Style::default().fg(t.text_muted),
                 )));
             }
@@ -505,7 +505,7 @@ fn draw_config_group_panel(
             )]));
         } else {
             lines.push(Line::from(Span::styled(
-                format!("  #{:02} ── empty ──", acct_num),
+                format!("  #{acct_num:02} ── empty ──"),
                 Style::default().fg(t.text_muted),
             )));
         }

@@ -111,7 +111,7 @@ impl fmt::Display for SpawnType {
             Self::Player => write!(f, "PC"),
             Self::Npc => write!(f, "NPC"),
             Self::Corpse => write!(f, "Corpse"),
-            Self::Unknown(id) => write!(f, "Unknown({})", id),
+            Self::Unknown(id) => write!(f, "Unknown({id})"),
         }
     }
 }
@@ -207,9 +207,9 @@ impl BuffSlot {
         let m = secs / 60;
         let s = secs % 60;
         if m > 0 {
-            format!("{}:{:02}", m, s)
+            format!("{m}:{s:02}")
         } else {
-            format!("{}s", s)
+            format!("{s}s")
         }
     }
 }
@@ -318,7 +318,7 @@ impl SpawnInfo {
             330 => "Froglok".to_string(),
             522 => "Drakkin".to_string(),
             0 => "Unknown".to_string(),
-            id => format!("R{}", id),
+            id => format!("R{id}"),
         }
     }
 }

@@ -67,7 +67,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 
     let client_count = app.clients.len();
     let client_str = if client_count > 0 {
-        format!(" {}✕ EQ", client_count)
+        format!(" {client_count}✕ EQ")
     } else {
         " Not attached".into()
     };
@@ -123,11 +123,11 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(" │", t.border_dim),
         Span::styled(&selected_str, t.header_selected),
         Span::styled("│ ", t.border_dim),
-        Span::styled(format!(" {} ", group_label), group_style),
+        Span::styled(format!(" {group_label} "), group_style),
         Span::styled(" │ ", t.border_dim),
         Span::styled(&server_str, Style::default().fg(t.text_server)),
         Span::styled("│ ", t.border_dim),
-        Span::styled(format!(" {} ", zone_str), t.header_zone),
+        Span::styled(format!(" {zone_str} "), t.header_zone),
         Span::styled("│", t.border_dim),
         Span::styled("  ", Style::default()),
     ];
@@ -217,7 +217,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
     // Mode badge
     right.push(Span::styled(
-        format!(" {} ", mode_str),
+        format!(" {mode_str} "),
         Style::default()
             .fg(Color::Black)
             .bg(mode_bg)
@@ -229,7 +229,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let filter = app.spawns_state.spawn_type_filter.label();
     if filter != "All" {
         right.push(Span::styled(
-            format!(" {} ", filter),
+            format!(" {filter} "),
             Style::default()
                 .fg(Color::Black)
                 .bg(t.text_accent)
@@ -285,7 +285,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let kv = |k: &'static str, v: &'static str| -> Line<'static> {
         Line::from(vec![
-            Span::styled(format!(" {:<12}", k), key_s),
+            Span::styled(format!(" {k:<12}"), key_s),
             Span::styled(v, desc_s),
         ])
     };

@@ -17,8 +17,7 @@ use crate::{SOUL_DB_PATH, get_module_base};
 fn load_pid_session(pid: u32) -> Result<(dmft_common::ipc::SessionToken, u64)> {
     let token = ipc::load_session_token(pid).ok_or_else(|| {
         anyhow::anyhow!(
-            "No session token for PID {}. Inject the DLL first to create authenticated IPC state.",
-            pid
+            "No session token for PID {pid}. Inject the DLL first to create authenticated IPC state."
         )
     })?;
     let session_id = dmft_common::ipc::session_id_from_token(&token);
@@ -28,9 +27,9 @@ fn load_pid_session(pid: u32) -> Result<(dmft_common::ipc::SessionToken, u64)> {
 fn connect_authenticated_pipe(pid: u32) -> Result<ipc::pipe::CommandPipe> {
     let (token, session_id) = load_pid_session(pid)?;
     let pipe = ipc::pipe::CommandPipe::connect(pid, session_id)
-        .with_context(|| format!("Failed to connect to PID {}. Is the DLL injected?", pid))?;
+        .with_context(|| format!("Failed to connect to PID {pid}. Is the DLL injected?"))?;
     pipe.send_raw_token(&token)
-        .with_context(|| format!("Failed to authenticate with PID {}", pid))?;
+        .with_context(|| format!("Failed to authenticate with PID {pid}"))?;
     Ok(pipe)
 }
 
@@ -38,8 +37,7 @@ fn shared_state_reader_for_pid(pid: u32) -> Result<ipc::shared::SharedStateReade
     let (_, session_id) = load_pid_session(pid)?;
     ipc::shared::SharedStateReader::new(pid, session_id).with_context(|| {
         format!(
-            "Cannot open shared memory for PID {} — is the DLL injected?",
-            pid
+            "Cannot open shared memory for PID {pid} — is the DLL injected?"
         )
     })
 }
@@ -149,10 +147,10 @@ pub fn run_inject_mode() -> Result<()> {
     let mut failed = 0u32;
 
     for &pid in &pids {
-        print!("Injecting into PID {}... ", pid);
+        print!("Injecting into PID {pid}... ");
         // Write session token before injection so DLL can read it during init.
         if let Err(e) = ipc::write_session_token_file(pid) {
-            println!("FAILED: token write failed: {:#}", e);
+            println!("FAILED: token write failed: {e:#}");
             error!(pid, error = %e, "Session token staging failed");
             failed += 1;
             continue;
@@ -164,7 +162,7 @@ pub fn run_inject_mode() -> Result<()> {
                 success += 1;
             }
             Err(e) => {
-                println!("FAILED: {:#}", e);
+                println!("FAILED: {e:#}");
                 error!(pid, error = %e, "Injection failed");
                 failed += 1;
             }
@@ -172,7 +170,7 @@ pub fn run_inject_mode() -> Result<()> {
     }
 
     println!();
-    println!("Results: {} succeeded, {} failed", success, failed);
+    println!("Results: {success} succeeded, {failed} failed");
     println!();
     println!("Log locations:");
     println!("  Orchestrator: logs/dmft.log");
@@ -196,7 +194,7 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
     use dmft_common::ipc::{Command, Response};
     use dmft_common::nav::ZoneGraph;
 
-    println!("Querying zone graph from PID {}...", pid);
+    println!("Querying zone graph from PID {pid}...");
 
     let pipe = connect_authenticated_pipe(pid)?;
     let response = pipe
@@ -235,11 +233,11 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
             let transfer_names = ["Zone Line", "Door", "Book", "Translocator", "Spell"];
             for (zone_id, name, min_level, max_level, conns) in &zones {
                 let level_str = if *max_level > 0 {
-                    format!(" (lv {}-{})", min_level, max_level)
+                    format!(" (lv {min_level}-{max_level})")
                 } else {
                     String::new()
                 };
-                println!("[{:>3}] {}{}", zone_id, name, level_str);
+                println!("[{zone_id:>3}] {name}{level_str}");
                 for (dest_id, tt, disabled) in conns {
                     let tt_name = transfer_names.get(*tt as usize).unwrap_or(&"Unknown");
                     let dest_name = zones
@@ -249,17 +247,16 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
                         .unwrap_or("???");
                     let disabled_str = if *disabled { " [DISABLED]" } else { "" };
                     println!(
-                        "      -> [{:>3}] {} via {}{}",
-                        dest_id, dest_name, tt_name, disabled_str
+                        "      -> [{dest_id:>3}] {dest_name} via {tt_name}{disabled_str}"
                     );
                 }
             }
         }
         Response::Error { message } => {
-            anyhow::bail!("DLL returned error: {}", message);
+            anyhow::bail!("DLL returned error: {message}");
         }
         other => {
-            anyhow::bail!("Unexpected response: {:?}", other);
+            anyhow::bail!("Unexpected response: {other:?}");
         }
     }
 
@@ -339,7 +336,7 @@ pub fn run_statusall_mode() -> Result<()> {
                                 waypoint_count,
                                 ..
                             } => {
-                                format!("{}/{}", waypoint_index, waypoint_count)
+                                format!("{waypoint_index}/{waypoint_count}")
                             }
                             dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
                             dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
@@ -391,7 +388,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
 
-    println!("Navigating PID {} -> ({}, {}, {})", pid, x, y, z);
+    println!("Navigating PID {pid} -> ({x}, {y}, {z})");
 
     // 1. Read shared memory to get current position and zone
     let waypoints = match shared_state_reader_for_pid(pid) {
@@ -425,7 +422,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
                                 "Navmesh path query failed: {:#} — falling back to straight line",
                                 e
                             );
-                            println!("Navmesh path failed: {} — using straight line", e);
+                            println!("Navmesh path failed: {e} — using straight line");
                             vec![Waypoint::new(x, y, z)]
                         }
                     },
@@ -434,7 +431,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
                             "Cannot load navmesh for zone '{}': {:#} — falling back to straight line",
                             zone, e
                         );
-                        println!("No navmesh for '{}': {} — using straight line", zone, e);
+                        println!("No navmesh for '{zone}': {e} — using straight line");
                         vec![Waypoint::new(x, y, z)]
                     }
                 }
@@ -446,8 +443,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
         },
         Err(e) => {
             println!(
-                "Cannot read shared memory for PID {}: {} — using straight line",
-                pid, e
+                "Cannot read shared memory for PID {pid}: {e} — using straight line"
             );
             vec![Waypoint::new(x, y, z)]
         }
@@ -457,7 +453,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     let pipe = connect_authenticated_pipe(pid)?;
     let cmd = Command::NavigateTo { waypoints };
     pipe.send_async(&cmd)
-        .context(format!("Failed to send NavigateTo to PID {}", pid))?;
+        .context(format!("Failed to send NavigateTo to PID {pid}"))?;
 
     println!("NavigateTo sent — character should start moving.");
     Ok(())
@@ -495,7 +491,7 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
                     let player = match state.local_player.as_ref() {
                         Some(p) => p,
                         None => {
-                            println!("  PID {}: no player data — skipping", pid);
+                            println!("  PID {pid}: no player data — skipping");
                             fail_count += 1;
                             continue;
                         }
@@ -534,12 +530,12 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
                     }
                 }
                 _ => {
-                    println!("  PID {}: no shared memory data — straight line", pid);
+                    println!("  PID {pid}: no shared memory data — straight line");
                     vec![Waypoint::new(x, y, z)]
                 }
             },
             Err(_) => {
-                println!("  PID {}: cannot read shared memory — skipping", pid);
+                println!("  PID {pid}: cannot read shared memory — skipping");
                 fail_count += 1;
                 continue;
             }
@@ -550,20 +546,20 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
             Ok(pipe) => {
                 let cmd = Command::NavigateTo { waypoints };
                 if let Err(e) = pipe.send_async(&cmd) {
-                    println!("  PID {}: send failed: {} — skipping", pid, e);
+                    println!("  PID {pid}: send failed: {e} — skipping");
                     fail_count += 1;
                 } else {
                     success_count += 1;
                 }
             }
             Err(e) => {
-                println!("  PID {}: cannot connect ({})", pid, e);
+                println!("  PID {pid}: cannot connect ({e})");
                 fail_count += 1;
             }
         }
     }
 
-    println!("Done: {} navigating, {} failed", success_count, fail_count);
+    println!("Done: {success_count} navigating, {fail_count} failed");
     Ok(())
 }
 
@@ -585,10 +581,10 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     ipc::write_session_token_file(pid)?;
 
     let staged_dll = inject::dll_prep::prepare_dll(source_dll)?;
-    println!("Injecting into PID {}...", pid);
+    println!("Injecting into PID {pid}...");
 
     inject::loader::inject_dll(pid, &staged_dll)?;
-    println!("OK — DLL injected into PID {}", pid);
+    println!("OK — DLL injected into PID {pid}");
     Ok(())
 }
 
@@ -603,8 +599,7 @@ pub fn run_login_pid_mode(
     use dmft_common::ipc::Command;
 
     println!(
-        "Sending StartLogin to PID {} (account: {}, server: {})...",
-        pid, account, server
+        "Sending StartLogin to PID {pid} (account: {account}, server: {server})..."
     );
 
     let pipe = connect_authenticated_pipe(pid)?;
@@ -615,9 +610,9 @@ pub fn run_login_pid_mode(
         character_name: character.to_string(),
     };
     pipe.send_async(&cmd)
-        .context(format!("Failed to send StartLogin to PID {}", pid))?;
+        .context(format!("Failed to send StartLogin to PID {pid}"))?;
 
-    println!("StartLogin sent to PID {}", pid);
+    println!("StartLogin sent to PID {pid}");
     Ok(())
 }
 
@@ -635,8 +630,7 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
 
     for &pid in &pids {
         println!(
-            "Sending StartLogin to PID {} (account: {}, server: {})...",
-            pid, account, server
+            "Sending StartLogin to PID {pid} (account: {account}, server: {server})..."
         );
 
         match connect_authenticated_pipe(pid) {
@@ -648,13 +642,13 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
                     character_name: character.to_string(),
                 };
                 if pipe.send_async(&cmd).is_ok() {
-                    println!("  StartLogin sent to PID {}", pid);
+                    println!("  StartLogin sent to PID {pid}");
                 } else {
-                    println!("  Failed to send StartLogin to PID {}", pid);
+                    println!("  Failed to send StartLogin to PID {pid}");
                 }
             }
             Err(_) => {
-                println!("  Cannot connect to PID {} — is the DLL injected?", pid);
+                println!("  Cannot connect to PID {pid} — is the DLL injected?");
             }
         }
     }
@@ -676,19 +670,19 @@ pub fn run_calibrate_mode() -> Result<()> {
     }
 
     for &pid in &pids {
-        println!("Sending calibrate_login to PID {}...", pid);
+        println!("Sending calibrate_login to PID {pid}...");
 
         match connect_authenticated_pipe(pid) {
             Ok(pipe) => {
                 let cmd = Command::CalibrateLogin;
                 if pipe.send_async(&cmd).is_ok() {
-                    println!("  Calibration sent to PID {}", pid);
+                    println!("  Calibration sent to PID {pid}");
                 } else {
-                    println!("  Failed to send calibration to PID {}", pid);
+                    println!("  Failed to send calibration to PID {pid}");
                 }
             }
             Err(_) => {
-                println!("  Cannot connect to PID {} — is the DLL injected?", pid);
+                println!("  Cannot connect to PID {pid} — is the DLL injected?");
             }
         }
     }
@@ -701,7 +695,7 @@ pub fn run_calibrate_mode() -> Result<()> {
 pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
-    println!("Sending command to PID {}: {}", pid, command);
+    println!("Sending command to PID {pid}: {command}");
 
     let pipe = connect_authenticated_pipe(pid)?;
     // Send the slash command (fire-and-forget — DLL disconnects pipe after read).
@@ -824,7 +818,7 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
     let mut lines = Vec::new();
     for (i, chunk) in bytes.chunks(16).enumerate() {
         let offset = i * 16;
-        let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+        let hex: Vec<String> = chunk.iter().map(|b| format!("{b:02x}")).collect();
         let ascii: String = chunk
             .iter()
             .map(|&b| {
@@ -1015,7 +1009,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                         .filter(|n| {
                             !n.is_empty() && n.chars().all(|c| c.is_ascii_graphic() || c == ' ')
                         })
-                        .map(|n| format!(" -> name=\"{}\"", n))
+                        .map(|n| format!(" -> name=\"{n}\""))
                         .unwrap_or_default();
                     info!(
                         "  +{:#04x}: {:#018x} <-- VALID PTR{}",
@@ -1093,7 +1087,7 @@ fn dump_hex_region(
                 let chunk = &bytes[chunk_start..chunk_end];
                 let offset = start_offset + chunk_start;
 
-                let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                let hex: Vec<String> = chunk.iter().map(|b| format!("{b:02x}")).collect();
                 let ascii: String = chunk
                     .iter()
                     .map(|&b| {

@@ -101,11 +101,11 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
     // Load layers 0-3
     let suffixes = ["", "_1", "_2", "_3"];
     for suffix in &suffixes {
-        let filename = format!("{}{}.txt", zone_lower, suffix);
+        let filename = format!("{zone_lower}{suffix}.txt");
         let path = map_dir.join(&filename);
         if path.exists() {
             parse_map_file(&path, &mut lines, &mut points)
-                .with_context(|| format!("parsing {}", filename))?;
+                .with_context(|| format!("parsing {filename}"))?;
         }
     }
 

@@ -57,7 +57,7 @@ impl CredentialStore {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         conn.execute(
             "INSERT INTO accounts (account_name, password_enc, nonce, salt, updated_at)
              VALUES (?1, ?2, ?3, ?4, datetime('now'))
@@ -78,14 +78,14 @@ impl CredentialStore {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         let (password_enc, nonce, salt): (Vec<u8>, Vec<u8>, Vec<u8>) = conn
             .query_row(
                 "SELECT password_enc, nonce, salt FROM accounts WHERE account_name = ?1",
                 rusqlite::params![account_name],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
-            .with_context(|| format!("Account '{}' not found", account_name))?;
+            .with_context(|| format!("Account '{account_name}' not found"))?;
 
         let account_key = crypto::derive_key_from_master(&self.master_key, &salt)?;
         let plaintext = crypto::decrypt(&password_enc, &account_key, &nonce)
@@ -101,7 +101,7 @@ impl CredentialStore {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         let mut stmt = conn.prepare("SELECT account_name FROM accounts ORDER BY account_name")?;
         let names = stmt
             .query_map([], |row| row.get(0))?
@@ -114,14 +114,14 @@ impl CredentialStore {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         let rows = conn.execute(
             "DELETE FROM accounts WHERE account_name = ?1",
             rusqlite::params![account_name],
         )?;
 
         if rows == 0 {
-            anyhow::bail!("Account '{}' not found", account_name);
+            anyhow::bail!("Account '{account_name}' not found");
         }
 
         Ok(())

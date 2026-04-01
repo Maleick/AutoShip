@@ -230,8 +230,7 @@ pub fn handle_events(
                     app.cmd_state.command_buffer.clear();
                 } else {
                     app.status_message = format!(
-                        "F{}: no favorite assigned (use commands to build frequency)",
-                        n
+                        "F{n}: no favorite assigned (use commands to build frequency)"
                     );
                 }
                 return Ok(true);
@@ -309,12 +308,11 @@ pub fn handle_events(
                 }
                 _ => {}
             },
-            ActivePanel::TacticalMap => {
-                if key.code == KeyCode::Enter {
+            ActivePanel::TacticalMap
+                if key.code == KeyCode::Enter => {
                     app.toggle_tactical_map_maximized();
                     return Ok(true);
                 }
-            }
             ActivePanel::TacticalNavigation => match key.code {
                 KeyCode::Down | KeyCode::Char('j') => {
                     app.next_client();

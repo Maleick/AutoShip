@@ -182,8 +182,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         })
         .unwrap_or_else(|| {
             format!(
-                " Map: {} (no map data){}{} | Z filter: {:.0} [+/-] | m maximize ",
-                zone_label, player_pos_label, mesh_label, z_range
+                " Map: {zone_label} (no map data){player_pos_label}{mesh_label} | Z filter: {z_range:.0} [+/-] | m maximize "
             )
         });
 
@@ -684,7 +683,7 @@ fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
 
 fn tactical_section_title(label: &str, collapsed: bool) -> String {
     let icon = if collapsed { "▶" } else { "▼" };
-    format!(" {} {} ", label, icon)
+    format!(" {label} {icon} ")
 }
 
 fn draw_named_tracker_panel(
@@ -710,7 +709,7 @@ fn draw_named_tracker_panel(
 
     if collapsed {
         let title = tactical_section_title("Named", true);
-        let summary = format!("{} named up | {} tracked up", n_alive, u_up);
+        let summary = format!("{n_alive} named up | {u_up} tracked up");
         frame.render_widget(
             Paragraph::new(summary)
                 .block(panel(title.as_str(), border_style, t))
@@ -900,7 +899,7 @@ fn draw_navigation_summary(
     let idle = visible.len().saturating_sub(navigating + arrived + stuck);
 
     if collapsed {
-        let summary = format!("{} nav | {} arr | {} idle", navigating, arrived, idle);
+        let summary = format!("{navigating} nav | {arrived} arr | {idle} idle");
         frame.render_widget(
             Paragraph::new(summary)
                 .block(panel(title.as_str(), border_style, t))
@@ -974,13 +973,13 @@ fn draw_navigation_summary(
         Line::from(vec![
             Span::styled("Fleet    ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{} nav", navigating),
+                format!("{navigating} nav"),
                 Style::default().fg(t.text_highlight),
             ),
             Span::styled("  ", Style::default()),
-            Span::styled(format!("{} arr", arrived), Style::default().fg(t.hp_high)),
+            Span::styled(format!("{arrived} arr"), Style::default().fg(t.hp_high)),
             Span::styled("  ", Style::default()),
-            Span::styled(format!("{} idle", idle), Style::default().fg(t.text_muted)),
+            Span::styled(format!("{idle} idle"), Style::default().fg(t.text_muted)),
         ]),
         Line::from(vec![
             Span::styled(":nav ", Style::default().fg(t.text_accent)),

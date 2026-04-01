@@ -243,7 +243,7 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
 fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
     let token_path = std::env::temp_dir()
         .join("dmft")
-        .join(format!("token_{}.bin", pid));
+        .join(format!("token_{pid}.bin"));
 
     if let Ok(data) = std::fs::read(&token_path) {
         // Clean up — token is single-use

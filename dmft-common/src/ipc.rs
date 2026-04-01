@@ -275,13 +275,13 @@ pub fn generate_random_token() -> SessionToken {
 pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
     let token_dir = std::env::temp_dir().join("dmft");
     std::fs::create_dir_all(&token_dir)?;
-    let token_path = token_dir.join(format!("token_{}.bin", pid));
+    let token_path = token_dir.join(format!("token_{pid}.bin"));
 
     let token = generate_random_token();
 
     std::fs::write(&token_path, token)?;
     // Also persist a copy for later CLI commands that reconnect to the injected client.
-    let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
+    let login_token_path = token_dir.join(format!("login_token_{pid}.bin"));
     std::fs::write(&login_token_path, token)?;
 
     Ok(())
@@ -291,7 +291,7 @@ pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
 pub fn load_session_token(pid: u32) -> Option<SessionToken> {
     let token_path = std::env::temp_dir()
         .join("dmft")
-        .join(format!("login_token_{}.bin", pid));
+        .join(format!("login_token_{pid}.bin"));
 
     if let Ok(data) = std::fs::read(&token_path)
         && data.len() == 32
@@ -306,13 +306,13 @@ pub fn load_session_token(pid: u32) -> Option<SessionToken> {
 /// Build a per-client pipe name incorporating a random session ID.
 /// Format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
 pub fn pipe_name(session_id: u64, client_id: u32) -> String {
-    format!(r"\\.\pipe\{:x}_cmd_{}", session_id, client_id)
+    format!(r"\\.\pipe\{session_id:x}_cmd_{client_id}")
 }
 
 /// Build a per-client shared memory name incorporating a random session ID.
 /// Format: `{session_id:x}_state_{client_id}`
 pub fn shared_memory_name(session_id: u64, client_id: u32) -> String {
-    format!("{:x}_state_{}", session_id, client_id)
+    format!("{session_id:x}_state_{client_id}")
 }
 
 #[cfg(test)]

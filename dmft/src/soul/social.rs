@@ -188,7 +188,7 @@ impl SocialGraph {
                     rel.communication_style,
                 )
             }
-            None => format!("{} has no opinion of {}", from, to),
+            None => format!("{from} has no opinion of {to}"),
         }
     }
 

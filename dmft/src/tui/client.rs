@@ -30,7 +30,7 @@ impl ClientState {
             zone_name: String::from("Unknown"),
             character_name: String::new(),
             group_info: None,
-            client_status: format!("Attached to PID {}", pid),
+            client_status: format!("Attached to PID {pid}"),
             is_demo: false,
         }
     }

@@ -109,7 +109,7 @@ impl MemoryStore {
         let event_type = event_type_label(event);
         let event_json = serde_json::to_string(event).context("Failed to serialize SoulEvent")?;
         let zone = event_zone(event);
-        let mood_str = format!("{:?}", mood);
+        let mood_str = format!("{mood:?}");
 
         self.conn.execute(
             "INSERT INTO memories (character_id, event_type, event_json, zone, mood_at_time, importance)
@@ -148,7 +148,7 @@ impl MemoryStore {
         limit: usize,
     ) -> Result<Vec<MemoryRow>> {
         let escaped = subject.replace('%', "\\%").replace('_', "\\_");
-        let pattern = format!("%{}%", escaped);
+        let pattern = format!("%{escaped}%");
         let mut stmt = self.conn.prepare(
             "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
              FROM memories

@@ -151,7 +151,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                     );
                 }
                 cells.push(
-                    Cell::from(format!("{:>3.0}%", hp_pct))
+                    Cell::from(format!("{hp_pct:>3.0}%"))
                         .style(Style::default().fg(hp_color(hp_pct, t))),
                 );
                 cells.push(Cell::from(condition_label).style(condition_style));
@@ -561,8 +561,8 @@ fn preferred_height(constraint: Constraint) -> u16 {
 fn section_title(label: &str, key_hint: Option<&str>, collapsed: bool) -> String {
     let icon = if collapsed { "▶" } else { "▼" };
     match key_hint {
-        Some(key) => format!(" {} [{}] {} ", label, key, icon),
-        None => format!(" {} {} ", label, icon),
+        Some(key) => format!(" {label} [{key}] {icon} "),
+        None => format!(" {label} {icon} "),
     }
 }
 
@@ -856,7 +856,7 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!(" | {} | {} chars", mode_str, focused_count),
+                format!(" | {mode_str} | {focused_count} chars"),
                 t.text_muted,
             ),
         ])]
@@ -1008,7 +1008,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     let xp_15min = {
         let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
         if rate > 0.01 {
-            format!("{:.0}/hr", rate)
+            format!("{rate:.0}/hr")
         } else {
             "-".into()
         }
@@ -1039,7 +1039,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
             ),
             Span::styled("  |  P ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{:.0}", total_plat),
+                format!("{total_plat:.0}"),
                 Style::default().fg(t.text_highlight),
             ),
         ])]
@@ -1062,7 +1062,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
             Line::from(vec![
                 Span::styled("Pp  ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    format!("{:.0} ({}/hr)", total_plat, plat_per_hour),
+                    format!("{total_plat:.0} ({plat_per_hour}/hr)"),
                     Style::default().fg(t.text_highlight),
                 ),
             ]),
@@ -1091,7 +1091,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                 lines.push(Line::from(vec![
                     Span::raw(" "),
                     Span::styled(
-                        format!("{}× ", count),
+                        format!("{count}× "),
                         Style::default().fg(t.text_highlight),
                     ),
                     Span::styled(label, Style::default().fg(t.text_secondary)),

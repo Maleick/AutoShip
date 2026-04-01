@@ -329,7 +329,7 @@ fn refresh_eq_data_live(app: &mut App) {
         let proc = match ProcessHandle::open(client.pid) {
             Ok(p) => p,
             Err(e) => {
-                client.client_status = format!("Lost connection: {}", e);
+                client.client_status = format!("Lost connection: {e}");
                 continue;
             }
         };
@@ -337,19 +337,19 @@ fn refresh_eq_data_live(app: &mut App) {
         // Read local player
         match eq::spawn::read_local_player(&proc, client.eq_base) {
             Ok(player) => client.local_player = Some(player),
-            Err(e) => client.client_status = format!("Player read error: {}", e),
+            Err(e) => client.client_status = format!("Player read error: {e}"),
         }
 
         // Read target
         match eq::spawn::read_target(&proc, client.eq_base) {
             Ok(target) => client.target = target,
-            Err(e) => client.client_status = format!("Target read error: {}", e),
+            Err(e) => client.client_status = format!("Target read error: {e}"),
         }
 
         // Read spawn list
         match eq::spawn::read_all_spawns(&proc, client.eq_base, 200) {
             Ok(spawns) => client.spawns = spawns,
-            Err(e) => client.client_status = format!("Spawn read error: {}", e),
+            Err(e) => client.client_status = format!("Spawn read error: {e}"),
         }
 
         // Read zone name from memory (preferred) or fall back to window title
@@ -677,7 +677,7 @@ fn load_demo_data(app: &mut App) {
             cast_state: None,
         });
         client.character_name = name.to_string();
-        client.client_status = format!("Connected: {}", name);
+        client.client_status = format!("Connected: {name}");
         client.is_demo = true;
         app.clients.push(client);
     }

@@ -53,8 +53,7 @@ impl SharedStateWriter {
             // sa_setup must be kept alive until after CreateFileMappingW returns.
             let sa_setup = create_current_user_security_attributes()
                 .ok_or_else(|| anyhow::anyhow!(
-                    "DACL creation failed for client {} — refusing to create shared memory with default security",
-                    client_id
+                    "DACL creation failed for client {client_id} — refusing to create shared memory with default security"
                 ))?;
             let sa_ptr = Some(sa_setup.sa_ptr());
 
@@ -80,7 +79,7 @@ impl SharedStateWriter {
             // UnmapViewOfFile is called (in Drop). Null check follows immediately.
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_WRITE, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
-                anyhow::bail!("MapViewOfFile returned null for client {}", client_id);
+                anyhow::bail!("MapViewOfFile returned null for client {client_id}");
             }
 
             Ok(Self {
@@ -111,7 +110,7 @@ impl SharedStateWriter {
             use std::sync::atomic::{AtomicU64, Ordering};
 
             let payload = bincode::serde::encode_to_vec(state, bincode::config::standard())
-                .map_err(|e| anyhow::anyhow!("bincode encode failed: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("bincode encode failed: {e}"))?;
 
             if payload.len() + 12 > self.size {
                 anyhow::bail!(

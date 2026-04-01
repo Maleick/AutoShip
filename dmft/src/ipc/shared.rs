@@ -61,7 +61,7 @@ impl SharedStateReader {
 
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_READ, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
-                anyhow::bail!("MapViewOfFile returned null for client {}", client_id);
+                anyhow::bail!("MapViewOfFile returned null for client {client_id}");
             }
 
             Ok(Self {

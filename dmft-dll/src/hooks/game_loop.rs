@@ -1150,9 +1150,9 @@ fn update_window_title() {
         // Build title: "[DMFT] EQ - CharName (ZoneName)" or "[DMFT] EQ - CharName" if no zone.
         let title = if zone_name.is_empty() {
             tracing::trace!(char_name = %char_name, "Zone name empty — title without zone");
-            format!("[DMFT] EQ - {}\0", char_name)
+            format!("[DMFT] EQ - {char_name}\0")
         } else {
-            format!("[DMFT] EQ - {} ({})\0", char_name, zone_name)
+            format!("[DMFT] EQ - {char_name} ({zone_name})\0")
         };
 
         // Find our window by enumerating windows for this PID.

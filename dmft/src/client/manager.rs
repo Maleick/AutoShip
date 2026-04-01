@@ -47,7 +47,7 @@ impl ClientManager {
         let session = self
             .sessions
             .get_mut(&client_id)
-            .ok_or_else(|| anyhow::anyhow!("Client {} not found", client_id))?;
+            .ok_or_else(|| anyhow::anyhow!("Client {client_id} not found"))?;
 
         let prepared = crate::inject::dll_prep::prepare_dll(dll_source)?;
         crate::inject::loader::inject_dll(session.pid, &prepared)?;

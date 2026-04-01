@@ -95,7 +95,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             let dist_str = match player_pos {
                 Some((px, py)) => {
                     let dist = ((spawn.x - px).powi(2) + (spawn.y - py).powi(2)).sqrt();
-                    format!("{:.0}", dist)
+                    format!("{dist:.0}")
                 }
                 None => String::from("-"),
             };
@@ -224,7 +224,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             let end = (offset + 16).min(app.hex_state.hex_data.len());
             let chunk = &app.hex_state.hex_data[offset..end];
 
-            let hex_str: String = chunk.iter().map(|b| format!("{:02x} ", b)).collect();
+            let hex_str: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
             let ascii_str: String = chunk
                 .iter()
                 .map(|&b| {
@@ -237,10 +237,10 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
                 .collect();
 
             Some(Line::from(vec![
-                Span::styled(format!("{:08x}", addr), Style::default().fg(t.text_muted)),
+                Span::styled(format!("{addr:08x}"), Style::default().fg(t.text_muted)),
                 Span::raw("  "),
                 Span::styled(
-                    format!("{:<48}", hex_str),
+                    format!("{hex_str:<48}"),
                     Style::default().fg(t.text_normal),
                 ),
                 Span::raw(" "),

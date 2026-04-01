@@ -197,7 +197,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     }
 
     if !found || module_base.is_invalid() {
-        bail!("DLL '{}' not found in modules of process {}", dll_name, pid);
+        bail!("DLL '{dll_name}' not found in modules of process {pid}");
     }
 
     // Open target process with thread-creation rights.

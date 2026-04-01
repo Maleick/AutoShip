@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 
 fn argon2_instance() -> Result<Argon2<'static>> {
     let params = Params::new(65536, 3, 4, Some(32))
-        .map_err(|e| anyhow::anyhow!("invalid argon2 params: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid argon2 params: {e}"))?;
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
@@ -19,7 +19,7 @@ pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 3
     let mut key = Zeroizing::new([0u8; 32]);
     argon2
         .hash_password_into(master_password.as_bytes(), salt, &mut *key)
-        .map_err(|e| anyhow::anyhow!("argon2 key derivation failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("argon2 key derivation failed: {e}"))?;
     Ok(key)
 }
 
@@ -29,7 +29,7 @@ pub fn derive_key_from_master(master_key: &[u8; 32], salt: &[u8]) -> Result<Zero
     let mut key = Zeroizing::new([0u8; 32]);
     argon2
         .hash_password_into(master_key, salt, &mut *key)
-        .map_err(|e| anyhow::anyhow!("argon2 per-account key derivation failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("argon2 per-account key derivation failed: {e}"))?;
     Ok(key)
 }
 
@@ -43,7 +43,7 @@ pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
 
     let ciphertext = cipher
         .encrypt(nonce, plaintext)
-        .map_err(|e| anyhow::anyhow!("AES-256-GCM encryption failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("AES-256-GCM encryption failed: {e}"))?;
 
     Ok((ciphertext, nonce_bytes.to_vec()))
 }
@@ -56,7 +56,7 @@ pub fn decrypt(ciphertext: &[u8], key: &[u8; 32], nonce: &[u8]) -> Result<Vec<u8
 
     cipher
         .decrypt(nonce, ciphertext)
-        .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))
+        .map_err(|e| anyhow::anyhow!("Decryption failed: {e}"))
 }
 
 /// Generate a random 32-byte salt.

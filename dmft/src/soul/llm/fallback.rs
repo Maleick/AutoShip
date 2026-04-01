@@ -93,7 +93,7 @@ impl TraitDrivenResponder {
 
         // Sometimes add the player's name
         if traits.extraversion > 0.5 && self.rng.next_f32() < 0.4 {
-            format!("{}, {}", greeting, player_name)
+            format!("{greeting}, {player_name}")
         } else {
             greeting.to_string()
         }
@@ -118,7 +118,7 @@ impl TraitDrivenResponder {
 
         // High openness characters comment on what happened
         if traits.openness > 0.7 && self.rng.next_f32() < 0.3 {
-            format!("{} {}", base, description)
+            format!("{base} {description}")
         } else {
             base.to_string()
         }
@@ -135,7 +135,7 @@ impl TraitDrivenResponder {
         let base = self.pick(reactions);
 
         if traits.battle_hunger > 0.7 && self.rng.next_f32() < 0.3 {
-            format!("{}! {}", base, description)
+            format!("{base}! {description}")
         } else {
             base.to_string()
         }
@@ -153,7 +153,7 @@ impl TraitDrivenResponder {
         let base = self.pick(responses);
 
         if traits.extraversion > 0.6 && self.rng.next_f32() < 0.3 {
-            format!("{}, {}", base, character_name)
+            format!("{base}, {character_name}")
         } else {
             base.to_string()
         }

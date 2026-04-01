@@ -240,11 +240,11 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!("  {:<12}", leader_display),
+                    format!("  {leader_display:<12}"),
                     Style::default().fg(t.text_normal),
                 ),
                 Span::styled(
-                    format!("{}nav {}arr {}idl", navigating, arrived, idle),
+                    format!("{navigating}nav {arrived}arr {idle}idl"),
                     Style::default().fg(status_color),
                 ),
             ]));

@@ -35,5 +35,5 @@ fn generate_random_dll_name() -> String {
     let mut rng = rand::rngs::OsRng;
     let hi = rng.next_u64();
     let lo = rng.next_u64();
-    format!("{:016x}{:016x}.dll", hi, lo)
+    format!("{hi:016x}{lo:016x}.dll")
 }

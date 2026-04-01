@@ -1151,7 +1151,7 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
                 let bytes: [u8; 16] = std::ptr::read(addr as *const [u8; 16]);
                 let hex: String = bytes
                     .iter()
-                    .map(|b| format!("{:02x}", b))
+                    .map(|b| format!("{b:02x}"))
                     .collect::<Vec<_>>()
                     .join(" ");
                 // Also interpret as usize pairs (pointers)

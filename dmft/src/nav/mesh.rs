@@ -350,8 +350,7 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     }
 
     let url = format!(
-        "https://mqmesh.com/resources/meshes/{}.navmesh",
-        zone_short_name
+        "https://mqmesh.com/resources/meshes/{zone_short_name}.navmesh"
     );
     tracing::info!(zone = zone_short_name, %url, "Downloading navmesh");
 
@@ -387,9 +386,7 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     if magic != NAVMESH_FILE_MAGIC {
         bail!(
-            "Invalid navmesh magic: expected 0x{:08X} ('MSET'), got 0x{:08X}",
-            NAVMESH_FILE_MAGIC,
-            magic
+            "Invalid navmesh magic: expected 0x{NAVMESH_FILE_MAGIC:08X} ('MSET'), got 0x{magic:08X}"
         );
     }
 

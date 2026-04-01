@@ -150,7 +150,7 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
         return Some(LogEvent::Chat(ChatEvent {
             channel: ChatChannel::TellOut,
             sender: "You".to_string(),
-            message: format!("-> {}: {}", target, msg),
+            message: format!("-> {target}: {msg}"),
         }));
     }
 

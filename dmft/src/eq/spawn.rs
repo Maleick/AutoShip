@@ -397,5 +397,5 @@ pub fn read_spawn_bytes(
 ) -> Result<Vec<u8>> {
     let addr = spawn_addr + start_offset;
     proc.read_bytes(addr, len)
-        .with_context(|| format!("Failed to read {} bytes at spawn+{:#x}", len, start_offset))
+        .with_context(|| format!("Failed to read {len} bytes at spawn+{start_offset:#x}"))
 }
