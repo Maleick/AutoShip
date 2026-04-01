@@ -889,9 +889,8 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
             return false;
         };
 
-        // Server ID lookup requires iterating LoginClient::ServerList (DoublyLinkedList
-        // <EQClientServerData*> at offset 0x178). EQClientServerData layout: ServerID at
-        // 0x00, ServerName (CXStr) at 0x08. Needs calibration dump on live client.
+        // Server ID lookup requires iterating LoginClient::ServerList (DoublyLinkedList<EQClientServerData*> at offset 0x178).
+        // EQClientServerData layout: ServerID at 0x00, ServerName (CXStr) at 0x08. Needs calibration dump on live client.
         tracing::info!(
             server = server_name,
             login_api = format!("{:#x}", login_api),
