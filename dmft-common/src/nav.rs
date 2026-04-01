@@ -10,16 +10,19 @@ pub struct Xorshift32 {
 }
 
 impl Xorshift32 {
+    /// Create a new PRNG with the given seed. Seed must not be 0 (use `from_client_id` for safe seeding).
     pub fn new(seed: u32) -> Self {
         Self { state: seed }
     }
 
+    /// Create a PRNG seeded deterministically from a client PID via Knuth hash.
     pub fn from_client_id(client_id: u32) -> Self {
         let seed = client_id.wrapping_mul(KNUTH_HASH);
         // Xorshift with seed 0 is a fixed point — every call returns 0 forever.
         Self::new(if seed == 0 { 1 } else { seed })
     }
 
+    /// Generate the next pseudo-random `u32`.
     pub fn next_u32(&mut self) -> u32 {
         self.state ^= self.state << 13;
         self.state ^= self.state >> 17;
@@ -27,6 +30,7 @@ impl Xorshift32 {
         self.state
     }
 
+    /// Generate a pseudo-random `f32` in [0.0, 1.0).
     pub fn next_f32(&mut self) -> f32 {
         (self.next_u32() as f32) / (u32::MAX as f32)
     }
@@ -35,12 +39,16 @@ impl Xorshift32 {
 /// A single point in 3D space with optional metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Waypoint {
+    /// World X coordinate.
     pub x: f32,
+    /// World Y coordinate.
     pub y: f32,
+    /// World Z coordinate (vertical).
     pub z: f32,
 }
 
 impl Waypoint {
+    /// Create a waypoint at the given coordinates.
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
@@ -81,6 +89,7 @@ pub enum NavStatus {
 }
 
 impl NavStatus {
+    /// Human-readable label for the current navigation state.
     pub fn label(&self) -> &'static str {
         match self {
             Self::Idle => "Idle",
@@ -90,14 +99,17 @@ impl NavStatus {
         }
     }
 
+    /// Returns true if currently navigating toward a waypoint.
     pub fn is_moving(&self) -> bool {
         matches!(self, Self::Moving { .. })
     }
 
+    /// Returns true if stuck and attempting recovery.
     pub fn is_stuck(&self) -> bool {
         matches!(self, Self::Stuck { .. })
     }
 
+    /// Returns true if arrived at the final waypoint.
     pub fn is_arrived(&self) -> bool {
         matches!(self, Self::Arrived)
     }
@@ -175,24 +187,33 @@ impl<T> IndexedQueue<T> {
 /// A connection from one zone to another.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZoneConnection {
+    /// Destination zone ID.
     pub dest_zone_id: u16,
+    /// Transfer type (0=zone line, 1=translocator, etc.).
     pub transfer_type: u8,
+    /// Whether this connection is disabled (impassable).
     pub disabled: bool,
 }
 
 /// A single zone node with its connections.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZoneNode {
+    /// EQ zone ID.
     pub zone_id: u16,
+    /// Zone short name (e.g. "qey2hh1").
     pub name: String,
+    /// Minimum recommended level for this zone.
     pub min_level: i32,
+    /// Maximum recommended level for this zone.
     pub max_level: i32,
+    /// Outgoing connections to adjacent zones.
     pub connections: Vec<ZoneConnection>,
 }
 
 /// Complete zone adjacency graph read from EQ's ZoneGuideManagerClient.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ZoneGraph {
+    /// Map of zone ID to zone node.
     pub zones: std::collections::HashMap<u16, ZoneNode>,
 }
 
@@ -247,6 +268,7 @@ impl ZoneGraph {
 /// A named camp position for a specific role.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CampSpot {
+    /// World position for this camp spot.
     pub position: Waypoint,
     /// Heading to face (EQ degrees, 0-512).
     pub heading: f32,
@@ -257,8 +279,11 @@ pub struct CampSpot {
 /// A complete camp definition with spots for each role.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CampDefinition {
+    /// Human-readable camp name (e.g. "LGUK - Live Side").
     pub name: String,
+    /// Zone short name where this camp is located.
     pub zone: String,
+    /// Positions for each role in the camp.
     pub spots: Vec<CampSpot>,
 }
 
