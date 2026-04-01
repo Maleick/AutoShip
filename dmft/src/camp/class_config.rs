@@ -361,8 +361,7 @@ mod tests {
         let config = sample_warrior();
         let json = serde_json::to_string(&config).unwrap();
         let loaded: ClassConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(loaded.class_name, "warrior");
-        assert_eq!(loaded.combat_abilities.len(), 2);
+        assert_eq!(loaded, config);
     }
 
     #[test]
