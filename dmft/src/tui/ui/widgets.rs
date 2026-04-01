@@ -852,6 +852,371 @@ pub fn render_notifications(notifications: &[Notification], t: &Theme) -> Vec<Li
         .collect()
 }
 
+// ─── Multi-option selector (checkbox list) ──────────────────────────────────
+
+/// An item in a multi-option selector with a checked state.
+pub struct MultiOptionItem {
+    /// Display label.
+    pub label: String,
+    /// Whether this item is currently checked/selected.
+    pub checked: bool,
+}
+
+impl MultiOptionItem {
+    /// Create a new unchecked item.
+    #[must_use]
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            checked: false,
+        }
+    }
+}
+
+/// State for a multi-option selector (checkbox list).
+pub struct MultiOptionSelector {
+    /// Title for the selector.
+    pub title: String,
+    /// Available items with check state.
+    pub items: Vec<MultiOptionItem>,
+    /// Currently focused item index.
+    pub focused: usize,
+    /// Whether the selector is visible.
+    pub visible: bool,
+}
+
+impl MultiOptionSelector {
+    /// Create a new multi-option selector.
+    #[must_use]
+    pub fn new(title: impl Into<String>, labels: Vec<String>) -> Self {
+        Self {
+            title: title.into(),
+            items: labels.into_iter().map(MultiOptionItem::new).collect(),
+            focused: 0,
+            visible: false,
+        }
+    }
+
+    /// Move focus up.
+    pub fn focus_previous(&mut self) {
+        if self.focused > 0 {
+            self.focused -= 1;
+        }
+    }
+
+    /// Move focus down.
+    pub fn focus_next(&mut self) {
+        if self.focused + 1 < self.items.len() {
+            self.focused += 1;
+        }
+    }
+
+    /// Toggle the check state of the focused item.
+    pub fn toggle_focused(&mut self) {
+        if let Some(item) = self.items.get_mut(self.focused) {
+            item.checked = !item.checked;
+        }
+    }
+
+    /// Get labels of all checked items.
+    #[must_use]
+    pub fn checked_labels(&self) -> Vec<&str> {
+        self.items
+            .iter()
+            .filter(|i| i.checked)
+            .map(|i| i.label.as_str())
+            .collect()
+    }
+
+    /// Select all items.
+    pub fn select_all(&mut self) {
+        for item in &mut self.items {
+            item.checked = true;
+        }
+    }
+
+    /// Deselect all items.
+    pub fn deselect_all(&mut self) {
+        for item in &mut self.items {
+            item.checked = false;
+        }
+    }
+}
+
+/// Render a multi-option selector as a popup overlay.
+pub fn render_multi_option(
+    frame: &mut ratatui::Frame,
+    area: ratatui::layout::Rect,
+    selector: &MultiOptionSelector,
+    t: &Theme,
+) {
+    use ratatui::widgets::{Clear, List, ListItem, ListState};
+
+    let item_count = selector.items.len() as u16;
+    let popup_h = (item_count + 3).min(area.height.saturating_sub(4)).max(5);
+    let popup_w = (area.width * 45 / 100).clamp(25.min(area.width), 50.min(area.width));
+    let x = area.x + area.width.saturating_sub(popup_w) / 2;
+    let y = area.y + area.height.saturating_sub(popup_h) / 2;
+    let popup_area = ratatui::layout::Rect::new(x, y, popup_w, popup_h);
+
+    frame.render_widget(Clear, popup_area);
+
+    let items: Vec<ListItem> = selector
+        .items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let check = if item.checked { "\u{2611}" } else { "\u{2610}" };
+            let style = if i == selector.focused {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(t.text_accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.text_normal)
+            };
+            ListItem::new(Span::styled(format!(" {check} {} ", item.label), style))
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(t.border_type)
+            .title(Span::styled(
+                format!(" {} ", selector.title),
+                Style::default()
+                    .fg(t.text_bright)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .border_style(t.border_active)
+            .style(Style::default().bg(t.help_bg)),
+    );
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(selector.focused));
+    frame.render_stateful_widget(list, popup_area, &mut list_state);
+}
+
+// ─── Inline command hint ────────────────────────────────────────────────────
+
+/// Render an inline usage hint for the command bar.
+/// Returns a styled line showing the current command hint below the input.
+#[must_use]
+pub fn render_inline_hint(input: &str, t: &Theme) -> Option<Line<'static>> {
+    find_command_hint(input).map(|usage| {
+        Line::from(vec![
+            Span::styled(
+                "  Usage: ",
+                Style::default().fg(t.text_muted),
+            ),
+            Span::styled(
+                usage.to_string(),
+                Style::default().fg(t.text_accent),
+            ),
+        ])
+    })
+}
+
+// ─── Notification area (managed queue) ──────────────────────────────────────
+
+/// A managed notification queue with auto-expiry support.
+pub struct NotificationArea {
+    /// Active notifications.
+    pub notifications: Vec<Notification>,
+    /// Maximum number of visible notifications.
+    pub max_visible: usize,
+    /// How long notifications are kept (seconds).
+    pub ttl_secs: u64,
+}
+
+impl NotificationArea {
+    /// Create a new notification area.
+    #[must_use]
+    pub fn new(max_visible: usize, ttl_secs: u64) -> Self {
+        Self {
+            notifications: Vec::new(),
+            max_visible,
+            ttl_secs,
+        }
+    }
+
+    /// Push a notification, evicting the oldest if at capacity.
+    pub fn push(&mut self, notification: Notification) {
+        if self.notifications.len() >= self.max_visible {
+            self.notifications.remove(0);
+        }
+        self.notifications.push(notification);
+    }
+
+    /// Remove expired notifications.
+    pub fn prune_expired(&mut self) {
+        let ttl = std::time::Duration::from_secs(self.ttl_secs);
+        self.notifications
+            .retain(|n| n.created_at.elapsed() < ttl);
+    }
+
+    /// Push a convenience info notification.
+    pub fn info(&mut self, msg: impl Into<String>) {
+        self.push(Notification::new(msg, NotificationLevel::Info));
+    }
+
+    /// Push a convenience warning notification.
+    pub fn warn(&mut self, msg: impl Into<String>) {
+        self.push(Notification::new(msg, NotificationLevel::Warning));
+    }
+
+    /// Push a convenience error notification.
+    pub fn error(&mut self, msg: impl Into<String>) {
+        self.push(Notification::new(msg, NotificationLevel::Error));
+    }
+
+    /// Push a convenience success notification.
+    pub fn success(&mut self, msg: impl Into<String>) {
+        self.push(Notification::new(msg, NotificationLevel::Success));
+    }
+
+    /// Render the notification area.
+    #[must_use]
+    pub fn render(&self, t: &Theme) -> Vec<Line<'static>> {
+        render_notifications(&self.notifications, t)
+    }
+}
+
+// ─── Gauge bar ──────────────────────────────────────────────────────────────
+
+/// A simple gauge bar widget for displaying resource levels inline.
+pub struct GaugeBar {
+    /// Current value.
+    pub value: f64,
+    /// Maximum value.
+    pub max: f64,
+    /// Width of the bar in characters.
+    pub width: usize,
+    /// Label shown to the left (optional).
+    pub label: Option<String>,
+}
+
+impl GaugeBar {
+    /// Create a new gauge bar.
+    #[must_use]
+    pub fn new(value: f64, max: f64, width: usize) -> Self {
+        Self {
+            value,
+            max,
+            width,
+            label: None,
+        }
+    }
+
+    /// Set a label for the gauge.
+    #[must_use]
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Get the fill ratio (0.0..=1.0).
+    #[must_use]
+    pub fn ratio(&self) -> f64 {
+        if self.max <= 0.0 {
+            0.0
+        } else {
+            (self.value / self.max).clamp(0.0, 1.0)
+        }
+    }
+}
+
+/// Render a gauge bar as a styled line.
+#[must_use]
+pub fn render_gauge_bar(gauge: &GaugeBar, filled_color: Color, t: &Theme) -> Line<'static> {
+    let ratio = gauge.ratio();
+    let filled = (ratio * gauge.width as f64).round() as usize;
+    let empty = gauge.width.saturating_sub(filled);
+    let bar = format!(
+        "\u{2502}{}{}\u{2502}",
+        "\u{2588}".repeat(filled),
+        "\u{2591}".repeat(empty)
+    );
+
+    let mut spans = Vec::new();
+    if let Some(ref label) = gauge.label {
+        spans.push(Span::styled(
+            format!("{label} "),
+            Style::default().fg(t.text_muted),
+        ));
+    }
+    spans.push(Span::styled(bar, Style::default().fg(filled_color)));
+    spans.push(Span::styled(
+        format!(" {:.0}%", ratio * 100.0),
+        Style::default().fg(t.text_secondary),
+    ));
+
+    Line::from(spans)
+}
+
+// ─── Tooltip ────────────────────────────────────────────────────────────────
+
+/// A tooltip that can be positioned near the cursor or a specific area.
+pub struct Tooltip {
+    /// The tooltip text.
+    pub text: String,
+    /// Position hint — anchor coordinates (x, y).
+    pub anchor_x: u16,
+    pub anchor_y: u16,
+}
+
+impl Tooltip {
+    /// Create a new tooltip at the given position.
+    #[must_use]
+    pub fn new(text: impl Into<String>, anchor_x: u16, anchor_y: u16) -> Self {
+        Self {
+            text: text.into(),
+            anchor_x,
+            anchor_y,
+        }
+    }
+}
+
+/// Render a tooltip near the specified anchor point.
+pub fn render_tooltip(
+    frame: &mut ratatui::Frame,
+    area: ratatui::layout::Rect,
+    tooltip: &Tooltip,
+    t: &Theme,
+) {
+    use ratatui::widgets::{Clear, Paragraph};
+
+    let text_len = tooltip.text.len() as u16 + 2;
+    let w = text_len.min(area.width.saturating_sub(2));
+    let h = 3u16;
+
+    // Position below and to the right of anchor, falling back if near edges
+    let x = tooltip.anchor_x.min(area.x + area.width.saturating_sub(w));
+    let y = if tooltip.anchor_y + h + 1 < area.y + area.height {
+        tooltip.anchor_y + 1
+    } else {
+        tooltip.anchor_y.saturating_sub(h)
+    };
+
+    let tooltip_area = ratatui::layout::Rect::new(x, y, w, h);
+    frame.render_widget(Clear, tooltip_area);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            tooltip.text.clone(),
+            Style::default().fg(t.text_normal),
+        )))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(t.border_type)
+                .border_style(Style::default().fg(t.text_muted))
+                .style(Style::default().bg(t.help_bg)),
+        ),
+        tooltip_area,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1083,5 +1448,106 @@ mod tests {
         ];
         let lines = render_notifications(&notifs, &t);
         assert_eq!(lines.len(), 4);
+    }
+
+    #[test]
+    fn multi_option_selector_navigation() {
+        let mut sel =
+            MultiOptionSelector::new("Pick", vec!["A".into(), "B".into(), "C".into()]);
+        assert_eq!(sel.focused, 0);
+        sel.focus_next();
+        assert_eq!(sel.focused, 1);
+        sel.toggle_focused();
+        assert!(sel.items[1].checked);
+        sel.toggle_focused();
+        assert!(!sel.items[1].checked);
+    }
+
+    #[test]
+    fn multi_option_checked_labels() {
+        let mut sel =
+            MultiOptionSelector::new("Pick", vec!["A".into(), "B".into(), "C".into()]);
+        sel.items[0].checked = true;
+        sel.items[2].checked = true;
+        let labels = sel.checked_labels();
+        assert_eq!(labels, vec!["A", "C"]);
+    }
+
+    #[test]
+    fn multi_option_select_deselect_all() {
+        let mut sel =
+            MultiOptionSelector::new("Pick", vec!["X".into(), "Y".into()]);
+        sel.select_all();
+        assert!(sel.items.iter().all(|i| i.checked));
+        sel.deselect_all();
+        assert!(sel.items.iter().all(|i| !i.checked));
+    }
+
+    #[test]
+    fn render_inline_hint_found() {
+        let t = dark_modern();
+        let line = render_inline_hint("nav zone1", &t);
+        assert!(line.is_some());
+    }
+
+    #[test]
+    fn render_inline_hint_not_found() {
+        let t = dark_modern();
+        let line = render_inline_hint("unknown_cmd", &t);
+        assert!(line.is_none());
+    }
+
+    #[test]
+    fn notification_area_push_and_prune() {
+        let mut area = NotificationArea::new(3, 60);
+        area.info("msg1");
+        area.warn("msg2");
+        area.error("msg3");
+        area.success("msg4");
+        assert_eq!(area.notifications.len(), 3);
+        assert_eq!(area.notifications[0].message, "msg2");
+    }
+
+    #[test]
+    fn notification_area_render() {
+        let t = dark_modern();
+        let mut area = NotificationArea::new(5, 60);
+        area.info("hello");
+        let lines = area.render(&t);
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn gauge_bar_ratio() {
+        let g = GaugeBar::new(50.0, 100.0, 10);
+        assert!((g.ratio() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn gauge_bar_ratio_zero_max() {
+        let g = GaugeBar::new(50.0, 0.0, 10);
+        assert!((g.ratio() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn gauge_bar_with_label() {
+        let g = GaugeBar::new(75.0, 100.0, 10).with_label("HP");
+        assert_eq!(g.label, Some("HP".into()));
+    }
+
+    #[test]
+    fn render_gauge_bar_has_spans() {
+        let t = dark_modern();
+        let g = GaugeBar::new(30.0, 100.0, 10);
+        let line = render_gauge_bar(&g, t.hp_high, &t);
+        assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn tooltip_creation() {
+        let tip = Tooltip::new("Hover info", 10, 20);
+        assert_eq!(tip.text, "Hover info");
+        assert_eq!(tip.anchor_x, 10);
+        assert_eq!(tip.anchor_y, 20);
     }
 }
