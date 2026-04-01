@@ -197,7 +197,7 @@ pub fn run_inject_mode() -> Result<()> {
     Ok(())
 }
 
-/// Zones mode (--zones <PID>) — query the zone adjacency graph from an injected client.
+/// Zones mode (`--zones PID`) — query the zone adjacency graph from an injected client.
 ///
 /// # Errors
 ///
@@ -274,7 +274,7 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
     Ok(())
 }
 
-/// Status mode (--status <PID>) — read shared memory and print player state.
+/// Status mode (`--status PID`) — read shared memory and print player state.
 ///
 /// # Errors
 ///
@@ -402,7 +402,7 @@ pub fn run_statusall_mode() -> Result<()> {
     Ok(())
 }
 
-/// Navigate mode (--nav <PID> <x> <y> <z>) — send `NavigateTo` to a specific client.
+/// Navigate mode (`--nav PID x y z`) — send `NavigateTo` to a specific client.
 ///
 /// # Errors
 ///
@@ -584,7 +584,7 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
     Ok(())
 }
 
-/// Inject mode targeting a specific PID (--inject-pid <PID>).
+/// Inject mode targeting a specific PID (`--inject-pid PID`).
 ///
 /// # Errors
 ///
@@ -613,7 +613,7 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     Ok(())
 }
 
-/// Login mode targeting a specific PID (--login-pid <PID> <account> <password> [server] [character]).
+/// Login mode targeting a specific PID (`--login-pid PID account password [server] [character]`).
 ///
 /// # Errors
 ///
@@ -645,7 +645,7 @@ pub fn run_login_pid_mode(
     Ok(())
 }
 
-/// Login mode (--login <account> <password> [server] [character]) — send `StartLogin` to all injected EQ clients.
+/// Login mode (`--login account password [server] [character]`) — send `StartLogin` to all injected EQ clients.
 ///
 /// # Errors
 ///
@@ -728,7 +728,7 @@ pub fn run_calibrate_mode() -> Result<()> {
     Ok(())
 }
 
-/// Command mode (--cmd <pid> <command>) — send a slash command to an injected client.
+/// Command mode (`--cmd pid command`) — send a slash command to an injected client.
 ///
 /// # Errors
 ///

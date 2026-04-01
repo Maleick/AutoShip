@@ -380,7 +380,7 @@ pub fn classic() -> Theme {
 // ─── Dracula ────────────────────────────────────────────────────────────────
 
 /// Dracula color scheme — dark purples, pinks, and vivid accents.
-/// Based on https://draculatheme.com/contribute#color-palette
+/// Based on <https://draculatheme.com/contribute#color-palette>.
 #[must_use]
 pub fn dracula() -> Theme {
     let bg = Color::Rgb(40, 42, 54); // #282a36
