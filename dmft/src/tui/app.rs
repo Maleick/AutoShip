@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::cast::{CastDisplay, live_cast_display, short_cast_label};
+use super::command::{self, HelpSection};
 use super::config_panel::ConfigPanelState;
 use super::demo_data::{DemoRole, demo_client_cast_info, demo_client_profile};
 use super::menu::MenuState;
@@ -217,6 +218,42 @@ pub struct ChChainStatus {
     pub target_id: u32,
 }
 
+/// Help overlay jump target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HelpFocus {
+    Section(HelpSection),
+    Command(&'static str),
+}
+
+/// Severity level for the transient toast lane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToastLevel {
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+impl ToastLevel {
+    #[must_use]
+    pub fn ttl_ticks(self) -> u64 {
+        match self {
+            Self::Info | Self::Success => 24,
+            Self::Warning => 40,
+            Self::Error => 56,
+        }
+    }
+}
+
+/// Transient notification shown above the main UI chrome.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Toast {
+    pub message: String,
+    pub level: ToastLevel,
+    pub set_tick: u64,
+    pub ttl_ticks: u64,
+}
+
 /// Application state for the TUI command center.
 pub struct App {
     /// Whether the application is still running (false triggers shutdown).
@@ -291,6 +328,8 @@ pub struct App {
     /// Whether the help overlay is currently visible.
     pub help_visible: bool,
     pub help_scroll: usize,
+    /// Optional jump target applied the next time help is drawn.
+    pub help_focus: Option<HelpFocus>,
 
     /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
@@ -345,10 +384,8 @@ pub struct App {
 
     /// Command aliases mapping (e.g., "h" → "help", "q" → "quit").
     pub command_aliases: HashMap<String, String>,
-    /// Transient toast message for feedback (cleared after display timeout).
-    pub toast_message: Option<String>,
-    /// Tick when toast was set (for auto-dismiss).
-    pub toast_set_tick: u64,
+    /// Transient toast feedback shown above the main chrome.
+    pub toast: Option<Toast>,
 }
 
 /// Navigation status for a single client.
@@ -427,6 +464,7 @@ impl App {
 
             help_visible: false,
             help_scroll: 0,
+            help_focus: None,
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
@@ -459,8 +497,7 @@ impl App {
             ch_chain_panel_state: ChChainPanelState::new(),
 
             command_aliases: Self::build_default_aliases(),
-            toast_message: None,
-            toast_set_tick: 0,
+            toast: None,
         };
         app.cmd_state.load_history_from_disk();
         app
@@ -468,32 +505,57 @@ impl App {
 
     /// Build default command aliases.
     fn build_default_aliases() -> HashMap<String, String> {
-        let pairs = [
-            ("h", "help"),
-            ("q", "quit"),
-            ("chui", "chui"),
-            ("cmds", "commands"),
-            ("overview", "status overview"),
-            ("cfg", "config"),
-            ("s", "status"),
-        ];
-        pairs
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect()
+        let mut aliases = HashMap::new();
+        for entry in command::command_entries() {
+            for alias in entry.aliases {
+                aliases.insert((*alias).to_string(), entry.phrase.to_string());
+            }
+        }
+        aliases
+    }
+
+    /// Open the help overlay and optionally jump to a section or command.
+    pub fn open_help(&mut self, focus: HelpFocus) {
+        self.help_visible = true;
+        self.help_focus = Some(focus);
     }
 
     /// Set a transient toast notification message.
-    pub fn set_toast(&mut self, msg: String) {
-        self.toast_set_tick = self.tick_count;
-        self.toast_message = Some(msg);
+    pub fn set_toast(&mut self, level: ToastLevel, msg: impl Into<String>) {
+        let message = msg.into();
+        let ttl_ticks = level.ttl_ticks();
+        if let Some(toast) = self.toast.as_mut() {
+            if toast.level == level && toast.message == message {
+                toast.set_tick = self.tick_count;
+                toast.ttl_ticks = ttl_ticks;
+                return;
+            }
+        }
+        self.toast = Some(Toast {
+            message,
+            level,
+            set_tick: self.tick_count,
+            ttl_ticks,
+        });
     }
 
-    /// Clear expired toast messages (auto-dismiss after ~40 ticks ≈ 10 seconds).
+    /// Update the status line and optionally elevate the same message to a toast.
+    pub fn set_feedback(&mut self, level: ToastLevel, msg: impl Into<String>, show_toast: bool) {
+        let message = msg.into();
+        self.status_message = message.clone();
+        if show_toast {
+            self.set_toast(level, message);
+        }
+    }
+
+    /// Clear expired toast messages.
     pub fn clear_expired_toast(&mut self) {
-        if self.toast_message.is_some() && self.tick_count.saturating_sub(self.toast_set_tick) > 40
+        if self
+            .toast
+            .as_ref()
+            .is_some_and(|toast| self.tick_count.saturating_sub(toast.set_tick) > toast.ttl_ticks)
         {
-            self.toast_message = None;
+            self.toast = None;
         }
     }
 
@@ -1881,44 +1943,15 @@ impl App {
         }
 
         // --- Top-level command completion ---
-        let mut candidates: Vec<String> = vec![
-            "help".into(),
-            "h".into(),
-            "commands".into(),
-            "cmds".into(),
-            "camp".into(),
-            "nav".into(),
-            "login".into(),
-            "launch".into(),
-            "stop".into(),
-            "restart".into(),
-            "config".into(),
-            "cfg".into(),
-            "mode".into(),
-            "all".into(),
-            "inject".into(),
-            "status".into(),
-            "quit".into(),
-            "q".into(),
-            "track".into(),
-            "untrack".into(),
-            "ma".into(),
-            "mt".into(),
-            "engage".into(),
-            "disengage".into(),
-            "invite".into(),
-            "accept".into(),
-            "heal".into(),
-            "ch".into(),
-            "chui".into(),
-            "loot".into(),
-            "G1".into(),
-            "G2".into(),
-            "G3".into(),
-            "G4".into(),
-            "G5".into(),
-            "G6".into(),
-        ];
+        let mut candidates = command::top_level_completion_candidates();
+        candidates.extend([
+            String::from("G1"),
+            String::from("G2"),
+            String::from("G3"),
+            String::from("G4"),
+            String::from("G5"),
+            String::from("G6"),
+        ]);
 
         for client in &self.clients {
             if !client.character_name.is_empty() {
@@ -1952,7 +1985,8 @@ impl App {
                 } else {
                     name.to_string()
                 };
-                self.cmd_state.command_buffer = format!("{cmd_prefix}{formatted} ");
+                self.cmd_state
+                    .set_buffer(format!("{cmd_prefix}{formatted} "));
             }
             _ => {
                 // Complete common prefix
@@ -1971,7 +2005,7 @@ impl App {
 
                 if common_len > search.len() {
                     let common = &matches[0][..common_len];
-                    self.cmd_state.command_buffer = format!("{cmd_prefix}{common}");
+                    self.cmd_state.set_buffer(format!("{cmd_prefix}{common}"));
                 }
                 // Show available options (truncate if too many)
                 let display: Vec<&str> = matches.iter().take(10).map(|s| s.as_str()).collect();
@@ -1980,7 +2014,11 @@ impl App {
                 } else {
                     String::new()
                 };
-                self.status_message = format!("{}{}", display.join(" | "), suffix);
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Matches: {}{}", display.join(" | "), suffix),
+                    false,
+                );
             }
         }
     }
@@ -2132,7 +2170,7 @@ impl App {
     pub fn track_spawn(&mut self, name: &str) {
         let key = name.to_lowercase();
         if self.tracked_spawns.contains_key(&key) {
-            self.status_message = format!("Already tracking: {name}");
+            self.set_feedback(ToastLevel::Info, format!("Already tracking: {name}"), false);
             return;
         }
 
@@ -2161,7 +2199,11 @@ impl App {
             },
         };
 
-        self.status_message = format!("Tracking: {} [{}]", tracked.name, tracked.status.label());
+        self.set_feedback(
+            ToastLevel::Success,
+            format!("Tracking: {} [{}]", tracked.name, tracked.status.label()),
+            true,
+        );
         self.tracked_spawns.insert(key, tracked);
     }
 
@@ -2169,9 +2211,9 @@ impl App {
     pub fn untrack_spawn(&mut self, name: &str) {
         let key = name.to_lowercase();
         if self.tracked_spawns.remove(&key).is_some() {
-            self.status_message = format!("Untracked: {name}");
+            self.set_feedback(ToastLevel::Success, format!("Untracked: {name}"), true);
         } else {
-            self.status_message = format!("Not tracking: {name}");
+            self.set_feedback(ToastLevel::Warning, format!("Not tracking: {name}"), true);
         }
     }
 
@@ -2365,7 +2407,11 @@ impl App {
             .collect();
 
         if focused_clients.is_empty() {
-            self.status_message = String::from("No focused clients with position data");
+            self.set_feedback(
+                ToastLevel::Warning,
+                String::from("No focused clients with position data for navigation."),
+                true,
+            );
             return;
         }
 
@@ -2471,14 +2517,22 @@ impl App {
             details.push(format!("{} failed", failed));
         }
 
-        self.status_message = format!(
-            "Nav → {} ({})",
-            destination_label,
-            if details.is_empty() {
-                String::from("no clients routed")
+        self.set_feedback(
+            if failed > 0 || (sent == 0 && previews == 0) {
+                ToastLevel::Warning
             } else {
-                details.join(", ")
-            }
+                ToastLevel::Success
+            },
+            format!(
+                "Nav → {} ({})",
+                destination_label,
+                if details.is_empty() {
+                    String::from("no clients routed")
+                } else {
+                    details.join(", ")
+                }
+            ),
+            sent > 0 || previews > 0 || failed > 0,
         );
 
         if sent > 0 || previews > 0 {
@@ -2497,25 +2551,62 @@ impl App {
             .collect()
     }
 
+    fn split_command<'a>(&self, input: &'a str) -> (&'a str, &'a str) {
+        let trimmed = input.trim();
+        match trimmed.split_once(char::is_whitespace) {
+            Some((command, rest)) => (command, rest.trim()),
+            None => (trimmed, ""),
+        }
+    }
+
+    fn usage_feedback(&mut self, command: &str, reason: impl Into<String>) {
+        let reason = reason.into();
+        if let Some(entry) = command::command_entry(command) {
+            self.set_feedback(
+                ToastLevel::Warning,
+                format!(
+                    "{reason} Usage: {}. Example: :{}",
+                    entry.usage, entry.example
+                ),
+                true,
+            );
+        } else {
+            self.set_feedback(ToastLevel::Warning, reason, true);
+        }
+    }
+
+    fn unknown_command_feedback(&mut self, input: &str) {
+        if let Some(suggestion) = command::did_you_mean(input) {
+            let alias_note = suggestion
+                .alias
+                .map(|alias| format!(" Alias: :{alias}."))
+                .unwrap_or_default();
+            self.set_feedback(
+                ToastLevel::Warning,
+                format!(
+                    "Unknown command: '{input}'. Did you mean :{}?{}",
+                    suggestion.phrase, alias_note
+                ),
+                true,
+            );
+        } else {
+            self.set_feedback(
+                ToastLevel::Warning,
+                format!(
+                    "Unknown command: '{input}'. Use :help for workflows or :commands for the reference."
+                ),
+                true,
+            );
+        }
+    }
+
     /// Execute the current command buffer content.
     pub fn execute_command(&mut self, orchestrator: &mut Orchestrator) {
         let input = self.cmd_state.command_buffer.trim().to_string();
         if input.is_empty() {
             return;
         }
-        let input = {
-            let normalized = normalize_command_alias(&input);
-            let parts: Vec<&str> = normalized.splitn(2, ' ').collect();
-            if let Some(expanded) = self.command_aliases.get(parts[0]) {
-                if parts.len() > 1 {
-                    format!("{expanded} {}", parts[1])
-                } else {
-                    expanded.clone()
-                }
-            } else {
-                normalized
-            }
-        };
+        let input = command::normalize_command_alias(&input);
 
         // Save to history and track frequency for favorites
         self.cmd_state.command_history.push(input.clone());
@@ -2529,13 +2620,34 @@ impl App {
             if rest.is_empty() {
                 // Just ":G1" with nothing after — focus on that group
                 self.set_active_group(Some(group_idx));
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Scope changed to G{}", group_idx + 1),
+                    false,
+                );
+                return;
+            }
+            if !rest.starts_with('/') {
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    format!(
+                        "Group targets expect a slash command. Example: :G{} /follow {}",
+                        group_idx + 1,
+                        self.main_assist.as_deref().unwrap_or("<name>")
+                    ),
+                    true,
+                );
                 return;
             }
             let g = &self.groups[group_idx];
             let group_name = format!("G{} {}", g.id, g.name);
             let pids = self.pids_for_group(group_idx);
             if pids.is_empty() {
-                self.status_message = format!("{group_name}: no online members");
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    format!("{group_name}: no online members. Example: :G{} /sit", g.id),
+                    true,
+                );
                 return;
             }
             let slash_cmd = rest;
@@ -2547,7 +2659,16 @@ impl App {
                     Err(_) => fail += 1,
                 }
             }
-            self.status_message = format!("{group_name} {slash_cmd} → sent to {ok}, failed {fail}");
+            let message = format!("{group_name} {slash_cmd} → sent to {ok}, failed {fail}");
+            self.set_feedback(
+                if fail > 0 {
+                    ToastLevel::Warning
+                } else {
+                    ToastLevel::Success
+                },
+                message,
+                fail > 0 || ok > 0,
+            );
             return;
         }
 
@@ -2556,7 +2677,23 @@ impl App {
             if rest.is_empty() {
                 self.select_client_idx(client_idx);
                 self.expand_selected_character();
-                self.status_message = format!("Focused client: {target_name}");
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Focused client: {target_name}"),
+                    false,
+                );
+                return;
+            }
+            if !rest.starts_with('/') {
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    format!(
+                        "Character targets expect a slash command. Example: :{} /assist {}",
+                        target_name,
+                        self.main_assist.as_deref().unwrap_or("<name>")
+                    ),
+                    true,
+                );
                 return;
             }
 
@@ -2564,46 +2701,64 @@ impl App {
             self.select_client_idx(client_idx);
             match send_slash_command(pid, rest) {
                 Ok(()) => {
-                    self.status_message = format!("{target_name} → {rest}");
+                    self.set_feedback(ToastLevel::Success, format!("{target_name} → {rest}"), true);
                 }
                 Err(e) => {
-                    self.status_message = format!("Error sending to {target_name}: {e}");
+                    self.set_feedback(
+                        ToastLevel::Error,
+                        format!("Error sending to {target_name}: {e}"),
+                        true,
+                    );
                 }
             }
             return;
         }
 
-        let parts: Vec<&str> = input.split(' ').collect();
-        match parts[0] {
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        let (command_name, rest) = self.split_command(&input);
+        match command_name {
             "help" => {
-                if let Some(command) = parts.get(1).copied() {
-                    if let Some(detail) = command_help_detail(command) {
-                        self.status_message = detail.to_string();
-                    } else {
-                        self.status_message = format!(
-                            "No detailed help for '{command}'. Try :commands for the full list."
-                        );
-                    }
-                } else {
-                    self.help_visible = true;
+                if rest.is_empty() {
                     self.help_scroll = 0;
+                    self.open_help(HelpFocus::Section(HelpSection::Workflows));
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Help opened. Start with the live workflows section."),
+                        false,
+                    );
+                } else if let Some(entry) = command::command_entry(rest) {
+                    self.open_help(HelpFocus::Command(entry.phrase));
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Help opened for :{}", entry.phrase),
+                        false,
+                    );
+                } else if let Some(section) = command::help_section_for_command(rest) {
+                    self.open_help(HelpFocus::Section(section));
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Help opened for '{rest}'."),
+                        false,
+                    );
+                } else {
+                    self.usage_feedback("help", format!("Unknown help topic '{rest}'."));
                 }
             }
-            "commands" | "cmds" => {
-                let listing: Vec<String> = KNOWN_COMMANDS
-                    .iter()
-                    .map(|(cmd, desc)| format!("{cmd}: {desc}"))
-                    .collect();
-                self.status_message = listing.join(" | ");
+            "commands" => {
+                self.open_help(HelpFocus::Section(HelpSection::Combat));
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Command reference opened."),
+                    false,
+                );
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
             }
             "nav" => {
-                let destination = parts[1..].join(" ").trim().to_string();
+                let destination = rest.to_string();
                 if destination.is_empty() {
-                    self.status_message =
-                        String::from("Usage: nav <camp_name|x y z|zone>  (Tab for camps/zones)");
+                    self.usage_feedback("nav", "Missing navigation target.");
                 } else if let Some((label, target, zone_hint)) =
                     self.resolve_nav_target(&parts[1..])
                 {
@@ -2614,11 +2769,20 @@ impl App {
                     };
                     let ok = self.send_ipc_to_focused(&cmd);
                     if ok == 0 {
-                        self.status_message = String::from("No clients connected for navigation");
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            String::from(
+                                "No clients connected for navigation. Use :status to confirm scope.",
+                            ),
+                            true,
+                        );
                     } else {
                         tracing::info!(destination, sent = ok, "Navigation slash command sent");
-                        self.status_message =
-                            format!("Nav slash → {destination} (sent to {ok} clients)");
+                        self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Nav slash → {destination} (sent to {ok} clients)"),
+                            true,
+                        );
                         self.set_active_screen(ActiveScreen::Tactical);
                         if self.tactical_state.show_navigation {
                             self.active_panel = ActivePanel::TacticalNavigation;
@@ -2629,11 +2793,17 @@ impl App {
             "loot" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
                 if ok == 0 {
-                    self.status_message = String::from(
+                    self.set_feedback(
+                        ToastLevel::Warning,
                         "Loot: no clients received command. Check connection with :status",
+                        true,
                     );
                 } else {
-                    self.status_message = format!("Loot → sent to {ok} clients");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Loot → sent to {ok} clients"),
+                        false,
+                    );
                 }
             }
             "status" => {
@@ -2653,8 +2823,12 @@ impl App {
                             client_count
                         };
                         let map_zone = self.map_state.loaded_zone.clone();
-                        self.status_message = format!(
+                        self.set_feedback(
+                            ToastLevel::Info,
+                            format!(
                             "Overview: {client_count} connected, {clients_in_filter} visible | zone={zone} | mode={active_mode:?} | screen={active_screen} | map={map_zone}",
+                            ),
+                            false,
                         );
                         if self.wizard_state.active {
                             self.status_message.push_str(" | wizard active");
@@ -2665,16 +2839,24 @@ impl App {
                     }
                     _ => {
                         if self.active_group.is_some() {
-                            self.status_message = format!(
+                            self.set_feedback(
+                                ToastLevel::Info,
+                                format!(
                                 "{visible_count} visible / {client_count} total client(s) connected"
+                                ),
+                                false,
                             );
                         } else {
-                            self.status_message = format!("{client_count} client(s) connected");
+                            self.set_feedback(
+                                ToastLevel::Info,
+                                format!("{client_count} client(s) connected"),
+                                false,
+                            );
                         }
                     }
                 }
             }
-            "login" | "launch" => {
+            "login" => {
                 self.execute_login_command(&parts[1..]);
             }
             "stop" => {
@@ -2693,22 +2875,34 @@ impl App {
                     let clean = full_name.trim_matches('"');
                     self.untrack_spawn(clean);
                 } else {
-                    self.status_message = String::from("Usage: untrack <name>");
+                    self.usage_feedback("untrack", "Missing tracked spawn name.");
                 }
             }
             "mode" => match parts.get(1).copied() {
                 Some("camp") => {
                     self.operating_mode = crate::camp::hunt::OperatingMode::Camp;
-                    self.status_message = String::from("Switched to Camp mode");
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        String::from("Switched to Camp mode"),
+                        true,
+                    );
                 }
                 Some("hunt") => {
                     self.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
-                    self.status_message = String::from("Switched to Hunt mode");
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        String::from("Switched to Hunt mode"),
+                        true,
+                    );
                 }
-                _ => {
-                    self.status_message = format!(
-                        "Current mode: {}. Usage: mode <camp|hunt>",
-                        self.operating_mode
+                Some(other) => {
+                    self.usage_feedback("mode", format!("Invalid mode '{other}'."));
+                }
+                None => {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Current mode: {}", self.operating_mode),
+                        false,
                     );
                 }
             },
@@ -2724,51 +2918,83 @@ impl App {
                         }
                     }
                     tracing::info!(target = %name, sent = ok, "Main Assist set");
-                    self.status_message = format!("MA → {name} (sent /assist to {ok} clients)");
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("MA → {name} (sent /assist to {ok} clients)"),
+                        true,
+                    );
                 } else {
-                    self.status_message = match &self.main_assist {
-                        Some(ma) => format!("Main Assist: {ma}"),
-                        None => "No MA set. Usage: ma <character_name>".into(),
-                    };
+                    match &self.main_assist {
+                        Some(ma) => {
+                            self.set_feedback(
+                                ToastLevel::Info,
+                                format!("Main Assist: {ma}"),
+                                false,
+                            );
+                        }
+                        None => self.usage_feedback("ma", "No Main Assist is set."),
+                    }
                 }
             }
             "mt" => {
                 if let Some(name) = parts.get(1) {
                     self.main_tank = Some(name.to_string());
                     tracing::info!(target = %name, "Main Tank set");
-                    self.status_message = format!("MT → {name}");
+                    self.set_feedback(ToastLevel::Success, format!("MT → {name}"), true);
                 } else {
-                    self.status_message = match &self.main_tank {
-                        Some(mt) => format!("Main Tank: {mt}"),
-                        None => "No MT set. Usage: mt <character_name>".into(),
-                    };
+                    match &self.main_tank {
+                        Some(mt) => {
+                            self.set_feedback(ToastLevel::Info, format!("Main Tank: {mt}"), false);
+                        }
+                        None => self.usage_feedback("mt", "No Main Tank is set."),
+                    }
                 }
             }
             "engage" => {
-                let target_id = parts
-                    .get(1)
-                    .and_then(|s| s.parse::<u32>().ok())
-                    .unwrap_or(0);
+                let target_id = if rest.is_empty() {
+                    0
+                } else if let Ok(target_id) = rest.parse::<u32>() {
+                    target_id
+                } else {
+                    self.usage_feedback("engage", format!("Invalid target id '{rest}'."));
+                    return;
+                };
                 let ok = self
                     .send_ipc_to_focused(&dmft_common::ipc::Command::CombatEngage { target_id });
                 tracing::info!(target_id, sent = ok, "Combat engage sent");
                 if ok == 0 {
-                    self.status_message = String::from(
+                    self.set_feedback(
+                        ToastLevel::Warning,
                         "Engage: no clients received command. Check connection with :status",
+                        true,
                     );
                 } else {
-                    self.status_message = format!("Engage → {ok} clients (target_id={target_id})");
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Engage → {ok} clients (target_id={target_id})"),
+                        true,
+                    );
                 }
             }
             "disengage" => {
+                if !rest.is_empty() {
+                    self.usage_feedback("disengage", "Unexpected arguments.");
+                    return;
+                }
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
                 if ok == 0 {
-                    self.status_message = String::from(
+                    self.set_feedback(
+                        ToastLevel::Warning,
                         "Disengage: no clients received command. Check connection with :status",
+                        true,
                     );
                 } else {
-                    self.status_message = format!("Disengage → {ok} clients");
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Disengage → {ok} clients"),
+                        true,
+                    );
                 }
             }
             "invite" => {
@@ -2780,34 +3006,62 @@ impl App {
                             Ok(()) => {
                                 tracing::info!(target = %name, pid, "Group invite sent");
                                 let from = self.client_command_target(client);
-                                self.status_message = format!("Invited {name} from {from}");
+                                self.set_feedback(
+                                    ToastLevel::Success,
+                                    format!("Invited {name} from {from}"),
+                                    true,
+                                );
                             }
                             Err(e) => {
-                                self.status_message = format!("Invite failed: {e}");
+                                self.set_feedback(
+                                    ToastLevel::Error,
+                                    format!("Invite failed: {e}"),
+                                    true,
+                                );
                             }
                         }
                     } else {
-                        self.status_message = String::from("No active client to send invite from");
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            String::from("No active client to send invite from."),
+                            true,
+                        );
                     }
                 } else {
-                    self.status_message = String::from("Usage: invite <character_name>");
+                    self.usage_feedback("invite", "Missing invite target.");
                 }
             }
             "accept" => {
+                if !rest.is_empty() {
+                    self.usage_feedback("accept", "Unexpected arguments.");
+                    return;
+                }
                 if let Some(client) = self.active_client() {
                     let pid = client.pid;
                     match send_slash_command(pid, "/accept") {
                         Ok(()) => {
                             tracing::info!(pid, "Group invite accepted");
                             let on_client = self.client_command_target(client);
-                            self.status_message = format!("Accepted group invite on {on_client}");
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!("Accepted group invite on {on_client}"),
+                                true,
+                            );
                         }
                         Err(e) => {
-                            self.status_message = format!("Accept failed: {e}");
+                            self.set_feedback(
+                                ToastLevel::Error,
+                                format!("Accept failed: {e}"),
+                                true,
+                            );
                         }
                     }
                 } else {
-                    self.status_message = String::from("No active client to accept on");
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("No active client to accept on."),
+                        true,
+                    );
                 }
             }
             "heal" => {
@@ -2819,15 +3073,20 @@ impl App {
                         "OFF"
                     };
                     tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
-                    self.status_message = format!("Heal-cancel: {state}");
-                } else {
+                    self.set_feedback(ToastLevel::Success, format!("Heal-cancel: {state}"), true);
+                } else if rest.is_empty() {
                     let state = if self.heal_cancel_enabled {
                         "ON"
                     } else {
                         "OFF"
                     };
-                    self.status_message =
-                        format!("Heal-cancel is {state}. Usage: heal cancel (toggles on/off)");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Heal-cancel is {state}. Use :heal cancel to toggle it."),
+                        false,
+                    );
+                } else {
+                    self.usage_feedback("heal cancel", format!("Unknown heal option '{rest}'."));
                 }
             }
             "ch" => {
@@ -2835,45 +3094,72 @@ impl App {
             }
             "inject" => {
                 if self.clients.is_empty() {
-                    self.status_message =
-                        String::from("Inject: no clients connected. Connect a client first.");
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("Inject: no clients connected. Connect a client first."),
+                        true,
+                    );
                 } else {
-                    self.status_message = String::from(
+                    self.set_feedback(
+                        ToastLevel::Info,
                         "Inject: DLL injection placeholder (not yet wired). Will inject into active client.",
+                        true,
                     );
                 }
             }
             "quit" => {
                 self.running = false;
-                self.status_message = String::from("Shutting down DMFT TUI...");
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Shutting down DMFT TUI..."),
+                    false,
+                );
             }
             "all" => {
-                if let Some(slash_cmd) = parts.get(1) {
+                if rest.is_empty() {
+                    self.usage_feedback("all", "Missing slash command to broadcast.");
+                } else if !rest.starts_with('/') {
+                    self.usage_feedback("all", "Broadcasts require a slash command.");
+                } else {
                     let pids: Vec<u32> = self.clients.iter().map(|c| c.pid).collect();
                     if pids.is_empty() {
-                        self.status_message = format!(
-                            "all {slash_cmd}: no clients connected. Use :login to connect first."
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            format!(
+                                "all {rest}: no clients connected. Use :login to connect first."
+                            ),
+                            true,
                         );
                         return;
                     }
                     let mut ok = 0usize;
                     let mut fail = 0usize;
                     for pid in &pids {
-                        match send_slash_command(*pid, slash_cmd) {
+                        match send_slash_command(*pid, rest) {
                             Ok(()) => ok += 1,
                             Err(_) => fail += 1,
                         }
                     }
-                    self.status_message = format!("all {slash_cmd} → sent to {ok}, failed {fail}");
-                } else {
-                    self.status_message = String::from("Usage: all <slash command>");
+                    self.set_feedback(
+                        if fail > 0 {
+                            ToastLevel::Warning
+                        } else {
+                            ToastLevel::Success
+                        },
+                        format!("all {rest} → sent to {ok}, failed {fail}"),
+                        fail > 0 || ok > 0,
+                    );
                 }
             }
             "wizard" => {
                 self.wizard_state.start();
-                self.status_message = String::from("Starting setup wizard...");
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Starting setup wizard..."),
+                    false,
+                );
             }
-            "config" | "cfg" => {
+            "config" => {
                 self.config_panel_state.active = !self.config_panel_state.active;
                 if self.config_panel_state.active {
                     self.config_panel_state.sync_from_app(
@@ -2884,87 +3170,137 @@ impl App {
                         self.heal_cancel_enabled,
                         &format!("{}", self.operating_mode),
                     );
-                    self.status_message = String::from("Configuration panel opened");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Configuration panel opened"),
+                        false,
+                    );
                 } else {
-                    self.status_message = String::from("Configuration panel closed");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Configuration panel closed"),
+                        false,
+                    );
                 }
             }
             "chui" => match parts.get(1).copied() {
                 Some("open") => {
                     self.ch_chain_panel_state.active = true;
                     self.sync_ch_chain_panel_state(orchestrator);
-                    self.status_message = String::from("CH chain panel opened");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("CH chain panel opened"),
+                        false,
+                    );
                 }
                 Some("close") => {
                     self.ch_chain_panel_state.active = false;
-                    self.status_message = String::from("CH chain panel closed");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("CH chain panel closed"),
+                        false,
+                    );
                 }
                 Some("toggle") => {
                     self.ch_chain_panel_state.active = !self.ch_chain_panel_state.active;
                     if self.ch_chain_panel_state.active {
                         self.sync_ch_chain_panel_state(orchestrator);
-                        self.status_message = String::from("CH chain panel opened");
+                        self.set_feedback(
+                            ToastLevel::Info,
+                            String::from("CH chain panel opened"),
+                            false,
+                        );
                     } else {
-                        self.status_message = String::from("CH chain panel closed");
+                        self.set_feedback(
+                            ToastLevel::Info,
+                            String::from("CH chain panel closed"),
+                            false,
+                        );
                     }
                 }
                 Some("status") => {
                     if let Some(chain) = &self.ch_chain_status {
-                        self.status_message = format!(
-                            "CH chain: {} clerics, {:.1}s interval ({})",
-                            chain.members,
-                            chain.interval_secs,
-                            if chain.is_adaptive {
-                                "adaptive"
-                            } else {
-                                "fixed"
-                            }
+                        self.set_feedback(
+                            ToastLevel::Info,
+                            format!(
+                                "CH chain: {} clerics, {:.1}s interval ({})",
+                                chain.members,
+                                chain.interval_secs,
+                                if chain.is_adaptive {
+                                    "adaptive"
+                                } else {
+                                    "fixed"
+                                }
+                            ),
+                            false,
                         );
                     } else {
-                        self.status_message = String::from("CH chain inactive. Use :ch start.");
+                        self.usage_feedback("ch start", "CH chain inactive.");
                     }
                 }
-                _ => {
+                None => {
                     self.ch_chain_panel_state.active = !self.ch_chain_panel_state.active;
                     if self.ch_chain_panel_state.active {
                         self.sync_ch_chain_panel_state(orchestrator);
-                        self.status_message = String::from("CH chain panel opened");
+                        self.set_feedback(
+                            ToastLevel::Info,
+                            String::from("CH chain panel opened"),
+                            false,
+                        );
                     } else {
-                        self.status_message = String::from("CH chain panel closed");
+                        self.set_feedback(
+                            ToastLevel::Info,
+                            String::from("CH chain panel closed"),
+                            false,
+                        );
                     }
+                }
+                Some(other) => {
+                    self.usage_feedback("chui", format!("Unknown chui option '{other}'."))
                 }
             },
             "theme" => {
                 self.cycle_theme();
-                self.set_toast(format!("Theme: {}", self.theme_kind.label()));
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Theme: {}", self.theme_kind.label()),
+                    true,
+                );
             }
             "privacy" => {
                 self.toggle_privacy();
                 let state = if self.privacy_mode { "ON" } else { "OFF" };
-                self.status_message = format!("Privacy mode: {state}");
+                self.set_feedback(ToastLevel::Success, format!("Privacy mode: {state}"), true);
             }
             _ => {
                 // Try to parse first token as PID
-                if let Ok(pid) = parts[0].parse::<u32>() {
-                    if let Some(slash_cmd) = parts.get(1) {
-                        match send_slash_command(pid, slash_cmd) {
+                if let Ok(pid) = command_name.parse::<u32>() {
+                    if rest.is_empty() || !rest.starts_with('/') {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            format!("PID targets expect a slash command. Example: :{pid} /assist Warrior"),
+                            true,
+                        );
+                    } else {
+                        match send_slash_command(pid, rest) {
                             Ok(()) => {
-                                self.status_message = format!("{pid} → {slash_cmd}");
+                                self.set_feedback(
+                                    ToastLevel::Success,
+                                    format!("{pid} → {rest}"),
+                                    true,
+                                );
                             }
                             Err(e) => {
-                                self.status_message = format!("Error sending to {pid}: {e}");
+                                self.set_feedback(
+                                    ToastLevel::Error,
+                                    format!("Error sending to {pid}: {e}"),
+                                    true,
+                                );
                             }
                         }
-                    } else {
-                        self.status_message = format!("Usage: {pid} <slash command>");
                     }
-                } else if let Some(suggestion) = did_you_mean(parts[0]) {
-                    self.status_message =
-                        format!("Unknown command: '{input}'. Did you mean '{suggestion}'?");
                 } else {
-                    self.status_message = format!(
-                        "Unknown command: '{input}'. Type :help or :commands for available commands."
-                    );
+                    self.unknown_command_feedback(&input);
                 }
             }
         }
@@ -3208,21 +3544,21 @@ impl App {
                         "fixed"
                     };
                     let target = chain.target_id();
-                    self.status_message = format!(
-                        "CH chain: {members} clerics, {interval:.1}s interval ({adaptive}), target={target}"
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!(
+                            "CH chain: {members} clerics, {interval:.1}s interval ({adaptive}), target={target}"
+                        ),
+                        false,
                     );
                 } else {
-                    self.status_message = String::from(
-                        "No CH chain active. Usage: ch start <pid1,pid2,...> <interval> <target_id>",
-                    );
+                    self.usage_feedback("ch start", "No CH chain is active.");
                 }
             }
             Some("start") => {
                 // ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
                 let Some(pids_str) = args.get(1) else {
-                    self.status_message = String::from(
-                        "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
-                    );
+                    self.usage_feedback("ch start", "Missing cleric PID list.");
                     return;
                 };
                 let pids: Vec<u32> = pids_str
@@ -3230,7 +3566,7 @@ impl App {
                     .filter_map(|s| s.trim().parse::<u32>().ok())
                     .collect();
                 if pids.is_empty() {
-                    self.status_message = String::from("No valid PIDs. Use comma-separated PIDs.");
+                    self.usage_feedback("ch start", "No valid PIDs found in the list.");
                     return;
                 }
                 let interval: f32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(3.0);
@@ -3247,21 +3583,25 @@ impl App {
                     spell_slot,
                     "CH chain started from TUI"
                 );
-                self.status_message = format!(
-                    "CH chain started: {} clerics, {:.1}s interval, target={}, slot={}",
-                    pids.len(),
-                    interval,
-                    target_id,
-                    spell_slot
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!(
+                        "CH chain started: {} clerics, {:.1}s interval, target={}, slot={}",
+                        pids.len(),
+                        interval,
+                        target_id,
+                        spell_slot
+                    ),
+                    true,
                 );
             }
             Some("stop") => {
                 if orchestrator.combat.ch_chain_active() {
                     orchestrator.combat.stop_ch_chain();
                     tracing::info!("CH chain stopped from TUI");
-                    self.status_message = String::from("CH chain stopped");
+                    self.set_feedback(ToastLevel::Success, String::from("CH chain stopped"), true);
                 } else {
-                    self.status_message = String::from("No CH chain is running");
+                    self.usage_feedback("ch start", "No CH chain is running.");
                 }
             }
             Some("add") => {
@@ -3270,16 +3610,19 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_add(pid);
                             tracing::info!(pid, "Cleric added to CH chain");
-                            self.status_message = format!("Added PID {pid} to CH chain");
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!("Added PID {pid} to CH chain"),
+                                true,
+                            );
                         } else {
-                            self.status_message =
-                                String::from("No CH chain is running. Use: ch start");
+                            self.usage_feedback("ch start", "No CH chain is running.");
                         }
                     } else {
-                        self.status_message = String::from("Invalid PID. Usage: ch add <pid>");
+                        self.usage_feedback("ch add", format!("Invalid PID '{pid_str}'."));
                     }
                 } else {
-                    self.status_message = String::from("Usage: ch add <pid>");
+                    self.usage_feedback("ch add", "Missing cleric PID.");
                 }
             }
             Some("rm" | "remove") => {
@@ -3288,15 +3631,19 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_remove(pid);
                             tracing::info!(pid, "Cleric removed from CH chain");
-                            self.status_message = format!("Removed PID {pid} from CH chain");
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!("Removed PID {pid} from CH chain"),
+                                true,
+                            );
                         } else {
-                            self.status_message = String::from("No CH chain is running");
+                            self.usage_feedback("ch start", "No CH chain is running.");
                         }
                     } else {
-                        self.status_message = String::from("Invalid PID. Usage: ch rm <pid>");
+                        self.usage_feedback("ch rm", format!("Invalid PID '{pid_str}'."));
                     }
                 } else {
-                    self.status_message = String::from("Usage: ch rm <pid>");
+                    self.usage_feedback("ch rm", "Missing cleric PID.");
                 }
             }
             Some("interval") => {
@@ -3305,16 +3652,22 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_set_interval(secs);
                             tracing::info!(interval = secs, "CH chain interval updated");
-                            self.status_message = format!("CH chain interval set to {secs:.1}s");
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!("CH chain interval set to {secs:.1}s"),
+                                true,
+                            );
                         } else {
-                            self.status_message = String::from("No CH chain is running");
+                            self.usage_feedback("ch start", "No CH chain is running.");
                         }
                     } else {
-                        self.status_message =
-                            String::from("Invalid seconds. Usage: ch interval <seconds>");
+                        self.usage_feedback(
+                            "ch interval",
+                            format!("Invalid seconds '{secs_str}'."),
+                        );
                     }
                 } else {
-                    self.status_message = String::from("Usage: ch interval <seconds>");
+                    self.usage_feedback("ch interval", "Missing interval seconds.");
                 }
             }
             Some("adaptive") => match args.get(1).copied() {
@@ -3323,10 +3676,14 @@ impl App {
                         if let Some(chain) = &mut orchestrator.combat.ch_chain {
                             chain.set_adaptive(true);
                             tracing::info!("CH chain adaptive mode enabled");
-                            self.status_message = String::from("CH chain: adaptive timing ON");
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                String::from("CH chain: adaptive timing ON"),
+                                true,
+                            );
                         }
                     } else {
-                        self.status_message = String::from("No CH chain is running");
+                        self.usage_feedback("ch start", "No CH chain is running.");
                     }
                 }
                 Some("off" | "false" | "0") => {
@@ -3334,20 +3691,33 @@ impl App {
                         if let Some(chain) = &mut orchestrator.combat.ch_chain {
                             chain.set_adaptive(false);
                             tracing::info!("CH chain adaptive mode disabled");
-                            self.status_message = String::from("CH chain: adaptive timing OFF");
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                String::from("CH chain: adaptive timing OFF"),
+                                true,
+                            );
                         }
                     } else {
-                        self.status_message = String::from("No CH chain is running");
+                        self.usage_feedback("ch start", "No CH chain is running.");
                     }
                 }
                 _ => {
-                    self.status_message = String::from("Usage: ch adaptive <on|off>");
+                    self.usage_feedback("ch adaptive", "Expected 'on' or 'off'.");
                 }
             },
             Some(sub) => {
-                self.status_message = format!(
-                    "Unknown CH subcommand: {sub}. Use: start|stop|add|rm|interval|adaptive|status"
-                );
+                if let Some(suggestion) = command::did_you_mean(&format!("ch {sub}")) {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!(
+                            "Unknown CH subcommand '{sub}'. Did you mean :{}?",
+                            suggestion.phrase
+                        ),
+                        true,
+                    );
+                } else {
+                    self.usage_feedback("ch", format!("Unknown CH subcommand '{sub}'."));
+                }
             }
         }
         // Sync cached display state after any CH chain mutation
@@ -3535,18 +3905,22 @@ impl App {
     fn execute_track_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {
-                self.status_message = String::from("Usage: track <name> | track list");
+                self.usage_feedback("track", "Missing spawn name.");
             }
             Some("list") => {
                 if self.tracked_spawns.is_empty() {
-                    self.status_message = String::from("No spawns tracked");
+                    self.set_feedback(ToastLevel::Info, String::from("No spawns tracked"), false);
                 } else {
                     let entries: Vec<String> = self
                         .tracked_spawns
                         .values()
                         .map(|t| format!("{} [{}]", t.name, t.status.label()))
                         .collect();
-                    self.status_message = format!("Tracked: {}", entries.join(", "));
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Tracked: {}", entries.join(", ")),
+                        false,
+                    );
                 }
             }
             Some(_) => {
@@ -3687,179 +4061,19 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
     digits.parse().ok()
 }
 
-/// All known top-level commands for suggestions and the :commands listing.
-const KNOWN_COMMANDS: &[(&str, &str)] = &[
-    ("help", "Show help overlay"),
-    ("commands", "List all commands with usage"),
-    (
-        "status",
-        "Show connected client count and `status overview`",
-    ),
-    (
-        "camp",
-        "Camp management: start|stop|status|list|add|remove|next|prev",
-    ),
-    ("nav", "Navigate: nav <camp_name|x y z|zone>"),
-    ("loot", "Loot nearby corpses"),
-    ("login", "Login management: login [all|G<n>|<name>]"),
-    ("launch", "Alias for login"),
-    ("stop", "Stop client: stop <name|all>"),
-    ("restart", "Restart client: restart <name|all>"),
-    ("track", "Track spawn: track <name> | track list"),
-    ("untrack", "Stop tracking: untrack <name>"),
-    ("mode", "Switch mode: mode <camp|hunt>"),
-    ("ma", "Main Assist: ma [name]"),
-    ("mt", "Main Tank: mt [name]"),
-    ("engage", "Start combat: engage [target_id]"),
-    ("disengage", "Stop combat for focused clients"),
-    ("invite", "Group invite: invite <name>"),
-    ("accept", "Accept pending group invite"),
-    ("heal", "Heal options: heal cancel"),
-    ("ch", "CH chain: start|stop|add|rm|interval|adaptive|status"),
-    ("chui", "Open the CH chain management panel"),
-    ("inject", "Request DLL injection"),
-    ("all", "Broadcast: all <slash_command>"),
-    ("wizard", "Run the setup wizard"),
-    ("config", "Open configuration panel"),
-    ("theme", "Cycle color theme"),
-    ("privacy", "Toggle privacy mode"),
-    ("cmds", "Alias for commands"),
-    ("quit", "Quit TUI"),
-];
-
-/// Levenshtein edit distance between two strings.
-fn edit_distance(a: &str, b: &str) -> usize {
-    let a_len = a.len();
-    let b_len = b.len();
-    let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
-
-    for (i, row) in matrix.iter_mut().enumerate().take(a_len + 1) {
-        row[0] = i;
-    }
-    for (j, cell) in matrix[0].iter_mut().enumerate().take(b_len + 1) {
-        *cell = j;
-    }
-
-    for (i, ca) in a.chars().enumerate() {
-        for (j, cb) in b.chars().enumerate() {
-            let cost = if ca == cb { 0 } else { 1 };
-            matrix[i + 1][j + 1] = (matrix[i][j + 1] + 1)
-                .min(matrix[i + 1][j] + 1)
-                .min(matrix[i][j] + cost);
-        }
-    }
-
-    matrix[a_len][b_len]
-}
-
-/// Find the closest matching command to the given input, within a max edit distance.
-/// Also checks for prefix matches (e.g., "hel" → "help").
-fn did_you_mean(input: &str) -> Option<&'static str> {
-    let input_lower = input.to_lowercase();
-
-    // Prefix match first (higher priority)
-    let prefix_matches: Vec<&str> = KNOWN_COMMANDS
-        .iter()
-        .filter(|(cmd, _)| cmd.starts_with(&input_lower))
-        .map(|(cmd, _)| *cmd)
-        .collect();
-    if prefix_matches.len() == 1 {
-        return Some(prefix_matches[0]);
-    }
-
-    for &(cmd, _) in KNOWN_COMMANDS {
-        if cmd.starts_with(&input_lower) {
-            return Some(cmd);
-        }
-    }
-    let mut best: Option<(&str, usize)> = None;
-
-    for &(cmd, _) in KNOWN_COMMANDS {
-        let dist = edit_distance(&input_lower, cmd);
-        // Only suggest if distance is at most 2 (or 3 for longer commands)
-        let max_dist = if cmd.len() > 5 { 3 } else { 2 };
-        if dist <= max_dist
-            && (best.is_none() || dist < best.map_or(usize::MAX, |(_, best_dist)| best_dist))
-        {
-            best = Some((cmd, dist));
-        }
-    }
-
-    best.map(|(cmd, _)| cmd)
-}
-
 /// Get a command syntax hint for the <command> input fragment.
 pub fn command_syntax_hint(input: &str) -> Option<&'static str> {
-    let trimmed = input.trim();
-    let first_word = trimmed.split_whitespace().next().unwrap_or("");
-    match first_word {
-        "camp" => Some("camp [start|stop|status|list|add|remove|next|prev] [name]"),
-        "nav" => Some("nav <camp_name|x y z|zone>"),
-        "login" | "launch" => Some("login [all|G<n>|<name>]"),
-        "ma" => Some("ma <character_name>"),
-        "mt" => Some("mt <character_name>"),
-        "status" => Some("status [overview]"),
-        "ch" => Some("ch [start|stop|add|rm|interval|adaptive|status]"),
-        "chui" => Some("chui [open|close|toggle]"),
-        "mode" => Some("mode <camp|hunt>"),
-        "track" => Some("track <spawn_name> | track list"),
-        "untrack" => Some("untrack <spawn_name>"),
-        "engage" => Some("engage [target_id]"),
-        "invite" => Some("invite <character_name>"),
-        "all" => Some("all <slash_command>"),
-        "stop" => Some("stop <name|all>"),
-        "restart" => Some("restart <name|all>"),
-        "heal" => Some("heal cancel"),
-        _ => None,
-    }
+    command::find_command_hint(input).map(|hint| hint.usage)
 }
 
-fn normalize_command_alias(input: &str) -> String {
-    match input.trim() {
-        "h" => String::from("help"),
-        "q" => String::from("quit"),
-        "chui" => String::from("chui"),
-        "s" => String::from("status"),
-        "cfg" => String::from("config"),
-        "cmds" => String::from("commands"),
-        "overview" => String::from("status overview"),
-        other => other.to_string(),
-    }
+/// Get a matching inline example for the current command fragment.
+pub fn command_example_hint(input: &str) -> Option<&'static str> {
+    command::find_command_hint(input).map(|hint| hint.example)
 }
 
+#[cfg(test)]
 fn command_help_detail(command: &str) -> Option<&'static str> {
-    match command.to_ascii_lowercase().as_str() {
-        "help" | "h" => Some(
-            "help [command] — open help overlay or show detailed help for one command. Example: :help camp",
-        ),
-        "commands" | "cmds" => {
-            Some("commands — list all available commands and summaries. Alias: :cmds")
-        }
-        "camp" => Some(
-            "camp <start|stop|status|list|add|remove|next|prev> [name] — manage saved camp configs and active camp loop.",
-        ),
-        "nav" => {
-            Some("nav <camp_name|x y z|zone> — route focused clients via waypoint/navmesh systems.")
-        }
-        "login" | "launch" => {
-            Some("login [all|G<n>|name] — queue account launches and login automation.")
-        }
-        "status" => {
-            Some("status [overview] — show connected client counts or a compact runtime summary.")
-        }
-        "ch" => Some(
-            "ch <start|stop|add|rm|interval|adaptive|status> — control Complete Heal chain rotation.",
-        ),
-        "chui" => Some("chui [open|close|toggle] — CH chain management panel."),
-        "ma" => Some("ma [name] — set or show main assist; sends /assist when target is provided."),
-        "mt" => Some("mt [name] — set or show main tank."),
-        "all" => Some("all <slash_command> — broadcast a slash command to all connected clients."),
-        "config" | "cfg" => Some(
-            "config — open the interactive configuration panel, or use :status for live state summary. (alias: cfg)",
-        ),
-        "quit" | "q" => Some("quit — exit the TUI immediately (alias: q)."),
-        _ => None,
-    }
+    command::command_entry(command).map(|entry| entry.summary)
 }
 
 /// Send a slash command to a specific PID via named pipe.
@@ -3932,6 +4146,7 @@ fn ascii_icontains(haystack: &str, needle: &str) -> bool {
 mod tests {
     use super::*;
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
+    use crate::orchestrator::Orchestrator;
 
     fn test_spawn(name: &str) -> SpawnInfo {
         SpawnInfo {
@@ -3989,6 +4204,25 @@ mod tests {
     }
 
     #[test]
+    fn split_command_preserves_full_slash_tail() {
+        let app = App::new();
+        assert_eq!(app.split_command("all /assist Bob"), ("all", "/assist Bob"));
+        assert_eq!(
+            app.split_command("1234 /assist Bob"),
+            ("1234", "/assist Bob")
+        );
+    }
+
+    #[test]
+    fn parse_group_prefix_preserves_full_slash_tail() {
+        let app = App::new();
+        assert_eq!(
+            app.parse_group_prefix("G1 /assist Bob"),
+            Some((0, "/assist Bob"))
+        );
+    }
+
+    #[test]
     fn send_ipc_command_errors_when_session_token_is_missing() {
         let pid = u32::MAX - 7;
         let login_token_path = std::env::temp_dir()
@@ -4013,64 +4247,68 @@ mod tests {
     }
 
     #[test]
-    fn edit_distance_identical_strings() {
-        assert_eq!(edit_distance("hello", "hello"), 0);
-    }
-
-    #[test]
-    fn edit_distance_one_substitution() {
-        assert_eq!(edit_distance("camp", "came"), 1);
-    }
-
-    #[test]
-    fn edit_distance_insertion_and_deletion() {
-        assert_eq!(edit_distance("nav", "navi"), 1);
-        assert_eq!(edit_distance("engage", "engag"), 1);
-    }
-
-    #[test]
-    fn edit_distance_empty_strings() {
-        assert_eq!(edit_distance("", ""), 0);
-        assert_eq!(edit_distance("abc", ""), 3);
-        assert_eq!(edit_distance("", "xyz"), 3);
-    }
-
-    #[test]
     fn did_you_mean_close_match() {
-        assert_eq!(did_you_mean("campp"), Some("camp"));
-        assert_eq!(did_you_mean("navv"), Some("nav"));
-        assert_eq!(did_you_mean("engge"), Some("engage"));
-        assert_eq!(did_you_mean("disengag"), Some("disengage"));
+        assert_eq!(
+            command::did_you_mean("campp").map(|suggestion| suggestion.phrase),
+            Some("camp")
+        );
+        assert_eq!(
+            command::did_you_mean("navv").map(|suggestion| suggestion.phrase),
+            Some("nav")
+        );
+        assert_eq!(
+            command::did_you_mean("engge").map(|suggestion| suggestion.phrase),
+            Some("engage")
+        );
+        assert_eq!(
+            command::did_you_mean("disengag").map(|suggestion| suggestion.phrase),
+            Some("disengage")
+        );
     }
 
     #[test]
     fn did_you_mean_no_match() {
-        assert_eq!(did_you_mean("xyzzy"), None);
-        assert_eq!(did_you_mean("foobarqux"), None);
+        assert_eq!(command::did_you_mean("xyzzy"), None);
+        assert_eq!(command::did_you_mean("foobarqux"), None);
     }
 
     #[test]
     fn did_you_mean_exact_match_returns_itself() {
-        assert_eq!(did_you_mean("help"), Some("help"));
-        assert_eq!(did_you_mean("status"), Some("status"));
+        assert_eq!(
+            command::did_you_mean("help").map(|suggestion| suggestion.phrase),
+            Some("help")
+        );
+        assert_eq!(
+            command::did_you_mean("status").map(|suggestion| suggestion.phrase),
+            Some("status")
+        );
     }
 
     #[test]
     fn did_you_mean_prefix_match() {
-        assert_eq!(did_you_mean("ca"), Some("camp"));
-        assert_eq!(did_you_mean("st"), Some("status"));
+        assert_eq!(
+            command::did_you_mean("ca").map(|suggestion| suggestion.phrase),
+            Some("camp")
+        );
+        assert_eq!(
+            command::did_you_mean("st").map(|suggestion| suggestion.phrase),
+            Some("status")
+        );
     }
 
     #[test]
     fn normalize_command_aliases() {
-        assert_eq!(normalize_command_alias("h"), "help");
-        assert_eq!(normalize_command_alias("q"), "quit");
-        assert_eq!(normalize_command_alias("chui"), "chui");
-        assert_eq!(normalize_command_alias("cfg"), "config");
-        assert_eq!(normalize_command_alias("cmds"), "commands");
-        assert_eq!(normalize_command_alias("s"), "status");
-        assert_eq!(normalize_command_alias("overview"), "status overview");
-        assert_eq!(normalize_command_alias("camp start"), "camp start");
+        assert_eq!(command::normalize_command_alias("h"), "help");
+        assert_eq!(command::normalize_command_alias("q"), "quit");
+        assert_eq!(command::normalize_command_alias("chui"), "chui");
+        assert_eq!(command::normalize_command_alias("cfg"), "config");
+        assert_eq!(command::normalize_command_alias("cmds"), "commands");
+        assert_eq!(command::normalize_command_alias("s"), "status");
+        assert_eq!(
+            command::normalize_command_alias("overview"),
+            "status overview"
+        );
+        assert_eq!(command::normalize_command_alias("camp start"), "camp start");
     }
 
     #[test]
@@ -4083,7 +4321,10 @@ mod tests {
 
     #[test]
     fn known_commands_has_all_expected_commands() {
-        let names: Vec<&str> = KNOWN_COMMANDS.iter().map(|(n, _)| *n).collect();
+        let names: Vec<&str> = command::command_entries()
+            .iter()
+            .flat_map(|entry| std::iter::once(entry.phrase).chain(entry.aliases.iter().copied()))
+            .collect();
         for expected in &[
             "help",
             "commands",
@@ -4115,8 +4356,76 @@ mod tests {
         ] {
             assert!(
                 names.contains(expected),
-                "KNOWN_COMMANDS missing '{expected}'"
+                "Command metadata missing '{expected}'"
             );
         }
+    }
+
+    #[test]
+    fn help_commands_open_expected_focus_targets() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+
+        app.cmd_state.command_buffer = String::from("help nav");
+        app.execute_command(&mut orchestrator);
+        assert!(app.help_visible);
+        assert_eq!(app.help_focus, Some(HelpFocus::Command("nav")));
+
+        app.help_visible = false;
+        app.help_focus = None;
+        app.cmd_state.command_buffer = String::from("commands");
+        app.execute_command(&mut orchestrator);
+        assert!(app.help_visible);
+        assert_eq!(
+            app.help_focus,
+            Some(HelpFocus::Section(HelpSection::Combat))
+        );
+    }
+
+    #[test]
+    fn invalid_mode_feedback_includes_usage_and_example() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+
+        app.cmd_state.command_buffer = String::from("mode raid");
+        app.execute_command(&mut orchestrator);
+
+        let toast = app.toast.as_ref().expect("warning toast");
+        assert_eq!(toast.level, ToastLevel::Warning);
+        assert!(app.status_message.contains("Invalid mode 'raid'."));
+        assert!(app.status_message.contains("Usage: mode <camp|hunt>."));
+        assert!(app.status_message.contains("Example: :mode hunt"));
+    }
+
+    #[test]
+    fn toast_dedupe_refreshes_timestamp_and_expires_after_ttl() {
+        let mut app = App::new();
+        app.tick_count = 10;
+        app.set_toast(ToastLevel::Warning, "Camp loop paused");
+        let first_tick = app.toast.as_ref().expect("toast").set_tick;
+        assert_eq!(first_tick, 10);
+        assert_eq!(
+            app.toast.as_ref().expect("toast").ttl_ticks,
+            ToastLevel::Warning.ttl_ticks()
+        );
+
+        app.tick_count = 25;
+        app.set_toast(ToastLevel::Warning, "Camp loop paused");
+        let refreshed = app.toast.as_ref().expect("toast");
+        assert_eq!(refreshed.set_tick, 25);
+
+        app.tick_count = 65;
+        app.clear_expired_toast();
+        assert!(
+            app.toast.is_some(),
+            "warning should still be visible at ttl"
+        );
+
+        app.tick_count = 66;
+        app.clear_expired_toast();
+        assert!(
+            app.toast.is_none(),
+            "warning should clear once ttl is exceeded"
+        );
     }
 }
