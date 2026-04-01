@@ -40,7 +40,7 @@ impl PersonalityProfile {
         // med_threshold_jitter: -5.0 to +5.0
         let med_threshold_jitter = (rng.next_f32() - 0.5) * 10.0;
         // phase_offset: 0-30
-        let phase_offset = (rng.next_u32() % 31) as u64;
+        let phase_offset = u64::from(rng.next_u32() % 31);
 
         Self {
             name: character_name.to_string(),
@@ -68,7 +68,7 @@ impl PersonalityProfile {
 fn name_hash(name: &str) -> u32 {
     let mut h: u32 = 0;
     for byte in name.bytes() {
-        h = h.wrapping_add(byte as u32).wrapping_mul(KNUTH_HASH);
+        h = h.wrapping_add(u32::from(byte)).wrapping_mul(KNUTH_HASH);
     }
     h
 }

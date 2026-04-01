@@ -54,7 +54,7 @@ impl IdleScheduler {
         let tick_secs = config.idle_tick_secs.max(1);
         let min_ticks = (config.min_chat_interval_secs / tick_secs).max(1) as u32;
         let max_ticks =
-            (config.max_chat_interval_secs / tick_secs).max(min_ticks as u64 + 1u64) as u32;
+            (config.max_chat_interval_secs / tick_secs).max(u64::from(min_ticks) + 1u64) as u32;
 
         Self {
             rng: Xorshift32::from_client_id(client_id.wrapping_mul(7919)),

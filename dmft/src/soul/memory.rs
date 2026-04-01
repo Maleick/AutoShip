@@ -187,7 +187,7 @@ impl MemoryStore {
         self.conn.execute(
             "INSERT INTO conversations (character_id, speaker, is_player, channel, message, sentiment)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![character_id, speaker, is_player as i32, channel, message, sentiment],
+            params![character_id, speaker, i32::from(is_player), channel, message, sentiment],
         ).context("Failed to record conversation")?;
 
         Ok(())

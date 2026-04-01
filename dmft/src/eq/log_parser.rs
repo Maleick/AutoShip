@@ -258,10 +258,10 @@ impl LootDatabase {
                 silver,
                 copper,
             } => {
-                self.total_plat += *plat as u64;
-                self.total_gold += *gold as u64;
-                self.total_silver += *silver as u64;
-                self.total_copper += *copper as u64;
+                self.total_plat += u64::from(*plat);
+                self.total_gold += u64::from(*gold);
+                self.total_silver += u64::from(*silver);
+                self.total_copper += u64::from(*copper);
             }
             LogEvent::Experience { .. } => {
                 self.total_xp_events += 1;

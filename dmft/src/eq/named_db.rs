@@ -30,12 +30,12 @@ pub struct NamedMobEntry {
 impl NamedMobEntry {
     /// Convert `respawn_min_minutes` to ticks (at 250ms per tick = 4 ticks/sec).
     pub fn respawn_min_ticks(&self) -> u64 {
-        self.respawn_min_minutes as u64 * 60 * 4
+        u64::from(self.respawn_min_minutes) * 60 * 4
     }
 
     /// Convert `respawn_max_minutes` to ticks.
     pub fn respawn_max_ticks(&self) -> u64 {
-        self.respawn_max_minutes as u64 * 60 * 4
+        u64::from(self.respawn_max_minutes) * 60 * 4
     }
 }
 

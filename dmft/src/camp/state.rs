@@ -345,9 +345,9 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let pull_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map_or(self.config.pull_mana_pct as f32, |h| {
+                    .map_or(f32::from(self.config.pull_mana_pct), |h| {
                         h.personality
-                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
+                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
                     });
                 let healer_ready = snapshot
                     .is_none_or(|s| s.healer_mana_pct >= pull_threshold);
@@ -426,9 +426,9 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let med_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map_or(self.config.pull_mana_pct as f32, |h| {
+                    .map_or(f32::from(self.config.pull_mana_pct), |h| {
                         h.personality
-                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
+                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
                     });
                 let mana_ready = snapshot
                     .is_some_and(|s| s.healer_mana_pct >= med_threshold);

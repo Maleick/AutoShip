@@ -143,7 +143,7 @@ impl MovementController {
                 // no specific target).
                 unsafe {
                     let func: ExecuteCmdFn = std::mem::transmute(addr);
-                    func(command, key_down as i32, 0, 0);
+                    func(command, i32::from(key_down), 0, 0);
                 }
             }
         }

@@ -311,7 +311,7 @@ impl Combatant {
                     crate::eq::cast_spell(spell.slot, spell.spell_id);
 
                     // Apply humanization delay (cast_start_delay absorbed into cast time)
-                    let cast_delay = self.personality.next_cast_delay() as u32;
+                    let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
                     self.state = CombatState::Casting {
                         spell_slot: spell.slot,

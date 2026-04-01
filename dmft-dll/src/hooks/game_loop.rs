@@ -304,7 +304,7 @@ fn human_jitter_ticks(rng: &mut dmft_common::nav::Xorshift32) -> u64 {
     } else {
         0
     };
-    (base + hesitate) as u64
+    u64::from(base + hesitate)
 }
 
 /// Queue a slash command for execution on the next game loop tick.

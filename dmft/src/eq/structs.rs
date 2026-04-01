@@ -284,7 +284,7 @@ impl SpawnInfo {
 
     pub fn mana_pct(&self) -> f64 {
         if self.mana_max > 0 {
-            (self.mana_current as f64 / self.mana_max as f64) * 100.0
+            (f64::from(self.mana_current) / f64::from(self.mana_max)) * 100.0
         } else {
             100.0
         }

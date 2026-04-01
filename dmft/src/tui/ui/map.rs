@@ -40,7 +40,7 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(11), Constraint::Length(sidebar_height + 10)])
             .split(area);
-        let rail_width = ((area.width as f32) * 0.28).round() as u16;
+        let rail_width = (f32::from(area.width) * 0.28).round() as u16;
         let rail_width = rail_width.clamp(20, area.width.saturating_sub(26));
         let bottom = Layout::default()
             .direction(Direction::Horizontal)

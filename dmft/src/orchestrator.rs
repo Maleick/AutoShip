@@ -179,7 +179,7 @@ impl Orchestrator {
                 self.game_states.get(&m.pid).and_then(|gs| {
                     gs.local_player
                         .as_ref()
-                        .map(|lp| (m.pid, lp.hp_current.clamp(0, i32::MAX as i64) as i32))
+                        .map(|lp| (m.pid, lp.hp_current.clamp(0, i64::from(i32::MAX)) as i32))
                 })
             })
             .collect();
@@ -364,7 +364,7 @@ impl Orchestrator {
             .filter_map(|m| {
                 self.game_states
                     .get(&m.pid)
-                    .and_then(|gs| gs.local_player.as_ref().map(|lp| lp.level as f32))
+                    .and_then(|gs| gs.local_player.as_ref().map(|lp| f32::from(lp.level)))
             })
             .collect();
 

@@ -175,7 +175,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
                     .szModule
                     .iter()
                     .take_while(|&&c| c != 0)
-                    .map(|&c| char::from_u32(c as u32).unwrap_or('?'))
+                    .map(|&c| char::from_u32(u32::from(c)).unwrap_or('?'))
                     .collect::<String>()
                     .to_ascii_lowercase();
 

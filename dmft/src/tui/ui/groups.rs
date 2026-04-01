@@ -459,7 +459,7 @@ fn draw_config_group_panel(
         .map(|cfg| {
             cfg.accounts
                 .iter()
-                .filter(|a| a.group == group.id as u32)
+                .filter(|a| a.group == u32::from(group.id))
                 .filter_map(|a| extract_account_number(&a.name).map(|n| (n, a)))
                 .collect()
         })
