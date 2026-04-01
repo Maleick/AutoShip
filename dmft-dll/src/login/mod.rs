@@ -18,14 +18,18 @@ static LOGIN_FSM: Mutex<Option<LoginFsm>> = Mutex::new(None);
 
 /// Initialize the login FSM. Called once during DLL setup.
 pub fn init() {
-    let mut guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     *guard = Some(LoginFsm::new());
     tracing::info!("Login FSM initialized");
 }
 
 /// Run one login tick. Call from `on_game_tick()` when `local_player` is None.
 pub fn tick() -> Option<LoginPhase> {
-    let mut guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(fsm) = guard.as_mut() {
         fsm.tick()
     } else {
@@ -40,7 +44,9 @@ pub fn start_login(
     server_name: String,
     character_name: String,
 ) {
-    let mut guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(fsm) = guard.as_mut() {
         fsm.store_credentials(account_name, password, server_name, character_name);
     } else {
@@ -53,7 +59,9 @@ pub fn start_login(
 
 /// Get current login phase for status queries.
 pub fn phase() -> LoginPhase {
-    let guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     guard
         .as_ref()
         .map_or(LoginPhase::NotStarted, |fsm| fsm.phase.clone())
@@ -61,7 +69,9 @@ pub fn phase() -> LoginPhase {
 
 /// Check if the login FSM has completed (in world, error, or idle after completion).
 pub fn is_done() -> bool {
-    let guard = LOGIN_FSM.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     guard
         .as_ref()
         .is_none_or(|fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))

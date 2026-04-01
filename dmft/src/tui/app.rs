@@ -663,7 +663,11 @@ impl App {
         self.active_panel = ActivePanel::OverviewCharacter;
         self.status_message = self
             .active_client()
-            .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("Character: no client selected"), |player| format!("Character: {}", self.redact_name(&player.displayed_name)));
+            .and_then(|client| client.local_player.as_ref())
+            .map_or_else(
+                || String::from("Character: no client selected"),
+                |player| format!("Character: {}", self.redact_name(&player.displayed_name)),
+            );
         self.ensure_panel_focus();
     }
 
@@ -694,8 +698,10 @@ impl App {
                         let lo = account_nums.iter().copied().min().unwrap_or(1);
                         let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
-                        let name = default_names
-                            .get((id - 1) as usize).map_or_else(|| format!("Group {id}"), std::string::ToString::to_string);
+                        let name = default_names.get((id - 1) as usize).map_or_else(
+                            || format!("Group {id}"),
+                            std::string::ToString::to_string,
+                        );
 
                         GroupDef {
                             id: id as u8,
@@ -1187,8 +1193,7 @@ impl App {
             && let Ok(proc) = ProcessHandle::open(client.pid)
         {
             // Find the spawn address by walking the spawn list
-            let Some(mgr_ptr_addr) =
-                offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base)
+            let Some(mgr_ptr_addr) = offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base)
             else {
                 return Vec::new();
             };
@@ -1272,7 +1277,8 @@ impl App {
             } else if let Some(add_rest) = rest.strip_prefix("add ") {
                 // Suggest zone-based name
                 let zone = self
-                    .active_client().map_or_else(|| "camp".into(), |c| c.zone_name.clone());
+                    .active_client()
+                    .map_or_else(|| "camp".into(), |c| c.zone_name.clone());
                 let suggestion = vec![zone];
                 self.complete_with_candidates("camp add ", add_rest, &suggestion);
             } else {
@@ -2047,9 +2053,7 @@ impl App {
                     Err(_) => fail += 1,
                 }
             }
-            self.status_message = format!(
-                "{group_name} {slash_cmd} → sent to {ok}, failed {fail}"
-            );
+            self.status_message = format!("{group_name} {slash_cmd} → sent to {ok}, failed {fail}");
             return;
         }
 
@@ -2249,25 +2253,26 @@ impl App {
                     self.status_message = String::from("No active client to accept on");
                 }
             }
-            "heal" => if let Some("cancel") = parts.get(1).copied() {
-                self.heal_cancel_enabled = !self.heal_cancel_enabled;
-                let state = if self.heal_cancel_enabled {
-                    "ON"
+            "heal" => {
+                if let Some("cancel") = parts.get(1).copied() {
+                    self.heal_cancel_enabled = !self.heal_cancel_enabled;
+                    let state = if self.heal_cancel_enabled {
+                        "ON"
+                    } else {
+                        "OFF"
+                    };
+                    tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
+                    self.status_message = format!("Heal-cancel: {state}");
                 } else {
-                    "OFF"
-                };
-                tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
-                self.status_message = format!("Heal-cancel: {state}");
-            } else {
-                let state = if self.heal_cancel_enabled {
-                    "ON"
-                } else {
-                    "OFF"
-                };
-                self.status_message = format!(
-                    "Heal-cancel is {state}. Usage: heal cancel (toggles on/off)"
-                );
-            },
+                    let state = if self.heal_cancel_enabled {
+                        "ON"
+                    } else {
+                        "OFF"
+                    };
+                    self.status_message =
+                        format!("Heal-cancel is {state}. Usage: heal cancel (toggles on/off)");
+                }
+            }
             "ch" => {
                 self.execute_ch_command(&parts[1..], orchestrator);
             }
@@ -2285,8 +2290,7 @@ impl App {
                             Err(_) => fail += 1,
                         }
                     }
-                    self.status_message =
-                        format!("all {slash_cmd} → sent to {ok}, failed {fail}");
+                    self.status_message = format!("all {slash_cmd} → sent to {ok}, failed {fail}");
                 } else {
                     self.status_message = String::from("Usage: all <slash command>");
                 }
@@ -2322,10 +2326,11 @@ impl App {
                 );
             }
             Some("start") => {
-                let camp_name = if let Some(name) = args.get(1) { *name } else {
-                    self.status_message = String::from(
-                        "Usage: camp start <name>  (loads config/camps/<name>.toml)",
-                    );
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
+                    self.status_message =
+                        String::from("Usage: camp start <name>  (loads config/camps/<name>.toml)");
                     return;
                 };
 
@@ -2363,7 +2368,9 @@ impl App {
                 }
             }
             Some("add") => {
-                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
                     self.status_message =
                         String::from("Usage: camp add <name>  (saves current position)");
                     return;
@@ -2371,7 +2378,8 @@ impl App {
 
                 let (center, zone) = if let Some(player) = &self.local_player {
                     let zone = self
-                        .active_client().map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
+                        .active_client()
+                        .map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
                     ([player.x, player.y, player.z], zone)
                 } else {
                     self.status_message =
@@ -2410,7 +2418,9 @@ impl App {
                 }
             }
             Some("remove") => {
-                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                let camp_name = if let Some(name) = args.get(1) {
+                    *name
+                } else {
                     self.status_message = String::from("Usage: camp remove <name>");
                     return;
                 };
@@ -2695,9 +2705,10 @@ impl App {
     ///   login G<n>        — launch all accounts in group n
     ///   login <name>      — launch a single account by name
     fn execute_login_command(&mut self, args: &[&str]) {
-        let accounts = if let Some(cfg) = &self.accounts_config { cfg.clone() } else {
-            self.status_message =
-                String::from("No accounts config — create config/accounts.toml");
+        let accounts = if let Some(cfg) = &self.accounts_config {
+            cfg.clone()
+        } else {
+            self.status_message = String::from("No accounts config — create config/accounts.toml");
             return;
         };
 
@@ -2853,9 +2864,8 @@ impl App {
                     orchestrator.eject_client(pid);
                     // Re-launch via login
                     self.execute_login_command(&[name]);
-                    self.status_message = format!(
-                        "Restarting {char_name} (PID {pid}) — ejected, re-launching..."
-                    );
+                    self.status_message =
+                        format!("Restarting {char_name} (PID {pid}) — ejected, re-launching...");
                 } else {
                     // Maybe the client isn't connected but the account exists — just launch
                     self.execute_login_command(&[name]);
@@ -2946,9 +2956,8 @@ impl App {
             }
         }
 
-        self.status_message = format!(
-            "Login: launched {launched}, failed {failed} of {count} queued"
-        );
+        self.status_message =
+            format!("Login: launched {launched}, failed {failed} of {count} queued");
     }
 
     /// Build camp members from connected clients using simple role assignment.
@@ -3036,9 +3045,7 @@ fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result
     use crate::ipc::pipe::CommandPipe;
 
     let token = crate::ipc::load_session_token(pid).with_context(|| {
-        format!(
-            "missing session token for PID {pid}; inject the DLL before sending commands"
-        )
+        format!("missing session token for PID {pid}; inject the DLL before sending commands")
     })?;
     let session_id = dmft_common::ipc::session_id_from_token(&token);
     let pipe = CommandPipe::connect(pid, session_id)?;

@@ -259,7 +259,8 @@ fn group_scope_entries(app: &App) -> Vec<GroupScopeEntry> {
             GroupScopeEntry {
                 label: format!("G{} {}", group.id, group.name),
                 zone: members
-                    .first().map_or_else(|| String::from("—"), |client| client.zone_name.clone()),
+                    .first()
+                    .map_or_else(|| String::from("—"), |client| client.zone_name.clone()),
                 connected: members.len(),
                 members: usize::from(hi.saturating_sub(lo).saturating_add(1)),
                 active: app.active_group == Some(idx),
@@ -606,35 +607,37 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
             .add_modifier(Modifier::BOLD),
         _ => Style::default().fg(t.text_muted),
     };
-    let target_name = client
-        .target
-        .as_ref().map_or_else(|| String::from("—"), |target| app.redact_name(&target.displayed_name).into_owned());
-    let (nav_label, nav_style, nav_destination) = app
-        .nav_state
-        .nav_statuses
-        .get(&client.pid).map_or_else(|| {
-            (
-                String::from("Idle"),
-                Style::default().fg(t.text_muted),
-                String::from("—"),
-            )
-        }, |nav| {
-            let style = if nav.status.is_moving() {
-                Style::default().fg(t.text_highlight)
-            } else if nav.status.is_arrived() {
-                Style::default().fg(t.hp_high)
-            } else if nav.status.is_stuck() {
-                Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.text_muted)
-            };
-            let destination = if nav.destination.is_empty() {
-                String::from("—")
-            } else {
-                nav.destination.clone()
-            };
-            (nav.status.label().to_string(), style, destination)
-        });
+    let target_name = client.target.as_ref().map_or_else(
+        || String::from("—"),
+        |target| app.redact_name(&target.displayed_name).into_owned(),
+    );
+    let (nav_label, nav_style, nav_destination) =
+        app.nav_state.nav_statuses.get(&client.pid).map_or_else(
+            || {
+                (
+                    String::from("Idle"),
+                    Style::default().fg(t.text_muted),
+                    String::from("—"),
+                )
+            },
+            |nav| {
+                let style = if nav.status.is_moving() {
+                    Style::default().fg(t.text_highlight)
+                } else if nav.status.is_arrived() {
+                    Style::default().fg(t.hp_high)
+                } else if nav.status.is_stuck() {
+                    Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(t.text_muted)
+                };
+                let destination = if nav.destination.is_empty() {
+                    String::from("—")
+                } else {
+                    nav.destination.clone()
+                };
+                (nav.status.label().to_string(), style, destination)
+            },
+        );
 
     let lines = if collapsed {
         vec![Line::from(vec![
@@ -1084,10 +1087,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                 let label: String = name.chars().take(18).collect();
                 lines.push(Line::from(vec![
                     Span::raw(" "),
-                    Span::styled(
-                        format!("{count}× "),
-                        Style::default().fg(t.text_highlight),
-                    ),
+                    Span::styled(format!("{count}× "), Style::default().fg(t.text_highlight)),
                     Span::styled(label, Style::default().fg(t.text_secondary)),
                 ]));
             }
