@@ -150,7 +150,7 @@ fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
 /// `gem_id`: 0-based gem slot index.
 /// `spell_id`: the spell's ID number.
 ///
-/// Calls `CharacterZoneClient::CastSpell(gemid`, spellid, item_ptr=null, item_guid=0).
+/// Calls `CharacterZoneClient::CastSpell(gemid`, spellid, `item_ptr=null`, item_guid=0).
 pub fn cast_spell(gem_id: u8, spell_id: i32) {
     #[cfg(windows)]
     {

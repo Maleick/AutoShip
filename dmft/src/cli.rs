@@ -898,7 +898,7 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
     lines.join("\n")
 }
 
-/// Diagnostic hex dump of `SpawnManager`, the TList, and the first spawn node.
+/// Diagnostic hex dump of `SpawnManager`, the `TList`, and the first spawn node.
 /// Helps debug why the NEXT pointer reads as 0x0 after the first spawn.
 #[allow(unused_variables)]
 fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u64) {
