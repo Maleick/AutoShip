@@ -16,6 +16,15 @@ use super::widgets::{
 use crate::eq::structs::{EqClass, StandState};
 use crate::tui::app::{ActivePanel, App, ClientState};
 
+const MIN_HEIGHT_FOR_FOCUS_STRIP: u16 = 28;
+const STACKED_ROSTER_TALL_HEIGHT_THRESHOLD: u16 = 28;
+const STACKED_ROSTER_MEDIUM_HEIGHT_THRESHOLD: u16 = 24;
+const STACKED_ROSTER_COMPACT_HEIGHT_THRESHOLD: u16 = 18;
+const STACKED_ROSTER_MIN_TALL: u16 = 15;
+const STACKED_ROSTER_MIN_MEDIUM: u16 = 13;
+const STACKED_ROSTER_MIN_COMPACT: u16 = 11;
+const STACKED_ROSTER_MIN_TINY: u16 = 8;
+
 /// Draw the main overview dashboard with roster and status panels.
 pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
     let stacked = area.width < WIDTH_OVERVIEW_STACK;
@@ -24,11 +33,7 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
     let chunks = if stacked {
         let sidebar_height = sections.iter().map(|section| section.height).sum::<u16>();
         let roster_min = stacked_roster_min_height(area.height);
-        let roster_height = area
-            .height
-            .saturating_sub(sidebar_height)
-            .max(roster_min)
-            .min(area.height.saturating_sub(sidebar_height));
+        let roster_height = area.height.saturating_sub(sidebar_height).max(roster_min);
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -348,7 +353,11 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn group_focus_strip_height(area: Rect) -> u16 {
-    if area.height >= 28 { 3 } else { 0 }
+    if area.height >= MIN_HEIGHT_FOR_FOCUS_STRIP {
+        3
+    } else {
+        0
+    }
 }
 
 fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'static str, Style) {
@@ -614,14 +623,14 @@ fn overview_sections(app: &App, area: Rect, stacked: bool) -> Vec<OverviewSectio
 }
 
 fn stacked_roster_min_height(total_height: u16) -> u16 {
-    if total_height >= 28 {
-        15
-    } else if total_height >= 24 {
-        13
-    } else if total_height >= 18 {
-        11
+    if total_height >= STACKED_ROSTER_TALL_HEIGHT_THRESHOLD {
+        STACKED_ROSTER_MIN_TALL
+    } else if total_height >= STACKED_ROSTER_MEDIUM_HEIGHT_THRESHOLD {
+        STACKED_ROSTER_MIN_MEDIUM
+    } else if total_height >= STACKED_ROSTER_COMPACT_HEIGHT_THRESHOLD {
+        STACKED_ROSTER_MIN_COMPACT
     } else {
-        8
+        STACKED_ROSTER_MIN_TINY
     }
 }
 

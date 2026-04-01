@@ -13,6 +13,11 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Widget},
 };
 
+const COMPACT_LAYOUT_WIDTH_THRESHOLD: u16 = 72;
+const COMPACT_LAYOUT_HEIGHT_THRESHOLD: u16 = 20;
+const HEADER_TARGET_DECORATION_WIDTH: u16 = 22;
+const HEADER_TARGET_MIN_WIDTH: usize = 8;
+
 /// A single cleric in the CH chain.
 #[derive(Debug, Clone)]
 pub struct ChainCleric {
@@ -215,7 +220,8 @@ impl Widget for ChChainWidget<'_> {
             return;
         }
 
-        let compact = inner.width < 72 || inner.height < 20;
+        let compact = inner.width < COMPACT_LAYOUT_WIDTH_THRESHOLD
+            || inner.height < COMPACT_LAYOUT_HEIGHT_THRESHOLD;
         let layout = if compact {
             Layout::vertical([
                 Constraint::Length(2), // Target header
@@ -252,7 +258,10 @@ impl ChChainWidget<'_> {
         } else {
             self.state.target_name.clone()
         };
-        let target_budget = area.width.saturating_sub(22).max(8) as usize;
+        let target_budget = area
+            .width
+            .saturating_sub(HEADER_TARGET_DECORATION_WIDTH)
+            .max(HEADER_TARGET_MIN_WIDTH as u16) as usize;
         let target_label = truncate_inline(&target_name, target_budget);
 
         let adaptive_label = if self.state.adaptive {
@@ -358,11 +367,13 @@ impl ChChainWidget<'_> {
             } else {
                 String::new()
             };
-            let eligible_detail = cleric.cast_display.is_some()
-                && remaining_details > 0
-                && (!tight_height
-                    || is_selected
-                    || matches!(cleric.cast_state, CastState::Casting(_)));
+            let has_cast_details = cleric.cast_display.is_some();
+            let has_capacity_for_details = remaining_details > 0;
+            let force_show_details =
+                is_selected || matches!(cleric.cast_state, CastState::Casting(_));
+            let layout_allows_details = !tight_height || force_show_details;
+            let eligible_detail =
+                has_cast_details && has_capacity_for_details && layout_allows_details;
             let inline_cast = cleric
                 .cast_display
                 .as_ref()

@@ -1429,6 +1429,10 @@ pub fn render_cast_bar(
     meta_color: Color,
     dim_color: Color,
 ) -> Line<'static> {
+    const MIN_LABEL_BUDGET_COMPACT: usize = 2;
+    const MIN_LABEL_BUDGET_MEDIUM: usize = 4;
+    const MIN_LABEL_BUDGET_WIDE: usize = 8;
+
     let compact = available_width < 34;
     let medium = (34..52).contains(&available_width);
     let wide = available_width >= 52;
@@ -1489,13 +1493,13 @@ pub fn render_cast_bar(
         } else {
             0
         })
-        .max(2);
+        .max(MIN_LABEL_BUDGET_COMPACT);
     let minimum_label_budget = if compact {
-        2
+        MIN_LABEL_BUDGET_COMPACT
     } else if medium {
-        4
+        MIN_LABEL_BUDGET_MEDIUM
     } else {
-        8
+        MIN_LABEL_BUDGET_WIDE
     };
     if label_budget < minimum_label_budget && suffix_budget > 0 {
         let shift = (minimum_label_budget - label_budget).min(suffix_budget);
@@ -2097,6 +2101,7 @@ pub fn render_sparkline(spark: &Sparkline, color: Color) -> Span<'static> {
 mod tests {
     use super::*;
     use crate::tui::theme::dark_modern;
+    use ratatui::text::{Line, Span};
 
     #[test]
     fn con_color_red_when_much_higher() {
@@ -2137,6 +2142,18 @@ mod tests {
         let t = dark_modern();
         assert_eq!(con_color(30, 23, &t), t.con_green);
         assert_eq!(con_color(30, 1, &t), t.con_green);
+    }
+
+    #[test]
+    fn spans_width_uses_terminal_cell_width() {
+        let spans = vec![Span::raw("A"), Span::raw("界")];
+        assert_eq!(spans_width(&spans), 3);
+    }
+
+    #[test]
+    fn line_width_uses_terminal_cell_width() {
+        let line = Line::from(vec![Span::raw("A"), Span::raw("界")]);
+        assert_eq!(line_width(&line), 3);
     }
 
     #[test]

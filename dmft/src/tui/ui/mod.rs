@@ -522,20 +522,17 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
     spans
 }
 
-fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
+fn build_command_mode_line(app: &App, available_width: u16) -> Line<'static> {
     let t = &app.theme;
+    let input_text = format!(": {}_", app.cmd_state.command_buffer);
+    let input_width = line_width(&Line::from(input_text.as_str())) as u16;
+    let mut spans = vec![Span::styled(input_text, t.statusbar_cmd)];
 
-    // Command mode: full-width input line with syntax hint
-    if app.cmd_state.command_mode {
-        let input_text = format!(": {}_", app.cmd_state.command_buffer);
-        let mut spans = vec![Span::styled(&input_text, t.statusbar_cmd)];
-
-        // Show syntax hint for known commands
-        if let Some(hint) = crate::tui::app::command_syntax_hint(&app.cmd_state.command_buffer) {
-            let hint_budget = area
-                .width
-                .saturating_sub(input_text.chars().count() as u16)
-                .saturating_sub(8) as usize;
+    if let Some(hint) = crate::tui::app::command_syntax_hint(&app.cmd_state.command_buffer) {
+        let hint_budget = available_width
+            .saturating_sub(input_width)
+            .saturating_sub(8) as usize;
+        if hint_budget > 0 {
             let truncated_hint = truncate_inline(hint, hint_budget);
             if !truncated_hint.is_empty() {
                 spans.push(Span::styled(
@@ -544,20 +541,31 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 ));
             }
         }
+    }
 
+    Line::from(spans)
+}
+
+fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+
+    // Command mode: full-width input line with syntax hint
+    if app.cmd_state.command_mode {
         frame.render_widget(
-            Paragraph::new(Line::from(spans)).block(widgets::panel("", t.border_active, t)),
+            Paragraph::new(build_command_mode_line(app, area.width.saturating_sub(2)))
+                .block(widgets::panel("", t.border_active, t)),
             area,
         );
         return;
     }
 
     let width_class = classify_width(area.width);
-    let right_budget = area.width.saturating_sub(12) as usize;
-    let right_spans = build_status_right(app, width_class, right_budget);
+    let max_right_width = area.width.saturating_sub(12).max(1);
+    let right_spans =
+        build_status_right(app, width_class, max_right_width.saturating_sub(2) as usize);
     let right_width = (spans_width(&right_spans) as u16 + 2)
         .max(12)
-        .min(area.width.saturating_sub(12));
+        .min(max_right_width);
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(10), Constraint::Length(right_width)])
@@ -576,6 +584,24 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 // ─── Help overlay ─────────────────────────────────────────────────────────────
+
+fn help_content_line_count(lines: &[Line<'_>], content_width: u16) -> usize {
+    if content_width == 0 {
+        return 0;
+    }
+
+    let content_width = content_width as usize;
+    lines
+        .iter()
+        .map(|line| line_width(line).max(1).div_ceil(content_width))
+        .sum()
+}
+
+fn help_max_scroll(lines: &[Line<'_>], popup_area: Rect) -> usize {
+    let visible_lines = popup_area.height.saturating_sub(2) as usize;
+    let content_width = popup_area.width.saturating_sub(2);
+    help_content_line_count(lines, content_width).saturating_sub(visible_lines)
+}
 
 fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
@@ -926,14 +952,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         )),
     ]);
 
-    // Clamp scroll to valid range (account for border lines)
-    let visible_lines = popup_area.height.saturating_sub(2) as usize;
-    let content_width = popup_area.width.saturating_sub(2) as usize;
-    let total_rows = text
-        .iter()
-        .map(|line| wrapped_visual_rows(line, content_width))
-        .sum::<usize>();
-    let max_scroll = total_rows.saturating_sub(visible_lines);
+    // Clamp scroll using wrapped visual rows so narrow popups can reach the bottom.
+    let max_scroll = help_max_scroll(&text, popup_area);
     let scroll = app.help_scroll.min(max_scroll);
 
     // Build title with scroll indicator
@@ -962,15 +982,6 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             ),
         popup_area,
     );
-}
-
-fn wrapped_visual_rows(line: &Line<'_>, width: usize) -> usize {
-    if width == 0 {
-        return 1;
-    }
-
-    let cells = line_width(line);
-    cells.max(1).div_ceil(width)
 }
 
 #[cfg(test)]
@@ -1024,6 +1035,33 @@ mod tests {
         assert!(rendered.contains("Help"));
         assert!(rendered.contains("Active: Characters"));
         assert!(rendered.contains("g - Toggle group roster section"));
+    }
+
+    #[test]
+    fn command_mode_line_skips_empty_hint_wrapper_when_budget_is_zero() {
+        let mut app = sample_app();
+        app.cmd_state.command_mode = true;
+        app.cmd_state.command_buffer = String::from("nav");
+
+        let line = build_command_mode_line(&app, 14);
+        let rendered = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+
+        assert_eq!(line.spans.len(), 1);
+        assert!(!rendered.contains("()"));
+    }
+
+    #[test]
+    fn help_max_scroll_accounts_for_wrapped_visual_rows() {
+        let lines = vec![Line::from(
+            "This is a long help row that should wrap across several visual rows.",
+        )];
+        let popup = Rect::new(0, 0, 14, 4);
+
+        assert!(help_max_scroll(&lines, popup) > 0);
     }
 
     fn render_app(mut app: App, width: u16, height: u16) -> String {
