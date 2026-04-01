@@ -955,7 +955,7 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
 // STUB: Direct CListWnd item iteration and SelectCharacter/EnterWorld calls not yet
 // implemented. The game-loop-based workaround (`queue_enter_world`) handles character
 // selection reliably. Direct calls would be cleaner but require reading CListWnd items
-// via GetItemText vtable call, which has not been reverse-engineered.
+// via GetItemText vtable call (unverified) or by walking the ItemsArray (see eq::widgets).
 pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) -> bool {
     #[cfg(windows)]
     {
