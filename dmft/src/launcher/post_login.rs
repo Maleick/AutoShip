@@ -49,12 +49,12 @@ impl PostLoginSequencer {
             }
             PostLoginPhase::Buffing => {
                 // Waiting for buffs to be applied
-                if !self.camp_waypoints.is_empty() {
+                if self.camp_waypoints.is_empty() {
+                    Some(Command::ReportReady)
+                } else {
                     Some(Command::NavigateTo {
                         waypoints: self.camp_waypoints.clone(),
                     })
-                } else {
-                    Some(Command::ReportReady)
                 }
             }
             PostLoginPhase::NavigatingToCamp => {

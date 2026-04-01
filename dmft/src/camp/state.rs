@@ -544,10 +544,10 @@ impl CampLoop {
         }
 
         // DPS assists tank and attacks
-        let assist_name = if !tank_name.is_empty() {
-            &tank_name
-        } else {
+        let assist_name = if tank_name.is_empty() {
             &puller_name
+        } else {
+            &tank_name
         };
 
         for dps in self.find_all_by_role(&Role::Dps) {
@@ -589,13 +589,13 @@ impl CampLoop {
         // Create a loot cycle from pending corpses.
         // If no corpses recorded, fall back to the last pull target as a single corpse.
         let corpses = if self.pending_corpses.is_empty() {
-            if !self.last_pull_target.is_empty() {
+            if self.last_pull_target.is_empty() {
+                Vec::new()
+            } else {
                 vec![CorpseEntry {
                     spawn_id: 0,
                     mob_name: self.last_pull_target.clone(),
                 }]
-            } else {
-                Vec::new()
             }
         } else {
             self.pending_corpses.drain(..).collect()
