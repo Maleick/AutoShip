@@ -35,3 +35,58 @@ impl ClientState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_sets_pid_and_base() {
+        let cs = ClientState::new(1234, 0x140000000);
+        assert_eq!(cs.pid, 1234);
+        assert_eq!(cs.eq_base, 0x140000000);
+    }
+
+    #[test]
+    fn new_defaults_no_player() {
+        let cs = ClientState::new(1, 0);
+        assert!(cs.local_player.is_none());
+        assert!(cs.target.is_none());
+    }
+
+    #[test]
+    fn new_defaults_empty_spawns() {
+        let cs = ClientState::new(1, 0);
+        assert!(cs.spawns.is_empty());
+    }
+
+    #[test]
+    fn new_defaults_zone_unknown() {
+        let cs = ClientState::new(1, 0);
+        assert_eq!(cs.zone_name, "Unknown");
+    }
+
+    #[test]
+    fn new_defaults_empty_character_name() {
+        let cs = ClientState::new(1, 0);
+        assert!(cs.character_name.is_empty());
+    }
+
+    #[test]
+    fn new_defaults_no_group_info() {
+        let cs = ClientState::new(1, 0);
+        assert!(cs.group_info.is_none());
+    }
+
+    #[test]
+    fn new_status_contains_pid() {
+        let cs = ClientState::new(5678, 0);
+        assert!(cs.client_status.contains("5678"));
+    }
+
+    #[test]
+    fn new_defaults_not_demo() {
+        let cs = ClientState::new(1, 0);
+        assert!(!cs.is_demo);
+    }
+}
