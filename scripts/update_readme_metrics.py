@@ -38,7 +38,7 @@ def test_count() -> int:
     result = subprocess.run(
         ["cargo", "test", "--workspace"],
         cwd=REPO_ROOT,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         env={**os.environ, "CARGO_TERM_COLOR": "never"},
