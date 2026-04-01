@@ -223,7 +223,7 @@ mod tests {
         assert_eq!(config.ignore_mob_names, vec!["Ambassador DVinn"]);
         let toml_str = toml::to_string_pretty(&config).unwrap();
         let loaded: CampConfig = toml::from_str(&toml_str).unwrap();
-        assert_eq!(loaded.ignore_mob_names, vec!["Ambassador DVinn"]);
+        assert_eq!(loaded, config);
     }
 
     #[test]
