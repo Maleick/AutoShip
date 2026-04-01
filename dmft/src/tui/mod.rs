@@ -2,6 +2,8 @@
 
 /// Application state — tracks active screen, selections, and all runtime data.
 pub mod app;
+/// Shared cast presentation helpers for TUI surfaces.
+pub mod cast;
 /// TUI client wrapper — connects process reading to app state updates.
 pub mod client;
 /// Configuration panel with tree view and inline editing.

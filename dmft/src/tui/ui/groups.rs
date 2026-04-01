@@ -11,7 +11,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use super::widgets::{hp_color, panel};
+use super::widgets::{hp_color, panel, render_cast_bar};
 use crate::eq::structs::BuffSlot;
 use crate::tui::app::extract_account_number;
 use crate::tui::app::{App, ClientState, GroupDef, LiveGroup};
@@ -85,6 +85,35 @@ fn buff_line<'a>(player: &crate::eq::structs::SpawnInfo, t: &Theme) -> Option<Li
         ));
     }
     Some(Line::from(buff_spans))
+}
+
+fn member_detail_line<'a>(
+    app: &App,
+    client: &ClientState,
+    player: &crate::eq::structs::SpawnInfo,
+    available_width: usize,
+    t: &Theme,
+) -> Option<Line<'a>> {
+    if let Some(cast_display) = app.client_cast_display(client) {
+        return Some(render_cast_bar(
+            &cast_display,
+            available_width.saturating_sub(2),
+            if cast_display.exact {
+                t.hp_high
+            } else {
+                t.text_highlight
+            },
+            if cast_display.exact {
+                t.hp_high
+            } else {
+                t.text_accent
+            },
+            t.text_secondary,
+            t.text_muted,
+        ));
+    }
+
+    buff_line(player, t)
 }
 
 /// Build the operating mode indicator lines.
@@ -239,9 +268,10 @@ fn draw_live_group_panel(
 
                 if show_buffs
                     && lines.len() < member_budget
-                    && let Some(bl) = buff_line(player, t)
+                    && let Some(detail_line) =
+                        member_detail_line(app, client, player, inner.width as usize, t)
                 {
-                    lines.push(bl);
+                    lines.push(detail_line);
                 }
             } else {
                 lines.push(Line::from(Span::styled(
@@ -485,9 +515,10 @@ fn draw_config_group_panel(
 
                 if show_buffs
                     && lines.len() < member_budget
-                    && let Some(bl) = buff_line(player, t)
+                    && let Some(detail_line) =
+                        member_detail_line(app, client, player, inner.width as usize, t)
                 {
-                    lines.push(bl);
+                    lines.push(detail_line);
                 }
             } else {
                 lines.push(Line::from(Span::styled(

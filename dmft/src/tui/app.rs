@@ -1,9 +1,13 @@
 use std::collections::{HashMap, VecDeque};
 
+use super::cast::{CastDisplay, heuristic_live_cast, short_cast_label};
 use super::config_panel::ConfigPanelState;
+use super::demo_data::{DemoRole, demo_client_cast_info, demo_client_profile};
 use super::menu::MenuState;
 use super::theme::{Theme, ThemeKind};
-use super::ui::ch_chain::{CastState, ChChainPanelState, ChainCleric, ChainStats};
+use super::ui::ch_chain::{
+    CastState as ChPanelCastState, ChChainPanelState, ChainCleric, ChainStats,
+};
 use super::wizard::WizardState;
 use crate::camp::config::CampConfig;
 use crate::camp::state::{CampMember, Role};
@@ -491,6 +495,44 @@ impl App {
         }
     }
 
+    /// Build a cast-strip display model for a client, when actively casting.
+    #[must_use]
+    pub fn client_cast_display(&self, client: &ClientState) -> Option<CastDisplay> {
+        if client.is_demo {
+            let name = if !client.character_name.is_empty() {
+                client.character_name.as_str()
+            } else {
+                client
+                    .local_player
+                    .as_ref()
+                    .map_or("", |player| player.displayed_name.as_str())
+            };
+            if let Some(cast) =
+                demo_client_cast_info(name, client.pid, self.tick_count, self.refresh_rate_ms)
+            {
+                return Some(CastDisplay::exact_progress(
+                    cast.spell_label,
+                    short_cast_label(cast.spell_label),
+                    f64::from(cast.progress),
+                    cast.total_cast_ms as f32 / 1000.0,
+                ));
+            }
+        }
+
+        let player = client.local_player.as_ref()?;
+        let cast = player.cast_state.as_ref()?;
+        if !cast.is_casting() {
+            return None;
+        }
+
+        Some(heuristic_live_cast(
+            cast.spell_slot,
+            player.class,
+            self.tick_count,
+            client.pid,
+        ))
+    }
+
     /// Initialize Discord integration from config.
     pub fn init_discord(&mut self, config: &crate::config::DiscordConfig) {
         if !config.webhook_url.is_empty() {
@@ -941,13 +983,16 @@ impl App {
                     target_id: chain.target_id(),
                 })
         } else {
-            None
+            self.demo_ch_chain_status()
         };
     }
 
     /// Sync CH chain data into the dedicated CH chain management panel.
     pub fn sync_ch_chain_panel_state(&mut self, orchestrator: &Orchestrator) {
         let Some(chain) = orchestrator.combat.ch_chain.as_ref() else {
+            if self.sync_demo_ch_chain_panel_state() {
+                return;
+            }
             self.ch_chain_panel_state.clerics.clear();
             self.ch_chain_panel_state.selected = 0;
             self.ch_chain_panel_state.target_id = 0;
@@ -986,12 +1031,24 @@ impl App {
                     pid,
                     position: (index as u8) + 1,
                     timing_offset_ms: 0,
+                    cast_display: if let Some((active_index, progress)) = cast_progress
+                        && active_index == index
+                    {
+                        Some(CastDisplay::exact_progress(
+                            "Complete Heal",
+                            "CH",
+                            f64::from(progress),
+                            self.ch_chain_panel_state.cast_time_secs,
+                        ))
+                    } else {
+                        None
+                    },
                     cast_state: if let Some((active_index, progress)) = cast_progress
                         && active_index == index
                     {
-                        CastState::Casting(progress)
+                        ChPanelCastState::Casting(progress)
                     } else {
-                        CastState::Idle
+                        ChPanelCastState::Idle
                     },
                 }
             })
@@ -1289,6 +1346,110 @@ impl App {
         None
     }
 
+    fn demo_ch_chain_status(&self) -> Option<ChChainStatus> {
+        let clerics: Vec<&ClientState> =
+            self.clients
+                .iter()
+                .filter(|client| {
+                    client.is_demo
+                        && demo_client_profile(client.character_name.as_str(), client.pid)
+                            .is_some_and(|profile| {
+                                matches!(
+                                    profile.role,
+                                    DemoRole::ChainCleric | DemoRole::ChainClericTwo
+                                )
+                            })
+                })
+                .collect();
+        if clerics.is_empty() {
+            return None;
+        }
+
+        let target_name = clerics
+            .iter()
+            .find_map(|client| {
+                let name = client.character_name.as_str();
+                demo_client_profile(name, client.pid).and_then(|profile| profile.target_spawn_name)
+            })
+            .unwrap_or("Dmft01");
+        let target_id = self.find_spawn_id_by_name(target_name).unwrap_or(0);
+
+        Some(ChChainStatus {
+            members: clerics.len(),
+            interval_secs: 2.5,
+            is_adaptive: false,
+            target_id,
+        })
+    }
+
+    fn sync_demo_ch_chain_panel_state(&mut self) -> bool {
+        let mut clerics: Vec<ChainCleric> = self
+            .clients
+            .iter()
+            .filter_map(|client| {
+                if !client.is_demo {
+                    return None;
+                }
+                let profile = demo_client_profile(&client.character_name, client.pid)?;
+                if !matches!(
+                    profile.role,
+                    DemoRole::ChainCleric | DemoRole::ChainClericTwo
+                ) {
+                    return None;
+                }
+
+                let cast_display = self.client_cast_display(client);
+                let cast_state = if let Some(display) = &cast_display {
+                    if display.label == "Complete Heal" {
+                        ChPanelCastState::Casting(display.progress as f32)
+                    } else {
+                        ChPanelCastState::Idle
+                    }
+                } else {
+                    ChPanelCastState::Idle
+                };
+
+                Some(ChainCleric {
+                    name: client.character_name.clone(),
+                    pid: client.pid,
+                    position: 0,
+                    timing_offset_ms: 0,
+                    cast_display,
+                    cast_state,
+                })
+            })
+            .collect();
+        if clerics.is_empty() {
+            return false;
+        }
+
+        clerics.sort_by_key(|cleric| cleric.pid);
+        for (index, cleric) in clerics.iter_mut().enumerate() {
+            cleric.position = (index + 1) as u8;
+        }
+
+        let target_name = clerics
+            .iter()
+            .find_map(|cleric| {
+                demo_client_profile(&cleric.name, cleric.pid)
+                    .and_then(|profile| profile.target_spawn_name)
+            })
+            .unwrap_or("Dmft01");
+
+        self.ch_chain_panel_state.target_id = self.find_spawn_id_by_name(target_name).unwrap_or(0);
+        self.ch_chain_panel_state.target_name = target_name.to_string();
+        self.ch_chain_panel_state.cast_time_secs = 10.0;
+        self.ch_chain_panel_state.overlap_buffer_secs = 0.5;
+        self.ch_chain_panel_state.chain_delay_secs = 2.5;
+        self.ch_chain_panel_state.adaptive = false;
+        self.ch_chain_panel_state.stats = ChainStats::default();
+        self.ch_chain_panel_state.clerics = clerics;
+        if self.ch_chain_panel_state.selected >= self.ch_chain_panel_state.clerics.len() {
+            self.ch_chain_panel_state.selected = 0;
+        }
+        true
+    }
+
     fn find_spawn_name(&self, spawn_id: u32) -> Option<String> {
         self.clients.iter().find_map(|client| {
             if let Some(player) = &client.local_player
@@ -1298,6 +1459,22 @@ impl App {
             }
             client.spawns.iter().find_map(|spawn| {
                 (spawn.spawn_id == spawn_id).then(|| spawn.displayed_name.clone())
+            })
+        })
+    }
+
+    fn find_spawn_id_by_name(&self, name: &str) -> Option<u32> {
+        self.clients.iter().find_map(|client| {
+            if let Some(player) = &client.local_player
+                && player.displayed_name.eq_ignore_ascii_case(name)
+            {
+                return Some(player.spawn_id);
+            }
+            client.spawns.iter().find_map(|spawn| {
+                spawn
+                    .displayed_name
+                    .eq_ignore_ascii_case(name)
+                    .then_some(spawn.spawn_id)
             })
         })
     }
@@ -2053,6 +2230,17 @@ impl App {
     }
 
     fn load_zone_navmesh_overlay(&mut self, zone_short_name: &str) {
+        #[cfg(not(windows))]
+        {
+            tracing::debug!(
+                zone = zone_short_name,
+                "Skipping navmesh overlay load on non-Windows"
+            );
+            self.map_state.navmesh_overlay = None;
+            return;
+        }
+
+        #[cfg(windows)]
         match crate::nav::mesh::load_zone_overlay(zone_short_name) {
             Ok(overlay) if !overlay.is_empty() => {
                 tracing::info!(
