@@ -66,13 +66,13 @@ pub fn classify_width(width: u16) -> WidthClass {
 /// Count the visible width of a span collection in terminal cells.
 #[must_use]
 pub fn spans_width(spans: &[Span<'_>]) -> usize {
-    spans.iter().map(|span| span.content.chars().count()).sum()
+    spans.iter().map(Span::width).sum()
 }
 
 /// Count the visible width of a line in terminal cells.
 #[must_use]
 pub fn line_width(line: &Line<'_>) -> usize {
-    spans_width(&line.spans)
+    line.width()
 }
 
 /// Build a centered popup rect with bounded margins on small terminals.

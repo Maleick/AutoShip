@@ -536,10 +536,13 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 .width
                 .saturating_sub(input_text.chars().count() as u16)
                 .saturating_sub(8) as usize;
-            spans.push(Span::styled(
-                format!("  ({})", truncate_inline(hint, hint_budget)),
-                Style::default().fg(t.text_muted),
-            ));
+            let truncated_hint = truncate_inline(hint, hint_budget);
+            if !truncated_hint.is_empty() {
+                spans.push(Span::styled(
+                    format!("  ({truncated_hint})"),
+                    Style::default().fg(t.text_muted),
+                ));
+            }
         }
 
         frame.render_widget(
@@ -550,7 +553,8 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let width_class = classify_width(area.width);
-    let right_spans = build_status_right(app, width_class, area.width as usize);
+    let right_budget = area.width.saturating_sub(12) as usize;
+    let right_spans = build_status_right(app, width_class, right_budget);
     let right_width = (spans_width(&right_spans) as u16 + 2)
         .max(12)
         .min(area.width.saturating_sub(12));
@@ -924,7 +928,12 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     // Clamp scroll to valid range (account for border lines)
     let visible_lines = popup_area.height.saturating_sub(2) as usize;
-    let max_scroll = text.len().saturating_sub(visible_lines);
+    let content_width = popup_area.width.saturating_sub(2) as usize;
+    let total_rows = text
+        .iter()
+        .map(|line| wrapped_visual_rows(line, content_width))
+        .sum::<usize>();
+    let max_scroll = total_rows.saturating_sub(visible_lines);
     let scroll = app.help_scroll.min(max_scroll);
 
     // Build title with scroll indicator
@@ -953,6 +962,15 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             ),
         popup_area,
     );
+}
+
+fn wrapped_visual_rows(line: &Line<'_>, width: usize) -> usize {
+    if width == 0 {
+        return 1;
+    }
+
+    let cells = line_width(line);
+    cells.max(1).div_ceil(width)
 }
 
 #[cfg(test)]
