@@ -159,4 +159,84 @@ mod tests {
         let account_key = derive_key_from_master(&master_key, &account_salt).unwrap();
         assert_eq!(account_key.len(), 32);
     }
+
+    #[test]
+    fn same_password_same_salt_produces_same_key() {
+        let salt = generate_salt();
+        let key_a = derive_key("test_password", &salt).unwrap();
+        let key_b = derive_key("test_password", &salt).unwrap();
+        assert_eq!(*key_a, *key_b);
+    }
+
+    #[test]
+    fn encrypt_produces_12_byte_nonce() {
+        let salt = generate_salt();
+        let key = derive_key("test", &salt).unwrap();
+        let (_, nonce) = encrypt(b"data", &key).unwrap();
+        assert_eq!(nonce.len(), 12);
+    }
+
+    #[test]
+    fn ciphertext_differs_from_plaintext() {
+        let salt = generate_salt();
+        let key = derive_key("test", &salt).unwrap();
+        let plaintext = b"sensitive data here";
+        let (ciphertext, _) = encrypt(plaintext, &key).unwrap();
+        assert_ne!(&ciphertext[..], &plaintext[..]);
+    }
+
+    #[test]
+    fn encrypt_large_plaintext() {
+        let salt = generate_salt();
+        let key = derive_key("large_test", &salt).unwrap();
+        let plaintext = vec![0x42u8; 10_000];
+        let (ciphertext, nonce) = encrypt(&plaintext, &key).unwrap();
+        let decrypted = decrypt(&ciphertext, &key, &nonce).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn decrypt_with_wrong_nonce_fails() {
+        let salt = generate_salt();
+        let key = derive_key("test_nonce", &salt).unwrap();
+        let plaintext = b"test data";
+        let (ciphertext, _) = encrypt(plaintext, &key).unwrap();
+        let wrong_nonce = [0u8; 12];
+        let result = decrypt(&ciphertext, &key, &wrong_nonce);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn decrypt_tampered_ciphertext_fails() {
+        let salt = generate_salt();
+        let key = derive_key("tamper_test", &salt).unwrap();
+        let plaintext = b"original data";
+        let (mut ciphertext, nonce) = encrypt(plaintext, &key).unwrap();
+        // Tamper with the ciphertext
+        if !ciphertext.is_empty() {
+            ciphertext[0] ^= 0xFF;
+        }
+        let result = decrypt(&ciphertext, &key, &nonce);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn derive_key_from_master_different_salts_different_keys() {
+        let master_salt = generate_salt();
+        let master_key = derive_key("master", &master_salt).unwrap();
+        let salt_a = generate_salt();
+        let salt_b = generate_salt();
+        let key_a = derive_key_from_master(&master_key, &salt_a).unwrap();
+        let key_b = derive_key_from_master(&master_key, &salt_b).unwrap();
+        assert_ne!(*key_a, *key_b);
+    }
+
+    #[test]
+    fn each_encrypt_produces_different_nonce() {
+        let salt = generate_salt();
+        let key = derive_key("nonce_test", &salt).unwrap();
+        let (_, nonce_a) = encrypt(b"data", &key).unwrap();
+        let (_, nonce_b) = encrypt(b"data", &key).unwrap();
+        assert_ne!(nonce_a, nonce_b);
+    }
 }

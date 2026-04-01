@@ -360,4 +360,86 @@ mod tests {
         );
         assert!(cmds.is_empty());
     }
+
+    #[test]
+    fn test_record_cast_overwrites_previous() {
+        let mut tracker = BuffTracker::new();
+        tracker.record_cast(100, "Haste", 10);
+        tracker.record_cast(100, "Haste", 50);
+        // Should use the later cast time
+        assert!(!tracker.is_expired(100, "Haste", 100, 100));
+        assert_eq!(tracker.remaining(100, "Haste", 100, 100), 50);
+    }
+
+    #[test]
+    fn test_different_members_tracked_separately() {
+        let mut tracker = BuffTracker::new();
+        tracker.record_cast(100, "Haste", 10);
+        tracker.record_cast(101, "Haste", 50);
+        assert_eq!(tracker.remaining(100, "Haste", 100, 60), 50);
+        assert_eq!(tracker.remaining(101, "Haste", 100, 60), 90);
+    }
+
+    #[test]
+    fn test_different_buffs_tracked_separately() {
+        let mut tracker = BuffTracker::new();
+        tracker.record_cast(100, "Haste", 10);
+        tracker.record_cast(100, "Clarity", 50);
+        assert_eq!(tracker.remaining(100, "Haste", 100, 60), 50);
+        assert_eq!(tracker.remaining(100, "Clarity", 100, 60), 90);
+    }
+
+    #[test]
+    fn test_buff_priority_alacrity_is_haste() {
+        assert_eq!(buff_priority("Alacrity"), PRIORITY_HASTE);
+    }
+
+    #[test]
+    fn test_buff_priority_aegolism_is_hp() {
+        assert_eq!(buff_priority("Aegolism"), PRIORITY_HP);
+    }
+
+    #[test]
+    fn test_buff_priority_kei_is_mana_regen() {
+        assert_eq!(buff_priority("KEI"), PRIORITY_MANA_REGEN);
+    }
+
+    #[test]
+    fn test_buff_priority_unknown_is_stat() {
+        assert_eq!(buff_priority("Shield of the Magi"), PRIORITY_STAT);
+    }
+
+    #[test]
+    fn test_expired_at_exact_duration_boundary() {
+        let mut tracker = BuffTracker::new();
+        tracker.record_cast(100, "Haste", 0);
+        // At exactly duration ticks, should be expired
+        assert!(tracker.is_expired(100, "Haste", 100, 100));
+        // One tick before, not expired
+        assert!(!tracker.is_expired(100, "Haste", 100, 99));
+    }
+
+    #[test]
+    fn test_remaining_at_exact_cast_time() {
+        let mut tracker = BuffTracker::new();
+        tracker.record_cast(100, "Haste", 50);
+        assert_eq!(tracker.remaining(100, "Haste", 100, 50), 100);
+    }
+
+    #[test]
+    fn test_check_buffs_no_class_config_for_role() {
+        let tracker = BuffTracker::new();
+        let members = vec![CampMember::new(100, "Warrior01".into(), Role::Tank)];
+        let configs = HashMap::new(); // No configs at all
+        let cmds = check_buffs(&tracker, &members, &configs, 0, &CampState::Idle);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn test_check_buffs_empty_members() {
+        let tracker = BuffTracker::new();
+        let configs = test_class_configs();
+        let cmds = check_buffs(&tracker, &[], &configs, 0, &CampState::Idle);
+        assert!(cmds.is_empty());
+    }
 }

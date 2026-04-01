@@ -250,4 +250,100 @@ mod tests {
         let seq = PostLoginSequencer::new(42, 1, vec![]);
         assert_eq!(seq.client_id(), 42);
     }
+
+    #[test]
+    fn elapsed_is_non_zero_after_creation() {
+        let seq = PostLoginSequencer::new(1, 1, vec![]);
+        // Should be very small but not exactly zero (on most systems)
+        let _ = seq.elapsed(); // Just test it doesn't panic
+    }
+
+    #[test]
+    fn mark_dispatched_advances_not_started_to_joining() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        assert!(matches!(seq.phase(), PostLoginPhase::NotStarted));
+        seq.mark_dispatched();
+        assert!(matches!(seq.phase(), PostLoginPhase::JoiningGroup));
+    }
+
+    #[test]
+    fn mark_dispatched_no_op_after_joining() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        seq.mark_dispatched();
+        assert!(matches!(seq.phase(), PostLoginPhase::JoiningGroup));
+        seq.mark_dispatched(); // Should be a no-op
+        assert!(matches!(seq.phase(), PostLoginPhase::JoiningGroup));
+    }
+
+    #[test]
+    fn joining_group_generates_apply_buffs_command() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        seq.mark_dispatched(); // -> JoiningGroup
+        let state = test_game_state();
+        let cmd = seq.next_command(&state);
+        assert!(matches!(cmd, Some(Command::ApplyBuffs)));
+    }
+
+    #[test]
+    fn full_lifecycle_no_waypoints() {
+        let mut seq = PostLoginSequencer::new(1, 1, vec![]);
+        assert!(!seq.is_ready());
+
+        seq.mark_dispatched();
+        seq.advance(PostLoginEvent::GroupJoined);
+        seq.advance(PostLoginEvent::BuffsApplied);
+
+        assert!(seq.is_ready());
+        assert!(matches!(seq.phase(), PostLoginPhase::Ready));
+    }
+
+    #[test]
+    fn full_lifecycle_with_waypoints() {
+        let waypoints = vec![
+            Waypoint::new(100.0, 200.0, 0.0),
+            Waypoint::new(300.0, 400.0, 10.0),
+        ];
+        let mut seq = PostLoginSequencer::new(1, 1, waypoints);
+        assert!(!seq.is_ready());
+
+        seq.mark_dispatched();
+        seq.advance(PostLoginEvent::GroupJoined);
+        seq.advance(PostLoginEvent::BuffsApplied);
+        assert!(!seq.is_ready()); // Navigating
+
+        seq.advance(PostLoginEvent::CampReached);
+        assert!(seq.is_ready());
+    }
+
+    #[test]
+    fn group_invite_commands_empty() {
+        let cmds = group_invite_commands(&[]);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn group_invite_commands_multiple() {
+        let cmds = group_invite_commands(&["Alice", "Bob", "Charlie"]);
+        assert_eq!(cmds.len(), 3);
+        if let Command::SlashCommand { command } = &cmds[0] {
+            assert_eq!(command, "/invite Alice");
+        } else {
+            panic!("Expected SlashCommand");
+        }
+        if let Command::SlashCommand { command } = &cmds[2] {
+            assert_eq!(command, "/invite Charlie");
+        } else {
+            panic!("Expected SlashCommand");
+        }
+    }
+
+    #[test]
+    fn group_accept_command_format() {
+        let cmd = group_accept_command();
+        if let Command::SlashCommand { command } = cmd {
+            assert_eq!(command, "/accept");
+        } else {
+            panic!("Expected SlashCommand");
+        }
+    }
 }

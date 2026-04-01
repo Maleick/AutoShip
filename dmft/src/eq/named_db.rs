@@ -229,4 +229,112 @@ priority = "medium"
         // 32 min * 60 sec * 4 ticks/sec = 7680
         assert_eq!(crush.respawn_max_ticks(), 7680);
     }
+
+    #[test]
+    fn test_priority_values() {
+        assert_eq!(NamedPriority::High, NamedPriority::High);
+        assert_ne!(NamedPriority::High, NamedPriority::Low);
+        assert_ne!(NamedPriority::Medium, NamedPriority::Low);
+    }
+
+    #[test]
+    fn test_ambassador_dvinn_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_toml(dir.path());
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        let dvinn = db.get("crushbone", "Ambassador Dvinn").unwrap();
+        assert_eq!(dvinn.level, 13);
+        assert_eq!(dvinn.priority, NamedPriority::Medium);
+        assert_eq!(dvinn.drops.len(), 1);
+        assert_eq!(dvinn.drops[0], "Elven Chainmail");
+    }
+
+    #[test]
+    fn test_location_coordinates() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_toml(dir.path());
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        let crush = db.get("crushbone", "Emperor Crush").unwrap();
+        assert!((crush.location[0] - (-688.0)).abs() < f32::EPSILON);
+        assert!((crush.location[1] - 118.0).abs() < f32::EPSILON);
+        assert!((crush.location[2] - 28.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_multiple_zone_files() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_toml(dir.path());
+
+        // Add a second zone file
+        let gfay = r#"
+zone = "gfaydark"
+
+[[named]]
+name = "Orc Centurion"
+level = 8
+respawn_min_minutes = 10
+respawn_max_minutes = 15
+location = [100.0, 200.0, 0.0]
+priority = "low"
+"#;
+        let mut f = std::fs::File::create(dir.path().join("gfaydark.toml")).unwrap();
+        f.write_all(gfay.as_bytes()).unwrap();
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        assert_eq!(db.len(), 3);
+        assert_eq!(db.zone_count(), 2);
+        assert_eq!(db.for_zone("gfaydark").len(), 1);
+        assert_eq!(db.for_zone("crushbone").len(), 2);
+    }
+
+    #[test]
+    fn test_respawn_zero_minutes() {
+        let entry = NamedMobEntry {
+            name: "Instant Spawn".into(),
+            level: 1,
+            respawn_min_minutes: 0,
+            respawn_max_minutes: 0,
+            location: [0.0, 0.0, 0.0],
+            drops: vec![],
+            priority: NamedPriority::Low,
+        };
+        assert_eq!(entry.respawn_min_ticks(), 0);
+        assert_eq!(entry.respawn_max_ticks(), 0);
+    }
+
+    #[test]
+    fn test_empty_drops_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let zone_toml = r#"
+zone = "test"
+
+[[named]]
+name = "No Drop Mob"
+level = 5
+respawn_min_minutes = 10
+respawn_max_minutes = 15
+location = [0.0, 0.0, 0.0]
+priority = "low"
+"#;
+        let mut f = std::fs::File::create(dir.path().join("test.toml")).unwrap();
+        f.write_all(zone_toml.as_bytes()).unwrap();
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        let mob = db.get("test", "No Drop Mob").unwrap();
+        assert!(mob.drops.is_empty());
+    }
+
+    #[test]
+    fn test_non_toml_files_ignored() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_toml(dir.path());
+
+        // Create a non-TOML file
+        std::fs::write(dir.path().join("readme.txt"), "not a toml file").unwrap();
+
+        let db = NamedMobDatabase::load(dir.path()).unwrap();
+        assert_eq!(db.len(), 2); // Only from crushbone.toml
+    }
 }
