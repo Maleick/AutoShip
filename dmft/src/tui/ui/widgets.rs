@@ -1217,6 +1217,249 @@ pub fn render_tooltip(
     );
 }
 
+// ─── Tab bar ────────────────────────────────────────────────────────────────
+
+/// A reusable tab bar widget for switching between sections.
+pub struct TabBar {
+    /// Tab labels.
+    pub tabs: Vec<String>,
+    /// Currently active tab index.
+    pub active: usize,
+}
+
+impl TabBar {
+    /// Create a new tab bar with the given labels.
+    #[must_use]
+    pub fn new(tabs: Vec<String>) -> Self {
+        Self { tabs, active: 0 }
+    }
+
+    /// Select the next tab (wraps around).
+    pub fn next_tab(&mut self) {
+        if !self.tabs.is_empty() {
+            self.active = (self.active + 1) % self.tabs.len();
+        }
+    }
+
+    /// Select the previous tab (wraps around).
+    pub fn prev_tab(&mut self) {
+        if !self.tabs.is_empty() {
+            self.active = if self.active == 0 {
+                self.tabs.len() - 1
+            } else {
+                self.active - 1
+            };
+        }
+    }
+
+    /// Get the active tab label.
+    #[must_use]
+    pub fn active_label(&self) -> Option<&str> {
+        self.tabs.get(self.active).map(String::as_str)
+    }
+}
+
+/// Render a tab bar as a styled line.
+#[must_use]
+pub fn render_tab_bar(tab_bar: &TabBar, t: &Theme) -> Line<'static> {
+    let mut spans = Vec::new();
+    for (i, label) in tab_bar.tabs.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" ", Style::default().fg(t.text_muted)));
+        }
+        let style = if i == tab_bar.active {
+            t.tab_active
+        } else {
+            t.tab_inactive
+        };
+        spans.push(Span::styled(format!(" {label} "), style));
+    }
+    Line::from(spans)
+}
+
+// ─── Filter input ───────────────────────────────────────────────────────────
+
+/// State for a text filter input field with live feedback.
+pub struct FilterInput {
+    /// Current filter text.
+    pub text: String,
+    /// Whether the filter is active (focused for typing).
+    pub active: bool,
+    /// Placeholder text shown when empty.
+    pub placeholder: String,
+    /// Number of items matching the current filter (for feedback).
+    pub match_count: Option<usize>,
+}
+
+impl FilterInput {
+    /// Create a new filter input with the given placeholder.
+    #[must_use]
+    pub fn new(placeholder: impl Into<String>) -> Self {
+        Self {
+            text: String::new(),
+            active: false,
+            placeholder: placeholder.into(),
+            match_count: None,
+        }
+    }
+
+    /// Clear the filter text.
+    pub fn clear(&mut self) {
+        self.text.clear();
+        self.match_count = None;
+    }
+
+    /// Toggle active state.
+    pub fn toggle(&mut self) {
+        self.active = !self.active;
+    }
+
+    /// Check if the filter has any text.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+}
+
+/// Render a filter input as a styled line.
+#[must_use]
+pub fn render_filter_input(filter: &FilterInput, t: &Theme) -> Line<'static> {
+    let mut spans = Vec::new();
+
+    if filter.active {
+        spans.push(Span::styled(
+            "\u{1f50d} ",
+            Style::default().fg(t.text_accent),
+        ));
+    } else {
+        spans.push(Span::styled(
+            "\u{1f50d} ",
+            Style::default().fg(t.text_muted),
+        ));
+    }
+
+    if filter.text.is_empty() {
+        spans.push(Span::styled(
+            filter.placeholder.clone(),
+            Style::default().fg(t.text_muted),
+        ));
+    } else {
+        spans.push(Span::styled(
+            filter.text.clone(),
+            Style::default().fg(t.text_bright),
+        ));
+        if filter.active {
+            spans.push(Span::styled("_", Style::default().fg(t.text_accent)));
+        }
+    }
+
+    if let Some(count) = filter.match_count {
+        spans.push(Span::styled(
+            format!("  ({count} matches)"),
+            Style::default().fg(t.text_secondary),
+        ));
+    }
+
+    Line::from(spans)
+}
+
+// ─── Keybinding hint ────────────────────────────────────────────────────────
+
+/// Render a single keybinding hint as a pair of styled spans.
+#[must_use]
+pub fn keybinding_hint<'a>(key: &'a str, description: &'a str, t: &Theme) -> Vec<Span<'a>> {
+    vec![
+        Span::styled(key.to_string(), t.statusbar_key),
+        Span::styled(format!(" {description}  "), t.statusbar_dim),
+    ]
+}
+
+/// Render a row of keybinding hints.
+#[must_use]
+pub fn keybinding_row<'a>(bindings: &[(&'a str, &'a str)], t: &Theme) -> Line<'a> {
+    let mut spans = Vec::new();
+    for (key, desc) in bindings {
+        spans.extend(keybinding_hint(key, desc, t));
+    }
+    Line::from(spans)
+}
+
+// ─── Divider / separator ────────────────────────────────────────────────────
+
+/// Render a horizontal divider line with an optional centered label.
+#[must_use]
+pub fn divider(width: usize, label: Option<&str>, t: &Theme) -> Line<'static> {
+    match label {
+        Some(text) => {
+            let text_len = text.len() + 2; // space padding
+            let side = width.saturating_sub(text_len) / 2;
+            let right_side = width.saturating_sub(text_len).saturating_sub(side);
+            Line::from(vec![
+                Span::styled(
+                    "\u{2500}".repeat(side),
+                    Style::default().fg(t.text_muted),
+                ),
+                Span::styled(
+                    format!(" {text} "),
+                    Style::default().fg(t.text_secondary),
+                ),
+                Span::styled(
+                    "\u{2500}".repeat(right_side),
+                    Style::default().fg(t.text_muted),
+                ),
+            ])
+        }
+        None => Line::from(Span::styled(
+            "\u{2500}".repeat(width),
+            Style::default().fg(t.text_muted),
+        )),
+    }
+}
+
+// ─── Badge ──────────────────────────────────────────────────────────────────
+
+/// Render a small inline badge (colored label).
+#[must_use]
+pub fn badge(text: &str, fg: Color, bg: Color) -> Span<'static> {
+    Span::styled(
+        format!(" {text} "),
+        Style::default()
+            .fg(fg)
+            .bg(bg)
+            .add_modifier(Modifier::BOLD),
+    )
+}
+
+/// Render a status badge using theme colors based on variant.
+#[must_use]
+pub fn status_badge(label: &str, variant: BadgeVariant, t: &Theme) -> Span<'static> {
+    let (fg, bg) = match variant {
+        BadgeVariant::Primary => (Color::Black, t.text_accent),
+        BadgeVariant::Success => (Color::Black, t.hp_high),
+        BadgeVariant::Warning => (Color::Black, t.text_highlight),
+        BadgeVariant::Danger => (Color::Black, t.hp_low),
+        BadgeVariant::Info => (Color::Black, t.mana_color),
+        BadgeVariant::Muted => (t.text_bright, t.bar_empty),
+    };
+    badge(label, fg, bg)
+}
+
+/// Badge style variants.
+pub enum BadgeVariant {
+    /// Accent/primary color.
+    Primary,
+    /// Green/success.
+    Success,
+    /// Yellow/warning.
+    Warning,
+    /// Red/danger.
+    Danger,
+    /// Blue/info.
+    Info,
+    /// Dim/muted.
+    Muted,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1549,5 +1792,112 @@ mod tests {
         assert_eq!(tip.text, "Hover info");
         assert_eq!(tip.anchor_x, 10);
         assert_eq!(tip.anchor_y, 20);
+    }
+
+    #[test]
+    fn tab_bar_navigation() {
+        let mut tb = TabBar::new(vec!["A".into(), "B".into(), "C".into()]);
+        assert_eq!(tb.active, 0);
+        tb.next_tab();
+        assert_eq!(tb.active, 1);
+        tb.next_tab();
+        assert_eq!(tb.active, 2);
+        tb.next_tab();
+        assert_eq!(tb.active, 0); // wrap
+        tb.prev_tab();
+        assert_eq!(tb.active, 2); // wrap back
+    }
+
+    #[test]
+    fn tab_bar_active_label() {
+        let tb = TabBar::new(vec!["First".into(), "Second".into()]);
+        assert_eq!(tb.active_label(), Some("First"));
+    }
+
+    #[test]
+    fn render_tab_bar_has_spans() {
+        let t = dark_modern();
+        let tb = TabBar::new(vec!["A".into(), "B".into()]);
+        let line = render_tab_bar(&tb, &t);
+        assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn filter_input_clear() {
+        let mut fi = FilterInput::new("Search...");
+        fi.text = "hello".into();
+        fi.match_count = Some(5);
+        fi.clear();
+        assert!(fi.text.is_empty());
+        assert!(fi.match_count.is_none());
+    }
+
+    #[test]
+    fn filter_input_toggle() {
+        let mut fi = FilterInput::new("Search...");
+        assert!(!fi.active);
+        fi.toggle();
+        assert!(fi.active);
+    }
+
+    #[test]
+    fn render_filter_input_placeholder() {
+        let t = dark_modern();
+        let fi = FilterInput::new("Type to search...");
+        let line = render_filter_input(&fi, &t);
+        assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn render_filter_input_with_text_and_count() {
+        let t = dark_modern();
+        let mut fi = FilterInput::new("Search...");
+        fi.text = "orc".into();
+        fi.match_count = Some(12);
+        fi.active = true;
+        let line = render_filter_input(&fi, &t);
+        assert!(line.spans.len() >= 3);
+    }
+
+    #[test]
+    fn keybinding_hint_has_two_spans() {
+        let t = dark_modern();
+        let spans = keybinding_hint("Tab", "switch pane", &t);
+        assert_eq!(spans.len(), 2);
+    }
+
+    #[test]
+    fn keybinding_row_renders() {
+        let t = dark_modern();
+        let line = keybinding_row(&[("Tab", "pane"), ("?", "help")], &t);
+        assert_eq!(line.spans.len(), 4);
+    }
+
+    #[test]
+    fn divider_without_label() {
+        let t = dark_modern();
+        let line = divider(40, None, &t);
+        assert_eq!(line.spans.len(), 1);
+    }
+
+    #[test]
+    fn divider_with_label() {
+        let t = dark_modern();
+        let line = divider(40, Some("Section"), &t);
+        assert_eq!(line.spans.len(), 3);
+    }
+
+    #[test]
+    fn badge_variant_primary() {
+        let t = dark_modern();
+        let b = status_badge("OK", BadgeVariant::Primary, &t);
+        assert!(!b.content.is_empty());
+    }
+
+    #[test]
+    fn badge_variant_danger() {
+        let t = dark_modern();
+        let b = status_badge("ERR", BadgeVariant::Danger, &t);
+        assert!(!b.content.is_empty());
     }
 }
