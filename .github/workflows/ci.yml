@@ -11,6 +11,23 @@ env:
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
+  submodules:
+    name: Reference submodules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize reference submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
+      - name: Verify reference trees
+        run: |
+          git submodule status --recursive
+          test -f third_party/eqlib/include/eqlib/offsets/eqgame.h
+          test -d third_party/macroquest/src/login
+          test -d third_party/macroquest/src/routing
+          test -d third_party/macroquest/src/eqlib
+
   macos:
     name: macOS (fmt + clippy + test)
     runs-on: macos-latest
