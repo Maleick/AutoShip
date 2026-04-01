@@ -2,7 +2,8 @@ use super::structs::{BuffSlot, CastState, EqClass, GroupInfo, SpawnInfo, SpawnTy
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
 use dmft_common::offsets::{
-    self, actor_client, group, player_base, player_zone, spawn_manager, zone_info,
+    self, actor_client, character_zone, display, group, launch_spell_data, player_base,
+    player_zone, spawn_manager, zone_info,
 };
 
 /// Read a single spawn's data from the process at the given `PlayerClient` address.
@@ -10,7 +11,11 @@ use dmft_common::offsets::{
 /// # Errors
 ///
 /// Returns an error if the operation fails.
-pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
+pub fn read_spawn(
+    proc: &ProcessHandle,
+    addr: usize,
+    display_timestamp: Option<u32>,
+) -> Result<SpawnInfo> {
     // Critical fields — hard fail if any are unreadable (corrupt memory → skip spawn)
     let name = proc
         .read_string(addr + player_base::NAME, 64)
@@ -80,6 +85,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
 
     let gm_flag = proc.read::<u8>(addr + player_zone::GM).unwrap_or(0);
     let race_id = proc.read::<i32>(addr + actor_client::RACE).unwrap_or(0) as u32;
+    let cast_state = read_spawn_cast_state(proc, addr, display_timestamp, None);
 
     Ok(SpawnInfo {
         name,
@@ -104,7 +110,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         is_gm: gm_flag != 0,
         race_id,
         buff_slots: Vec::new(),
-        cast_state: None,
+        cast_state,
     })
 }
 
@@ -114,6 +120,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
 ///
 /// Returns an error if the operation fails.
 pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo> {
+    let display_timestamp = read_display_timestamp(proc, eq_base);
     let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)
         .context("rebase underflow for pinstLocalPlayer")?;
     let player_addr = proc
@@ -131,10 +138,12 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
         "read_local_player pointer chain"
     );
 
-    let mut spawn =
-        read_spawn(proc, player_addr).context("Failed to read local player spawn data")?;
+    let mut spawn = read_spawn(proc, player_addr, display_timestamp)
+        .context("Failed to read local player spawn data")?;
     spawn.buff_slots = read_buff_slots(proc, eq_base);
-    spawn.cast_state = read_cast_state(proc, eq_base);
+    if let Some(local_cast_state) = read_cast_state(proc, eq_base) {
+        spawn.cast_state = Some(local_cast_state);
+    }
     Ok(spawn)
 }
 
@@ -175,7 +184,7 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     }
 }
 
-/// Read cast state for the local player via `PINST_LOCAL_PC`.
+/// Read cast state for the local player via `PINST_LOCAL_PC -> CharacterZoneClient::me`.
 /// On non-Windows builds returns None (stub).
 #[must_use]
 pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> {
@@ -186,26 +195,10 @@ pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> 
     }
     #[cfg(windows)]
     {
-        use dmft_common::offsets::character_zone;
-        let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
-        let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
-        let spell_slot = proc
-            .read::<u8>(pc_addr + character_zone::SPELL_SLOT)
-            .unwrap_or(0xFF);
-        let spell_eta = proc
-            .read::<u32>(pc_addr + character_zone::SPELL_ETA)
-            .unwrap_or(0);
-        let mut gem_etas = [0u32; 15];
-        for (i, eta) in gem_etas.iter_mut().enumerate() {
-            *eta = proc
-                .read::<u32>(pc_addr + character_zone::SPELL_GEM_ETA + i * 4)
-                .unwrap_or(0);
-        }
-        Some(CastState {
-            spell_slot,
-            spell_eta,
-            gem_etas,
-        })
+        let player_addr = read_local_player_addr_from_pc(proc, eq_base)?;
+        let display_timestamp = read_display_timestamp(proc, eq_base);
+        let gem_etas = read_spell_gem_etas(proc, player_addr);
+        read_spawn_cast_state(proc, player_addr, display_timestamp, Some(gem_etas))
     }
 }
 
@@ -215,6 +208,7 @@ pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> 
 ///
 /// Returns an error if the operation fails.
 pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInfo>> {
+    let display_timestamp = read_display_timestamp(proc, eq_base);
     let target_ptr_addr = offsets::rebase(offsets::PINST_TARGET, eq_base)
         .context("rebase underflow for pinstTarget")?;
     let target_addr = proc
@@ -225,7 +219,8 @@ pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInf
         return Ok(None);
     }
 
-    let spawn = read_spawn(proc, target_addr).context("Failed to read target spawn data")?;
+    let spawn = read_spawn(proc, target_addr, display_timestamp)
+        .context("Failed to read target spawn data")?;
     Ok(Some(spawn))
 }
 
@@ -240,6 +235,7 @@ pub fn read_all_spawns(
     eq_base: u64,
     max_count: usize,
 ) -> Result<Vec<SpawnInfo>> {
+    let display_timestamp = read_display_timestamp(proc, eq_base);
     let mgr_ptr_addr = offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base)
         .context("rebase underflow for pinstSpawnManager")?;
     let mgr_addr = proc
@@ -260,7 +256,7 @@ pub fn read_all_spawns(
     let mut spawns = Vec::new();
 
     while current != 0 && spawns.len() < max_count {
-        match read_spawn(proc, current) {
+        match read_spawn(proc, current, display_timestamp) {
             Ok(spawn) => {
                 tracing::trace!(addr = format!("{:#x}", current), name = %spawn.name, "Read spawn OK");
                 spawns.push(spawn);
@@ -295,6 +291,81 @@ pub fn read_all_spawns(
     }
 
     Ok(spawns)
+}
+
+fn read_display_timestamp(proc: &ProcessHandle, eq_base: u64) -> Option<u32> {
+    let display_ptr_addr = offsets::rebase(offsets::PINST_CDISPLAY, eq_base)?;
+    let display_addr = proc.read_ptr(display_ptr_addr).ok().filter(|&a| a != 0)?;
+    proc.read::<u32>(display_addr + display::TIME_STAMP).ok()
+}
+
+fn read_local_player_addr_from_pc(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
+    let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
+    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
+    proc.read_ptr(pc_addr + character_zone::ME)
+        .ok()
+        .filter(|&a| a != 0)
+        .or_else(|| {
+            let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)?;
+            proc.read_ptr(player_ptr_addr).ok().filter(|&a| a != 0)
+        })
+}
+
+fn read_spell_gem_etas(proc: &ProcessHandle, player_addr: usize) -> [u32; 15] {
+    let mut gem_etas = [0u32; 15];
+    for (i, eta) in gem_etas.iter_mut().enumerate() {
+        *eta = proc
+            .read::<u32>(player_addr + player_zone::SPELL_GEM_ETA + i * 4)
+            .unwrap_or(0);
+    }
+    gem_etas
+}
+
+fn read_spawn_cast_state(
+    proc: &ProcessHandle,
+    player_addr: usize,
+    display_timestamp: Option<u32>,
+    gem_etas: Option<[u32; 15]>,
+) -> Option<CastState> {
+    let cast_addr = player_addr + player_zone::CASTING_DATA;
+    let spell_id = proc
+        .read::<i32>(cast_addr + launch_spell_data::SPELL_ID)
+        .ok()?;
+    let is_casting = spell_id != launch_spell_data::NOT_CASTING_SPELL_ID;
+    let target_id = proc
+        .read::<u32>(cast_addr + launch_spell_data::TARGET_ID)
+        .unwrap_or(0);
+    let spell_eta = proc
+        .read::<u32>(cast_addr + launch_spell_data::SPELL_ETA)
+        .unwrap_or(0);
+    let item_id = proc
+        .read::<i32>(cast_addr + launch_spell_data::ITEM_ID)
+        .unwrap_or(0);
+    let spell_slot = proc
+        .read::<u8>(cast_addr + launch_spell_data::SPELL_SLOT)
+        .unwrap_or(launch_spell_data::NOT_CASTING_SPELL_SLOT);
+
+    let remaining_ms = if is_casting && gem_etas.is_some() {
+        display_timestamp.map(|timestamp| spell_eta.saturating_sub(timestamp))
+    } else {
+        None
+    };
+
+    let cast_state = CastState {
+        spell_id,
+        target_id,
+        spell_eta,
+        item_id,
+        spell_slot,
+        remaining_ms,
+        gem_etas,
+    };
+
+    if cast_state.gem_etas.is_some() || cast_state.is_casting() {
+        Some(cast_state)
+    } else {
+        None
+    }
 }
 
 /// Read a `CXStr` (EQ's string type) from memory.
