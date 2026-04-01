@@ -590,4 +590,189 @@ mod tests {
         let responder = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
         assert!(LlmProvider::is_available(&responder));
     }
+
+    #[test]
+    fn idle_phrases_non_empty_for_all_moods_and_edginess() {
+        let moods = [
+            MoodState::Neutral,
+            MoodState::Happy,
+            MoodState::Angry,
+            MoodState::Anxious,
+            MoodState::Excited,
+            MoodState::Melancholy,
+            MoodState::Focused,
+            MoodState::Playful,
+            MoodState::Bored,
+            MoodState::Exhausted,
+        ];
+        let edginess_levels = [
+            EdginessLevel::Mild,
+            EdginessLevel::Moderate,
+            EdginessLevel::Spicy,
+        ];
+        let traits = PersonalityTraits::default();
+        for mood in &moods {
+            for edginess in &edginess_levels {
+                let phrases = idle_phrases(*mood, *edginess, &traits);
+                assert!(
+                    !phrases.is_empty(),
+                    "No idle phrases for {:?}/{:?}",
+                    mood,
+                    edginess
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn event_reactions_non_empty_for_all_moods() {
+        let moods = [
+            MoodState::Neutral,
+            MoodState::Happy,
+            MoodState::Angry,
+            MoodState::Excited,
+        ];
+        for mood in &moods {
+            let reactions = event_reactions(*mood, EdginessLevel::Moderate);
+            assert!(!reactions.is_empty(), "No reactions for {:?}", mood);
+        }
+    }
+
+    #[test]
+    fn combat_reactions_non_empty_for_all_edginess() {
+        let traits = PersonalityTraits::default();
+        for edginess in &[
+            EdginessLevel::Mild,
+            EdginessLevel::Moderate,
+            EdginessLevel::Spicy,
+        ] {
+            let reactions = combat_reactions(MoodState::Excited, *edginess, &traits);
+            assert!(
+                !reactions.is_empty(),
+                "No combat reactions for {:?}",
+                edginess
+            );
+        }
+    }
+
+    #[test]
+    fn combat_reactions_battle_hungry_differs() {
+        let default_traits = PersonalityTraits::default();
+        let battle_hungry = PersonalityTraits {
+            battle_hunger: 0.9,
+            ..Default::default()
+        };
+        let default_reactions =
+            combat_reactions(MoodState::Excited, EdginessLevel::Moderate, &default_traits);
+        let hungry_reactions =
+            combat_reactions(MoodState::Excited, EdginessLevel::Moderate, &battle_hungry);
+        // Battle-hungry gets a different table
+        assert_ne!(
+            default_reactions.as_ptr(),
+            hungry_reactions.as_ptr(),
+            "Battle-hungry should use a different phrase table"
+        );
+    }
+
+    #[test]
+    fn bot_chat_responses_non_empty_for_all_moods() {
+        let traits = PersonalityTraits::default();
+        let moods = [
+            MoodState::Neutral,
+            MoodState::Happy,
+            MoodState::Angry,
+            MoodState::Playful,
+        ];
+        for mood in &moods {
+            let responses = bot_chat_responses(*mood, &traits);
+            assert!(!responses.is_empty(), "No bot chat for {:?}", mood);
+        }
+    }
+
+    #[test]
+    fn bot_chat_extraverted_differs() {
+        let introverted = PersonalityTraits {
+            extraversion: 0.2,
+            ..Default::default()
+        };
+        let extraverted = PersonalityTraits {
+            extraversion: 0.9,
+            ..Default::default()
+        };
+        let intro_resp = bot_chat_responses(MoodState::Neutral, &introverted);
+        let extro_resp = bot_chat_responses(MoodState::Neutral, &extraverted);
+        assert_ne!(
+            intro_resp.as_ptr(),
+            extro_resp.as_ptr(),
+            "Extraverted and introverted should use different tables"
+        );
+    }
+
+    #[test]
+    fn apply_speech_style_slang_prepend() {
+        let style = SpeechStyle {
+            vocabulary_level: 0.5,
+            emote_frequency: 0.5,
+            typing_speed: 1.0,
+            catchphrases: Vec::new(),
+            adopted_slang: vec!["kek".into()],
+        };
+        // Run many times; adopted slang has 10% chance
+        let mut found_slang = false;
+        for i in 0..300 {
+            let mut r = TraitDrivenResponder::new(i, EdginessLevel::Moderate);
+            let result = r.apply_speech_style("Hello world", &style);
+            if result.starts_with("kek") {
+                found_slang = true;
+                break;
+            }
+        }
+        assert!(
+            found_slang,
+            "Adopted slang should appear at least once in 300 attempts"
+        );
+    }
+
+    #[test]
+    fn apply_speech_style_no_modification_with_defaults() {
+        let style = SpeechStyle::default();
+        let mut r = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let result = r.apply_speech_style("Test phrase", &style);
+        // Default style has no catchphrases or slang, vocabulary_level = 0.5
+        // So the text should pass through unchanged
+        assert_eq!(result, "Test phrase");
+    }
+
+    #[test]
+    fn respond_to_player_with_name_sometimes() {
+        let mut found_with_name = false;
+        for i in 0..100 {
+            let mut r = TraitDrivenResponder::new(i, EdginessLevel::Moderate);
+            let traits = PersonalityTraits {
+                extraversion: 0.9,
+                agreeableness: 0.5,
+                ..Default::default()
+            };
+            let text = r.respond_to_player("Dave", "Hey", &traits, MoodState::Neutral);
+            if text.contains("Dave") {
+                found_with_name = true;
+                break;
+            }
+        }
+        assert!(
+            found_with_name,
+            "Extraverted character should use player name sometimes"
+        );
+    }
+
+    #[test]
+    fn high_vocabulary_preserves_case() {
+        let style = SpeechStyle {
+            vocabulary_level: 0.9,
+            ..Default::default()
+        };
+        let mut r = TraitDrivenResponder::new(1, EdginessLevel::Moderate);
+        let result = r.apply_speech_style("Hello World", &style);
+        assert!(result.contains('H') && result.contains('W'));
+    }
 }
