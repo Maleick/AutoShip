@@ -1,7 +1,7 @@
 //! Vendor/sell cycle — periodically sell loot to a nearby vendor.
 //!
 //! The sell cycle is a two-level FSM:
-//! - Outer: `SellState` — NotNeeded → TravelingToVendor → Selling → Returning
+//! - Outer: `SellState` — `NotNeeded` → `TravelingToVendor` → Selling → Returning
 //! - Inner: `VendorStep` — sub-states within `Selling` that drive the actual
 //!   vendor UI interaction (target, approach, open window, sell items, close).
 
@@ -13,7 +13,7 @@ pub struct VendorConfig {
     pub vendor_name: String,
     pub sell_interval_ticks: u64,
     pub keep_items: Vec<String>,
-    /// Ticks to wait in TravelingToVendor / Returning.
+    /// Ticks to wait in `TravelingToVendor` / Returning.
     pub travel_ticks: u64,
     /// Items to sell. If empty, sells everything not in `keep_items`.
     pub sellable_items: Vec<String>,
@@ -59,6 +59,7 @@ pub struct SellCycle {
 }
 
 impl SellCycle {
+    #[must_use]
     pub fn new(config: VendorConfig) -> Self {
         let keep_set: HashSet<String> = config.keep_items.iter().cloned().collect();
         Self {
@@ -72,12 +73,14 @@ impl SellCycle {
     }
 
     /// Check if it's time to sell. Call from camp loop during Idle/Medding.
+    #[must_use]
     pub fn needs_sell(&self, current_tick: u64) -> bool {
         self.state == SellState::NotNeeded
             && current_tick.saturating_sub(self.last_sell_tick) >= self.config.sell_interval_ticks
     }
 
     /// Returns true if the item should be kept (not sold).
+    #[must_use]
     pub fn should_keep(&self, item_name: &str) -> bool {
         self.keep_set.contains(item_name)
     }
@@ -237,6 +240,7 @@ impl SellCycle {
 }
 
 /// Generate slash commands for the current sell state (standalone helper).
+#[must_use]
 pub fn sell_commands(state: &SellState, vendor_name: &str, seller_pid: u32) -> Vec<(u32, String)> {
     match state {
         SellState::NotNeeded => Vec::new(),

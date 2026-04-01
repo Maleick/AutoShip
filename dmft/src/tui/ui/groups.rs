@@ -45,7 +45,7 @@ fn member_line<'a>(
 
     Line::from(vec![
         Span::styled(leader_marker, Style::default().fg(t.text_accent)),
-        Span::styled(format!("{:<12}", display_name), name_style),
+        Span::styled(format!("{display_name:<12}"), name_style),
         Span::styled(
             format!("{:<4}", player.class_str()),
             Style::default().fg(t.text_accent),
@@ -55,7 +55,7 @@ fn member_line<'a>(
             Style::default().fg(t.text_secondary),
         ),
         Span::styled(
-            format!(" {:>3.0}%", hp_pct),
+            format!(" {hp_pct:>3.0}%"),
             Style::default().fg(hp_color(hp_pct, t)),
         ),
         Span::styled(mana_str, Style::default().fg(t.mana_color)),
@@ -122,7 +122,7 @@ fn draw_live_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: 
     let t = &app.theme;
     let (live_groups, ungrouped) = app.build_live_groups();
 
-    let total_panels = live_groups.len() + if ungrouped.is_empty() { 0 } else { 1 };
+    let total_panels = live_groups.len() + usize::from(!ungrouped.is_empty());
 
     if total_panels == 0 {
         frame.render_widget(
@@ -252,7 +252,7 @@ fn draw_live_group_panel(
             // Member not connected
             let display_name = app.redact_name(name).into_owned();
             lines.push(Line::from(vec![Span::styled(
-                format!("  {:<12} offline", display_name),
+                format!("  {display_name:<12} offline"),
                 Style::default().fg(t.text_muted),
             )]));
         }
@@ -298,20 +298,20 @@ fn draw_ungrouped_panel(
                     "     -".into()
                 };
                 lines.push(Line::from(vec![
-                    Span::styled(format!(" {:<12}", name), Style::default().fg(t.text_normal)),
+                    Span::styled(format!(" {name:<12}"), Style::default().fg(t.text_normal)),
                     Span::styled(
                         format!("{:<4}", player.class_str()),
                         Style::default().fg(t.text_accent),
                     ),
                     Span::styled(
-                        format!(" {:>3.0}%", hp_pct),
+                        format!(" {hp_pct:>3.0}%"),
                         Style::default().fg(hp_color(hp_pct, t)),
                     ),
                     Span::styled(mana_str, Style::default().fg(t.mana_color)),
                 ]));
             } else {
                 lines.push(Line::from(Span::styled(
-                    format!("  {} (loading…)", name),
+                    format!("  {name} (loading…)"),
                     Style::default().fg(t.text_muted),
                 )));
             }
@@ -384,8 +384,7 @@ pub fn clients_in_group<'a>(
                 return false;
             };
             extract_account_number(name)
-                .map(|n| n >= lo && n <= hi)
-                .unwrap_or(false)
+                .is_some_and(|n| n >= lo && n <= hi)
         })
         .collect()
 }
@@ -422,8 +421,7 @@ fn draw_config_group_panel(
 
     let zone = members
         .first()
-        .map(|c| c.zone_name.as_str())
-        .unwrap_or("---");
+        .map_or("---", |c| c.zone_name.as_str());
     let title = format!(
         " G{} {} ({}/{}) {} ",
         group.id, group.name, online, total, zone
@@ -461,7 +459,7 @@ fn draw_config_group_panel(
         .map(|cfg| {
             cfg.accounts
                 .iter()
-                .filter(|a| a.group == group.id as u32)
+                .filter(|a| a.group == u32::from(group.id))
                 .filter_map(|a| extract_account_number(&a.name).map(|n| (n, a)))
                 .collect()
         })
@@ -505,7 +503,7 @@ fn draw_config_group_panel(
             )]));
         } else {
             lines.push(Line::from(Span::styled(
-                format!("  #{:02} ── empty ──", acct_num),
+                format!("  #{acct_num:02} ── empty ──"),
                 Style::default().fg(t.text_muted),
             )));
         }
@@ -524,8 +522,7 @@ fn draw_config_group_panel(
 /// Choose grid rows/cols for a given number of panels.
 fn grid_dims(panel_count: usize) -> (usize, usize) {
     match panel_count {
-        0 => (1, 1),
-        1 => (1, 1),
+        0 | 1 => (1, 1),
         2 => (1, 2),
         3 => (1, 3),
         4 => (2, 2),

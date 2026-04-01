@@ -150,7 +150,7 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
         return Some(LogEvent::Chat(ChatEvent {
             channel: ChatChannel::TellOut,
             sender: "You".to_string(),
-            message: format!("-> {}: {}", target, msg),
+            message: format!("-> {target}: {msg}"),
         }));
     }
 
@@ -239,6 +239,7 @@ pub struct LootDatabase {
 }
 
 impl LootDatabase {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -258,10 +259,10 @@ impl LootDatabase {
                 silver,
                 copper,
             } => {
-                self.total_plat += *plat as u64;
-                self.total_gold += *gold as u64;
-                self.total_silver += *silver as u64;
-                self.total_copper += *copper as u64;
+                self.total_plat += u64::from(*plat);
+                self.total_gold += u64::from(*gold);
+                self.total_silver += u64::from(*silver);
+                self.total_copper += u64::from(*copper);
             }
             LogEvent::Experience { .. } => {
                 self.total_xp_events += 1;
@@ -270,8 +271,7 @@ impl LootDatabase {
             LogEvent::Death { .. } => {
                 self.deaths += 1;
             }
-            LogEvent::ZoneEnter { .. } => {}
-            LogEvent::Chat(_) => {}
+            LogEvent::ZoneEnter { .. } | LogEvent::Chat(_) => {}
         }
     }
 
@@ -286,6 +286,7 @@ impl LootDatabase {
     }
 
     /// XP events per hour within the last `window` duration.
+    #[must_use]
     pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
         let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
         let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;

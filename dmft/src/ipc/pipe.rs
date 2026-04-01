@@ -25,8 +25,12 @@ impl CommandPipe {
     ///
     /// IMPORTANT: `client_id` must be the EQ process PID, not a sequential
     /// index. The injected DLL creates its pipe using `std::process::id()`
-    /// (i.e., the PID) as the client_id. The orchestrator must match this
+    /// (i.e., the PID) as the `client_id`. The orchestrator must match this
     /// by passing the PID discovered via `find_processes_by_name`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn connect(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {
@@ -61,6 +65,10 @@ impl CommandPipe {
     }
 
     /// Send a command and wait for response.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn send(&self, cmd: &Command) -> Result<Response> {
         #[cfg(windows)]
         {
@@ -112,6 +120,10 @@ impl CommandPipe {
 
     /// Send the raw 32-byte session token for authentication handshake.
     /// Must be called once after connecting, before sending any commands.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn send_raw_token(&self, token: &[u8; 32]) -> Result<()> {
         #[cfg(windows)]
         {
@@ -144,6 +156,10 @@ impl CommandPipe {
     }
 
     /// Send a command without waiting for response (fire-and-forget).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn send_async(&self, cmd: &Command) -> Result<()> {
         #[cfg(windows)]
         {

@@ -52,6 +52,7 @@ pub struct NamedTracker {
 }
 
 impl NamedTracker {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tracked: HashMap::new(),
@@ -61,6 +62,7 @@ impl NamedTracker {
     }
 
     /// Create a tracker with a named mob database for respawn estimates.
+    #[must_use]
     pub fn with_db(db: NamedMobDatabase) -> Self {
         Self {
             tracked: HashMap::new(),
@@ -161,8 +163,7 @@ impl NamedTracker {
                     .db
                     .as_ref()
                     .and_then(|db| db.get(&self.zone, &status.name))
-                    .map(|entry| (entry.respawn_min_ticks(), entry.respawn_max_ticks()))
-                    .unwrap_or((DEFAULT_RESPAWN_TICKS, DEFAULT_RESPAWN_TICKS));
+                    .map_or((DEFAULT_RESPAWN_TICKS, DEFAULT_RESPAWN_TICKS), |entry| (entry.respawn_min_ticks(), entry.respawn_max_ticks()));
 
                 status.estimated_respawn_tick = Some(tick + min_ticks);
                 status.respawn_window_end_tick = Some(tick + max_ticks);
@@ -179,6 +180,7 @@ impl NamedTracker {
     }
 
     /// Get all tracked named spawns (alive and dead).
+    #[must_use]
     pub fn tracked_spawns(&self) -> Vec<&NamedSpawnStatus> {
         let mut result: Vec<&NamedSpawnStatus> = self.tracked.values().collect();
         // Alive first, then dead sorted by estimated respawn
@@ -193,6 +195,7 @@ impl NamedTracker {
 
     /// Returns the highest-priority alive named mob, if any.
     /// Used by the camp loop to override normal pull targets.
+    #[must_use]
     pub fn priority_target(&self) -> Option<&NamedSpawnStatus> {
         self.tracked
             .values()
@@ -208,6 +211,7 @@ impl NamedTracker {
 
     /// Check if a respawn window is currently active for any tracked named mob.
     /// Returns named mobs whose respawn window has opened (past min estimate).
+    #[must_use]
     pub fn in_respawn_window(&self, current_tick: u64) -> Vec<&NamedSpawnStatus> {
         self.tracked
             .values()
@@ -222,11 +226,13 @@ impl NamedTracker {
     }
 
     /// Number of tracked named spawns.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.tracked.len()
     }
 
     /// Whether no named spawns are tracked.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.tracked.is_empty()
     }
@@ -234,6 +240,7 @@ impl NamedTracker {
 
 /// Returns true if the spawn name looks like a named mob (not a generic mob).
 /// Generic mobs start with articles: "a ", "an ", "the " (case-insensitive).
+#[must_use]
 pub fn is_named(name: &str) -> bool {
     let lower = name.to_lowercase();
     !lower.starts_with("a ")

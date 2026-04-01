@@ -11,11 +11,12 @@ pub enum DeathState {
 
 /// Tracks death/recovery state for the entire group.
 pub struct RecoveryTracker {
-    /// (pid, character_name, death_state)
+    /// (pid, `character_name`, `death_state`)
     pub members: Vec<(u32, String, DeathState)>,
 }
 
 impl RecoveryTracker {
+    #[must_use]
     pub fn new(members: &[(u32, String)]) -> Self {
         Self {
             members: members
@@ -59,6 +60,7 @@ impl RecoveryTracker {
     }
 
     /// Returns true if any member is not Alive (camp loop should pause).
+    #[must_use]
     pub fn recovery_in_progress(&self) -> bool {
         self.members
             .iter()
@@ -66,6 +68,7 @@ impl RecoveryTracker {
     }
 
     /// Returns true when all members are alive (safe to resume camp loop).
+    #[must_use]
     pub fn all_alive(&self) -> bool {
         self.members
             .iter()
@@ -73,6 +76,7 @@ impl RecoveryTracker {
     }
 
     /// Get list of dead member pids.
+    #[must_use]
     pub fn dead_members(&self) -> Vec<u32> {
         self.members
             .iter()
@@ -131,8 +135,7 @@ pub fn death_commands_with_roles(
                 role_map
                     .iter()
                     .find(|(p, _)| p == pid)
-                    .map(|(_, role)| rez_priority(role))
-                    .unwrap_or(3)
+                    .map_or(3, |(_, role)| rez_priority(role))
             });
         }
 

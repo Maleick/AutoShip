@@ -27,6 +27,7 @@ pub struct PersonalityProfile {
 impl PersonalityProfile {
     /// Generate a deterministic personality from a character name.
     /// The same name always produces the same profile.
+    #[must_use]
     pub fn generate(character_name: &str) -> Self {
         let hash = name_hash(character_name);
         let mut rng = Xorshift32::new(if hash == 0 { 1 } else { hash });
@@ -40,7 +41,7 @@ impl PersonalityProfile {
         // med_threshold_jitter: -5.0 to +5.0
         let med_threshold_jitter = (rng.next_f32() - 0.5) * 10.0;
         // phase_offset: 0-30
-        let phase_offset = (rng.next_u32() % 31) as u64;
+        let phase_offset = u64::from(rng.next_u32() % 31);
 
         Self {
             name: character_name.to_string(),
@@ -52,13 +53,15 @@ impl PersonalityProfile {
         }
     }
 
-    /// Apply reaction_speed multiplier to a tick delay.
+    /// Apply `reaction_speed` multiplier to a tick delay.
+    #[must_use]
     pub fn adjust_delay(&self, base_ticks: u64) -> u64 {
         let adjusted = (base_ticks as f32 * self.reaction_speed).round() as u64;
         adjusted.max(1) // never zero
     }
 
-    /// Apply med_threshold_jitter to a mana percentage threshold.
+    /// Apply `med_threshold_jitter` to a mana percentage threshold.
+    #[must_use]
     pub fn adjust_mana_threshold(&self, base_pct: f32) -> f32 {
         (base_pct + self.med_threshold_jitter).clamp(0.0, 100.0)
     }
@@ -68,7 +71,7 @@ impl PersonalityProfile {
 fn name_hash(name: &str) -> u32 {
     let mut h: u32 = 0;
     for byte in name.bytes() {
-        h = h.wrapping_add(byte as u32).wrapping_mul(KNUTH_HASH);
+        h = h.wrapping_add(u32::from(byte)).wrapping_mul(KNUTH_HASH);
     }
     h
 }

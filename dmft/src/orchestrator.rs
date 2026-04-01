@@ -28,7 +28,7 @@ const STALE_TICK_THRESHOLD: u64 = 3;
 /// How often (in ticks) to check camp progression for level-based advances.
 const PROGRESSION_CHECK_INTERVAL: u64 = 50;
 
-/// Ticks before CC expiry to push a CcExpiring event.
+/// Ticks before CC expiry to push a `CcExpiring` event.
 const CC_EXPIRY_BUFFER: u64 = 3;
 
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
@@ -54,7 +54,7 @@ pub struct Orchestrator {
     // --- Integration fields ---
     /// Current operating mode: Camp (stationary) or Hunt (roaming).
     pub operating_mode: OperatingMode,
-    /// Active hunt loop (used when operating_mode == Hunt).
+    /// Active hunt loop (used when `operating_mode` == Hunt).
     pub active_hunt: Option<HuntLoop>,
     /// Vendor sell cycle (ticked during camp Idle/Medding).
     pub sell_cycle: Option<SellCycle>,
@@ -62,13 +62,14 @@ pub struct Orchestrator {
     pub camp_db: Option<CampDatabase>,
     /// Suggested camp from progression check (for TUI display).
     pub suggested_camp: Option<String>,
-    /// Previous CC state snapshot for charm break detection (spawn_id -> CcType).
+    /// Previous CC state snapshot for charm break detection (`spawn_id` -> `CcType`).
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
 }
 
 impl Orchestrator {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             client_pids: Vec::new(),
@@ -94,6 +95,7 @@ impl Orchestrator {
 
     /// Get the latest game state for a client PID.
     #[allow(dead_code)]
+    #[must_use]
     pub fn get_client_state(&self, pid: u32) -> Option<&GameState> {
         self.game_states.get(&pid)
     }
@@ -106,8 +108,7 @@ impl Orchestrator {
                 let session_id = self
                     .session_tokens
                     .get(&pid)
-                    .map(dmft_common::ipc::session_id_from_token)
-                    .unwrap_or(0);
+                    .map_or(0, dmft_common::ipc::session_id_from_token);
                 match SharedStateReader::new(pid, session_id) {
                     Ok(reader) => {
                         e.insert(reader);
@@ -159,21 +160,18 @@ impl Orchestrator {
         let tank_hp_pct = tank_state
             .local_player
             .as_ref()
-            .map(|p| p.hp_pct())
-            .unwrap_or(100.0);
+            .map_or(100.0, dmft_common::types::SpawnData::hp_pct);
 
         let healer_mana_pct = healer_state
             .local_player
             .as_ref()
-            .map(|p| p.mana_pct())
-            .unwrap_or(100.0);
+            .map_or(100.0, dmft_common::types::SpawnData::mana_pct);
 
         // Use the tank's target for target HP and spawn ID
         let (target_hp_pct, target_is_dead, target_spawn_id) = tank_state
             .target
             .as_ref()
-            .map(|t| (Some(t.hp_pct()), t.hp_current <= 0, Some(t.spawn_id)))
-            .unwrap_or((None, false, None));
+            .map_or((None, false, None), |t| (Some(t.hp_pct()), t.hp_current <= 0, Some(t.spawn_id)));
 
         // Collect per-member HP for death detection
         let member_hp: Vec<(u32, i32)> = camp
@@ -183,7 +181,7 @@ impl Orchestrator {
                 self.game_states.get(&m.pid).and_then(|gs| {
                     gs.local_player
                         .as_ref()
-                        .map(|lp| (m.pid, lp.hp_current.clamp(0, i32::MAX as i64) as i32))
+                        .map(|lp| (m.pid, lp.hp_current.clamp(0, i64::from(i32::MAX)) as i32))
                 })
             })
             .collect();
@@ -329,9 +327,8 @@ impl Orchestrator {
             return Vec::new();
         }
 
-        let sell_cycle = match &mut self.sell_cycle {
-            Some(sc) => sc,
-            None => return Vec::new(),
+        let Some(sell_cycle) = &mut self.sell_cycle else {
+            return Vec::new();
         };
 
         // Check if we need to start a sell cycle
@@ -352,13 +349,11 @@ impl Orchestrator {
 
     /// Check camp progression and set `suggested_camp` if the group has outleveled.
     fn check_camp_progression(&mut self) {
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
-        let db = match &self.camp_db {
-            Some(db) => db,
-            None => return,
+        let Some(db) = &self.camp_db else {
+            return;
         };
 
         // Calculate average level from game states of camp members
@@ -368,7 +363,7 @@ impl Orchestrator {
             .filter_map(|m| {
                 self.game_states
                     .get(&m.pid)
-                    .and_then(|gs| gs.local_player.as_ref().map(|lp| lp.level as f32))
+                    .and_then(|gs| gs.local_player.as_ref().map(|lp| f32::from(lp.level)))
             })
             .collect();
 
@@ -412,9 +407,8 @@ impl Orchestrator {
     /// Produce camp events by comparing current state to previous tick state.
     /// Detects charm breaks, new adds, and expiring CC.
     fn produce_camp_events(&mut self, _snapshot: &Option<CampSnapshot>) {
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
 
         // Only produce events during active combat phases
@@ -449,9 +443,8 @@ impl Orchestrator {
 
         // --- Add detection: new NPCs within camp radius ---
         // Use the tank's nearby_spawns as the source
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
         let tank = camp.members.iter().find(|m| m.role == Role::Tank);
         if let Some(tank) = tank
@@ -478,9 +471,8 @@ impl Orchestrator {
         }
 
         // --- CC expiry detection ---
-        let camp = match &self.active_camp {
-            Some(c) => c,
-            None => return,
+        let Some(camp) = &self.active_camp else {
+            return;
         };
         let tick = camp.tick;
         let expiring: Vec<u32> = camp
@@ -566,6 +558,7 @@ impl Orchestrator {
     }
 
     /// Return the current camp/hunt state for display.
+    #[must_use]
     pub fn camp_status(&self) -> String {
         match self.operating_mode {
             OperatingMode::Hunt => match &self.active_hunt {
@@ -630,7 +623,7 @@ impl Orchestrator {
         token
     }
 
-    /// Dispatch a CampAction to the appropriate client via IPC.
+    /// Dispatch a `CampAction` to the appropriate client via IPC.
     fn dispatch_action(&mut self, pid: u32, action: &CampAction) {
         match action {
             CampAction::Slash(command) => {
@@ -656,15 +649,11 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
-            .unwrap_or("?");
+            .map_or("?", std::string::String::as_str);
 
-        let token = match self.session_tokens.get(&pid) {
-            Some(t) => *t,
-            None => {
-                tracing::warn!(pid, name, "No session token for client — skipping");
-                return None;
-            }
+        let token = if let Some(t) = self.session_tokens.get(&pid) { *t } else {
+            tracing::warn!(pid, name, "No session token for client — skipping");
+            return None;
         };
 
         // Reuse existing connection or create a new one.
@@ -695,8 +684,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
-            .unwrap_or("?")
+            .map_or("?", std::string::String::as_str)
             .to_string();
 
         let Some(pipe) = self.get_pipe(pid) else {
@@ -719,8 +707,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
-            .unwrap_or("?")
+            .map_or("?", std::string::String::as_str)
             .to_string();
         tracing::info!(pid, name = %name, "Ejecting client");
 
@@ -746,8 +733,7 @@ impl Orchestrator {
         let name = self
             .client_names
             .get(&pid)
-            .map(|s| s.as_str())
-            .unwrap_or("?")
+            .map_or("?", std::string::String::as_str)
             .to_string();
 
         let Some(pipe) = self.get_pipe(pid) else {

@@ -1,7 +1,7 @@
 use std::fmt;
 
 /// EQ character class IDs.
-/// These are the numeric values stored in CharClass field.
+/// These are the numeric values stored in `CharClass` field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum EqClass {
@@ -24,6 +24,7 @@ pub enum EqClass {
 }
 
 impl EqClass {
+    #[must_use]
     pub fn from_id(id: u8) -> Option<Self> {
         match id {
             1 => Some(Self::Warrior),
@@ -46,6 +47,7 @@ impl EqClass {
         }
     }
 
+    #[must_use]
     pub fn short_name(&self) -> &'static str {
         match self {
             Self::Warrior => "WAR",
@@ -84,6 +86,7 @@ pub enum SpawnType {
 }
 
 impl SpawnType {
+    #[must_use]
     pub fn from_id(id: u8) -> Self {
         match id {
             0 => Self::Player,
@@ -95,6 +98,7 @@ impl SpawnType {
 
     /// Return a static string label suitable for display and filtering.
     /// Avoids a heap allocation compared to `to_string()`.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Player => "PC",
@@ -111,12 +115,12 @@ impl fmt::Display for SpawnType {
             Self::Player => write!(f, "PC"),
             Self::Npc => write!(f, "NPC"),
             Self::Corpse => write!(f, "Corpse"),
-            Self::Unknown(id) => write!(f, "Unknown({})", id),
+            Self::Unknown(id) => write!(f, "Unknown({id})"),
         }
     }
 }
 
-/// Standing state values from STANDSTATE offset (0x0574 in PlayerZoneClient).
+/// Standing state values from STANDSTATE offset (0x0574 in `PlayerZoneClient`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StandState {
     Standing,
@@ -130,6 +134,7 @@ pub enum StandState {
 }
 
 impl StandState {
+    #[must_use]
     pub fn from_id(id: u8) -> Self {
         match id {
             0 => Self::Standing,
@@ -144,6 +149,7 @@ impl StandState {
     }
 
     /// Small ASCII sprite representing the character's current state.
+    #[must_use]
     pub fn sprite(&self) -> &'static str {
         match self {
             Self::Standing => " O \n/|\\\n/ \\",
@@ -157,6 +163,7 @@ impl StandState {
         }
     }
 
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Standing => "Stand",
@@ -177,7 +184,7 @@ impl fmt::Display for StandState {
     }
 }
 
-/// A single active buff/song slot from the CharacterZoneClient buff array.
+/// A single active buff/song slot from the `CharacterZoneClient` buff array.
 #[derive(Debug, Clone)]
 pub struct BuffSlot {
     /// Spell ID (0xFFFF = empty).
@@ -189,16 +196,19 @@ pub struct BuffSlot {
 }
 
 impl BuffSlot {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.spell_id == 0xFFFF || self.spell_id == 0
     }
 
     /// Duration in seconds.
+    #[must_use]
     pub fn duration_secs(&self) -> i32 {
         self.duration_ticks * 6
     }
 
     /// Formatted duration "M:SS", "Xs", or "PERM" for permanent buffs.
+    #[must_use]
     pub fn duration_str(&self) -> String {
         if self.duration_ticks <= 0 {
             return "PERM".to_string();
@@ -207,15 +217,15 @@ impl BuffSlot {
         let m = secs / 60;
         let s = secs % 60;
         if m > 0 {
-            format!("{}:{:02}", m, s)
+            format!("{m}:{s:02}")
         } else {
-            format!("{}s", s)
+            format!("{s}s")
         }
     }
 }
 
 /// Active spell cast state for the local player.
-/// Read from CharacterZoneClient via PINST_LOCAL_PC.
+/// Read from `CharacterZoneClient` via `PINST_LOCAL_PC`.
 #[derive(Debug, Clone)]
 pub struct CastState {
     /// Active gem slot (0-based). 0xFF = not currently casting.
@@ -228,12 +238,13 @@ pub struct CastState {
 
 impl CastState {
     /// True if actively casting a spell right now.
+    #[must_use]
     pub fn is_casting(&self) -> bool {
         self.spell_slot != 0xFF && self.spell_eta != 0
     }
 }
 
-/// Group membership info read from CGroup in memory.
+/// Group membership info read from `CGroup` in memory.
 #[derive(Debug, Clone)]
 pub struct GroupInfo {
     pub leader_name: String,
@@ -265,15 +276,16 @@ pub struct SpawnInfo {
     pub endurance_current: i32,
     pub endurance_max: u32,
     pub is_gm: bool,
-    /// Race ID from ActorClient (e.g., Human=1, Barbarian=2, etc.)
+    /// Race ID from `ActorClient` (e.g., Human=1, Barbarian=2, etc.)
     pub race_id: u32,
-    /// Active buff slots (populated only for local player via read_buff_slots).
+    /// Active buff slots (populated only for local player via `read_buff_slots`).
     pub buff_slots: Vec<BuffSlot>,
-    /// Cast state (populated only for local player via read_cast_state).
+    /// Cast state (populated only for local player via `read_cast_state`).
     pub cast_state: Option<CastState>,
 }
 
 impl SpawnInfo {
+    #[must_use]
     pub fn hp_pct(&self) -> f64 {
         if self.hp_max > 0 {
             (self.hp_current as f64 / self.hp_max as f64) * 100.0
@@ -282,14 +294,16 @@ impl SpawnInfo {
         }
     }
 
+    #[must_use]
     pub fn mana_pct(&self) -> f64 {
         if self.mana_max > 0 {
-            (self.mana_current as f64 / self.mana_max as f64) * 100.0
+            (f64::from(self.mana_current) / f64::from(self.mana_max)) * 100.0
         } else {
             100.0
         }
     }
 
+    #[must_use]
     pub fn class_str(&self) -> String {
         self.class
             .as_ref()
@@ -299,6 +313,7 @@ impl SpawnInfo {
     }
 
     /// Human-readable race name from the numeric race ID.
+    #[must_use]
     pub fn race_name(&self) -> String {
         match self.race_id {
             1 => "Human".to_string(),
@@ -318,7 +333,7 @@ impl SpawnInfo {
             330 => "Froglok".to_string(),
             522 => "Drakkin".to_string(),
             0 => "Unknown".to_string(),
-            id => format!("R{}", id),
+            id => format!("R{id}"),
         }
     }
 }

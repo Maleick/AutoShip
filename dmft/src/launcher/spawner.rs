@@ -6,6 +6,10 @@ pub struct SpawnedProcess {
 }
 
 /// Launch an EQ client process with login and server args.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn spawn_eq_client(
     eq_path: &Path,
@@ -15,8 +19,8 @@ pub fn spawn_eq_client(
 ) -> Result<SpawnedProcess> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::Foundation::*;
-    use windows::Win32::System::Threading::*;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{STARTUPINFOW, PROCESS_INFORMATION, CreateProcessW, PROCESS_CREATION_FLAGS};
 
     let cmd = format!(
         "\"{}\" patchme /login:{} /server:{}{}",

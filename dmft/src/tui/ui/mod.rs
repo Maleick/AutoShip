@@ -67,7 +67,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 
     let client_count = app.clients.len();
     let client_str = if client_count > 0 {
-        format!(" {}✕ EQ", client_count)
+        format!(" {client_count}✕ EQ")
     } else {
         " Not attached".into()
     };
@@ -75,9 +75,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let selected_str = if let Some(client) = app.active_client() {
         let name = client
             .local_player
-            .as_ref()
-            .map(|p| app.redact_name(&p.displayed_name).into_owned())
-            .unwrap_or_else(|| "???".into());
+            .as_ref().map_or_else(|| "???".into(), |p| app.redact_name(&p.displayed_name).into_owned());
         format!(" [{}/{}] {} ", app.selected_client + 1, client_count, name)
     } else {
         " No client ".into()
@@ -85,15 +83,13 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 
     let server_str = format!(" {} ", app.display_server());
     let zone_str = app
-        .active_client()
-        .map(|c| {
+        .active_client().map_or_else(|| "No Zone".into(), |c| {
             if c.zone_name.is_empty() {
                 "Unknown Zone".into()
             } else {
                 c.zone_name.clone()
             }
-        })
-        .unwrap_or_else(|| "No Zone".into());
+        });
 
     // Tab bar — current screen is highlighted with accent bg
     let mut tabs: Vec<Span<'_>> = vec![Span::raw("  ")];
@@ -123,11 +119,11 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(" │", t.border_dim),
         Span::styled(&selected_str, t.header_selected),
         Span::styled("│ ", t.border_dim),
-        Span::styled(format!(" {} ", group_label), group_style),
+        Span::styled(format!(" {group_label} "), group_style),
         Span::styled(" │ ", t.border_dim),
         Span::styled(&server_str, Style::default().fg(t.text_server)),
         Span::styled("│ ", t.border_dim),
-        Span::styled(format!(" {} ", zone_str), t.header_zone),
+        Span::styled(format!(" {zone_str} "), t.header_zone),
         Span::styled("│", t.border_dim),
         Span::styled("  ", Style::default()),
     ];
@@ -244,7 +240,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
     // Mode badge
     right.push(Span::styled(
-        format!(" {} ", mode_str),
+        format!(" {mode_str} "),
         Style::default()
             .fg(Color::Black)
             .bg(mode_bg)
@@ -256,7 +252,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let filter = app.spawns_state.spawn_type_filter.label();
     if filter != "All" {
         right.push(Span::styled(
-            format!(" {} ", filter),
+            format!(" {filter} "),
             Style::default()
                 .fg(Color::Black)
                 .bg(t.text_accent)
@@ -312,7 +308,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let kv = |k: &'static str, v: &'static str| -> Line<'static> {
         Line::from(vec![
-            Span::styled(format!(" {:<12}", k), key_s),
+            Span::styled(format!(" {k:<12}"), key_s),
             Span::styled(v, desc_s),
         ])
     };

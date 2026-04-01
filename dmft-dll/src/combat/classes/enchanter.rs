@@ -50,8 +50,7 @@ impl ClassStrategy for EnchanterStrategy {
         // In group XP, off-targets are NPCs that should be mezzed.
         let is_mez_target = ctx
             .target
-            .map(|t| t.spawn_type == 1) // NPC spawn type
-            .unwrap_or(false);
+            .is_some_and(|t| t.spawn_type == 1);
 
         let spells = &ctx.config.spells;
         if spells.is_empty() {

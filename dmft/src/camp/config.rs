@@ -41,6 +41,10 @@ impl CampConfig {
     }
 
     /// Save this camp config to `config/camps/{name}.toml`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn save(&self) -> Result<()> {
         let dir = Self::camps_dir();
         std::fs::create_dir_all(&dir)
@@ -56,6 +60,10 @@ impl CampConfig {
     }
 
     /// Load a camp config from `config/camps/{name}.toml`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(name: &str) -> Result<Self> {
         let path = Self::camps_dir().join(format!("{name}.toml"));
         let contents = std::fs::read_to_string(&path)

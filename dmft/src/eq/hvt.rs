@@ -37,6 +37,10 @@ struct WatchlistFile {
 
 impl HvtWatchlist {
     /// Load the watchlist from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let file: WatchlistFile = toml::from_str(&content)?;
@@ -48,16 +52,19 @@ impl HvtWatchlist {
     }
 
     /// Check if a spawn name matches an HVT entry (case-insensitive).
+    #[must_use]
     pub fn is_hvt(&self, name: &str) -> Option<&HvtTarget> {
         self.targets.get(&name.to_lowercase())
     }
 
     /// Number of targets in the watchlist.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.targets.len()
     }
 
     /// Whether the watchlist is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.targets.is_empty()
     }

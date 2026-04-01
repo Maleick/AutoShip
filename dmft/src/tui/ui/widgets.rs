@@ -54,6 +54,7 @@ pub fn panel<'a>(
 // ─── Table helpers ───────────────────────────────────────────────────────────
 
 /// Build a table header row with all cells styled using `theme.table_header`.
+#[must_use]
 pub fn themed_header_row<'a>(cells: Vec<&'a str>, t: &Theme) -> Row<'a> {
     Row::new(
         cells
@@ -67,6 +68,7 @@ pub fn themed_header_row<'a>(cells: Vec<&'a str>, t: &Theme) -> Row<'a> {
 
 // ─── Color helpers ───────────────────────────────────────────────────────────
 
+#[must_use]
 pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
     if hp_pct > 75.0 {
         t.hp_high
@@ -77,6 +79,7 @@ pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
     }
 }
 
+#[must_use]
 pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> Color {
     use crate::eq::structs::StandState;
     match state {
@@ -88,6 +91,7 @@ pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> C
     }
 }
 
+#[must_use]
 pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
     match st {
         SpawnType::Player => t.spawn_pc,
@@ -98,9 +102,10 @@ pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
 }
 
 /// EQ con color — level delta from player perspective.
-/// delta = mob_level - player_level
+/// delta = `mob_level` - `player_level`
+#[must_use]
 pub fn con_color(player_level: u8, mob_level: u8, t: &Theme) -> Color {
-    let delta = mob_level as i16 - player_level as i16;
+    let delta = i16::from(mob_level) - i16::from(player_level);
     match delta {
         d if d >= 4 => t.con_red,
         1..=3 => t.con_yellow,
@@ -111,6 +116,7 @@ pub fn con_color(player_level: u8, mob_level: u8, t: &Theme) -> Color {
     }
 }
 
+#[must_use]
 pub fn spawn_row_style(
     spawn: &SpawnInfo,
     player_level: Option<u8>,
@@ -120,8 +126,7 @@ pub fn spawn_row_style(
         SpawnType::Player => Style::default().fg(t.spawn_pc),
         SpawnType::Npc => {
             let color = player_level
-                .map(|pl| con_color(pl, spawn.level, t))
-                .unwrap_or(t.spawn_npc);
+                .map_or(t.spawn_npc, |pl| con_color(pl, spawn.level, t));
             Style::default().fg(color)
         }
         SpawnType::Corpse => Style::default().fg(t.spawn_corpse),

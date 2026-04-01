@@ -4,11 +4,13 @@
 pub const DEFAULT_MELEE_RANGE: f32 = 15.0;
 
 /// Calculate distance between two 2D points.
+#[must_use]
 pub fn distance_2d(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
     ((x1 - x2).powi(2) + (y1 - y2).powi(2)).sqrt()
 }
 
 /// Check if a melee character needs to reposition (too far from target).
+#[must_use]
 pub fn needs_reposition(
     player_x: f32,
     player_y: f32,
@@ -24,6 +26,7 @@ pub fn needs_reposition(
 ///
 /// - If in melee range: just `/face` to stay oriented on the target.
 /// - If out of range: `/face` then `/nav target` to close the gap.
+#[must_use]
 pub fn melee_positioning_commands(
     player_pos: (f32, f32),
     target_pos: (f32, f32),
@@ -48,6 +51,7 @@ const BACKSTAB_OFFSET: f32 = 5.0;
 /// EQ heading is 0-512. "Behind" = heading + 256 (mod 512).
 /// Heading-to-radians: `radians = heading * (2π / 512)`.
 /// Position: `(target_x + offset * sin(behind_heading_rad), target_y + offset * cos(behind_heading_rad))`.
+#[must_use]
 pub fn behind_target_position(
     target_x: f32,
     target_y: f32,
@@ -66,6 +70,7 @@ pub fn behind_target_position(
 ///
 /// If already behind the target (within backstab offset range), returns just `/face`.
 /// Otherwise returns `/face` + movement to the behind position.
+#[must_use]
 pub fn rogue_positioning_commands(
     player_pos: (f32, f32),
     target_pos: (f32, f32),
@@ -88,6 +93,7 @@ pub fn rogue_positioning_commands(
 /// Intended to be called periodically during the Fighting state.
 ///
 /// Rogues (identified by `is_rogue` closure) get backstab positioning instead of plain `/face`.
+#[must_use]
 pub fn fighting_face_commands(members: &[(u32, super::state::Role)]) -> Vec<(u32, String)> {
     members
         .iter()

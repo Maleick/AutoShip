@@ -6,7 +6,7 @@
 use crate::eq::named_tracker::is_named;
 use crate::eq::structs::{EqClass, SpawnInfo, SpawnType, StandState};
 
-/// Spawn definition tuple: (name, level, class_id, spawn_type, hp, hp_max, stand_state).
+/// Spawn definition tuple: (name, level, `class_id`, `spawn_type`, hp, `hp_max`, `stand_state`).
 type SpawnDef<'a> = (&'a str, u8, u8, SpawnType, i64, i64, StandState);
 
 #[derive(Clone, Copy)]
@@ -62,6 +62,7 @@ fn zone_anchor(zone: &str) -> Option<DemoAnchor> {
     }
 }
 
+#[must_use]
 pub fn demo_player_position(zone: &str, slot: usize) -> Option<(f32, f32, f32, f32)> {
     let anchor = zone_anchor(zone)?;
     let (dx, dy) = PLAYER_OFFSETS[slot % PLAYER_OFFSETS.len()];
@@ -142,6 +143,7 @@ fn make_demo_spawns(zone: &str, data: &[SpawnDef<'_>]) -> Vec<SpawnInfo> {
 ///
 /// Recognized zones: "Permafrost", "Eastern Wastes", "Great Divide".
 /// Returns an empty vec for unknown zones.
+#[must_use]
 pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
     match zone {
         "Permafrost" => make_demo_spawns(
@@ -179,8 +181,8 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
                     60,
                     0,
                     SpawnType::Npc,
-                    250000,
-                    320000,
+                    250_000,
+                    320_000,
                     StandState::Standing,
                 ),
                 (
@@ -292,8 +294,8 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
                     60,
                     0,
                     SpawnType::Npc,
-                    200000,
-                    280000,
+                    200_000,
+                    280_000,
                     StandState::Standing,
                 ),
                 (
@@ -369,8 +371,8 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
                     60,
                     0,
                     SpawnType::Npc,
-                    180000,
-                    220000,
+                    180_000,
+                    220_000,
                     StandState::Standing,
                 ),
                 (

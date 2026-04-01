@@ -30,6 +30,7 @@ pub enum ActiveScreen {
 }
 
 impl ActiveScreen {
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Overview => "Characters",
@@ -74,6 +75,7 @@ pub enum SpawnFilter {
 }
 
 impl SpawnFilter {
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Self::All => Self::Pc,
@@ -83,6 +85,7 @@ impl SpawnFilter {
         }
     }
 
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::All => "All",
@@ -102,6 +105,7 @@ pub enum TrackedStatus {
 }
 
 impl TrackedStatus {
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Up => "UP",
@@ -110,6 +114,7 @@ impl TrackedStatus {
         }
     }
 
+    #[must_use]
     pub fn color(&self) -> ratatui::style::Color {
         use ratatui::style::Color;
         match self {
@@ -277,6 +282,7 @@ struct FocusedNavClient {
 }
 
 impl App {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             running: true,
@@ -657,9 +663,7 @@ impl App {
         self.active_panel = ActivePanel::OverviewCharacter;
         self.status_message = self
             .active_client()
-            .and_then(|client| client.local_player.as_ref())
-            .map(|player| format!("Character: {}", self.redact_name(&player.displayed_name)))
-            .unwrap_or_else(|| String::from("Character: no client selected"));
+            .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("Character: no client selected"), |player| format!("Character: {}", self.redact_name(&player.displayed_name)));
         self.ensure_panel_focus();
     }
 
@@ -691,15 +695,13 @@ impl App {
                         let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
                         let name = default_names
-                            .get((id - 1) as usize)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| format!("Group {}", id));
+                            .get((id - 1) as usize).map_or_else(|| format!("Group {id}"), std::string::ToString::to_string);
 
                         GroupDef {
                             id: id as u8,
                             name,
                             account_range: (lo, hi),
-                            default_camp: format!("Camp {}", id),
+                            default_camp: format!("Camp {id}"),
                         }
                     })
                     .collect();
@@ -760,7 +762,7 @@ impl App {
     }
 
     /// Sync the legacy single-client fields from the selected client.
-    /// This keeps backward compatibility with code that reads app.local_player, etc.
+    /// This keeps backward compatibility with code that reads `app.local_player`, etc.
     pub fn sync_from_selected_client(&mut self) {
         if let Some(client) = self.clients.get(self.selected_client) {
             self.local_player = client.local_player.clone();
@@ -860,8 +862,7 @@ impl App {
                     let zone = self
                         .clients_in_group_idx(idx)
                         .first()
-                        .map(|c| c.zone_name.as_str())
-                        .unwrap_or("???");
+                        .map_or("???", |c| c.zone_name.as_str());
                     format!("G{} {} ({})", g.id, g.name, zone)
                 } else {
                     String::from("All Groups")
@@ -1002,7 +1003,7 @@ impl App {
         // Collect ungrouped clients (those not mentioned in any group)
         let all_grouped_names: std::collections::HashSet<&str> = groups_map
             .values()
-            .flat_map(|g| g.member_names.iter().map(|s| s.as_str()))
+            .flat_map(|g| g.member_names.iter().map(std::string::String::as_str))
             .collect();
 
         let ungrouped: Vec<usize> = self
@@ -1156,8 +1157,8 @@ impl App {
                 .map(|s| (s.displayed_name.clone(), s.spawn_id, sel))
         };
         if let Some((name, id, _idx)) = info {
-            self.hex_state.hex_label = format!("Raw memory: {} (ID {})", name, id);
-            self.status_message = format!("Debug: {}", name);
+            self.hex_state.hex_label = format!("Raw memory: {name} (ID {id})");
+            self.status_message = format!("Debug: {name}");
 
             // On Windows, read real spawn memory; on macOS, generate demo hex data
             #[cfg(windows)]
@@ -1186,9 +1187,10 @@ impl App {
             && let Ok(proc) = ProcessHandle::open(client.pid)
         {
             // Find the spawn address by walking the spawn list
-            let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base) {
-                Some(a) => a,
-                None => return Vec::new(),
+            let Some(mgr_ptr_addr) =
+                offsets::rebase(offsets::PINST_SPAWN_MANAGER, client.eq_base)
+            else {
+                return Vec::new();
             };
             let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
                 Ok(a) if a != 0 => a,
@@ -1270,9 +1272,7 @@ impl App {
             } else if let Some(add_rest) = rest.strip_prefix("add ") {
                 // Suggest zone-based name
                 let zone = self
-                    .active_client()
-                    .map(|c| c.zone_name.clone())
-                    .unwrap_or_else(|| "camp".into());
+                    .active_client().map_or_else(|| "camp".into(), |c| c.zone_name.clone());
                 let suggestion = vec![zone];
                 self.complete_with_candidates("camp add ", add_rest, &suggestion);
             } else {
@@ -1390,7 +1390,7 @@ impl App {
             let cmd_prefix_str = &prefix[..2];
             let rest = prefix[2..].trim_start();
             if !rest.is_empty() {
-                self.complete_with_candidates(&format!("{} ", cmd_prefix_str), rest, &slash_cmds);
+                self.complete_with_candidates(&format!("{cmd_prefix_str} "), rest, &slash_cmds);
                 return;
             }
         }
@@ -1491,11 +1491,11 @@ impl App {
                 let name = &matches[0];
                 // Quote multi-word names
                 let formatted = if name.contains(' ') {
-                    format!("\"{}\"", name)
+                    format!("\"{name}\"")
                 } else {
                     name.to_string()
                 };
-                self.cmd_state.command_buffer = format!("{}{} ", cmd_prefix, formatted);
+                self.cmd_state.command_buffer = format!("{cmd_prefix}{formatted} ");
             }
             _ => {
                 // Complete common prefix
@@ -1514,7 +1514,7 @@ impl App {
 
                 if common_len > search.len() {
                     let common = &matches[0][..common_len];
-                    self.cmd_state.command_buffer = format!("{}{}", cmd_prefix, common);
+                    self.cmd_state.command_buffer = format!("{cmd_prefix}{common}");
                 }
                 // Show available options (truncate if too many)
                 let display: Vec<&str> = matches.iter().take(10).map(|s| s.as_str()).collect();
@@ -1533,13 +1533,13 @@ impl App {
         let camps_dir = std::path::Path::new("config/camps");
         match std::fs::read_dir(camps_dir) {
             Ok(entries) => entries
-                .filter_map(|e| e.ok())
+                .filter_map(std::result::Result::ok)
                 .filter_map(|e| {
                     let path = e.path();
                     if path.extension().is_some_and(|ext| ext == "toml") {
                         path.file_stem()
                             .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                     } else {
                         None
                     }
@@ -1555,13 +1555,13 @@ impl App {
         let mesh_dir = std::path::Path::new("data/meshes");
         if let Ok(entries) = std::fs::read_dir(mesh_dir) {
             return entries
-                .filter_map(|e| e.ok())
+                .filter_map(std::result::Result::ok)
                 .filter_map(|e| {
                     let path = e.path();
                     if path.extension().is_some_and(|ext| ext == "navmesh") {
                         path.file_stem()
                             .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                     } else {
                         None
                     }
@@ -1674,7 +1674,7 @@ impl App {
     pub fn track_spawn(&mut self, name: &str) {
         let key = name.to_lowercase();
         if self.tracked_spawns.contains_key(&key) {
-            self.status_message = format!("Already tracking: {}", name);
+            self.status_message = format!("Already tracking: {name}");
             return;
         }
 
@@ -1711,9 +1711,9 @@ impl App {
     pub fn untrack_spawn(&mut self, name: &str) {
         let key = name.to_lowercase();
         if self.tracked_spawns.remove(&key).is_some() {
-            self.status_message = format!("Untracked: {}", name);
+            self.status_message = format!("Untracked: {name}");
         } else {
-            self.status_message = format!("Not tracking: {}", name);
+            self.status_message = format!("Not tracking: {name}");
         }
     }
 
@@ -1788,7 +1788,7 @@ impl App {
     }
 
     /// Parse a group prefix like "G1", "G2", ..., "G6" from the first word.
-    /// Returns (group_idx 0-based, remaining command) if found.
+    /// Returns (`group_idx` 0-based, remaining command) if found.
     fn parse_group_prefix<'a>(&self, input: &'a str) -> Option<(usize, &'a str)> {
         let trimmed = input.trim();
         let bytes = trimmed.as_bytes();
@@ -1808,7 +1808,7 @@ impl App {
         let trimmed = input.trim();
         let mut parts = trimmed.splitn(2, char::is_whitespace);
         let raw_target = parts.next()?;
-        let rest = parts.next().map(str::trim).unwrap_or("");
+        let rest = parts.next().map_or("", str::trim);
         let forced = raw_target.starts_with('@');
         let target = raw_target.trim_start_matches('@');
 
@@ -2035,7 +2035,7 @@ impl App {
             let group_name = format!("G{} {}", g.id, g.name);
             let pids = self.pids_for_group(group_idx);
             if pids.is_empty() {
-                self.status_message = format!("{}: no online members", group_name);
+                self.status_message = format!("{group_name}: no online members");
                 return;
             }
             let slash_cmd = rest;
@@ -2048,8 +2048,7 @@ impl App {
                 }
             }
             self.status_message = format!(
-                "{} {} → sent to {}, failed {}",
-                group_name, slash_cmd, ok, fail
+                "{group_name} {slash_cmd} → sent to {ok}, failed {fail}"
             );
             return;
         }
@@ -2059,7 +2058,7 @@ impl App {
             if rest.is_empty() {
                 self.select_client_idx(client_idx);
                 self.expand_selected_character();
-                self.status_message = format!("Focused client: {}", target_name);
+                self.status_message = format!("Focused client: {target_name}");
                 return;
             }
 
@@ -2067,10 +2066,10 @@ impl App {
             self.select_client_idx(client_idx);
             match send_slash_command(pid, rest) {
                 Ok(()) => {
-                    self.status_message = format!("{} → {}", target_name, rest);
+                    self.status_message = format!("{target_name} → {rest}");
                 }
                 Err(e) => {
-                    self.status_message = format!("Error sending to {}: {}", target_name, e);
+                    self.status_message = format!("Error sending to {target_name}: {e}");
                 }
             }
             return;
@@ -2095,7 +2094,7 @@ impl App {
                     self.execute_waypoint_navigation(&label, target, zone_hint.as_deref());
                 } else {
                     let cmd = dmft_common::ipc::Command::SlashCommand {
-                        command: format!("/nav to {}", destination),
+                        command: format!("/nav to {destination}"),
                     };
                     let ok = self.send_ipc_to_focused(&cmd);
                     if ok == 0 {
@@ -2103,7 +2102,7 @@ impl App {
                     } else {
                         tracing::info!(destination, sent = ok, "Navigation slash command sent");
                         self.status_message =
-                            format!("Nav slash → {} (sent to {} clients)", destination, ok);
+                            format!("Nav slash → {destination} (sent to {ok} clients)");
                         self.set_active_screen(ActiveScreen::Tactical);
                         if self.tactical_state.show_navigation {
                             self.active_panel = ActivePanel::TacticalNavigation;
@@ -2113,18 +2112,17 @@ impl App {
             }
             "loot" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
-                self.status_message = format!("Loot → sent to {} clients", ok);
+                self.status_message = format!("Loot → sent to {ok} clients");
             }
             "status" => {
                 let client_count = self.clients.len();
                 let visible_count = self.visible_clients().len();
                 if self.active_group.is_some() {
                     self.status_message = format!(
-                        "{} visible / {} total client(s) connected",
-                        visible_count, client_count
+                        "{visible_count} visible / {client_count} total client(s) connected"
                     );
                 } else {
-                    self.status_message = format!("{} client(s) connected", client_count);
+                    self.status_message = format!("{client_count} client(s) connected");
                 }
             }
             "login" | "launch" => {
@@ -2172,15 +2170,15 @@ impl App {
                     let pids = self.focused_pids();
                     let mut ok = 0;
                     for pid in &pids {
-                        if send_slash_command(*pid, &format!("/assist {}", name)).is_ok() {
+                        if send_slash_command(*pid, &format!("/assist {name}")).is_ok() {
                             ok += 1;
                         }
                     }
                     tracing::info!(target = %name, sent = ok, "Main Assist set");
-                    self.status_message = format!("MA → {} (sent /assist to {} clients)", name, ok);
+                    self.status_message = format!("MA → {name} (sent /assist to {ok} clients)");
                 } else {
                     self.status_message = match &self.main_assist {
-                        Some(ma) => format!("Main Assist: {}", ma),
+                        Some(ma) => format!("Main Assist: {ma}"),
                         None => "No MA set. Usage: ma <character_name>".into(),
                     };
                 }
@@ -2189,10 +2187,10 @@ impl App {
                 if let Some(name) = parts.get(1) {
                     self.main_tank = Some(name.to_string());
                     tracing::info!(target = %name, "Main Tank set");
-                    self.status_message = format!("MT → {}", name);
+                    self.status_message = format!("MT → {name}");
                 } else {
                     self.status_message = match &self.main_tank {
-                        Some(mt) => format!("Main Tank: {}", mt),
+                        Some(mt) => format!("Main Tank: {mt}"),
                         None => "No MT set. Usage: mt <character_name>".into(),
                     };
                 }
@@ -2205,26 +2203,26 @@ impl App {
                 let ok = self
                     .send_ipc_to_focused(&dmft_common::ipc::Command::CombatEngage { target_id });
                 tracing::info!(target_id, sent = ok, "Combat engage sent");
-                self.status_message = format!("Engage → {} clients (target_id={})", ok, target_id);
+                self.status_message = format!("Engage → {ok} clients (target_id={target_id})");
             }
             "disengage" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::CombatDisengage);
                 tracing::info!(sent = ok, "Combat disengage sent");
-                self.status_message = format!("Disengage → {} clients", ok);
+                self.status_message = format!("Disengage → {ok} clients");
             }
             "invite" => {
                 if let Some(name) = parts.get(1) {
                     if let Some(client) = self.active_client() {
                         let pid = client.pid;
-                        let slash = format!("/invite {}", name);
+                        let slash = format!("/invite {name}");
                         match send_slash_command(pid, &slash) {
                             Ok(()) => {
                                 tracing::info!(target = %name, pid, "Group invite sent");
                                 let from = self.client_command_target(client);
-                                self.status_message = format!("Invited {} from {}", name, from);
+                                self.status_message = format!("Invited {name} from {from}");
                             }
                             Err(e) => {
-                                self.status_message = format!("Invite failed: {}", e);
+                                self.status_message = format!("Invite failed: {e}");
                             }
                         }
                     } else {
@@ -2241,38 +2239,34 @@ impl App {
                         Ok(()) => {
                             tracing::info!(pid, "Group invite accepted");
                             let on_client = self.client_command_target(client);
-                            self.status_message = format!("Accepted group invite on {}", on_client);
+                            self.status_message = format!("Accepted group invite on {on_client}");
                         }
                         Err(e) => {
-                            self.status_message = format!("Accept failed: {}", e);
+                            self.status_message = format!("Accept failed: {e}");
                         }
                     }
                 } else {
                     self.status_message = String::from("No active client to accept on");
                 }
             }
-            "heal" => match parts.get(1).copied() {
-                Some("cancel") => {
-                    self.heal_cancel_enabled = !self.heal_cancel_enabled;
-                    let state = if self.heal_cancel_enabled {
-                        "ON"
-                    } else {
-                        "OFF"
-                    };
-                    tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
-                    self.status_message = format!("Heal-cancel: {}", state);
-                }
-                _ => {
-                    let state = if self.heal_cancel_enabled {
-                        "ON"
-                    } else {
-                        "OFF"
-                    };
-                    self.status_message = format!(
-                        "Heal-cancel is {}. Usage: heal cancel (toggles on/off)",
-                        state
-                    );
-                }
+            "heal" => if let Some("cancel") = parts.get(1).copied() {
+                self.heal_cancel_enabled = !self.heal_cancel_enabled;
+                let state = if self.heal_cancel_enabled {
+                    "ON"
+                } else {
+                    "OFF"
+                };
+                tracing::info!(enabled = self.heal_cancel_enabled, "Heal-cancel toggled");
+                self.status_message = format!("Heal-cancel: {state}");
+            } else {
+                let state = if self.heal_cancel_enabled {
+                    "ON"
+                } else {
+                    "OFF"
+                };
+                self.status_message = format!(
+                    "Heal-cancel is {state}. Usage: heal cancel (toggles on/off)"
+                );
             },
             "ch" => {
                 self.execute_ch_command(&parts[1..], orchestrator);
@@ -2292,7 +2286,7 @@ impl App {
                         }
                     }
                     self.status_message =
-                        format!("all {} → sent to {}, failed {}", slash_cmd, ok, fail);
+                        format!("all {slash_cmd} → sent to {ok}, failed {fail}");
                 } else {
                     self.status_message = String::from("Usage: all <slash command>");
                 }
@@ -2303,17 +2297,17 @@ impl App {
                     if let Some(slash_cmd) = parts.get(1) {
                         match send_slash_command(pid, slash_cmd) {
                             Ok(()) => {
-                                self.status_message = format!("{} → {}", pid, slash_cmd);
+                                self.status_message = format!("{pid} → {slash_cmd}");
                             }
                             Err(e) => {
-                                self.status_message = format!("Error sending to {}: {}", pid, e);
+                                self.status_message = format!("Error sending to {pid}: {e}");
                             }
                         }
                     } else {
-                        self.status_message = format!("Usage: {} <slash command>", pid);
+                        self.status_message = format!("Usage: {pid} <slash command>");
                     }
                 } else {
-                    self.status_message = format!("Unknown command: {}", input);
+                    self.status_message = format!("Unknown command: {input}");
                 }
             }
         }
@@ -2328,14 +2322,11 @@ impl App {
                 );
             }
             Some("start") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message = String::from(
-                            "Usage: camp start <name>  (loads config/camps/<name>.toml)",
-                        );
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                    self.status_message = String::from(
+                        "Usage: camp start <name>  (loads config/camps/<name>.toml)",
+                    );
+                    return;
                 };
 
                 match CampConfig::load(camp_name) {
@@ -2349,10 +2340,10 @@ impl App {
                         let count = members.len();
                         orchestrator.start_camp(config, members);
                         self.status_message =
-                            format!("Camp '{}' started with {} members", camp_name, count);
+                            format!("Camp '{camp_name}' started with {count} members");
                     }
                     Err(e) => {
-                        self.status_message = format!("Failed to load camp '{}': {}", camp_name, e);
+                        self.status_message = format!("Failed to load camp '{camp_name}': {e}");
                     }
                 }
             }
@@ -2372,28 +2363,20 @@ impl App {
                 }
             }
             Some("add") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message =
-                            String::from("Usage: camp add <name>  (saves current position)");
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                    self.status_message =
+                        String::from("Usage: camp add <name>  (saves current position)");
+                    return;
                 };
 
-                let (center, zone) = match &self.local_player {
-                    Some(player) => {
-                        let zone = self
-                            .active_client()
-                            .map(|c| c.zone_name.clone())
-                            .unwrap_or_else(|| "unknown".into());
-                        ([player.x, player.y, player.z], zone)
-                    }
-                    None => {
-                        self.status_message =
-                            String::from("No player data — cannot save camp position");
-                        return;
-                    }
+                let (center, zone) = if let Some(player) = &self.local_player {
+                    let zone = self
+                        .active_client().map_or_else(|| "unknown".into(), |c| c.zone_name.clone());
+                    ([player.x, player.y, player.z], zone)
+                } else {
+                    self.status_message =
+                        String::from("No player data — cannot save camp position");
+                    return;
                 };
 
                 let config = CampConfig {
@@ -2422,32 +2405,29 @@ impl App {
                         );
                     }
                     Err(e) => {
-                        self.status_message = format!("Failed to save camp '{}': {}", camp_name, e);
+                        self.status_message = format!("Failed to save camp '{camp_name}': {e}");
                     }
                 }
             }
             Some("remove") => {
-                let camp_name = match args.get(1) {
-                    Some(name) => *name,
-                    None => {
-                        self.status_message = String::from("Usage: camp remove <name>");
-                        return;
-                    }
+                let camp_name = if let Some(name) = args.get(1) { *name } else {
+                    self.status_message = String::from("Usage: camp remove <name>");
+                    return;
                 };
 
-                let path = std::path::Path::new("config/camps").join(format!("{}.toml", camp_name));
+                let path = std::path::Path::new("config/camps").join(format!("{camp_name}.toml"));
                 if path.exists() {
                     match std::fs::remove_file(&path) {
                         Ok(()) => {
-                            self.status_message = format!("Camp '{}' removed", camp_name);
+                            self.status_message = format!("Camp '{camp_name}' removed");
                         }
                         Err(e) => {
                             self.status_message =
-                                format!("Failed to remove camp '{}': {}", camp_name, e);
+                                format!("Failed to remove camp '{camp_name}': {e}");
                         }
                     }
                 } else {
-                    self.status_message = format!("Camp '{}' not found", camp_name);
+                    self.status_message = format!("Camp '{camp_name}' not found");
                 }
             }
             Some("next") => match &orchestrator.active_camp {
@@ -2469,16 +2449,16 @@ impl App {
                                 let to = config.name.clone();
                                 orchestrator.start_camp(config, members);
                                 self.status_message =
-                                    format!("Advanced: {} → {} ({} members)", current, to, count);
+                                    format!("Advanced: {current} → {to} ({count} members)");
                             }
                             Err(e) => {
                                 self.status_message =
-                                    format!("Failed to load next camp '{}': {}", next_name, e);
+                                    format!("Failed to load next camp '{next_name}': {e}");
                             }
                         },
                         None => {
                             self.status_message =
-                                format!("Camp '{}' has no next camp configured", current);
+                                format!("Camp '{current}' has no next camp configured");
                         }
                     }
                 }
@@ -2502,16 +2482,16 @@ impl App {
                                 let to = config.name.clone();
                                 orchestrator.start_camp(config, members);
                                 self.status_message =
-                                    format!("Fell back: {} → {} ({} members)", current, to, count);
+                                    format!("Fell back: {current} → {to} ({count} members)");
                             }
                             Err(e) => {
                                 self.status_message =
-                                    format!("Failed to load prev camp '{}': {}", prev_name, e);
+                                    format!("Failed to load prev camp '{prev_name}': {e}");
                             }
                         },
                         None => {
                             self.status_message =
-                                format!("Camp '{}' has no previous camp configured", current);
+                                format!("Camp '{current}' has no previous camp configured");
                         }
                     }
                 }
@@ -2527,12 +2507,11 @@ impl App {
                     }
                     let count = members.len();
                     orchestrator.start_camp(config, members);
-                    self.status_message = format!("Camp '{}' started with {} members", name, count);
+                    self.status_message = format!("Camp '{name}' started with {count} members");
                 }
                 Err(_) => {
                     self.status_message = format!(
-                        "Unknown camp subcommand or config: '{}'. Try: start|stop|status|list|add|remove|next|prev",
-                        name
+                        "Unknown camp subcommand or config: '{name}'. Try: start|stop|status|list|add|remove|next|prev"
                     );
                 }
             },
@@ -2542,7 +2521,7 @@ impl App {
     /// Handle `ch <subcommand>` — CH chain management from the command bar.
     ///
     /// Subcommands:
-    ///   ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
+    ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
     ///   ch stop                  — Stop the running CH chain
     ///   ch add <pid>             — Add a cleric to the chain
     ///   ch rm <pid>              — Remove a cleric from the chain
@@ -2563,8 +2542,7 @@ impl App {
                     };
                     let target = chain.target_id();
                     self.status_message = format!(
-                        "CH chain: {} clerics, {:.1}s interval ({}), target={}",
-                        members, interval, adaptive, target
+                        "CH chain: {members} clerics, {interval:.1}s interval ({adaptive}), target={target}"
                     );
                 } else {
                     self.status_message = String::from(
@@ -2574,14 +2552,11 @@ impl App {
             }
             Some("start") => {
                 // ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]
-                let pids_str = match args.get(1) {
-                    Some(s) => s,
-                    None => {
-                        self.status_message = String::from(
-                            "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
-                        );
-                        return;
-                    }
+                let Some(pids_str) = args.get(1) else {
+                    self.status_message = String::from(
+                        "Usage: ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot]",
+                    );
+                    return;
                 };
                 let pids: Vec<u32> = pids_str
                     .split(',')
@@ -2628,7 +2603,7 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_add(pid);
                             tracing::info!(pid, "Cleric added to CH chain");
-                            self.status_message = format!("Added PID {} to CH chain", pid);
+                            self.status_message = format!("Added PID {pid} to CH chain");
                         } else {
                             self.status_message =
                                 String::from("No CH chain is running. Use: ch start");
@@ -2646,7 +2621,7 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_remove(pid);
                             tracing::info!(pid, "Cleric removed from CH chain");
-                            self.status_message = format!("Removed PID {} from CH chain", pid);
+                            self.status_message = format!("Removed PID {pid} from CH chain");
                         } else {
                             self.status_message = String::from("No CH chain is running");
                         }
@@ -2663,7 +2638,7 @@ impl App {
                         if orchestrator.combat.ch_chain_active() {
                             orchestrator.combat.ch_chain_set_interval(secs);
                             tracing::info!(interval = secs, "CH chain interval updated");
-                            self.status_message = format!("CH chain interval set to {:.1}s", secs);
+                            self.status_message = format!("CH chain interval set to {secs:.1}s");
                         } else {
                             self.status_message = String::from("No CH chain is running");
                         }
@@ -2704,8 +2679,7 @@ impl App {
             },
             Some(sub) => {
                 self.status_message = format!(
-                    "Unknown CH subcommand: {}. Use: start|stop|add|rm|interval|adaptive|status",
-                    sub
+                    "Unknown CH subcommand: {sub}. Use: start|stop|add|rm|interval|adaptive|status"
                 );
             }
         }
@@ -2721,13 +2695,10 @@ impl App {
     ///   login G<n>        — launch all accounts in group n
     ///   login <name>      — launch a single account by name
     fn execute_login_command(&mut self, args: &[&str]) {
-        let accounts = match &self.accounts_config {
-            Some(cfg) => cfg.clone(),
-            None => {
-                self.status_message =
-                    String::from("No accounts config — create config/accounts.toml");
-                return;
-            }
+        let accounts = if let Some(cfg) = &self.accounts_config { cfg.clone() } else {
+            self.status_message =
+                String::from("No accounts config — create config/accounts.toml");
+            return;
         };
 
         match args.first().copied() {
@@ -2793,12 +2764,12 @@ impl App {
                         .collect();
                     if group_accounts.is_empty() {
                         self.status_message =
-                            format!("No accounts configured for group {}", group_id);
+                            format!("No accounts configured for group {group_id}");
                     } else {
                         self.enqueue_account_launches(&group_accounts);
                     }
                 } else {
-                    self.status_message = format!("Invalid group: {}", arg);
+                    self.status_message = format!("Invalid group: {arg}");
                 }
             }
 
@@ -2807,7 +2778,7 @@ impl App {
                 if let Some(entry) = accounts.find_account(name) {
                     self.enqueue_account_launches(std::slice::from_ref(entry));
                 } else {
-                    self.status_message = format!("Account '{}' not found in config", name);
+                    self.status_message = format!("Account '{name}' not found in config");
                 }
             }
         }
@@ -2829,7 +2800,7 @@ impl App {
                 for pid in pids {
                     orchestrator.eject_client(pid);
                 }
-                self.status_message = format!("Ejected {} client(s)", count);
+                self.status_message = format!("Ejected {count} client(s)");
             }
             Some(name) => {
                 if let Some(client) = self
@@ -2840,9 +2811,9 @@ impl App {
                     let pid = client.pid;
                     let char_name = client.character_name.clone();
                     orchestrator.eject_client(pid);
-                    self.status_message = format!("Ejected {} (PID {})", char_name, pid);
+                    self.status_message = format!("Ejected {char_name} (PID {pid})");
                 } else {
-                    self.status_message = format!("Client '{}' not found", name);
+                    self.status_message = format!("Client '{name}' not found");
                 }
             }
         }
@@ -2868,7 +2839,7 @@ impl App {
                 // Then re-launch all
                 self.execute_login_command(&["all"]);
                 self.status_message =
-                    format!("Restarting {} client(s) — ejected, re-launching...", count);
+                    format!("Restarting {count} client(s) — ejected, re-launching...");
             }
             Some(name) => {
                 // Eject the specific client
@@ -2883,8 +2854,7 @@ impl App {
                     // Re-launch via login
                     self.execute_login_command(&[name]);
                     self.status_message = format!(
-                        "Restarting {} (PID {}) — ejected, re-launching...",
-                        char_name, pid
+                        "Restarting {char_name} (PID {pid}) — ejected, re-launching..."
                     );
                 } else {
                     // Maybe the client isn't connected but the account exists — just launch
@@ -2977,8 +2947,7 @@ impl App {
         }
 
         self.status_message = format!(
-            "Login: launched {}, failed {} of {} queued",
-            launched, failed, count
+            "Login: launched {launched}, failed {failed} of {count} queued"
         );
     }
 
@@ -3043,7 +3012,7 @@ pub fn extract_account_number(name: &str) -> Option<u8> {
     let digits: String = name
         .chars()
         .rev()
-        .take_while(|c| c.is_ascii_digit())
+        .take_while(char::is_ascii_digit)
         .collect();
     if digits.is_empty() {
         return None;
@@ -3068,8 +3037,7 @@ fn send_ipc_command(pid: u32, cmd: &dmft_common::ipc::Command) -> anyhow::Result
 
     let token = crate::ipc::load_session_token(pid).with_context(|| {
         format!(
-            "missing session token for PID {}; inject the DLL before sending commands",
-            pid
+            "missing session token for PID {pid}; inject the DLL before sending commands"
         )
     })?;
     let session_id = dmft_common::ipc::session_id_from_token(&token);

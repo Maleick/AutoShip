@@ -47,6 +47,7 @@ pub struct TuiBridge {
 
 impl TuiBridge {
     /// Poll for an inbound Discord command. Non-blocking.
+    #[must_use]
     pub fn poll(&self) -> Option<BridgeCommand> {
         self.cmd_rx.try_recv().ok()
     }
@@ -74,6 +75,10 @@ pub struct BotBridge {
 #[allow(dead_code)] // Public API — used by Discord bot integration
 impl BotBridge {
     /// Send a command to the TUI for execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn send_command(
         &self,
         command: BridgeCommand,
@@ -82,6 +87,7 @@ impl BotBridge {
     }
 
     /// Poll for a response from the TUI. Non-blocking.
+    #[must_use]
     pub fn poll_response(&self) -> Option<BridgeResponse> {
         self.resp_rx.try_recv().ok()
     }
@@ -89,6 +95,7 @@ impl BotBridge {
 
 /// Create a linked bridge pair: one for the TUI, one for the Discord bot.
 #[allow(dead_code)] // Public API — called when Discord bot is initialized
+#[must_use]
 pub fn create_bridge() -> (TuiBridge, BotBridge) {
     let (cmd_tx, cmd_rx) = mpsc::channel();
     let (resp_tx, resp_rx) = mpsc::channel();

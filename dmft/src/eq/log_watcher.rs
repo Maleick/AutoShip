@@ -12,9 +12,10 @@ pub struct LogWatcher {
 }
 
 impl LogWatcher {
+    #[must_use]
     pub fn new(path: PathBuf) -> Self {
         // Start at the end of the file so we only capture new events
-        let last_position = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let last_position = std::fs::metadata(&path).map_or(0, |m| m.len());
 
         Self {
             path,
@@ -27,14 +28,12 @@ impl LogWatcher {
     pub fn poll(&mut self) -> Vec<LogEvent> {
         let mut events = Vec::new();
 
-        let file = match File::open(&self.path) {
-            Ok(f) => f,
-            Err(_) => return events, // File not found — graceful on macOS
+        let Ok(file) = File::open(&self.path) else {
+            return events; // File not found — graceful on macOS
         };
 
-        let metadata = match file.metadata() {
-            Ok(m) => m,
-            Err(_) => return events,
+        let Ok(metadata) = file.metadata() else {
+            return events;
         };
 
         // If the file shrank (log rotation), reset to beginning
@@ -56,13 +55,12 @@ impl LogWatcher {
         loop {
             line.clear();
             match reader.read_line(&mut line) {
-                Ok(0) => break, // EOF
+                Ok(0) | Err(_) => break, // EOF or error
                 Ok(_) => {
                     if let Some(event) = self.database.process_line(line.trim_end()) {
                         events.push(event);
                     }
                 }
-                Err(_) => break,
             }
         }
 
@@ -70,6 +68,7 @@ impl LogWatcher {
         events
     }
 
+    #[must_use]
     pub fn database(&self) -> &LootDatabase {
         &self.database
     }

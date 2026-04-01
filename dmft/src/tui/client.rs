@@ -20,6 +20,7 @@ pub struct ClientState {
 }
 
 impl ClientState {
+    #[must_use]
     pub fn new(pid: u32, eq_base: u64) -> Self {
         Self {
             pid,
@@ -30,7 +31,7 @@ impl ClientState {
             zone_name: String::from("Unknown"),
             character_name: String::new(),
             group_info: None,
-            client_status: format!("Attached to PID {}", pid),
+            client_status: format!("Attached to PID {pid}"),
             is_demo: false,
         }
     }

@@ -21,6 +21,7 @@ pub enum CcType {
 
 impl CcType {
     /// Lower value = higher priority. Matches the CC priority list.
+    #[must_use]
     pub fn priority(self) -> u8 {
         match self {
             CcType::Stun => 1,
@@ -79,6 +80,7 @@ pub struct CcTracker {
 }
 
 impl CcTracker {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             targets: Vec::new(),
@@ -377,6 +379,7 @@ impl CcTracker {
     }
 
     /// Count of mobs currently without any CC applied.
+    #[must_use]
     pub fn uncontrolled_count(&self) -> usize {
         self.targets
             .iter()
@@ -385,6 +388,7 @@ impl CcTracker {
     }
 
     /// Count of mobs currently under CC.
+    #[must_use]
     pub fn controlled_count(&self) -> usize {
         self.targets
             .iter()

@@ -40,7 +40,7 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(11), Constraint::Length(sidebar_height + 10)])
             .split(area);
-        let rail_width = ((area.width as f32) * 0.28).round() as u16;
+        let rail_width = (f32::from(area.width) * 0.28).round() as u16;
         let rail_width = rail_width.clamp(20, area.width.saturating_sub(26));
         let bottom = Layout::default()
             .direction(Direction::Horizontal)
@@ -148,8 +148,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let zone_label = app
         .active_client()
-        .map(|c| c.zone_name.as_str())
-        .unwrap_or("Unknown");
+        .map_or("Unknown", |c| c.zone_name.as_str());
     let z_range = app.map_state.z_filter_range;
     let player_z = app.local_player.as_ref().map(|p| p.z);
     let player_pos_label = app
@@ -188,25 +187,16 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let map_info = app
         .map_state
         .zone_map
-        .as_ref()
-        .map(|m| {
+        .as_ref().map_or_else(|| {
+            format!(
+                " Map: {zone_label} (no map data){player_pos_label}{mesh_label} | Z filter: {z_range:.0} [+/-] | m maximize "
+            )
+        }, |m| {
             format!(
                 " Map: {} ({} lines, {} labels){} | View: {} {:.2}x | Z: {:.0} [+/-] | Mesh: {} {} [n] | m maximize ",
                 zone_label,
                 m.lines.len(),
                 m.points.len(),
-                player_pos_label,
-                view_label,
-                app.map_state.zoom,
-                z_range,
-                mesh_cache_label,
-                overlay_label,
-            )
-        })
-        .unwrap_or_else(|| {
-            format!(
-                " Map: {} (no map data){} | View: {} {:.2}x | Z: {:.0} [+/-] | Mesh: {} {} [n] | m maximize ",
-                zone_label,
                 player_pos_label,
                 view_label,
                 app.map_state.zoom,
@@ -925,10 +915,10 @@ fn draw_tactical_sidebar(
     for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
         match section {
             TacticalSectionKind::Named => {
-                draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed)
+                draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed);
             }
             TacticalSectionKind::Navigation => {
-                draw_navigation_summary(frame, *chunk, app, app.tactical_state.navigation_collapsed)
+                draw_navigation_summary(frame, *chunk, app, app.tactical_state.navigation_collapsed);
             }
         }
     }
@@ -982,7 +972,7 @@ fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
 
 fn tactical_section_title(label: &str, collapsed: bool) -> String {
     let icon = if collapsed { "▶" } else { "▼" };
-    format!(" {} {} ", label, icon)
+    format!(" {label} {icon} ")
 }
 
 fn draw_named_tracker_panel(
@@ -1008,7 +998,7 @@ fn draw_named_tracker_panel(
 
     if collapsed {
         let title = tactical_section_title("Named", true);
-        let summary = format!("{} named up | {} tracked up", n_alive, u_up);
+        let summary = format!("{n_alive} named up | {u_up} tracked up");
         frame.render_widget(
             Paragraph::new(summary)
                 .block(panel(title.as_str(), border_style, t))
@@ -1198,7 +1188,7 @@ fn draw_navigation_summary(
     let idle = visible.len().saturating_sub(navigating + arrived + stuck);
 
     if collapsed {
-        let summary = format!("{} nav | {} arr | {} idle", navigating, arrived, idle);
+        let summary = format!("{navigating} nav | {arrived} arr | {idle} idle");
         frame.render_widget(
             Paragraph::new(summary)
                 .block(panel(title.as_str(), border_style, t))
@@ -1210,32 +1200,27 @@ fn draw_navigation_summary(
 
     let selected_name = app
         .active_client()
-        .and_then(|client| client.local_player.as_ref())
-        .map(|player| app.redact_name(&player.displayed_name).into_owned())
-        .unwrap_or_else(|| String::from("No client"));
+        .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("No client"), |player| app.redact_name(&player.displayed_name).into_owned());
 
     let selected_nav = app
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid));
-    let selected_status = selected_nav.map(|nav| nav.status.label()).unwrap_or("Idle");
+    let selected_status = selected_nav.map_or("Idle", |nav| nav.status.label());
     let selected_dest = selected_nav
-        .map(|nav| nav.destination.as_str())
-        .unwrap_or("—");
-    let selected_waypoints = selected_nav.map(|nav| nav.waypoints.len()).unwrap_or(0);
+        .map_or("—", |nav| nav.destination.as_str());
+    let selected_waypoints = selected_nav.map_or(0, |nav| nav.waypoints.len());
     let mesh_status = app
         .current_zone_short_name()
-        .map(|zone| {
+        .map_or_else(|| String::from("—"), |zone| {
             format!(
-                "{} ({})",
+                "{} ({zone})",
                 if crate::nav::mesh::has_cached_zone_mesh(&zone) {
                     "cached"
                 } else {
                     "on-demand"
                 },
-                zone
             )
-        })
-        .unwrap_or_else(|| String::from("—"));
+        });
 
     let status_color = match selected_nav.map(|nav| &nav.status) {
         Some(s) if s.is_moving() => t.text_highlight,
@@ -1272,13 +1257,13 @@ fn draw_navigation_summary(
         Line::from(vec![
             Span::styled("Fleet    ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{} nav", navigating),
+                format!("{navigating} nav"),
                 Style::default().fg(t.text_highlight),
             ),
             Span::styled("  ", Style::default()),
-            Span::styled(format!("{} arr", arrived), Style::default().fg(t.hp_high)),
+            Span::styled(format!("{arrived} arr"), Style::default().fg(t.hp_high)),
             Span::styled("  ", Style::default()),
-            Span::styled(format!("{} idle", idle), Style::default().fg(t.text_muted)),
+            Span::styled(format!("{idle} idle"), Style::default().fg(t.text_muted)),
         ]),
         Line::from(vec![
             Span::styled(":nav ", Style::default().fg(t.text_accent)),

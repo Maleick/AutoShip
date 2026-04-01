@@ -51,7 +51,7 @@ impl TargetingController {
 
     /// Set the current target by writing a spawn's address to pinstTarget.
     ///
-    /// `spawn_addr` is the runtime address of the target PlayerClient struct.
+    /// `spawn_addr` is the runtime address of the target `PlayerClient` struct.
     /// Use `set_target_by_id` once spawn-list walking is implemented.
     pub fn set_target_by_addr(&self, spawn_addr: usize) -> Result<(), TargetError> {
         let pinst_addr = self.target_ptr_addr()?;
@@ -85,7 +85,7 @@ impl TargetingController {
 
     /// Set the current target by spawn ID.
     ///
-    /// Walks the spawn linked list to find the PlayerClient with the matching
+    /// Walks the spawn linked list to find the `PlayerClient` with the matching
     /// spawn ID, then writes its address to pinstTarget.
     pub fn set_target(&self, spawn_id: u32) -> Result<(), TargetError> {
         let spawn_addr = self.find_spawn_addr(spawn_id)?;
@@ -184,8 +184,8 @@ impl TargetingController {
 
     /// Walk the spawn linked list to find a spawn by ID. Returns its address.
     ///
-    /// Traverses the TList<PlayerClient*> starting from SpawnManager's player
-    /// list, following NEXT pointers until a matching SPAWN_ID is found.
+    /// Traverses the `TList`<`PlayerClient`*> starting from `SpawnManager`'s player
+    /// list, following NEXT pointers until a matching `SPAWN_ID` is found.
     fn find_spawn_addr(&self, spawn_id: u32) -> Result<usize, TargetError> {
         if self.eq_base == 0 {
             return Err(TargetError::NoBaseAddress);

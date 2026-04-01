@@ -124,6 +124,7 @@ pub struct Theme {
 // ─── Dark Modern ────────────────────────────────────────────────────────────
 
 /// A polished dark theme using RGB colors and rounded borders.
+#[must_use]
 pub fn dark_modern() -> Theme {
     let accent = Color::Rgb(0, 200, 210); // teal-cyan
     let gold = Color::Rgb(240, 185, 40); // warm gold
@@ -228,6 +229,7 @@ pub fn dark_modern() -> Theme {
 // ─── Classic ────────────────────────────────────────────────────────────────
 
 /// Classic terminal theme using named colors and plain borders.
+#[must_use]
 pub fn classic() -> Theme {
     Theme {
         border_type: BorderType::Plain,
@@ -331,6 +333,7 @@ pub fn classic() -> Theme {
 
 /// Dracula color scheme — dark purples, pinks, and vivid accents.
 /// Based on https://draculatheme.com/contribute#color-palette
+#[must_use]
 pub fn dracula() -> Theme {
     let bg = Color::Rgb(40, 42, 54); // #282a36
     let fg = Color::Rgb(248, 248, 242); // #f8f8f2
@@ -444,6 +447,7 @@ pub enum ThemeKind {
 }
 
 impl ThemeKind {
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Self::DarkModern => Self::Dracula,
@@ -452,6 +456,7 @@ impl ThemeKind {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::DarkModern => "Dark",
@@ -460,6 +465,7 @@ impl ThemeKind {
         }
     }
 
+    #[must_use]
     pub fn build(self) -> Theme {
         match self {
             Self::DarkModern => dark_modern(),

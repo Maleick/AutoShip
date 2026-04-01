@@ -30,7 +30,7 @@ struct CharacterSoul {
 }
 
 /// Tick-driven orchestrator for all Soul Engine subsystems.
-/// Mirrors CombatCoordinator: called each tick, returns commands to dispatch.
+/// Mirrors `CombatCoordinator`: called each tick, returns commands to dispatch.
 pub struct SoulCoordinator {
     souls: HashMap<ClientId, CharacterSoul>,
     memory: MemoryStore,
@@ -42,7 +42,11 @@ pub struct SoulCoordinator {
 }
 
 impl SoulCoordinator {
-    /// Create a new SoulCoordinator from config.
+    /// Create a new `SoulCoordinator` from config.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn new(config: SoulConfig, db_path: &Path) -> Result<Self> {
         let memory = MemoryStore::open(db_path)?;
         let social = SocialGraph::from_seeds(&config.relationship);
@@ -93,14 +97,12 @@ impl SoulCoordinator {
         let client_ids: Vec<ClientId> = self.souls.keys().copied().collect();
 
         for client_id in client_ids {
-            let soul = match self.souls.get_mut(&client_id) {
-                Some(s) => s,
-                None => continue,
+            let Some(soul) = self.souls.get_mut(&client_id) else {
+                continue;
             };
 
-            let state = match states.get(&client_id) {
-                Some(s) => s,
-                None => continue,
+            let Some(state) = states.get(&client_id) else {
+                continue;
             };
 
             let in_combat = is_in_combat(state);
@@ -120,7 +122,7 @@ impl SoulCoordinator {
                 mood: soul.mood,
                 edginess: soul.edginess,
                 zone,
-                level: state.local_player.as_ref().map(|p| p.level).unwrap_or(1),
+                level: state.local_player.as_ref().map_or(1, |p| p.level),
                 in_combat,
                 group_members: &group_members,
             };
@@ -171,8 +173,7 @@ impl SoulCoordinator {
         // Process any queued LLM requests
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs());
 
         // Drain all ready requests, then process each with the matching soul's responder
         // In Phase 2, this will use a real LLM provider instead of per-soul fallback responders
@@ -217,9 +218,8 @@ impl SoulCoordinator {
             return;
         }
 
-        let soul = match self.souls.get_mut(&client_id) {
-            Some(s) => s,
-            None => return,
+        let Some(soul) = self.souls.get_mut(&client_id) else {
+            return;
         };
 
         // Record the conversation
@@ -269,9 +269,8 @@ impl SoulCoordinator {
 
     /// Handle a game event (kill, death, loot, zone change, etc.).
     pub fn on_game_event(&mut self, client_id: ClientId, event: SoulEvent) {
-        let soul = match self.souls.get_mut(&client_id) {
-            Some(s) => s,
-            None => return,
+        let Some(soul) = self.souls.get_mut(&client_id) else {
+            return;
         };
 
         // Capture mood before event processing for accurate memory recording
@@ -289,8 +288,7 @@ impl SoulCoordinator {
             SoulEvent::Kill { .. } | SoulEvent::Loot { .. } => 1.5,
             SoulEvent::PlayerChat { .. } => 3.0,
             SoulEvent::RelationshipChange { .. } => 2.0,
-            SoulEvent::ZoneEnter { .. } => 1.0,
-            _ => 1.0,
+            SoulEvent::ZoneEnter { .. } | _ => 1.0,
         };
 
         // Record memory with the mood as it was before the event changed it

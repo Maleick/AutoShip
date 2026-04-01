@@ -24,11 +24,19 @@ pub struct OffsetDatabase {
 
 impl OffsetDatabase {
     /// Load an offset database from a JSON file on disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load_from_file(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let db: Self = serde_json::from_str(&content)?;
         Ok(db)
     }
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
 
     /// Serialize and write this database to a JSON file.
     pub fn save_to_file(&self, path: &Path) -> anyhow::Result<()> {
@@ -38,29 +46,34 @@ impl OffsetDatabase {
     }
 
     /// Look up a global pointer address by name.
+    #[must_use]
     pub fn get_global(&self, name: &str) -> Option<u64> {
         self.globals.get(name).copied()
     }
 
     /// Look up a PlayerBase field offset by name.
+    #[must_use]
     pub fn get_player_base_offset(&self, name: &str) -> Option<usize> {
         self.player_base.get(name).copied()
     }
 
     /// Look up a PlayerZoneClient field offset by name.
+    #[must_use]
     pub fn get_player_zone_offset(&self, name: &str) -> Option<usize> {
         self.player_zone.get(name).copied()
     }
 
     /// Convert a preferred-base address to a runtime address using this database's preferred base.
+    #[must_use]
     pub fn rebase(&self, preferred_addr: u64, actual_base: u64) -> Option<usize> {
         let offset = preferred_addr.checked_sub(self.eq_preferred_base)?;
         Some((actual_base + offset) as usize)
     }
 
     /// Create from the current compile-time constants in offsets.rs
+    #[must_use]
     pub fn from_compiled_offsets() -> Self {
-        use crate::offsets::*;
+        use crate::offsets::{PINST_LOCAL_PLAYER, PINST_CONTROLLED_PLAYER, PINST_TARGET, PINST_SPAWN_MANAGER, PINST_LOCAL_PC, PINST_SPELL_MANAGER, PINST_CDISPLAY, PINST_CEVERQUEST, player_base, player_zone, spawn_manager, EQ_PREFERRED_BASE};
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
         globals.insert("pinstControlledPlayer".to_string(), PINST_CONTROLLED_PLAYER);

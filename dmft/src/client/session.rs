@@ -1,10 +1,10 @@
-//! EqSession — represents a single managed EQ client.
+//! `EqSession` — represents a single managed EQ client.
 
 use super::healing::{ClientHealth, HealthMonitor};
 use dmft_common::types::{ClientId, GameState, HookStatus};
 use std::path::PathBuf;
 
-/// Post-login setup phases after a client reaches InWorld.
+/// Post-login setup phases after a client reaches `InWorld`.
 #[derive(Debug, Clone)]
 pub enum PostLoginPhase {
     NotStarted,
@@ -29,6 +29,7 @@ pub struct EqSession {
 }
 
 impl EqSession {
+    #[must_use]
     pub fn new(client_id: ClientId, pid: u32) -> Self {
         Self {
             client_id,
@@ -45,6 +46,7 @@ impl EqSession {
     }
 
     /// Whether this session is fully operational (non-mutating snapshot).
+    #[must_use]
     pub fn is_active(&self) -> bool {
         matches!(self.hook_status, HookStatus::HooksActive)
             && matches!(self.health_monitor.current_health(), ClientHealth::Healthy)

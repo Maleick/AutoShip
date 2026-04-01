@@ -73,18 +73,22 @@ impl MapBounds {
         }
     }
 
+    #[must_use]
     pub fn width(&self) -> f32 {
         (self.max_x - self.min_x).max(1.0)
     }
 
+    #[must_use]
     pub fn height(&self) -> f32 {
         (self.max_y - self.min_y).max(1.0)
     }
 
+    #[must_use]
     pub fn center_x(&self) -> f32 {
         (self.min_x + self.max_x) / 2.0
     }
 
+    #[must_use]
     pub fn center_y(&self) -> f32 {
         (self.min_y + self.max_y) / 2.0
     }
@@ -92,6 +96,10 @@ impl MapBounds {
 
 /// Load a zone map from all layer files in the given directory.
 /// Looks for `zone.txt`, `zone_1.txt`, `zone_2.txt`, `zone_3.txt`.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
     let mut lines = Vec::new();
     let mut points = Vec::new();
@@ -101,11 +109,11 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
     // Load layers 0-3
     let suffixes = ["", "_1", "_2", "_3"];
     for suffix in &suffixes {
-        let filename = format!("{}{}.txt", zone_lower, suffix);
+        let filename = format!("{zone_lower}{suffix}.txt");
         let path = map_dir.join(&filename);
         if path.exists() {
             parse_map_file(&path, &mut lines, &mut points)
-                .with_context(|| format!("parsing {}", filename))?;
+                .with_context(|| format!("parsing {filename}"))?;
         }
     }
 
@@ -161,7 +169,7 @@ fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoi
 fn parse_l_line(line: &str) -> Option<MapLine> {
     // Format: L x1, y1, z1, x2, y2, z2, r, g, b
     let rest = line[1..].trim();
-    let parts: Vec<&str> = rest.splitn(9, ',').map(|s| s.trim()).collect();
+    let parts: Vec<&str> = rest.splitn(9, ',').map(str::trim).collect();
     if parts.len() < 9 {
         return None;
     }
@@ -182,7 +190,7 @@ fn parse_p_line(line: &str) -> Option<MapPoint> {
     // Format: P x, y, z, r, g, b, size, label_text
     // Use splitn(8, ',') so commas in the label are preserved.
     let rest = line[1..].trim();
-    let parts: Vec<&str> = rest.splitn(8, ',').map(|s| s.trim()).collect();
+    let parts: Vec<&str> = rest.splitn(8, ',').map(str::trim).collect();
     if parts.len() < 8 {
         return None;
     }

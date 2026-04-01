@@ -35,6 +35,10 @@ pub struct AccountsConfig {
 
 impl AccountsConfig {
     /// Load account definitions from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read accounts config: {}", path.display()))?;
@@ -44,6 +48,7 @@ impl AccountsConfig {
     }
 
     /// Return accounts belonging to a specific group.
+    #[must_use]
     pub fn accounts_for_group(&self, group_id: u32) -> Vec<&AccountEntry> {
         self.accounts
             .iter()
@@ -52,6 +57,7 @@ impl AccountsConfig {
     }
 
     /// Find a single account by name (case-insensitive).
+    #[must_use]
     pub fn find_account(&self, name: &str) -> Option<&AccountEntry> {
         let lower = name.to_lowercase();
         self.accounts
@@ -59,7 +65,8 @@ impl AccountsConfig {
             .find(|a| a.name.to_lowercase() == lower)
     }
 
-    /// Convert an AccountEntry into the AccountInfo used by the launch system.
+    /// Convert an `AccountEntry` into the `AccountInfo` used by the launch system.
+    #[must_use]
     pub fn to_account_info(entry: &AccountEntry) -> dmft_common::login::AccountInfo {
         dmft_common::login::AccountInfo {
             account_name: entry.name.clone(),
@@ -231,6 +238,10 @@ fn default_max_spawns() -> usize {
 }
 
 impl AppConfig {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
@@ -239,6 +250,7 @@ impl AppConfig {
         Ok(config)
     }
 
+    #[must_use]
     pub fn default_config() -> Self {
         Self {
             process_name: default_process_name(),

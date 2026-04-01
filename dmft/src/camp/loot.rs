@@ -20,7 +20,7 @@ pub struct LootRules {
     /// Items to pick up and immediately destroy (junk clogging inventory).
     #[serde(default)]
     pub destroy_items: HashSet<String>,
-    /// If true, loot everything not in destroy_items. Overrides keep/sell lists.
+    /// If true, loot everything not in `destroy_items`. Overrides keep/sell lists.
     #[serde(default = "default_true")]
     pub loot_all: bool,
     /// If true, auto-split coin with group.
@@ -112,6 +112,7 @@ pub struct LootCycle {
 }
 
 impl LootCycle {
+    #[must_use]
     pub fn new(config: LootConfig, corpses: Vec<CorpseEntry>) -> Self {
         let phase = if corpses.is_empty() {
             LootPhase::Done
@@ -127,6 +128,7 @@ impl LootCycle {
     }
 
     /// Is the loot cycle complete?
+    #[must_use]
     pub fn is_done(&self) -> bool {
         self.phase == LootPhase::Done
     }
@@ -239,6 +241,7 @@ pub enum ItemAction {
 }
 
 /// Classify an item based on loot rules.
+#[must_use]
 pub fn classify_item(item_name: &str, rules: &LootRules) -> ItemAction {
     if rules.destroy_items.contains(item_name) {
         return ItemAction::Destroy;

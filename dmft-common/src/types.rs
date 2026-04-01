@@ -57,13 +57,14 @@ pub struct SpawnData {
     pub mana_max: i32,
     /// Signed because EQ can drain endurance below zero internally.
     pub endurance_current: i32,
-    /// Unsigned in the EQ struct (PlayerZoneClient). Do not compare directly
-    /// with endurance_current without casting — signedness differs intentionally.
+    /// Unsigned in the EQ struct (`PlayerZoneClient`). Do not compare directly
+    /// with `endurance_current` without casting — signedness differs intentionally.
     pub endurance_max: u32,
 }
 
 impl SpawnData {
     /// Returns current HP as a percentage (0.0 - 100.0). Returns 100.0 if max HP is zero or negative.
+    #[must_use]
     pub fn hp_pct(&self) -> f32 {
         if self.hp_max > 0 {
             (self.hp_current as f32 / self.hp_max as f32) * 100.0
@@ -73,6 +74,7 @@ impl SpawnData {
     }
 
     /// Returns current mana as a percentage (0.0 - 100.0). Returns 100.0 if max mana is zero or negative.
+    #[must_use]
     pub fn mana_pct(&self) -> f32 {
         if self.mana_max > 0 {
             (self.mana_current as f32 / self.mana_max as f32) * 100.0

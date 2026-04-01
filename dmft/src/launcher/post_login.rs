@@ -20,6 +20,7 @@ pub enum PostLoginEvent {
 }
 
 impl PostLoginSequencer {
+    #[must_use]
     pub fn new(
         client_id: ClientId,
         group_id: u32,
@@ -35,6 +36,7 @@ impl PostLoginSequencer {
     }
 
     /// Get the next command to send based on current phase and game state.
+    #[must_use]
     pub fn next_command(&self, _state: &GameState) -> Option<Command> {
         match self.phase {
             PostLoginPhase::NotStarted => Some(Command::JoinGroup {
@@ -47,12 +49,12 @@ impl PostLoginSequencer {
             }
             PostLoginPhase::Buffing => {
                 // Waiting for buffs to be applied
-                if !self.camp_waypoints.is_empty() {
+                if self.camp_waypoints.is_empty() {
+                    Some(Command::ReportReady)
+                } else {
                     Some(Command::NavigateTo {
                         waypoints: self.camp_waypoints.clone(),
                     })
-                } else {
-                    Some(Command::ReportReady)
                 }
             }
             PostLoginPhase::NavigatingToCamp => {
@@ -64,7 +66,7 @@ impl PostLoginSequencer {
     }
 
     /// Mark that the current phase's command was dispatched.
-    /// Advances NotStarted -> JoiningGroup after the JoinGroup command is sent.
+    /// Advances `NotStarted` -> `JoiningGroup` after the `JoinGroup` command is sent.
     pub fn mark_dispatched(&mut self) {
         if matches!(self.phase, PostLoginPhase::NotStarted) {
             self.phase = PostLoginPhase::JoiningGroup;
@@ -94,18 +96,22 @@ impl PostLoginSequencer {
         }
     }
 
+    #[must_use]
     pub fn phase(&self) -> &PostLoginPhase {
         &self.phase
     }
 
+    #[must_use]
     pub fn is_ready(&self) -> bool {
         matches!(self.phase, PostLoginPhase::Ready)
     }
 
+    #[must_use]
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }
 
+    #[must_use]
     pub fn elapsed(&self) -> std::time::Duration {
         self.started_at.elapsed()
     }
@@ -114,7 +120,8 @@ impl PostLoginSequencer {
 /// Generate `/invite <name>` commands for forming groups.
 /// `leader_pid` is the PID of the group leader's EQ client.
 /// `member_names` are the character names to invite.
-/// Returns a list of SlashCommand to send to the leader's DLL.
+/// Returns a list of `SlashCommand` to send to the leader's DLL.
+#[must_use]
 pub fn group_invite_commands(member_names: &[&str]) -> Vec<Command> {
     member_names
         .iter()
@@ -125,6 +132,7 @@ pub fn group_invite_commands(member_names: &[&str]) -> Vec<Command> {
 }
 
 /// Generate `/accept` command for group members to accept invites.
+#[must_use]
 pub fn group_accept_command() -> Command {
     Command::SlashCommand {
         command: "/accept".to_string(),

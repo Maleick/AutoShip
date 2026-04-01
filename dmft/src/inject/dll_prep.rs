@@ -4,6 +4,10 @@ use anyhow::{Context, Result};
 
 /// Copy the compiled DLL to a temp directory with a randomized name
 /// that looks like a plausible system component.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn prepare_dll(source_dll: &Path) -> Result<PathBuf> {
     let target_dir = std::env::temp_dir().join("dmft_payloads");
     std::fs::create_dir_all(&target_dir)?;
@@ -35,5 +39,5 @@ fn generate_random_dll_name() -> String {
     let mut rng = rand::rngs::OsRng;
     let hi = rng.next_u64();
     let lo = rng.next_u64();
-    format!("{:016x}{:016x}.dll", hi, lo)
+    format!("{hi:016x}{lo:016x}.dll")
 }

@@ -5,8 +5,8 @@ use dmft_common::soul::{MoodState, SoulEvent, SpeechStyle};
 use dmft_common::types::ClientId;
 use rusqlite::{Connection, params};
 
-/// Autobiographical memory store backed by SQLite.
-/// One database per deployment, partitioned by character_id.
+/// Autobiographical memory store backed by `SQLite`.
+/// One database per deployment, partitioned by `character_id`.
 pub struct MemoryStore {
     conn: Connection,
 }
@@ -88,6 +88,10 @@ CREATE TABLE IF NOT EXISTS speech_patterns (
 
 impl MemoryStore {
     /// Open (or create) the memory database at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open memory store at {}", path.display()))?;
@@ -99,6 +103,10 @@ impl MemoryStore {
     }
 
     /// Record a soul event as a memory for a character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn record(
         &self,
         character_id: ClientId,
@@ -109,7 +117,7 @@ impl MemoryStore {
         let event_type = event_type_label(event);
         let event_json = serde_json::to_string(event).context("Failed to serialize SoulEvent")?;
         let zone = event_zone(event);
-        let mood_str = format!("{:?}", mood);
+        let mood_str = format!("{mood:?}");
 
         self.conn.execute(
             "INSERT INTO memories (character_id, event_type, event_json, zone, mood_at_time, importance)
@@ -121,6 +129,10 @@ impl MemoryStore {
     }
 
     /// Recall the N most recent memories for a character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn recall_recent(&self, character_id: ClientId, limit: usize) -> Result<Vec<MemoryRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
@@ -141,6 +153,10 @@ impl MemoryStore {
     /// Recall memories about a specific subject (zone, player name, etc.).
     /// Applies rehearsal effect: each recalled memory gets +0.1 importance boost,
     /// simulating how remembering something reinforces the memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn recall_about(
         &self,
         character_id: ClientId,
@@ -148,7 +164,7 @@ impl MemoryStore {
         limit: usize,
     ) -> Result<Vec<MemoryRow>> {
         let escaped = subject.replace('%', "\\%").replace('_', "\\_");
-        let pattern = format!("%{}%", escaped);
+        let pattern = format!("%{escaped}%");
         let mut stmt = self.conn.prepare(
             "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
              FROM memories
@@ -175,6 +191,10 @@ impl MemoryStore {
     }
 
     /// Record a conversation line.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn record_conversation(
         &self,
         character_id: ClientId,
@@ -187,13 +207,17 @@ impl MemoryStore {
         self.conn.execute(
             "INSERT INTO conversations (character_id, speaker, is_player, channel, message, sentiment)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![character_id, speaker, is_player as i32, channel, message, sentiment],
+            params![character_id, speaker, i32::from(is_player), channel, message, sentiment],
         ).context("Failed to record conversation")?;
 
         Ok(())
     }
 
     /// Recall recent conversations for a character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn recall_conversations(
         &self,
         character_id: ClientId,
@@ -219,6 +243,10 @@ impl MemoryStore {
     }
 
     /// Get the speech style for a character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn get_speech_patterns(&self, character_id: ClientId) -> Result<SpeechStyle> {
         let result = self.conn.query_row(
             "SELECT vocabulary_level, emote_frequency, typing_speed, catchphrases, adopted_slang
@@ -245,6 +273,10 @@ impl MemoryStore {
     }
 
     /// Update the speech style for a character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn update_speech_patterns(
         &self,
         character_id: ClientId,
@@ -279,6 +311,10 @@ impl MemoryStore {
     }
 
     /// Record a memory summary for a time period.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn record_summary(
         &self,
         character_id: ClientId,
@@ -297,6 +333,10 @@ impl MemoryStore {
     }
 
     /// Record a shared reference between two characters for a memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn record_shared_reference(
         &self,
         character_a: ClientId,
@@ -324,8 +364,12 @@ impl MemoryStore {
 
     /// Apply exponential decay to all non-decayed memories for a character.
     /// `decay_factor` is multiplied into importance each tick.
-    /// Typical half-life: if tick is every 30 min, decay_factor ≈ 0.99 gives
+    /// Typical half-life: if tick is every 30 min, `decay_factor` ≈ 0.99 gives
     /// half-life of ~69 ticks (~34.5 hours).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn decay_tick(&self, character_id: ClientId, decay_factor: f32) -> Result<usize> {
         let rows = self
             .conn
@@ -342,6 +386,10 @@ impl MemoryStore {
 
     /// Mark memories with importance below threshold as decayed (soft delete).
     /// Returns the number of memories pruned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn prune_low_importance(&self, character_id: ClientId, threshold: f32) -> Result<usize> {
         let rows = self
             .conn
@@ -359,6 +407,10 @@ impl MemoryStore {
     /// Rehearsal effect: boost importance of recalled memories.
     /// Called when recall_about() finds matching memories — each recall
     /// reinforces the memory, making it resist decay longer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn rehearse(&self, memory_id: i64, boost: f32) -> Result<()> {
         self.conn
             .execute(
@@ -374,6 +426,10 @@ impl MemoryStore {
 
     /// Export all memories and conversations for a character as JSON.
     /// Used for per-character portability and LLM context building.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn export_character_json(&self, character_id: ClientId) -> Result<String> {
         let memories = self.recall_recent(character_id, 10000)?;
         let conversations = self.recall_conversations(character_id, 10000)?;
@@ -443,6 +499,10 @@ impl MemoryRow {
     }
 
     /// Deserialize the stored event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn event(&self) -> Result<SoulEvent> {
         serde_json::from_str(&self.event_json).context("Failed to deserialize SoulEvent")
     }
@@ -474,7 +534,7 @@ impl ConversationRow {
     }
 }
 
-/// Extract a short label for the event type (used as event_type column).
+/// Extract a short label for the event type (used as `event_type` column).
 fn event_type_label(event: &SoulEvent) -> &'static str {
     match event {
         SoulEvent::Death { .. } => "death",

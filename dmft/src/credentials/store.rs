@@ -7,7 +7,7 @@ use zeroize::Zeroizing;
 
 use super::crypto;
 
-/// Encrypted credential store backed by SQLite.
+/// Encrypted credential store backed by `SQLite`.
 pub struct CredentialStore {
     conn: Mutex<Connection>,
     master_key: Zeroizing<[u8; 32]>,
@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS meta (
 
 impl CredentialStore {
     /// Open (or create) the credential store at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn open(path: &Path, master_key: Zeroizing<[u8; 32]>) -> Result<Self> {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open credential store at {}", path.display()))?;
@@ -49,6 +53,10 @@ impl CredentialStore {
     }
 
     /// Add or update an account's encrypted password.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn add_account(&self, account_name: &str, password: &str) -> Result<()> {
         let salt = crypto::generate_salt();
         let account_key = crypto::derive_key_from_master(&self.master_key, &salt)?;
@@ -57,7 +65,7 @@ impl CredentialStore {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         conn.execute(
             "INSERT INTO accounts (account_name, password_enc, nonce, salt, updated_at)
              VALUES (?1, ?2, ?3, ?4, datetime('now'))
@@ -74,18 +82,22 @@ impl CredentialStore {
     }
 
     /// Retrieve and decrypt the password for a given account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn get_password(&self, account_name: &str) -> Result<Zeroizing<String>> {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         let (password_enc, nonce, salt): (Vec<u8>, Vec<u8>, Vec<u8>) = conn
             .query_row(
                 "SELECT password_enc, nonce, salt FROM accounts WHERE account_name = ?1",
                 rusqlite::params![account_name],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
-            .with_context(|| format!("Account '{}' not found", account_name))?;
+            .with_context(|| format!("Account '{account_name}' not found"))?;
 
         let account_key = crypto::derive_key_from_master(&self.master_key, &salt)?;
         let plaintext = crypto::decrypt(&password_enc, &account_key, &nonce)
@@ -97,11 +109,15 @@ impl CredentialStore {
     }
 
     /// List all stored account names.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn list_accounts(&self) -> Result<Vec<String>> {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         let mut stmt = conn.prepare("SELECT account_name FROM accounts ORDER BY account_name")?;
         let names = stmt
             .query_map([], |row| row.get(0))?
@@ -110,18 +126,22 @@ impl CredentialStore {
     }
 
     /// Remove an account from the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn remove_account(&self, account_name: &str) -> Result<()> {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("credential store mutex poisoned: {e}"))?;
         let rows = conn.execute(
             "DELETE FROM accounts WHERE account_name = ?1",
             rusqlite::params![account_name],
         )?;
 
         if rows == 0 {
-            anyhow::bail!("Account '{}' not found", account_name);
+            anyhow::bail!("Account '{account_name}' not found");
         }
 
         Ok(())

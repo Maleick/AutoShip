@@ -30,6 +30,7 @@ pub struct TravelPlan {
 }
 
 impl TravelPlan {
+    #[must_use]
     pub fn new(client_id: ClientId, steps: Vec<TravelStep>) -> Self {
         let mut queue = IndexedQueue::new();
         queue.set_items(steps);
@@ -39,6 +40,7 @@ impl TravelPlan {
         }
     }
 
+    #[must_use]
     pub fn current(&self) -> Option<&TravelStep> {
         self.steps.current()
     }
@@ -47,13 +49,15 @@ impl TravelPlan {
         self.steps.advance()
     }
 
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         self.steps.index() >= self.steps.len()
     }
 }
 
 /// Generates stagger delays for a group of characters zoning together.
-/// Returns map of client_id -> delay in seconds.
+/// Returns map of `client_id` -> delay in seconds.
+#[must_use]
 pub fn generate_zone_staggers(
     client_ids: &[ClientId],
     min_secs: u32,
@@ -87,6 +91,7 @@ pub struct GroupRouter {
 }
 
 impl GroupRouter {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             porters: Vec::new(),
@@ -101,6 +106,7 @@ impl GroupRouter {
     }
 
     /// Whether any porters are available for long-distance travel.
+    #[must_use]
     pub fn has_porters(&self) -> bool {
         !self.porters.is_empty()
     }
@@ -108,9 +114,10 @@ impl GroupRouter {
     /// Plan travel for a group of characters.
     ///
     /// When porters are available and the route is long-distance (multiple zone
-    /// transitions), the planner would prefer PortTo steps over walking. For now,
+    /// transitions), the planner would prefer `PortTo` steps over walking. For now,
     /// port-based routing is a future enhancement — all travel uses staggered
     /// zone transitions.
+    #[must_use]
     pub fn plan_travel(
         &self,
         client_ids: &[ClientId],
@@ -140,6 +147,7 @@ impl GroupRouter {
 }
 
 /// Convenience wrapper that creates a one-shot travel plan without porter awareness.
+#[must_use]
 pub fn plan_group_travel(
     client_ids: &[ClientId],
     class_map: &HashMap<ClientId, u8>,

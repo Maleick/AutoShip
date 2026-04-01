@@ -38,6 +38,10 @@ impl SharedStateReader {
     ///
     /// Uses `OpenFileMappingW` + `FILE_MAP_READ` — the orchestrator has no need
     /// for write access to the DLL-owned mapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub fn new(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {
@@ -61,7 +65,7 @@ impl SharedStateReader {
 
             let ptr = unsafe { MapViewOfFile(handle, FILE_MAP_READ, 0, 0, SHARED_MEMORY_SIZE) };
             if ptr.Value.is_null() {
-                anyhow::bail!("MapViewOfFile returned null for client {}", client_id);
+                anyhow::bail!("MapViewOfFile returned null for client {client_id}");
             }
 
             Ok(Self {
@@ -86,6 +90,7 @@ impl SharedStateReader {
     /// [sequence: u64 LE][payload_len: u32 LE][payload: bincode bytes]
     /// ```
     /// A zero sequence number means the DLL hasn't written yet.
+    #[must_use]
     pub fn read(&self) -> Option<GameState> {
         #[cfg(windows)]
         {

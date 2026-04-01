@@ -17,8 +17,7 @@ use crate::{SOUL_DB_PATH, get_module_base};
 fn load_pid_session(pid: u32) -> Result<(dmft_common::ipc::SessionToken, u64)> {
     let token = ipc::load_session_token(pid).ok_or_else(|| {
         anyhow::anyhow!(
-            "No session token for PID {}. Inject the DLL first to create authenticated IPC state.",
-            pid
+            "No session token for PID {pid}. Inject the DLL first to create authenticated IPC state."
         )
     })?;
     let session_id = dmft_common::ipc::session_id_from_token(&token);
@@ -28,9 +27,9 @@ fn load_pid_session(pid: u32) -> Result<(dmft_common::ipc::SessionToken, u64)> {
 fn connect_authenticated_pipe(pid: u32) -> Result<ipc::pipe::CommandPipe> {
     let (token, session_id) = load_pid_session(pid)?;
     let pipe = ipc::pipe::CommandPipe::connect(pid, session_id)
-        .with_context(|| format!("Failed to connect to PID {}. Is the DLL injected?", pid))?;
+        .with_context(|| format!("Failed to connect to PID {pid}. Is the DLL injected?"))?;
     pipe.send_raw_token(&token)
-        .with_context(|| format!("Failed to authenticate with PID {}", pid))?;
+        .with_context(|| format!("Failed to authenticate with PID {pid}"))?;
     Ok(pipe)
 }
 
@@ -38,13 +37,16 @@ fn shared_state_reader_for_pid(pid: u32) -> Result<ipc::shared::SharedStateReade
     let (_, session_id) = load_pid_session(pid)?;
     ipc::shared::SharedStateReader::new(pid, session_id).with_context(|| {
         format!(
-            "Cannot open shared memory for PID {} — is the DLL injected?",
-            pid
+            "Cannot open shared memory for PID {pid} — is the DLL injected?"
         )
     })
 }
 
 /// TUI mode — the default. Shows ShowEQ-inspired live dashboard.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_tui_mode() -> Result<()> {
     let mut app = tui::app::App::new();
     let config = load_config()?;
@@ -111,7 +113,11 @@ pub fn run_tui_mode() -> Result<()> {
     tui::run::run_tui(app, orchestrator)
 }
 
-/// Inject mode (--inject) — find eqgame.exe processes and inject dmft_dll.dll into each.
+/// Inject mode (--inject) — find eqgame.exe processes and inject `dmft_dll.dll` into each.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_inject_mode() -> Result<()> {
     info!("DMFT inject mode — finding EQ processes...");
 
@@ -149,10 +155,10 @@ pub fn run_inject_mode() -> Result<()> {
     let mut failed = 0u32;
 
     for &pid in &pids {
-        print!("Injecting into PID {}... ", pid);
+        print!("Injecting into PID {pid}... ");
         // Write session token before injection so DLL can read it during init.
         if let Err(e) = ipc::write_session_token_file(pid) {
-            println!("FAILED: token write failed: {:#}", e);
+            println!("FAILED: token write failed: {e:#}");
             error!(pid, error = %e, "Session token staging failed");
             failed += 1;
             continue;
@@ -164,7 +170,7 @@ pub fn run_inject_mode() -> Result<()> {
                 success += 1;
             }
             Err(e) => {
-                println!("FAILED: {:#}", e);
+                println!("FAILED: {e:#}");
                 error!(pid, error = %e, "Injection failed");
                 failed += 1;
             }
@@ -172,7 +178,7 @@ pub fn run_inject_mode() -> Result<()> {
     }
 
     println!();
-    println!("Results: {} succeeded, {} failed", success, failed);
+    println!("Results: {success} succeeded, {failed} failed");
     println!();
     println!("Log locations:");
     println!("  Orchestrator: logs/dmft.log");
@@ -192,11 +198,15 @@ pub fn run_inject_mode() -> Result<()> {
 }
 
 /// Zones mode (--zones <PID>) — query the zone adjacency graph from an injected client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_zones_mode(pid: u32) -> Result<()> {
     use dmft_common::ipc::{Command, Response};
     use dmft_common::nav::ZoneGraph;
 
-    println!("Querying zone graph from PID {}...", pid);
+    println!("Querying zone graph from PID {pid}...");
 
     let pipe = connect_authenticated_pipe(pid)?;
     let response = pipe
@@ -235,31 +245,29 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
             let transfer_names = ["Zone Line", "Door", "Book", "Translocator", "Spell"];
             for (zone_id, name, min_level, max_level, conns) in &zones {
                 let level_str = if *max_level > 0 {
-                    format!(" (lv {}-{})", min_level, max_level)
+                    format!(" (lv {min_level}-{max_level})")
                 } else {
                     String::new()
                 };
-                println!("[{:>3}] {}{}", zone_id, name, level_str);
+                println!("[{zone_id:>3}] {name}{level_str}");
                 for (dest_id, tt, disabled) in conns {
                     let tt_name = transfer_names.get(*tt as usize).unwrap_or(&"Unknown");
                     let dest_name = zones
                         .iter()
                         .find(|(id, _, _, _, _)| *id == *dest_id)
-                        .map(|(_, n, _, _, _)| n.as_str())
-                        .unwrap_or("???");
+                        .map_or("???", |(_, n, _, _, _)| n.as_str());
                     let disabled_str = if *disabled { " [DISABLED]" } else { "" };
                     println!(
-                        "      -> [{:>3}] {} via {}{}",
-                        dest_id, dest_name, tt_name, disabled_str
+                        "      -> [{dest_id:>3}] {dest_name} via {tt_name}{disabled_str}"
                     );
                 }
             }
         }
         Response::Error { message } => {
-            anyhow::bail!("DLL returned error: {}", message);
+            anyhow::bail!("DLL returned error: {message}");
         }
         other => {
-            anyhow::bail!("Unexpected response: {:?}", other);
+            anyhow::bail!("Unexpected response: {other:?}");
         }
     }
 
@@ -267,6 +275,10 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
 }
 
 /// Status mode (--status <PID>) — read shared memory and print player state.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_status_mode(pid: u32) -> Result<()> {
     let reader = shared_state_reader_for_pid(pid)?;
 
@@ -311,6 +323,10 @@ pub fn run_status_mode(pid: u32) -> Result<()> {
 }
 
 /// Status-all mode (--statusall) — read shared memory for all EQ clients and print a summary table.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_statusall_mode() -> Result<()> {
     let pids = process::memory::find_processes_by_name("eqgame.exe")?;
 
@@ -339,7 +355,7 @@ pub fn run_statusall_mode() -> Result<()> {
                                 waypoint_count,
                                 ..
                             } => {
-                                format!("{}/{}", waypoint_index, waypoint_count)
+                                format!("{waypoint_index}/{waypoint_count}")
                             }
                             dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
                             dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
@@ -386,12 +402,16 @@ pub fn run_statusall_mode() -> Result<()> {
     Ok(())
 }
 
-/// Navigate mode (--nav <PID> <x> <y> <z>) — send NavigateTo to a specific client.
+/// Navigate mode (--nav <PID> <x> <y> <z>) — send `NavigateTo` to a specific client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
 
-    println!("Navigating PID {} -> ({}, {}, {})", pid, x, y, z);
+    println!("Navigating PID {pid} -> ({x}, {y}, {z})");
 
     // 1. Read shared memory to get current position and zone
     let waypoints = match shared_state_reader_for_pid(pid) {
@@ -425,7 +445,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
                                 "Navmesh path query failed: {:#} — falling back to straight line",
                                 e
                             );
-                            println!("Navmesh path failed: {} — using straight line", e);
+                            println!("Navmesh path failed: {e} — using straight line");
                             vec![Waypoint::new(x, y, z)]
                         }
                     },
@@ -434,7 +454,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
                             "Cannot load navmesh for zone '{}': {:#} — falling back to straight line",
                             zone, e
                         );
-                        println!("No navmesh for '{}': {} — using straight line", zone, e);
+                        println!("No navmesh for '{zone}': {e} — using straight line");
                         vec![Waypoint::new(x, y, z)]
                     }
                 }
@@ -446,8 +466,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
         },
         Err(e) => {
             println!(
-                "Cannot read shared memory for PID {}: {} — using straight line",
-                pid, e
+                "Cannot read shared memory for PID {pid}: {e} — using straight line"
             );
             vec![Waypoint::new(x, y, z)]
         }
@@ -457,13 +476,17 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
     let pipe = connect_authenticated_pipe(pid)?;
     let cmd = Command::NavigateTo { waypoints };
     pipe.send_async(&cmd)
-        .context(format!("Failed to send NavigateTo to PID {}", pid))?;
+        .context(format!("Failed to send NavigateTo to PID {pid}"))?;
 
     println!("NavigateTo sent — character should start moving.");
     Ok(())
 }
 
 /// Navigate ALL EQ clients to a destination using navmesh pathfinding.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
     use dmft_common::ipc::Command;
     use dmft_common::nav::Waypoint;
@@ -489,60 +512,54 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
 
     for &pid in &pids {
         // Read shared memory for position + zone
-        let waypoints = match shared_state_reader_for_pid(pid) {
-            Ok(reader) => match reader.read() {
-                Some(state) if !state.zone_short_name.is_empty() => {
-                    let player = match state.local_player.as_ref() {
-                        Some(p) => p,
-                        None => {
-                            println!("  PID {}: no player data — skipping", pid);
-                            fail_count += 1;
-                            continue;
-                        }
-                    };
-                    let from = (player.x, player.y, player.z);
-                    let zone = &state.zone_short_name;
+        let waypoints = if let Ok(reader) = shared_state_reader_for_pid(pid) { match reader.read() {
+            Some(state) if !state.zone_short_name.is_empty() => {
+                let player = if let Some(p) = state.local_player.as_ref() { p } else {
+                    println!("  PID {pid}: no player data — skipping");
+                    fail_count += 1;
+                    continue;
+                };
+                let from = (player.x, player.y, player.z);
+                let zone = &state.zone_short_name;
 
-                    match nav::mesh::load_zone(zone) {
-                        Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
-                            Ok(path) => {
-                                println!(
-                                    "  PID {} ({}): navmesh path, {} waypoints",
-                                    pid,
-                                    player.name,
-                                    path.len()
-                                );
-                                path.iter()
-                                    .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
-                                    .collect()
-                            }
-                            Err(e) => {
-                                println!(
-                                    "  PID {} ({}): navmesh failed ({}), straight line",
-                                    pid, player.name, e
-                                );
-                                vec![Waypoint::new(x, y, z)]
-                            }
-                        },
+                match nav::mesh::load_zone(zone) {
+                    Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
+                        Ok(path) => {
+                            println!(
+                                "  PID {} ({}): navmesh path, {} waypoints",
+                                pid,
+                                player.name,
+                                path.len()
+                            );
+                            path.iter()
+                                .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
+                                .collect()
+                        }
                         Err(e) => {
                             println!(
-                                "  PID {} ({}): no mesh for '{}' ({}), straight line",
-                                pid, player.name, zone, e
+                                "  PID {} ({}): navmesh failed ({}), straight line",
+                                pid, player.name, e
                             );
                             vec![Waypoint::new(x, y, z)]
                         }
+                    },
+                    Err(e) => {
+                        println!(
+                            "  PID {} ({}): no mesh for '{}' ({}), straight line",
+                            pid, player.name, zone, e
+                        );
+                        vec![Waypoint::new(x, y, z)]
                     }
                 }
-                _ => {
-                    println!("  PID {}: no shared memory data — straight line", pid);
-                    vec![Waypoint::new(x, y, z)]
-                }
-            },
-            Err(_) => {
-                println!("  PID {}: cannot read shared memory — skipping", pid);
-                fail_count += 1;
-                continue;
             }
+            _ => {
+                println!("  PID {pid}: no shared memory data — straight line");
+                vec![Waypoint::new(x, y, z)]
+            }
+        } } else {
+            println!("  PID {pid}: cannot read shared memory — skipping");
+            fail_count += 1;
+            continue;
         };
 
         // Send via IPC
@@ -550,24 +567,28 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
             Ok(pipe) => {
                 let cmd = Command::NavigateTo { waypoints };
                 if let Err(e) = pipe.send_async(&cmd) {
-                    println!("  PID {}: send failed: {} — skipping", pid, e);
+                    println!("  PID {pid}: send failed: {e} — skipping");
                     fail_count += 1;
                 } else {
                     success_count += 1;
                 }
             }
             Err(e) => {
-                println!("  PID {}: cannot connect ({})", pid, e);
+                println!("  PID {pid}: cannot connect ({e})");
                 fail_count += 1;
             }
         }
     }
 
-    println!("Done: {} navigating, {} failed", success_count, fail_count);
+    println!("Done: {success_count} navigating, {fail_count} failed");
     Ok(())
 }
 
 /// Inject mode targeting a specific PID (--inject-pid <PID>).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     info!(pid, "DMFT inject-pid mode — targeting single process");
 
@@ -585,14 +606,18 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     ipc::write_session_token_file(pid)?;
 
     let staged_dll = inject::dll_prep::prepare_dll(source_dll)?;
-    println!("Injecting into PID {}...", pid);
+    println!("Injecting into PID {pid}...");
 
     inject::loader::inject_dll(pid, &staged_dll)?;
-    println!("OK — DLL injected into PID {}", pid);
+    println!("OK — DLL injected into PID {pid}");
     Ok(())
 }
 
 /// Login mode targeting a specific PID (--login-pid <PID> <account> <password> [server] [character]).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_login_pid_mode(
     pid: u32,
     account: &str,
@@ -603,8 +628,7 @@ pub fn run_login_pid_mode(
     use dmft_common::ipc::Command;
 
     println!(
-        "Sending StartLogin to PID {} (account: {}, server: {})...",
-        pid, account, server
+        "Sending StartLogin to PID {pid} (account: {account}, server: {server})..."
     );
 
     let pipe = connect_authenticated_pipe(pid)?;
@@ -615,13 +639,17 @@ pub fn run_login_pid_mode(
         character_name: character.to_string(),
     };
     pipe.send_async(&cmd)
-        .context(format!("Failed to send StartLogin to PID {}", pid))?;
+        .context(format!("Failed to send StartLogin to PID {pid}"))?;
 
-    println!("StartLogin sent to PID {}", pid);
+    println!("StartLogin sent to PID {pid}");
     Ok(())
 }
 
-/// Login mode (--login <account> <password> [server] [character]) — send StartLogin to all injected EQ clients.
+/// Login mode (--login <account> <password> [server] [character]) — send `StartLogin` to all injected EQ clients.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
@@ -635,8 +663,7 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
 
     for &pid in &pids {
         println!(
-            "Sending StartLogin to PID {} (account: {}, server: {})...",
-            pid, account, server
+            "Sending StartLogin to PID {pid} (account: {account}, server: {server})..."
         );
 
         match connect_authenticated_pipe(pid) {
@@ -648,13 +675,13 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
                     character_name: character.to_string(),
                 };
                 if pipe.send_async(&cmd).is_ok() {
-                    println!("  StartLogin sent to PID {}", pid);
+                    println!("  StartLogin sent to PID {pid}");
                 } else {
-                    println!("  Failed to send StartLogin to PID {}", pid);
+                    println!("  Failed to send StartLogin to PID {pid}");
                 }
             }
             Err(_) => {
-                println!("  Cannot connect to PID {} — is the DLL injected?", pid);
+                println!("  Cannot connect to PID {pid} — is the DLL injected?");
             }
         }
     }
@@ -663,7 +690,11 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
     Ok(())
 }
 
-/// Calibrate mode (--calibrate) — find all EQ processes and send calibrate_login to each.
+/// Calibrate mode (--calibrate) — find all EQ processes and send `calibrate_login` to each.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_calibrate_mode() -> Result<()> {
     use dmft_common::ipc::Command;
 
@@ -676,19 +707,19 @@ pub fn run_calibrate_mode() -> Result<()> {
     }
 
     for &pid in &pids {
-        println!("Sending calibrate_login to PID {}...", pid);
+        println!("Sending calibrate_login to PID {pid}...");
 
         match connect_authenticated_pipe(pid) {
             Ok(pipe) => {
                 let cmd = Command::CalibrateLogin;
                 if pipe.send_async(&cmd).is_ok() {
-                    println!("  Calibration sent to PID {}", pid);
+                    println!("  Calibration sent to PID {pid}");
                 } else {
-                    println!("  Failed to send calibration to PID {}", pid);
+                    println!("  Failed to send calibration to PID {pid}");
                 }
             }
             Err(_) => {
-                println!("  Cannot connect to PID {} — is the DLL injected?", pid);
+                println!("  Cannot connect to PID {pid} — is the DLL injected?");
             }
         }
     }
@@ -698,10 +729,14 @@ pub fn run_calibrate_mode() -> Result<()> {
 }
 
 /// Command mode (--cmd <pid> <command>) — send a slash command to an injected client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     use dmft_common::ipc::Command;
 
-    println!("Sending command to PID {}: {}", pid, command);
+    println!("Sending command to PID {pid}: {command}");
 
     let pipe = connect_authenticated_pipe(pid)?;
     // Send the slash command (fire-and-forget — DLL disconnects pipe after read).
@@ -717,6 +752,10 @@ pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 }
 
 /// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> Result<()> {
     info!("Navpath mode: zone={zone} from={from:?} to={to:?}");
     println!("Loading navmesh for zone '{zone}'...");
@@ -750,6 +789,10 @@ pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) 
 }
 
 /// Dump mode (--dump) — one-shot CLI output, the original M1 behavior.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn run_dump_mode() -> Result<()> {
     info!(
         "Frostreaver v{} — EQ Memory Reader (dump mode)",
@@ -824,7 +867,7 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
     let mut lines = Vec::new();
     for (i, chunk) in bytes.chunks(16).enumerate() {
         let offset = i * 16;
-        let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+        let hex: Vec<String> = chunk.iter().map(|b| format!("{b:02x}")).collect();
         let ascii: String = chunk
             .iter()
             .map(|&b| {
@@ -855,7 +898,7 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
     lines.join("\n")
 }
 
-/// Diagnostic hex dump of SpawnManager, the TList, and the first spawn node.
+/// Diagnostic hex dump of `SpawnManager`, the `TList`, and the first spawn node.
 /// Helps debug why the NEXT pointer reads as 0x0 after the first spawn.
 #[allow(unused_variables)]
 fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u64) {
@@ -866,12 +909,9 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     info!("===================================================");
 
     // Step 1: Read SpawnManager pointer
-    let mgr_ptr_addr = match offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base) {
-        Some(addr) => addr,
-        None => {
-            error!("Failed to rebase pinstSpawnManager");
-            return;
-        }
+    let mgr_ptr_addr = if let Some(addr) = offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base) { addr } else {
+        error!("Failed to rebase pinstSpawnManager");
+        return;
     };
     let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
         Ok(addr) => addr,
@@ -1015,7 +1055,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                         .filter(|n| {
                             !n.is_empty() && n.chars().all(|c| c.is_ascii_graphic() || c == ' ')
                         })
-                        .map(|n| format!(" -> name=\"{}\"", n))
+                        .map(|n| format!(" -> name=\"{n}\""))
                         .unwrap_or_default();
                     info!(
                         "  +{:#04x}: {:#018x} <-- VALID PTR{}",
@@ -1048,10 +1088,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                     Ok(bytes) => info!("\n{}", format_hex_dump(alt, &bytes)),
                     Err(e) => error!("  Failed to read: {:#}", e),
                 }
-                match proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) {
-                    Ok(name) => info!("  Name: \"{}\"", name),
-                    Err(_) => info!("  (name unreadable)"),
-                }
+                if let Ok(name) = proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) { info!("  Name: \"{}\"", name) } else { info!("  (name unreadable)") }
             }
             Ok(alt) if alt == first_node => {
                 info!("SpawnManager+0x00 -> same node as PLAYER_LIST ({:#x})", alt);
@@ -1064,10 +1101,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
         match proc.read_ptr(mgr_addr + 0x08) {
             Ok(alt) if alt != 0 => {
                 info!("SpawnManager+0x08 -> {:#x}", alt);
-                match proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) {
-                    Ok(name) => info!("  Name: \"{}\"", name),
-                    Err(_) => info!("  (name unreadable)"),
-                }
+                if let Ok(name) = proc.read_string(alt + dmft_common::offsets::player_base::NAME, 64) { info!("  Name: \"{}\"", name) } else { info!("  (name unreadable)") }
             }
             _ => info!("SpawnManager+0x08 -> NULL or unreadable"),
         }
@@ -1093,7 +1127,7 @@ fn dump_hex_region(
                 let chunk = &bytes[chunk_start..chunk_end];
                 let offset = start_offset + chunk_start;
 
-                let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                let hex: Vec<String> = chunk.iter().map(|b| format!("{b:02x}")).collect();
                 let ascii: String = chunk
                     .iter()
                     .map(|&b| {
@@ -1124,6 +1158,10 @@ fn dump_hex_region(
         ),
     }
 }
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 
 pub fn load_config() -> Result<config::AppConfig> {
     let config_path = Path::new("config/frostreaver.toml");

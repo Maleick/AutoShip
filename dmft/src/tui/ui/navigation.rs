@@ -69,16 +69,14 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 let name = client
                     .local_player
                     .as_ref()
-                    .map(|p| app.redact_name(&p.displayed_name).into_owned())
-                    .unwrap_or_else(|| app.client_command_target(client));
+                    .map_or_else(|| app.client_command_target(client), |p| app.redact_name(&p.displayed_name).into_owned());
 
                 let nav = app.nav_state.nav_statuses.get(&client.pid);
-                let status = nav.map(|s| s.status.label()).unwrap_or("Idle");
-                let dest = nav.map(|s| s.destination.as_str()).unwrap_or("—");
+                let status = nav.map_or("Idle", |s| s.status.label());
+                let dest = nav.map_or("—", |s| s.destination.as_str());
 
                 let status_color = nav
-                    .map(|s| nav_status_color(&s.status, t))
-                    .unwrap_or(t.text_muted);
+                    .map_or(t.text_muted, |s| nav_status_color(&s.status, t));
 
                 let row_style = if is_sel {
                     Style::default()
@@ -240,11 +238,11 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!("  {:<12}", leader_display),
+                    format!("  {leader_display:<12}"),
                     Style::default().fg(t.text_normal),
                 ),
                 Span::styled(
-                    format!("{}nav {}arr {}idl", navigating, arrived, idle),
+                    format!("{navigating}nav {arrived}arr {idle}idl"),
                     Style::default().fg(status_color),
                 ),
             ]));

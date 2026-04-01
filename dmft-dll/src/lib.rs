@@ -1,5 +1,5 @@
 //! DMFT injected DLL payload.
-//! This cdylib is loaded into eqgame.exe via CreateRemoteThread + LoadLibrary.
+//! This cdylib is loaded into eqgame.exe via `CreateRemoteThread` + `LoadLibrary`.
 //! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
 
 // Deeply nested unsafe FFI code with many conditional pointer checks — collapsing
@@ -35,8 +35,8 @@ pub static EQ_BASE: AtomicU64 = AtomicU64::new(0);
 /// Checked by long-running loops (IPC listener, nav ticks) to exit gracefully.
 pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
-/// Guard against double injection. Set to true on first DLL_PROCESS_ATTACH.
-/// If a second copy is loaded (randomized DLL names bypass LoadLibrary dedup),
+/// Guard against double injection. Set to true on first `DLL_PROCESS_ATTACH`.
+/// If a second copy is loaded (randomized DLL names bypass `LoadLibrary` dedup),
 /// the init thread exits immediately.
 #[cfg(windows)]
 static ALREADY_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -62,7 +62,7 @@ mod dll_main {
     }
 
     /// DLL entry point. Called by Windows when the DLL is loaded/unloaded.
-    /// IMPORTANT: DllMain runs under the loader lock — keep work minimal.
+    /// IMPORTANT: `DllMain` runs under the loader lock — keep work minimal.
     /// We use `CreateThread` (not `thread::spawn`) because `std::thread::spawn`
     /// internally calls `CreateThread` *and* may acquire internal locks that
     /// can deadlock under the loader lock.
@@ -176,7 +176,7 @@ fn resolve_eq_base() -> u64 {
         // SAFETY: GetModuleHandleW(None) is always safe to call — it returns the
         // base address of the hosting executable (eqgame.exe). The handle is used
         // only as an integer base address, not as a loadable module reference.
-        unsafe { GetModuleHandleW(None).map(|h| h.0 as u64).unwrap_or(0) }
+        unsafe { GetModuleHandleW(None).map_or(0, |h| h.0 as u64) }
     }
 
     #[cfg(not(windows))]
@@ -243,7 +243,7 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
 fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
     let token_path = std::env::temp_dir()
         .join("dmft")
-        .join(format!("token_{}.bin", pid));
+        .join(format!("token_{pid}.bin"));
 
     if let Ok(data) = std::fs::read(&token_path) {
         // Clean up — token is single-use
@@ -292,7 +292,7 @@ fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
 }
 
-/// Full cleanup — call from the eject command handler, NOT from DLL_PROCESS_DETACH.
+/// Full cleanup — call from the eject command handler, NOT from `DLL_PROCESS_DETACH`.
 /// This runs outside the loader lock so it's safe to do I/O, remove hooks, etc.
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn graceful_shutdown() {

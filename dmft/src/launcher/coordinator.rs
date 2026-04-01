@@ -15,7 +15,7 @@ pub struct LaunchCoordinator {
     launch_queue: VecDeque<(ClientId, AccountInfo)>,
     active_logins: Vec<LoginStateMachine>,
     failure_window: VecDeque<(Instant, ClientId)>,
-    /// Per-client earliest retry time, honoring backoff from LoginAction::Retry.
+    /// Per-client earliest retry time, honoring backoff from `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
     paused: bool,
     last_launch: Option<Instant>,
@@ -42,6 +42,7 @@ pub enum CoordinatorEvent {
 }
 
 impl LaunchCoordinator {
+    #[must_use]
     pub fn new(config: LaunchConfig, retry: RetryConfig, server: ServerConfig) -> Self {
         let next_stagger =
             compute_stagger_between(config.stagger_min_secs, config.stagger_max_secs);
@@ -162,7 +163,7 @@ impl LaunchCoordinator {
         // 7. If all active logins are terminal and queue is empty, emit AllReady
         if self.launch_queue.is_empty()
             && !self.active_logins.is_empty()
-            && self.active_logins.iter().all(|sm| sm.is_terminal())
+            && self.active_logins.iter().all(super::login_sm::LoginStateMachine::is_terminal)
         {
             // Only emit AllReady if all finished successfully (Ready state)
             let all_ready = self
@@ -222,14 +223,17 @@ impl LaunchCoordinator {
         tracing::info!("Launch coordinator resumed");
     }
 
+    #[must_use]
     pub fn is_paused(&self) -> bool {
         self.paused
     }
 
+    #[must_use]
     pub fn pending_count(&self) -> usize {
         self.launch_queue.len()
     }
 
+    #[must_use]
     pub fn active_count(&self) -> usize {
         self.active_logins
             .iter()

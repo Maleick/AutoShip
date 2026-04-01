@@ -10,7 +10,7 @@
 //!
 //! - **Combatant FSM** (`dmft-dll/src/combat/state.rs`, DLL-side): Handles micro-level
 //!   execution per character — class strategy spell rotations, melee skill firing, GCD
-//!   tracking, mana governance, and HolyShit emergency overrides.
+//!   tracking, mana governance, and `HolyShit` emergency overrides.
 //!
 //! Both are needed: the camp loop orchestrates the group, the combatant executes per-character
 //! combat logic. Integration point: `transition_to_fighting()` sends slash commands AND should
@@ -50,7 +50,7 @@ pub struct CampSnapshot {
     pub tank_hp_pct: f32,
     pub target_hp_pct: Option<f32>,
     pub target_is_dead: bool,
-    /// Spawn ID of the tank's current target (for CombatEngage commands).
+    /// Spawn ID of the tank's current target (for `CombatEngage` commands).
     pub target_spawn_id: Option<u32>,
     /// Per-member HP values: `(pid, current_hp)`. Used to detect deaths
     /// and trigger recovery (rez commands). Empty when HP data is unavailable.
@@ -71,7 +71,8 @@ pub enum CampAction {
 }
 
 impl CampAction {
-    /// Helper to convert a vec of slash command strings into CampActions.
+    /// Helper to convert a vec of slash command strings into `CampActions`.
+    #[must_use]
     pub fn from_slash_vec(cmds: Vec<(u32, String)>) -> Vec<(u32, CampAction)> {
         cmds.into_iter()
             .map(|(pid, cmd)| (pid, CampAction::Slash(cmd)))
@@ -79,6 +80,7 @@ impl CampAction {
     }
 
     /// Extract the slash command string, if this is a Slash action.
+    #[must_use]
     pub fn as_slash(&self) -> Option<&str> {
         match self {
             CampAction::Slash(s) => Some(s),
@@ -87,11 +89,13 @@ impl CampAction {
     }
 
     /// Check if this action's slash text contains a substring.
+    #[must_use]
     pub fn contains(&self, needle: &str) -> bool {
         self.as_slash().is_some_and(|s| s.contains(needle))
     }
 
     /// Check if this action's slash text starts with a prefix.
+    #[must_use]
     pub fn starts_with(&self, prefix: &str) -> bool {
         self.as_slash().is_some_and(|s| s.starts_with(prefix))
     }
@@ -142,6 +146,7 @@ pub struct CampMember {
 
 impl CampMember {
     /// Create a new camp member with an auto-generated personality from their name.
+    #[must_use]
     pub fn new(pid: u32, name: String, role: Role) -> Self {
         let personality = PersonalityProfile::generate(&name);
         Self {
@@ -191,6 +196,7 @@ pub struct CampLoop {
 }
 
 impl CampLoop {
+    #[must_use]
     pub fn new(config: CampConfig, members: Vec<CampMember>) -> Self {
         let recovery_members: Vec<(u32, String)> =
             members.iter().map(|m| (m.pid, m.name.clone())).collect();
@@ -345,14 +351,12 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let pull_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map(|h| {
+                    .map_or(f32::from(self.config.pull_mana_pct), |h| {
                         h.personality
-                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
-                    })
-                    .unwrap_or(self.config.pull_mana_pct as f32);
+                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
+                    });
                 let healer_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= pull_threshold)
-                    .unwrap_or(true);
+                    .is_none_or(|s| s.healer_mana_pct >= pull_threshold);
                 if healer_ready {
                     self.transition_to_pulling(&mut commands);
                 }
@@ -428,14 +432,12 @@ impl CampLoop {
                 // Apply healer's personality jitter to the threshold.
                 let med_threshold = self
                     .find_by_role(&Role::Healer)
-                    .map(|h| {
+                    .map_or(f32::from(self.config.pull_mana_pct), |h| {
                         h.personality
-                            .adjust_mana_threshold(self.config.pull_mana_pct as f32)
-                    })
-                    .unwrap_or(self.config.pull_mana_pct as f32);
+                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
+                    });
                 let mana_ready = snapshot
-                    .map(|s| s.healer_mana_pct >= med_threshold)
-                    .unwrap_or(false);
+                    .is_some_and(|s| s.healer_mana_pct >= med_threshold);
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
                 if mana_ready || timer_expired {
                     // Check if any buffs need refreshing before going idle
@@ -542,10 +544,10 @@ impl CampLoop {
         }
 
         // DPS assists tank and attacks
-        let assist_name = if !tank_name.is_empty() {
-            &tank_name
-        } else {
+        let assist_name = if tank_name.is_empty() {
             &puller_name
+        } else {
+            &tank_name
         };
 
         for dps in self.find_all_by_role(&Role::Dps) {
@@ -587,13 +589,13 @@ impl CampLoop {
         // Create a loot cycle from pending corpses.
         // If no corpses recorded, fall back to the last pull target as a single corpse.
         let corpses = if self.pending_corpses.is_empty() {
-            if !self.last_pull_target.is_empty() {
+            if self.last_pull_target.is_empty() {
+                Vec::new()
+            } else {
                 vec![CorpseEntry {
                     spawn_id: 0,
                     mob_name: self.last_pull_target.clone(),
                 }]
-            } else {
-                Vec::new()
             }
         } else {
             self.pending_corpses.drain(..).collect()

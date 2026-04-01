@@ -16,7 +16,7 @@ const GAME_TICK_FRAMES: u64 = FRAMES_PER_SECOND * 6;
 
 /// Adaptive CH interval bounds (seconds).
 /// Complete Heal cast time is ~10 seconds in classic EQ. Chain interval
-/// must be less than cast_time / num_clerics to keep the chain seamless.
+/// must be less than `cast_time` / `num_clerics` to keep the chain seamless.
 const MIN_INTERVAL_SECS: f32 = 1.5;
 const MAX_INTERVAL_SECS: f32 = 8.0;
 
@@ -34,7 +34,7 @@ pub struct ChChain {
     active: bool,
     /// Frame counter for timing (one frame ≈ 50ms at ~20fps).
     frame_count: u64,
-    /// Frames between each CH cast (computed from interval_secs × FRAMES_PER_SECOND).
+    /// Frames between each CH cast (computed from `interval_secs` × `FRAMES_PER_SECOND`).
     frames_per_interval: u64,
     /// The spawn ID of the CH target (usually the main tank).
     target_id: u32,
@@ -51,6 +51,7 @@ pub struct ChChain {
 }
 
 impl ChChain {
+    #[must_use]
     pub fn new(members: Vec<u32>, interval_secs: f32, target_id: u32, spell_slot: u8) -> Self {
         Self {
             members,
@@ -130,10 +131,12 @@ impl ChChain {
         }
     }
 
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.active
     }
 
+    #[must_use]
     pub fn target_id(&self) -> u32 {
         self.target_id
     }
@@ -142,10 +145,12 @@ impl ChChain {
         self.target_id = target_id;
     }
 
+    #[must_use]
     pub fn spell_slot(&self) -> u8 {
         self.spell_slot
     }
 
+    #[must_use]
     pub fn members(&self) -> &[u32] {
         &self.members
     }
@@ -160,6 +165,7 @@ impl ChChain {
         }
     }
 
+    #[must_use]
     pub fn is_adaptive(&self) -> bool {
         self.adaptive
     }
@@ -199,7 +205,7 @@ impl ChChain {
     /// the chain, each cleric casts every `N * interval` seconds, so:
     ///   interval = 100 / (D * N)
     ///
-    /// Clamped to [MIN_INTERVAL_SECS, MAX_INTERVAL_SECS] for safety.
+    /// Clamped to [`MIN_INTERVAL_SECS`, `MAX_INTERVAL_SECS`] for safety.
     fn recalculate_interval(&mut self) {
         if self.damage_samples.is_empty() || self.members.is_empty() {
             return;
@@ -239,6 +245,7 @@ impl ChChain {
     }
 
     /// Get the current effective interval in seconds.
+    #[must_use]
     pub fn interval_secs(&self) -> f32 {
         self.interval_secs
     }

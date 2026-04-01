@@ -20,6 +20,7 @@ pub struct CombatCoordinator {
 }
 
 impl CombatCoordinator {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             assist_target: None,
@@ -36,6 +37,7 @@ impl CombatCoordinator {
         self.main_tank_id = Some(client_id);
     }
 
+    #[must_use]
     pub fn camp_loop(&self) -> &CampLoop {
         &self.camp_loop
     }
@@ -128,7 +130,7 @@ impl CombatCoordinator {
         commands
     }
 
-    /// Detect combat state changes from GameState and convert to CampEvents.
+    /// Detect combat state changes from `GameState` and convert to `CampEvents`.
     fn detect_camp_events(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<CampEvent> {
         let mut events = Vec::new();
 
@@ -247,7 +249,7 @@ impl CombatCoordinator {
 
     /// Whether a CH chain is currently active.
     pub fn ch_chain_active(&self) -> bool {
-        self.ch_chain.as_ref().is_some_and(|c| c.is_active())
+        self.ch_chain.as_ref().is_some_and(super::ch_chain::ChChain::is_active)
     }
 
     /// Add a cleric to the active CH chain.

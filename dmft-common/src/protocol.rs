@@ -11,6 +11,10 @@ pub const MAX_MESSAGE_SIZE: u32 = 65536;
 /// Returns an error if serialization fails. This is preferred over panicking
 /// because inside the injected DLL, a panic unwinds through EQ's stack frames
 /// and causes undefined behavior.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, bincode::error::EncodeError> {
     let payload = bincode::serde::encode_to_vec(msg, bincode::config::standard())?;
     let len = (payload.len() as u32).to_le_bytes();
@@ -24,6 +28,7 @@ pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, bincode::error::EncodeEr
 ///
 /// Returns `Some((message, bytes_consumed))` on success, or `None` if `data`
 /// does not yet contain a complete frame.
+#[must_use]
 pub fn decode<T: DeserializeOwned>(data: &[u8]) -> Option<(T, usize)> {
     if data.len() < 4 {
         return None;

@@ -1,4 +1,4 @@
-//! Navmesh loading pipeline — download from mqmesh.com, parse MQ2Nav binary format,
+//! Navmesh loading pipeline — download from mqmesh.com, parse `MQ2Nav` binary format,
 //! load into Detour for pathfinding.
 
 use anyhow::{Context, Result, bail};
@@ -59,7 +59,7 @@ pub struct ProtoNavMeshTileSet {
 }
 
 /// nav.NavMeshFile — top-level container.
-/// Fields 3-6 (build_settings, convex_volumes, areas, connections) exist in the
+/// Fields 3-6 (`build_settings`, `convex_volumes`, areas, connections) exist in the
 /// proto but are not needed for pathfinding — prost silently skips unknown fields.
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshFile {
@@ -143,7 +143,7 @@ unsafe extern "C" {
 // Safe Detour wrappers
 // ---------------------------------------------------------------------------
 
-/// DT_TILE_FREE_DATA flag — tells Detour to free tile data when removing.
+/// `DT_TILE_FREE_DATA` flag — tells Detour to free tile data when removing.
 const DT_TILE_FREE_DATA: i32 = 0x01;
 
 /// Check if a Detour status indicates success.
@@ -151,7 +151,7 @@ fn dt_success(status: u32) -> bool {
     (status & 0x4000_0000) != 0
 }
 
-/// Owned Detour NavMesh.
+/// Owned Detour `NavMesh`.
 struct DetourNavMesh {
     ptr: *mut recastnavigation_sys::dtNavMesh,
 }
@@ -205,7 +205,7 @@ impl Drop for DetourNavMesh {
     }
 }
 
-/// Owned Detour NavMeshQuery.
+/// Owned Detour `NavMeshQuery`.
 struct DetourNavMeshQuery {
     ptr: *mut recastnavigation_sys::dtNavMeshQuery,
 }
@@ -349,6 +349,10 @@ fn default_query_filter() -> recastnavigation_sys::dtQueryFilter {
 // ---------------------------------------------------------------------------
 
 /// Download a zone's navmesh file from mqmesh.com, caching to disk.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     let cache_path = mesh_cache_path(zone_short_name);
 
@@ -359,8 +363,7 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     }
 
     let url = format!(
-        "https://mqmesh.com/resources/meshes/{}.navmesh",
-        zone_short_name
+        "https://mqmesh.com/resources/meshes/{zone_short_name}.navmesh"
     );
     tracing::info!(zone = zone_short_name, %url, "Downloading navmesh");
 
@@ -388,6 +391,10 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
 
 /// Parse the raw .navmesh file bytes: validate header, decompress if needed,
 /// decode protobuf payload.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     if data.len() < 8 {
         bail!("Navmesh file too small ({} bytes)", data.len());
@@ -396,9 +403,7 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     if magic != NAVMESH_FILE_MAGIC {
         bail!(
-            "Invalid navmesh magic: expected 0x{:08X} ('MSET'), got 0x{:08X}",
-            NAVMESH_FILE_MAGIC,
-            magic
+            "Invalid navmesh magic: expected 0x{NAVMESH_FILE_MAGIC:08X} ('MSET'), got 0x{magic:08X}"
         );
     }
 
@@ -543,6 +548,10 @@ pub struct RoutePlan {
 }
 
 /// Load a parsed navmesh into Detour, returning a query-ready object.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     let tile_set = proto
         .tile_set
@@ -556,8 +565,7 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     let origin = params_proto
         .origin
         .as_ref()
-        .map(|o| [o.x, o.y, o.z])
-        .unwrap_or([0.0; 3]);
+        .map_or([0.0; 3], |o| [o.x, o.y, o.z]);
 
     let params = recastnavigation_sys::dtNavMeshParams {
         orig: origin,
@@ -593,7 +601,7 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
 }
 
 /// Convert EQ coordinates (x, y, z where Z=up) to Detour coordinates (x, z, y where Y=up).
-/// MQ2Nav stores meshes in Detour's native coordinate space: (eq_x, eq_z, eq_y).
+/// `MQ2Nav` stores meshes in Detour's native coordinate space: (`eq_x`, `eq_z`, `eq_y`).
 fn eq_to_detour(eq_x: f32, eq_y: f32, eq_z: f32) -> [f32; 3] {
     [eq_x, eq_z, eq_y]
 }
@@ -778,6 +786,10 @@ fn overlay_from_loaded(loaded: &LoadedNavMesh) -> Result<NavMeshOverlay> {
 /// Find a path between two EQ positions using a loaded navmesh.
 /// Positions are in EQ coordinate space (x=east/west, y=north/south, z=up).
 /// Returns a list of EQ waypoint positions (x, y, z).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn find_path(
     loaded: &LoadedNavMesh,
     from: (f32, f32, f32),
@@ -834,6 +846,10 @@ pub fn find_path(
 }
 
 /// End-to-end convenience: download (or load from cache), parse, and load a zone mesh.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn load_zone(zone_short_name: &str) -> Result<LoadedNavMesh> {
     let data = download_zone_mesh(zone_short_name)?;
     let proto = parse_navmesh(&data)?;

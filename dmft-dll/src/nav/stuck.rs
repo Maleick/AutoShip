@@ -7,7 +7,7 @@
 use crate::hooks::movement::MovementController;
 use dmft_common::nav::Waypoint;
 
-/// How many ticks with < MIN_MOVEMENT unit movement before we consider ourselves stuck.
+/// How many ticks with < `MIN_MOVEMENT` unit movement before we consider ourselves stuck.
 const STUCK_TICK_THRESHOLD: u32 = 40; // ~2 seconds at 20 Hz
 /// Minimum movement per tick to not be considered stuck (game units).
 const MIN_MOVEMENT: f32 = 0.5;
@@ -34,8 +34,8 @@ impl StuckDetector {
         }
     }
 
-    /// Track movement and return `true` if stuck (< MIN_MOVEMENT units/tick
-    /// for STUCK_TICK_THRESHOLD consecutive ticks).
+    /// Track movement and return `true` if stuck (< `MIN_MOVEMENT` units/tick
+    /// for `STUCK_TICK_THRESHOLD` consecutive ticks).
     pub fn check(&mut self, current: &Waypoint) -> bool {
         let moved = current.distance_2d(&self.last_position);
         self.last_position = *current;

@@ -1,7 +1,7 @@
 //! eqmain.dll discovery and pointer resolution.
 //!
 //! eqmain.dll is loaded into the eqgame.exe process and contains the login UI,
-//! CSidlManager, LoginServerAPI, and other pre-game systems.
+//! `CSidlManager`, `LoginServerAPI`, and other pre-game systems.
 
 /// Find eqmain.dll base address in the current process.
 /// Returns 0 if not found (eqmain.dll may not be loaded yet during early startup).
@@ -16,8 +16,7 @@ pub fn find_eqmain() -> u64 {
         // The handle is used only as an integer base address.
         unsafe {
             GetModuleHandleW(w!("eqmain.dll"))
-                .map(|h| h.0 as u64)
-                .unwrap_or(0)
+                .map_or(0, |h| h.0 as u64)
         }
     }
 
@@ -29,7 +28,7 @@ pub fn find_eqmain() -> u64 {
     }
 }
 
-/// Resolve the CSidlManager pointer from eqmain.dll globals.
+/// Resolve the `CSidlManager` pointer from eqmain.dll globals.
 /// Returns None if the pointer is null or eqmain isn't loaded.
 pub fn resolve_sidl_manager(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
@@ -51,7 +50,7 @@ pub fn resolve_sidl_manager(eqmain_base: u64) -> Option<usize> {
     }
 }
 
-/// Resolve the LoginServerAPI pointer from eqmain.dll globals.
+/// Resolve the `LoginServerAPI` pointer from eqmain.dll globals.
 pub fn resolve_login_server_api(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
     {
@@ -71,8 +70,8 @@ pub fn resolve_login_server_api(eqmain_base: u64) -> Option<usize> {
     }
 }
 
-/// Resolve the LoginClient pointer from eqmain.dll globals.
-/// LoginClient contains pLoginData (EQLogin*) which has the username/password char arrays.
+/// Resolve the `LoginClient` pointer from eqmain.dll globals.
+/// `LoginClient` contains pLoginData (`EQLogin`*) which has the username/password char arrays.
 pub fn resolve_login_client(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
     {
@@ -91,8 +90,8 @@ pub fn resolve_login_client(eqmain_base: u64) -> Option<usize> {
     }
 }
 
-/// Resolve the EQLogin struct pointer from LoginClient→pLoginData.
-/// Returns the address of the EQLogin struct which has Login/PW char arrays.
+/// Resolve the `EQLogin` struct pointer from LoginClient→pLoginData.
+/// Returns the address of the `EQLogin` struct which has Login/PW char arrays.
 pub fn resolve_eqlogin(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
     {
@@ -118,7 +117,7 @@ pub fn resolve_eqlogin(eqmain_base: u64) -> Option<usize> {
     }
 }
 
-/// Resolve the EQ window handle (HWND) from EQLogin::hEQWnd.
+/// Resolve the EQ window handle (HWND) from `EQLogin::hEQWnd`.
 pub fn resolve_eq_hwnd(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
     {
@@ -138,7 +137,7 @@ pub fn resolve_eq_hwnd(eqmain_base: u64) -> Option<usize> {
     }
 }
 
-/// Resolve the CXWndManager pointer from eqmain.dll globals.
+/// Resolve the `CXWndManager` pointer from eqmain.dll globals.
 pub fn resolve_cxwnd_manager(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
     {

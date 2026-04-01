@@ -12,6 +12,10 @@ pub struct WindowHandle {
 
 /// Find all windows matching a title substring (case-insensitive).
 /// Returns (HWND, title, PID) tuples.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
     use std::sync::Mutex;
@@ -19,9 +23,6 @@ pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowTextW, GetWindowThreadProcessId,
     };
-
-    let substring_lower = substring.to_lowercase();
-    let results: Mutex<Vec<WindowHandle>> = Mutex::new(Vec::new());
 
     unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         unsafe {
@@ -45,6 +46,8 @@ pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
         }
     }
 
+    let substring_lower = substring.to_lowercase();
+    let results: Mutex<Vec<WindowHandle>> = Mutex::new(Vec::new());
     let data = (substring_lower, &results as *const _);
     unsafe { EnumWindows(Some(enum_callback), LPARAM(&data as *const _ as isize)) }.ok();
 

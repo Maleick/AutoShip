@@ -36,6 +36,7 @@ pub struct NearbySpawn {
 /// 1. Mobs matching `pull_mob_names` from camp config (if configured)
 /// 2. Mobs on the HVT (high-value target) watchlist
 /// 3. Closest NPC to the pull point
+#[must_use]
 pub fn select_pull_target(
     nearby_spawns: &[NearbySpawn],
     camp_config: &CampConfig,
@@ -104,6 +105,7 @@ pub fn select_pull_target(
 /// Extended pull target selection that checks the named tracker first.
 /// If a named mob from the database is alive and in range, it takes priority
 /// over all other targets.
+#[must_use]
 pub fn select_pull_target_with_named(
     nearby_spawns: &[NearbySpawn],
     camp_config: &CampConfig,

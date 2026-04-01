@@ -40,6 +40,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const RETRY_DELAY: Duration = Duration::from_secs(5);
 
 impl LoginStateMachine {
+    #[must_use]
     pub fn new(client_id: ClientId, account_info: AccountInfo) -> Self {
         Self {
             client_id,
@@ -111,7 +112,6 @@ impl LoginStateMachine {
                 self.transition_to(phase.clone());
                 match phase {
                     LoginPhase::InWorld => LoginAction::BeginPostLogin,
-                    LoginPhase::Ready => LoginAction::None,
                     LoginPhase::Failed { reason } => LoginAction::Abort { reason },
                     _ => LoginAction::None,
                 }
@@ -148,6 +148,7 @@ impl LoginStateMachine {
         }
     }
 
+    #[must_use]
     pub fn is_terminal(&self) -> bool {
         matches!(self.phase, LoginPhase::Ready | LoginPhase::Failed { .. })
     }
@@ -173,15 +174,9 @@ impl LoginStateMachine {
             }
 
             // Fatal errors — abort immediately
-            LoginError::WrongPassword | LoginError::AccountLocked => {
-                self.transition_to(LoginPhase::Failed {
-                    reason: error.clone(),
-                });
-                LoginAction::Abort { reason: error }
-            }
-
-            // Character mismatch — abort
-            LoginError::CharacterNotFound { .. } => {
+            LoginError::WrongPassword
+            | LoginError::AccountLocked
+            | LoginError::CharacterNotFound { .. } => {
                 self.transition_to(LoginPhase::Failed {
                     reason: error.clone(),
                 });

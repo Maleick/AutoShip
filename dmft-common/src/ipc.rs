@@ -63,7 +63,7 @@ pub enum Command {
     /// Used to validate offsets on the live client before attempting auto-login.
     CalibrateLogin,
     /// Start the automated login sequence. The DLL handles all UI steps
-    /// autonomously and reports progress via LoginPhaseUpdate responses.
+    /// autonomously and reports progress via `LoginPhaseUpdate` responses.
     /// Password is zeroized in DLL memory immediately after use.
     StartLogin {
         /// Account name for login.
@@ -133,13 +133,13 @@ pub enum Command {
         action: crate::soul::SoulAction,
     },
     /// Execute a slash command as if typed in the chat window.
-    /// Uses EQ's InterpretCmd internally (e.g. "/target Camrene", "/follow").
+    /// Uses EQ's `InterpretCmd` internally (e.g. "/target Camrene", "/follow").
     SlashCommand {
         /// Full slash command string (e.g. "/target Mob").
         command: String,
     },
     // Zone graph
-    /// Request the zone adjacency graph from ZoneGuideManagerClient.
+    /// Request the zone adjacency graph from `ZoneGuideManagerClient`.
     QueryZoneGraph,
     // System
     /// Heartbeat ping — expects a Pong response.
@@ -205,7 +205,7 @@ pub enum Response {
         message: String,
     },
     /// Navigation status push notification from the DLL's nav state machine.
-    /// Note: NavStatus is also available in `GameState.nav_status` (shared memory).
+    /// Note: `NavStatus` is also available in `GameState.nav_status` (shared memory).
     /// `GameState.nav_status` is authoritative — it is updated every tick.
     /// `NavUpdate` is sent only on state transitions (Idle→Moving, Moving→Arrived, etc.)
     /// for low-latency notification without polling shared memory.
@@ -228,17 +228,17 @@ pub enum Response {
         /// Current combat FSM state.
         status: crate::combat::CombatStatus,
     },
-    /// Zone adjacency graph from ZoneGuideManagerClient.
-    /// Simplified wire format: Vec of (zone_id, name, min_level, max_level, connections).
-    /// Each connection is (dest_zone_id, transfer_type, disabled).
+    /// Zone adjacency graph from `ZoneGuideManagerClient`.
+    /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).
+    /// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
     ZoneGraph {
         /// List of zone entries with connectivity data.
         zones: Vec<ZoneGraphEntry>,
     },
 }
 
-/// Wire-format for a single zone entry: (zone_id, name, min_level, max_level, connections).
-/// Each connection is (dest_zone_id, transfer_type, disabled).
+/// Wire-format for a single zone entry: (`zone_id`, name, `min_level`, `max_level`, connections).
+/// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
 pub type ZoneGraphEntry = (u16, String, i32, i32, Vec<(u16, u8, bool)>);
 
 /// Random session token generated at injection time for IPC authentication.
@@ -258,11 +258,13 @@ pub const SHARED_MEMORY_NAME_PREFIX: &str = "dmft_state_";
 /// Derive a deterministic `u64` session ID from a 32-byte session token.
 /// Uses the first 8 bytes interpreted as little-endian. Both the DLL and
 /// orchestrator call this on the same token to produce matching IPC names.
+#[must_use]
 pub fn session_id_from_token(token: &SessionToken) -> u64 {
     u64::from_le_bytes(token[..8].try_into().unwrap())
 }
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
+#[must_use]
 pub fn generate_random_token() -> SessionToken {
     use rand::RngCore;
     let mut token = [0u8; 32];
@@ -272,26 +274,31 @@ pub fn generate_random_token() -> SessionToken {
 
 /// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
 /// Must be called BEFORE injection.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
 pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
     let token_dir = std::env::temp_dir().join("dmft");
     std::fs::create_dir_all(&token_dir)?;
-    let token_path = token_dir.join(format!("token_{}.bin", pid));
+    let token_path = token_dir.join(format!("token_{pid}.bin"));
 
     let token = generate_random_token();
 
     std::fs::write(&token_path, token)?;
     // Also persist a copy for later CLI commands that reconnect to the injected client.
-    let login_token_path = token_dir.join(format!("login_token_{}.bin", pid));
+    let login_token_path = token_dir.join(format!("login_token_{pid}.bin"));
     std::fs::write(&login_token_path, token)?;
 
     Ok(())
 }
 
 /// Read the session token for authenticating with an already-injected DLL.
+#[must_use]
 pub fn load_session_token(pid: u32) -> Option<SessionToken> {
     let token_path = std::env::temp_dir()
         .join("dmft")
-        .join(format!("login_token_{}.bin", pid));
+        .join(format!("login_token_{pid}.bin"));
 
     if let Ok(data) = std::fs::read(&token_path)
         && data.len() == 32
@@ -305,14 +312,16 @@ pub fn load_session_token(pid: u32) -> Option<SessionToken> {
 
 /// Build a per-client pipe name incorporating a random session ID.
 /// Format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
+#[must_use]
 pub fn pipe_name(session_id: u64, client_id: u32) -> String {
-    format!(r"\\.\pipe\{:x}_cmd_{}", session_id, client_id)
+    format!(r"\\.\pipe\{session_id:x}_cmd_{client_id}")
 }
 
 /// Build a per-client shared memory name incorporating a random session ID.
 /// Format: `{session_id:x}_state_{client_id}`
+#[must_use]
 pub fn shared_memory_name(session_id: u64, client_id: u32) -> String {
-    format!("{:x}_state_{}", session_id, client_id)
+    format!("{session_id:x}_state_{client_id}")
 }
 
 #[cfg(test)]
