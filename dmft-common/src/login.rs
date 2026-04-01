@@ -179,4 +179,79 @@ mod tests {
         assert_eq!(restored.account_name, info.account_name);
         assert_eq!(restored.level, info.level);
     }
+
+    #[test]
+    fn login_error_equality() {
+        assert_eq!(LoginError::WrongPassword, LoginError::WrongPassword);
+        assert_eq!(LoginError::ServerDown, LoginError::ServerDown);
+        assert_ne!(LoginError::WrongPassword, LoginError::AccountLocked);
+        assert_ne!(LoginError::ServerDown, LoginError::ServerFull);
+    }
+
+    #[test]
+    fn login_error_serialization_roundtrip() {
+        let errors = vec![
+            LoginError::WrongPassword,
+            LoginError::AccountLocked,
+            LoginError::ServerDown,
+            LoginError::ServerFull,
+            LoginError::MassFailure,
+            LoginError::CharacterNotFound {
+                expected: "A".into(),
+                found: "B".into(),
+            },
+            LoginError::Timeout {
+                phase: "test".into(),
+            },
+        ];
+        for error in &errors {
+            let json = serde_json::to_string(error).expect("serialize");
+            let restored: LoginError = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(*error, restored);
+        }
+    }
+
+    #[test]
+    fn login_phase_failed_with_different_errors_not_equal() {
+        let p1 = LoginPhase::Failed {
+            reason: LoginError::WrongPassword,
+        };
+        let p2 = LoginPhase::Failed {
+            reason: LoginError::AccountLocked,
+        };
+        assert_ne!(p1, p2);
+    }
+
+    #[test]
+    fn login_phase_debug_format() {
+        let phase = LoginPhase::AtLoginScreen;
+        let debug = format!("{:?}", phase);
+        assert!(debug.contains("AtLoginScreen"));
+    }
+
+    #[test]
+    fn login_error_debug_format() {
+        let err = LoginError::CharacterNotFound {
+            expected: "Foo".into(),
+            found: "Bar".into(),
+        };
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("Foo"));
+        assert!(debug.contains("Bar"));
+    }
+
+    #[test]
+    fn account_info_clone() {
+        let info = AccountInfo {
+            account_name: "user".into(),
+            character_name: "Char".into(),
+            class_name: "Warrior".into(),
+            level: 50,
+            group_id: 1,
+            server_name: "FV".into(),
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned.account_name, info.account_name);
+        assert_eq!(cloned.group_id, info.group_id);
+    }
 }

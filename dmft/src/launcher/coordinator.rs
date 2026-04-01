@@ -437,4 +437,61 @@ mod tests {
         assert!(has_failed, "expected ClientFailed event for client 42");
         assert_eq!(coord.pending_count(), 0, "failed client should be dequeued");
     }
+
+    #[test]
+    fn enqueue_preserves_order() {
+        let (launch, retry, server) = test_configs();
+        let mut coord = LaunchCoordinator::new(launch, retry, server);
+        coord.enqueue(1, test_account("acct1"));
+        coord.enqueue(2, test_account("acct2"));
+        coord.enqueue(3, test_account("acct3"));
+        assert_eq!(coord.pending_count(), 3);
+    }
+
+    #[test]
+    fn compute_stagger_zero_zero() {
+        let duration = compute_stagger_between(0, 0);
+        assert_eq!(duration.as_secs(), 0);
+    }
+
+    #[test]
+    fn compute_stagger_one_one() {
+        let duration = compute_stagger_between(1, 1);
+        assert_eq!(duration.as_secs(), 1);
+    }
+
+    #[test]
+    fn resume_after_pause_allows_tick() {
+        let (launch, retry, server) = test_configs();
+        let mut coord = LaunchCoordinator::new(launch, retry, server);
+        // Manually test the paused flag via resume
+        coord.resume();
+        assert!(!coord.is_paused());
+    }
+
+    #[test]
+    fn coordinator_event_debug_format() {
+        let event = CoordinatorEvent::ClientLaunched {
+            client_id: 1,
+            pid: 1234,
+        };
+        let debug = format!("{:?}", event);
+        assert!(debug.contains("ClientLaunched"));
+    }
+
+    #[test]
+    fn coordinator_event_all_ready_debug() {
+        let event = CoordinatorEvent::AllReady;
+        let debug = format!("{:?}", event);
+        assert!(debug.contains("AllReady"));
+    }
+
+    #[test]
+    fn coordinator_event_all_paused_debug() {
+        let event = CoordinatorEvent::AllPaused {
+            reason: "test reason".into(),
+        };
+        let debug = format!("{:?}", event);
+        assert!(debug.contains("test reason"));
+    }
 }

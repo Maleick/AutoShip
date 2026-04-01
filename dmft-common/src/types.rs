@@ -234,4 +234,86 @@ mod tests {
         assert_eq!(spawn.endurance_current, -50);
         assert_eq!(spawn.endurance_max, 100);
     }
+
+    #[test]
+    fn hp_pct_over_100_when_buffed() {
+        // Some EQ buffs can push HP above max
+        let spawn = make_spawn(1200, 1000, 0, 0);
+        assert!(spawn.hp_pct() > 100.0);
+    }
+
+    #[test]
+    fn mana_pct_over_100_when_buffed() {
+        let spawn = make_spawn(100, 100, 1500, 1000);
+        assert!(spawn.mana_pct() > 100.0);
+    }
+
+    #[test]
+    fn hp_pct_negative_hp_current() {
+        let spawn = make_spawn(-100, 1000, 0, 0);
+        assert!(spawn.hp_pct() < 0.0);
+    }
+
+    #[test]
+    fn spawn_data_equality() {
+        let a = make_spawn(100, 200, 50, 100);
+        let b = make_spawn(100, 200, 50, 100);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn spawn_data_clone() {
+        let original = make_spawn(500, 1000, 200, 400);
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
+    }
+
+    #[test]
+    fn hook_status_equality() {
+        assert_eq!(HookStatus::NotInjected, HookStatus::NotInjected);
+        assert_ne!(HookStatus::NotInjected, HookStatus::Injected);
+        assert_ne!(
+            HookStatus::Error("a".into()),
+            HookStatus::Error("b".into())
+        );
+    }
+
+    #[test]
+    fn game_state_with_spawns() {
+        let gs = GameState {
+            client_id: 1,
+            local_player: None,
+            target: None,
+            nearby_spawns: vec![
+                make_spawn(100, 100, 0, 0),
+                make_spawn(200, 200, 0, 0),
+            ],
+            timestamp_ms: 0,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: String::new(),
+            zone_long_name: String::new(),
+        };
+        assert_eq!(gs.nearby_spawns.len(), 2);
+        assert_eq!(gs.nearby_spawns[0].hp_current, 100);
+    }
+
+    #[test]
+    fn spawn_data_heading_preserved() {
+        let spawn = SpawnData {
+            heading: 256.0,
+            ..SpawnData::default()
+        };
+        assert!((spawn.heading - 256.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn spawn_data_displayed_name_differs_from_name() {
+        let spawn = SpawnData {
+            name: "a_moss_snake".into(),
+            displayed_name: "a moss snake".into(),
+            ..SpawnData::default()
+        };
+        assert_ne!(spawn.name, spawn.displayed_name);
+    }
 }
