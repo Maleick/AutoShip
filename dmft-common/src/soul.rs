@@ -547,8 +547,6 @@ mod tests {
         };
         let json = serde_json::to_string(&style).expect("serialize");
         let restored: SpeechStyle = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(restored.catchphrases.len(), 2);
-        assert_eq!(restored.adopted_slang.len(), 1);
-        assert!((restored.vocabulary_level - 0.3).abs() < f32::EPSILON);
+        assert_eq!(restored, style);
     }
 }
