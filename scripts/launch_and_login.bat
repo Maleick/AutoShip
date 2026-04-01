@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo  Frostreaver - Auto-Login Full Chain
+echo  DMFT - Auto-Login Full Chain
 echo ============================================
 echo.
 

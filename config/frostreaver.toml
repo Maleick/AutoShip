@@ -1,4 +1,4 @@
-# Frostreaver Configuration
+# DMFT Configuration
 # EQ process name to attach to
 process_name = "eqgame.exe"
 
@@ -58,7 +58,7 @@ max_spawns = 2048
 
 # ─── Group Definitions ───
 # Machine-to-group mapping is flexible — assign groups to machines at deploy time.
-# These are the 6 groups for the 36-box Frostreaver setup.
+# These are the 6 groups for the 36-box DMFT setup.
 
 [[group]]
 id = 1

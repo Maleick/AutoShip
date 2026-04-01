@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 echo ============================================
-echo  Frostreaver - Group 1 Launch (6 clients)
+echo  DMFT - Group 1 Launch (6 clients)
 echo  Per-PID injection + login targeting
 echo ============================================
 echo.

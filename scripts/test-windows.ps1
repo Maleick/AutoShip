@@ -1,5 +1,5 @@
 # =============================================================================
-# Frostreaver (DMFT) — Windows Test Runner
+# DMFT — Windows Test Runner
 # =============================================================================
 # Runs automated tests and reports results. Run from the repo root.
 #
@@ -54,7 +54,7 @@ function Test-Skip {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " Frostreaver — Windows Test Suite" -ForegroundColor Cyan
+Write-Host " DMFT — Windows Test Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Host " Host: $env:COMPUTERNAME"

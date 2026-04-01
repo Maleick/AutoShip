@@ -85,7 +85,7 @@ impl AccountsConfig {
     }
 }
 
-/// Top-level application configuration loaded from frostreaver.toml.
+/// Top-level application configuration loaded from the TOML config file.
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     /// Name of the EQ process to attach to (default: "eqgame.exe")

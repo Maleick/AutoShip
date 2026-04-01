@@ -1,4 +1,4 @@
-//! Theme system for the Frostreaver TUI.
+//! Theme system for the DMFT TUI.
 //!
 //! A `Theme` carries every semantic color and style used by the renderer.
 //! All `draw_*` functions read colors from `app.theme` instead of using

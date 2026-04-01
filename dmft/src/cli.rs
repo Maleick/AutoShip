@@ -788,7 +788,7 @@ pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) 
 /// Returns an error if the operation fails.
 pub fn run_dump_mode() -> Result<()> {
     info!(
-        "Frostreaver v{} — EQ Memory Reader (dump mode)",
+        "DMFT v{} — EQ Memory Reader (dump mode)",
         env!("CARGO_PKG_VERSION")
     );
 
