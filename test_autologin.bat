@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo  Frostreaver - Auto-Login Calibration Test
+echo  DMFT - Auto-Login Calibration Test
 echo ============================================
 echo.
 echo Step 1: Launching EQ (frostreaver01)...

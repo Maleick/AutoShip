@@ -1,4 +1,4 @@
-FROSTREAVER TUI TARGET
+DMFT TUI TARGET
 ======================
 
 This mockup reflects the composite 3-screen model:

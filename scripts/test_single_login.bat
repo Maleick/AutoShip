@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 echo ============================================
-echo  Frostreaver - Single Client Test
+echo  DMFT - Single Client Test
 echo ============================================
 echo.
 

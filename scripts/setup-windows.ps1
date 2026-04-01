@@ -1,5 +1,5 @@
 # =============================================================================
-# Frostreaver (DMFT) — Windows Setup Script
+# DMFT — Windows Setup Script
 # =============================================================================
 # Installs Rust toolchain, VS Build Tools, clones repo, and builds all crates.
 #
@@ -17,7 +17,7 @@ $RepoUrl = "https://github.com/Maleick/DMFT.git"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " Frostreaver (DMFT) — Windows Setup" -ForegroundColor Cyan
+Write-Host " DMFT — Windows Setup" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

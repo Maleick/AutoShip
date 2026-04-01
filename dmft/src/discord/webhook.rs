@@ -114,7 +114,7 @@ impl WebhookSender {
                     "description": alert.message,
                     "color": alert.level.color(),
                     "footer": {
-                        "text": "Frostreaver"
+                        "text": "DMFT"
                     },
                     "timestamp": chrono_now_iso()
                 }]

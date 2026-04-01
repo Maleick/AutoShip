@@ -1,4 +1,4 @@
-//! Shared types and utilities for the Frostreaver (DMFT) workspace.
+//! Shared types and utilities for the DMFT workspace.
 //!
 //! This crate contains domain types, IPC protocol definitions, EQ memory offsets,
 //! and common structures used by both the external orchestrator (`dmft`) and the

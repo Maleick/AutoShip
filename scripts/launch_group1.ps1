@@ -1,4 +1,4 @@
-## Frostreaver - Group 1 Launch (6 clients) with per-PID targeting
+## DMFT - Group 1 Launch (6 clients) with per-PID targeting
 ## Requires Console session with GPU (not RDP)
 
 $EqPath = "C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest"
@@ -18,7 +18,7 @@ $Accounts = @(
 )
 
 Write-Host "============================================"
-Write-Host " Frostreaver - Group 1 Launch (6 clients)"
+Write-Host " DMFT - Group 1 Launch (6 clients)"
 Write-Host "============================================"
 Write-Host ""
 

@@ -133,7 +133,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     spans.extend(tabs);
 
     frame.render_widget(
-        Paragraph::new(Line::from(spans)).block(widgets::panel(" Frostreaver ", t.border_dim, t)),
+        Paragraph::new(Line::from(spans)).block(widgets::panel(" DMFT ", t.border_dim, t)),
         area,
     );
 }
