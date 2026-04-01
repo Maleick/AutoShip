@@ -15,10 +15,13 @@ use std::path::{Path, PathBuf};
 /// nav.vector3
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoVector3 {
+    /// X component.
     #[prost(float, tag = "1")]
     pub x: f32,
+    /// Y component.
     #[prost(float, tag = "2")]
     pub y: f32,
+    /// Z component.
     #[prost(float, tag = "3")]
     pub z: f32,
 }
@@ -26,14 +29,19 @@ pub struct ProtoVector3 {
 /// nav.dtNavMeshParams
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoDtNavMeshParams {
+    /// Mesh origin point.
     #[prost(message, optional, tag = "1")]
     pub origin: Option<ProtoVector3>,
+    /// Width of each tile in world units.
     #[prost(float, tag = "2")]
     pub tile_width: f32,
+    /// Height of each tile in world units.
     #[prost(float, tag = "3")]
     pub tile_height: f32,
+    /// Maximum number of tiles.
     #[prost(int32, tag = "4")]
     pub max_tiles: i32,
+    /// Maximum number of polygons per tile.
     #[prost(int32, tag = "5")]
     pub max_polys: i32,
 }
@@ -41,8 +49,10 @@ pub struct ProtoDtNavMeshParams {
 /// nav.NavMeshTile
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshTile {
+    /// Tile reference ID within the navmesh.
     #[prost(uint64, tag = "1")]
     pub tile_ref: u64,
+    /// Raw Detour tile data bytes.
     #[prost(bytes = "vec", tag = "2")]
     pub tile_data: Vec<u8>,
 }
@@ -50,10 +60,13 @@ pub struct ProtoNavMeshTile {
 /// nav.NavMeshTileSet
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshTileSet {
+    /// Version number for format compatibility.
     #[prost(int32, tag = "1")]
     pub compatibility_version: i32,
+    /// Parameters defining the navmesh grid.
     #[prost(message, optional, tag = "2")]
     pub mesh_params: Option<ProtoDtNavMeshParams>,
+    /// Individual mesh tiles.
     #[prost(message, repeated, tag = "3")]
     pub tiles: Vec<ProtoNavMeshTile>,
 }
@@ -63,8 +76,10 @@ pub struct ProtoNavMeshTileSet {
 /// proto but are not needed for pathfinding — prost silently skips unknown fields.
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshFile {
+    /// EQ zone short name (e.g., "gfaydark").
     #[prost(string, tag = "1")]
     pub zone_short_name: String,
+    /// The navigation mesh tile set.
     #[prost(message, optional, tag = "2")]
     pub tile_set: Option<ProtoNavMeshTileSet>,
 }
@@ -453,16 +468,23 @@ pub struct LoadedNavMesh {
     query: DetourNavMeshQuery,
 }
 
+/// How the route waypoints were generated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteSource {
+    /// Route computed via Detour navmesh pathfinding.
     NavMesh,
+    /// Straight line from A to B (navmesh unavailable).
     StraightLineFallback,
 }
 
+/// A planned navigation route with waypoints and metadata.
 #[derive(Debug, Clone)]
 pub struct RoutePlan {
+    /// Ordered waypoints from start to destination.
     pub waypoints: Vec<Waypoint>,
+    /// How the route was generated.
     pub source: RouteSource,
+    /// Whether the zone mesh was loaded from cache.
     pub mesh_cached: bool,
 }
 

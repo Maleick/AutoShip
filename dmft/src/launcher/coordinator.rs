@@ -8,6 +8,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+/// Coordinates staggered launching and login of multiple EQ clients.
 pub struct LaunchCoordinator {
     config: LaunchConfig,
     retry_config: RetryConfig,
@@ -23,25 +24,38 @@ pub struct LaunchCoordinator {
 }
 
 #[derive(Debug)]
+/// Events emitted by the launch coordinator.
 pub enum CoordinatorEvent {
+    /// A client process was spawned.
     ClientLaunched {
+        /// Client identifier.
         client_id: ClientId,
+        /// OS process ID.
         pid: u32,
     },
+    /// A client completed login and is in-world.
     ClientReady {
+        /// Client identifier.
         client_id: ClientId,
     },
+    /// A client login failed.
     ClientFailed {
+        /// Client identifier.
         client_id: ClientId,
+        /// The login error.
         error: LoginError,
     },
+    /// All launches paused due to mass failure.
     AllPaused {
+        /// Reason for the pause.
         reason: String,
     },
+    /// All queued clients are ready.
     AllReady,
 }
 
 impl LaunchCoordinator {
+    /// Creates a new coordinator with the given config.
     #[must_use]
     pub fn new(config: LaunchConfig, retry: RetryConfig, server: ServerConfig) -> Self {
         let next_stagger =
@@ -60,10 +74,12 @@ impl LaunchCoordinator {
         }
     }
 
+    /// Adds a client to the launch queue.
     pub fn enqueue(&mut self, client_id: ClientId, account: AccountInfo) {
         self.launch_queue.push_back((client_id, account));
     }
 
+    /// Advances all active logins and launches queued clients. Returns events.
     pub fn tick(&mut self) -> Vec<CoordinatorEvent> {
         let mut events = Vec::new();
 
