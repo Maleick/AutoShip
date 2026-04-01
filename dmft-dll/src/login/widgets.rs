@@ -805,8 +805,9 @@ pub fn dismiss_splash(eqmain_base: u64) {
 /// `Some(LoginError::WrongPassword)` if any OK dialog is visible (always the same
 /// variant until text parsing is implemented). `None` if no dialog is visible.
 ///
-// TODO(M2.5): Read CStmlWnd text content once CXStr layout is validated, and return
-// the correct LoginError variant based on dialog message content.
+// NOTE: Dialog text parsing (CStmlWnd → CXStr) is not yet implemented. All error
+// dialogs are treated as WrongPassword. Refining this requires validating the CXStr
+// struct layout on a live client, then pattern-matching the message text.
 pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
     #[cfg(windows)]
     {
@@ -814,9 +815,8 @@ pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
             return None;
         }
 
-        // Read the dialog text to determine error type.
-        // TODO(M2.5): Read CStmlWnd text content once CXStr layout is validated.
-        // For now, dismiss the dialog and report a generic error.
+        // Dismiss the dialog and report a generic error. Refining error
+        // classification requires CStmlWnd text parsing (CXStr layout unvalidated).
         click_button(eqmain_base, OK_DIALOG);
         tracing::warn!("Error dialog detected and dismissed");
 
@@ -867,10 +867,10 @@ pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
 /// - `LoginFsm::tick_selecting_server()` in `mod.rs` uses the "PLAY EVERQUEST!"
 ///   button click as a workaround.
 ///
-// TODO(M2.5): Implement server-list iteration and JoinServer call. This was deferred
-// from the M2.5 login milestone because the "PLAY EVERQUEST!" button workaround is
-// sufficient for single-server setups. Named server selection is needed for multi-server
-// TLP configurations.
+// STUB: Server-list iteration and JoinServer call not yet implemented. The "PLAY
+// EVERQUEST!" button workaround is sufficient for single-server setups. Named server
+// selection (needed for multi-server TLP configs) requires iterating LoginClient::ServerList
+// at offset 0x178 and calling LoginServerAPI::JoinServer with the resolved ServerID.
 pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -889,11 +889,9 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
             return false;
         };
 
-        // TODO(M2.5): Find server ID by iterating LoginClient::ServerList at offset 0x178.
-        // The ServerList is a DoublyLinkedList<EQClientServerData*>.
-        // EQClientServerData has ServerName (CXStr) at offset 0x08 and ID (ServerID) at 0x00.
-        // For now, log what we have and return false — need calibration dump to discover
-        // the actual server ID for the target TLP.
+        // Server ID lookup requires iterating LoginClient::ServerList (DoublyLinkedList
+        // <EQClientServerData*> at offset 0x178). EQClientServerData layout: ServerID at
+        // 0x00, ServerName (CXStr) at 0x08. Needs calibration dump on live client.
         tracing::info!(
             server = server_name,
             login_api = format!("{:#x}", login_api),
@@ -902,7 +900,7 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
              Use CalibrateLogin to dump server list."
         );
 
-        // TODO(M2.5): Once we know the server ID, call:
+        // When server ID is known, the call will be:
         // type JoinServerFn = unsafe extern "C" fn(*mut u8, i32, *mut u8, i32) -> u32;
         // let func: JoinServerFn = std::mem::transmute(join_server_addr);
         // func(login_api as *mut u8, server_id, std::ptr::null_mut(), 10);
@@ -954,10 +952,10 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
 ///   alternative that bypasses this function entirely.
 /// - `crate::hooks::game_loop::queue_enter_world()` is the mechanism used by the FSM.
 ///
-// TODO(M2.5): Implement CListWnd item iteration and direct SelectCharacter/EnterWorld
-// calls. This was deferred from M2.5 because the game-loop-based workaround
-// (`queue_enter_world`) handles character selection reliably. Direct calls would be
-// cleaner and avoid the game-loop dependency.
+// STUB: Direct CListWnd item iteration and SelectCharacter/EnterWorld calls not yet
+// implemented. The game-loop-based workaround (`queue_enter_world`) handles character
+// selection reliably. Direct calls would be cleaner but require reading CListWnd items
+// via GetItemText vtable call, which has not been reverse-engineered.
 pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -976,9 +974,8 @@ pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) ->
             return false;
         };
 
-        // TODO(M2.5): Find character index in Character_List CListWnd by name,
-        // then call SelectCharacter(index) followed by EnterWorld().
-        // Requires reading CListWnd items to match character_name.
+        // Character index lookup requires CListWnd item iteration (GetItemText vtable).
+        // Once implemented: call SelectCharacter(index) then EnterWorld().
         let _ = (eqmain_base, select_addr, enter_world_addr, character_name);
         tracing::info!(
             character = character_name,
