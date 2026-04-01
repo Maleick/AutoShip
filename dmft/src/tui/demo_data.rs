@@ -179,8 +179,8 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
                     60,
                     0,
                     SpawnType::Npc,
-                    250000,
-                    320000,
+                    250_000,
+                    320_000,
                     StandState::Standing,
                 ),
                 (
@@ -292,8 +292,8 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
                     60,
                     0,
                     SpawnType::Npc,
-                    200000,
-                    280000,
+                    200_000,
+                    280_000,
                     StandState::Standing,
                 ),
                 (
@@ -369,8 +369,8 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
                     60,
                     0,
                     SpawnType::Npc,
-                    180000,
-                    220000,
+                    180_000,
+                    220_000,
                     StandState::Standing,
                 ),
                 (

@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Knuth multiplicative hash constant for deterministic per-client randomness.
-pub const KNUTH_HASH: u32 = 2654435761;
+pub const KNUTH_HASH: u32 = 2_654_435_761;
 
 /// Simple xorshift32 PRNG for deterministic per-client randomness.
 pub struct Xorshift32 {

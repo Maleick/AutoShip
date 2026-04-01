@@ -41,7 +41,7 @@ impl CommandListener {
             use windows::Win32::System::Pipes::{PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT};
             use windows::core::PCSTR;
             const PIPE_ACCESS_DUPLEX: FILE_FLAGS_AND_ATTRIBUTES =
-                FILE_FLAGS_AND_ATTRIBUTES(0x00000003);
+                FILE_FLAGS_AND_ATTRIBUTES(0x0000_0003);
 
             let session_id = dmft_common::ipc::session_id_from_token(&token);
             let pipe_name = format!("{}\0", dmft_common::ipc::pipe_name(session_id, client_id));

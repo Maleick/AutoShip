@@ -21,9 +21,9 @@ pub enum AlertLevel {
 impl AlertLevel {
     fn color(&self) -> u32 {
         match self {
-            AlertLevel::Info => 0x2ECC71,     // green
-            AlertLevel::Warning => 0xF1C40F,  // yellow
-            AlertLevel::Critical => 0xE74C3C, // red
+            AlertLevel::Info => 0x002E_CC71,     // green
+            AlertLevel::Warning => 0x00F1_C40F,  // yellow
+            AlertLevel::Critical => 0x00E7_4C3C, // red
         }
     }
 }

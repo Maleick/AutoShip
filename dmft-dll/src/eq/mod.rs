@@ -7,7 +7,7 @@ pub mod widgets;
 /// CEverQuest::MainLoop offset from EQ base.
 /// Derived from dmft_common::offsets::PROCESS_GAME_EVENTS (0x14028E0F0)
 /// minus preferred base (0x140000000).
-pub const MAIN_LOOP_OFFSET: usize = 0x28E0F0;
+pub const MAIN_LOOP_OFFSET: usize = 0x0028_E0F0;
 
 /// Movement processing function offset.
 pub const MOVE_PLAYER_OFFSET: usize = 0x0; // placeholder

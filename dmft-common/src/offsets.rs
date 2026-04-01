@@ -1,5 +1,5 @@
 // EQ global pointer addresses from eqlib/offsets/eqgame.h
-// These are PREFERRED 64-bit addresses (base 0x140000000).
+// These are PREFERRED 64-bit addresses (base 0x0001_4000_0000).
 // At runtime, subtract the preferred base and add the actual base
 // (obtained via GetModuleInformation or EnumProcessModules).
 //
@@ -7,31 +7,31 @@
 // Client date: 20260310 (March 10, 2026)
 
 /// Preferred base address of eqgame.exe (64-bit)
-pub const EQ_PREFERRED_BASE: u64 = 0x140000000;
+pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 
 /// Pointer to local player (PlayerClient*)
-pub const PINST_LOCAL_PLAYER: u64 = 0x140E8E380;
+pub const PINST_LOCAL_PLAYER: u64 = 0x0001_40E8_E380;
 
 /// Pointer to controlled player (PlayerClient*)
-pub const PINST_CONTROLLED_PLAYER: u64 = 0x140E8E430;
+pub const PINST_CONTROLLED_PLAYER: u64 = 0x0001_40E8_E430;
 
 /// Pointer to current target (PlayerClient*)
-pub const PINST_TARGET: u64 = 0x140E8E428;
+pub const PINST_TARGET: u64 = 0x0001_40E8_E428;
 
 /// Pointer to spawn manager (PlayerManagerClient*)
-pub const PINST_SPAWN_MANAGER: u64 = 0x140F0CD90;
+pub const PINST_SPAWN_MANAGER: u64 = 0x0001_40F0_CD90;
 
 /// Pointer to local PC data (PcClient*)
-pub const PINST_LOCAL_PC: u64 = 0x140E909A8;
+pub const PINST_LOCAL_PC: u64 = 0x0001_40E9_09A8;
 
 /// Pointer to spell manager
-pub const PINST_SPELL_MANAGER: u64 = 0x140F0E6F0;
+pub const PINST_SPELL_MANAGER: u64 = 0x0001_40F0_E6F0;
 
 /// Pointer to CDisplay
-pub const PINST_CDISPLAY: u64 = 0x140E8E450;
+pub const PINST_CDISPLAY: u64 = 0x0001_40E8_E450;
 
 /// Pointer to CEverQuest
-pub const PINST_CEVERQUEST: u64 = 0x140F11758;
+pub const PINST_CEVERQUEST: u64 = 0x0001_40F1_1758;
 
 // ─── EQ Internal Function Addresses ───
 // These are preferred-base addresses for EQ's internal functions.
@@ -41,82 +41,82 @@ pub const PINST_CEVERQUEST: u64 = 0x140F11758;
 
 /// CharacterZoneClient::CastSpell — cast a spell by gem ID
 /// Signature: unsigned char CastSpell(unsigned char gemid, int spellid, ...)
-pub const CAST_SPELL: u64 = 0x1400D9F20;
+pub const CAST_SPELL: u64 = 0x0001_400D_9F20;
 
 /// PcZoneClient::DoCombatAbility — use a combat ability
 /// Signature: bool DoCombatAbility(int spellID, bool allowLowerRank)
-pub const DO_COMBAT_ABILITY: u64 = 0x1402ED490;
+pub const DO_COMBAT_ABILITY: u64 = 0x0001_402E_D490;
 
 /// CharacterZoneClient::UseSkill — use a skill on a target
 /// Signature: void UseSkill(unsigned char skill, PlayerZoneClient* Target, bool bAuto)
-pub const USE_SKILL: u64 = 0x1401052A0;
+pub const USE_SKILL: u64 = 0x0001_4010_52A0;
 
 /// CharacterZoneClient::CanUseItem — check if an item is usable
-pub const CAN_USE_ITEM: u64 = 0x1400EDDB0;
+pub const CAN_USE_ITEM: u64 = 0x0001_400E_DDB0;
 
 /// PlayerZoneClient::DoAttack — perform a melee attack
 /// Signature: bool DoAttack(BYTE slot, BYTE skill, PlayerZoneClient* Target, ...)
-pub const DO_ATTACK: u64 = 0x14031B890;
+pub const DO_ATTACK: u64 = 0x0001_4031_B890;
 
 /// __ExecuteCmd — execute any EQ command by command ID (most versatile)
 /// Can do: follow, stopcast, face, sit, stand, attack, etc.
-pub const EXECUTE_CMD: u64 = 0x1402235B0;
+pub const EXECUTE_CMD: u64 = 0x0001_4022_35B0;
 
 /// CEverQuest::InterpretCmd — interpret a slash command string
 /// Signature: void InterpretCmd(PlayerClient*, const char*)
-pub const INTERPRET_CMD: u64 = 0x140283FB0;
+pub const INTERPRET_CMD: u64 = 0x0001_4028_3FB0;
 
 /// pinstCXWndManager — eqgame.exe's UI window manager (not eqmain.dll's)
-pub const PINST_CXWND_MANAGER: u64 = 0x140F37B28;
+pub const PINST_CXWND_MANAGER: u64 = 0x0001_40F3_7B28;
 
 /// CCharacterListWnd::EnterWorld — enter world from character select
 /// Signature: void EnterWorld() (member function, takes this only)
-pub const CHAR_LIST_ENTER_WORLD: u64 = 0x1400D4B20;
+pub const CHAR_LIST_ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
 /// CCharacterListWnd::SelectCharacter — select a character by index
 /// Signature: void SelectCharacter(int index)
-pub const CHAR_LIST_SELECT_CHAR: u64 = 0x1400D5D20;
+pub const CHAR_LIST_SELECT_CHAR: u64 = 0x0001_400D_5D20;
 
 /// CEverQuest::ClickedPlayer — click-target a player
-pub const CLICKED_PLAYER: u64 = 0x1402724F0;
+pub const CLICKED_PLAYER: u64 = 0x0001_4027_24F0;
 
 /// CEverQuest::IssuePetCommand — issue a pet command
 /// Signature: void IssuePetCommand(ePetCommandType, int TargetID, bool bQuiet, ...)
-pub const ISSUE_PET_COMMAND: u64 = 0x1402856A0;
+pub const ISSUE_PET_COMMAND: u64 = 0x0001_4028_56A0;
 
 /// PcClient::GetConLevel — get consider level of target
-pub const GET_CON_LEVEL: u64 = 0x1402E3C10;
+pub const GET_CON_LEVEL: u64 = 0x0001_402E_3C10;
 
 /// PlayerClient::GetPcClient — get PcClient from PlayerClient
-pub const GET_PC_CLIENT: u64 = 0x140307970;
+pub const GET_PC_CLIENT: u64 = 0x0001_4030_7970;
 
 /// __do_loot — main loot function (opens loot window on targeted corpse)
-pub const DO_LOOT: u64 = 0x14022C0D0;
+pub const DO_LOOT: u64 = 0x0001_4022_C0D0;
 
 /// pinstActiveCorpse — pointer to the active corpse (current loot target)
-pub const PINST_ACTIVE_CORPSE: u64 = 0x140E8E390;
+pub const PINST_ACTIVE_CORPSE: u64 = 0x0001_40E8_E390;
 
 /// __ProcessGameEvents — game event processing (hook point for game loop)
-pub const PROCESS_GAME_EVENTS: u64 = 0x14028E0F0;
+pub const PROCESS_GAME_EVENTS: u64 = 0x0001_4028_E0F0;
 
 /// CDisplay::RealRender_World — render loop (alternative hook point)
-pub const REAL_RENDER_WORLD: u64 = 0x1401A4320;
+pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
 
 /// __FixHeading — normalize heading value
-pub const FIX_HEADING: u64 = 0x140661520;
+pub const FIX_HEADING: u64 = 0x0001_4066_1520;
 
 /// __get_bearing — calculate bearing between two points
-pub const GET_BEARING: u64 = 0x140258850;
+pub const GET_BEARING: u64 = 0x0001_4025_8850;
 
 /// FreeTargetTracker::CastSpell — ground-targeted spell casting
-pub const FREE_TARGET_CAST_SPELL: u64 = 0x1402B5740;
+pub const FREE_TARGET_CAST_SPELL: u64 = 0x0001_402B_5740;
 
 /// PlayerZoneClient::ChangeHeight — change character height
-pub const CHANGE_HEIGHT: u64 = 0x14031AB80;
+pub const CHANGE_HEIGHT: u64 = 0x0001_4031_AB80;
 
 /// ZoneGuideManagerClient singleton (preferred base)
 /// Source: eqgame.h ZoneGuideManagerClient__Instance_x
-pub const ZONE_GUIDE_MANAGER: u64 = 0x1403571F0;
+pub const ZONE_GUIDE_MANAGER: u64 = 0x0001_4035_71F0;
 
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
@@ -134,34 +134,34 @@ pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
 /// Offsets within eqmain.dll (login/server select UI module).
 pub mod eqmain {
     /// Preferred base address of eqmain.dll (64-bit)
-    pub const EQMAIN_PREFERRED_BASE: u64 = 0x180000000;
+    pub const EQMAIN_PREFERRED_BASE: u64 = 0x0001_8000_0000;
 
     // ─── Global pointer addresses (preferred base) ───
 
     /// Pointer to CSidlManager instance
-    pub const SIDL_MANAGER: u64 = 0x1803824C0;
+    pub const SIDL_MANAGER: u64 = 0x0001_8038_24C0;
 
     /// Pointer to LoginServerAPI instance
-    pub const LOGIN_SERVER_API: u64 = 0x18017F4D0;
+    pub const LOGIN_SERVER_API: u64 = 0x0001_8017_F4D0;
 
     /// Pointer to CXWndManager instance
-    pub const CXWND_MANAGER: u64 = 0x1803824B8;
+    pub const CXWND_MANAGER: u64 = 0x0001_8038_24B8;
 
     /// LoginServerAPI::JoinServer function address
-    pub const JOIN_SERVER: u64 = 0x180018050;
+    pub const JOIN_SERVER: u64 = 0x0001_8001_8050;
 
     /// LoginViewManager function address
-    pub const LOGIN_VIEW_MANAGER: u64 = 0x18001B0E0;
+    pub const LOGIN_VIEW_MANAGER: u64 = 0x0001_8001_B0E0;
 
     // ─── Login pointer addresses (preferred base) ───
 
     /// Pointer to LoginClient instance (LoginClient*)
     /// Source: eqmain.h EQMain__pinstLoginClient_x (derived from pinstCLoginViewManager - 8)
-    pub const PINST_LOGIN_CLIENT: u64 = 0x18017F4E0;
+    pub const PINST_LOGIN_CLIENT: u64 = 0x0001_8017_F4E0;
 
     /// Pointer to LoginController instance
     /// Source: eqmain.h EQMain__pinstLoginController_x
-    pub const PINST_LOGIN_CONTROLLER: u64 = 0x18017F4F0;
+    pub const PINST_LOGIN_CONTROLLER: u64 = 0x0001_8017_F4F0;
 
     // ─── LoginClient struct field offsets ───
 
@@ -294,10 +294,10 @@ pub mod eqgame {
 // ─── Character select offsets (eqgame.exe) ───
 
 /// CCharacterListWnd::SelectCharacter function address (preferred base, eqgame.exe)
-pub const SELECT_CHARACTER: u64 = 0x1400D5D20;
+pub const SELECT_CHARACTER: u64 = 0x0001_400D_5D20;
 
 /// CCharacterListWnd::EnterWorld function address (preferred base, eqgame.exe)
-pub const ENTER_WORLD: u64 = 0x1400D4B20;
+pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
@@ -472,7 +472,7 @@ pub mod group {
 pub mod zone_info {
     /// Address of the zoneHeader struct (instEQZoneInfo).
     /// This is NOT a pointer — it's the struct itself at this address.
-    pub const INST_EQ_ZONE_INFO: u64 = 0x140E95CD4;
+    pub const INST_EQ_ZONE_INFO: u64 = 0x0001_40E9_5CD4;
 
     /// char\[128\] — zone short name (e.g., "qey2hh1")
     pub const SHORT_NAME: usize = 0x000;

@@ -643,7 +643,7 @@ fn load_demo_data(app: &mut App) {
     for (i, &(name, class_id, level, hp, hp_max, mana, mana_max, ref stand, zone, race_id)) in
         demo_clients.iter().enumerate()
     {
-        let mut client = ClientState::new(1000 + i as u32, 0x140000000);
+        let mut client = ClientState::new(1000 + i as u32, 0x0001_4000_0000);
         client.zone_name = zone.to_string();
         let (x, y, z, heading) = super::demo_data::demo_player_position(zone, i).unwrap_or((
             1234.5 + (i as f32 * 100.0),
