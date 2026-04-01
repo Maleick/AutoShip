@@ -724,11 +724,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     // Build title with scroll indicator
     let title = if max_scroll > 0 {
-        let pct = if max_scroll > 0 {
-            (scroll * 100) / max_scroll
-        } else {
-            0
-        };
+        let pct = (scroll * 100).checked_div(max_scroll).unwrap_or(0);
         format!(" Help [{pct}%] ")
     } else {
         String::from(" Help ")
