@@ -1,10 +1,16 @@
 /// Basic spell info for orchestrator planning decisions.
 pub struct SpellInfo {
+    /// Unique spell identifier.
     pub spell_id: u32,
+    /// Display name of the spell.
     pub name: &'static str,
+    /// Mana cost to cast.
     pub mana_cost: u32,
+    /// Cast time in milliseconds.
     pub cast_time_ms: u32,
+    /// Maximum casting range in game units.
     pub range: f32,
+    /// Whether this spell is area-of-effect.
     pub is_aoe: bool,
 }
 

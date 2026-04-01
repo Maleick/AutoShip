@@ -194,6 +194,7 @@ impl LaunchCoordinator {
         events
     }
 
+    /// Report a login state machine event for a specific client.
     pub fn report_login_event(&mut self, client_id: ClientId, event: LoginEvent) {
         if let Some(sm) = self
             .active_logins
@@ -234,21 +235,25 @@ impl LaunchCoordinator {
         }
     }
 
+    /// Resume the launch coordinator after a pause.
     pub fn resume(&mut self) {
         self.paused = false;
         tracing::info!("Launch coordinator resumed");
     }
 
+    /// Whether the coordinator is paused (e.g., due to mass failure).
     #[must_use]
     pub fn is_paused(&self) -> bool {
         self.paused
     }
 
+    /// Number of clients waiting in the launch queue.
     #[must_use]
     pub fn pending_count(&self) -> usize {
         self.launch_queue.len()
     }
 
+    /// Number of clients currently in the login process.
     #[must_use]
     pub fn active_count(&self) -> usize {
         self.active_logins

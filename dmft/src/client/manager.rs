@@ -15,6 +15,7 @@ pub struct ClientManager {
 
 impl ClientManager {
     #[must_use]
+    /// Create a new client manager that watches for the given EQ process name.
     pub fn new(process_name: &str) -> Self {
         Self {
             sessions: HashMap::new(),

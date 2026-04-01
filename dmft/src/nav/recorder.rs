@@ -15,6 +15,7 @@ pub struct WaypointRecorder {
 }
 
 impl WaypointRecorder {
+    /// Create a new empty waypoint recorder.
     #[must_use]
     pub fn new() -> Self {
         Self {

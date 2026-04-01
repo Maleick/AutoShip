@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use super::camp_loop::{CampEvent, CampLoop, CampState};
 use super::ch_chain::ChChain;
 
+/// Coordinates group combat — assist targeting, CC assignments, and camp loop FSM.
 pub struct CombatCoordinator {
     assist_target: Option<u32>,
     main_tank_id: Option<ClientId>,
@@ -20,6 +21,7 @@ pub struct CombatCoordinator {
 }
 
 impl CombatCoordinator {
+    /// Create a new combat coordinator with no assignments.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -33,10 +35,12 @@ impl CombatCoordinator {
         }
     }
 
+    /// Designate a client as the main tank for assist targeting.
     pub fn set_main_tank(&mut self, client_id: ClientId) {
         self.main_tank_id = Some(client_id);
     }
 
+    /// Reference to the inner camp loop FSM.
     #[must_use]
     pub fn camp_loop(&self) -> &CampLoop {
         &self.camp_loop
@@ -273,6 +277,7 @@ impl CombatCoordinator {
         }
     }
 
+    /// Assign nearby enemies to enchanter CC targets and return commands.
     pub fn decide_cc_assignments(
         &mut self,
         nearby_enemies: &[(u32, String)],

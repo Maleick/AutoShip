@@ -63,7 +63,10 @@ pub enum CampEvent {
     /// All members returned to camp spots.
     ReturnedToCamp,
     /// A group member died.
-    MemberDied { client_id: ClientId },
+    MemberDied {
+        /// Client ID of the group member who died.
+        client_id: ClientId,
+    },
     /// All members are dead (wipe).
     GroupWiped,
     /// Recovery is complete (rezzed, regrouped).
@@ -75,6 +78,7 @@ pub enum CampEvent {
 }
 
 impl CampLoop {
+    /// Create a new camp loop in the `Idle` state.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -89,15 +93,18 @@ impl CampLoop {
         }
     }
 
+    /// Designate a client as the puller.
     pub fn set_puller(&mut self, client_id: ClientId) {
         self.puller_id = Some(client_id);
     }
 
+    /// Current camp loop state.
     #[must_use]
     pub fn state(&self) -> &CampState {
         &self.state
     }
 
+    /// Whether the loop is currently running.
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.active

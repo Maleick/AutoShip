@@ -68,6 +68,7 @@ pub struct NamedTracker {
 }
 
 impl NamedTracker {
+    /// Create a new named mob tracker with no database loaded.
     #[must_use]
     pub fn new() -> Self {
         Self {

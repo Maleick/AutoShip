@@ -12,6 +12,7 @@ pub struct LogWatcher {
 }
 
 impl LogWatcher {
+    /// Create a new log watcher positioned at the end of the given file.
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
         // Start at the end of the file so we only capture new events
@@ -68,6 +69,7 @@ impl LogWatcher {
         events
     }
 
+    /// Reference to the accumulated loot database.
     #[must_use]
     pub fn database(&self) -> &LootDatabase {
         &self.database

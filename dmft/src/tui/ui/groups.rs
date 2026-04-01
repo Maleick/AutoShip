@@ -108,6 +108,7 @@ fn mode_lines<'a>(app: &App) -> Vec<Line<'a>> {
     ]
 }
 
+/// Draw the groups overview screen showing all group members.
 pub fn draw_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     if app.has_live_group_data() {
         draw_live_groups_screen(frame, area, app);
@@ -368,6 +369,7 @@ fn draw_config_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app
     }
 }
 
+/// Collect all client states that belong to a given group definition.
 pub fn clients_in_group<'a>(
     app: &'a App,
     group: &GroupDef,

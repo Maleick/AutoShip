@@ -34,11 +34,22 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CampEvent {
     /// A charm has broken — immediate emergency CC needed.
-    CharmBreak { spawn_id: u32 },
+    CharmBreak {
+        /// Spawn ID of the mob whose charm broke.
+        spawn_id: u32,
+    },
     /// A new add has spawned or aggroed within camp radius.
-    AddSpawned { spawn_id: u32, name: String },
+    AddSpawned {
+        /// Spawn ID of the new add.
+        spawn_id: u32,
+        /// Display name of the add.
+        name: String,
+    },
     /// A CC effect is about to expire on a mob.
-    CcExpiring { spawn_id: u32 },
+    CcExpiring {
+        /// Spawn ID of the mob whose CC is about to expire.
+        spawn_id: u32,
+    },
 }
 
 /// Real-time game state snapshot for the camp loop.
@@ -69,7 +80,10 @@ pub enum CampAction {
     /// A slash command string (e.g., "/attack", "/assist Tankname").
     Slash(String),
     /// Engage the Combatant FSM against a specific spawn.
-    CombatEngage { target_id: u32 },
+    CombatEngage {
+        /// Spawn ID of the target to engage.
+        target_id: u32,
+    },
     /// Disengage the Combatant FSM.
     CombatDisengage,
 }

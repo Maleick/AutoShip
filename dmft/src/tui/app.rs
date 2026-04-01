@@ -333,6 +333,7 @@ pub struct NavClientStatus {
     pub destination: String,
     /// Current navigator state (idle, moving, stuck, arrived).
     pub status: dmft_common::nav::NavStatus,
+    /// Estimated time of arrival in seconds, if calculable.
     #[allow(dead_code)]
     pub eta_secs: Option<u32>,
     /// Active navigation waypoints for map overlay rendering.
@@ -348,6 +349,7 @@ struct FocusedNavClient {
 }
 
 impl App {
+    /// Create a new TUI application with default state.
     #[must_use]
     pub fn new() -> Self {
         Self {

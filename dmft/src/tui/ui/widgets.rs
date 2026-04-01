@@ -68,6 +68,7 @@ pub fn themed_header_row<'a>(cells: Vec<&'a str>, t: &Theme) -> Row<'a> {
 
 // ─── Color helpers ───────────────────────────────────────────────────────────
 
+/// Map an HP percentage to a themed color (green/yellow/red).
 #[must_use]
 pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
     if hp_pct > 75.0 {
@@ -79,6 +80,7 @@ pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
     }
 }
 
+/// Map a stand state (dead, sitting, feigned, etc.) to a themed color.
 #[must_use]
 pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> Color {
     use crate::eq::structs::StandState;
@@ -91,6 +93,7 @@ pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> C
     }
 }
 
+/// Map a spawn type (PC, NPC, corpse) to a themed color.
 #[must_use]
 pub fn spawn_type_color(st: &SpawnType, t: &Theme) -> Color {
     match st {
@@ -116,6 +119,7 @@ pub fn con_color(player_level: u8, mob_level: u8, t: &Theme) -> Color {
     }
 }
 
+/// Compute the row style for a spawn entry based on type and con color.
 #[must_use]
 pub fn spawn_row_style(
     spawn: &SpawnInfo,

@@ -16,6 +16,7 @@ use super::widgets::{
 use crate::eq::structs::{EqClass, StandState};
 use crate::tui::app::{ActivePanel, App, ClientState};
 
+/// Draw the main overview dashboard with roster and status panels.
 pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
     let sections = overview_sections(app);
     let natural_sidebar_height = sections

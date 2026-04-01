@@ -33,10 +33,15 @@ const CC_EXPIRY_BUFFER: u64 = 3;
 
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
 pub struct Orchestrator {
+    /// Process IDs of all registered EQ clients.
     pub client_pids: Vec<u32>,
+    /// Mapping of PID to character name for each client.
     pub client_names: HashMap<u32, String>,
+    /// Active camp loop state machine, if a camp is running.
     pub active_camp: Option<CampLoop>,
+    /// Group combat coordinator (assist, CC, CH chain).
     pub combat: CombatCoordinator,
+    /// Monotonically increasing tick counter.
     pub tick_count: u64,
     /// Commands dispatched this tick (for status display).
     pub last_dispatched: Vec<(u32, CampAction)>,
@@ -69,6 +74,7 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
+    /// Create a new orchestrator with no registered clients.
     #[must_use]
     pub fn new() -> Self {
         Self {

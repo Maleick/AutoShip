@@ -625,10 +625,12 @@ pub fn load_zone(zone_short_name: &str) -> Result<LoadedNavMesh> {
     load_navmesh(&proto)
 }
 
+/// Check whether a cached navmesh file exists for the given zone.
 pub fn has_cached_zone_mesh(zone_short_name: &str) -> bool {
     mesh_cache_path(zone_short_name).exists()
 }
 
+/// Plan a navigation route between two points in a zone using the navmesh.
 pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> RoutePlan {
     let mesh_cached = has_cached_zone_mesh(zone_short_name);
 

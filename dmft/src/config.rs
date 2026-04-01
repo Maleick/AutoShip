@@ -152,6 +152,7 @@ impl Default for DiscordConfig {
     }
 }
 
+/// Configuration for a group of characters that play together.
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
 #[derive(Debug, Deserialize, Clone)]
 pub struct GroupConfig {
@@ -164,6 +165,7 @@ pub struct GroupConfig {
     pub toon: Vec<ToonConfig>,
 }
 
+/// Configuration for a single character (toon) within a group.
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
 #[derive(Debug, Deserialize, Clone)]
 pub struct ToonConfig {
@@ -181,6 +183,7 @@ pub struct ToonConfig {
     pub account: Option<String>,
 }
 
+/// Configuration for EQ client launching — paths, stagger timing, and resource limits.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct LaunchConfig {
@@ -211,6 +214,7 @@ impl Default for LaunchConfig {
     }
 }
 
+/// EQ server connection settings.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ServerConfig {
@@ -232,6 +236,7 @@ impl Default for ServerConfig {
     }
 }
 
+/// Retry and backoff policy for failed client launches.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct RetryConfig {

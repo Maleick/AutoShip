@@ -9,6 +9,7 @@ use crate::soul::personality::SoulContext;
 /// An active idle behavior with its remaining duration.
 #[derive(Debug, Clone)]
 pub struct ActiveBehavior {
+    /// The type of idle behavior being performed.
     pub behavior: IdleBehaviorType,
     /// Ticks remaining before this behavior ends.
     pub ticks_remaining: u32,
@@ -19,7 +20,9 @@ pub struct ActiveBehavior {
 /// A behavior with its computed weight for selection.
 #[derive(Debug, Clone)]
 pub struct PrioritizedBehavior {
+    /// The idle behavior type.
     pub behavior: IdleBehaviorType,
+    /// Computed selection weight based on personality and context.
     pub weight: f32,
 }
 
@@ -33,7 +36,10 @@ pub enum IdleTransition {
     /// Stop idling entirely (e.g., combat started).
     Stop,
     /// `LogOffToSleep`: character "logs off" — remove from active rotation.
-    LogOff { return_after_secs: u64 },
+    LogOff {
+        /// Seconds until the character returns from the "logged off" state.
+        return_after_secs: u64,
+    },
 }
 
 /// Drives idle behavior selection and timing for a single character.
@@ -49,6 +55,7 @@ pub struct IdleScheduler {
 }
 
 impl IdleScheduler {
+    /// Create a new idle scheduler seeded from the client ID.
     #[must_use]
     pub fn new(client_id: u32, config: &SoulConfig) -> Self {
         // Convert config seconds to ticks (soul tick = 5s by default)

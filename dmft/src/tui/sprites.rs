@@ -13,7 +13,9 @@ use crate::eq::structs::{EqClass, StandState};
 
 // ── Constants ────────────────────────────────────────────────────────
 
+/// Width of a sprite in pixels.
 pub const SPRITE_W: usize = 10;
+/// Height of a sprite in pixels.
 pub const SPRITE_H: usize = 10;
 /// Terminal lines needed to render one sprite (2 pixel rows per line).
 pub const SPRITE_RENDER_H: u16 = (SPRITE_H as u16).div_ceil(2); // 5
@@ -25,6 +27,7 @@ type Palette = &'static [(u8, u8, u8)];
 // Each terminal line encodes 2 pixel rows via ▀ (upper half) with
 // fg = top pixel color, bg = bottom pixel color.
 
+/// Render a sprite into terminal lines using Unicode half-block characters.
 #[must_use]
 pub fn render_sprite_lines(sprite: &Sprite, palette: Palette) -> Vec<Line<'static>> {
     let mut lines = Vec::with_capacity(SPRITE_RENDER_H as usize);

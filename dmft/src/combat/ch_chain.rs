@@ -23,6 +23,7 @@ const MAX_INTERVAL_SECS: f32 = 8.0;
 /// How many HP-delta samples to keep for averaging damage rate.
 const DAMAGE_WINDOW_SIZE: usize = 10;
 
+/// Complete Heal chain — rotates CH casts across clerics with adaptive timing.
 pub struct ChChain {
     /// Cleric PIDs in chain order.
     members: Vec<u32>,
@@ -175,6 +176,7 @@ impl ChChain {
         }
     }
 
+    /// Whether the chain auto-adjusts interval based on incoming damage.
     #[must_use]
     pub fn is_adaptive(&self) -> bool {
         self.adaptive

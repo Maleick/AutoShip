@@ -36,7 +36,10 @@ pub enum VendorStep {
     /// Right-click vendor to open the merchant window.
     OpeningWindow,
     /// Sell items one at a time. `index` tracks progress through sellable inventory.
-    SellingItems { index: usize },
+    SellingItems {
+        /// Index of the item currently being sold.
+        index: usize,
+    },
     /// Close the merchant window.
     ClosingWindow,
 }

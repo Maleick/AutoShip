@@ -1,7 +1,9 @@
 use anyhow::Result;
 use std::path::Path;
 
+/// Result of spawning an EQ client process.
 pub struct SpawnedProcess {
+    /// OS process ID of the newly launched EQ client.
     pub pid: u32,
 }
 

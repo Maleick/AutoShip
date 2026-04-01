@@ -12,10 +12,12 @@ use super::widgets::{hp_color, panel, spawn_info_lines, spawn_row_style, themed_
 use crate::eq::structs::SpawnInfo;
 use crate::tui::app::{ActivePanel, App};
 
+/// Draw the full spawns screen (spawn list + details).
 pub fn draw_spawns_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     draw_spawn_list(frame, area, app);
 }
 
+/// Draw the filterable, sortable spawn list table.
 pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let t = &app.theme;
     let is_active = matches!(
@@ -143,6 +145,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
 
 // ─── Target / spawn panels (used from debug screen) ─────────────────────────
 
+/// Draw the target info panel (used from debug screen).
 pub fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let target = app.active_client().and_then(|c| c.target.as_ref());
@@ -157,6 +160,7 @@ pub fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
     );
 }
 
+/// Draw a single spawn info panel with the given title.
 pub fn draw_spawn_panel(
     frame: &mut Frame,
     area: ratatui::layout::Rect,
@@ -187,6 +191,7 @@ pub fn draw_spawn_panel(
 
 // ─── Hex dump panel ──────────────────────────────────────────────────────────
 
+/// Draw the hex dump panel for raw memory inspection.
 pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let is_active = app.active_panel == ActivePanel::DebugHexDump;
@@ -252,6 +257,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 
 // ─── Debug screen layout ─────────────────────────────────────────────────────
 
+/// Draw the debug screen layout (spawn list + target + hex dump).
 pub fn draw_debug_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     if area.width < 110 {
         let rows = Layout::default()

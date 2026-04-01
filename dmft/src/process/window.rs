@@ -5,8 +5,11 @@ use anyhow::Result;
 pub struct WindowHandle {
     #[cfg(windows)]
     #[allow(dead_code)] // Needed for PostMessage input dispatch in M2+
+    /// Win32 window handle for this EQ client.
     pub hwnd: windows::Win32::Foundation::HWND,
+    /// Window title text.
     pub title: String,
+    /// Process ID that owns this window.
     pub pid: u32,
 }
 

@@ -1,12 +1,12 @@
 //! TUI renderer — entry point and global chrome (header, status bar, help overlay).
 //!
 //! Each screen lives in its own sub-module:
-//! - [`dashboard`]   — character grid + health gauges + session stats
-//! - [`spawns`]      — filterable spawn list + hex dump
-//! - [`map`]         — zone map + named tracker
-//! - [`groups`]      — per-group panels with buff timer columns
-//! - [`navigation`]  — nav status + commands reference
-//! - [`widgets`]     — shared helpers (`panel`, `themed_header_row`, colour fns …)
+//! - `dashboard`   — character grid + health gauges + session stats
+//! - `spawns`      — filterable spawn list + hex dump
+//! - `map`         — zone map + named tracker
+//! - `groups`      — per-group panels with buff timer columns
+//! - `navigation`  — nav status + commands reference
+//! - `widgets`     — shared helpers (panel, themed header row, colour fns)
 
 pub mod dashboard;
 pub mod groups;
