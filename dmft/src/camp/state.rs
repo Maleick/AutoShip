@@ -349,14 +349,14 @@ impl CampLoop {
             CampState::Idle => {
                 // Only pull if healer has enough mana (when we know).
                 // Apply healer's personality jitter to the threshold.
-                let pull_threshold = self
-                    .find_by_role(&Role::Healer)
-                    .map_or(f32::from(self.config.pull_mana_pct), |h| {
+                let pull_threshold = self.find_by_role(&Role::Healer).map_or(
+                    f32::from(self.config.pull_mana_pct),
+                    |h| {
                         h.personality
                             .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
-                    });
-                let healer_ready = snapshot
-                    .is_none_or(|s| s.healer_mana_pct >= pull_threshold);
+                    },
+                );
+                let healer_ready = snapshot.is_none_or(|s| s.healer_mana_pct >= pull_threshold);
                 if healer_ready {
                     self.transition_to_pulling(&mut commands);
                 }
@@ -430,14 +430,14 @@ impl CampLoop {
             CampState::Medding { started_tick } => {
                 // Transition when healer mana is above pull threshold (real data) or timer (fallback).
                 // Apply healer's personality jitter to the threshold.
-                let med_threshold = self
-                    .find_by_role(&Role::Healer)
-                    .map_or(f32::from(self.config.pull_mana_pct), |h| {
+                let med_threshold = self.find_by_role(&Role::Healer).map_or(
+                    f32::from(self.config.pull_mana_pct),
+                    |h| {
                         h.personality
                             .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
-                    });
-                let mana_ready = snapshot
-                    .is_some_and(|s| s.healer_mana_pct >= med_threshold);
+                    },
+                );
+                let mana_ready = snapshot.is_some_and(|s| s.healer_mana_pct >= med_threshold);
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
                 if mana_ready || timer_expired {
                     // Check if any buffs need refreshing before going idle

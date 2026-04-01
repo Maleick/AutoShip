@@ -177,10 +177,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     // Compute bounds and transform once so they can be reused for both the
     // view label and the actual map rendering logic.
     let map_bounds = combined_bounds(app);
-    let map_view_transform =
-        map_bounds
-            .as_ref()
-            .and_then(|bounds| map_transform(app, bounds, 80, 30));
+    let map_view_transform = map_bounds
+        .as_ref()
+        .and_then(|bounds| map_transform(app, bounds, 80, 30));
     let view_label = map_view_transform
         .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
         .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
@@ -919,7 +918,12 @@ fn draw_tactical_sidebar(
                 draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed);
             }
             TacticalSectionKind::Navigation => {
-                draw_navigation_summary(frame, *chunk, app, app.tactical_state.navigation_collapsed);
+                draw_navigation_summary(
+                    frame,
+                    *chunk,
+                    app,
+                    app.tactical_state.navigation_collapsed,
+                );
             }
         }
     }
@@ -1201,18 +1205,21 @@ fn draw_navigation_summary(
 
     let selected_name = app
         .active_client()
-        .and_then(|client| client.local_player.as_ref()).map_or_else(|| String::from("No client"), |player| app.redact_name(&player.displayed_name).into_owned());
+        .and_then(|client| client.local_player.as_ref())
+        .map_or_else(
+            || String::from("No client"),
+            |player| app.redact_name(&player.displayed_name).into_owned(),
+        );
 
     let selected_nav = app
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid));
     let selected_status = selected_nav.map_or("Idle", |nav| nav.status.label());
-    let selected_dest = selected_nav
-        .map_or("—", |nav| nav.destination.as_str());
+    let selected_dest = selected_nav.map_or("—", |nav| nav.destination.as_str());
     let selected_waypoints = selected_nav.map_or(0, |nav| nav.waypoints.len());
-    let mesh_status = app
-        .current_zone_short_name()
-        .map_or_else(|| String::from("—"), |zone| {
+    let mesh_status = app.current_zone_short_name().map_or_else(
+        || String::from("—"),
+        |zone| {
             format!(
                 "{} ({zone})",
                 if crate::nav::mesh::has_cached_zone_mesh(&zone) {
@@ -1221,7 +1228,8 @@ fn draw_navigation_summary(
                     "on-demand"
                 },
             )
-        });
+        },
+    );
 
     let status_color = match selected_nav.map(|nav| &nav.status) {
         Some(s) if s.is_moving() => t.text_highlight,

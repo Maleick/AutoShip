@@ -525,7 +525,7 @@ impl Combatant {
             7 => &[26, 38, 52, 23], // Monk: flying kick, round kick, tiger claw, eagle strike
             9 => &[8],              // Rogue: backstab
             15 => &[30, 26],        // Beastlord: kick, flying kick
-            _ => &[30],              // Berserker / Generic: kick
+            _ => &[30],             // Berserker / Generic: kick
         };
 
         // Fire each skill independently when its cooldown is ready

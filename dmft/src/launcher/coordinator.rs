@@ -163,7 +163,10 @@ impl LaunchCoordinator {
         // 7. If all active logins are terminal and queue is empty, emit AllReady
         if self.launch_queue.is_empty()
             && !self.active_logins.is_empty()
-            && self.active_logins.iter().all(super::login_sm::LoginStateMachine::is_terminal)
+            && self
+                .active_logins
+                .iter()
+                .all(super::login_sm::LoginStateMachine::is_terminal)
         {
             // Only emit AllReady if all finished successfully (Ready state)
             let all_ready = self

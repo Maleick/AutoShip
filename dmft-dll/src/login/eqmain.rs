@@ -14,10 +14,7 @@ pub fn find_eqmain() -> u64 {
         // SAFETY: GetModuleHandleW is always safe to call — it queries the
         // module table for a loaded DLL by name. Returns NULL if not loaded.
         // The handle is used only as an integer base address.
-        unsafe {
-            GetModuleHandleW(w!("eqmain.dll"))
-                .map_or(0, |h| h.0 as u64)
-        }
+        unsafe { GetModuleHandleW(w!("eqmain.dll")).map_or(0, |h| h.0 as u64) }
     }
 
     #[cfg(not(windows))]

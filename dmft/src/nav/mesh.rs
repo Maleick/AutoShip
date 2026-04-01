@@ -362,9 +362,7 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
             .with_context(|| format!("Failed to read cached mesh: {}", cache_path.display()));
     }
 
-    let url = format!(
-        "https://mqmesh.com/resources/meshes/{zone_short_name}.navmesh"
-    );
+    let url = format!("https://mqmesh.com/resources/meshes/{zone_short_name}.navmesh");
     tracing::info!(zone = zone_short_name, %url, "Downloading navmesh");
 
     let data = reqwest::blocking::get(&url)

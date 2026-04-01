@@ -37,7 +37,11 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
 
     let client_label = app
         .active_client()
-        .and_then(|c| c.local_player.as_ref()).map_or_else(|| "???".into(), |p| app.redact_name(&p.displayed_name).into_owned());
+        .and_then(|c| c.local_player.as_ref())
+        .map_or_else(
+            || "???".into(),
+            |p| app.redact_name(&p.displayed_name).into_owned(),
+        );
 
     let fl = app.spawns_state.spawn_type_filter.label();
     let title = if app.spawns_state.search_mode {
@@ -237,10 +241,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             Some(Line::from(vec![
                 Span::styled(format!("{addr:08x}"), Style::default().fg(t.text_muted)),
                 Span::raw("  "),
-                Span::styled(
-                    format!("{hex_str:<48}"),
-                    Style::default().fg(t.text_normal),
-                ),
+                Span::styled(format!("{hex_str:<48}"), Style::default().fg(t.text_normal)),
                 Span::raw(" "),
                 Span::styled(ascii_str, Style::default().fg(t.text_highlight)),
             ]))

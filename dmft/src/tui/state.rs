@@ -284,8 +284,8 @@ impl CommandBarState {
             // Group broadcast + slash: "all /sit", "G1 /follow" → keep 2
             // Single meaningful arg: "ma Warrior", "mt Tank" → keep 2
             Some(
-                "all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6" | "ma" | "mt" | "mode"
-                | "login" | "nav" | "track" | "ch",
+                "all" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6" | "ma" | "mt" | "mode" | "login"
+                | "nav" | "track" | "ch",
             ) => 2,
             Some("engage") => 1,
             // Camp subcommands: "camp start permafrost" → keep all 3
