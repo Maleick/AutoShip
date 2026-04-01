@@ -834,8 +834,8 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     frame.render_widget(blk, area);
 
     let focus = app.group_focus_label();
-    let selected_cmd = if let Some(client) = app.active_client() {
-        format!("{} /cmd", app.client_command_target(client))
+    let selected_cmd = if app.active_client().is_some() {
+        String::from("Selected /cmd")
     } else {
         String::from("Select a character")
     };
