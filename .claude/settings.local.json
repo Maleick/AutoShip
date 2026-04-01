@@ -1,15 +1,28 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo clippy:*)",
-      "Bash(cargo test:*)",
-      "Bash(cargo fmt:*)",
-      "Bash(git -C \".claude/worktrees/agent-ad868d43\" log --oneline -5)",
-      "Bash(git -C \".claude/worktrees/agent-a40e4cf6\" log --oneline -5)",
-      "Bash(git -C .claude/worktrees/agent-ad868d43 diff --stat HEAD)",
-      "Bash(git -C .claude/worktrees/agent-a40e4cf6 diff --stat HEAD)",
-      "Bash(grep -v \"^$\")",
-      "Bash(python3:*)"
+      "Bash(cargo:*)",
+      "Bash(git:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash C:/Users/xmale/Projects/DMFT/.claude/hooks/rust-fmt.sh",
+            "statusMessage": "Formatting Rust..."
+          },
+          {
+            "type": "command",
+            "command": "bash C:/Users/xmale/Projects/DMFT/.claude/hooks/rust-clippy.sh",
+            "statusMessage": "Running clippy...",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   }
 }
