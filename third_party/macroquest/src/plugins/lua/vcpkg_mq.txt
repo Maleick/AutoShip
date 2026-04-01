@@ -1,3 +1,0 @@
-luajit
-sol2
-yaml-cpp

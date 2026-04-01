@@ -1,3 +1,0 @@
-protobuf
-sqlite3
-argon2

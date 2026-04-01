@@ -1,4 +1,0 @@
-fmt
-glm
-spdlog
-wil

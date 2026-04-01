@@ -1,1 +1,0 @@
-dxsdk-d3dx:x86-windows

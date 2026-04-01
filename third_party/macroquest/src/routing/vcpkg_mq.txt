@@ -1,4 +1,0 @@
-asio
-fmt
-protobuf
-spdlog
