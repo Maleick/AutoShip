@@ -3,14 +3,26 @@
 [![CI](https://github.com/Maleick/DMFT/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/DMFT/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-73%2C533-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-1%2C752%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-74%2C122-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-1%2C766%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
 External process memory reader, DLL injector, and multibox controller for EverQuest, built in Rust.
 
 DMFT reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
+
+If you plan to do offset, struct, or MacroQuest reference work, clone with submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/Maleick/DMFT.git
+cd DMFT
+
+# Existing clone
+git submodule update --init --recursive
+```
+
+Routine `cargo build` / `cargo test` work does not require the reference trees, but `third_party/eqlib` and `third_party/macroquest` are the canonical local sources for reference work. See `third_party/README.md` for the layout.
 
 ## Status
 
@@ -222,7 +234,7 @@ target\release\dmft.exe
 
 ## Testing
 
-Current workspace totals: 73,533 Rust lines and 1,752 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. CI runs on every push to master:
+Current workspace totals: 74,122 Rust lines and 1,766 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. CI runs on every push to master:
 
 | Platform | Jobs                      |
 | -------- | ------------------------- |

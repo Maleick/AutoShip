@@ -143,10 +143,15 @@ pub fn spawn_row_style(
 /// Human-readable cast label for a `LaunchSpellData` snapshot.
 #[must_use]
 pub fn cast_summary(cast: &CastState) -> String {
-    let spell_name = u32::try_from(cast.spell_id)
-        .ok()
-        .and_then(spell_db::get)
-        .map(|spell| spell.name.to_string())
+    let spell_name = cast
+        .spell_name
+        .clone()
+        .or_else(|| {
+            u32::try_from(cast.spell_id)
+                .ok()
+                .and_then(spell_db::get)
+                .map(|spell| spell.name.to_string())
+        })
         .unwrap_or_else(|| format!("Spell {}", cast.spell_id));
 
     match cast.spell_gem() {

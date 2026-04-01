@@ -19,8 +19,9 @@ cat <<EOF
 Read this file + check memories (\`MEMORY.md\`) for full project context.
 
 MacroQuest reference code now lives in local git submodules at \`third_party/eqlib\`
-and \`third_party/macroquest\`. After checkout, run
-\`git submodule update --init --recursive\` before doing offset or struct work.
+and \`third_party/macroquest\`. Routine \`cargo build\` / \`cargo test\` work does not
+require them, but offset or struct work does. After checkout, run
+\`git submodule update --init --recursive\` before working against those trees.
 
 ## Repository Stats
 
@@ -33,12 +34,47 @@ TOTAL_COMMITS=$(git rev-list --count HEAD)
 echo "- **Branch:** \`$BRANCH\`"
 echo "- **Total commits:** $TOTAL_COMMITS"
 
-# Line counts (exclude build output and third-party reference submodules)
-LINES=$(find . \
-    \( -path './target' -o -path './third_party/eqlib' -o -path './third_party/macroquest' \) -prune -o \
-    -name '*.rs' -exec cat {} + | wc -l | awk '{print $1}')
+# Line counts from tracked workspace Rust sources (excludes submodules automatically)
+RUST_FILES=$(git ls-files -- '*.rs')
+if [ -n "$RUST_FILES" ]; then
+    LINES=$(printf '%s\n' "$RUST_FILES" | xargs cat | wc -l | awk '{print $1}')
+else
+    LINES=0
+fi
 echo "- **Rust lines:** ~${LINES}"
 
+echo ""
+
+# --- Reference trees ---
+echo "## Reference Trees"
+echo ""
+git submodule status --recursive | while IFS= read -r line; do
+    status_char=${line:0:1}
+    rest=${line:1}
+    sha=${rest%% *}
+    rest=${rest#"$sha "}
+    path=${rest%% *}
+
+    case "$status_char" in
+        ' ')
+            state="ready"
+            ;;
+        '-')
+            state="not initialized"
+            ;;
+        '+')
+            state="checked out at a different commit"
+            ;;
+        'U')
+            state="merge conflict"
+            ;;
+        *)
+            state="unknown"
+            ;;
+    esac
+
+    echo "- \`$path\` — $state (\`$sha\`)"
+done
 echo ""
 
 # --- Crate structure ---
@@ -71,13 +107,16 @@ echo ""
 
 # Run cargo test and capture output
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
-TEST_OUTPUT=$(cargo test 2>&1 || true)
+TEST_OUTPUT=$(CARGO_TERM_COLOR=never cargo test 2>&1 || true)
+TEST_SUMMARY=$(printf '%s\n' "$TEST_OUTPUT" | grep -E '(^running |^test result:)' || true)
+TEST_RESULTS=$(printf '%s\n' "$TEST_OUTPUT" | grep '^test result:' || true)
 
 echo '```'
-# Extract the "test result:" lines per crate
-echo "$TEST_OUTPUT" | grep -E '(^running |^test result:)' | while read -r line; do
-    echo "$line"
-done
+if [ -n "$TEST_SUMMARY" ]; then
+    printf '%s\n' "$TEST_SUMMARY"
+else
+    echo "(no test summary lines captured)"
+fi
 echo '```'
 echo ""
 
@@ -86,12 +125,16 @@ echo "### Per-crate summary"
 echo ""
 echo "| Crate | Passed | Failed |"
 echo "|-------|--------|--------|"
-echo "$TEST_OUTPUT" | grep '^test result:' | while read -r line; do
-    passed=$(echo "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
-    failed=$(echo "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
-    # Best-effort crate name from context — cargo test prints "Running unittests" lines
-    echo "| — | ${passed:-0} | ${failed:-0} |"
-done
+if [ -n "$TEST_RESULTS" ]; then
+    while IFS= read -r line; do
+        passed=$(printf '%s\n' "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
+        failed=$(printf '%s\n' "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
+        # Best-effort crate name from context — cargo test prints "Running unittests" lines
+        echo "| — | ${passed:-0} | ${failed:-0} |"
+    done <<< "$TEST_RESULTS"
+else
+    echo "| — | 0 | 0 |"
+fi
 echo ""
 
 # --- Key offsets ---
@@ -99,7 +142,7 @@ echo "## Key Offsets (from dmft-common/src/offsets.rs)"
 echo ""
 echo "| Constant | Value |"
 echo "|----------|-------|"
-grep -E '^pub const' dmft-common/src/offsets.rs | sed 's/pub const \([A-Z_]*\):[^=]*= \(0x[0-9A-Fa-f]*\);/| \1 | `\2` |/' | head -30
+grep -E '^pub const' dmft-common/src/offsets.rs | sed 's/pub const \([A-Z0-9_]*\):[^=]*= \(0x[0-9A-Fa-f_]*\);/| \1 | `\2` |/' | head -30
 echo ""
 
 # --- Build requirements ---
