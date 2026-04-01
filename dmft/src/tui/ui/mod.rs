@@ -295,9 +295,9 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
 fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    // Scale to terminal: 60% width (min 40, max 60), 80% height (min 20, max 40)
-    let popup_w = (area.width * 60 / 100).clamp(40.min(area.width), 60.min(area.width));
-    let popup_h = (area.height * 80 / 100).clamp(20.min(area.height), 40.min(area.height));
+    // Scale to terminal: 70% width (min 50, max 80), 85% height (min 25, max 50)
+    let popup_w = (area.width * 70 / 100).clamp(50.min(area.width), 80.min(area.width));
+    let popup_h = (area.height * 85 / 100).clamp(25.min(area.height), 50.min(area.height));
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
     let popup_area = Rect::new(x, y, popup_w, popup_h);
@@ -311,83 +311,191 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let kv = |k: &'static str, v: &'static str| -> Line<'static> {
         Line::from(vec![
-            Span::styled(format!(" {k:<12}"), key_s),
+            Span::styled(format!(" {k:<14}"), key_s),
             Span::styled(v, desc_s),
         ])
     };
 
     let text = vec![
-        Line::from(Span::styled(" Keybindings", head_s)),
+        // ── Global Keybindings ──
+        Line::from(Span::styled(" Global Keybindings", head_s)),
         Line::from(""),
-        kv("1-4", "Characters, Map, Navigation, Debug"),
-        kv("Shift+1-6", "Focus group G1–G6"),
-        kv("Shift+0", "All groups"),
-        kv("Tab", "Cycle focused pane"),
-        kv("[ ]", "Cycle clients"),
-        kv("/", "Search spawns"),
-        kv("f", "Filter spawn type"),
-        kv("Enter", "Expand or open focused detail"),
-        kv("g", "Toggle group section"),
-        kv("v", "Toggle scope section"),
-        kv("z", "Collapse focused section"),
-        kv("+/-", "Adjust Tactical Z slice"),
-        kv("PgUp/PgDn", "Zoom Tactical map"),
-        kv("Arrow keys", "Pan Tactical map"),
-        kv("Home", "Reset Tactical viewport"),
-        kv("v (Map pane)", "Cycle auto/local/global view"),
-        kv("n (Map pane)", "Toggle navmesh overlay"),
-        kv("m", "Maximize Tactical map"),
-        kv("p", "Privacy mode"),
-        kv("T", "Cycle theme"),
-        kv(":", "Command mode"),
-        kv("?", "This help"),
-        kv("q", "Quit"),
+        kv("1-4", "Switch screen: Characters, Map, Navigation, Debug"),
+        kv("Shift+1-6", "Focus group G1-G6"),
+        kv("Shift+0", "Show all groups (clear group filter)"),
+        kv("Tab", "Cycle focused pane within current screen"),
+        kv("[ ]", "Cycle through connected clients"),
+        kv(":", "Enter command mode"),
+        kv("/", "Search spawns (switches to Map screen)"),
+        kv("f", "Cycle spawn type filter (All/PC/NPC/Named)"),
+        kv("z", "Collapse or expand focused section"),
+        kv("p", "Toggle privacy mode (redact names)"),
+        kv("T", "Cycle color theme"),
+        kv("?", "Toggle this help overlay"),
+        kv("q / Ctrl+C", "Quit application"),
+        kv("Esc", "Clear group filter or close overlay"),
         Line::from(""),
-        Line::from(Span::styled(" Commands  (:cmd)", head_s)),
+        // ── Quick Action Keys ──
+        Line::from(Span::styled(" Quick Action Keys (any screen)", head_s)),
         Line::from(""),
-        kv("<name> /cmd", "Send to character"),
-        kv("@<name> /cmd", "Force direct target"),
-        kv("G1-G6 /cmd", "Send to group"),
-        kv("all /cmd", "Broadcast"),
-        kv("camp <sub>", "start|stop|list|add|rm"),
-        kv("nav <dest>", "Camp, coords, or slash fallback"),
-        kv("track <n>", "Track spawn"),
-        kv("ma <name>", "Set Main Assist"),
-        kv("mt <name>", "Set Main Tank"),
-        kv("engage", "Start combat"),
-        kv("disengage", "Stop combat"),
-        kv("invite <n>", "Group invite"),
-        kv("accept", "Accept invite"),
-        kv("mode camp", "Camp mode"),
-        kv("mode hunt", "Hunt mode"),
+        kv("e", "Engage combat (send to focused clients)"),
+        kv("d", "Disengage combat (send to focused clients)"),
+        kv("l", "Loot nearby corpses"),
+        kv("r", "Repeat last command from history"),
+        kv("F1-F9", "Run favorite command (by frequency)"),
         Line::from(""),
+        // ── Characters Screen (1) ──
+        Line::from(Span::styled(" Characters Screen [1]", head_s)),
+        Line::from(""),
+        kv("g", "Toggle group roster section"),
+        kv("v", "Toggle scope/filters section"),
+        kv("j/k / Up/Dn", "Navigate client roster"),
+        kv("Enter", "Expand selected character detail"),
+        Line::from(""),
+        // ── Map Screen (2) ──
+        Line::from(Span::styled(" Map Screen [2]", head_s)),
+        Line::from(""),
+        kv("+/-", "Adjust Z-depth slice filter"),
+        kv("Arrow keys", "Pan map viewport"),
+        kv("PgUp/PgDn", "Zoom map in/out"),
+        kv("Home", "Reset map viewport to default"),
+        kv("m / M", "Toggle map maximize (full screen)"),
+        kv("v (map pane)", "Cycle viewport: auto/local/global"),
+        kv("n (map pane)", "Toggle navmesh overlay"),
+        kv("Enter (map)", "Toggle map maximize"),
+        Line::from(""),
+        // ── Map Spawn List ──
+        Line::from(Span::styled(" Spawn List (Map/Debug)", head_s)),
+        Line::from(""),
+        kv("j/k / Up/Dn", "Navigate spawn list"),
+        kv("PgUp/PgDn", "Page through spawn list"),
+        kv("Home / End", "Jump to first/last spawn"),
+        kv("Enter", "Inspect selected spawn in hex dump"),
+        Line::from(""),
+        // ── Navigation Screen (3) ──
+        Line::from(Span::styled(" Navigation Screen [3]", head_s)),
+        Line::from(""),
+        kv("j/k / Up/Dn", "Navigate client list"),
+        kv("Enter", "Toggle full navigation status view"),
+        Line::from(""),
+        // ── Debug Screen (4) ──
+        Line::from(Span::styled(" Debug Screen [4]", head_s)),
+        Line::from(""),
+        kv("Up/Down", "Scroll hex dump"),
+        Line::from(""),
+        // ── Command Mode ──
+        Line::from(Span::styled(" Command Mode (: prefix)", head_s)),
+        Line::from(""),
+        kv("Tab", "Auto-complete command or arguments"),
+        kv("Up/Down", "Browse command history"),
+        kv("Enter", "Execute command"),
+        kv("Esc", "Cancel and exit command mode"),
+        Line::from(""),
+        // ── Targeting Commands ──
+        Line::from(Span::styled(" Targeting Commands", head_s)),
+        Line::from(""),
+        kv("<name> /cmd", "Send slash command to character by name"),
+        kv("@<name> /cmd", "Force direct target (bypass group)"),
+        kv("<pid> /cmd", "Send slash command to client by PID"),
+        kv("G1-G6 /cmd", "Send slash command to entire group"),
+        kv("all /cmd", "Broadcast slash command to all clients"),
+        Line::from(""),
+        // ── General Commands ──
+        Line::from(Span::styled(" General Commands", head_s)),
+        Line::from(""),
+        kv("help", "Show this help overlay"),
+        kv("commands", "List all commands with usage summary"),
+        kv("status", "Show connected client count"),
+        kv("mode <m>", "Switch mode: camp | hunt"),
+        kv("inject", "Request DLL injection (placeholder)"),
+        Line::from(""),
+        // ── Combat Commands ──
+        Line::from(Span::styled(" Combat Commands", head_s)),
+        Line::from(""),
+        kv("ma [name]", "Set or show Main Assist (sends /assist)"),
+        kv("mt [name]", "Set or show Main Tank"),
+        kv("engage [id]", "Start combat (optional target_id)"),
+        kv("disengage", "Stop combat for focused clients"),
+        kv("loot", "Loot nearby corpses"),
+        kv("heal cancel", "Toggle heal-cancel optimization"),
+        Line::from(""),
+        // ── Group & Social Commands ──
+        Line::from(Span::styled(" Group & Social Commands", head_s)),
+        Line::from(""),
+        kv("invite <name>", "Send group invite from active client"),
+        kv("accept", "Accept pending group invite"),
+        Line::from(""),
+        // ── Navigation Commands ──
+        Line::from(Span::styled(" Navigation Commands", head_s)),
+        Line::from(""),
+        kv("nav <dest>", "Navigate to camp, coords (x y z), or zone"),
+        kv("track <name>", "Track a spawn by name (shows on map)"),
+        kv("track list", "Show all tracked spawns"),
+        kv("untrack <name>", "Stop tracking a spawn"),
+        Line::from(""),
+        // ── Camp Commands ──
+        Line::from(Span::styled(" Camp Commands", head_s)),
+        Line::from(""),
+        kv("camp start <n>", "Start camp from config/camps/<n>.toml"),
+        kv("camp stop", "Stop active camp"),
+        kv("camp status", "Show active camp status"),
+        kv("camp list", "List saved camp configs"),
+        kv("camp add <n>", "Save current position as camp <n>"),
+        kv("camp remove <n>", "Delete saved camp config"),
+        kv("camp next", "Advance to next linked camp"),
+        kv("camp prev", "Fall back to previous linked camp"),
+        kv("camp <name>", "Shortcut for camp start <name>"),
+        Line::from(""),
+        // ── Login Commands ──
+        Line::from(Span::styled(" Login & Lifecycle Commands", head_s)),
+        Line::from(""),
+        kv("login", "List configured accounts and status"),
+        kv("login all", "Launch all configured accounts"),
+        kv("login G<n>", "Launch accounts in group n"),
+        kv("login <name>", "Launch a single account by name"),
+        kv("stop <name>", "Stop a client (or stop all)"),
+        kv("restart <name>", "Restart a client (or restart all)"),
+        Line::from(""),
+        // ── CH Chain Commands ──
+        Line::from(Span::styled(" CH Chain Commands", head_s)),
+        Line::from(""),
+        kv("ch status", "Show CH chain status"),
+        kv("ch start", "<pids> <interval> <target> [slot]"),
+        kv("ch stop", "Stop the running CH chain"),
+        kv("ch add <pid>", "Add cleric to chain"),
+        kv("ch rm <pid>", "Remove cleric from chain"),
+        kv("ch interval", "Set cast interval (seconds)"),
+        kv("ch adaptive", "Toggle adaptive timing: on|off"),
+        Line::from(""),
+        // ── Status Glyphs ──
         Line::from(Span::styled(" Status Glyphs", head_s)),
         Line::from(""),
         kv("⚔ / ✚ / ✦", "Fight, Heal, Cast"),
         kv("➜ / ✓ / !", "Navigate, Arrived, Stuck"),
         kv("☾ / ⇣ / ⌕", "Sit, Feign, Loot"),
         Line::from(""),
-        Line::from(Span::styled(" CH Chain", head_s)),
-        Line::from(""),
-        kv("ch start", "<pids> <interval>"),
-        kv("ch stop", "Stop CH chain"),
-        kv("ch add <pid>", "Add cleric"),
-        kv("ch rm <pid>", "Remove cleric"),
-        kv("ch interval", "<seconds>"),
-        kv("ch adaptive", "on|off"),
-        Line::from(""),
-        Line::from(Span::styled(" Press ? or Esc to close", dim_s)),
+        Line::from(Span::styled(
+            " Scroll: j/k/Up/Down  Page: PgUp/PgDn  Top: Home  Close: ?/Esc",
+            dim_s,
+        )),
     ];
 
+    // Clamp scroll to valid range (account for border lines)
+    let visible_lines = popup_h.saturating_sub(2) as usize;
+    let max_scroll = text.len().saturating_sub(visible_lines);
+    let scroll = app.help_scroll.min(max_scroll);
+
     frame.render_widget(
-        Paragraph::new(text).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(t.border_type)
-                .title(Span::styled(" Help ", t.help_heading))
-                .border_style(t.help_border)
-                .style(Style::default().bg(t.help_bg)),
-        ),
+        Paragraph::new(text)
+            .scroll((scroll as u16, 0))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(t.border_type)
+                    .title(Span::styled(" Help ", t.help_heading))
+                    .border_style(t.help_border)
+                    .style(Style::default().bg(t.help_bg)),
+            ),
         popup_area,
     );
 }

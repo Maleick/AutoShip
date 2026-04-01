@@ -224,6 +224,7 @@ pub struct App {
 
     // Help overlay
     pub help_visible: bool,
+    pub help_scroll: usize,
 
     // Operating mode (camp vs hunt)
     pub operating_mode: crate::camp::hunt::OperatingMode,
@@ -331,6 +332,7 @@ impl App {
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
+            help_scroll: 0,
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 

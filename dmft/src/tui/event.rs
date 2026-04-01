@@ -82,7 +82,25 @@ pub fn handle_events(
 
         if app.help_visible {
             match key.code {
-                KeyCode::Char('?') | KeyCode::Esc => app.help_visible = false,
+                KeyCode::Char('?') | KeyCode::Esc => {
+                    app.help_visible = false;
+                    app.help_scroll = 0;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.help_scroll = app.help_scroll.saturating_add(1);
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.help_scroll = app.help_scroll.saturating_sub(1);
+                }
+                KeyCode::PageDown => {
+                    app.help_scroll = app.help_scroll.saturating_add(10);
+                }
+                KeyCode::PageUp => {
+                    app.help_scroll = app.help_scroll.saturating_sub(10);
+                }
+                KeyCode::Home => {
+                    app.help_scroll = 0;
+                }
                 _ => {}
             }
             return Ok(true);
