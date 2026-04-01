@@ -1,0 +1,17 @@
+{
+    "commands": {
+        "launcher (debug)": {
+            "workingDirectory": ".",
+            "fileName": "..\\build\\bin\\debug\\MacroQuest.exe"
+        },
+        "launcher (release)": {
+            "workingDirectory": ".",
+            "fileName": "..\\build\\bin\\release\\MacroQuest.exe"
+        },
+        "comment-update (debug)": {
+            "fileName": "cmd.exe",
+            "workingDirectory": ".",
+            "arguments": "/c ..\\tools\\comment-update\\update-debug.bat"
+        }
+    }
+}

@@ -1,0 +1,78 @@
+*.aps
+*.bak
+*.dep
+*.dsp
+*.exp
+*.ilk
+*.iobj
+*.ipdb
+*.log
+*.mak
+*.map
+*.navmesh
+*.obj
+*.opensdf
+*.pdb
+*.sdf
+*.suo
+*.tlog
+*.tmp
+*.VC.db
+*.VC.opendb
+*.vcproj
+*.vcxproj.user
+*.vspscc
+*.zip
+.vs/
+.idea/
+.claude/
+
+/build/
+/build_*/
+packages/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+_deps/
+
+UpgradeLog.htm
+
+CVS/
+ipch/
+
+.cvsignore
+.vscode/
+.ionide/
+
+# ignore ida files
+*.id?
+*.nam
+*.til
+
+# ignore files created from templates
+/include/config/crashpad.h
+
+# ignore tools repo
+src/tools
+
+# ignore a specific sln file
+src/MacroQuest*.sln
+!src/MacroQuest.sln
+
+# ignore generated protobuf files
+*.pb.*
+
+# ignore resharper files
+*.DotSettings.user
+src/_ReSharper*/
+src/*.[Rr]e[Ss]harper
+
+# ignore .custom files
+*.custom
+custom_plugins.cmake
+
+# ignore conversion analysis
+*conversion-analysis.txt

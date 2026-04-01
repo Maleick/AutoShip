@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{9c7402b4-f71e-41f8-bb17-320f47de02c8}</ProjectGuid>
+    <RootNamespace>zep</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\src\Common.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\src\Common.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\src\Common.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\src\Common.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ZEP_FEATURE_CPP_FILE_SYSTEM;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ZEP_FEATURE_CPP_FILE_SYSTEM;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ZEP_FEATURE_CPP_FILE_SYSTEM;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ZEP_FEATURE_CPP_FILE_SYSTEM;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\zep\ImGuiZepConsole.cpp" />
+    <ClCompile Include="..\..\src\zep\ImGuiZepEditor.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\buffer.cpp">
+    </ClCompile>
+    <ClCompile Include="src\commands.cpp">
+    </ClCompile>
+    <ClCompile Include="src\display.cpp">
+    </ClCompile>
+    <ClCompile Include="src\editor.cpp">
+    </ClCompile>
+    <ClCompile Include="src\filesystem.cpp">
+    </ClCompile>
+    <ClCompile Include="src\glyph_iterator.cpp">
+    </ClCompile>
+    <ClCompile Include="src\indexer.cpp">
+    </ClCompile>
+    <ClCompile Include="src\keymap.cpp">
+    </ClCompile>
+    <ClCompile Include="src\line_widgets.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mcommon\animation\timer.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mcommon\file\path.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mcommon\string\stringutils.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mode.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mode_search.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mode_standard.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mode_tree.cpp">
+    </ClCompile>
+    <ClCompile Include="src\mode_vim.cpp">
+    </ClCompile>
+    <ClCompile Include="src\range_markers.cpp">
+    </ClCompile>
+    <ClCompile Include="src\regress.cpp">
+    </ClCompile>
+    <ClCompile Include="src\scroller.cpp">
+    </ClCompile>
+    <ClCompile Include="src\splits.cpp">
+    </ClCompile>
+    <ClCompile Include="src\syntax.cpp">
+    </ClCompile>
+    <ClCompile Include="src\syntax_markdown.cpp">
+    </ClCompile>
+    <ClCompile Include="src\syntax_providers.cpp">
+    </ClCompile>
+    <ClCompile Include="src\syntax_rainbow_brackets.cpp">
+    </ClCompile>
+    <ClCompile Include="src\syntax_tree.cpp">
+    </ClCompile>
+    <ClCompile Include="src\tab_window.cpp">
+    </ClCompile>
+    <ClCompile Include="src\theme.cpp">
+    </ClCompile>
+    <ClCompile Include="src\window.cpp">
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\include\mq\zep\ImGuiZepConsole.h" />
+    <ClInclude Include="..\..\include\mq\zep\ImGuiZepEditor.h" />
+    <ClInclude Include="include\zep.h" />
+    <ClInclude Include="include\zep\buffer.h" />
+    <ClInclude Include="include\zep\commands.h" />
+    <ClInclude Include="include\zep\display.h" />
+    <ClInclude Include="include\zep\editor.h" />
+    <ClInclude Include="include\zep\filesystem.h" />
+    <ClInclude Include="include\zep\gap_buffer.h" />
+    <ClInclude Include="include\zep\glyph_iterator.h" />
+    <ClInclude Include="include\zep\indexer.h" />
+    <ClInclude Include="include\zep\keymap.h" />
+    <ClInclude Include="include\zep\line_widgets.h" />
+    <ClInclude Include="include\zep\mcommon\animation\timer.h" />
+    <ClInclude Include="include\zep\mcommon\callback.h" />
+    <ClInclude Include="include\zep\mcommon\file\cpptoml.h" />
+    <ClInclude Include="include\zep\mcommon\file\fnmatch.h" />
+    <ClInclude Include="include\zep\mcommon\file\path.h" />
+    <ClInclude Include="include\zep\mcommon\gsl-lite.hpp" />
+    <ClInclude Include="include\zep\mcommon\logger.h" />
+    <ClInclude Include="include\zep\mcommon\math\color.h" />
+    <ClInclude Include="include\zep\mcommon\math\math.h" />
+    <ClInclude Include="include\zep\mcommon\platform.h" />
+    <ClInclude Include="include\zep\mcommon\registrar.h" />
+    <ClInclude Include="include\zep\mcommon\signals.h" />
+    <ClInclude Include="include\zep\mcommon\string\stringutils.h" />
+    <ClInclude Include="include\zep\mcommon\threadpool.h" />
+    <ClInclude Include="include\zep\mcommon\threadutils.h" />
+    <ClInclude Include="include\zep\mcommon\utf8.h" />
+    <ClInclude Include="include\zep\mcommon\utf8\checked.h" />
+    <ClInclude Include="include\zep\mcommon\utf8\core.h" />
+    <ClInclude Include="include\zep\mcommon\utf8\cpp11.h" />
+    <ClInclude Include="include\zep\mcommon\utf8\unchecked.h" />
+    <ClInclude Include="include\zep\mode.h" />
+    <ClInclude Include="include\zep\mode_search.h" />
+    <ClInclude Include="include\zep\mode_standard.h" />
+    <ClInclude Include="include\zep\mode_tree.h" />
+    <ClInclude Include="include\zep\mode_vim.h" />
+    <ClInclude Include="include\zep\range_markers.h" />
+    <ClInclude Include="include\zep\regress.h" />
+    <ClInclude Include="include\zep\scroller.h" />
+    <ClInclude Include="include\zep\splits.h" />
+    <ClInclude Include="include\zep\syntax.h" />
+    <ClInclude Include="include\zep\syntax_markdown.h" />
+    <ClInclude Include="include\zep\syntax_providers.h" />
+    <ClInclude Include="include\zep\syntax_rainbow_brackets.h" />
+    <ClInclude Include="include\zep\syntax_tree.h" />
+    <ClInclude Include="include\zep\tab_window.h" />
+    <ClInclude Include="include\zep\theme.h" />
+    <ClInclude Include="include\zep\window.h" />
+    <ClInclude Include="include\zep\zep_config.h" />
+    <ClInclude Include="pch.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="zep.natvis" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

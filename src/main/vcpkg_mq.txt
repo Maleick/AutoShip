@@ -1,0 +1,8 @@
+crashpad
+fmt
+wil
+date
+detours
+protobuf
+sqlite3
+argon2

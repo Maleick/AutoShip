@@ -1,0 +1,196 @@
+/*
+ * MacroQuest: The extension platform for EverQuest
+ * Copyright (C) 2002-present MacroQuest Authors
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License, version 2, as published by
+ * the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "pch.h"
+#include "LuaCoroutine.h"
+#include "LuaThread.h"
+
+#include <mq/Plugin.h>
+
+namespace mq::lua {
+
+template <typename T>
+CoroutineResult Run(const std::vector<T>& args, LuaCoroutine* co)
+{
+	try
+	{
+		co->luaThread->SetCurrentCoroutine(co);
+		auto result = co->coroutine(sol::as_args(args));
+		if (result.valid())
+			return result;
+
+		sol::table stackTraces = co->luaThread->GetState().registry()["mq2lua.tracebacks"];
+		sol::error err = result;
+		DebugStackTrace(result.lua_state(), err, stackTraces);
+		result.abandon();
+	}
+	catch (const sol::error& err)
+	{
+		DebugStackTrace(co->coroutine.lua_state(), err);
+	}
+	catch (...)
+	{
+		LuaError("Abnormal exception thrown from coroutine!");
+	}
+
+	return std::nullopt;
+}
+
+CoroutineResult LuaCoroutine::RunCoroutine()
+{
+	return Run(std::vector<std::string>{}, this);
+}
+
+CoroutineResult LuaCoroutine::RunCoroutine(const std::vector<std::string>& args)
+{
+	return Run(args, this);
+}
+
+CoroutineResult LuaCoroutine::RunCoroutine(const std::vector<sol::object>& args)
+{
+	return Run(args, this);
+}
+
+LuaCoroutine::LuaCoroutine(sol::thread thread, LuaThread* luaThread)
+	: thread(std::move(thread))
+	, luaThread(luaThread)
+{
+}
+
+std::shared_ptr<LuaCoroutine> LuaCoroutine::Create(sol::thread thread, LuaThread* luaThread)
+{
+	auto co_ptr = std::make_shared<LuaCoroutine>(std::move(thread), luaThread);
+	return co_ptr;
+}
+
+bool LuaCoroutine::CheckCondition(std::optional<sol::function>& func)
+{
+	if (!func)
+		return false;
+
+	try
+	{
+		lua_State* L = thread.state();
+		auto check_thread = sol::thread::create(thread.state());
+
+		sol::protected_function check_func(check_thread.state(), *func);
+		sol::protected_function_result result = check_func();
+
+		if (!result.valid())
+		{
+			luaL_error(thread.state(), "Error received from mq.delay callback");
+		}
+
+		auto result_bool = result.get<sol::optional<bool>>();
+		if (!result_bool.has_value())
+		{
+			luaL_error(thread.state(), "Error in mq.delay callback result:\nexpected bool, got %s", sol::type_name(thread.state(), result.get_type()).c_str());
+		}
+
+		return result_bool.value();
+	}
+	catch (sol::error& ex)
+	{
+		LuaError("Failed to check delay condition check with error '%s'", ex.what());
+		func = std::nullopt;
+	}
+
+	return false;
+}
+
+void LuaCoroutine::Delay(sol::object delayObj, std::optional<sol::object> conditionObj, sol::state_view s)
+{
+	using namespace std::chrono_literals;
+
+	auto delay_int = delayObj.as<std::optional<const int64_t>>();
+	if (!delay_int)
+	{
+		auto delay_str = delayObj.as<std::optional<std::string_view>>();
+		if (delay_str)
+		{
+			if (delay_str->length() > 1 && delay_str->compare(delay_str->length() - 1, 1, "m") == 0)
+			{
+				delay_int.emplace(std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::minutes(GetIntFromString(*delay_str, 0))).count());
+			}
+			else if (delay_str->length() > 2 && delay_str->compare(delay_str->length() - 2, 2, "ms") == 0)
+			{
+				delay_int.emplace(std::chrono::milliseconds(GetIntFromString(*delay_str, 0)).count());
+			}
+			else if (delay_str->length() > 1 && delay_str->compare(delay_str->length() - 1, 1, "s") == 0)
+			{
+				delay_int.emplace(std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::seconds(GetIntFromString(*delay_str, 0))).count());
+			}
+			else
+			{
+				luaL_error(s, "Units are required when passing delay as a string.");
+				return;
+			}
+		}
+	}
+
+	if (delay_int.has_value())
+	{
+		uint64_t delay_ms = std::max(0ms, std::chrono::milliseconds(*delay_int)).count();
+		std::optional<sol::function> condition;
+		if (conditionObj)
+			condition = conditionObj->as<std::optional<sol::function>>();
+
+		SetDelay(delay_ms + MQGetTickCount64(), condition);
+	}
+	else
+	{
+		luaL_error(s, "Invalid argument passed to mq.delay");
+	}
+}
+
+void LuaCoroutine::SetDelay(uint64_t time, std::optional<sol::function> condition /* = std::nullopt */)
+{
+	if (luaThread == nullptr)
+		return;
+
+	if (time > MQGetTickCount64() && !CheckCondition(condition))
+	{
+		luaThread->DoYield();
+		//lua_yield(coroutine.lua_state(), 0); // only yield from the current coroutine
+		m_delayTime = time;
+		m_delayCondition = condition;
+	}
+}
+
+void LuaCoroutine::ClearDelay()
+{
+	m_delayTime = 0L;
+	m_delayCondition = std::nullopt;
+}
+
+bool LuaCoroutine::ShouldRun()
+{
+	if (luaThread == nullptr || luaThread->IsPaused())
+	{
+		return false;
+	}
+
+	// check delayed status
+	if (m_delayTime <= MQGetTickCount64() || CheckCondition(m_delayCondition))
+	{
+		ClearDelay();
+		return true;
+	}
+
+	return false;
+}
+
+} // namespace mq::lua
