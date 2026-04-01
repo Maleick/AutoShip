@@ -158,6 +158,9 @@ impl ChChain {
         }
 
         let prev_member = self.members.get(self.current_index).copied();
+        let last_fired_member = self
+            .last_fired_index
+            .and_then(|index| self.members.get(index).copied());
         self.members = filtered;
 
         self.current_index = if let Some(prev_pid) = prev_member {
@@ -172,10 +175,7 @@ impl ChChain {
             self.current_index = 0;
         }
 
-        if let Some(pid) = self
-            .last_fired_index
-            .and_then(|index| self.members.get(index).copied())
-        {
+        if let Some(pid) = last_fired_member {
             self.last_fired_index = self.members.iter().position(|member| *member == pid);
         } else if self.last_fired_index.is_some() {
             self.last_fired_index = None;
@@ -499,6 +499,24 @@ mod tests {
             chain.tick();
         }
         assert_eq!(chain.tick(), Some(3));
+    }
+
+    #[test]
+    fn set_members_reorders_rotation_and_active_caster() {
+        let mut chain = ChChain::new(vec![1, 2, 3], 1.0, 1, 1);
+        chain.start();
+        assert_eq!(chain.tick(), Some(1));
+        assert_eq!(chain.active_index(), Some(0));
+
+        chain.set_members(vec![3, 1, 2]);
+
+        assert_eq!(chain.members(), &[3, 1, 2]);
+        assert_eq!(chain.active_index(), Some(1));
+
+        for _ in 0..19 {
+            chain.tick();
+        }
+        assert_eq!(chain.tick(), Some(2));
     }
 
     #[test]

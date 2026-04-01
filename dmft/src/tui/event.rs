@@ -185,6 +185,16 @@ pub fn handle_events(
                 KeyCode::Left => match app.ch_chain_panel_state.focus {
                     ChPanelFocus::ChainOrder => {
                         app.ch_chain_panel_state.move_up();
+                        if !app.ch_chain_panel_state.clerics.is_empty() {
+                            let members: Vec<u32> = app
+                                .ch_chain_panel_state
+                                .clerics
+                                .iter()
+                                .map(|cleric| cleric.pid)
+                                .collect();
+                            orchestrator.combat.ch_chain_set_members(members);
+                            app.status_message = String::from("CH chain order updated");
+                        }
                     }
                     ChPanelFocus::Timing => {
                         app.ch_chain_panel_state.chain_delay_secs =
@@ -209,6 +219,16 @@ pub fn handle_events(
                 KeyCode::Right => match app.ch_chain_panel_state.focus {
                     ChPanelFocus::ChainOrder => {
                         app.ch_chain_panel_state.move_down();
+                        if !app.ch_chain_panel_state.clerics.is_empty() {
+                            let members: Vec<u32> = app
+                                .ch_chain_panel_state
+                                .clerics
+                                .iter()
+                                .map(|cleric| cleric.pid)
+                                .collect();
+                            orchestrator.combat.ch_chain_set_members(members);
+                            app.status_message = String::from("CH chain order updated");
+                        }
                     }
                     ChPanelFocus::Timing => {
                         app.ch_chain_panel_state.chain_delay_secs += 0.25;

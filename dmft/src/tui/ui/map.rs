@@ -690,6 +690,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         })
         .collect();
 
+    frame.render_widget(Paragraph::new(lines), inner);
+
     if let Some(mini_bounds) = minimap_area(inner, w, h) {
         let selected_spawn = app
             .filtered_spawns()
@@ -705,8 +707,6 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             );
         }
     }
-
-    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// Collapse a row of `(char, Color)` cells into spans grouped by consecutive color runs.
