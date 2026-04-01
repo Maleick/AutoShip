@@ -363,6 +363,8 @@ pub struct NavClientStatus {
     pub eta_secs: Option<u32>,
     /// Active navigation waypoints for map overlay rendering.
     pub waypoints: Vec<dmft_common::nav::Waypoint>,
+    /// Whether this status was injected by the deterministic demo script.
+    pub is_demo_scripted: bool,
 }
 
 struct FocusedNavClient {
@@ -1466,15 +1468,19 @@ impl App {
     fn find_spawn_id_by_name(&self, name: &str) -> Option<u32> {
         self.clients.iter().find_map(|client| {
             if let Some(player) = &client.local_player
-                && player.displayed_name.eq_ignore_ascii_case(name)
+                && (player.displayed_name.eq_ignore_ascii_case(name)
+                    || player.name.eq_ignore_ascii_case(name))
             {
                 return Some(player.spawn_id);
             }
             client.spawns.iter().find_map(|spawn| {
-                spawn
-                    .displayed_name
-                    .eq_ignore_ascii_case(name)
-                    .then_some(spawn.spawn_id)
+                if spawn.displayed_name.eq_ignore_ascii_case(name)
+                    || spawn.name.eq_ignore_ascii_case(name)
+                {
+                    Some(spawn.spawn_id)
+                } else {
+                    None
+                }
             })
         })
     }
@@ -2237,7 +2243,6 @@ impl App {
                 "Skipping navmesh overlay load on non-Windows"
             );
             self.map_state.navmesh_overlay = None;
-            return;
         }
 
         #[cfg(windows)]
@@ -2440,6 +2445,7 @@ impl App {
                         status,
                         eta_secs: None,
                         waypoints: route.waypoints,
+                        is_demo_scripted: false,
                     },
                 );
             }

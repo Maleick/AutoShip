@@ -4,7 +4,7 @@ use crossterm::terminal::{
 };
 use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -282,14 +282,19 @@ fn apply_demo_scenario(app: &mut App) {
 
     let tick_count = app.tick_count;
     let refresh_rate_ms = app.refresh_rate_ms;
-
-    app.nav_state.nav_statuses.clear();
+    let demo_pids: HashSet<u32> = app
+        .clients
+        .iter()
+        .filter(|client| client.is_demo)
+        .map(|client| client.pid)
+        .collect();
+    app.nav_state
+        .nav_statuses
+        .retain(|pid, status| !demo_pids.contains(pid) || !status.is_demo_scripted);
 
     let mut chain_clerics = Vec::new();
     let mut chain_target_id = 0u32;
     let mut chain_target_name = String::new();
-    let mut main_tank_name = None;
-    let mut main_assist_name = None;
 
     for client in app.clients.iter_mut() {
         let Some(snapshot) = super::demo_data::demo_client_snapshot(
@@ -324,15 +329,23 @@ fn apply_demo_scenario(app: &mut App) {
             });
 
         if let Some(nav) = snapshot.nav.as_ref() {
-            app.nav_state.nav_statuses.insert(
-                client.pid,
-                NavClientStatus {
-                    destination: nav.destination.clone(),
-                    status: nav.status.clone(),
-                    eta_secs: None,
-                    waypoints: nav.waypoints.clone(),
-                },
-            );
+            let has_manual_nav = app
+                .nav_state
+                .nav_statuses
+                .get(&client.pid)
+                .is_some_and(|status| !status.is_demo_scripted);
+            if !has_manual_nav {
+                app.nav_state.nav_statuses.insert(
+                    client.pid,
+                    NavClientStatus {
+                        destination: nav.destination.clone(),
+                        status: nav.status.clone(),
+                        eta_secs: None,
+                        waypoints: nav.waypoints.clone(),
+                        is_demo_scripted: true,
+                    },
+                );
+            }
         }
 
         if let Some(profile) =
@@ -340,7 +353,6 @@ fn apply_demo_scenario(app: &mut App) {
         {
             match profile.role {
                 super::demo_data::DemoRole::MainTank => {
-                    main_tank_name = Some(profile.name.to_string());
                     if let Some(player) = client.local_player.as_ref() {
                         chain_target_id = player.spawn_id;
                     }
@@ -379,11 +391,7 @@ fn apply_demo_scenario(app: &mut App) {
                 | super::demo_data::DemoRole::Shaman
                 | super::demo_data::DemoRole::Druid
                 | super::demo_data::DemoRole::Wizard
-                | super::demo_data::DemoRole::RecoveryWizard => {
-                    if main_assist_name.is_none() {
-                        main_assist_name = Some(profile.name.to_string());
-                    }
-                }
+                | super::demo_data::DemoRole::RecoveryWizard => {}
                 _ => {}
             }
         }
@@ -416,13 +424,6 @@ fn apply_demo_scenario(app: &mut App) {
         app.ch_chain_status = None;
     }
 
-    app.main_tank = if main_tank_name.is_some() {
-        main_tank_name
-    } else {
-        Some(String::from("Dmft01"))
-    };
-    app.main_assist = main_assist_name.or_else(|| Some(String::from("Iceweaver02")));
-    app.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
     app.status_message = format!(
         "DEMO MODE - {} scripted clients",
         app.clients.iter().filter(|client| client.is_demo).count()
@@ -916,6 +917,14 @@ fn load_demo_data(app: &mut App) {
 
     // Sync selected client to legacy fields
     app.sync_from_selected_client();
+
+    if app.main_tank.is_none() {
+        app.main_tank = Some(String::from("Dmft01"));
+    }
+    if app.main_assist.is_none() {
+        app.main_assist = Some(String::from("Iceweaver02"));
+    }
+    app.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
 
     // Load zone map for the selected client's zone
     app.reload_map_for_selected_client();

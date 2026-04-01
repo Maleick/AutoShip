@@ -1279,15 +1279,7 @@ pub fn render_gauge_bar(gauge: &GaugeBar, filled_color: Color, t: &Theme) -> Lin
     let ratio = gauge.ratio();
     let filled = (ratio * gauge.width as f64).round() as usize;
     let empty = gauge.width.saturating_sub(filled);
-    let bar = if gauge.ascii_safe {
-        format!("|{}{}|", "#".repeat(filled), "-".repeat(empty))
-    } else {
-        format!(
-            "\u{2502}{}{}\u{2502}",
-            "\u{2588}".repeat(filled),
-            "\u{2591}".repeat(empty)
-        )
-    };
+    let bar = gauge_bar_string(filled, empty, gauge.ascii_safe);
 
     let mut spans = Vec::new();
     if let Some(ref label) = gauge.label {
@@ -1367,15 +1359,7 @@ pub fn render_cast_bar(
     let gauge = GaugeBar::new(cast.progress * 100.0, 100.0, bar_width).ascii_safe(ascii_safe);
     let filled = (gauge.ratio() * gauge.width as f64).round() as usize;
     let empty = gauge.width.saturating_sub(filled);
-    let bar = if gauge.ascii_safe {
-        format!("|{}{}|", "#".repeat(filled), "-".repeat(empty))
-    } else {
-        format!(
-            "\u{2502}{}{}\u{2502}",
-            "\u{2588}".repeat(filled),
-            "\u{2591}".repeat(empty)
-        )
-    };
+    let bar = gauge_bar_string(filled, empty, gauge.ascii_safe);
 
     let mut spans = vec![
         Span::styled(label_prefix, Style::default().fg(dim_color)),
@@ -1399,18 +1383,33 @@ pub fn render_cast_bar(
     Line::from(spans)
 }
 
-fn truncate_inline(text: &str, max_chars: usize) -> String {
-    if text.chars().count() <= max_chars {
+fn gauge_bar_string(filled: usize, empty: usize, ascii_safe: bool) -> String {
+    if ascii_safe {
+        format!("|{}{}|", "#".repeat(filled), "-".repeat(empty))
+    } else {
+        format!(
+            "\u{2502}{}{}\u{2502}",
+            "\u{2588}".repeat(filled),
+            "\u{2591}".repeat(empty)
+        )
+    }
+}
+
+pub(crate) fn truncate_inline(text: &str, max_chars: usize) -> String {
+    let char_count = text.chars().count();
+    if char_count <= max_chars {
         return text.to_string();
     }
-    if max_chars <= 2 {
-        return text.chars().take(max_chars).collect();
-    }
 
-    let mut truncated: String = text.chars().take(max_chars - 2).collect();
-    truncated.push('.');
-    truncated.push('.');
-    truncated
+    match max_chars {
+        0 => String::new(),
+        1 | 2 => text.chars().take(max_chars).collect(),
+        _ => {
+            let mut truncated: String = text.chars().take(max_chars - 2).collect();
+            truncated.push_str("..");
+            truncated
+        }
+    }
 }
 
 // ─── Tooltip ────────────────────────────────────────────────────────────────

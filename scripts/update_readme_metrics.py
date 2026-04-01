@@ -31,7 +31,7 @@ def test_count() -> int:
         check=True,
         capture_output=True,
         text=True,
-        env={"CARGO_TERM_COLOR": "never", **os.environ},
+        env={**os.environ, "CARGO_TERM_COLOR": "never"},
     )
     return sum(1 for line in result.stdout.splitlines() if line.endswith(": test"))
 

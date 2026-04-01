@@ -4,7 +4,7 @@
 //! including chain ordering, timing, target selection, and real-time status.
 
 use crate::tui::cast::CastDisplay;
-use crate::tui::ui::widgets::render_cast_bar;
+use crate::tui::ui::widgets::{render_cast_bar, truncate_inline};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -301,7 +301,7 @@ impl ChChainWidget<'_> {
             };
 
             // Cast state indicator
-            let state_char = match cleric.cast_state {
+            let (state_char, state_color) = match cleric.cast_state {
                 CastState::Idle => ("○", Color::DarkGray),
                 CastState::Casting(pct) => {
                     if pct > 0.75 {
@@ -314,21 +314,41 @@ impl ChChainWidget<'_> {
                 }
                 CastState::Completed => ("●", Color::Green),
                 CastState::Missed => ("✗", Color::Red),
-            }
-            .0;
+            };
+            let pos_text = format!(" {}. ", cleric.position);
             let offset_text = if cleric.timing_offset_ms != 0 {
                 format!(" {:+}ms", cleric.timing_offset_ms)
             } else {
                 String::new()
             };
-            let row_label = truncate_inline(
-                &format!(
-                    " {}. {}  {}{}",
-                    cleric.position, cleric.name, state_char, offset_text
+            let name_budget = inner.width.saturating_sub(
+                (pos_text.chars().count()
+                    + 2
+                    + state_char.chars().count()
+                    + offset_text.chars().count()) as u16,
+            ) as usize;
+            let name_label = truncate_inline(&cleric.name, name_budget);
+            let row = Line::from(vec![
+                Span::styled(pos_text, base_style),
+                Span::styled(name_label, base_style),
+                Span::styled("  ", base_style),
+                Span::styled(
+                    state_char,
+                    Style::default().fg(state_color).bg(if is_selected {
+                        self.accent_color
+                    } else {
+                        Color::Reset
+                    }),
                 ),
-                inner.width as usize,
-            );
-            let row = Line::from(vec![Span::styled(row_label, base_style)]);
+                Span::styled(
+                    offset_text,
+                    Style::default().fg(Color::DarkGray).bg(if is_selected {
+                        self.accent_color
+                    } else {
+                        Color::Reset
+                    }),
+                ),
+            ]);
             buf.set_line(inner.x, y, &row, inner.width);
             y += 1;
 
@@ -438,6 +458,16 @@ impl ChChainWidget<'_> {
         let para = Paragraph::new(line);
         para.render(inner, buf);
     }
+}
+
+fn apply_row_background(mut line: Line<'static>, background: Color) -> Line<'static> {
+    for span in &mut line.spans {
+        span.style.bg = Some(background);
+        if span.style.fg.is_none() {
+            span.style.fg = Some(Color::Black);
+        }
+    }
+    line
 }
 
 #[cfg(test)]
@@ -550,28 +580,4 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n")
     }
-}
-
-fn apply_row_background(mut line: Line<'static>, background: Color) -> Line<'static> {
-    for span in &mut line.spans {
-        span.style.bg = Some(background);
-        if span.style.fg.is_none() {
-            span.style.fg = Some(Color::Black);
-        }
-    }
-    line
-}
-
-fn truncate_inline(text: &str, max_chars: usize) -> String {
-    if text.chars().count() <= max_chars {
-        return text.to_string();
-    }
-    if max_chars <= 2 {
-        return text.chars().take(max_chars).collect();
-    }
-
-    let mut truncated: String = text.chars().take(max_chars - 2).collect();
-    truncated.push('.');
-    truncated.push('.');
-    truncated
 }
