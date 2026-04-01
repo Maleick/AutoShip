@@ -937,4 +937,115 @@ mod tests {
         let lines = class_sprite(None, &StandState::Standing, 0);
         assert_eq!(lines.len(), 5);
     }
+
+    #[test]
+    fn feigned_sprite_works() {
+        let lines = class_sprite(Some(&EqClass::Monk), &StandState::Feigned, 0);
+        assert_eq!(lines.len(), 5);
+    }
+
+    #[test]
+    fn sprite_constants_correct() {
+        assert_eq!(SPRITE_W, 10);
+        assert_eq!(SPRITE_H, 10);
+        assert_eq!(SPRITE_RENDER_H, 5);
+    }
+
+    #[test]
+    fn warrior_sprite_has_three_frames() {
+        assert_eq!(SPRITE_WARRIOR.len(), 3);
+    }
+
+    #[test]
+    fn dead_sprite_has_two_frames() {
+        assert_eq!(SPRITE_DEAD.len(), 2);
+    }
+
+    #[test]
+    fn sitting_sprite_has_two_frames() {
+        assert_eq!(SPRITE_SITTING.len(), 2);
+    }
+
+    #[test]
+    fn class_sprite_animation_cycles() {
+        // tick / 2 gives the animation frame, mod sprite count (3 frames for warrior)
+        let t0 = class_sprite(Some(&EqClass::Warrior), &StandState::Standing, 0);
+        let t2 = class_sprite(Some(&EqClass::Warrior), &StandState::Standing, 2);
+        let t6 = class_sprite(Some(&EqClass::Warrior), &StandState::Standing, 6);
+        // Frame 0 and frame 1 (tick=2) should differ
+        assert_ne!(format!("{:?}", t0), format!("{:?}", t2));
+        // Frame 0 and frame 3 (tick=6, wraps back to frame 0 with 3 frames) should be same
+        assert_eq!(format!("{:?}", t0), format!("{:?}", t6));
+    }
+
+    #[test]
+    fn class_palette_returns_palette_for_all_classes() {
+        let classes = [
+            EqClass::Warrior,
+            EqClass::Berserker,
+            EqClass::Cleric,
+            EqClass::Paladin,
+            EqClass::ShadowKnight,
+            EqClass::Ranger,
+            EqClass::Druid,
+            EqClass::Beastlord,
+            EqClass::Monk,
+            EqClass::Rogue,
+            EqClass::Bard,
+            EqClass::Enchanter,
+            EqClass::Wizard,
+            EqClass::Magician,
+            EqClass::Necromancer,
+            EqClass::Shaman,
+        ];
+        for class in &classes {
+            let pal = class_palette(Some(class));
+            assert!(!pal.is_empty(), "Palette empty for {:?}", class);
+        }
+    }
+
+    #[test]
+    fn class_palette_none_returns_generic() {
+        let pal = class_palette(None);
+        assert!(!pal.is_empty());
+    }
+
+    #[test]
+    fn class_sprites_returns_non_empty_for_all_classes() {
+        let classes = [
+            EqClass::Warrior,
+            EqClass::Cleric,
+            EqClass::Ranger,
+            EqClass::Monk,
+            EqClass::Enchanter,
+            EqClass::Wizard,
+            EqClass::Necromancer,
+        ];
+        for class in &classes {
+            let sprites = class_sprites(Some(class));
+            assert!(!sprites.is_empty(), "No sprites for {:?}", class);
+        }
+    }
+
+    #[test]
+    fn render_sprite_handles_transparent_pixels() {
+        // Create a sprite that is all zeros (transparent)
+        let sprite: Sprite = [[0; SPRITE_W]; SPRITE_H];
+        let lines = render_sprite_lines(&sprite, PAL_GENERIC);
+        assert_eq!(lines.len(), SPRITE_RENDER_H as usize);
+        // All pixels should be spaces
+        for line in &lines {
+            for span in line.spans.iter() {
+                assert_eq!(span.content.as_ref(), " ");
+            }
+        }
+    }
+
+    #[test]
+    fn feigned_sprite_does_not_animate() {
+        // Feigned uses frame [0] only, so different ticks should produce same output
+        let t0 = class_sprite(Some(&EqClass::Monk), &StandState::Feigned, 0);
+        let t5 = class_sprite(Some(&EqClass::Monk), &StandState::Feigned, 10);
+        assert_eq!(format!("{:?}", t0), format!("{:?}", t5));
+    }
 }
