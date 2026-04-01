@@ -316,7 +316,55 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ])
     };
 
-    let text = vec![
+    // Build context-sensitive quick-reference for the active screen
+    let mut text: Vec<Line<'_>> = Vec::with_capacity(160);
+
+    let screen_label = app.active_screen.label();
+    text.push(Line::from(vec![
+        Span::styled(
+            format!(" Active: {screen_label} "),
+            Style::default()
+                .fg(t.help_bg)
+                .bg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " -- keys for this screen shown below",
+            dim_s,
+        ),
+    ]));
+    text.push(Line::from(""));
+
+    match app.active_screen {
+        ActiveScreen::Overview => {
+            text.push(kv("g", "Toggle group roster section"));
+            text.push(kv("v", "Toggle scope/filters section"));
+            text.push(kv("j/k / Up/Dn", "Navigate client roster"));
+            text.push(kv("Enter", "Expand selected character detail"));
+        }
+        ActiveScreen::Tactical => {
+            text.push(kv("+/-", "Adjust Z-depth slice filter"));
+            text.push(kv("Arrows", "Pan map viewport"));
+            text.push(kv("PgUp/PgDn", "Zoom map in/out"));
+            text.push(kv("Home", "Reset map viewport"));
+            text.push(kv("m / M", "Toggle map maximize"));
+            text.push(kv("v (map)", "Cycle viewport mode"));
+            text.push(kv("n (map)", "Toggle navmesh overlay"));
+        }
+        ActiveScreen::Navigation => {
+            text.push(kv("j/k / Up/Dn", "Navigate client list"));
+            text.push(kv("Enter", "Toggle full nav status view"));
+        }
+        ActiveScreen::Debug => {
+            text.push(kv("Up/Down", "Scroll hex dump"));
+            text.push(kv("j/k", "Navigate spawn list"));
+            text.push(kv("Enter", "Inspect spawn in hex view"));
+        }
+    }
+    text.push(Line::from(""));
+
+    // ── Full reference follows ──
+    text.extend_from_slice(&[
         // ── Global Keybindings ──
         Line::from(Span::styled(" Global Keybindings", head_s)),
         Line::from(""),
@@ -502,7 +550,7 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             " Scroll: j/k/Up/Down  Page: PgUp/PgDn  Top: Home  Close: ?/Esc",
             dim_s,
         )),
-    ];
+    ]);
 
     // Clamp scroll to valid range (account for border lines)
     let visible_lines = popup_h.saturating_sub(2) as usize;
