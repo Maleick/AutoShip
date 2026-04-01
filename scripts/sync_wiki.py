@@ -55,6 +55,7 @@ def run(
     *,
     cwd: Path | None = None,
     check: bool = True,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
@@ -62,6 +63,7 @@ def run(
         check=check,
         text=True,
         capture_output=True,
+        env=env,
     )
 
 
@@ -147,7 +149,15 @@ def wiki_display_url(repo_full_name: str) -> str:
 
 def git_auth_config(token: str) -> str:
     basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
-    return f"http.extraheader=AUTHORIZATION: basic {basic}"
+    return f"AUTHORIZATION: basic {basic}"
+
+
+def git_auth_env(token: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "http.extraheader"
+    env["GIT_CONFIG_VALUE_0"] = git_auth_config(token)
+    return env
 
 
 def run_git_authenticated(
@@ -157,9 +167,10 @@ def run_git_authenticated(
     cwd: Path | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    # Use an in-memory auth header for this process invocation so persistent wiki
-    # clones can keep a plain https remote URL without writing tokens to .git/config.
-    return run(["git", "-c", git_auth_config(token), *args], cwd=cwd, check=check)
+    # Use an in-memory Git config override so persistent wiki clones can keep a
+    # plain https remote URL without writing tokens to .git/config or putting
+    # secrets in the git process argv.
+    return run(["git", *args], cwd=cwd, check=check, env=git_auth_env(token))
 
 
 def wiki_remote_exists(display_url: str, token: str) -> bool:
@@ -169,7 +180,31 @@ def wiki_remote_exists(display_url: str, token: str) -> bool:
         cwd=REPO_ROOT,
         check=False,
     )
-    return result.returncode == 0
+    if result.returncode == 0:
+        return True
+
+    stderr = (result.stderr or "").strip().lower()
+    auth_indicators = (
+        "authentication failed",
+        "fatal: authentication failed",
+        "permission denied",
+        "permission to ",
+        "http basic: access denied",
+        "could not read from remote repository",
+        "could not read username",
+        "403",
+        "401",
+        "requires sso",
+        "saml sso",
+    )
+    if any(indicator in stderr for indicator in auth_indicators):
+        fail(
+            "Failed to authenticate to the GitHub wiki remote when checking whether it exists.\n\n"
+            "Please verify `GH_TOKEN` or `gh auth` configuration.\n\n"
+            f"Git error output:\n{result.stderr.strip()}"
+        )
+
+    return False
 
 
 def ensure_dir(path: Path) -> None:
@@ -309,7 +344,10 @@ def main() -> int:
     if args.dry_run:
         title = f"Dry run for {display_url} (remote {'exists' if remote_exists else 'missing'})"
         print_actions(actions, title=title)
-        print(f"Materialized wiki checkout: {wiki_dir}")
+        if args.wiki_dir:
+            print(f"Materialized wiki checkout: {wiki_dir}")
+        else:
+            print(f"Materialized wiki checkout (ephemeral; deleted after this run): {wiki_dir}")
         return 0
 
     print_actions(actions, title=f"Publishing wiki to {display_url}")

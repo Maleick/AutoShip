@@ -4,7 +4,7 @@
 
 ### All platforms
 
-- Rust stable with edition 2024 support
+- Rust toolchain with edition 2024 support
 - Git submodules initialized with:
 
 ```bash
@@ -15,7 +15,7 @@ git submodule update --init --recursive
 
 - CMake 3.5+
 - LLVM/Clang available for bindgen
-- MSVC Rust toolchain
+- nightly MSVC Rust toolchain
 
 If the navmesh FFI build complains about CMake policy settings, export:
 
@@ -72,6 +72,7 @@ cargo run -- --dump
 - `cargo run` launches the real app entrypoint and will attach to live EQ processes if found.
 - `dmft.exe inject` stages and injects `dmft_dll.dll`.
 - `dmft.exe cmd`, `status`, `status-all`, `nav`, and `zones` all expect live injected clients.
+- CI currently validates the Windows build on nightly, so contributors should match that toolchain when reproducing Windows build issues.
 
 ## Important Files and Paths
 
