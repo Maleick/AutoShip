@@ -341,6 +341,7 @@ pub fn render_progress_indicator(indicator: &ProgressIndicator, t: &Theme) -> Li
     let label = indicator.label.clone();
     match indicator.progress {
         Some(pct) => {
+            let pct = pct.clamp(0.0, 1.0);
             let filled = ((pct * 10.0).round() as usize).min(10);
             let empty = 10 - filled;
             let bar: String = format!(
