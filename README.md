@@ -256,7 +256,7 @@ Run `scripts\optimize_ini.ps1` to apply minimal settings:
 
 ## Requirements
 
-- **Rust** (edition 2024, stable MSVC toolchain on Windows)
+- **Rust** (edition 2024; nightly MSVC toolchain currently required on Windows because `retour` uses unstable features)
 - **Windows** for live EQ interaction (macOS/Linux for development only)
 - **EverQuest** client (March 2026 build confirmed)
 
