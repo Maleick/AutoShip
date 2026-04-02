@@ -12,7 +12,7 @@ This document is the operator manual for the DMFT issue queue that runs through 
 
 ## Queue Contract
 
-GitHub Projects mirror repo truth. The repo remains authoritative, especially [`docs/implementation-roadmap.md`](/Users/maleick/.codex/worktrees/0138/DMFT/docs/implementation-roadmap.md).
+GitHub Projects mirror repo truth. The repo remains authoritative, especially [`docs/implementation-roadmap.md`](implementation-roadmap.md).
 
 An issue enters the autonomous queue only when both are true:
 
@@ -41,7 +41,7 @@ Queue and policy labels:
 
 ## Issue Lifecycle
 
-1. Create the issue with [`.github/ISSUE_TEMPLATE/agent-task.yml`](/Users/maleick/.codex/worktrees/0138/DMFT/.github/ISSUE_TEMPLATE/agent-task.yml).
+1. Create the issue with [`.github/ISSUE_TEMPLATE/agent-task.yml`](../.github/ISSUE_TEMPLATE/agent-task.yml).
 2. Fill in `Scope`, `Done when`, `Verify`, `Out of scope`, and `Source docs`.
 3. Add the issue to the `DMFT Roadmap` GitHub Project.
 4. Leave the issue in `Backlog` until it is ready for hands-off execution.
@@ -64,7 +64,7 @@ Queue and policy labels:
 
 Shared contract:
 
-- Read [`AGENTS.md`](/Users/maleick/.codex/worktrees/0138/DMFT/AGENTS.md) and [`CLAUDE.md`](/Users/maleick/.codex/worktrees/0138/DMFT/CLAUDE.md) before editing.
+- Read [`AGENTS.md`](../AGENTS.md) and [`CLAUDE.md`](../CLAUDE.md) before editing.
 - Default to implementation mode for concrete issues. The operator should not need to repeat “please code this now.”
 - If `mode:research` is present, use the research-first workflow:
   - update roadmap or research docs first
@@ -102,26 +102,26 @@ If any of those conditions fail, the PR stays open and the blocker should be sum
 Codex app automations:
 
 - `DMFT issue executor`
-  - root: `/Users/maleick/Projects/DMFT`
+  - root: the DMFT repository checkout on the always-on automation host
   - execution mode: worktree
   - purpose: claim one eligible issue, implement it, verify it, and open a PR
   - current cadence: hourly
 - `DMFT PR manager`
-  - root: `/Users/maleick/Projects/DMFT`
+  - root: the DMFT repository checkout on the always-on automation host
   - execution mode: worktree
   - purpose: open missing PRs, address straightforward review feedback, and merge eligible PRs
   - cadence: hourly
 
 GitHub workflow:
 
-- [`.github/workflows/claude-agent.yml`](/Users/maleick/.codex/worktrees/0138/DMFT/.github/workflows/claude-agent.yml)
+- [`.github/workflows/claude-agent.yml`](../.github/workflows/claude-agent.yml)
   - responds only when `worker:claude` is present on an issue or a comment explicitly mentions `@claude`
-  - uses [`docs/claude-issue-worker.md`](/Users/maleick/.codex/worktrees/0138/DMFT/docs/claude-issue-worker.md) as the repo-tracked worker brief
+  - uses [`docs/claude-issue-worker.md`](claude-issue-worker.md) as the repo-tracked worker brief
   - never merges
 
 ## External Setup And Constraints
 
-- The Codex app must stay running on the always-on machine that has `/Users/maleick/Projects/DMFT` available on disk.
+- The Codex app must stay running on the always-on machine that has a DMFT repository checkout available on disk.
 - GitHub CLI auth on that machine needs `project` and `read:project` scopes in order to inspect and mutate the `DMFT Roadmap` project state.
 - The autonomous queue uses the custom `Agent Status` field so the project can keep the built-in `Status` field for broader roadmap progress.
 - The optional Claude workflow requires repository secret `ANTHROPIC_API_KEY`.

@@ -34,7 +34,7 @@ Shared operating contract for autonomous coding agents in this repository.
   - post a short claim comment that names the branch being created
 - Branch from `master` using `codex/issue-<number>-<slug>` or `claude/issue-<number>-<slug>`.
 - Default to implementation mode for concrete issues. Do not wait for a second prompt that says to code.
-- If an issue has `mode:research`, use [$codex-autoresearch](/Users/maleick/.codex/plugins/cache/local-plugins/codex-autoresearch/local/skills/codex-autoresearch/SKILL.md) or the same structured docs-first loop:
+- If an issue has `mode:research`, use the `codex-autoresearch` skill or the same structured docs-first loop:
   - update roadmap or research docs first
   - run the relevant verifier and guard commands
   - only then mirror mature work back into GitHub issues or project items

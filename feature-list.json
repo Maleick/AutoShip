@@ -52,7 +52,7 @@
         "Required PR gate is the self-hosted Windows `PR gate (fmt + clippy + test + python)` and still runs on README-only and docs-only changes",
         "README Metrics workflow no longer pushes directly to protected master and bootstraps the nightly Windows Rust toolchain it actually needs",
         "Nightly Release, Release, and Wiki Nightly workflows are hardened for the self-hosted Windows runner without depending on runner-local pwsh or preinstalled toolchains",
-        "DMFT PR manager automation runs every 5 hours against /Users/maleick/Projects/DMFT",
+        "DMFT PR manager automation runs every 5 hours against the DMFT repository checkout on the automation host",
         "python3 scripts/sync_wiki.py --check",
         "python3 -m unittest discover -s tests -p 'test_*.py' -v",
         "cargo fmt --all --check",
@@ -68,11 +68,11 @@
       "acceptance_tests": [
         "Issue template captures Scope, Done when, Verify, Out of scope, and Source docs",
         "AGENTS.md and CLAUDE.md define the shared autonomous worker contract",
-        "Codex issue executor automation is installed in ~/.codex/automations and claims exactly one eligible issue per run",
+        "Codex issue executor automation is installed on the automation host and claims exactly one eligible issue per run",
         "DMFT PR manager automation requires merge:auto and refuses human:required, risk:high, or agent:blocked merges",
         "Optional Claude GitHub Action only responds to worker:claude or @claude and never merges",
         "python3 scripts/sync_wiki.py --check",
-        "python3 - <<'PY'\nimport json, pathlib, tomllib\nimport yaml\njson.loads(pathlib.Path('feature-list.json').read_text())\ntomllib.loads(pathlib.Path.home().joinpath('.codex/automations/dmft-pr-manager/automation.toml').read_text())\ntomllib.loads(pathlib.Path.home().joinpath('.codex/automations/dmft-issue-executor/automation.toml').read_text())\nyaml.safe_load(pathlib.Path('.github/workflows/claude-agent.yml').read_text())\nyaml.safe_load(pathlib.Path('.github/ISSUE_TEMPLATE/agent-task.yml').read_text())\nprint('ok')\nPY"
+        "python3 - <<'PY'\nimport json, pathlib\nimport yaml\njson.loads(pathlib.Path('feature-list.json').read_text())\nyaml.safe_load(pathlib.Path('.github/workflows/claude-agent.yml').read_text())\nyaml.safe_load(pathlib.Path('.github/ISSUE_TEMPLATE/agent-task.yml').read_text())\nprint('ok')\nPY"
       ],
       "notes": "Repo docs, issue template, Claude workflow, and Codex automation files now define the autonomous queue. The installed issue executor currently runs hourly because Codex app automations do not yet support 15-minute cadences. The `DMFT Roadmap` project now uses a dedicated `Agent Status` field for queue state so the built-in `Status` field can keep its broader roadmap-progress meaning."
     }
