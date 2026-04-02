@@ -942,7 +942,7 @@ fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
         let summary = format!(
             "{} | {} chars",
             app.group_focus_label(),
-            app.focused_pids().len()
+            app.focused_pid_count()
         );
         frame.render_widget(
             Paragraph::new(summary).style(Style::default().fg(t.text_muted)),
@@ -1027,7 +1027,7 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
         "Hunt" => t.mode_hunt,
         _ => t.text_muted,
     };
-    let focused_count = app.focused_pids().len();
+    let focused_count = app.focused_pid_count();
 
     let lines = if collapsed {
         vec![Line::from(vec![
@@ -1095,7 +1095,7 @@ fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     let ma_str = app.main_assist.as_deref().unwrap_or("—");
     let mt_str = app.main_tank.as_deref().unwrap_or("—");
     let scope_str = app.group_focus_label();
-    let focused_count = app.focused_pids().len();
+    let focused_count = app.focused_pid_count();
 
     let lines = if collapsed {
         vec![Line::from(vec![

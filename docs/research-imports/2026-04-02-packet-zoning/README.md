@@ -2,7 +2,7 @@
 
 Imported on `2026-04-02` from:
 
-- `C:\Users\xmale\Projects\DMFT\research`
+- imported from a local research archive
 
 This folder is a raw archive, not a canonical roadmap source.
 

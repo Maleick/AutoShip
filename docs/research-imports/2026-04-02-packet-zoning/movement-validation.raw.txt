@@ -412,7 +412,7 @@
 
   Now let me check what those float values actually are in real-time:
 
-● Bash(python "C:\Users\Mateusz\macroquest\plugins\MQ2send\test_mcp.py" read 0x7fff8f15b260 8)
+● Bash(python "<redacted-path>/test_mcp.py" read 0x7fff8f15b260 8)
   ⎿  Memory at 0x7fff8f15b260 (8 bytes):
        7FFF8F15B260: 33 33 33 3F 66 66 06 40
 
@@ -424,7 +424,7 @@
 
 ● Wait - the threshold is only ~14! But you're at 300% speed. Let me check if these values change when WickedSpeed is set to 300:
 
-● Bash(python "C:\Users\Mateusz\macroquest\plugins\MQ2send\test_mcp.py" read 0x7fff8f15b260 16)
+● Bash(python "<redacted-path>/test_mcp.py" read 0x7fff8f15b260 16)
   ⎿  Memory at 0x7fff8f15b260 (16 bytes):
        7FFF8F15B260: 33 33 33 3F 66 66 06 40 01 01 01 00 00 00 00 00
 
@@ -436,7 +436,7 @@
 
   Let me check the Position packet structure by reading actual packet data:
 
-● Bash(python "C:\Users\Mateusz\macroquest\plugins\MQ2send\test_mcp.py" read 0x25878ecb7a0 8)
+● Bash(python "<redacted-path>/test_mcp.py" read 0x25878ecb7a0 8)
   ⎿  Memory at 0x25878ecb7a0 (8 bytes):
        25878ECB7A0: 1F CE 00 00 00 00 00 00
 
@@ -468,7 +468,7 @@
 
   Let me verify by looking at the actual packet format. Let me find Position packet documentation or capture one:
 
-● Bash(python "C:\Users\Mateusz\macroquest\plugins\MQ2send\test_mcp.py" read 0x7fff8f15b25c 32)
+● Bash(python "<redacted-path>/test_mcp.py" read 0x7fff8f15b25c 32)
   ⎿  Memory at 0x7fff8f15b25c (32 bytes):
        7FFF8F15B25C: 00 00 00 00 33 33 33 3F 66 66 06 40 01 01 01 00
        7FFF8F15B26C: 00 00 00 00 4F 03 00 00 00 00 00 00 70 57 6C 84
@@ -479,7 +479,7 @@
       # Flag address calculation from:…)
   ⎿  0x7fff8f15b268
 
-● Bash(python "C:\Users\Mateusz\macroquest\plugins\MQ2send\test_mcp.py" read 0x7fff8f15b268 4)
+● Bash(python "<redacted-path>/test_mcp.py" read 0x7fff8f15b268 4)
   ⎿  Memory at 0x7fff8f15b268 (4 bytes):
        7FFF8F15B268: 01 01 01 00
 
@@ -505,7 +505,7 @@
   ⎿  XMM1 loaded from: 0x7fff8f15b260
      XMM0 loaded from: 0x7fff8f15b264
 
-● Bash(python "C:\Users\Mateusz\macroquest\plugins\MQ2send\test_mcp.py" read 0x7fff8f15b260 8)
+● Bash(python "<redacted-path>/test_mcp.py" read 0x7fff8f15b260 8)
   ⎿  Memory at 0x7fff8f15b260 (8 bytes):
        7FFF8F15B260: 33 33 33 3F 66 66 06 40
 
@@ -789,8 +789,8 @@
 
 > /ralph-wiggum:ralph-loop is running… "We are decompiling'" eqgame.exe MassRename"in ghidra... WE MUST ABOVE ALL ELSE MAINTAIN THE HIGHEST CONFIDENCE INTERVAL ON OUR RENAMING focus on gameplay related items, and game, server select, character select components additionally we are also identifying core interactions with that and mq2mmobugs.dll and mq2wickedspeed.dll.  all 3 are open tabs in our current ghidra open file. We need to iterate through eqgame first several times to understand if the current named documents are accurate and possibly rename things that look wrong... we can reference cd macroquest for naming schemas ... consider all core offsets identified via macroquest offsets as correct except ones we have deliberately renamed. when all functions are defined... we will have a 98% confidence in our understanding of how everquest works at a core level and we wont have any errors in understanding of functions.. things we dont understand we should probably annotate, things that look wrong, we should note for review. we should develop a solid mapping in an MD file of structure.  we should note known flow.  login front end > serverselection> character selection > ingame status > zoning/ and bidirectional opcodes > disconnections and how they work and what functions can and cant call disconnections and what triggers them.  Also note a lot of our naming was done in bulk so it has a lot to review on this. if stuck pause and prompt for guiddance " --completion-promise "DONE" --max-iterations 100
 
-"C:/Program Files/Epic Games/UE_5.7/Engine/Build/BatchFiles/Build.bat" NorrathboundEditor Win64 Development -Project="C:\Users\Mateusz\EQNew 5.7\Norrathbound.uproject" -WaitMutex -FromMsBuild -architecture=x64
+"C:/Program Files/Epic Games/UE_5.7/Engine/Build/BatchFiles/Build.bat" NorrathboundEditor Win64 Development -Project="<redacted-path>/Norrathbound.uproject" -WaitMutex -FromMsBuild -architecture=x64
 
-& "C:/Program Files/Epic Games/UE_5.7/Engine/Build/BatchFiles/Build.bat" NorrathboundEditor Win64 Development -Project="C:\Users\Mateusz\EQNew 5.7\Norrathbound.uproject" -WaitMutex -FromMsBuild -architecture=x64
+& "C:/Program Files/Epic Games/UE_5.7/Engine/Build/BatchFiles/Build.bat" NorrathboundEditor Win64 Development -Project="<redacted-path>/Norrathbound.uproject" -WaitMutex -FromMsBuild -architecture=x64
 
-"C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" NorrathboundEditor Win64 Development -Project="C:\Users\Mateusz\EQNew 5.7\Norrathbound.uproject" -WaitMutex -FromMsBuild -architecture=x64
+"C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" NorrathboundEditor Win64 Development -Project="<redacted-path>/Norrathbound.uproject" -WaitMutex -FromMsBuild -architecture=x64

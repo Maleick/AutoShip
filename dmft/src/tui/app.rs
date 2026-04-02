@@ -1332,6 +1332,11 @@ impl App {
         self.visible_clients().iter().map(|c| c.pid).collect()
     }
 
+    /// Return the number of focused clients without allocating a Vec.
+    pub fn focused_pid_count(&self) -> usize {
+        self.visible_clients().len()
+    }
+
     /// Send an IPC command to all focused clients, returning the success count.
     fn send_ipc_to_focused(&self, cmd: &dmft_common::ipc::Command) -> usize {
         self.focused_pids()
