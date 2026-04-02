@@ -21,22 +21,35 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        shell: pwsh
+        shell: powershell
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
+      - name: Locate Python
+        run: |
+          $python = (Get-Command python -ErrorAction SilentlyContinue)
+          if ($python) {
+            "PYTHON_CMD=python" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            exit 0
+          }
+
+          $py = (Get-Command py -ErrorAction SilentlyContinue)
+          if ($py) {
+            "PYTHON_CMD=py -3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            exit 0
+          }
+
+          throw "Python 3 is not installed on the Windows runner."
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
       - name: Update README metrics
-        run: python scripts/update_readme_metrics.py
+        run: |
+          Invoke-Expression "$env:PYTHON_CMD scripts/update_readme_metrics.py"
 
       - name: Commit updated README metrics
         run: |
