@@ -147,7 +147,7 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt, clippy
-      - uses: lukka/get-cmake@v4
+      - uses: lukka/get-cmake@v4.3.1
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
