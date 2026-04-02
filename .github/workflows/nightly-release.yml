@@ -16,6 +16,7 @@ env:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   gate:
@@ -25,20 +26,29 @@ jobs:
       should_run: ${{ steps.gate.outputs.should_run }}
     defaults:
       run:
-        shell: pwsh
+        shell: cmd
     steps:
       - id: gate
+        shell: cmd
         run: |
-          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
-            "should_run=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            exit 0
-          }
+          setlocal
+          set "EVENT_NAME=${{ github.event_name }}"
 
-          $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Central Standard Time")
-          $nowUtc = [DateTime]::UtcNow
-          $local = [System.TimeZoneInfo]::ConvertTimeFromUtc($nowUtc, $tz)
-          $shouldRun = if ($local.Hour -eq 3) { "true" } else { "false" }
-          "should_run=$shouldRun" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          if "%EVENT_NAME%"=="workflow_dispatch" (
+            echo should_run=true>>%GITHUB_OUTPUT%
+            exit /b 0
+          )
+
+          set "should_run=false"
+          for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$tz = [System.TimeZoneInfo]::FindSystemTimeZoneById(\"Central Standard Time\"); $local = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz); if ($local.Hour -eq 3) { \"true\" } else { \"false\" }"') do set "should_run=%%T"
+
+          if errorlevel 1 (
+            echo Local-time gate failed; defaulting should_run=false.
+            echo should_run=false>>%GITHUB_OUTPUT%
+            exit /b 0
+          )
+
+          echo should_run=%should_run%>>%GITHUB_OUTPUT%
 
   build-nightly:
     name: Build rolling nightly prerelease
@@ -48,22 +58,68 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: pwsh
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Configure Git safe directories for runner account
+        run: |
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
+          )
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+            git config --global --add safe.directory "%%~D" || (
+              echo [fatal] Failed to add safe.directory for %%~D.
+              exit /b 1
+            )
+          )
+          echo [info] Active safe.directory values:
+          git config --global --get-all safe.directory
 
       - name: Initialize reference submodules
         run: |
           git submodule sync --recursive
           git submodule update --init --recursive --depth 1
 
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly
+      - name: Provision nightly toolchain via rustup
+        env:
+          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
+        run: |
+          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
+          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
+          set "PATH=%CARGO_HOME%\bin;%PATH%"
+          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
+          where rustup.exe >nul 2>nul || (
+            echo [warn] rustup.exe not found in PATH. Installing rustup bootstrap.
+            curl.exe -fSLo "%TEMP%\rustup-init.exe" https://win.rustup.rs/x86_64
+            start /wait "" "%TEMP%\rustup-init.exe" -y --no-modify-path --default-toolchain %NIGHTLY_TOOLCHAIN%
+            if errorlevel 1 (
+              echo [fatal] rustup bootstrap failed.
+              exit /b 1
+            )
+            del /f /q "%TEMP%\rustup-init.exe"
+          )
 
-      - uses: lukka/get-cmake@v4
+          where rustup.exe >nul 2>nul || (
+            echo [fatal] rustup.exe still not available after bootstrap.
+            exit /b 1
+          )
+          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
+          echo [info] rustup version:
+          rustup --version
+          rustup show
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup default %NIGHTLY_TOOLCHAIN%
+          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
+          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
+            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
+            exit /b 1
+          )
+
+      - uses: lukka/get-cmake@v4.3.1
 
       - name: Build release binaries
         run: cargo build --release
@@ -72,21 +128,22 @@ jobs:
 
       - name: Package nightly artifacts
         run: |
-          New-Item -ItemType Directory -Force release | Out-Null
-          if (-not (Test-Path target/release/dmft.exe)) {
-            throw "Expected target/release/dmft.exe to exist after the build."
-          }
-          if (-not (Test-Path target/release/dmft_dll.dll)) {
-            throw "Expected target/release/dmft_dll.dll to exist after the build."
-          }
-          Copy-Item target/release/dmft.exe release/
-          Copy-Item target/release/dmft_dll.dll release/
-          @"
-          DMFT Nightly
-          Commit: $env:GITHUB_SHA
-          Run: $env:GITHUB_RUN_NUMBER
-          UTC: $(Get-Date -AsUTC -Format o)
-          "@ | Out-File -FilePath release/NOTES.txt -Encoding UTF8
+          if not exist release mkdir release
+          if not exist target\release\dmft.exe (
+            echo [fatal] Expected target\release\dmft.exe to exist after the build.
+            exit /b 1
+          )
+          if not exist target\release\dmft_dll.dll (
+            echo [fatal] Expected target\release\dmft_dll.dll to exist after the build.
+            exit /b 1
+          )
+          copy /Y target\release\dmft.exe release\
+          copy /Y target\release\dmft_dll.dll release\
+          for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "[DateTime]::UtcNow.ToString('o')"') do set "UTC_TS=%%T"
+          echo DMFT Nightly > release\NOTES.txt
+          echo Commit: %GITHUB_SHA% >> release\NOTES.txt
+          echo Run: %GITHUB_RUN_NUMBER% >> release\NOTES.txt
+          echo UTC: %UTC_TS% >> release\NOTES.txt
 
       - name: Upload nightly artifacts
         uses: actions/upload-artifact@v4
@@ -101,7 +158,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -fa nightly -m "Nightly build $env:GITHUB_RUN_NUMBER"
+          git tag -fa nightly -m "Nightly build %GITHUB_RUN_NUMBER%"
           git push origin refs/tags/nightly --force
 
       - name: Create or update rolling nightly prerelease
@@ -116,3 +173,19 @@ jobs:
           removeArtifacts: true
           replacesArtifacts: true
           tag: nightly
+
+      - name: Trigger wiki publish from successful nightly run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if "%GITHUB_TOKEN%"=="" (
+            echo [fatal] GITHUB_TOKEN is not available in this workflow context.
+            exit /b 1
+          )
+          curl.exe -fS -X POST ^
+            -H "Authorization: Bearer %GITHUB_TOKEN%" ^
+            -H "Accept: application/vnd.github+json" ^
+            -H "X-GitHub-Api-Version: 2022-11-28" ^
+            -H "Content-Type: application/json" ^
+            -d "{\"ref\":\"%GITHUB_REF%\"}" ^
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/wiki-nightly.yml/dispatches"

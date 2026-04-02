@@ -62,6 +62,10 @@ Rules:
 - external research may add milestone slices, validation tasks, and evidence updates
 - external research may not reorder milestones on its own
 - use evidence states when promoting research into execution work
+- keep the GitHub Project mirror in sync only after repo docs are updated
+- keep milestone epics as draft items, but promote mature research, task, and validation items into GitHub issues
+- remove overlapping draft items after an issue promotion so the project has one execution item per slice
+- use the live roadmap mirror at `https://github.com/users/Maleick/projects/1`
 
 Default roadmap verifier:
 
@@ -85,8 +89,16 @@ Nightly automation now runs on the self-hosted Windows runner:
 
 - `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
+- the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
 
 These workflows mirror repo state. They do not replace keeping source docs current.
+
+Nightly sync order:
+
+1. source docs and research ledgers
+2. roadmap verifier and wiki guard
+3. GitHub issues for mature checkpoint items
+4. GitHub Project mirror fields and cards
 
 ## Logging and Debugging
 

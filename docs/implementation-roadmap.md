@@ -232,6 +232,10 @@ Before an external finding becomes a roadmap slice candidate, it must include:
 
 GitHub Projects are a mirror, not a source of truth.
 
+Current mirror:
+
+- `DMFT Roadmap`: `https://github.com/users/Maleick/projects/1`
+
 Use one roadmap project with these fields:
 
 - `Status`
@@ -248,8 +252,9 @@ Use one roadmap project with these fields:
 Rules:
 
 - milestone epics begin as draft items
-- tasks and validations begin as draft items unless they are mature enough to become issues
+- mature tasks, validations, and research items should be promoted from draft items into GitHub issues once they have a concrete scope and checkpoint batch
 - sync is checkpoint-based, after repo docs are updated
+- remove overlapping draft items after issue promotion so the active board has one execution item per slice
 - external research may add draft items and validation tasks, but it may not reorder milestones on its own
 - CLI bootstrap requires `gh auth refresh -s read:project -s project`
 
@@ -264,6 +269,14 @@ Nightly digest defaults:
 - keep changes proposal-oriented rather than implementation-heavy
 - promote only evidence-backed slice candidates
 
+Nightly checkpoint cadence:
+
+1. update repo docs and research ledgers first
+2. run the roadmap verifier and wiki guard
+3. reconcile the active checkpoint batch in the `DMFT Roadmap` GitHub Project
+4. promote mature current-window items into GitHub issues and remove overlapping drafts
+5. record project-sync results in the autoresearch artifacts
+
 Mechanical verifier:
 
 - `python scripts/validate_roadmap_unknowns.py --plan docs/implementation-roadmap.md --domains packet,zoning,anticheat`
@@ -272,6 +285,8 @@ Expected outputs:
 
 - updates to curated research ledgers
 - proposed checkpoint batch items
+- GitHub Project mirror updates for the active checkpoint batch
+- GitHub issue promotion for mature checkpoint items
 - evidence-state changes
 - no milestone reordering
 
@@ -288,6 +303,13 @@ Expected outputs:
 ### Codex automation
 
 The nightly external-research digest runs as a Codex automation after the GitHub workflows. It is intentionally separate from GitHub Actions because it needs evidence modeling, source weighting, and slice promotion rules that are easier to enforce in a Codex-guided research loop.
+
+Nightly project-sync rules:
+
+- repo docs remain the source of truth
+- the active checkpoint batch may update GitHub Project fields after the docs pass guard and verifier checks
+- mature, cited, evidence-scored items may be promoted into GitHub issues
+- provisional or low-confidence findings should remain draft items until they are strong enough to promote
 
 ## Near-Term Backlog
 

@@ -28,6 +28,36 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure Git safe directories for runner account
+        run: |
+          echo [info] Marking workflow directories as trusted for Git.
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
+          )
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+            git config --global --add safe.directory "%%~D" || (
+              echo [fatal] Unable to add safe.directory for %%~D.
+              exit /b 1
+            )
+          )
+          echo [info] Active safe.directory values:
+          git config --global --get-all safe.directory
+
+      - name: Initialize reference submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
+
+      - name: Verify reference trees
+        run: |
+          git submodule status --recursive
+          if not exist "third_party\eqlib\include\eqlib\offsets\eqgame.h" (echo missing third_party\eqlib\include\eqlib\offsets\eqgame.h & exit /b 1)
+          if not exist "third_party\macroquest\src\login" (echo missing third_party\macroquest\src\login & exit /b 1)
+          if not exist "third_party\macroquest\src\routing" (echo missing third_party\macroquest\src\routing & exit /b 1)
+          if not exist "third_party\macroquest\src\eqlib" (echo missing third_party\macroquest\src\eqlib & exit /b 1)
+
       - name: Locate Python
         run: |
           where python >nul 2>nul && (echo PYTHON_CMD=python>>"%GITHUB_ENV%" & exit /b 0)
@@ -36,6 +66,7 @@ jobs:
           curl.exe -fsSL -o .ci-python\python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
           tar -xf .ci-python\python-embed.zip -C .ci-python
           echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
+
       - name: Provision nightly toolchain via rustup
         env:
           NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
@@ -69,6 +100,7 @@ jobs:
             exit /b 1
           )
           echo [info] Nightly compiler confirmed for %NIGHTLY_TOOLCHAIN%.
+
       - uses: lukka/get-cmake@v4.3.1
       - run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
       - run: '%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v'
@@ -87,10 +119,28 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure Git safe directories for runner account
+        run: |
+          echo [info] Marking workflow directories as trusted for Git.
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
+          )
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+            git config --global --add safe.directory "%%~D" || (
+              echo [fatal] Unable to add safe.directory for %%~D.
+              exit /b 1
+            )
+          )
+          echo [info] Active safe.directory values:
+          git config --global --get-all safe.directory
+
       - name: Initialize reference submodules
         run: |
           git submodule sync --recursive
           git submodule update --init --recursive --depth 1
+
       - name: Provision nightly toolchain via rustup
         env:
           NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
@@ -109,7 +159,6 @@ jobs:
             )
             del /f /q "%TEMP%\rustup-init.exe"
           )
-
           where rustup.exe >nul 2>nul || (
             echo [fatal] rustup.exe still not available after bootstrap.
             exit /b 1
@@ -125,7 +174,9 @@ jobs:
             echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
             exit /b 1
           )
+
       - uses: lukka/get-cmake@v4.3.1
+
       - name: Nightly compiler sanity check
         run: |
           echo [info] Verifying required nightly compiler for release path.
@@ -136,6 +187,7 @@ jobs:
             exit /b 1
           )
           cargo --version
+
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"

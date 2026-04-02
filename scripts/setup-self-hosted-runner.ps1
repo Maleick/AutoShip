@@ -35,6 +35,62 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Add-SafeGitDirectory {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return
+    }
+
+    if (-not (Test-Path $Path)) {
+        Write-Host "Skipping non-existent safe.directory path: $Path" -ForegroundColor Yellow
+        return
+    }
+
+    git config --global --add safe.directory $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to mark $Path as safe.directory for git."
+    }
+
+    Write-Host "Marked Git safe.directory: $Path" -ForegroundColor Green
+}
+
+function Ensure-NightlyRustToolchain {
+    param(
+        [string]$Toolchain = "nightly-x86_64-pc-windows-msvc"
+    )
+
+    $cargoHome = $env:CARGO_HOME
+    if ([string]::IsNullOrWhiteSpace($cargoHome)) {
+        $cargoHome = Join-Path $env:USERPROFILE ".cargo"
+    }
+
+    $rustup = Join-Path $cargoHome "bin\rustup.exe"
+    if (-not (Test-Path $rustup)) {
+        Write-Host "Rustup was not found under $rustup. Bootstrapping rustup via official installer." -ForegroundColor Yellow
+        $tmp = Join-Path $env:TEMP "rustup-init.exe"
+        try {
+            Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $tmp
+            & $tmp -y --no-modify-path --default-toolchain $Toolchain | Out-Null
+        } catch {
+            throw "Failed to install rustup. Please install rustup manually from https://rustup.rs and retry."
+        } finally {
+            if (Test-Path $tmp) { Remove-Item $tmp -ErrorAction SilentlyContinue }
+        }
+    }
+
+    $env:PATH = "${cargoHome}\bin;${env:PATH}"
+    try {
+        & $rustup show | Out-Null
+        & $rustup toolchain install $Toolchain | Out-Null
+        & $rustup default $Toolchain | Out-Null
+        & $rustup component add rustfmt clippy --toolchain $Toolchain | Out-Null
+        Write-Host "Rust nightly toolchain configured: $Toolchain" -ForegroundColor Green
+    } catch {
+        throw "Failed to configure rustup toolchain '$Toolchain'."
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($Token)) {
     throw "A runner registration token is required. Generate one from GitHub Settings → Actions → Runners."
 }
@@ -110,6 +166,27 @@ if ($InstallService) { $runnerConfigArgs += "--runasservice" }
 }
 
 Write-Host "Runner configured with labels: self-hosted, $($Labels -join ', ')." -ForegroundColor Green
+Write-Host "Seeding Git safe.directory entries for this runner..." -ForegroundColor Yellow
+
+$repoName = "DMFT"
+try {
+    $repoName = ([System.Uri]$RepositoryUrl).Segments[-1].TrimEnd("/")
+} catch {
+    Write-Host "Could not parse repository name from RepositoryUrl, using fallback 'DMFT'." -ForegroundColor Yellow
+}
+if ([string]::IsNullOrWhiteSpace($repoName)) {
+    $repoName = "DMFT"
+}
+
+$workRoot = Join-Path $RunnerRoot "_work"
+Add-SafeGitDirectory -Path (Join-Path $workRoot "$repoName\$repoName")
+Add-SafeGitDirectory -Path (Join-Path $workRoot $repoName)
+Add-SafeGitDirectory -Path "C:\actions-runner\_work\$repoName\$repoName"
+Add-SafeGitDirectory -Path "C:\actions-runner\_work\$repoName"
+Write-Host "Completed git safe.directory seeding." -ForegroundColor Green
+Write-Host ""
+Write-Host "Ensuring nightly Rust toolchain for release workflows..." -ForegroundColor Yellow
+Ensure-NightlyRustToolchain -Toolchain "nightly-x86_64-pc-windows-msvc"
 
 if (-not $ServiceName) {
     $ServiceName = "GitHubActionsRunner-$RunnerName"
