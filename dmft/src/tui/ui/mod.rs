@@ -18,13 +18,16 @@ pub mod widgets;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
 use crate::tui::app::{ActivePanel, ActiveScreen, App};
+use crate::tui::ui::widgets::{
+    WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
+};
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -97,11 +100,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Config panel overlay
     if app.config_panel_state.active {
         use crate::tui::config_panel::ConfigPanelWidget;
-        let popup_w = (area.width as f32 * 0.6).max(40.0).min(area.width as f32) as u16;
-        let popup_h = (area.height as f32 * 0.7).max(15.0).min(area.height as f32) as u16;
-        let popup_x = area.x + (area.width.saturating_sub(popup_w)) / 2;
-        let popup_y = area.y + (area.height.saturating_sub(popup_h)) / 2;
-        let popup_area = Rect::new(popup_x, popup_y, popup_w, popup_h);
+        let popup_area = centered_popup(area, 68, 72, 36, 12, 96, 30, 1);
         frame.render_widget(Clear, popup_area);
         frame.render_widget(
             ConfigPanelWidget::new(&app.config_panel_state).accent_color(app.theme.text_accent),
@@ -112,13 +111,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // CH chain panel overlay
     if app.ch_chain_panel_state.active {
         use crate::tui::ui::ch_chain::ChChainWidget;
-        let popup_w = (area.width as f32 * 0.75).max(60.0).min(area.width as f32) as u16;
-        let popup_h = (area.height as f32 * 0.75)
-            .max(18.0)
-            .min(area.height as f32) as u16;
-        let popup_x = area.x + (area.width.saturating_sub(popup_w)) / 2;
-        let popup_y = area.y + (area.height.saturating_sub(popup_h)) / 2;
-        let popup_area = Rect::new(popup_x, popup_y, popup_w, popup_h);
+        let popup_area = centered_popup(area, 80, 78, 48, 12, 104, 32, 1);
         frame.render_widget(Clear, popup_area);
         frame.render_widget(
             ChChainWidget::new(&app.ch_chain_panel_state).accent_color(app.theme.text_accent),
@@ -138,14 +131,15 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     // Toast notification
     if let Some(ref toast) = app.toast_message {
-        let toast_width = (toast.len() + 4).min(area.width as usize) as u16;
-        let toast_x = area.x + area.width.saturating_sub(toast_width) - 1;
+        let toast_text = truncate_inline(toast, area.width.saturating_sub(4) as usize);
+        let toast_width = (toast_text.chars().count() + 2).min(area.width as usize) as u16;
+        let toast_x = area.x + area.width.saturating_sub(toast_width).saturating_sub(1);
         let toast_y = area.y + 1;
         let toast_area = Rect::new(toast_x, toast_y, toast_width, 1);
         frame.render_widget(Clear, toast_area);
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                format!(" {toast} "),
+                format!(" {toast_text} "),
                 Style::default().fg(Color::Black).bg(app.theme.text_accent),
             ))),
             toast_area,
@@ -155,264 +149,464 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
 // ─── Header ──────────────────────────────────────────────────────────────────
 
-fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
+fn push_segment_if_fits(
+    spans: &mut Vec<Span<'static>>,
+    mut segment: Vec<Span<'static>>,
+    max_width: usize,
+) -> bool {
+    let candidate_width = spans_width(spans) + spans_width(&segment);
+    if candidate_width > max_width {
+        return false;
+    }
+    spans.append(&mut segment);
+    true
+}
+
+fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static str {
+    match width_class {
+        WidthClass::Wide => screen.label(),
+        WidthClass::Medium => match screen {
+            ActiveScreen::Overview => "Char",
+            ActiveScreen::Tactical => "Map",
+            ActiveScreen::Navigation => "Nav",
+            ActiveScreen::Debug => "Dbg",
+        },
+        WidthClass::Narrow => match screen {
+            ActiveScreen::Overview => "1",
+            ActiveScreen::Tactical => "2",
+            ActiveScreen::Navigation => "3",
+            ActiveScreen::Debug => "4",
+        },
+    }
+}
+
+fn build_header_tabs(app: &App, width_class: WidthClass) -> Line<'static> {
     let t = &app.theme;
+    let mut spans = Vec::new();
+    for (index, screen) in ActiveScreen::ALL.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw(" "));
+        }
+        let label = header_tab_label(*screen, width_class);
+        spans.push(if *screen == app.active_screen {
+            Span::styled(format!(" {label} "), t.tab_active)
+        } else {
+            Span::styled(format!(" {label} "), t.tab_inactive)
+        });
+    }
+    Line::from(spans)
+}
 
+fn build_header_meta(app: &App, width_class: WidthClass, max_width: usize) -> Vec<Span<'static>> {
+    let t = &app.theme;
     let client_count = app.clients.len();
-    let client_str = if client_count > 0 {
-        format!(" {client_count}✕ EQ")
+    let client_label = if client_count > 0 {
+        match width_class {
+            WidthClass::Narrow => format!("{client_count} EQ"),
+            _ => format!("{client_count}x EQ"),
+        }
     } else {
-        " Not attached".into()
+        String::from("Not attached")
     };
-
-    let selected_str = if let Some(client) = app.active_client() {
+    let selected_name_budget = match width_class {
+        WidthClass::Narrow => 10,
+        WidthClass::Medium => 16,
+        WidthClass::Wide => 24,
+    };
+    let selected_label = if let Some(client) = app.active_client() {
         let name = client.local_player.as_ref().map_or_else(
-            || "???".into(),
-            |p| app.redact_name(&p.displayed_name).into_owned(),
+            || String::from("???"),
+            |player| app.redact_name(&player.displayed_name).into_owned(),
         );
-        format!(" [{}/{}] {} ", app.selected_client + 1, client_count, name)
+        format!(
+            "{}/{} {}",
+            app.selected_client + 1,
+            client_count.max(1),
+            truncate_inline(&name, selected_name_budget)
+        )
     } else {
-        " No client ".into()
+        String::from("No client")
     };
-
-    let server_str = format!(" {} ", app.display_server());
-    let zone_str = app.active_client().map_or_else(
-        || "No Zone".into(),
-        |c| {
-            if c.zone_name.is_empty() {
-                "Unknown Zone".into()
+    let group_budget = match width_class {
+        WidthClass::Narrow => 10,
+        WidthClass::Medium => 14,
+        WidthClass::Wide => 18,
+    };
+    let server_budget = match width_class {
+        WidthClass::Narrow => 8,
+        WidthClass::Medium => 12,
+        WidthClass::Wide => 18,
+    };
+    let zone_budget = match width_class {
+        WidthClass::Narrow => 10,
+        WidthClass::Medium => 14,
+        WidthClass::Wide => 22,
+    };
+    let zone_label = app.active_client().map_or_else(
+        || String::from("No Zone"),
+        |client| {
+            if client.zone_name.is_empty() {
+                String::from("Unknown Zone")
             } else {
-                c.zone_name.clone()
+                client.zone_name.clone()
             }
         },
     );
-
-    // Tab bar — current screen is highlighted with accent bg
-    let mut tabs: Vec<Span<'_>> = vec![Span::raw("  ")];
-    for screen in &ActiveScreen::ALL {
-        let is_active = *screen == app.active_screen;
-        let label = format!(" {} ", screen.label());
-        tabs.push(if is_active {
-            Span::styled(label, t.tab_active)
-        } else {
-            Span::styled(label, t.tab_inactive)
-        });
-        tabs.push(Span::raw(" "));
-    }
-
-    // Group indicator — bold + accent when focused to make it prominent
-    let group_label = app.group_focus_label();
     let group_style = if app.active_group.is_some() {
         t.header_group_active.add_modifier(Modifier::BOLD)
     } else {
         t.header_group
     };
-
-    let mut spans: Vec<Span<'_>> = vec![
-        Span::styled(" DMFT ", t.header_title),
-        Span::styled("│", t.border_dim),
-        Span::styled(&client_str, t.header_client_count),
-        Span::styled(" │", t.border_dim),
-        Span::styled(&selected_str, t.header_selected),
-        Span::styled("│ ", t.border_dim),
-        Span::styled(format!(" {group_label} "), group_style),
-        Span::styled(" │ ", t.border_dim),
-        Span::styled(&server_str, Style::default().fg(t.text_server)),
-        Span::styled("│ ", t.border_dim),
-        Span::styled(format!(" {zone_str} "), t.header_zone),
-        Span::styled("│", t.border_dim),
-        Span::styled("  ", Style::default()),
-    ];
-    spans.extend(tabs);
-
-    frame.render_widget(
-        Paragraph::new(Line::from(spans)).block(widgets::panel(" DMFT ", t.border_dim, t)),
-        area,
+    let separator = Style::default().fg(t.border_dim.fg.unwrap_or(Color::DarkGray));
+    let mut spans = Vec::new();
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![Span::styled(client_label, t.header_client_count)],
+        max_width,
     );
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![
+            Span::styled(" | ", separator),
+            Span::styled(selected_label, t.header_selected),
+        ],
+        max_width,
+    );
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![
+            Span::styled(" | ", separator),
+            Span::styled(
+                truncate_inline(&app.group_focus_label(), group_budget),
+                group_style,
+            ),
+        ],
+        max_width,
+    );
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![
+            Span::styled(" | ", separator),
+            Span::styled(
+                truncate_inline(app.display_server(), server_budget),
+                Style::default().fg(t.text_server),
+            ),
+        ],
+        max_width,
+    );
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![
+            Span::styled(" | ", separator),
+            Span::styled(truncate_inline(&zone_label, zone_budget), t.header_zone),
+        ],
+        max_width,
+    );
+    spans
+}
+
+fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let block = widgets::panel(" DMFT ", t.border_dim, t);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+
+    let width_class = classify_width(inner.width);
+    let tabs = build_header_tabs(app, width_class);
+    let tabs_width = line_width(&tabs).min(inner.width as usize) as u16;
+
+    if inner.width > tabs_width.saturating_add(12) {
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Length(tabs_width)])
+            .split(inner);
+        let header_spans = build_header_meta(app, width_class, cols[0].width as usize);
+        frame.render_widget(Paragraph::new(Line::from(header_spans)), cols[0]);
+        frame.render_widget(Paragraph::new(tabs).alignment(Alignment::Right), cols[1]);
+    } else {
+        let mut header_spans = build_header_meta(app, width_class, inner.width as usize);
+        let _ = push_segment_if_fits(
+            &mut header_spans,
+            vec![
+                Span::styled(
+                    " | ",
+                    Style::default().fg(t.border_dim.fg.unwrap_or(Color::DarkGray)),
+                ),
+                Span::styled(
+                    header_tab_label(app.active_screen, width_class),
+                    t.tab_active,
+                ),
+            ],
+            inner.width as usize,
+        );
+        frame.render_widget(Paragraph::new(Line::from(header_spans)), inner);
+    }
 }
 
 // ─── Status bar ──────────────────────────────────────────────────────────────
 
-fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-
-    // Command mode: full-width input line with syntax hint
-    if app.cmd_state.command_mode {
-        let input_text = format!(": {}_", app.cmd_state.command_buffer);
-        let mut spans = vec![Span::styled(&input_text, t.statusbar_cmd)];
-
-        // Show syntax hint for known commands
-        if let Some(hint) = crate::tui::app::command_syntax_hint(&app.cmd_state.command_buffer) {
-            spans.push(Span::styled(
-                format!("  ({hint})"),
-                Style::default().fg(t.text_muted),
-            ));
+fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, &'static str)] {
+    if app.active_panel == ActivePanel::TacticalMap {
+        match width_class {
+            WidthClass::Narrow => &[
+                ("1-4", "screen"),
+                ("Tab", "pane"),
+                ("[ ]", "client"),
+                ("n", "mesh"),
+                ("v", "view"),
+                ("+/-", "depth"),
+                ("?", "help"),
+            ],
+            WidthClass::Medium => &[
+                ("1-4", "screen"),
+                ("Tab", "pane"),
+                ("[ ]", "client"),
+                ("Alt+1", "geo"),
+                ("Alt+2", "spawns"),
+                ("Alt+3", "paths"),
+                ("Alt+4", "mesh"),
+                ("n", "navmesh"),
+                ("v", "view"),
+                ("PgUp/Dn", "zoom"),
+                ("?", "help"),
+            ],
+            WidthClass::Wide => &[
+                ("1-4", "screen"),
+                ("Tab", "pane"),
+                ("[ ]", "client"),
+                ("Alt+1", "geo"),
+                ("Alt+2", "spawns"),
+                ("Alt+3", "paths"),
+                ("Alt+4", "mesh"),
+                ("n", "navmesh"),
+                ("Alt+5", "labels"),
+                ("v", "view"),
+                ("PgUp/Dn", "zoom"),
+                ("+/-", "depth"),
+                ("Home", "reset"),
+                ("?", "help"),
+            ],
         }
-
-        frame.render_widget(
-            Paragraph::new(Line::from(spans)).block(widgets::panel("", t.border_active, t)),
-            area,
-        );
-        return;
-    }
-
-    // Split: left = message + hints, right = status badges
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(10), Constraint::Length(32)])
-        .split(area);
-
-    // ── Left pane ─────────────────────────────────────────────────────
-    let hints: Vec<Span<'_>> = if app.active_panel == ActivePanel::TacticalMap {
-        vec![
-            Span::styled("1-4", t.statusbar_key),
-            Span::styled(" screen  ", t.statusbar_dim),
-            Span::styled("Tab", t.statusbar_key),
-            Span::styled(" pane  ", t.statusbar_dim),
-            Span::styled("[ ]", t.statusbar_key),
-            Span::styled(" client  ", t.statusbar_dim),
-            Span::styled("Alt+1", t.statusbar_key),
-            Span::styled(" geo  ", t.statusbar_dim),
-            Span::styled("Alt+2", t.statusbar_key),
-            Span::styled(" spawns  ", t.statusbar_dim),
-            Span::styled("Alt+3", t.statusbar_key),
-            Span::styled(" paths  ", t.statusbar_dim),
-            Span::styled("Alt+4", t.statusbar_key),
-            Span::styled(" mesh  ", t.statusbar_dim),
-            Span::styled("n", t.statusbar_key),
-            Span::styled(" navmesh  ", t.statusbar_dim),
-            Span::styled("Alt+5", t.statusbar_key),
-            Span::styled(" labels  ", t.statusbar_dim),
-            Span::styled("v", t.statusbar_key),
-            Span::styled(" view  ", t.statusbar_dim),
-            Span::styled("PgUp/Dn", t.statusbar_key),
-            Span::styled(" zoom  ", t.statusbar_dim),
-            Span::styled("←↑↓→", t.statusbar_key),
-            Span::styled(" pan  ", t.statusbar_dim),
-            Span::styled("+/-", t.statusbar_key),
-            Span::styled(" depth  ", t.statusbar_dim),
-            Span::styled("Home", t.statusbar_key),
-            Span::styled(" reset  ", t.statusbar_dim),
-            Span::styled("m", t.statusbar_key),
-            Span::styled(" map  ", t.statusbar_dim),
-            Span::styled("?", t.statusbar_key),
-            Span::styled(" help", t.statusbar_dim),
-        ]
     } else {
-        vec![
-            Span::styled("1-4", t.statusbar_key),
-            Span::styled(" screen  ", t.statusbar_dim),
-            Span::styled("⇧1-6", t.statusbar_key),
-            Span::styled(" group  ", t.statusbar_dim),
-            Span::styled("Tab", t.statusbar_key),
-            Span::styled(" pane  ", t.statusbar_dim),
-            Span::styled("[ ]", t.statusbar_key),
-            Span::styled(" client  ", t.statusbar_dim),
-            Span::styled("g/v", t.statusbar_key),
-            Span::styled(" sections  ", t.statusbar_dim),
-            Span::styled("z", t.statusbar_key),
-            Span::styled(" collapse  ", t.statusbar_dim),
-            Span::styled("/", t.statusbar_key),
-            Span::styled(" search  ", t.statusbar_dim),
-            Span::styled("f", t.statusbar_key),
-            Span::styled(" filter  ", t.statusbar_dim),
-            Span::styled("+/-", t.statusbar_key),
-            Span::styled(" depth  ", t.statusbar_dim),
-            Span::styled("m", t.statusbar_key),
-            Span::styled(" map  ", t.statusbar_dim),
-            Span::styled("T", t.statusbar_key),
-            Span::styled(" theme  ", t.statusbar_dim),
-            Span::styled("F10", t.statusbar_key),
-            Span::styled(" menu  ", t.statusbar_dim),
-            Span::styled("?", t.statusbar_key),
-            Span::styled(" help", t.statusbar_dim),
-        ]
+        match width_class {
+            WidthClass::Narrow => &[
+                ("1-4", "screen"),
+                ("Tab", "pane"),
+                ("[ ]", "client"),
+                ("/", "search"),
+                ("g/v", "sect"),
+                ("?", "help"),
+            ],
+            WidthClass::Medium => &[
+                ("1-4", "screen"),
+                ("Shift+1-6", "group"),
+                ("Tab", "pane"),
+                ("[ ]", "client"),
+                ("g/v", "sections"),
+                ("z", "collapse"),
+                ("/", "search"),
+                ("f", "filter"),
+                ("?", "help"),
+            ],
+            WidthClass::Wide => &[
+                ("1-4", "screen"),
+                ("Shift+1-6", "group"),
+                ("Tab", "pane"),
+                ("[ ]", "client"),
+                ("g/v", "sections"),
+                ("z", "collapse"),
+                ("/", "search"),
+                ("f", "filter"),
+                ("T", "theme"),
+                ("F10", "menu"),
+                ("?", "help"),
+            ],
+        }
+    }
+}
+
+fn build_status_left(app: &App, width_class: WidthClass, max_width: usize) -> Vec<Span<'static>> {
+    let t = &app.theme;
+    let message_cap = match width_class {
+        WidthClass::Narrow => max_width.saturating_sub(1),
+        WidthClass::Medium => max_width.min(38),
+        WidthClass::Wide => max_width.min(48),
     };
-
-    let left_spans: Vec<Span<'_>> = std::iter::once(Span::raw(" "))
-        .chain(std::iter::once(Span::styled(
-            app.status_message.as_str(),
+    let mut spans = vec![
+        Span::raw(" "),
+        Span::styled(
+            truncate_inline(&app.status_message, message_cap.saturating_sub(1)),
             t.statusbar_message,
-        )))
-        .chain(std::iter::once(Span::styled("  │  ", t.statusbar_dim)))
-        .chain(hints)
-        .collect();
+        ),
+    ];
+    for (key, desc) in status_hints(app, width_class) {
+        let segment = if spans.len() == 2 {
+            let mut items = vec![Span::styled(" | ", t.statusbar_dim)];
+            items.extend(widgets::keybinding_hint(key, desc, t));
+            items
+        } else {
+            widgets::keybinding_hint(key, desc, t)
+        };
+        if !push_segment_if_fits(&mut spans, segment, max_width) {
+            break;
+        }
+    }
+    spans
+}
 
-    frame.render_widget(
-        Paragraph::new(Line::from(left_spans)).block(widgets::panel("", t.border_dim, t)),
-        cols[0],
-    );
-
-    // ── Right pane: colored badges ─────────────────────────────────────
+fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> Vec<Span<'static>> {
+    let t = &app.theme;
     let mode_str = format!("{}", app.operating_mode);
     let mode_bg = match mode_str.as_str() {
         "Camp" => t.mode_camp,
         "Hunt" => t.mode_hunt,
         _ => t.text_muted,
     };
-
-    let mut right: Vec<Span<'_>> = vec![];
-
-    // Mode badge
-    right.push(Span::styled(
+    let mut spans = vec![Span::styled(
         format!(" {mode_str} "),
         Style::default()
             .fg(Color::Black)
             .bg(mode_bg)
             .add_modifier(Modifier::BOLD),
-    ));
-    right.push(Span::raw(" "));
-
-    // Filter badge (only when non-default)
+    )];
     let filter = app.spawns_state.spawn_type_filter.label();
     if filter != "All" {
-        right.push(Span::styled(
-            format!(" {filter} "),
-            Style::default()
-                .fg(Color::Black)
-                .bg(t.text_accent)
-                .add_modifier(Modifier::BOLD),
-        ));
-        right.push(Span::raw(" "));
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::raw(" "),
+                Span::styled(
+                    format!(" {filter} "),
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(t.text_accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ],
+            max_width,
+        );
     }
-
-    // Privacy badge
     if app.privacy_mode {
-        right.push(Span::styled(" PRIVATE ", t.statusbar_badge));
-        right.push(Span::raw(" "));
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![Span::raw(" "), Span::styled(" PRIVATE ", t.statusbar_badge)],
+            max_width,
+        );
     }
-
-    // Active group badge
     if let Some(idx) = app.active_group {
-        right.push(Span::styled(
-            format!(" G{} ", idx + 1),
-            Style::default().fg(Color::Black).bg(t.text_accent),
-        ));
-        right.push(Span::raw(" "));
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::raw(" "),
+                Span::styled(
+                    format!(" G{} ", idx + 1),
+                    Style::default().fg(Color::Black).bg(t.text_accent),
+                ),
+            ],
+            max_width,
+        );
+    }
+    if width_class != WidthClass::Narrow {
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::raw(" "),
+                Span::styled(format!(" {} ", app.theme_kind.label()), t.statusbar_dim),
+            ],
+            max_width,
+        );
+    }
+    spans
+}
+
+fn build_command_mode_line(app: &App, available_width: u16) -> Line<'static> {
+    let t = &app.theme;
+    let input_text = format!(": {}_", app.cmd_state.command_buffer);
+    let input_width = line_width(&Line::from(input_text.as_str())) as u16;
+    let mut spans = vec![Span::styled(input_text, t.statusbar_cmd)];
+
+    if let Some(hint) = crate::tui::app::command_syntax_hint(&app.cmd_state.command_buffer) {
+        let hint_budget = available_width
+            .saturating_sub(input_width)
+            .saturating_sub(8) as usize;
+        if hint_budget > 0 {
+            let truncated_hint = truncate_inline(hint, hint_budget);
+            if !truncated_hint.is_empty() {
+                spans.push(Span::styled(
+                    format!("  ({truncated_hint})"),
+                    Style::default().fg(t.text_muted),
+                ));
+            }
+        }
     }
 
-    // Theme label (dim)
-    right.push(Span::styled(
-        format!(" {} ", app.theme_kind.label()),
-        t.statusbar_dim,
-    ));
+    Line::from(spans)
+}
+
+fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+
+    // Command mode: full-width input line with syntax hint
+    if app.cmd_state.command_mode {
+        frame.render_widget(
+            Paragraph::new(build_command_mode_line(app, area.width.saturating_sub(2)))
+                .block(widgets::panel("", t.border_active, t)),
+            area,
+        );
+        return;
+    }
+
+    let width_class = classify_width(area.width);
+    let max_right_width = area.width.saturating_sub(12).max(1);
+    let right_spans =
+        build_status_right(app, width_class, max_right_width.saturating_sub(2) as usize);
+    let right_width = (spans_width(&right_spans) as u16 + 2)
+        .max(12)
+        .min(max_right_width);
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(10), Constraint::Length(right_width)])
+        .split(area);
+    let left_spans = build_status_left(app, width_class, cols[0].width.saturating_sub(2) as usize);
 
     frame.render_widget(
-        Paragraph::new(Line::from(right)).block(widgets::panel("", t.border_dim, t)),
+        Paragraph::new(Line::from(left_spans)).block(widgets::panel("", t.border_dim, t)),
+        cols[0],
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(right_spans)).block(widgets::panel("", t.border_dim, t)),
         cols[1],
     );
 }
 
 // ─── Help overlay ─────────────────────────────────────────────────────────────
 
+fn help_content_line_count(lines: &[Line<'_>], content_width: u16) -> usize {
+    if content_width == 0 {
+        return 0;
+    }
+
+    let content_width = content_width as usize;
+    lines
+        .iter()
+        .map(|line| line_width(line).max(1).div_ceil(content_width))
+        .sum()
+}
+
+fn help_max_scroll(lines: &[Line<'_>], popup_area: Rect) -> usize {
+    let visible_lines = popup_area.height.saturating_sub(2) as usize;
+    let content_width = popup_area.width.saturating_sub(2);
+    help_content_line_count(lines, content_width).saturating_sub(visible_lines)
+}
+
 fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    // Scale to terminal: 70% width (min 50, max 80), 85% height (min 25, max 50)
-    let popup_w = (area.width * 70 / 100).clamp(50.min(area.width), 80.min(area.width));
-    let popup_h = (area.height * 85 / 100).clamp(25.min(area.height), 50.min(area.height));
-    let x = area.x + area.width.saturating_sub(popup_w) / 2;
-    let y = area.y + area.height.saturating_sub(popup_h) / 2;
-    let popup_area = Rect::new(x, y, popup_w, popup_h);
+    let popup_area = centered_popup(area, 76, 80, 42, 14, 88, 40, 1);
+    let compact_rows = popup_area.width < 64;
 
     frame.render_widget(Clear, popup_area);
 
@@ -422,10 +616,17 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let dim_s = t.help_dim;
 
     let kv = |k: &'static str, v: &'static str| -> Line<'static> {
-        Line::from(vec![
-            Span::styled(format!(" {k:<14}"), key_s),
-            Span::styled(v, desc_s),
-        ])
+        if compact_rows {
+            Line::from(vec![
+                Span::styled(format!(" {k} - "), key_s),
+                Span::styled(v, desc_s),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(format!(" {k:<14}"), key_s),
+                Span::styled(v, desc_s),
+            ])
+        }
     };
 
     // Build context-sensitive quick-reference for the active screen
@@ -440,7 +641,14 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 .bg(t.text_accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" -- keys for this screen shown below", dim_s),
+        Span::styled(
+            if compact_rows {
+                " - keys below"
+            } else {
+                " -- keys for this screen shown below"
+            },
+            dim_s,
+        ),
     ]));
     text.push(Line::from(""));
 
@@ -744,9 +952,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         )),
     ]);
 
-    // Clamp scroll to valid range (account for border lines)
-    let visible_lines = popup_h.saturating_sub(2) as usize;
-    let max_scroll = text.len().saturating_sub(visible_lines);
+    // Clamp scroll using wrapped visual rows so narrow popups can reach the bottom.
+    let max_scroll = help_max_scroll(&text, popup_area);
     let scroll = app.help_scroll.min(max_scroll);
 
     // Build title with scroll indicator
@@ -762,14 +969,259 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     frame.render_widget(
-        Paragraph::new(text).scroll((scroll as u16, 0)).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(t.border_type)
-                .title(Span::styled(title, t.help_heading))
-                .border_style(t.help_border)
-                .style(Style::default().bg(t.help_bg)),
-        ),
+        Paragraph::new(text)
+            .scroll((scroll as u16, 0))
+            .wrap(Wrap { trim: true })
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(t.border_type)
+                    .title(Span::styled(title, t.help_heading))
+                    .border_style(t.help_border)
+                    .style(Style::default().bg(t.help_bg)),
+            ),
         popup_area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eq::structs::{
+        BuffSlot, CastState as EqCastState, EqClass, SpawnInfo, SpawnType, StandState,
+    };
+    use crate::tui::app::{ChChainStatus, ClientState, GroupDef, NavClientStatus};
+    use dmft_common::nav::NavStatus;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn overview_render_narrow_keeps_roster_dense() {
+        let rendered = render_app(sample_app(), 80, 24);
+
+        assert!(rendered.contains("Ops Roster"));
+        assert!(rendered.contains("Toon06"));
+        assert!(rendered.contains("Character"));
+        assert!(rendered.contains("Camp"));
+    }
+
+    #[test]
+    fn overview_render_medium_uses_compact_tabs_and_idle_character_card() {
+        let rendered = render_app(sample_app(), 110, 30);
+
+        assert!(rendered.contains("Char"));
+        assert!(rendered.contains("Nav"));
+        assert!(rendered.contains("Dbg"));
+        assert!(rendered.contains("Toon08"));
+        assert!(!rendered.contains("y:"));
+    }
+
+    #[test]
+    fn overview_render_wide_keeps_full_tabs_and_session_panel() {
+        let rendered = render_app(sample_app(), 150, 36);
+
+        assert!(rendered.contains("Characters"));
+        assert!(rendered.contains("Navigation"));
+        assert!(rendered.contains("Session"));
+        assert!(rendered.contains("Toon10"));
+    }
+
+    #[test]
+    fn help_overlay_small_host_uses_compact_rows() {
+        let mut app = sample_app();
+        app.help_visible = true;
+
+        let rendered = render_app(app, 80, 24);
+
+        assert!(rendered.contains("Help"));
+        assert!(rendered.contains("Active: Characters"));
+        assert!(rendered.contains("g - Toggle group roster section"));
+    }
+
+    #[test]
+    fn command_mode_line_skips_empty_hint_wrapper_when_budget_is_zero() {
+        let mut app = sample_app();
+        app.cmd_state.command_mode = true;
+        app.cmd_state.command_buffer = String::from("nav");
+
+        let line = build_command_mode_line(&app, 14);
+        let rendered = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+
+        assert_eq!(line.spans.len(), 1);
+        assert!(!rendered.contains("()"));
+    }
+
+    #[test]
+    fn help_max_scroll_accounts_for_wrapped_visual_rows() {
+        let lines = vec![Line::from(
+            "This is a long help row that should wrap across several visual rows.",
+        )];
+        let popup = Rect::new(0, 0, 14, 4);
+
+        assert!(help_max_scroll(&lines, popup) > 0);
+    }
+
+    fn render_app(mut app: App, width: u16, height: u16) -> String {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal");
+        terminal
+            .draw(|frame| draw(frame, &mut app))
+            .expect("render app");
+        buffer_contents(terminal.backend().buffer(), width, height)
+    }
+
+    fn buffer_contents(buf: &ratatui::buffer::Buffer, width: u16, height: u16) -> String {
+        (0..height)
+            .map(|y| (0..width).map(|x| buf[(x, y)].symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn sample_app() -> App {
+        let mut app = App::new();
+        app.groups = (0..6)
+            .map(|idx| GroupDef {
+                id: (idx + 1) as u8,
+                name: format!("Group {}", idx + 1),
+                account_range: ((idx * 6 + 1) as u8, ((idx + 1) * 6) as u8),
+                default_camp: format!("Camp {}", idx + 1),
+            })
+            .collect();
+        app.server_name = String::from("Fippy Darkpaw");
+        app.status_message = String::from("Operator demo ready");
+        app.main_assist = Some(String::from("Toon01"));
+        app.main_tank = Some(String::from("Toon02"));
+        app.ch_chain_status = Some(ChChainStatus {
+            members: 4,
+            interval_secs: 2.5,
+            is_adaptive: true,
+            target_id: 42,
+        });
+        app.clients = (1..=12).map(sample_client).collect();
+        app.selected_client = 0;
+        app.sync_from_selected_client();
+        app.nav_state.nav_statuses.insert(
+            app.clients[2].pid,
+            NavClientStatus {
+                destination: String::from("camp"),
+                status: NavStatus::Moving {
+                    waypoint_index: 0,
+                    waypoint_count: 3,
+                    distance_remaining: 15.0,
+                },
+                eta_secs: Some(12),
+                waypoints: Vec::new(),
+                is_demo_scripted: false,
+            },
+        );
+        app
+    }
+
+    fn sample_client(index: u8) -> ClientState {
+        let mut client = ClientState::new(1_000 + u32::from(index), 0);
+        let name = format!("Toon{index:02}");
+        client.character_name = name.clone();
+        client.zone_name = if index <= 6 {
+            String::from("Guild Lobby")
+        } else {
+            String::from("Plane of Knowledge")
+        };
+        client.local_player = Some(sample_spawn(
+            &name,
+            match index % 4 {
+                0 => EqClass::Cleric,
+                1 => EqClass::Warrior,
+                2 => EqClass::Enchanter,
+                _ => EqClass::Wizard,
+            },
+            65,
+            if index == 2 {
+                Some(EqCastState {
+                    spell_id: 1,
+                    target_id: 42,
+                    spell_eta: 0,
+                    item_id: 0,
+                    spell_slot: 0,
+                    remaining_ms: Some(2_500),
+                    gem_etas: None,
+                })
+            } else {
+                None
+            },
+            StandState::Standing,
+        ));
+        if index == 1 {
+            client.target = Some(sample_target("Ancient Cyclops", 42));
+        }
+        client
+    }
+
+    fn sample_spawn(
+        name: &str,
+        class: EqClass,
+        level: u8,
+        cast_state: Option<EqCastState>,
+        stand_state: StandState,
+    ) -> SpawnInfo {
+        SpawnInfo {
+            name: name.to_string(),
+            displayed_name: name.to_string(),
+            lastname: String::new(),
+            spawn_id: 100,
+            spawn_type: SpawnType::Player,
+            level,
+            class_id: class as u8,
+            class: Some(class),
+            stand_state,
+            x: 100.0,
+            y: -25.0,
+            z: 5.0,
+            heading: 0.0,
+            hp_current: 9_500,
+            hp_max: 10_000,
+            mana_current: 7_000,
+            mana_max: 8_000,
+            endurance_current: 4_000,
+            endurance_max: 5_000,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: vec![BuffSlot {
+                spell_id: 0xFFFF,
+                duration_ticks: 0,
+                caster_level: 0,
+            }],
+            cast_state,
+        }
+    }
+
+    fn sample_target(name: &str, spawn_id: u32) -> SpawnInfo {
+        SpawnInfo {
+            name: name.to_string(),
+            displayed_name: name.to_string(),
+            lastname: String::new(),
+            spawn_id,
+            spawn_type: SpawnType::Npc,
+            level: 65,
+            class_id: 1,
+            class: Some(EqClass::Warrior),
+            stand_state: StandState::Standing,
+            x: 95.0,
+            y: -30.0,
+            z: 5.0,
+            heading: 0.0,
+            hp_current: 50_000,
+            hp_max: 50_000,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 0,
+            endurance_max: 0,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: Vec::new(),
+            cast_state: None,
+        }
+    }
 }
