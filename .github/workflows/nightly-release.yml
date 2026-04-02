@@ -25,20 +25,24 @@ jobs:
       should_run: ${{ steps.gate.outputs.should_run }}
     defaults:
       run:
-        shell: pwsh
+        shell: powershell
     steps:
       - id: gate
         run: |
-          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             "should_run=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
             exit 0
           }
 
-          $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Central Standard Time")
-          $nowUtc = [DateTime]::UtcNow
-          $local = [System.TimeZoneInfo]::ConvertTimeFromUtc($nowUtc, $tz)
-          $shouldRun = if ($local.Hour -eq 3) { "true" } else { "false" }
-          "should_run=$shouldRun" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          try {
+            $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Central Standard Time")
+            $local = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)
+            $shouldRun = if ($local.Hour -eq 3) { "true" } else { "false" }
+            "should_run=$shouldRun" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } catch {
+            Write-Host "Local-time gate failed; defaulting to false." -ForegroundColor Yellow
+            "should_run=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
 
   build-nightly:
     name: Build rolling nightly prerelease
@@ -48,7 +52,7 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: pwsh
+        shell: powershell
     steps:
       - uses: actions/checkout@v4
         with:
