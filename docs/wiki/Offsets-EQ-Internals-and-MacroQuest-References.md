@@ -2,7 +2,9 @@
 
 ## Current Rules
 
-Before doing any offset or struct work:
+The reference submodules are not required for normal build, test, or runtime work.
+
+Before doing any offset or struct work, sync them with:
 
 ```bash
 git submodule update --init --recursive
@@ -76,7 +78,8 @@ Use it for:
 
 ### Current behavior
 
-- The submodule-based reference layout is the current reality of this repo.
+- The submodule-based reference layout is the current reality of this repo for research work.
+- Those reference trees are not required for normal build, test, or runtime work.
 - `third_party/eqlib` is the canonical eqlib path and should be cited that way in docs and PRs.
 
 ### Validation notes

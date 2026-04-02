@@ -1,9 +1,13 @@
 name: README Metrics
 
 on:
-  push:
-    branches: [master]
+  schedule:
+    - cron: "30 7 * * 0"
   workflow_dispatch:
+
+concurrency:
+  group: readme-metrics-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,7 +19,7 @@ permissions:
 jobs:
   refresh-readme-metrics:
     name: Refresh README metrics
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:

@@ -201,6 +201,9 @@ cargo test               # Run the full workspace test suite
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
+Reference submodules under `third_party/` are optional for normal build, test, and runtime work.
+Only initialize them when doing offset, struct, eqlib, or MacroQuest reference research.
+
 **Demo mode** activates automatically when no live EQ process is found (always on macOS/Linux, on Windows when EQ isn't running). It populates the TUI with 18 simulated characters across 3 groups covering all 16 EQ classes:
 
 | Group | Zone           | Classes                      |

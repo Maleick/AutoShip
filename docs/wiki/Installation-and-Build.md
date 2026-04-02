@@ -5,7 +5,12 @@
 ### All platforms
 
 - Rust toolchain with edition 2024 support
-- Git submodules initialized with:
+- No `.env` file is required for normal build, test, or runtime work
+- `.cargo/config.toml` already sets `CMAKE_POLICY_VERSION_MINIMUM=3.5` for normal Cargo commands
+
+### Optional reference-only submodules
+
+Sync these only when doing offset, struct, eqlib, or MacroQuest research:
 
 ```bash
 git submodule update --init --recursive
@@ -24,6 +29,13 @@ export CMAKE_POLICY_VERSION_MINIMUM=3.5
 ```
 
 The repository also sets this through repo configuration, but the explicit export is still a useful fallback when troubleshooting.
+
+## Local Environment Notes
+
+- Codex and other local tooling will automatically pick up checked-in repo configuration such as `.cargo/config.toml`.
+- There is no required project `.env` file today.
+- The main user-provided setup is installing the host tools: Rust, CMake, and on Windows LLVM/Clang.
+- The main optional secret is `GH_TOKEN` for wiki publishing; `gh auth login` works too.
 
 ## Build Commands
 
@@ -104,7 +116,7 @@ cargo run -- --dump
 ### Current behavior
 
 - Cross-platform compilation is deliberate; the repo is structured so UI and logic work on non-Windows even when live control cannot.
-- Submodule-backed reference trees are the normal source for offset and struct investigations.
+- Submodule-backed reference trees are available for offset and struct investigations, but they are not required for normal build, test, or runtime work.
 
 ### Gaps and caveats
 

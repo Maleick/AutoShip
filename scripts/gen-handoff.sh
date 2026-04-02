@@ -150,7 +150,7 @@ cat <<'BUILDEOF'
 ## Build Requirements
 
 ```bash
-# One-time (all platforms): fetch reference trees used for offset/struct work
+# Optional reference trees (only for offset/struct work)
 git submodule update --init --recursive
 
 # macOS/Linux (development — demo mode)
@@ -168,7 +168,7 @@ cargo build --release
 
 ### Dependencies
 
-- Rust (edition 2024, stable MSVC toolchain on Windows)
+- Rust (edition 2024, nightly MSVC toolchain on Windows for live/release validation)
 - CMake 3.5+ (for navmesh C++ FFI shim)
 - LLVM/Clang (Windows, for bindgen)
 
