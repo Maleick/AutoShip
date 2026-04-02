@@ -234,22 +234,14 @@ fn draw_live_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: 
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            (0..num_rows)
-                .map(|_| Constraint::Ratio(1, num_rows as u32))
-                .collect::<Vec<_>>(),
-        )
+        .constraints((0..num_rows).map(|_| Constraint::Ratio(1, num_rows as u32)))
         .split(area);
-
-    let col_constraints: Vec<Constraint> = (0..num_cols)
-        .map(|_| Constraint::Ratio(1, num_cols as u32))
-        .collect();
 
     let mut panel_idx = 0;
     for row in rows.iter() {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints(col_constraints.clone())
+            .constraints((0..num_cols).map(|_| Constraint::Ratio(1, num_cols as u32)))
             .split(*row);
 
         for col in cols.iter() {
@@ -431,22 +423,14 @@ fn draw_config_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            (0..num_rows)
-                .map(|_| Constraint::Ratio(1, num_rows as u32))
-                .collect::<Vec<_>>(),
-        )
+        .constraints((0..num_rows).map(|_| Constraint::Ratio(1, num_rows as u32)))
         .split(area);
-
-    let col_constraints: Vec<Constraint> = (0..num_cols)
-        .map(|_| Constraint::Ratio(1, num_cols as u32))
-        .collect();
 
     let mut panel_idx = 0;
     for row in rows.iter() {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints(col_constraints.clone())
+            .constraints((0..num_cols).map(|_| Constraint::Ratio(1, num_cols as u32)))
             .split(*row);
 
         for col in cols.iter() {

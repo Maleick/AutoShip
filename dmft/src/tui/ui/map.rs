@@ -1205,12 +1205,7 @@ fn draw_tactical_sidebar(
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            sections
-                .iter()
-                .map(|(_, constraint)| *constraint)
-                .collect::<Vec<_>>(),
-        )
+        .constraints(sections.iter().map(|(_, constraint)| *constraint))
         .split(area);
 
     for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {

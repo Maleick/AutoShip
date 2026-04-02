@@ -1,4 +1,10 @@
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=csrc/detour_query_shim.cpp");
+    println!("cargo:rerun-if-env-changed=CARGO_HOME");
+    println!("cargo:rerun-if-env-changed=USERPROFILE");
+    println!("cargo:rerun-if-env-changed=HOME");
+
     // Find the recastnavigation-sys source directory in the cargo registry
     // to get the Detour include headers.
     let home = std::env::var("CARGO_HOME")

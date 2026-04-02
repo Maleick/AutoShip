@@ -524,12 +524,13 @@ impl App {
     pub fn set_toast(&mut self, level: ToastLevel, msg: impl Into<String>) {
         let message = msg.into();
         let ttl_ticks = level.ttl_ticks();
-        if let Some(toast) = self.toast.as_mut() {
-            if toast.level == level && toast.message == message {
-                toast.set_tick = self.tick_count;
-                toast.ttl_ticks = ttl_ticks;
-                return;
-            }
+        if let Some(toast) = self.toast.as_mut()
+            && toast.level == level
+            && toast.message == message
+        {
+            toast.set_tick = self.tick_count;
+            toast.ttl_ticks = ttl_ticks;
+            return;
         }
         self.toast = Some(Toast {
             message,

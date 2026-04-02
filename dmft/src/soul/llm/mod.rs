@@ -123,8 +123,8 @@ mod tests {
         let p = LlmPriority::Medium;
         let c = p; // Copy
         assert_eq!(p, c);
-        let cl = p;
-        assert_eq!(p, cl);
+        let copy = p;
+        assert_eq!(p, copy);
     }
 
     #[test]
@@ -156,7 +156,6 @@ mod tests {
         ];
         for s in &situations {
             let _ = format!("{:?}", s);
-            let _ = s.clone();
         }
     }
 
@@ -187,9 +186,8 @@ mod tests {
         };
         assert!(!resp.from_llm);
         assert_eq!(resp.tokens_used, 0);
-        let cloned = resp.clone();
-        assert_eq!(cloned.text, "Hail, traveler!");
-        let _ = format!("{:?}", cloned);
+        assert_eq!(resp.text, "Hail, traveler!");
+        let _ = format!("{:?}", resp);
     }
 
     #[test]
@@ -215,8 +213,7 @@ mod tests {
             memory_context: vec![],
             backstory: String::new(),
         };
-        let cloned = req.clone();
-        assert_eq!(cloned.character_name, "Test");
-        assert_eq!(cloned.priority, LlmPriority::High);
+        assert_eq!(req.character_name, "Test");
+        assert_eq!(req.priority, LlmPriority::High);
     }
 }

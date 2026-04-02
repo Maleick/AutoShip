@@ -32,6 +32,15 @@ credentials.db*
 # Playwright MCP
 .playwright-mcp/
 
+# Local Codex/Claude workspace artifacts
+.claude/hooks/
+.claude/worktrees/
+logs/
+
+# Local reference repos
+mq2-definitions/
+mq2-eqlib/
+
 # Account credentials
 accounts.csv
 config/accounts.toml

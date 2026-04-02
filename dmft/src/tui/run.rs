@@ -95,6 +95,7 @@ fn run_loop(
     let mut last_process_scan = Instant::now();
     let mut last_camp_tick = Instant::now();
     let mut last_log_poll = Instant::now();
+    let mut process_handles: HashMap<u32, crate::process::memory::ProcessHandle> = HashMap::new();
 
     while app.running {
         // Draw the UI
@@ -107,6 +108,14 @@ fn run_loop(
         // Periodic scan for new/lost EQ processes
         if last_process_scan.elapsed() >= PROCESS_SCAN_INTERVAL {
             scan_for_clients(app);
+            let active_live_pids: HashSet<u32> = app
+                .clients
+                .iter()
+                .filter(|client| !client.is_demo)
+                .map(|client| client.pid)
+                .collect();
+            process_handles.retain(|pid, _| active_live_pids.contains(pid));
+
             // Sync orchestrator's client list from app
             orchestrator.client_pids = app.clients.iter().map(|c| c.pid).collect();
             orchestrator.client_names = app
@@ -119,7 +128,7 @@ fn run_loop(
 
         // Periodic data refresh from EQ process
         if last_refresh.elapsed() >= refresh_interval {
-            refresh_eq_data(app);
+            refresh_eq_data(app, &mut process_handles);
             app.tick_count += 1;
             app.clear_expired_toast();
             let demo_mode =
@@ -493,10 +502,13 @@ fn parse_title_fields(title: &str) -> (String, String) {
 }
 
 /// Refresh live EQ data. On non-Windows or when not attached, loads demo data.
-fn refresh_eq_data(app: &mut App) {
+fn refresh_eq_data(
+    app: &mut App,
+    _process_handles: &mut HashMap<u32, crate::process::memory::ProcessHandle>,
+) {
     #[cfg(windows)]
     {
-        refresh_eq_data_live(app);
+        refresh_eq_data_live(app, _process_handles);
         // If no EQ processes found, load demo data so TUI is testable on Windows too
         if app.clients.is_empty() {
             load_demo_data(app);
@@ -515,18 +527,29 @@ fn refresh_eq_data(app: &mut App) {
 /// Live EQ memory refresh — only compiles on Windows.
 /// Refreshes ALL attached clients.
 #[cfg(windows)]
-fn refresh_eq_data_live(app: &mut App) {
+fn refresh_eq_data_live(
+    app: &mut App,
+    process_handles: &mut HashMap<u32, crate::process::memory::ProcessHandle>,
+) {
     use crate::eq;
     use crate::process::memory::ProcessHandle;
 
     for client in app.clients.iter_mut() {
-        let proc = match ProcessHandle::open(client.pid) {
-            Ok(p) => p,
-            Err(e) => {
-                client.client_status = format!("Lost connection: {e}");
-                continue;
-            }
+        if client.is_demo {
+            continue;
+        }
+
+        let proc = match process_handles.remove(&client.pid) {
+            Some(proc) => proc,
+            None => match ProcessHandle::open(client.pid) {
+                Ok(handle) => handle,
+                Err(e) => {
+                    client.client_status = format!("Lost connection: {e}");
+                    continue;
+                }
+            },
         };
+        let mut read_failed = false;
 
         // Read local player
         match eq::spawn::read_local_player(&proc, client.eq_base) {
@@ -559,25 +582,37 @@ fn refresh_eq_data_live(app: &mut App) {
             Err(e) => {
                 client.last_live_cast_capture = None;
                 client.client_status = format!("Player read error: {e}");
+                read_failed = true;
             }
         }
 
         // Read target
         match eq::spawn::read_target(&proc, client.eq_base) {
-            Ok(target) => client.target = target,
-            Err(e) => client.client_status = format!("Target read error: {e}"),
+            Ok(target) => {
+                client.target = target;
+            }
+            Err(e) => {
+                client.client_status = format!("Target read error: {e}");
+                read_failed = true;
+            }
         }
 
         // Read spawn list
         match eq::spawn::read_all_spawns(&proc, client.eq_base, 200) {
-            Ok(spawns) => client.spawns = spawns,
-            Err(e) => client.client_status = format!("Spawn read error: {e}"),
+            Ok(spawns) => {
+                client.spawns = spawns;
+            }
+            Err(e) => {
+                client.client_status = format!("Spawn read error: {e}");
+                read_failed = true;
+            }
         }
 
         // Read zone name from memory (preferred) or fall back to window title
         match eq::spawn::read_zone_name(&proc, client.eq_base) {
             Ok(zone) => client.zone_name = zone,
             Err(_) => {
+                read_failed = true;
                 // Fallback: parse from window title
                 if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
                     for w in &windows {
@@ -603,7 +638,12 @@ fn refresh_eq_data_live(app: &mut App) {
             Ok(group) => client.group_info = group,
             Err(e) => {
                 tracing::trace!(pid = client.pid, error = %e, "Failed to read group info");
+                read_failed = true;
             }
+        }
+
+        if !read_failed {
+            process_handles.insert(client.pid, proc);
         }
     }
 

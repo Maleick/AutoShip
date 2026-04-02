@@ -211,12 +211,23 @@ instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
 # Preview cleanup operations (default: dry-run)
 scripts/git_prune.sh
 
-# Apply local cleanup
+# Apply local cleanup. By default this protects main/master, release/*,
+# hotfix/*, codex/*, copilot/*, dependabot/*, the current branch, and the base branch.
 scripts/git_prune.sh --apply
+
+# Add extra protected globs for long-lived branches
+scripts/git_prune.sh --apply --protect 'feature/keep-*'
 
 # Also delete merged remote PR branches (requires gh auth)
 scripts/git_prune.sh --apply --include-remote
 ```
+
+The script auto-detects the base branch from local `main`, local `master`, then
+`origin/HEAD` unless you pass `--base`.
+
+Stale local branches are only deleted by default when they are already merged into the
+base branch or their upstream has disappeared. Use `--force-stale` if you really want
+age-only pruning.
 
 ### Development (any platform — demo mode)
 

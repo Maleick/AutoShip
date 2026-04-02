@@ -235,7 +235,6 @@ pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
     .context("EnumProcesses failed")?;
 
     let count = bytes_returned as usize / 4;
-    let name_lower = name.to_lowercase();
     let mut matches = Vec::new();
 
     for &pid in &pids[..count] {
@@ -254,7 +253,7 @@ pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
 
             if len > 0 {
                 let proc_name = String::from_utf16_lossy(&buf[..len as usize]);
-                if proc_name.to_lowercase() == name_lower {
+                if proc_name.eq_ignore_ascii_case(name) {
                     matches.push(pid);
                 }
             }
