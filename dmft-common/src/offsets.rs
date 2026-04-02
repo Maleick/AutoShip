@@ -3,7 +3,7 @@
 // At runtime, subtract the preferred base and add the actual base
 // (obtained via GetModuleInformation or EnumProcessModules).
 //
-// Source: mq2-reference/src/eqlib/include/eqlib/offsets/eqgame.h
+// Source: third_party/eqlib/include/eqlib/offsets/eqgame.h
 // Client date: 20260310 (March 10, 2026)
 
 /// Preferred base address of eqgame.exe (64-bit)
@@ -273,7 +273,7 @@ pub mod eqgame {
     pub const CSIDL_SCREEN_WND_SIDL_TEXT: usize = 0x270;
 
     // ─── CListWnd offsets (for character list reading) ───
-    // Source: mq2-reference UI.h — CListWnd inherits CSidlScreenWnd
+    // Source: third_party/eqlib/include/eqlib/game/UI.h — CListWnd inherits CSidlScreenWnd
 
     /// `CListWnd::ItemsArray` (`ArrayClass<SListWndLine>`) — row count (int at +0x270)
     pub const CLISTWND_ITEMS_COUNT: usize = 0x270;
@@ -303,7 +303,7 @@ pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
-// Source: mq2-reference/src/eqlib/include/eqlib/game/PlayerClient.h
+// Source: third_party/eqlib/include/eqlib/game/PlayerClient.h
 
 /// Offsets within `PlayerBase` (base class of `PlayerClient`)
 pub mod player_base {
@@ -342,7 +342,7 @@ pub mod player_base {
 }
 
 /// Buff slot offsets within `CharacterZoneClient`.
-/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h (`EQ_Affect` array).
+/// Source: third_party/eqlib/include/eqlib/game/PcClient.h (`EQ_Affect` array).
 /// TODO: calibrate exact `BUFF_ARRAY_OFFSET` against live 20260310 client hex dump.
 pub mod buff_slots {
     /// Total buff slots (long buffs + short buffs).
@@ -371,21 +371,103 @@ pub mod buff_slots {
     pub const EMPTY_SPELL_ID: u32 = 0xFFFF;
 }
 
-/// Offsets within `CharacterZoneClient` (casting state)
+/// Offsets within `CDisplay`.
+/// Source: third_party/eqlib/include/eqlib/game/Display.h
+pub mod display {
+    /// `uint32_t` — EQ's live millisecond timestamp counter.
+    pub const TIME_STAMP: usize = 0x016c;
+}
+
+/// Offsets within `CharacterZoneClient` as embedded in `PcClient`.
+/// Source: third_party/eqlib/include/eqlib/game/PcClient.h
 pub mod character_zone {
-    /// `uint32_t` — cast completion ETA (server timestamp when spell finishes)
-    /// Source: PlayerClient.h offset 0x010 (`CharacterZoneClient::SpellETA`)
-    pub const SPELL_ETA: usize = 0x010;
-    /// `uint8_t` — active spell gem slot (0xFF = not casting)
-    /// Source: PlayerClient.h offset 0x039 (`CharacterZoneClient::SpellSlot`)
-    pub const SPELL_SLOT: usize = 0x039;
-    /// `uint32_t`\[15\] — per-gem recast timestamp array
-    /// Source: PlayerClient.h offset 0x3B0 (`CharacterZoneClient::SpellGemETA`)
-    pub const SPELL_GEM_ETA: usize = 0x3B0;
+    /// `PlayerClient*` — local spawn pointer (`CharacterZoneClient::me`).
+    pub const ME: usize = 0x2798;
+}
+
+/// Offsets within `LaunchSpellData`.
+/// Source: third_party/eqlib/include/eqlib/game/PlayerClient.h
+pub mod launch_spell_data {
+    /// `int` — active spell ID (`-1` when not casting).
+    pub const SPELL_ID: usize = 0x00;
+    /// `uint32_t` — target spawn ID for the active cast.
+    pub const TARGET_ID: usize = 0x04;
+    /// `uint32_t` — client timestamp when the cast lands.
+    pub const SPELL_ETA: usize = 0x10;
+    /// `int` — casting item ID, if any.
+    pub const ITEM_ID: usize = 0x14;
+    /// `ItemGlobalIndex` — inventory location for item-origin casts.
+    pub const ITEM_LOCATION: usize = 0x2c;
+    /// `ItemSpellTypes` — which item spell slot is being activated.
+    pub const ITEM_CAST_TYPE: usize = 0x38;
+    /// `uint8_t` — spell gem slot (`0xFF` when not using a gem).
+    pub const SPELL_SLOT: usize = 0x39;
+
+    /// Sentinel spell ID used by EQ when no cast is active.
+    pub const NOT_CASTING_SPELL_ID: i32 = -1;
+    /// Sentinel spell slot used by EQ when no spell gem is active.
+    pub const NOT_CASTING_SPELL_SLOT: u8 = 0xFF;
+}
+
+/// Offsets within `ClientSpellManager`.
+/// Source: `third_party/eqlib/include/eqlib/game/Spells.h`
+pub mod client_spell_manager {
+    /// `int` — largest valid spell ID in the loaded spell database.
+    pub const MAX_SPELL_ID: usize = 0x0064;
+    /// `SoeUtil::HashMap<int, EQ_Spell>` — loaded spell records keyed by spell ID.
+    pub const SPELLS: usize = 0x2240;
+}
+
+/// Offsets within `EQ_Spell`.
+/// Source: `third_party/eqlib/include/eqlib/game/Spells.h`
+pub mod eq_spell {
+    /// `uint32_t` — base cast time from spell data (does not include live haste/focus modifiers).
+    pub const CAST_TIME: usize = 0x0010;
+    /// `int` — spell ID inside the record.
+    pub const ID: usize = 0x008c;
+    /// `char[64]` — spell name.
+    pub const NAME: usize = 0x0192;
+    /// `sizeof(EQ_Spell)` on the 2026-03-10 live client.
+    pub const SIZE: usize = 0x0218;
+}
+
+/// Offsets within `SoeUtil::HashMap<int, EQ_Spell>`.
+/// Source: `third_party/eqlib/include/eqlib/game/SoeUtil.h` + `EQ_Spell` size above.
+pub mod spell_hash_map {
+    const fn align_up(value: usize, alignment: usize) -> usize {
+        let remainder = value % alignment;
+        if remainder == 0 {
+            value
+        } else {
+            value + (alignment - remainder)
+        }
+    }
+
+    /// `size_t` — number of entries in the map.
+    pub const COUNT: usize = 0x08;
+    /// `Node*` — head of the linked list of values.
+    pub const HEAD: usize = 0x10;
+    /// `Node**` — bucket array for hash lookups.
+    pub const BUCKETS: usize = 0x20;
+    /// `size_t` — bucket count, always a power of two when populated.
+    pub const DYNAMIC_SIZE: usize = 0x28;
+
+    /// `int` — hash node key (`spell_id`).
+    pub const KEY: usize = 0x000;
+    /// `EQ_Spell` — hash node value payload.
+    pub const VALUE: usize = 0x004;
+    /// `Node*` — next entry within the same hash bucket.
+    pub const HASH_NEXT: usize = align_up(VALUE + super::eq_spell::SIZE, 0x08);
+    /// `Node*` — next entry in insertion order.
+    pub const NEXT: usize = HASH_NEXT + 0x08;
+    /// `Node*` — previous entry in insertion order.
+    pub const PREV: usize = NEXT + 0x08;
 }
 
 /// Offsets within `PlayerZoneClient` (extends `PlayerBase` at 0x01c8)
 pub mod player_zone {
+    /// `LaunchSpellData` — persistent cast state snapshot for this spawn.
+    pub const CASTING_DATA: usize = 0x01d8;
     /// `int64_t` — maximum HP
     pub const HP_MAX: usize = 0x0338;
     /// `int64_t` — current HP
@@ -406,6 +488,8 @@ pub mod player_zone {
     pub const GM: usize = 0x03ec;
     /// `uint8_t` — GM rank. Source: PlayerClient.h offset 0x0368
     pub const GM_RANK: usize = 0x0368;
+    /// `uint32_t`\[15\] — per-gem recast timestamps.
+    pub const SPELL_GEM_ETA: usize = 0x03b0;
     /// `uint8_t` — character class ID (1=WAR, 2=CLR, ..., 16=BER)
     /// Source: `PlayerZoneClient` offset 0x0420 in PlayerClient.h
     /// This is the direct field — more reliable than the `ActorClient` path (0x0FDC)
@@ -434,7 +518,7 @@ pub mod actor_client {
 }
 
 /// Group-related offsets
-/// Source: mq2-reference/src/eqlib/include/eqlib/game/PcClient.h
+/// Source: third_party/eqlib/include/eqlib/game/PcClient.h
 pub mod group {
     /// Offset of `CGroup`* pointer within `PcClient` struct
     /// PcClient.Group at 0x2EB0
@@ -470,7 +554,7 @@ pub mod group {
 }
 
 /// Zone info offsets (zoneHeader / ZONEINFO struct)
-/// Source: mq2-reference/src/eqlib/include/eqlib/game/EverQuest.h (zoneHeader)
+/// Source: third_party/eqlib/include/eqlib/game/EverQuest.h (zoneHeader)
 pub mod zone_info {
     /// Address of the zoneHeader struct (instEQZoneInfo).
     /// This is NOT a pointer — it's the struct itself at this address.
@@ -761,6 +845,62 @@ mod tests {
             assert!(buff_slots::MAX_BUFF_SLOTS > 0);
         };
         assert_eq!(buff_slots::EMPTY_SPELL_ID, 0xFFFF);
+    }
+
+    #[test]
+    fn display_timestamp_offset_matches_eqlib_live_20260310() {
+        assert_eq!(display::TIME_STAMP, 0x016c);
+    }
+
+    #[test]
+    fn launch_spell_data_offsets_match_eqlib_live_20260310() {
+        assert_eq!(launch_spell_data::SPELL_ID, 0x00);
+        assert_eq!(launch_spell_data::TARGET_ID, 0x04);
+        assert_eq!(launch_spell_data::SPELL_ETA, 0x10);
+        assert_eq!(launch_spell_data::ITEM_ID, 0x14);
+        assert_eq!(launch_spell_data::ITEM_LOCATION, 0x2c);
+        assert_eq!(launch_spell_data::ITEM_CAST_TYPE, 0x38);
+        assert_eq!(launch_spell_data::SPELL_SLOT, 0x39);
+        assert_eq!(launch_spell_data::NOT_CASTING_SPELL_ID, -1);
+        assert_eq!(launch_spell_data::NOT_CASTING_SPELL_SLOT, 0xFF);
+    }
+
+    #[test]
+    fn player_zone_casting_offsets_match_eqlib_live_20260310() {
+        assert_eq!(player_zone::CASTING_DATA, 0x01d8);
+        assert_eq!(player_zone::SPELL_GEM_ETA, 0x03b0);
+    }
+
+    #[test]
+    fn character_zone_me_offset_matches_eqlib_live_20260310() {
+        assert_eq!(character_zone::ME, 0x2798);
+    }
+
+    #[test]
+    fn spell_manager_offsets_match_eqlib_live_20260310() {
+        assert_eq!(client_spell_manager::MAX_SPELL_ID, 0x0064);
+        assert_eq!(client_spell_manager::SPELLS, 0x2240);
+    }
+
+    #[test]
+    fn eq_spell_offsets_match_eqlib_live_20260310() {
+        assert_eq!(eq_spell::CAST_TIME, 0x0010);
+        assert_eq!(eq_spell::ID, 0x008c);
+        assert_eq!(eq_spell::NAME, 0x0192);
+        assert_eq!(eq_spell::SIZE, 0x0218);
+    }
+
+    #[test]
+    fn spell_hash_map_offsets_match_eqlib_layout() {
+        assert_eq!(spell_hash_map::COUNT, 0x08);
+        assert_eq!(spell_hash_map::HEAD, 0x10);
+        assert_eq!(spell_hash_map::BUCKETS, 0x20);
+        assert_eq!(spell_hash_map::DYNAMIC_SIZE, 0x28);
+        assert_eq!(spell_hash_map::KEY, 0x000);
+        assert_eq!(spell_hash_map::VALUE, 0x004);
+        assert_eq!(spell_hash_map::HASH_NEXT, 0x220);
+        assert_eq!(spell_hash_map::NEXT, 0x228);
+        assert_eq!(spell_hash_map::PREV, 0x230);
     }
 
     #[test]

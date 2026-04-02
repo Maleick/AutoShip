@@ -10,27 +10,36 @@ use ratatui::{
 
 use super::widgets::{
     WIDTH_OVERVIEW_STACK, WIDTH_SHOW_CLASS_COL, WIDTH_SHOW_GROUP_COL, WIDTH_SHOW_ZONE_COL,
-    WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, hp_color, panel, stand_state_color,
-    themed_header_row,
+    WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, WidthClass, classify_width, hp_color, panel,
+    render_cast_bar, stand_state_color, themed_header_row, truncate_inline,
 };
 use crate::eq::structs::{EqClass, StandState};
 use crate::tui::app::{ActivePanel, App, ClientState};
 
+const MIN_HEIGHT_FOR_FOCUS_STRIP: u16 = 28;
+const STACKED_ROSTER_TALL_HEIGHT_THRESHOLD: u16 = 28;
+const STACKED_ROSTER_MEDIUM_HEIGHT_THRESHOLD: u16 = 24;
+const STACKED_ROSTER_COMPACT_HEIGHT_THRESHOLD: u16 = 18;
+const STACKED_ROSTER_MIN_TALL: u16 = 15;
+const STACKED_ROSTER_MIN_MEDIUM: u16 = 13;
+const STACKED_ROSTER_MIN_COMPACT: u16 = 11;
+const STACKED_ROSTER_MIN_TINY: u16 = 8;
+
 /// Draw the main overview dashboard with roster and status panels.
 pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
-    let sections = overview_sections(app);
-    let natural_sidebar_height = sections
-        .iter()
-        .map(|(_, constraint)| preferred_height(*constraint))
-        .sum::<u16>();
+    let stacked = area.width < WIDTH_OVERVIEW_STACK;
+    let sections = overview_sections(app, area, stacked);
 
-    let chunks = if area.width < WIDTH_OVERVIEW_STACK {
-        let sidebar_height = natural_sidebar_height
-            .min(area.height.saturating_sub(10))
-            .max(3);
+    let chunks = if stacked {
+        let sidebar_height = sections.iter().map(|section| section.height).sum::<u16>();
+        let roster_min = stacked_roster_min_height(area.height);
+        let roster_height = area.height.saturating_sub(sidebar_height).max(roster_min);
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(10), Constraint::Length(sidebar_height)])
+            .constraints([
+                Constraint::Length(roster_height.max(5)),
+                Constraint::Length(sidebar_height),
+            ])
             .split(area)
     } else {
         let sidebar_width = if area.width >= WIDTH_SIDEBAR_WIDE {
@@ -50,16 +59,19 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     draw_dashboard_grid(frame, chunks[0], app);
-    draw_dashboard_sidebar(frame, chunks[1], app, &sections);
+    if !sections.is_empty() {
+        draw_dashboard_sidebar(frame, chunks[1], app, &sections);
+    }
 }
 
 // ─── Character grid ──────────────────────────────────────────────────────────
 
 fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
-    let roster_area = if area.height >= 9 {
+    let focus_height = group_focus_strip_height(area);
+    let roster_area = if focus_height > 0 {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(4), Constraint::Min(5)])
+            .constraints([Constraint::Length(focus_height), Constraint::Min(5)])
             .split(area);
         draw_group_focus_strip(frame, chunks[0], app);
         chunks[1]
@@ -128,7 +140,10 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 let hp_pct = player.hp_pct();
                 let name = app.redact_name(&player.displayed_name).into_owned();
                 let (condition_label, condition_style) = client_condition(client, t);
-                let (activity_label, activity_style) = client_activity(app, client);
+                let compact_activity =
+                    roster_area.width < WIDTH_SHOW_ZONE_COL || area.width < WIDTH_OVERVIEW_STACK;
+                let (activity_label, activity_style) =
+                    client_activity(app, client, compact_activity);
 
                 let mut cells = vec![
                     Cell::from(marker).style(Style::default().fg(t.text_accent)),
@@ -318,8 +333,9 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
         })
         .unwrap_or_else(|| String::from("none"));
 
+    let compact = inner.width < 60;
     let mut lines = vec![Line::from(cards)];
-    if inner.height > 1 {
+    if inner.height > 1 && !compact {
         lines.push(Line::from(vec![
             Span::styled("Focus ", Style::default().fg(t.text_muted)),
             Span::styled(
@@ -334,6 +350,14 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
+}
+
+fn group_focus_strip_height(area: Rect) -> u16 {
+    if area.height >= MIN_HEIGHT_FOR_FOCUS_STRIP {
+        3
+    } else {
+        0
+    }
 }
 
 fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'static str, Style) {
@@ -360,61 +384,83 @@ fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'st
     }
 }
 
-fn client_activity(app: &App, client: &ClientState) -> (&'static str, Style) {
+fn client_activity(app: &App, client: &ClientState, compact: bool) -> (&'static str, Style) {
     let t = &app.theme;
 
     if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
         if nav.status.is_moving() {
             return (
-                "➜ Nav",
+                if compact { "NAV" } else { "➜ Nav" },
                 Style::default()
                     .fg(t.text_highlight)
                     .add_modifier(Modifier::BOLD),
             );
         }
         if nav.status.is_arrived() {
-            return ("✓ Arr", Style::default().fg(t.hp_high));
+            return (
+                if compact { "ARR" } else { "✓ Arr" },
+                Style::default().fg(t.hp_high),
+            );
         }
         if nav.status.is_stuck() {
             return (
-                "! Stuck",
+                if compact { "STK" } else { "! Stuck" },
                 Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
             );
         }
     }
 
     let Some(player) = &client.local_player else {
-        return ("• Idle", Style::default().fg(t.text_muted));
+        return ("RDY", Style::default().fg(t.text_muted));
     };
 
     if matches!(player.stand_state, StandState::Dead) {
-        return ("☠ Dead", Style::default().fg(t.hp_low));
+        return (
+            if compact { "DEAD" } else { "☠ Dead" },
+            Style::default().fg(t.hp_low),
+        );
     }
     if matches!(player.stand_state, StandState::Feigned) {
-        return ("⇣ FD", Style::default().fg(t.text_secondary));
+        return (
+            if compact { "FD" } else { "⇣ FD" },
+            Style::default().fg(t.text_secondary),
+        );
     }
     if matches!(player.stand_state, StandState::Sitting) {
-        return ("☾ Sit", Style::default().fg(t.state_sitting));
+        return (
+            if compact { "SIT" } else { "☾ Sit" },
+            Style::default().fg(t.state_sitting),
+        );
     }
     if matches!(player.stand_state, StandState::Looting) {
-        return ("⌕ Loot", Style::default().fg(t.text_highlight));
+        return (
+            if compact { "LOOT" } else { "⌕ Loot" },
+            Style::default().fg(t.text_highlight),
+        );
     }
 
     if let Some(cast) = &player.cast_state
         && cast.is_casting()
     {
         if is_healer_class(player.class) {
-            return ("✚ Heal", Style::default().fg(t.hp_high));
+            return (
+                if compact { "HEAL" } else { "✚ Heal" },
+                Style::default().fg(t.hp_high),
+            );
         }
-        if is_debuffer_class(player.class) {
-            return ("≈ Debuff", Style::default().fg(t.text_accent));
-        }
-        return ("✦ Cast", Style::default().fg(t.text_highlight));
+        return (
+            if compact { "CAST" } else { "✦ Cast" },
+            Style::default().fg(if is_debuffer_class(player.class) {
+                t.text_accent
+            } else {
+                t.text_highlight
+            }),
+        );
     }
 
     if client.target.is_some() {
         return (
-            "⚔ Fight",
+            if compact { "FGT" } else { "⚔ Fight" },
             Style::default()
                 .fg(t.text_server)
                 .add_modifier(Modifier::BOLD),
@@ -422,9 +468,18 @@ fn client_activity(app: &App, client: &ClientState) -> (&'static str, Style) {
     }
 
     match player.stand_state {
-        StandState::Ducking => ("↧ Duck", Style::default().fg(t.text_secondary)),
-        StandState::Frozen => ("■ Hold", Style::default().fg(t.text_muted)),
-        _ => ("• Ready", Style::default().fg(t.text_muted)),
+        StandState::Ducking => (
+            if compact { "DUCK" } else { "↧ Duck" },
+            Style::default().fg(t.text_secondary),
+        ),
+        StandState::Frozen => (
+            if compact { "HOLD" } else { "■ Hold" },
+            Style::default().fg(t.text_muted),
+        ),
+        _ => (
+            if compact { "RDY" } else { "• Ready" },
+            Style::default().fg(t.text_muted),
+        ),
     }
 }
 
@@ -444,7 +499,7 @@ fn is_debuffer_class(class: Option<EqClass>) -> bool {
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum OverviewSectionKind {
     Character,
     Groups,
@@ -453,11 +508,18 @@ enum OverviewSectionKind {
     Session,
 }
 
+#[derive(Clone, Copy)]
+struct OverviewSectionLayout {
+    kind: OverviewSectionKind,
+    height: u16,
+    collapsed: bool,
+}
+
 fn draw_dashboard_sidebar(
     frame: &mut Frame,
     area: Rect,
     app: &App,
-    sections: &[(OverviewSectionKind, Constraint)],
+    sections: &[OverviewSectionLayout],
 ) {
     if sections.is_empty() {
         return;
@@ -468,93 +530,181 @@ fn draw_dashboard_sidebar(
         .constraints(
             sections
                 .iter()
-                .map(|(_, constraint)| *constraint)
+                .map(|section| Constraint::Length(section.height))
                 .collect::<Vec<_>>(),
         )
         .split(area);
 
-    for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
-        match section {
+    for (section, chunk) in sections.iter().zip(chunks.iter()) {
+        match section.kind {
             OverviewSectionKind::Character => {
-                draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed);
+                draw_character_summary(frame, *chunk, app, section.collapsed);
             }
             OverviewSectionKind::Groups => {
-                draw_group_ops_summary(frame, *chunk, app, app.overview_state.groups_collapsed);
+                draw_group_ops_summary(frame, *chunk, app, section.collapsed);
             }
             OverviewSectionKind::Filters => {
-                draw_scope_summary(frame, *chunk, app, app.overview_state.filters_collapsed);
+                draw_scope_summary(frame, *chunk, app, section.collapsed);
             }
             OverviewSectionKind::Combat => {
-                draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed);
+                draw_combat_status(frame, *chunk, app, section.collapsed);
             }
             OverviewSectionKind::Session => {
-                draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed);
+                draw_session_stats(frame, *chunk, app, section.collapsed);
             }
         }
     }
 }
 
-fn overview_sections(app: &App) -> Vec<(OverviewSectionKind, Constraint)> {
-    let mut sections = vec![(
-        OverviewSectionKind::Character,
-        if app.overview_state.character_collapsed {
-            Constraint::Length(3)
+fn overview_sections(app: &App, area: Rect, stacked: bool) -> Vec<OverviewSectionLayout> {
+    let mut sections = vec![OverviewSectionLayout {
+        kind: OverviewSectionKind::Character,
+        height: if app.overview_state.character_collapsed {
+            3
         } else {
-            Constraint::Length(8)
+            7
         },
-    )];
+        collapsed: app.overview_state.character_collapsed,
+    }];
 
     if app.overview_state.show_groups {
         let group_rows = group_scope_entries(app).len().min(6) as u16;
-        sections.push((
-            OverviewSectionKind::Groups,
-            if app.overview_state.groups_collapsed {
-                Constraint::Length(3)
+        sections.push(OverviewSectionLayout {
+            kind: OverviewSectionKind::Groups,
+            height: if app.overview_state.groups_collapsed {
+                3
             } else {
-                Constraint::Length(group_rows.saturating_add(2).max(5))
+                group_rows.saturating_add(2).max(5)
             },
-        ));
+            collapsed: app.overview_state.groups_collapsed,
+        });
     }
 
     if app.overview_state.show_filters {
-        sections.push((
-            OverviewSectionKind::Filters,
-            if app.overview_state.filters_collapsed {
-                Constraint::Length(3)
+        sections.push(OverviewSectionLayout {
+            kind: OverviewSectionKind::Filters,
+            height: if app.overview_state.filters_collapsed {
+                3
             } else {
-                Constraint::Length(6)
+                5
             },
-        ));
+            collapsed: app.overview_state.filters_collapsed,
+        });
     }
 
-    sections.push((
-        OverviewSectionKind::Combat,
-        if app.overview_state.combat_collapsed {
-            Constraint::Length(3)
+    sections.push(OverviewSectionLayout {
+        kind: OverviewSectionKind::Combat,
+        height: if app.overview_state.combat_collapsed {
+            3
         } else if app.ch_chain_status.is_some() {
-            Constraint::Length(5)
+            6
         } else {
-            Constraint::Length(4)
+            5
         },
-    ));
-    sections.push((
-        OverviewSectionKind::Session,
-        if app.overview_state.session_collapsed {
-            Constraint::Length(3)
+        collapsed: app.overview_state.combat_collapsed,
+    });
+    sections.push(OverviewSectionLayout {
+        kind: OverviewSectionKind::Session,
+        height: if app.overview_state.session_collapsed {
+            3
         } else if app.loot_database.items.is_empty() {
-            Constraint::Min(7)
+            6
         } else {
-            Constraint::Min(10)
+            8
         },
-    ));
+        collapsed: app.overview_state.session_collapsed,
+    });
 
-    sections
+    if stacked {
+        stacked_overview_sections(app, area, &sections)
+    } else {
+        sections
+    }
 }
 
-fn preferred_height(constraint: Constraint) -> u16 {
-    match constraint {
-        Constraint::Length(height) | Constraint::Min(height) => height,
-        _ => 3,
+fn stacked_roster_min_height(total_height: u16) -> u16 {
+    if total_height >= STACKED_ROSTER_TALL_HEIGHT_THRESHOLD {
+        STACKED_ROSTER_MIN_TALL
+    } else if total_height >= STACKED_ROSTER_MEDIUM_HEIGHT_THRESHOLD {
+        STACKED_ROSTER_MIN_MEDIUM
+    } else if total_height >= STACKED_ROSTER_COMPACT_HEIGHT_THRESHOLD {
+        STACKED_ROSTER_MIN_COMPACT
+    } else {
+        STACKED_ROSTER_MIN_TINY
+    }
+}
+
+fn stacked_overview_sections(
+    app: &App,
+    area: Rect,
+    sections: &[OverviewSectionLayout],
+) -> Vec<OverviewSectionLayout> {
+    let available = area
+        .height
+        .saturating_sub(stacked_roster_min_height(area.height));
+    if available < 3 {
+        return Vec::new();
+    }
+
+    let mut indexed: Vec<(usize, OverviewSectionLayout)> =
+        sections.iter().copied().enumerate().collect();
+    indexed.sort_by_key(|(order, section)| stacked_priority(app, section.kind, *order));
+
+    let mut selected = Vec::new();
+    let mut used = 0;
+    for (_, section) in indexed {
+        if used + 3 > available {
+            continue;
+        }
+        used += 3;
+        selected.push(OverviewSectionLayout {
+            collapsed: true,
+            height: 3,
+            ..section
+        });
+    }
+
+    let mut extra = available.saturating_sub(used);
+    for section in &mut selected {
+        if let Some(base) = sections
+            .iter()
+            .find(|candidate| candidate.kind == section.kind)
+        {
+            let desired = base.height.saturating_sub(3);
+            if desired > 0 {
+                let grant = desired.min(extra);
+                section.height += grant;
+                if grant == desired {
+                    section.collapsed = base.collapsed;
+                }
+                extra = extra.saturating_sub(grant);
+            }
+        }
+    }
+
+    selected.sort_by_key(|section| natural_section_order(section.kind));
+    selected
+}
+
+fn stacked_priority(app: &App, kind: OverviewSectionKind, order: usize) -> (u8, usize) {
+    let priority = match kind {
+        OverviewSectionKind::Character => 0,
+        OverviewSectionKind::Combat if app.ch_chain_status.is_some() => 1,
+        OverviewSectionKind::Groups => 2,
+        OverviewSectionKind::Filters => 3,
+        OverviewSectionKind::Combat => 4,
+        OverviewSectionKind::Session => 5,
+    };
+    (priority, order)
+}
+
+fn natural_section_order(kind: OverviewSectionKind) -> u8 {
+    match kind {
+        OverviewSectionKind::Character => 0,
+        OverviewSectionKind::Groups => 1,
+        OverviewSectionKind::Filters => 2,
+        OverviewSectionKind::Combat => 3,
+        OverviewSectionKind::Session => 4,
     }
 }
 
@@ -597,7 +747,9 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     let name = app.redact_name(&player.displayed_name).into_owned();
     let group_label = app.client_group_label(client).unwrap_or("--");
     let (condition_label, condition_style) = client_condition(client, t);
-    let (activity_label, activity_style) = client_activity(app, client);
+    let width_class = classify_width(inner.width);
+    let compact_activity = width_class != WidthClass::Wide;
+    let (activity_label, activity_style) = client_activity(app, client, compact_activity);
     let mode_str = format!("{}", app.operating_mode);
     let mode_style = match mode_str.as_str() {
         "Camp" => Style::default()
@@ -652,14 +804,9 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
             ),
             Span::styled("  ", Style::default()),
             Span::styled(activity_label, activity_style),
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                app.client_command_target(client),
-                Style::default().fg(t.text_muted),
-            ),
         ])]
     } else {
-        vec![
+        let mut lines = vec![
             Line::from(vec![
                 Span::styled(
                     name,
@@ -675,16 +822,14 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                 ),
                 Span::styled("  ", Style::default()),
                 Span::styled(group_label, Style::default().fg(t.text_secondary)),
-                Span::styled("  ", Style::default()),
-                Span::styled(
-                    app.client_command_target(client),
-                    Style::default().fg(t.text_muted),
-                ),
             ]),
             Line::from(vec![
                 Span::styled("Zone ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    client.zone_name.as_str(),
+                    truncate_inline(
+                        client.zone_name.as_str(),
+                        inner.width.saturating_sub(26) as usize,
+                    ),
                     Style::default().fg(t.text_normal),
                 ),
                 Span::styled("  HP ", Style::default().fg(t.text_muted)),
@@ -710,38 +855,72 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                     player.stand_state.label(),
                     Style::default().fg(stand_state_color(&player.stand_state, t)),
                 ),
-                Span::styled("  Nav ", Style::default().fg(t.text_muted)),
-                Span::styled(nav_label, nav_style),
-            ]),
-            Line::from(vec![
-                Span::styled("Act  ", Style::default().fg(t.text_muted)),
+                Span::styled("  Act ", Style::default().fg(t.text_muted)),
                 Span::styled(activity_label, activity_style),
-                Span::styled("  Tgt ", Style::default().fg(t.text_muted)),
-                Span::styled(target_name, Style::default().fg(t.text_highlight)),
             ]),
             Line::from(vec![
                 Span::styled("Focus ", Style::default().fg(t.text_muted)),
                 Span::styled(app.group_focus_label(), Style::default().fg(t.text_accent)),
                 Span::styled("  Mode ", Style::default().fg(t.text_muted)),
                 Span::styled(mode_str, mode_style),
+                if width_class == WidthClass::Wide {
+                    Span::styled("  Tgt ", Style::default().fg(t.text_muted))
+                } else {
+                    Span::styled("  Nav ", Style::default().fg(t.text_muted))
+                },
+                if width_class == WidthClass::Wide {
+                    Span::styled(
+                        truncate_inline(&target_name, 14),
+                        Style::default().fg(t.text_highlight),
+                    )
+                } else {
+                    Span::styled(truncate_inline(&nav_label, 10), nav_style)
+                },
             ]),
-            Line::from(vec![
-                Span::styled("Cmd  ", Style::default().fg(t.text_muted)),
+        ];
+
+        if let Some(cast_display) = app.client_cast_display(client) {
+            lines.push(render_cast_bar(
+                &cast_display,
+                inner.width as usize,
+                if cast_display.exact {
+                    t.hp_high
+                } else {
+                    t.text_highlight
+                },
+                if cast_display.exact {
+                    t.hp_high
+                } else {
+                    t.text_accent
+                },
+                t.text_secondary,
+                t.text_muted,
+            ));
+        } else if width_class == WidthClass::Wide || nav_label != "Idle" {
+            lines.push(Line::from(vec![
                 Span::styled(
-                    format!("{} /cmd", app.client_command_target(client)),
-                    Style::default().fg(t.text_highlight),
+                    if nav_label != "Idle" {
+                        "To   "
+                    } else {
+                        "Pos  "
+                    },
+                    Style::default().fg(t.text_muted),
                 ),
-                Span::styled("  To ", Style::default().fg(t.text_muted)),
-                Span::styled(nav_destination, Style::default().fg(t.text_secondary)),
-            ]),
-            Line::from(vec![
-                Span::styled("Pos  ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    format!("y:{:.0} x:{:.0} z:{:.0}", player.y, player.x, player.z),
-                    Style::default().fg(t.text_secondary),
-                ),
-            ]),
-        ]
+                if nav_label != "Idle" {
+                    Span::styled(
+                        truncate_inline(&nav_destination, inner.width.saturating_sub(6) as usize),
+                        Style::default().fg(t.text_secondary),
+                    )
+                } else {
+                    Span::styled(
+                        format!("y:{:.0} x:{:.0} z:{:.0}", player.y, player.x, player.z),
+                        Style::default().fg(t.text_secondary),
+                    )
+                },
+            ]));
+        }
+
+        lines
     };
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
@@ -781,6 +960,8 @@ fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
         return;
     }
 
+    let label_budget = inner.width.saturating_sub(16).clamp(8, 18) as usize;
+    let zone_budget = inner.width.saturating_sub(24).clamp(8, 20) as usize;
     let lines: Vec<Line<'_>> = entries
         .into_iter()
         .take(inner.height as usize)
@@ -808,10 +989,14 @@ fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
 
             Line::from(vec![
                 Span::styled(if entry.active { "▶ " } else { "  " }, marker_style),
-                Span::styled(format!("{:<14}", entry.label), label_style),
+                Span::styled(truncate_inline(&entry.label, label_budget), label_style),
+                Span::styled(" ", Style::default()),
                 Span::styled(count_label, count_style),
                 Span::styled("  ", Style::default()),
-                Span::styled(entry.zone, Style::default().fg(t.text_secondary)),
+                Span::styled(
+                    truncate_inline(&entry.zone, zone_budget),
+                    Style::default().fg(t.text_secondary),
+                ),
             ])
         })
         .collect();
@@ -872,12 +1057,6 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                 Span::styled(&mode_str, Style::default().fg(mode_color)),
             ]),
             Line::from(vec![
-                Span::styled("Send  ", Style::default().fg(t.text_muted)),
-                Span::styled("all /cmd", Style::default().fg(t.text_highlight)),
-                Span::styled("  Group ", Style::default().fg(t.text_muted)),
-                Span::styled("G1-G6 /cmd", Style::default().fg(t.text_highlight)),
-            ]),
-            Line::from(vec![
                 Span::styled("Char  ", Style::default().fg(t.text_muted)),
                 Span::styled(selected_cmd, Style::default().fg(t.text_highlight)),
                 Span::styled("  Count ", Style::default().fg(t.text_muted)),
@@ -888,8 +1067,8 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
             ]),
             Line::from(vec![
                 Span::styled("Ops   ", Style::default().fg(t.text_muted)),
-                Span::styled("nav <zone>", Style::default().fg(t.text_highlight)),
-                Span::styled("  mode camp|hunt", Style::default().fg(t.text_accent)),
+                Span::styled("all /cmd", Style::default().fg(t.text_highlight)),
+                Span::styled("  nav <zone>", Style::default().fg(t.text_accent)),
             ]),
         ]
     };
@@ -960,7 +1139,7 @@ fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                 Span::styled("CH   ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     format!(
-                        "{}× {:.1}s {} tgt={}",
+                        "{}x {:.1}s {} tgt={}",
                         ch.members, ch.interval_secs, adaptive_str, ch.target_id
                     ),
                     Style::default().fg(t.text_highlight),
@@ -1044,7 +1223,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     } else {
         let mut lines: Vec<Line<'_>> = vec![
             Line::from(vec![
-                Span::styled("⏱ ", Style::default().fg(t.text_accent)),
+                Span::styled("Time ", Style::default().fg(t.text_accent)),
                 Span::styled(&duration_str, Style::default().fg(t.text_accent)),
             ]),
             Line::from(vec![
@@ -1065,7 +1244,7 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                 ),
             ]),
             Line::from(vec![
-                Span::styled("☠   ", Style::default().fg(t.text_muted)),
+                Span::styled("Kill ", Style::default().fg(t.text_muted)),
                 Span::styled(total_kills.to_string(), Style::default().fg(t.hp_low)),
                 Span::styled("  Deaths: ", Style::default().fg(t.text_muted)),
                 Span::styled(
@@ -1094,20 +1273,14 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
             }
         }
 
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Server  ", Style::default().fg(t.text_muted)),
-            Span::styled(app.display_server(), Style::default().fg(t.text_server)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("Theme   ", Style::default().fg(t.text_muted)),
-            Span::styled(app.theme_kind.label(), Style::default().fg(t.text_accent)),
-            Span::styled("  Refresh ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{}ms", app.refresh_rate_ms),
-                Style::default().fg(t.text_accent),
-            ),
-        ]));
+        if area.height >= 8 {
+            lines.push(Line::from(vec![
+                Span::styled("Server ", Style::default().fg(t.text_muted)),
+                Span::styled(app.display_server(), Style::default().fg(t.text_server)),
+                Span::styled("  Theme ", Style::default().fg(t.text_muted)),
+                Span::styled(app.theme_kind.label(), Style::default().fg(t.text_accent)),
+            ]));
+        }
 
         lines
     };

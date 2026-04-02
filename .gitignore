@@ -1,8 +1,6 @@
-# MQ2 reference clone (not part of our project)
-mq2-reference/
-
 # Rust build artifacts
 target/
+/logs/
 
 # IDE
 .idea/
@@ -28,6 +26,8 @@ credentials.db*
 *.md
 !README.md
 !CLAUDE.md
+!docs/wiki/
+!docs/wiki/*.md
 
 # Playwright MCP
 .playwright-mcp/

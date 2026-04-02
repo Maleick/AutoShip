@@ -1,16 +1,25 @@
-use super::structs::{BuffSlot, CastState, EqClass, GroupInfo, SpawnInfo, SpawnType, StandState};
+use super::structs::{
+    BuffSlot, CastDurationSource, CastState, EqClass, GroupInfo, SpawnInfo, SpawnType, StandState,
+};
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
 use dmft_common::offsets::{
-    self, actor_client, group, player_base, player_zone, spawn_manager, zone_info,
+    self, actor_client, character_zone, client_spell_manager, display, eq_spell, group,
+    launch_spell_data, player_base, player_zone, spawn_manager, spell_hash_map, zone_info,
 };
+use std::mem::size_of;
 
 /// Read a single spawn's data from the process at the given `PlayerClient` address.
 ///
 /// # Errors
 ///
 /// Returns an error if the operation fails.
-pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
+pub fn read_spawn(
+    proc: &ProcessHandle,
+    addr: usize,
+    eq_base: u64,
+    display_timestamp: Option<u32>,
+) -> Result<SpawnInfo> {
     // Critical fields — hard fail if any are unreadable (corrupt memory → skip spawn)
     let name = proc
         .read_string(addr + player_base::NAME, 64)
@@ -80,6 +89,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
 
     let gm_flag = proc.read::<u8>(addr + player_zone::GM).unwrap_or(0);
     let race_id = proc.read::<i32>(addr + actor_client::RACE).unwrap_or(0) as u32;
+    let cast_state = read_spawn_cast_state(proc, addr, eq_base, display_timestamp, None);
 
     Ok(SpawnInfo {
         name,
@@ -104,7 +114,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
         is_gm: gm_flag != 0,
         race_id,
         buff_slots: Vec::new(),
-        cast_state: None,
+        cast_state,
     })
 }
 
@@ -114,6 +124,7 @@ pub fn read_spawn(proc: &ProcessHandle, addr: usize) -> Result<SpawnInfo> {
 ///
 /// Returns an error if the operation fails.
 pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo> {
+    let display_timestamp = read_display_timestamp(proc, eq_base);
     let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)
         .context("rebase underflow for pinstLocalPlayer")?;
     let player_addr = proc
@@ -131,10 +142,12 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
         "read_local_player pointer chain"
     );
 
-    let mut spawn =
-        read_spawn(proc, player_addr).context("Failed to read local player spawn data")?;
+    let mut spawn = read_spawn(proc, player_addr, eq_base, display_timestamp)
+        .context("Failed to read local player spawn data")?;
     spawn.buff_slots = read_buff_slots(proc, eq_base);
-    spawn.cast_state = read_cast_state(proc, eq_base);
+    if let Some(local_cast_state) = read_cast_state(proc, eq_base) {
+        spawn.cast_state = Some(local_cast_state);
+    }
     Ok(spawn)
 }
 
@@ -175,7 +188,7 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     }
 }
 
-/// Read cast state for the local player via `PINST_LOCAL_PC`.
+/// Read cast state for the local player via `PINST_LOCAL_PC -> CharacterZoneClient::me`.
 /// On non-Windows builds returns None (stub).
 #[must_use]
 pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> {
@@ -186,26 +199,16 @@ pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> 
     }
     #[cfg(windows)]
     {
-        use dmft_common::offsets::character_zone;
-        let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
-        let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
-        let spell_slot = proc
-            .read::<u8>(pc_addr + character_zone::SPELL_SLOT)
-            .unwrap_or(0xFF);
-        let spell_eta = proc
-            .read::<u32>(pc_addr + character_zone::SPELL_ETA)
-            .unwrap_or(0);
-        let mut gem_etas = [0u32; 15];
-        for (i, eta) in gem_etas.iter_mut().enumerate() {
-            *eta = proc
-                .read::<u32>(pc_addr + character_zone::SPELL_GEM_ETA + i * 4)
-                .unwrap_or(0);
-        }
-        Some(CastState {
-            spell_slot,
-            spell_eta,
-            gem_etas,
-        })
+        let player_addr = read_local_player_addr_from_pc(proc, eq_base)?;
+        let display_timestamp = read_display_timestamp(proc, eq_base);
+        let gem_etas = read_spell_gem_etas(proc, player_addr);
+        read_spawn_cast_state(
+            proc,
+            player_addr,
+            eq_base,
+            display_timestamp,
+            Some(gem_etas),
+        )
     }
 }
 
@@ -215,6 +218,7 @@ pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> 
 ///
 /// Returns an error if the operation fails.
 pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInfo>> {
+    let display_timestamp = read_display_timestamp(proc, eq_base);
     let target_ptr_addr = offsets::rebase(offsets::PINST_TARGET, eq_base)
         .context("rebase underflow for pinstTarget")?;
     let target_addr = proc
@@ -225,7 +229,8 @@ pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInf
         return Ok(None);
     }
 
-    let spawn = read_spawn(proc, target_addr).context("Failed to read target spawn data")?;
+    let spawn = read_spawn(proc, target_addr, eq_base, display_timestamp)
+        .context("Failed to read target spawn data")?;
     Ok(Some(spawn))
 }
 
@@ -240,6 +245,7 @@ pub fn read_all_spawns(
     eq_base: u64,
     max_count: usize,
 ) -> Result<Vec<SpawnInfo>> {
+    let display_timestamp = read_display_timestamp(proc, eq_base);
     let mgr_ptr_addr = offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base)
         .context("rebase underflow for pinstSpawnManager")?;
     let mgr_addr = proc
@@ -260,7 +266,7 @@ pub fn read_all_spawns(
     let mut spawns = Vec::new();
 
     while current != 0 && spawns.len() < max_count {
-        match read_spawn(proc, current) {
+        match read_spawn(proc, current, eq_base, display_timestamp) {
             Ok(spawn) => {
                 tracing::trace!(addr = format!("{:#x}", current), name = %spawn.name, "Read spawn OK");
                 spawns.push(spawn);
@@ -295,6 +301,205 @@ pub fn read_all_spawns(
     }
 
     Ok(spawns)
+}
+
+fn read_display_timestamp(proc: &ProcessHandle, eq_base: u64) -> Option<u32> {
+    let display_ptr_addr = offsets::rebase(offsets::PINST_CDISPLAY, eq_base)?;
+    let display_addr = proc.read_ptr(display_ptr_addr).ok().filter(|&a| a != 0)?;
+    proc.read::<u32>(display_addr + display::TIME_STAMP).ok()
+}
+
+fn read_local_player_addr_from_pc(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
+    let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
+    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
+    proc.read_ptr(pc_addr + character_zone::ME)
+        .ok()
+        .filter(|&a| a != 0)
+        .or_else(|| {
+            let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)?;
+            proc.read_ptr(player_ptr_addr).ok().filter(|&a| a != 0)
+        })
+}
+
+fn read_spell_gem_etas(proc: &ProcessHandle, player_addr: usize) -> [u32; 15] {
+    let mut gem_etas = [0u32; 15];
+    for (i, eta) in gem_etas.iter_mut().enumerate() {
+        *eta = proc
+            .read::<u32>(player_addr + player_zone::SPELL_GEM_ETA + i * 4)
+            .unwrap_or(0);
+    }
+    gem_etas
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LaunchSpellSnapshot {
+    spell_id: i32,
+    target_id: u32,
+    spell_eta: u32,
+    item_id: i32,
+    spell_slot: u8,
+}
+
+#[derive(Debug, Clone)]
+struct SpellCastMetadata {
+    spell_name: Option<String>,
+    base_cast_ms: Option<u32>,
+}
+
+fn read_launch_spell_snapshot(
+    proc: &ProcessHandle,
+    cast_addr: usize,
+) -> Option<LaunchSpellSnapshot> {
+    Some(LaunchSpellSnapshot {
+        spell_id: proc
+            .read::<i32>(cast_addr + launch_spell_data::SPELL_ID)
+            .ok()?,
+        target_id: proc
+            .read::<u32>(cast_addr + launch_spell_data::TARGET_ID)
+            .unwrap_or(0),
+        spell_eta: proc
+            .read::<u32>(cast_addr + launch_spell_data::SPELL_ETA)
+            .unwrap_or(0),
+        item_id: proc
+            .read::<i32>(cast_addr + launch_spell_data::ITEM_ID)
+            .unwrap_or(0),
+        spell_slot: proc
+            .read::<u8>(cast_addr + launch_spell_data::SPELL_SLOT)
+            .unwrap_or(launch_spell_data::NOT_CASTING_SPELL_SLOT),
+    })
+}
+
+fn remaining_cast_ms(snapshot: LaunchSpellSnapshot, display_timestamp: Option<u32>) -> Option<u32> {
+    if snapshot.spell_id == launch_spell_data::NOT_CASTING_SPELL_ID {
+        return None;
+    }
+
+    display_timestamp.map(|timestamp| snapshot.spell_eta.saturating_sub(timestamp))
+}
+
+fn build_cast_state(
+    snapshot: LaunchSpellSnapshot,
+    display_timestamp: Option<u32>,
+    gem_etas: Option<[u32; 15]>,
+    metadata: Option<SpellCastMetadata>,
+) -> Option<CastState> {
+    let is_casting = snapshot.spell_id != launch_spell_data::NOT_CASTING_SPELL_ID;
+    let remaining_ms = remaining_cast_ms(snapshot, display_timestamp);
+
+    let spell_name = metadata.as_ref().and_then(|entry| entry.spell_name.clone());
+    let (total_cast_ms, duration_source) = if !is_casting {
+        (None, CastDurationSource::Unknown)
+    } else if snapshot.item_id > 0 {
+        // Item clicks can override the spell's base cast time, so do not claim a
+        // duration unless we have item-definition data for the specific click.
+        (None, CastDurationSource::Unknown)
+    } else if let Some(base_cast_ms) = metadata.and_then(|entry| entry.base_cast_ms) {
+        (Some(base_cast_ms), CastDurationSource::SpellDataBase)
+    } else {
+        (None, CastDurationSource::Unknown)
+    };
+
+    let cast_state = CastState {
+        spell_id: snapshot.spell_id,
+        spell_name,
+        target_id: snapshot.target_id,
+        spell_eta: snapshot.spell_eta,
+        item_id: snapshot.item_id,
+        spell_slot: snapshot.spell_slot,
+        remaining_ms,
+        total_cast_ms,
+        duration_source,
+        gem_etas,
+    };
+
+    if cast_state.gem_etas.is_some() || cast_state.is_casting() {
+        Some(cast_state)
+    } else {
+        None
+    }
+}
+
+fn read_spell_cast_metadata(
+    proc: &ProcessHandle,
+    eq_base: u64,
+    spell_id: i32,
+) -> Option<SpellCastMetadata> {
+    let spell_id = u32::try_from(spell_id).ok().filter(|&id| id > 0)?;
+    let spell_mgr_ptr_addr = offsets::rebase(offsets::PINST_SPELL_MANAGER, eq_base)?;
+    let spell_mgr_addr = proc.read_ptr(spell_mgr_ptr_addr).ok().filter(|&a| a != 0)?;
+    let max_spell_id = proc
+        .read::<i32>(spell_mgr_addr + client_spell_manager::MAX_SPELL_ID)
+        .ok()
+        .filter(|&max_id| max_id > 0)?;
+    if spell_id >= max_spell_id as u32 {
+        return None;
+    }
+
+    let spells_map_addr = spell_mgr_addr + client_spell_manager::SPELLS;
+    let buckets_addr = proc
+        .read_ptr(spells_map_addr + spell_hash_map::BUCKETS)
+        .ok()
+        .filter(|&a| a != 0)?;
+    let dynamic_size = proc
+        .read::<u64>(spells_map_addr + spell_hash_map::DYNAMIC_SIZE)
+        .ok()? as usize;
+    if dynamic_size == 0 || !dynamic_size.is_power_of_two() {
+        return None;
+    }
+
+    let bucket_index = spell_id as usize & (dynamic_size - 1);
+    let bucket_ptr_addr = buckets_addr + bucket_index * size_of::<usize>();
+    let mut node_addr = proc.read_ptr(bucket_ptr_addr).ok().unwrap_or(0);
+    const MAX_HASH_MAP_HOPS: usize = 128;
+    let mut hops = 0usize;
+
+    while node_addr != 0 && hops < MAX_HASH_MAP_HOPS {
+        let node_key = proc.read::<i32>(node_addr + spell_hash_map::KEY).ok()?;
+        if node_key == spell_id as i32 {
+            let spell_addr = node_addr + spell_hash_map::VALUE;
+            let stored_id = proc
+                .read::<i32>(spell_addr + eq_spell::ID)
+                .unwrap_or(node_key);
+            if stored_id != node_key {
+                return None;
+            }
+
+            let spell_name = proc
+                .read_string(spell_addr + eq_spell::NAME, 64)
+                .ok()
+                .filter(|name| !name.is_empty());
+            let base_cast_ms = proc
+                .read::<u32>(spell_addr + eq_spell::CAST_TIME)
+                .ok()
+                .filter(|&ms| ms > 0);
+
+            return Some(SpellCastMetadata {
+                spell_name,
+                base_cast_ms,
+            });
+        }
+
+        node_addr = proc
+            .read_ptr(node_addr + spell_hash_map::HASH_NEXT)
+            .ok()
+            .unwrap_or(0);
+        hops += 1;
+    }
+
+    None
+}
+
+fn read_spawn_cast_state(
+    proc: &ProcessHandle,
+    player_addr: usize,
+    eq_base: u64,
+    display_timestamp: Option<u32>,
+    gem_etas: Option<[u32; 15]>,
+) -> Option<CastState> {
+    let cast_addr = player_addr + player_zone::CASTING_DATA;
+    let snapshot = read_launch_spell_snapshot(proc, cast_addr)?;
+    let metadata = read_spell_cast_metadata(proc, eq_base, snapshot.spell_id);
+    build_cast_state(snapshot, display_timestamp, gem_etas, metadata)
 }
 
 /// Read a `CXStr` (EQ's string type) from memory.
@@ -431,4 +636,111 @@ pub fn read_spawn_bytes(
     let addr = spawn_addr + start_offset;
     proc.read_bytes(addr, len)
         .with_context(|| format!("Failed to read {len} bytes at spawn+{start_offset:#x}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(
+        spell_id: i32,
+        spell_eta: u32,
+        item_id: i32,
+        spell_slot: u8,
+    ) -> LaunchSpellSnapshot {
+        LaunchSpellSnapshot {
+            spell_id,
+            target_id: 42,
+            spell_eta,
+            item_id,
+            spell_slot,
+        }
+    }
+
+    fn metadata(name: &str, base_cast_ms: u32) -> SpellCastMetadata {
+        SpellCastMetadata {
+            spell_name: Some(name.to_string()),
+            base_cast_ms: Some(base_cast_ms),
+        }
+    }
+
+    #[test]
+    fn remaining_cast_ms_uses_display_timestamp_for_active_casts() {
+        let snapshot = snapshot(123, 1_500, 0, 2);
+        assert_eq!(remaining_cast_ms(snapshot, Some(1_000)), Some(500));
+    }
+
+    #[test]
+    fn remaining_cast_ms_is_none_when_not_casting() {
+        let snapshot = snapshot(launch_spell_data::NOT_CASTING_SPELL_ID, 1_500, 0, 2);
+        assert_eq!(remaining_cast_ms(snapshot, Some(1_000)), None);
+    }
+
+    #[test]
+    fn build_cast_state_uses_spell_data_base_duration_for_memmed_spells() {
+        let cast_state = build_cast_state(
+            snapshot(123, 2_500, 0, 4),
+            Some(1_000),
+            None,
+            Some(metadata("Complete Heal", 10_000)),
+        )
+        .expect("cast state");
+
+        assert_eq!(cast_state.spell_name.as_deref(), Some("Complete Heal"));
+        assert_eq!(cast_state.remaining_ms, Some(1_500));
+        assert_eq!(cast_state.total_cast_ms, Some(10_000));
+        assert_eq!(
+            cast_state.duration_source,
+            CastDurationSource::SpellDataBase
+        );
+    }
+
+    #[test]
+    fn build_cast_state_keeps_item_cast_duration_unknown_without_item_definition() {
+        let cast_state = build_cast_state(
+            snapshot(321, 2_000, 9_999, launch_spell_data::NOT_CASTING_SPELL_SLOT),
+            Some(1_000),
+            None,
+            Some(metadata("Clicky Gate", 8_000)),
+        )
+        .expect("cast state");
+
+        assert_eq!(cast_state.spell_name.as_deref(), Some("Clicky Gate"));
+        assert_eq!(cast_state.remaining_ms, Some(1_000));
+        assert_eq!(cast_state.total_cast_ms, None);
+        assert_eq!(cast_state.duration_source, CastDurationSource::Unknown);
+    }
+
+    #[test]
+    fn build_cast_state_preserves_gem_timers_when_idle() {
+        let cast_state = build_cast_state(
+            snapshot(
+                launch_spell_data::NOT_CASTING_SPELL_ID,
+                0,
+                0,
+                launch_spell_data::NOT_CASTING_SPELL_SLOT,
+            ),
+            Some(1_000),
+            Some([7; 15]),
+            None,
+        )
+        .expect("idle state with gem timers");
+
+        assert!(!cast_state.is_casting());
+        assert_eq!(cast_state.gem_etas, Some([7; 15]));
+    }
+
+    #[test]
+    fn build_cast_state_clamps_remaining_ms_when_eta_has_elapsed() {
+        let cast_state = build_cast_state(
+            snapshot(123, 800, 0, 1),
+            Some(1_000),
+            None,
+            Some(metadata("Late Cast", 2_000)),
+        )
+        .expect("cast state");
+
+        assert_eq!(cast_state.remaining_ms, Some(0));
+        assert_eq!(cast_state.cast_progress(), Some(1.0));
+    }
 }

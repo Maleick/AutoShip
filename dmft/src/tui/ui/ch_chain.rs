@@ -3,6 +3,8 @@
 //! Provides a dedicated UI for managing the cleric heal chain,
 //! including chain ordering, timing, target selection, and real-time status.
 
+use crate::tui::cast::CastDisplay;
+use crate::tui::ui::widgets::{render_cast_bar, truncate_inline};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -10,6 +12,11 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
 };
+
+const COMPACT_LAYOUT_WIDTH_THRESHOLD: u16 = 72;
+const COMPACT_LAYOUT_HEIGHT_THRESHOLD: u16 = 20;
+const HEADER_TARGET_DECORATION_WIDTH: u16 = 22;
+const HEADER_TARGET_MIN_WIDTH: usize = 8;
 
 /// A single cleric in the CH chain.
 #[derive(Debug, Clone)]
@@ -22,6 +29,8 @@ pub struct ChainCleric {
     pub position: u8,
     /// Individual timing offset (ms) for lag compensation.
     pub timing_offset_ms: i32,
+    /// Optional exact/provisional cast strip for this cleric.
+    pub cast_display: Option<CastDisplay>,
     /// Current casting state.
     pub cast_state: CastState,
 }
@@ -211,51 +220,82 @@ impl Widget for ChChainWidget<'_> {
             return;
         }
 
-        // Split into sections
-        let layout = Layout::vertical([
-            Constraint::Length(3), // Target & status header
-            Constraint::Min(5),    // Chain member list
-            Constraint::Length(3), // Timing config
-            Constraint::Length(3), // Stats
-        ])
-        .split(inner);
+        let compact = inner.width < COMPACT_LAYOUT_WIDTH_THRESHOLD
+            || inner.height < COMPACT_LAYOUT_HEIGHT_THRESHOLD;
+        let layout = if compact {
+            Layout::vertical([
+                Constraint::Length(2), // Target header
+                Constraint::Min(2),    // Chain member list
+                Constraint::Length(2), // Compact footer
+            ])
+            .split(inner)
+        } else {
+            Layout::vertical([
+                Constraint::Length(2), // Target header
+                Constraint::Min(4),    // Chain member list
+                Constraint::Length(2), // Timing config
+                Constraint::Length(2), // Stats
+            ])
+            .split(inner)
+        };
 
-        self.render_header(layout[0], buf);
-        self.render_chain_list(layout[1], buf);
-        self.render_timing(layout[2], buf);
-        self.render_stats(layout[3], buf);
+        self.render_header(layout[0], buf, compact);
+        self.render_chain_list(layout[1], buf, compact);
+        if compact {
+            self.render_compact_footer(layout[2], buf);
+        } else {
+            self.render_timing(layout[2], buf);
+            self.render_stats(layout[3], buf);
+        }
     }
 }
 
 impl ChChainWidget<'_> {
-    fn render_header(&self, area: Rect, buf: &mut Buffer) {
-        let target_label = if self.state.target_name.is_empty() {
-            format!("Target: (none) [ID: {}]", self.state.target_id)
+    fn render_header(&self, area: Rect, buf: &mut Buffer, compact: bool) {
+        let target_prefix = if compact { "Tgt:" } else { "Target:" };
+        let target_name = if self.state.target_name.is_empty() {
+            String::from("(none)")
         } else {
-            format!(
-                "Target: {} [ID: {}]",
-                self.state.target_name, self.state.target_id
-            )
+            self.state.target_name.clone()
         };
+        let target_budget = area
+            .width
+            .saturating_sub(HEADER_TARGET_DECORATION_WIDTH)
+            .max(HEADER_TARGET_MIN_WIDTH as u16) as usize;
+        let target_label = truncate_inline(&target_name, target_budget);
 
         let adaptive_label = if self.state.adaptive {
-            Span::styled(" ADAPTIVE ", Style::default().fg(Color::Green))
+            Span::styled(
+                if compact { " ADAPT " } else { " ADAPTIVE " },
+                Style::default().fg(Color::Green),
+            )
         } else {
             Span::styled(" FIXED ", Style::default().fg(Color::Yellow))
         };
 
         let lines = vec![
             Line::from(vec![
-                Span::styled(&target_label, Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("{target_prefix} {target_label} [{}]", self.state.target_id),
+                    Style::default().fg(Color::White),
+                ),
                 Span::raw("  "),
                 adaptive_label,
             ]),
             Line::from(Span::styled(
-                format!(
-                    "Chain: {} clerics, {:.1}s delay",
-                    self.state.clerics.len(),
-                    self.state.chain_delay_secs
-                ),
+                if compact {
+                    format!(
+                        "Chain {} clr  {:.1}s gap",
+                        self.state.clerics.len(),
+                        self.state.chain_delay_secs
+                    )
+                } else {
+                    format!(
+                        "Chain: {} clerics, {:.1}s delay",
+                        self.state.clerics.len(),
+                        self.state.chain_delay_secs
+                    )
+                },
                 Style::default().fg(Color::DarkGray),
             )),
         ];
@@ -264,9 +304,9 @@ impl ChChainWidget<'_> {
         para.render(area, buf);
     }
 
-    fn render_chain_list(&self, area: Rect, buf: &mut Buffer) {
+    fn render_chain_list(&self, area: Rect, buf: &mut Buffer, compact: bool) {
         let block = Block::default()
-            .title(" Chain Order ")
+            .title(if compact { " Chain " } else { " Chain Order " })
             .borders(Borders::TOP)
             .border_style(Style::default().fg(Color::DarkGray));
         let inner = block.inner(area);
@@ -281,12 +321,21 @@ impl ChChainWidget<'_> {
             return;
         }
 
+        let visible_clerics = self.state.clerics.len().min(inner.height as usize);
+        let extra_capacity = inner.height as usize - visible_clerics;
+        let tight_height = extra_capacity
+            < self
+                .state
+                .clerics
+                .iter()
+                .filter(|cleric| cleric.cast_display.is_some())
+                .count();
+        let mut y = inner.y;
+        let mut remaining_details = extra_capacity;
         for (i, cleric) in self.state.clerics.iter().enumerate() {
-            let y = inner.y + i as u16;
             if y >= inner.y + inner.height {
                 break;
             }
-
             let is_selected = i == self.state.selected;
             let base_style = if is_selected {
                 Style::default()
@@ -297,47 +346,115 @@ impl ChChainWidget<'_> {
                 Style::default().fg(Color::White)
             };
 
-            // Position number
-            let pos_text = format!(" {}. ", cleric.position);
-            buf.set_string(inner.x, y, &pos_text, base_style);
-
-            // Name
-            let name_x = inner.x + pos_text.len() as u16;
-            buf.set_string(name_x, y, &cleric.name, base_style);
-
             // Cast state indicator
             let (state_char, state_color) = match cleric.cast_state {
-                CastState::Idle => ("○", Color::DarkGray),
+                CastState::Idle => (if compact { "." } else { "○" }, Color::DarkGray),
                 CastState::Casting(pct) => {
                     if pct > 0.75 {
-                        ("◕", Color::Green)
+                        (if compact { "*" } else { "◕" }, Color::Green)
                     } else if pct > 0.25 {
-                        ("◑", Color::Yellow)
+                        (if compact { ">" } else { "◑" }, Color::Yellow)
                     } else {
-                        ("◔", Color::White)
+                        (if compact { "-" } else { "◔" }, Color::White)
                     }
                 }
-                CastState::Completed => ("●", Color::Green),
-                CastState::Missed => ("✗", Color::Red),
+                CastState::Completed => (if compact { "*" } else { "●" }, Color::Green),
+                CastState::Missed => (if compact { "x" } else { "✗" }, Color::Red),
             };
+            let pos_text = format!(" {}. ", cleric.position);
+            let offset_text = if cleric.timing_offset_ms != 0 {
+                format!(" {:+}ms", cleric.timing_offset_ms)
+            } else {
+                String::new()
+            };
+            let has_cast_details = cleric.cast_display.is_some();
+            let has_capacity_for_details = remaining_details > 0;
+            let force_show_details =
+                is_selected || matches!(cleric.cast_state, CastState::Casting(_));
+            let layout_allows_details = !tight_height || force_show_details;
+            let eligible_detail =
+                has_cast_details && has_capacity_for_details && layout_allows_details;
+            let inline_cast = cleric
+                .cast_display
+                .as_ref()
+                .filter(|_| compact || (tight_height && !eligible_detail))
+                .map(|cast| inline_cast_summary(cast, inner.width.saturating_sub(20) as usize))
+                .filter(|summary| !summary.is_empty())
+                .map(|summary| format!("  {summary}"))
+                .unwrap_or_default();
+            let name_budget = inner.width.saturating_sub(
+                (pos_text.chars().count()
+                    + 2
+                    + state_char.chars().count()
+                    + offset_text.chars().count()) as u16,
+            ) as usize;
+            let name_budget = name_budget
+                .saturating_sub(inline_cast.chars().count())
+                .max(4);
+            let name_label = truncate_inline(&cleric.name, name_budget);
+            let row = Line::from(vec![
+                Span::styled(pos_text, base_style),
+                Span::styled(name_label, base_style),
+                Span::styled("  ", base_style),
+                Span::styled(
+                    state_char,
+                    Style::default().fg(state_color).bg(if is_selected {
+                        self.accent_color
+                    } else {
+                        Color::Reset
+                    }),
+                ),
+                Span::styled(
+                    offset_text,
+                    Style::default().fg(Color::DarkGray).bg(if is_selected {
+                        self.accent_color
+                    } else {
+                        Color::Reset
+                    }),
+                ),
+                Span::styled(
+                    inline_cast,
+                    Style::default().fg(Color::DarkGray).bg(if is_selected {
+                        self.accent_color
+                    } else {
+                        Color::Reset
+                    }),
+                ),
+            ]);
+            buf.set_line(inner.x, y, &row, inner.width);
+            y += 1;
 
-            let state_x = inner.x + inner.width - 10;
-            if state_x > name_x + cleric.name.len() as u16 {
-                buf.set_string(state_x, y, state_char, Style::default().fg(state_color));
-            }
-
-            // Timing offset
-            if cleric.timing_offset_ms != 0 {
-                let offset_text = format!("{:+}ms", cleric.timing_offset_ms);
-                let offset_x = inner.x + inner.width - 6;
-                if offset_x > state_x + 2 {
-                    buf.set_string(
-                        offset_x,
-                        y,
-                        &offset_text,
-                        Style::default().fg(Color::DarkGray),
-                    );
+            if eligible_detail
+                && let Some(cast_display) = &cleric.cast_display
+                && y < inner.y + inner.height
+            {
+                let mut cast_line = render_cast_bar(
+                    cast_display,
+                    inner.width.saturating_sub(2) as usize,
+                    if cast_display.exact {
+                        Color::Green
+                    } else {
+                        Color::White
+                    },
+                    if cast_display.exact {
+                        Color::Green
+                    } else {
+                        Color::Yellow
+                    },
+                    if cast_display.exact {
+                        Color::White
+                    } else {
+                        Color::Gray
+                    },
+                    Color::DarkGray,
+                );
+                cast_line.spans.insert(0, Span::raw("  "));
+                if is_selected {
+                    cast_line = apply_row_background(cast_line, self.accent_color);
                 }
+                buf.set_line(inner.x, y, &cast_line, inner.width);
+                y += 1;
+                remaining_details = remaining_details.saturating_sub(1);
             }
         }
     }
@@ -415,11 +532,60 @@ impl ChChainWidget<'_> {
         let para = Paragraph::new(line);
         para.render(inner, buf);
     }
+
+    fn render_compact_footer(&self, area: Rect, buf: &mut Buffer) {
+        let block = Block::default()
+            .title(" Timing / Health ")
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(Color::DarkGray));
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        if inner.height == 0 {
+            return;
+        }
+
+        let health_pct = self.state.chain_health() * 100.0;
+        let summary = format!(
+            "Cast {:.1}s  Gap {:.1}s  HP {:.0}%  Miss {}",
+            self.state.cast_time_secs,
+            self.state.chain_delay_secs,
+            health_pct,
+            self.state.stats.missed_heals
+        );
+        let line = Line::from(Span::styled(
+            truncate_inline(&summary, inner.width as usize),
+            Style::default().fg(Color::DarkGray),
+        ));
+        Paragraph::new(line).render(inner, buf);
+    }
+}
+
+fn inline_cast_summary(cast: &CastDisplay, budget: usize) -> String {
+    let label = cast.preferred_label(true);
+    let suffix = cast
+        .remaining_secs
+        .map(|remaining| format!(" {remaining:.1}s"))
+        .or_else(|| cast.status_text.as_ref().map(|status| format!(" {status}")))
+        .unwrap_or_default();
+    truncate_inline(&format!("{label}{suffix}"), budget)
+}
+
+fn apply_row_background(mut line: Line<'static>, background: Color) -> Line<'static> {
+    for span in &mut line.spans {
+        span.style.bg = Some(background);
+        if span.style.fg.is_none() {
+            span.style.fg = Some(Color::Black);
+        }
+    }
+    line
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::buffer::Buffer;
+    use ratatui::layout::Rect;
 
     #[test]
     fn ch_panel_state_defaults() {
@@ -453,6 +619,7 @@ mod tests {
                 pid: 100,
                 position: 1,
                 timing_offset_ms: 0,
+                cast_display: None,
                 cast_state: CastState::Idle,
             },
             ChainCleric {
@@ -460,6 +627,7 @@ mod tests {
                 pid: 101,
                 position: 2,
                 timing_offset_ms: 0,
+                cast_display: None,
                 cast_state: CastState::Idle,
             },
         ];
@@ -485,5 +653,104 @@ mod tests {
         assert_eq!(state.focus, ChPanelFocus::Presets);
         state.cycle_focus();
         assert_eq!(state.focus, ChPanelFocus::ChainOrder);
+    }
+
+    #[test]
+    fn chain_widget_renders_cast_strip_for_active_cleric() {
+        let state = sample_state();
+
+        let area = Rect::new(0, 0, 50, 12);
+        let mut buf = Buffer::empty(area);
+        ChChainWidget::new(&state).render(area, &mut buf);
+        let rendered = buffer_contents(&buf, area);
+
+        assert!(rendered.contains("Complete Heal") || rendered.contains("CH"));
+        assert!(rendered.contains("Cast"));
+    }
+
+    #[test]
+    fn chain_widget_compact_layout_merges_footer_and_shortens_header() {
+        let state = sample_state();
+        let area = Rect::new(0, 0, 48, 14);
+        let mut buf = Buffer::empty(area);
+        ChChainWidget::new(&state).render(area, &mut buf);
+        let rendered = buffer_contents(&buf, area);
+
+        assert!(rendered.contains("Tgt:"));
+        assert!(rendered.contains("Timing / Health"));
+        assert!(rendered.contains("CH"));
+        assert!(!rendered.contains("Chain Health"));
+    }
+
+    #[test]
+    fn chain_widget_medium_layout_keeps_full_sections() {
+        let state = sample_state();
+        let area = Rect::new(0, 0, 80, 22);
+        let mut buf = Buffer::empty(area);
+        ChChainWidget::new(&state).render(area, &mut buf);
+        let rendered = buffer_contents(&buf, area);
+
+        assert!(rendered.contains("Target:"));
+        assert!(rendered.contains("Chain Health"));
+        assert!(rendered.contains("Timing"));
+        assert!(rendered.contains("Complete Heal") || rendered.contains("CH"));
+    }
+
+    fn sample_state() -> ChChainPanelState {
+        let mut state = ChChainPanelState::new();
+        state.target_name = String::from("Main Tank");
+        state.target_id = 42;
+        state.adaptive = true;
+        state.stats.total_heals = 12;
+        state.stats.missed_heals = 1;
+        state.stats.late_casts = 2;
+        state.clerics = vec![
+            ChainCleric {
+                name: String::from("Cleric1"),
+                pid: 100,
+                position: 1,
+                timing_offset_ms: 0,
+                cast_display: Some(CastDisplay::exact_progress(
+                    "Complete Heal",
+                    "CH",
+                    0.5,
+                    10.0,
+                )),
+                cast_state: CastState::Casting(0.5),
+            },
+            ChainCleric {
+                name: String::from("Cleric2"),
+                pid: 101,
+                position: 2,
+                timing_offset_ms: 150,
+                cast_display: Some(CastDisplay::provisional(
+                    "Heal Gem 2",
+                    "Heal G2",
+                    0.3,
+                    Some(String::from("gem 2")),
+                )),
+                cast_state: CastState::Idle,
+            },
+            ChainCleric {
+                name: String::from("Cleric3"),
+                pid: 102,
+                position: 3,
+                timing_offset_ms: -75,
+                cast_display: None,
+                cast_state: CastState::Completed,
+            },
+        ];
+        state
+    }
+
+    fn buffer_contents(buf: &Buffer, area: Rect) -> String {
+        (area.top()..area.bottom())
+            .map(|y| {
+                (area.left()..area.right())
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }

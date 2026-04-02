@@ -3,13 +3,26 @@
 [![CI](https://github.com/Maleick/DMFT/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/DMFT/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Tests](https://img.shields.io/badge/tests-1250%2B%20passing-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-74%2C123-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-1%2C766%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
 External process memory reader, DLL injector, and multibox controller for EverQuest, built in Rust.
 
 DMFT reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
+
+If you plan to do offset, struct, or MacroQuest reference work, clone with submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/Maleick/DMFT.git
+cd DMFT
+
+# Existing clone
+git submodule update --init --recursive
+```
+
+Routine `cargo build` / `cargo test` work does not require the reference trees, but `third_party/eqlib` and `third_party/macroquest` are the canonical local sources for reference work. See `third_party/README.md` for the layout.
 
 ## Status
 
@@ -179,6 +192,19 @@ DLL executes InterpretCmd with human-like jitter delay
 
 ## Quick Start
 
+### Developer Preflight (optional, recommended)
+
+```bash
+python3 scripts/dev-preflight.py
+python3 scripts/dev-preflight.py --require-reference-trees
+python3 scripts/dev-preflight.py --init-submodules --require-reference-trees
+```
+
+Use the default run for routine `cargo build` / `cargo test` work. Add
+`--require-reference-trees` when you plan to inspect or cite
+`third_party/eqlib` or `third_party/macroquest`. On Windows, use `py -3`
+instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
+
 ### Development (any platform — demo mode)
 
 ```bash
@@ -221,7 +247,7 @@ target\release\dmft.exe
 
 ## Testing
 
-1,250+ tests across 3 crates (625 dmft + 172 dmft-dll + 431 dmft-common + doc-tests). CI runs on every push to master:
+Current workspace totals: 74,123 Rust lines and 1,766 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. CI runs on every push to master:
 
 | Platform | Jobs                      |
 | -------- | ------------------------- |
@@ -309,6 +335,20 @@ Run `scripts\optimize_ini.ps1` to apply minimal settings:
 - `docs/wineq-research.md` — Render strobing, window management
 - `docs/roadmap-review.md` — Milestone priorities, risk assessment
 - `docs/code-review-session3.md` — Code audit findings
+
+## Wiki
+
+The long-lived operator and developer wiki is source-controlled in `docs/wiki/` and published to
+the GitHub wiki with `scripts/sync_wiki.py`.
+
+```bash
+python3 scripts/sync_wiki.py --check
+python3 scripts/sync_wiki.py --dry-run
+python3 scripts/sync_wiki.py --push
+```
+
+Update the repo-side source files in `docs/wiki/` in the same PRs that change behavior, then
+publish the wiki snapshot after review.
 
 ## Requirements
 

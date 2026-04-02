@@ -168,7 +168,8 @@ impl MapScreenState {
         self.show_navmesh
     }
 
-    /// Toggle a map layer by number (1=geometry, 2=spawns, 3=nav paths, 4=mesh).
+    /// Toggle a map layer by number:
+    /// 1=geometry, 2=spawns, 3=nav paths, 4=mesh, 5=labels.
     pub fn toggle_layer(&mut self, layer: u8) -> &'static str {
         match layer {
             1 => {
@@ -201,6 +202,14 @@ impl MapScreenState {
                     "Navmesh ON"
                 } else {
                     "Navmesh OFF"
+                }
+            }
+            5 => {
+                self.show_labels = !self.show_labels;
+                if self.show_labels {
+                    "Labels ON"
+                } else {
+                    "Labels OFF"
                 }
             }
             _ => "Unknown layer",
@@ -320,10 +329,14 @@ pub struct CommandBarState {
     pub command_mode: bool,
     /// Current text in the command input buffer.
     pub command_buffer: String,
+    /// Cursor position within the input buffer, measured in chars.
+    pub cursor: usize,
     /// History of previously executed commands.
     pub command_history: Vec<String>,
     /// Index into command history for up/down navigation.
     pub command_history_idx: Option<usize>,
+    /// Draft preserved before the user starts browsing history.
+    pub history_draft: Option<String>,
     /// Command usage frequency — tracks how often each command is used.
     pub command_frequency: HashMap<String, u32>,
     /// Cached top-N favorites (recalculated on each command execution).
@@ -331,17 +344,163 @@ pub struct CommandBarState {
 }
 
 impl CommandBarState {
+    const HISTORY_FILE: &'static str = "config/.dmft_command_history";
+
     /// Creates a new command bar state with empty buffer and history.
     #[must_use]
     pub fn new() -> Self {
         Self {
             command_mode: false,
             command_buffer: String::new(),
+            cursor: 0,
             command_history: Vec::new(),
             command_history_idx: None,
+            history_draft: None,
             command_frequency: HashMap::new(),
             favorites: Vec::new(),
         }
+    }
+
+    /// Enter command mode, optionally with a prefilled command.
+    pub fn enter(&mut self, prefill: Option<&str>) {
+        self.command_mode = true;
+        self.command_history_idx = None;
+        self.history_draft = None;
+        self.command_buffer = prefill.unwrap_or_default().to_string();
+        self.cursor = self.command_buffer.chars().count();
+    }
+
+    /// Exit command mode and clear transient editor state.
+    pub fn exit(&mut self) {
+        self.command_mode = false;
+        self.command_history_idx = None;
+        self.history_draft = None;
+        self.command_buffer.clear();
+        self.cursor = 0;
+    }
+
+    /// Replace the full command buffer.
+    pub fn set_buffer(&mut self, value: impl Into<String>) {
+        self.command_buffer = value.into();
+        self.cursor = self.command_buffer.chars().count();
+    }
+
+    /// Insert a character at the cursor position.
+    pub fn insert_char(&mut self, ch: char) {
+        let mut chars: Vec<char> = self.command_buffer.chars().collect();
+        let idx = self.cursor.min(chars.len());
+        chars.insert(idx, ch);
+        self.command_buffer = chars.into_iter().collect();
+        self.cursor = idx + 1;
+    }
+
+    /// Delete the character before the cursor.
+    pub fn backspace(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        let mut chars: Vec<char> = self.command_buffer.chars().collect();
+        let idx = self.cursor.min(chars.len()) - 1;
+        chars.remove(idx);
+        self.command_buffer = chars.into_iter().collect();
+        self.cursor = idx;
+    }
+
+    /// Delete the character under the cursor.
+    pub fn delete(&mut self) {
+        let mut chars: Vec<char> = self.command_buffer.chars().collect();
+        let idx = self.cursor.min(chars.len());
+        if idx >= chars.len() {
+            return;
+        }
+        chars.remove(idx);
+        self.command_buffer = chars.into_iter().collect();
+        self.cursor = idx.min(self.command_buffer.chars().count());
+    }
+
+    /// Move the cursor left by one character.
+    pub fn move_left(&mut self) {
+        self.cursor = self.cursor.saturating_sub(1);
+    }
+
+    /// Move the cursor right by one character.
+    pub fn move_right(&mut self) {
+        self.cursor = (self.cursor + 1).min(self.command_buffer.chars().count());
+    }
+
+    /// Move the cursor to the start of the buffer.
+    pub fn move_home(&mut self) {
+        self.cursor = 0;
+    }
+
+    /// Move the cursor to the end of the buffer.
+    pub fn move_end(&mut self) {
+        self.cursor = self.command_buffer.chars().count();
+    }
+
+    /// Browse to the previous command in history.
+    pub fn history_prev(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        if self.command_history_idx.is_none() {
+            self.history_draft = Some(self.command_buffer.clone());
+        }
+
+        let idx = match self.command_history_idx {
+            Some(idx) => idx.saturating_sub(1),
+            None => self.command_history.len() - 1,
+        };
+        self.command_history_idx = Some(idx);
+        self.set_buffer(self.command_history[idx].clone());
+    }
+
+    /// Browse to the next command in history, restoring the in-progress draft at the end.
+    pub fn history_next(&mut self) {
+        match self.command_history_idx {
+            Some(idx) if idx + 1 < self.command_history.len() => {
+                let next = idx + 1;
+                self.command_history_idx = Some(next);
+                self.set_buffer(self.command_history[next].clone());
+            }
+            Some(_) => {
+                self.command_history_idx = None;
+                let draft = self.history_draft.take().unwrap_or_default();
+                self.set_buffer(draft);
+            }
+            None => {}
+        }
+    }
+
+    /// Load command history from disk and rebuild frequency favorites.
+    pub fn load_history_from_disk(&mut self) {
+        let Ok(content) = std::fs::read_to_string(Self::HISTORY_FILE) else {
+            return;
+        };
+        self.command_history = content
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+        self.command_frequency.clear();
+        for cmd in &self.command_history {
+            let normalized = Self::normalize_command(cmd);
+            if !normalized.is_empty() {
+                *self.command_frequency.entry(normalized).or_insert(0) += 1;
+            }
+        }
+        self.recalculate_favorites();
+    }
+
+    /// Persist command history to disk (best-effort).
+    pub fn save_history_to_disk(&self) -> std::io::Result<()> {
+        let mut payload = self.command_history.join("\n");
+        if !payload.is_empty() {
+            payload.push('\n');
+        }
+        std::fs::write(Self::HISTORY_FILE, payload)
     }
 
     /// Record a command execution and update favorites.
@@ -466,6 +625,43 @@ mod tests {
             "ma Warrior"
         );
         assert_eq!(CommandBarState::normalize_command("engage 100"), "engage");
+    }
+
+    #[test]
+    fn command_editor_insert_delete_and_cursor_motion() {
+        let mut state = CommandBarState::new();
+        state.enter(Some("mode hunt"));
+        state.move_left();
+        state.move_left();
+        state.insert_char('e');
+        assert_eq!(state.command_buffer, "mode huent");
+        state.backspace();
+        assert_eq!(state.command_buffer, "mode hunt");
+        state.move_home();
+        state.delete();
+        assert_eq!(state.command_buffer, "ode hunt");
+        state.move_end();
+        assert_eq!(state.cursor, state.command_buffer.chars().count());
+    }
+
+    #[test]
+    fn history_navigation_restores_draft() {
+        let mut state = CommandBarState::new();
+        state.command_history = vec![
+            String::from("mode hunt"),
+            String::from("nav gfay"),
+            String::from("track list"),
+        ];
+        state.enter(Some("ma Warrior"));
+
+        state.history_prev();
+        assert_eq!(state.command_buffer, "track list");
+        state.history_prev();
+        assert_eq!(state.command_buffer, "nav gfay");
+        state.history_next();
+        assert_eq!(state.command_buffer, "track list");
+        state.history_next();
+        assert_eq!(state.command_buffer, "ma Warrior");
     }
 
     #[test]

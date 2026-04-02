@@ -7,6 +7,9 @@
 //!
 //! On non-Windows platforms all operations are no-ops that log a warning.
 
+#[cfg(windows)]
+use dmft_common::offsets::{self, character_zone, launch_spell_data, player_zone};
+
 /// Error type for casting operations.
 #[derive(Debug, thiserror::Error)]
 pub enum CastError {
@@ -101,7 +104,7 @@ impl CastingController {
 
     /// Check if the local player is currently casting a spell.
     ///
-    /// Reads the cast timer from the local player's `PcClient` struct.
+    /// Reads `PlayerZoneClient::CastingData.SpellID` from the local spawn.
     /// Returns `true` if a cast is in progress.
     pub fn is_casting(&self) -> Result<bool, CastError> {
         if self.eq_base == 0 {
@@ -110,22 +113,23 @@ impl CastingController {
 
         #[cfg(windows)]
         {
-            // TODO: Read cast timer from PcClient struct.
-            // The cast timer offset needs to be extracted from MQ2 headers
-            // and added to offsets.rs. When the timer is > 0, a cast is
-            // in progress.
-            //
-            // Approximate approach:
-            //   let pc_pinst = offsets::rebase(offsets::PINST_LOCAL_PC, self.eq_base)
-            //       .ok_or(CastError::NoBaseAddress)?;
-            //   let pc_ptr = unsafe { std::ptr::read(pc_pinst as *const usize) };
-            //   if pc_ptr == 0 { return Ok(false); }
-            //   let cast_timer = unsafe {
-            //       std::ptr::read((pc_ptr + CAST_TIMER_OFFSET) as *const i32)
-            //   };
-            //   Ok(cast_timer > 0)
-            tracing::trace!("is_casting -- cast timer offset not yet in offset database");
-            Ok(false)
+            let pc_pinst = offsets::rebase(offsets::PINST_LOCAL_PC, self.eq_base)
+                .ok_or(CastError::NoBaseAddress)?;
+            let pc_ptr = unsafe { std::ptr::read(pc_pinst as *const usize) };
+            if pc_ptr == 0 {
+                return Ok(false);
+            }
+
+            let player_ptr =
+                unsafe { std::ptr::read((pc_ptr + character_zone::ME) as *const usize) };
+            if player_ptr == 0 {
+                return Ok(false);
+            }
+
+            let cast_addr = player_ptr + player_zone::CASTING_DATA;
+            let spell_id =
+                unsafe { std::ptr::read((cast_addr + launch_spell_data::SPELL_ID) as *const i32) };
+            Ok(spell_id != launch_spell_data::NOT_CASTING_SPELL_ID)
         }
 
         #[cfg(not(windows))]

@@ -9,7 +9,7 @@ use crate::soul::config::SoulConfig;
 /// A single account entry from config/accounts.toml.
 #[derive(Debug, Deserialize, Clone)]
 pub struct AccountEntry {
-    /// Account login name (e.g., "account01").
+    /// Account login name (e.g., "dmft01").
     pub name: String,
     /// Target server name (e.g., "Firiona Vie").
     pub server: String,
@@ -305,21 +305,21 @@ mod tests {
 
     const SAMPLE_ACCOUNTS_TOML: &str = r#"
 [[accounts]]
-name = "frostreaver01"
+name = "dmft01"
 server = "Firiona Vie"
 character = "Camrene"
 class = "WAR"
 group = 1
 
 [[accounts]]
-name = "frostreaver02"
+name = "dmft02"
 server = "Firiona Vie"
 character = "Zisdarenu"
 class = "SHM"
 group = 1
 
 [[accounts]]
-name = "frostreaver07"
+name = "dmft07"
 server = "Firiona Vie"
 character = "Paladin"
 class = "PAL"
@@ -334,7 +334,7 @@ group = 2
     fn parse_accounts_toml() {
         let cfg = parse_sample();
         assert_eq!(cfg.accounts.len(), 3);
-        assert_eq!(cfg.accounts[0].name, "frostreaver01");
+        assert_eq!(cfg.accounts[0].name, "dmft01");
         assert_eq!(cfg.accounts[0].character, "Camrene");
         assert_eq!(cfg.accounts[0].class, "WAR");
         assert_eq!(cfg.accounts[0].group, 1);
@@ -350,7 +350,7 @@ group = 2
 
         let g2 = cfg.accounts_for_group(2);
         assert_eq!(g2.len(), 1);
-        assert_eq!(g2[0].name, "frostreaver07");
+        assert_eq!(g2[0].name, "dmft07");
 
         let g99 = cfg.accounts_for_group(99);
         assert!(g99.is_empty());
@@ -359,9 +359,9 @@ group = 2
     #[test]
     fn find_account_case_insensitive() {
         let cfg = parse_sample();
-        assert!(cfg.find_account("frostreaver01").is_some());
-        assert!(cfg.find_account("FROSTREAVER01").is_some());
-        assert!(cfg.find_account("Frostreaver01").is_some());
+        assert!(cfg.find_account("dmft01").is_some());
+        assert!(cfg.find_account("DMFT01").is_some());
+        assert!(cfg.find_account("Dmft01").is_some());
         assert!(cfg.find_account("nonexistent").is_none());
     }
 
@@ -369,7 +369,7 @@ group = 2
     fn to_account_info_conversion() {
         let cfg = parse_sample();
         let info = AccountsConfig::to_account_info(&cfg.accounts[0]);
-        assert_eq!(info.account_name, "frostreaver01");
+        assert_eq!(info.account_name, "dmft01");
         assert_eq!(info.character_name, "Camrene");
         assert_eq!(info.class_name, "WAR");
         assert_eq!(info.group_id, 1);
@@ -480,7 +480,7 @@ character = "Foo"
     #[test]
     fn find_account_returns_correct_entry() {
         let cfg = parse_sample();
-        let acct = cfg.find_account("frostreaver02").unwrap();
+        let acct = cfg.find_account("dmft02").unwrap();
         assert_eq!(acct.character, "Zisdarenu");
         assert_eq!(acct.class, "SHM");
         assert_eq!(acct.group, 1);

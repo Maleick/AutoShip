@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -156,6 +157,17 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
         bounds.expand(point.x, point.y);
     }
 
+    lines.sort_by(|a, b| {
+        let a_depth = (a.z1 + a.z2) * 0.5;
+        let b_depth = (b.z1 + b.z2) * 0.5;
+        a_depth.partial_cmp(&b_depth).unwrap_or(Ordering::Equal)
+    });
+    points.sort_by(|a, b| {
+        b.z.partial_cmp(&a.z)
+            .unwrap_or(Ordering::Equal)
+            .then(a.size.cmp(&b.size))
+    });
+
     // If no data was loaded, set bounds to origin
     if bounds.min_x == f32::MAX {
         bounds = MapBounds {
@@ -176,42 +188,89 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
 
 fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoint>) -> Result<()> {
     let file = File::open(path)?;
-    for line_result in BufReader::new(file).lines() {
+    let mut bad_lines = 0usize;
+
+    for (index, line_result) in BufReader::new(file).lines().enumerate() {
         let raw = line_result?;
         let trimmed = raw.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        if trimmed.starts_with('L')
-            && let Some(ml) = parse_l_line(trimmed)
-        {
-            lines.push(ml);
-        } else if trimmed.starts_with('P')
-            && let Some(mp) = parse_p_line(trimmed)
-        {
-            points.push(mp);
+
+        let parsed = if trimmed.starts_with('L') {
+            if let Some(ml) = parse_l_line(trimmed) {
+                lines.push(ml);
+                true
+            } else {
+                false
+            }
+        } else if trimmed.starts_with('P') {
+            if let Some(mp) = parse_p_line(trimmed) {
+                points.push(mp);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !parsed {
+            tracing::warn!(
+                file = %path.display(),
+                line = index + 1,
+                raw_line = trimmed,
+                "Ignoring malformed map row"
+            );
+            bad_lines = bad_lines.saturating_add(1);
         }
     }
+
+    if bad_lines > 0 {
+        tracing::info!(
+            file = %path.display(),
+            bad_lines,
+            "Map file loaded with malformed rows"
+        );
+    }
+
     Ok(())
+}
+
+fn parse_u8_channel(value: &str) -> Option<u8> {
+    value
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|&v| v <= u8::MAX as u16)
+        .and_then(|v| u8::try_from(v).ok())
+}
+
+fn parse_finite_f32(value: &str) -> Option<f32> {
+    value
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|value| value.is_finite())
 }
 
 fn parse_l_line(line: &str) -> Option<MapLine> {
     // Format: L x1, y1, z1, x2, y2, z2, r, g, b
     let rest = line[1..].trim();
     let parts: Vec<&str> = rest.splitn(9, ',').map(str::trim).collect();
-    if parts.len() < 9 {
+    if parts.len() != 9 {
         return None;
     }
     Some(MapLine {
-        x1: parts[0].parse().ok()?,
-        y1: parts[1].parse().ok()?,
-        z1: parts[2].parse().ok()?,
-        x2: parts[3].parse().ok()?,
-        y2: parts[4].parse().ok()?,
-        z2: parts[5].parse().ok()?,
-        r: parts[6].parse().ok()?,
-        g: parts[7].parse().ok()?,
-        b: parts[8].parse().ok()?,
+        x1: parse_finite_f32(parts[0])?,
+        y1: parse_finite_f32(parts[1])?,
+        z1: parse_finite_f32(parts[2])?,
+        x2: parse_finite_f32(parts[3])?,
+        y2: parse_finite_f32(parts[4])?,
+        z2: parse_finite_f32(parts[5])?,
+        r: parse_u8_channel(parts[6])?,
+        g: parse_u8_channel(parts[7])?,
+        b: parse_u8_channel(parts[8])?,
     })
 }
 
@@ -220,18 +279,18 @@ fn parse_p_line(line: &str) -> Option<MapPoint> {
     // Use splitn(8, ',') so commas in the label are preserved.
     let rest = line[1..].trim();
     let parts: Vec<&str> = rest.splitn(8, ',').map(str::trim).collect();
-    if parts.len() < 8 {
+    if parts.len() != 8 {
         return None;
     }
     // Replace underscores with spaces in label (Brewall convention)
     let label = parts[7].replace('_', " ");
     Some(MapPoint {
-        x: parts[0].parse().ok()?,
-        y: parts[1].parse().ok()?,
-        z: parts[2].parse().ok()?,
-        r: parts[3].parse().ok()?,
-        g: parts[4].parse().ok()?,
-        b: parts[5].parse().ok()?,
+        x: parse_finite_f32(parts[0])?,
+        y: parse_finite_f32(parts[1])?,
+        z: parse_finite_f32(parts[2])?,
+        r: parse_u8_channel(parts[3])?,
+        g: parse_u8_channel(parts[4])?,
+        b: parse_u8_channel(parts[5])?,
         size: parts[6].parse().ok()?,
         label,
     })
@@ -421,6 +480,22 @@ mod tests {
     #[test]
     fn parse_p_line_too_few_fields() {
         assert!(parse_p_line("P 1, 2, 3, 4, 5").is_none());
+    }
+
+    #[test]
+    fn parse_p_line_too_many_fields_keeps_unknown_label_comma_text() {
+        let mp = parse_p_line("P 1, 2, 3, 4, 5, 6, 7, Zone, extra").unwrap();
+        assert_eq!(mp.label, "Zone, extra");
+    }
+
+    #[test]
+    fn parse_l_line_out_of_range_color() {
+        assert!(parse_l_line("L 1, 2, 3, 4, 5, 6, 256, 0, 0").is_none());
+    }
+
+    #[test]
+    fn parse_p_line_out_of_range_color() {
+        assert!(parse_p_line("P 1, 2, 3, 0, 255, -1, 2, Zone").is_none());
     }
 
     #[test]

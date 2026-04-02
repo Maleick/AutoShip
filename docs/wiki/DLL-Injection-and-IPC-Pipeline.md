@@ -1,0 +1,112 @@
+# DLL Injection and IPC Pipeline
+
+## Current Runtime Flow
+
+The live-control path is:
+
+1. Build `dmft_dll.dll`
+2. Stage it to a temp location with a randomized filename
+3. Write a 32-byte session token for the target PID
+4. Inject via `CreateRemoteThread + LoadLibraryW`
+5. Let the DLL read the staged token during initialization
+6. Derive a session ID from the token
+7. Create authenticated IPC surfaces for that client
+
+## Injection Path
+
+The orchestrator-side injection code lives under `dmft/src/inject/`.
+
+Key details:
+
+- `dmft/src/inject/dll_prep.rs` copies the built DLL to a temp directory with a randomized name.
+- `dmft/src/inject/loader.rs` uses the classic remote-thread loader path with `LoadLibraryW`.
+- `dmft-common/src/ipc.rs` writes `%TEMP%/dmft/token_<pid>.bin` before injection and a retained `%TEMP%/dmft/login_token_<pid>.bin` for later reconnects.
+
+## Session Token and Naming
+
+The shared token is the root of client-specific IPC naming and authentication.
+
+- Token type: 32 random bytes
+- Session ID derivation: first 8 bytes interpreted as little-endian `u64`
+- Pipe name format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
+- Shared memory name format: `{session_id:x}_state_{client_id}`
+
+This is defined in `dmft-common/src/ipc.rs`.
+
+Important nuance:
+
+- The file still keeps legacy `PIPE_NAME_PREFIX` and `SHARED_MEMORY_NAME_PREFIX` constants.
+- The active path used by `pipe_name()` and `shared_memory_name()` is session-derived, not the legacy static prefix format.
+
+## Shared Memory Path
+
+The DLL publishes live `GameState` snapshots through a named file mapping created in `dmft-dll/src/ipc/shared.rs`.
+
+Current layout:
+
+```text
+[sequence: u64 LE][payload_len: u32 LE][payload: bincode bytes]
+```
+
+Behavior:
+
+- odd sequence: write in progress
+- even sequence: stable snapshot
+- zero sequence: no snapshot written yet
+
+The orchestrator-side reader in `dmft/src/ipc/shared.rs` checks the sequence before and after copying the payload so it can reject torn reads.
+
+## Named Pipe Path
+
+Command delivery is handled by:
+
+- DLL side: `dmft-dll/src/ipc/pipe.rs`
+- Orchestrator side: `dmft/src/ipc/pipe.rs`
+
+Connection flow:
+
+1. Orchestrator connects to the client's named pipe
+2. Orchestrator sends the raw 32-byte session token as the first message
+3. DLL validates the token in constant time
+4. If authentication succeeds, subsequent `Command` messages are accepted on that connection
+
+## Security Controls in the Current Code
+
+- Shared memory is created with a current-user DACL and fails closed if DACL setup fails.
+- Named pipes are also created with restrictive current-user security attributes.
+- Session tokens are random, per injection, and validated on each connection.
+- Login passwords are zeroized after use in DLL memory.
+
+## Command and Response Flow
+
+Shared command/response types live in `dmft-common/src/ipc.rs`.
+
+Examples of current command categories:
+
+- movement and navigation
+- login automation
+- combat control
+- loot and utility
+- soul chat and idle actions
+- slash command execution through EQ internals
+
+Responses include:
+
+- `Pong`
+- `CommandResult`
+- `NavUpdate`
+- `LoginPhaseUpdate`
+- `CombatUpdate`
+- `ZoneGraph`
+
+## Current Behavior vs Roadmap
+
+### Current behavior
+
+- Injection, token staging, shared-memory publishing, and authenticated pipe control are implemented today.
+- The DLL is the code that actually crosses the boundary from operator intent into EQ internal function calls.
+
+### Validation notes and remaining risk
+
+- Any live EQ patch can invalidate offsets or widget assumptions, so injection and login behavior always need Windows validation after upstream changes.
+- If the DLL log stops updating or shared memory is unreadable, treat that as a real pipeline failure rather than a UI-only issue.

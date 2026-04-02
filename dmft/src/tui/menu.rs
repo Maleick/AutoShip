@@ -17,6 +17,8 @@ pub struct MenuItem {
     pub label: &'static str,
     /// The command to execute when selected (same as `:` command bar input).
     pub command: &'static str,
+    /// Whether selecting this item should prefill command mode instead of executing immediately.
+    pub requires_input: bool,
     /// Keyboard shortcut hint displayed on the right.
     pub shortcut: &'static str,
 }
@@ -38,41 +40,49 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
             MenuItem {
                 label: "Help",
                 command: "help",
+                requires_input: false,
                 shortcut: "?",
             },
             MenuItem {
                 label: "Commands",
                 command: "commands",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Status",
                 command: "status",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Inject DLL",
                 command: "inject",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Login",
-                command: "login all",
+                command: "login",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
-                label: "Launch",
-                command: "launch all",
+                label: "Launch All",
+                command: "login all",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Stop All",
                 command: "stop all",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Restart All",
                 command: "restart all",
+                requires_input: false,
                 shortcut: "",
             },
         ],
@@ -83,46 +93,55 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
             MenuItem {
                 label: "Start Camp",
                 command: "camp start",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Stop Camp",
                 command: "camp stop",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Camp List",
                 command: "camp list",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Add Camp",
                 command: "camp add",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Remove Camp",
                 command: "camp remove",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Next Camp",
                 command: "camp next",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Prev Camp",
                 command: "camp prev",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Camp Mode",
                 command: "mode camp",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Hunt Mode",
                 command: "mode hunt",
+                requires_input: false,
                 shortcut: "",
             },
         ],
@@ -133,21 +152,19 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
             MenuItem {
                 label: "Nav to Camp",
                 command: "nav",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Nav to Coords",
                 command: "nav",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Nav to Zone",
                 command: "nav",
-                shortcut: "",
-            },
-            MenuItem {
-                label: "Waypoint Record",
-                command: "nav record",
+                requires_input: true,
                 shortcut: "",
             },
         ],
@@ -158,36 +175,43 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
             MenuItem {
                 label: "Engage",
                 command: "engage",
+                requires_input: false,
                 shortcut: "e",
             },
             MenuItem {
                 label: "Disengage",
                 command: "disengage",
+                requires_input: false,
                 shortcut: "d",
             },
             MenuItem {
                 label: "Main Assist",
                 command: "ma",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Main Tank",
                 command: "mt",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Heal Cancel",
                 command: "heal cancel",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "CH Chain",
-                command: "ch status",
+                command: "chui",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Loot",
                 command: "loot",
+                requires_input: false,
                 shortcut: "l",
             },
         ],
@@ -198,41 +222,49 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
             MenuItem {
                 label: "Invite",
                 command: "invite",
+                requires_input: true,
                 shortcut: "",
             },
             MenuItem {
                 label: "Accept",
                 command: "accept",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "G1 Focus",
                 command: "G1",
+                requires_input: false,
                 shortcut: "Shift+1",
             },
             MenuItem {
                 label: "G2 Focus",
                 command: "G2",
+                requires_input: false,
                 shortcut: "Shift+2",
             },
             MenuItem {
                 label: "G3 Focus",
                 command: "G3",
+                requires_input: false,
                 shortcut: "Shift+3",
             },
             MenuItem {
                 label: "G4 Focus",
                 command: "G4",
+                requires_input: false,
                 shortcut: "Shift+4",
             },
             MenuItem {
                 label: "G5 Focus",
                 command: "G5",
+                requires_input: false,
                 shortcut: "Shift+5",
             },
             MenuItem {
                 label: "G6 Focus",
                 command: "G6",
+                requires_input: false,
                 shortcut: "Shift+6",
             },
         ],
@@ -243,16 +275,19 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
             MenuItem {
                 label: "Theme",
                 command: "theme",
+                requires_input: false,
                 shortcut: "T",
             },
             MenuItem {
                 label: "Config Panel",
                 command: "config",
+                requires_input: false,
                 shortcut: "",
             },
             MenuItem {
                 label: "Privacy Toggle",
                 command: "privacy",
+                requires_input: false,
                 shortcut: "p",
             },
         ],
@@ -323,8 +358,14 @@ impl MenuState {
     /// Get the command for the currently selected item.
     #[must_use]
     pub fn selected_command(&self) -> &'static str {
+        self.selected_item().command
+    }
+
+    /// Get the currently selected menu item.
+    #[must_use]
+    pub fn selected_item(&self) -> &'static MenuItem {
         let cat = &MENU_CATEGORIES[self.selected_category];
-        cat.items[self.selected_item].command
+        &cat.items[self.selected_item]
     }
 }
 

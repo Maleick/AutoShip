@@ -1,13 +1,17 @@
 //! Shared widget-building helpers used across all screen modules.
 
 use ratatui::{
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Row},
 };
 
-use crate::eq::structs::{SpawnInfo, SpawnType};
-use crate::tui::theme::Theme;
+use crate::{
+    combat::spell_db,
+    eq::structs::{CastState, SpawnInfo, SpawnType},
+    tui::{cast::CastDisplay, command, theme::Theme},
+};
 
 // ─── Layout breakpoints ─────────────────────────────────────────────────────
 // Named constants for width-based layout transitions so dashboard.rs and map.rs
@@ -34,6 +38,74 @@ pub const WIDTH_SHOW_GROUP_COL: u16 = 78;
 pub const WIDTH_SHOW_CLASS_COL: u16 = 88;
 /// Minimum width to show the Zone column in the overview roster.
 pub const WIDTH_SHOW_ZONE_COL: u16 = 104;
+/// Below this width global chrome uses aggressive compaction.
+pub const WIDTH_CHROME_MEDIUM: u16 = 96;
+/// Above this width global chrome can render in its full form.
+pub const WIDTH_CHROME_WIDE: u16 = 130;
+
+/// Shared width classes for header/footer/popups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidthClass {
+    Narrow,
+    Medium,
+    Wide,
+}
+
+/// Classify a width into narrow, medium, or wide chrome modes.
+#[must_use]
+pub fn classify_width(width: u16) -> WidthClass {
+    if width < WIDTH_CHROME_MEDIUM {
+        WidthClass::Narrow
+    } else if width < WIDTH_CHROME_WIDE {
+        WidthClass::Medium
+    } else {
+        WidthClass::Wide
+    }
+}
+
+/// Count the visible width of a span collection in terminal cells.
+#[must_use]
+pub fn spans_width(spans: &[Span<'_>]) -> usize {
+    spans.iter().map(Span::width).sum()
+}
+
+/// Count the visible width of a line in terminal cells.
+#[must_use]
+pub fn line_width(line: &Line<'_>) -> usize {
+    line.width()
+}
+
+/// Build a centered popup rect with bounded margins on small terminals.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn centered_popup(
+    area: Rect,
+    width_pct: u16,
+    height_pct: u16,
+    min_width: u16,
+    min_height: u16,
+    max_width: u16,
+    max_height: u16,
+    margin: u16,
+) -> Rect {
+    let max_popup_width = area.width.saturating_sub(margin.saturating_mul(2)).max(1);
+    let max_popup_height = area.height.saturating_sub(margin.saturating_mul(2)).max(1);
+    let width_cap = max_popup_width.min(max_width.max(1));
+    let height_cap = max_popup_height.min(max_height.max(1));
+    let requested_width = ((u32::from(area.width) * u32::from(width_pct)) / 100) as u16;
+    let requested_height = ((u32::from(area.height) * u32::from(height_pct)) / 100) as u16;
+    let popup_width = requested_width
+        .max(min_width.min(width_cap))
+        .min(width_cap)
+        .max(1);
+    let popup_height = requested_height
+        .max(min_height.min(height_cap))
+        .min(height_cap)
+        .max(1);
+    let x = area.x + area.width.saturating_sub(popup_width) / 2;
+    let y = area.y + area.height.saturating_sub(popup_height) / 2;
+    Rect::new(x, y, popup_width, popup_height)
+}
 
 // ─── Block / panel helper ────────────────────────────────────────────────────
 
@@ -137,6 +209,37 @@ pub fn spawn_row_style(
     }
 }
 
+/// Human-readable cast label for a `LaunchSpellData` snapshot.
+#[must_use]
+pub fn cast_summary(cast: &CastState) -> String {
+    let spell_name = cast
+        .spell_name
+        .clone()
+        .or_else(|| {
+            u32::try_from(cast.spell_id)
+                .ok()
+                .and_then(spell_db::get)
+                .map(|spell| spell.name.to_string())
+        })
+        .unwrap_or_else(|| format!("Spell {}", cast.spell_id));
+
+    match cast.spell_gem() {
+        Some(gem) => format!("G{gem} {spell_name}"),
+        None => spell_name,
+    }
+}
+
+/// Format remaining cast time in a compact user-facing form.
+#[must_use]
+pub fn cast_time_remaining_label(cast: &CastState) -> Option<String> {
+    let remaining_ms = cast.cast_time_remaining_ms()?;
+    if remaining_ms >= 1_000 {
+        Some(format!("{:.1}s", f64::from(remaining_ms) / 1_000.0))
+    } else {
+        Some(format!("{remaining_ms}ms"))
+    }
+}
+
 // ─── Spawn info lines ────────────────────────────────────────────────────────
 
 /// Render a `SpawnInfo` as a list of styled lines (used by target panel and character screen).
@@ -150,7 +253,7 @@ pub fn spawn_info_lines(
     let name = redact(&spawn.displayed_name).into_owned();
     let rawname = redact(&spawn.name).into_owned();
 
-    vec![
+    let mut lines = vec![
         Line::from(vec![
             Span::styled(
                 name,
@@ -201,7 +304,34 @@ pub fn spawn_info_lines(
             ),
             Span::styled(rawname, Style::default().fg(t.text_secondary)),
         ]),
-    ]
+    ];
+
+    if let Some(cast) = spawn.cast_state.as_ref().filter(|cast| cast.is_casting()) {
+        let mut spans = vec![
+            Span::styled("Cast ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                cast_summary(cast),
+                Style::default()
+                    .fg(t.text_highlight)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ];
+        if cast.target_id != 0 {
+            spans.push(Span::styled(
+                format!("  -> {}", cast.target_id),
+                Style::default().fg(t.text_secondary),
+            ));
+        }
+        if let Some(remaining) = cast_time_remaining_label(cast) {
+            spans.push(Span::styled(
+                format!("  {remaining}"),
+                Style::default().fg(t.text_muted),
+            ));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    lines
 }
 
 // ─── Confirm dialog ─────────────────────────────────────────────────────────
@@ -248,14 +378,10 @@ pub fn render_confirm_dialog(
 ) {
     use ratatui::{
         layout::{Constraint, Direction, Layout},
-        widgets::{Clear, Paragraph},
+        widgets::{Clear, Paragraph, Wrap},
     };
 
-    let popup_w = (area.width * 50 / 100).clamp(30.min(area.width), 50.min(area.width));
-    let popup_h = 7u16.min(area.height);
-    let x = area.x + area.width.saturating_sub(popup_w) / 2;
-    let y = area.y + area.height.saturating_sub(popup_h) / 2;
-    let popup_area = ratatui::layout::Rect::new(x, y, popup_w, popup_h);
+    let popup_area = centered_popup(area, 60, 42, 28, 6, 60, 9, 1);
 
     frame.render_widget(Clear, popup_area);
 
@@ -284,7 +410,9 @@ pub fn render_confirm_dialog(
         Style::default().fg(t.text_muted)
     };
 
-    let msg = Paragraph::new(dialog.message.as_str()).style(Style::default().fg(t.text_normal));
+    let msg = Paragraph::new(dialog.message.as_str())
+        .style(Style::default().fg(t.text_normal))
+        .wrap(Wrap { trim: true });
     frame.render_widget(msg, inner[0]);
 
     let buttons = Line::from(vec![
@@ -470,145 +598,20 @@ pub struct CommandHint {
 /// Return the full list of available commands with usage hints and descriptions.
 #[must_use]
 pub fn command_hints() -> Vec<CommandHint> {
-    vec![
-        CommandHint {
-            prefix: "nav",
-            usage: "nav <zone> [camp]",
-            description: "Navigate to a zone/camp",
-        },
-        CommandHint {
-            prefix: "camp start",
-            usage: "camp start <name>",
-            description: "Start a camp by name",
-        },
-        CommandHint {
-            prefix: "camp stop",
-            usage: "camp stop",
-            description: "Stop the current camp",
-        },
-        CommandHint {
-            prefix: "camp list",
-            usage: "camp list",
-            description: "List available camps",
-        },
-        CommandHint {
-            prefix: "camp add",
-            usage: "camp add <name> <zone>",
-            description: "Add a new camp",
-        },
-        CommandHint {
-            prefix: "camp rm",
-            usage: "camp rm <name>",
-            description: "Remove a camp",
-        },
-        CommandHint {
-            prefix: "ma",
-            usage: "ma <name>",
-            description: "Set main assist",
-        },
-        CommandHint {
-            prefix: "mt",
-            usage: "mt <name>",
-            description: "Set main tank",
-        },
-        CommandHint {
-            prefix: "engage",
-            usage: "engage [target_id]",
-            description: "Engage combat",
-        },
-        CommandHint {
-            prefix: "disengage",
-            usage: "disengage",
-            description: "Stop combat",
-        },
-        CommandHint {
-            prefix: "track",
-            usage: "track <spawn_name>",
-            description: "Track a spawn on the map",
-        },
-        CommandHint {
-            prefix: "all",
-            usage: "all /<command>",
-            description: "Broadcast to all characters",
-        },
-        CommandHint {
-            prefix: "invite",
-            usage: "invite <name>",
-            description: "Invite player to group",
-        },
-        CommandHint {
-            prefix: "accept",
-            usage: "accept",
-            description: "Accept pending invite",
-        },
-        CommandHint {
-            prefix: "mode",
-            usage: "mode <camp|hunt>",
-            description: "Switch operating mode",
-        },
-        CommandHint {
-            prefix: "login",
-            usage: "login <profile>",
-            description: "Login a character profile",
-        },
-        CommandHint {
-            prefix: "ch start",
-            usage: "ch start <pids> <interval>",
-            description: "Start CH chain",
-        },
-        CommandHint {
-            prefix: "ch stop",
-            usage: "ch stop",
-            description: "Stop CH chain",
-        },
-        CommandHint {
-            prefix: "ch add",
-            usage: "ch add <pid>",
-            description: "Add cleric to CH chain",
-        },
-        CommandHint {
-            prefix: "ch rm",
-            usage: "ch rm <pid>",
-            description: "Remove cleric from CH chain",
-        },
-        CommandHint {
-            prefix: "ch interval",
-            usage: "ch interval <seconds>",
-            description: "Set CH interval",
-        },
-        CommandHint {
-            prefix: "ch adaptive",
-            usage: "ch adaptive <on|off>",
-            description: "Toggle adaptive CH timing",
-        },
-    ]
+    command::command_entries()
+        .iter()
+        .map(|entry| CommandHint {
+            prefix: entry.phrase,
+            usage: entry.usage,
+            description: entry.summary,
+        })
+        .collect()
 }
 
 /// Find the best matching command hint for the current input buffer.
 #[must_use]
 pub fn find_command_hint(input: &str) -> Option<&'static str> {
-    // Static storage so we can return references.
-    // This is fine because the hints are all &'static str.
-    static HINTS: std::sync::LazyLock<Vec<CommandHint>> = std::sync::LazyLock::new(command_hints);
-
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    // Find the longest matching prefix
-    let mut best: Option<&CommandHint> = None;
-    for hint in HINTS.iter() {
-        if trimmed.starts_with(hint.prefix)
-            && (trimmed.len() == hint.prefix.len()
-                || trimmed.as_bytes().get(hint.prefix.len()) == Some(&b' '))
-            && best.is_none_or(|current| hint.prefix.len() > current.prefix.len())
-        {
-            best = Some(hint);
-        }
-    }
-
-    best.map(|h| h.usage)
+    command::find_command_hint(input).map(|hint| hint.usage)
 }
 
 // ─── Dropdown selector ─────────────────────────────────────────────────────
@@ -1230,6 +1233,8 @@ pub struct GaugeBar {
     pub width: usize,
     /// Label shown to the left (optional).
     pub label: Option<String>,
+    /// Whether to render an ASCII-safe bar.
+    pub ascii_safe: bool,
 }
 
 impl GaugeBar {
@@ -1241,6 +1246,7 @@ impl GaugeBar {
             max,
             width,
             label: None,
+            ascii_safe: false,
         }
     }
 
@@ -1248,6 +1254,13 @@ impl GaugeBar {
     #[must_use]
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    /// Render with plain ASCII glyphs instead of Unicode block glyphs.
+    #[must_use]
+    pub fn ascii_safe(mut self, ascii_safe: bool) -> Self {
+        self.ascii_safe = ascii_safe;
         self
     }
 
@@ -1268,11 +1281,7 @@ pub fn render_gauge_bar(gauge: &GaugeBar, filled_color: Color, t: &Theme) -> Lin
     let ratio = gauge.ratio();
     let filled = (ratio * gauge.width as f64).round() as usize;
     let empty = gauge.width.saturating_sub(filled);
-    let bar = format!(
-        "\u{2502}{}{}\u{2502}",
-        "\u{2588}".repeat(filled),
-        "\u{2591}".repeat(empty)
-    );
+    let bar = gauge_bar_string(filled, empty, gauge.ascii_safe);
 
     let mut spans = Vec::new();
     if let Some(ref label) = gauge.label {
@@ -1288,6 +1297,156 @@ pub fn render_gauge_bar(gauge: &GaugeBar, filled_color: Color, t: &Theme) -> Lin
     ));
 
     Line::from(spans)
+}
+
+/// Render a compact cast strip with width-aware ASCII fallbacks.
+#[must_use]
+pub fn render_cast_bar(
+    cast: &CastDisplay,
+    available_width: usize,
+    label_color: Color,
+    filled_color: Color,
+    meta_color: Color,
+    dim_color: Color,
+) -> Line<'static> {
+    const MIN_LABEL_BUDGET_COMPACT: usize = 2;
+    const MIN_LABEL_BUDGET_MEDIUM: usize = 4;
+    const MIN_LABEL_BUDGET_WIDE: usize = 8;
+
+    let compact = available_width < 34;
+    let medium = (34..52).contains(&available_width);
+    let wide = available_width >= 52;
+    let ascii_safe = compact;
+    let label_prefix = if compact { "Cast:" } else { "Cast" };
+    let bar_width_target = if compact {
+        8
+    } else if medium {
+        10
+    } else {
+        14
+    };
+    let minimum_bar_width = 4;
+    let max_bar_width = available_width
+        .saturating_sub(label_prefix.chars().count().saturating_add(5))
+        .max(minimum_bar_width);
+    let bar_width = bar_width_target.min(max_bar_width).max(minimum_bar_width);
+    let suffix_source = if wide {
+        match (
+            cast.elapsed_secs,
+            cast.remaining_secs,
+            cast.status_text.as_deref(),
+        ) {
+            (Some(elapsed), Some(remaining), Some(status)) => {
+                format!("{elapsed:.1}s/{remaining:.1}s {status}")
+            }
+            (Some(_), Some(remaining), None) => format!("{remaining:.1}s"),
+            (_, _, Some(status)) => status.to_string(),
+            _ => String::from("casting"),
+        }
+    } else {
+        cast.remaining_secs
+            .map(|remaining| format!("{remaining:.1}s"))
+            .or_else(|| cast.status_text.clone())
+            .unwrap_or_else(|| String::from("casting"))
+    };
+    let total_text_budget = available_width
+        .saturating_sub(label_prefix.chars().count())
+        .saturating_sub(bar_width)
+        .saturating_sub(3);
+    let label_hint = if compact {
+        2
+    } else if medium {
+        6
+    } else {
+        12
+    };
+    let mut suffix_budget = if wide {
+        total_text_budget.saturating_sub(label_hint + 1).min(22)
+    } else if medium {
+        total_text_budget.saturating_sub(label_hint + 1).min(10)
+    } else {
+        total_text_budget.saturating_sub(label_hint + 1).min(6)
+    };
+    let mut label_budget = total_text_budget
+        .saturating_sub(if suffix_budget > 0 {
+            suffix_budget + 1
+        } else {
+            0
+        })
+        .max(MIN_LABEL_BUDGET_COMPACT);
+    let minimum_label_budget = if compact {
+        MIN_LABEL_BUDGET_COMPACT
+    } else if medium {
+        MIN_LABEL_BUDGET_MEDIUM
+    } else {
+        MIN_LABEL_BUDGET_WIDE
+    };
+    if label_budget < minimum_label_budget && suffix_budget > 0 {
+        let shift = (minimum_label_budget - label_budget).min(suffix_budget);
+        suffix_budget = suffix_budget.saturating_sub(shift);
+        label_budget += shift;
+    }
+    let preferred_label =
+        cast.preferred_label(compact || (medium && cast.label.chars().count() > 12));
+    let label = truncate_inline(preferred_label, label_budget);
+    let suffix = truncate_inline(&suffix_source, suffix_budget);
+
+    let gauge = GaugeBar::new(cast.progress * 100.0, 100.0, bar_width).ascii_safe(ascii_safe);
+    let filled = (gauge.ratio() * gauge.width as f64).round() as usize;
+    let empty = gauge.width.saturating_sub(filled);
+    let bar = gauge_bar_string(filled, empty, gauge.ascii_safe);
+
+    let mut spans = vec![
+        Span::styled(label_prefix, Style::default().fg(dim_color)),
+        Span::raw(" "),
+        Span::styled(
+            label,
+            Style::default()
+                .fg(label_color)
+                .add_modifier(if cast.exact {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
+        ),
+        Span::raw(" "),
+    ];
+    spans.push(Span::styled(bar, Style::default().fg(filled_color)));
+    if !suffix.is_empty() {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(suffix, Style::default().fg(meta_color)));
+    }
+
+    Line::from(spans)
+}
+
+fn gauge_bar_string(filled: usize, empty: usize, ascii_safe: bool) -> String {
+    if ascii_safe {
+        format!("|{}{}|", "#".repeat(filled), "-".repeat(empty))
+    } else {
+        format!(
+            "\u{2502}{}{}\u{2502}",
+            "\u{2588}".repeat(filled),
+            "\u{2591}".repeat(empty)
+        )
+    }
+}
+
+pub(crate) fn truncate_inline(text: &str, max_chars: usize) -> String {
+    let char_count = text.chars().count();
+    if char_count <= max_chars {
+        return text.to_string();
+    }
+
+    match max_chars {
+        0 => String::new(),
+        1 | 2 => text.chars().take(max_chars).collect(),
+        _ => {
+            let mut truncated: String = text.chars().take(max_chars - 2).collect();
+            truncated.push_str("..");
+            truncated
+        }
+    }
 }
 
 // ─── Tooltip ────────────────────────────────────────────────────────────────
@@ -1822,6 +1981,7 @@ pub fn render_sparkline(spark: &Sparkline, color: Color) -> Span<'static> {
 mod tests {
     use super::*;
     use crate::tui::theme::dark_modern;
+    use ratatui::text::{Line, Span};
 
     #[test]
     fn con_color_red_when_much_higher() {
@@ -1862,6 +2022,18 @@ mod tests {
         let t = dark_modern();
         assert_eq!(con_color(30, 23, &t), t.con_green);
         assert_eq!(con_color(30, 1, &t), t.con_green);
+    }
+
+    #[test]
+    fn spans_width_uses_terminal_cell_width() {
+        let spans = vec![Span::raw("A"), Span::raw("界")];
+        assert_eq!(spans_width(&spans), 3);
+    }
+
+    #[test]
+    fn line_width_uses_terminal_cell_width() {
+        let line = Line::from(vec![Span::raw("A"), Span::raw("界")]);
+        assert_eq!(line_width(&line), 3);
     }
 
     #[test]
@@ -1949,7 +2121,7 @@ mod tests {
     #[test]
     fn find_command_hint_matches_nav() {
         let hint = find_command_hint("nav ");
-        assert_eq!(hint, Some("nav <zone> [camp]"));
+        assert_eq!(hint, Some("nav <camp_name|x y z|zone>"));
     }
 
     #[test]
@@ -2217,10 +2389,90 @@ mod tests {
     }
 
     #[test]
+    fn render_cast_bar_compact_uses_ascii_bar() {
+        let t = dark_modern();
+        let cast = crate::tui::cast::CastDisplay::exact_progress("Complete Heal", "CH", 0.4, 10.0);
+        let line = render_cast_bar(
+            &cast,
+            28,
+            t.hp_high,
+            t.text_accent,
+            t.text_secondary,
+            t.text_muted,
+        );
+        let rendered = render_line(&line);
+
+        assert!(rendered.contains("Cast:"));
+        assert!(rendered.contains("|"));
+        assert!(rendered.contains("CH"));
+        assert_eq!(gauge_width(&rendered), Some(8));
+    }
+
+    #[test]
+    fn render_cast_bar_medium_keeps_fixed_gauge_width() {
+        let t = dark_modern();
+        let cast = crate::tui::cast::CastDisplay::exact_progress("Complete Heal", "CH", 0.4, 10.0);
+        let line = render_cast_bar(
+            &cast,
+            42,
+            t.hp_high,
+            t.text_accent,
+            t.text_secondary,
+            t.text_muted,
+        );
+        let rendered = render_line(&line);
+
+        assert!(rendered.contains("CH"));
+        assert!(rendered.contains("6.0s"));
+        assert_eq!(gauge_width(&rendered), Some(10));
+    }
+
+    #[test]
+    fn render_cast_bar_wide_shows_elapsed_and_remaining_time() {
+        let t = dark_modern();
+        let cast = crate::tui::cast::CastDisplay::exact_progress("Complete Heal", "CH", 0.25, 10.0);
+        let line = render_cast_bar(
+            &cast,
+            72,
+            t.hp_high,
+            t.text_accent,
+            t.text_secondary,
+            t.text_muted,
+        );
+        let rendered = render_line(&line);
+
+        assert!(rendered.contains("Complete Heal"));
+        assert!(rendered.contains("2.5s/7.5s"));
+        assert_eq!(gauge_width(&rendered), Some(14));
+    }
+
+    #[test]
     fn keybinding_hint_has_two_spans() {
         let t = dark_modern();
         let spans = keybinding_hint("Tab", "switch pane", &t);
         assert_eq!(spans.len(), 2);
+    }
+
+    fn render_line(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
+
+    fn gauge_width(rendered: &str) -> Option<usize> {
+        let chars: Vec<char> = rendered.chars().collect();
+        if let Some(start) = chars.iter().position(|ch| *ch == '|')
+            && let Some(end) = chars[start + 1..].iter().position(|ch| *ch == '|')
+        {
+            return Some(end);
+        }
+        if let Some(start) = chars.iter().position(|ch| *ch == '│')
+            && let Some(end) = chars[start + 1..].iter().position(|ch| *ch == '│')
+        {
+            return Some(end);
+        }
+        None
     }
 
     #[test]

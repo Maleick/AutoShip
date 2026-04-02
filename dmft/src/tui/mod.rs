@@ -2,14 +2,21 @@
 
 /// Application state — tracks active screen, selections, and all runtime data.
 pub mod app;
+/// Shared cast presentation helpers for TUI surfaces.
+pub mod cast;
 /// TUI client wrapper — connects process reading to app state updates.
 pub mod client;
+/// Shared command metadata for help, hints, and suggestions.
+pub mod command;
 /// Configuration panel with tree view and inline editing.
 pub mod config_panel;
 /// Demo data generator — synthetic spawns and player data for macOS development.
 pub mod demo_data;
 /// Event handling — keyboard input mapping and command dispatch.
 pub mod event;
+/// Env-gated live cast capture helpers for validating real EQ clients.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) mod live_cast_capture;
 /// Dropdown menu bar system for accessible command navigation.
 pub mod menu;
 /// TUI run loop — terminal setup, tick/render cycle, graceful shutdown.

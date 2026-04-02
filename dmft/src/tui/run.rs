@@ -4,7 +4,7 @@ use crossterm::terminal::{
 };
 use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -21,9 +21,19 @@ impl Drop for TerminalGuard {
 }
 
 use super::app::App;
+use super::app::{ChChainStatus, NavClientStatus};
+use super::cast::{CastDisplay, short_cast_label};
 use super::event::handle_events;
+use super::live_cast_capture::{LIVE_CAST_CAPTURE_ENV, live_cast_capture_enabled};
+use super::ui::ch_chain::{CastState as ChPanelCastState, ChainCleric};
 use super::ui::draw;
+use crate::eq::structs::SpawnInfo;
 use crate::orchestrator::Orchestrator;
+
+#[cfg(windows)]
+use super::live_cast_capture::{
+    LiveCastCaptureSnapshot, diff_live_cast_capture, log_live_cast_capture_event,
+};
 
 /// Soul Engine tick interval (5 seconds).
 const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
@@ -43,6 +53,15 @@ const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 ///
 /// Returns an error if the operation fails.
 pub fn run_tui(mut app: App, mut orchestrator: Orchestrator) -> Result<()> {
+    if live_cast_capture_enabled() {
+        tracing::info!(
+            target: "dmft::cast_capture",
+            env = LIVE_CAST_CAPTURE_ENV,
+            log_path = "logs/dmft.log",
+            "Live cast capture enabled"
+        );
+    }
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -102,6 +121,14 @@ fn run_loop(
         if last_refresh.elapsed() >= refresh_interval {
             refresh_eq_data(app);
             app.tick_count += 1;
+            app.clear_expired_toast();
+            let demo_mode =
+                !app.clients.is_empty() && app.clients.iter().all(|client| client.is_demo);
+            if demo_mode {
+                apply_demo_scenario(app);
+            } else {
+                app.sync_ch_chain_state(orchestrator);
+            }
             app.update_tracked_spawns();
             last_refresh = Instant::now();
         }
@@ -256,12 +283,176 @@ fn scan_for_clients_live(app: &mut App) {
             if count == 1 { "" } else { "s" }
         );
     } else {
-        app.status_message = String::from("No EQ process found — scanning...");
+        app.status_message = String::from("No EQ process found - scanning...");
     }
 
-    // Sync legacy fields and reload map for current client
-    app.sync_from_selected_client();
+    // Apply the deterministic demo script immediately so the first frame is lively.
+    apply_demo_scenario(app);
     app.reload_map_for_selected_client();
+}
+
+fn apply_demo_scenario(app: &mut App) {
+    if app.clients.is_empty() || !app.clients.iter().all(|client| client.is_demo) {
+        return;
+    }
+
+    let tick_count = app.tick_count;
+    let refresh_rate_ms = app.refresh_rate_ms;
+    let demo_pids: HashSet<u32> = app
+        .clients
+        .iter()
+        .filter(|client| client.is_demo)
+        .map(|client| client.pid)
+        .collect();
+    app.nav_state
+        .nav_statuses
+        .retain(|pid, status| !demo_pids.contains(pid) || !status.is_demo_scripted);
+
+    let mut chain_clerics = Vec::new();
+    let mut chain_target_id = 0u32;
+    let mut chain_target_name = String::new();
+
+    for client in app.clients.iter_mut() {
+        let Some(snapshot) = super::demo_data::demo_client_snapshot(
+            &client.character_name,
+            client.pid,
+            tick_count,
+            refresh_rate_ms,
+        ) else {
+            continue;
+        };
+
+        if let Some(player) = client.local_player.as_mut() {
+            player.stand_state = snapshot.stand_state;
+            player.hp_current = snapshot.hp_current;
+            player.mana_current = snapshot.mana_current;
+            player.x = snapshot.position.0;
+            player.y = snapshot.position.1;
+            player.z = snapshot.position.2;
+            player.heading = snapshot.position.3;
+            player.cast_state = Some(super::demo_data::demo_eq_cast_state(snapshot.cast));
+        }
+
+        client.client_status = snapshot.status_line.clone();
+        client.target = snapshot
+            .target_spawn_name
+            .and_then(|target_name| demo_spawn_by_name(&client.spawns, target_name))
+            .map(|mut spawn| {
+                if let Some(label) = snapshot.target_label.clone() {
+                    spawn.displayed_name = label;
+                }
+                spawn
+            });
+
+        if let Some(nav) = snapshot.nav.as_ref() {
+            let has_manual_nav = app
+                .nav_state
+                .nav_statuses
+                .get(&client.pid)
+                .is_some_and(|status| !status.is_demo_scripted);
+            if !has_manual_nav {
+                app.nav_state.nav_statuses.insert(
+                    client.pid,
+                    NavClientStatus {
+                        destination: nav.destination.clone(),
+                        status: nav.status.clone(),
+                        eta_secs: None,
+                        waypoints: nav.waypoints.clone(),
+                        is_demo_scripted: true,
+                    },
+                );
+            }
+        }
+
+        if let Some(profile) =
+            super::demo_data::demo_client_profile(&client.character_name, client.pid)
+        {
+            match profile.role {
+                super::demo_data::DemoRole::MainTank => {
+                    if let Some(player) = client.local_player.as_ref() {
+                        chain_target_id = player.spawn_id;
+                    }
+                    chain_target_name = profile.name.to_string();
+                }
+                super::demo_data::DemoRole::ChainCleric
+                | super::demo_data::DemoRole::ChainClericTwo => {
+                    let cast_state = match (snapshot.action_state, snapshot.cast) {
+                        (super::demo_data::DemoActionState::Casting, Some(cast)) => {
+                            ChPanelCastState::Casting(cast.progress)
+                        }
+                        (super::demo_data::DemoActionState::Sitting, _) => {
+                            ChPanelCastState::Completed
+                        }
+                        (super::demo_data::DemoActionState::Feigned, _) => ChPanelCastState::Missed,
+                        _ => ChPanelCastState::Idle,
+                    };
+
+                    chain_clerics.push(ChainCleric {
+                        name: profile.name.to_string(),
+                        pid: client.pid,
+                        position: (chain_clerics.len() + 1) as u8,
+                        timing_offset_ms: 0,
+                        cast_display: snapshot.cast.map(|cast| {
+                            CastDisplay::exact_progress(
+                                cast.spell_label,
+                                short_cast_label(cast.spell_label),
+                                cast.progress as f64,
+                                cast.total_cast_ms as f32 / 1000.0,
+                            )
+                        }),
+                        cast_state,
+                    });
+                }
+                super::demo_data::DemoRole::Enchanter
+                | super::demo_data::DemoRole::Shaman
+                | super::demo_data::DemoRole::Druid
+                | super::demo_data::DemoRole::Wizard
+                | super::demo_data::DemoRole::RecoveryWizard => {}
+                _ => {}
+            }
+        }
+    }
+
+    if !chain_clerics.is_empty() {
+        app.ch_chain_panel_state.clerics = chain_clerics;
+        app.ch_chain_panel_state.selected = 0;
+        app.ch_chain_panel_state.target_id = chain_target_id;
+        app.ch_chain_panel_state.target_name = chain_target_name;
+        app.ch_chain_panel_state.cast_time_secs = 10.0;
+        app.ch_chain_panel_state.overlap_buffer_secs = 0.5;
+        app.ch_chain_panel_state.chain_delay_secs = 2.5;
+        app.ch_chain_panel_state.adaptive = true;
+        app.ch_chain_panel_state.stats.total_heals = tick_count as u32;
+        app.ch_chain_panel_state.stats.missed_heals = (tick_count as u32 / 48) % 2;
+        app.ch_chain_panel_state.stats.late_casts = (tick_count as u32 / 24) % 3;
+        app.ch_chain_panel_state.stats.avg_cast_time_ms = 9_980.0;
+        app.ch_chain_panel_state.stats.chain_uptime_pct = 97.5;
+
+        app.ch_chain_status = Some(ChChainStatus {
+            members: app.ch_chain_panel_state.clerics.len(),
+            interval_secs: 2.5,
+            is_adaptive: true,
+            target_id: chain_target_id,
+        });
+    } else {
+        app.ch_chain_panel_state.clerics.clear();
+        app.ch_chain_panel_state.selected = 0;
+        app.ch_chain_status = None;
+    }
+
+    app.status_message = format!(
+        "DEMO MODE - {} scripted clients",
+        app.clients.iter().filter(|client| client.is_demo).count()
+    );
+
+    app.sync_from_selected_client();
+}
+
+fn demo_spawn_by_name(spawns: &[SpawnInfo], target_name: &str) -> Option<SpawnInfo> {
+    spawns
+        .iter()
+        .find(|spawn| spawn.name == target_name || spawn.displayed_name == target_name)
+        .cloned()
 }
 
 /// Parse character name and zone name from the DLL-renamed window title.
@@ -339,8 +530,36 @@ fn refresh_eq_data_live(app: &mut App) {
 
         // Read local player
         match eq::spawn::read_local_player(&proc, client.eq_base) {
-            Ok(player) => client.local_player = Some(player),
-            Err(e) => client.client_status = format!("Player read error: {e}"),
+            Ok(player) => {
+                if live_cast_capture_enabled() {
+                    let current_capture =
+                        LiveCastCaptureSnapshot::from_cast(player.cast_state.as_ref());
+                    if let Some(event) = diff_live_cast_capture(
+                        client.last_live_cast_capture.as_ref(),
+                        current_capture.as_ref(),
+                    ) {
+                        let character_name = if client.character_name.is_empty() {
+                            player.displayed_name.as_str()
+                        } else {
+                            client.character_name.as_str()
+                        };
+                        log_live_cast_capture_event(
+                            app.tick_count,
+                            client.pid,
+                            character_name,
+                            &event,
+                        );
+                    }
+                    client.last_live_cast_capture = current_capture;
+                } else {
+                    client.last_live_cast_capture = None;
+                }
+                client.local_player = Some(player);
+            }
+            Err(e) => {
+                client.last_live_cast_capture = None;
+                client.client_status = format!("Player read error: {e}");
+            }
         }
 
         // Read target
@@ -400,10 +619,10 @@ fn load_demo_data(app: &mut App) {
     use super::app::ClientState;
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
 
-    app.status_message = String::from("DEMO MODE — no EQ process");
+    app.status_message = String::from("DEMO MODE - no EQ process");
 
     // 18 demo clients across 3 groups, covering all 16 EQ classes.
-    // Names use trailing digits (e.g., "Frostreaver01") so they match group slots
+    // Names use trailing digits (e.g., "Dmft01") so they match group slots
     // via extract_account_number().
     //
     // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state, zone, race_id)
@@ -424,7 +643,7 @@ fn load_demo_data(app: &mut App) {
         // ── Group 1: Permafrost ──────────────────────────────────────
         // (name, class, lv, hp, hp_max, mana, mana_max, stand, zone, race)
         (
-            "Frostreaver01",
+            "Dmft01",
             1,
             60,
             9500,
@@ -643,17 +862,27 @@ fn load_demo_data(app: &mut App) {
         ), // WIZ Human
     ];
 
+    let mut zone_cache = HashMap::new();
     for (i, &(name, class_id, level, hp, hp_max, mana, mana_max, ref stand, zone, race_id)) in
         demo_clients.iter().enumerate()
     {
         let mut client = ClientState::new(1000 + i as u32, 0x0001_4000_0000);
         client.zone_name = zone.to_string();
-        let (x, y, z, heading) = super::demo_data::demo_player_position(zone, i).unwrap_or((
-            1234.5 + (i as f32 * 100.0),
-            -567.8 + (i as f32 * 50.0),
-            12.0,
-            128.0,
-        ));
+        let zone_short = zone_to_short_name(zone);
+        let (mut x, mut y, z, heading) =
+            super::demo_data::demo_player_position(zone, i).unwrap_or((
+                1234.5 + (i as f32 * 100.0),
+                -567.8 + (i as f32 * 50.0),
+                12.0,
+                128.0,
+            ));
+        clamp_demo_xy_to_map_bounds(
+            &zone_short,
+            &app.map_state.map_dir,
+            &mut zone_cache,
+            &mut x,
+            &mut y,
+        );
         client.local_player = Some(SpawnInfo {
             name: name.to_string(),
             displayed_name: name.to_string(),
@@ -689,8 +918,19 @@ fn load_demo_data(app: &mut App) {
     // Each group's clients share a spawn list appropriate to their zone.
     // Spawn definitions live in demo_data.rs to keep this function focused.
     for client in &mut app.clients {
-        let spawns = super::demo_data::demo_spawns_for_zone(&client.zone_name);
+        let mut spawns = super::demo_data::demo_spawns_for_zone(&client.zone_name);
         if !spawns.is_empty() {
+            let zone_short = zone_to_short_name(&client.zone_name);
+            for spawn in &mut spawns {
+                let spawn_zone = zone_short.as_str();
+                clamp_demo_xy_to_map_bounds(
+                    spawn_zone,
+                    &app.map_state.map_dir,
+                    &mut zone_cache,
+                    &mut spawn.x,
+                    &mut spawn.y,
+                );
+            }
             client.spawns = spawns;
         }
     }
@@ -705,7 +945,7 @@ fn load_demo_data(app: &mut App) {
 
         for (i, client) in app.clients.iter_mut().enumerate() {
             let (leader, members) = if i < 6 {
-                ("Frostreaver01", &group1_members)
+                ("Dmft01", &group1_members)
             } else if i < 12 {
                 ("Shadowveil07", &group2_members)
             } else {
@@ -722,8 +962,62 @@ fn load_demo_data(app: &mut App) {
     // Sync selected client to legacy fields
     app.sync_from_selected_client();
 
+    if app.main_tank.is_none() {
+        app.main_tank = Some(String::from("Dmft01"));
+    }
+    if app.main_assist.is_none() {
+        app.main_assist = Some(String::from("Iceweaver02"));
+    }
+    app.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
+
     // Load zone map for the selected client's zone
     app.reload_map_for_selected_client();
+}
+
+#[derive(Clone, Copy)]
+struct DemoMapBounds {
+    min_x: f32,
+    max_x: f32,
+    min_y: f32,
+    max_y: f32,
+}
+
+impl DemoMapBounds {
+    fn from_zone_name(zone: &str, map_dir: &std::path::Path) -> Option<Self> {
+        let map = crate::eq::map_parser::load_zone_map(map_dir, zone).ok()?;
+        Some(Self {
+            min_x: map.bounds.min_x,
+            max_x: map.bounds.max_x,
+            min_y: map.bounds.min_y,
+            max_y: map.bounds.max_y,
+        })
+    }
+
+    fn clamp_xy(&self, x: &mut f32, y: &mut f32) {
+        let pad_x = (self.max_x - self.min_x).max(220.0) * 0.09;
+        let pad_y = (self.max_y - self.min_y).max(220.0) * 0.09;
+        let min_x = self.min_x - pad_x;
+        let max_x = self.max_x + pad_x;
+        let min_y = self.min_y - pad_y;
+        let max_y = self.max_y + pad_y;
+        *x = (*x).clamp(min_x, max_x);
+        *y = (*y).clamp(min_y, max_y);
+    }
+}
+
+fn clamp_demo_xy_to_map_bounds(
+    zone_short: &str,
+    map_dir: &std::path::Path,
+    cache: &mut HashMap<String, Option<DemoMapBounds>>,
+    x: &mut f32,
+    y: &mut f32,
+) {
+    let bounds = cache
+        .entry(zone_short.to_string())
+        .or_insert_with(|| DemoMapBounds::from_zone_name(zone_short, map_dir));
+    if let Some(bounds) = bounds {
+        bounds.clamp_xy(x, y);
+    }
 }
 
 /// Convert a zone display name (long name from zoneHeader) to its EQ short name

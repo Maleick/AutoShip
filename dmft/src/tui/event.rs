@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use super::app::{ActivePanel, ActiveScreen, App};
 use crate::orchestrator::Orchestrator;
+use crate::tui::ui::ch_chain::ChPanelFocus;
 
 /// Poll for keyboard events and update app state.
 /// Returns true if an event was handled.
@@ -28,52 +29,59 @@ pub fn handle_events(
         if app.cmd_state.command_mode {
             match key.code {
                 KeyCode::Esc => {
-                    app.cmd_state.command_mode = false;
-                    app.cmd_state.command_buffer.clear();
+                    app.cmd_state.exit();
                     return Ok(true);
                 }
                 KeyCode::Enter => {
                     app.cmd_state.command_mode = false;
                     app.cmd_state.command_history_idx = None;
+                    app.cmd_state.history_draft = None;
                     app.execute_command(orchestrator);
                     app.cmd_state.command_buffer.clear();
+                    app.cmd_state.cursor = 0;
                     return Ok(true);
                 }
                 KeyCode::Backspace => {
-                    app.cmd_state.command_buffer.pop();
+                    app.cmd_state.backspace();
+                    return Ok(true);
+                }
+                KeyCode::Delete => {
+                    app.cmd_state.delete();
                     return Ok(true);
                 }
                 KeyCode::Up => {
-                    if !app.cmd_state.command_history.is_empty() {
-                        let idx = match app.cmd_state.command_history_idx {
-                            Some(i) => i.saturating_sub(1),
-                            None => app.cmd_state.command_history.len() - 1,
-                        };
-                        app.cmd_state.command_history_idx = Some(idx);
-                        app.cmd_state.command_buffer = app.cmd_state.command_history[idx].clone();
-                    }
+                    app.cmd_state.history_prev();
                     return Ok(true);
                 }
                 KeyCode::Down => {
-                    if let Some(idx) = app.cmd_state.command_history_idx {
-                        if idx + 1 < app.cmd_state.command_history.len() {
-                            let next = idx + 1;
-                            app.cmd_state.command_history_idx = Some(next);
-                            app.cmd_state.command_buffer =
-                                app.cmd_state.command_history[next].clone();
-                        } else {
-                            app.cmd_state.command_history_idx = None;
-                            app.cmd_state.command_buffer.clear();
-                        }
-                    }
+                    app.cmd_state.history_next();
                     return Ok(true);
                 }
                 KeyCode::Tab => {
                     app.complete_command();
                     return Ok(true);
                 }
-                KeyCode::Char(c) => {
-                    app.cmd_state.command_buffer.push(c);
+                KeyCode::Left => {
+                    app.cmd_state.move_left();
+                    return Ok(true);
+                }
+                KeyCode::Right => {
+                    app.cmd_state.move_right();
+                    return Ok(true);
+                }
+                KeyCode::Home => {
+                    app.cmd_state.move_home();
+                    return Ok(true);
+                }
+                KeyCode::End => {
+                    app.cmd_state.move_end();
+                    return Ok(true);
+                }
+                KeyCode::Char(c)
+                    if !key.modifiers.contains(KeyModifiers::CONTROL)
+                        && !key.modifiers.contains(KeyModifiers::ALT) =>
+                {
+                    app.cmd_state.insert_char(c);
                     return Ok(true);
                 }
                 _ => return Ok(false),
@@ -166,7 +174,182 @@ pub fn handle_events(
             return Ok(true);
         }
 
+        // ── CH chain panel modal ──
+        if app.ch_chain_panel_state.active {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    app.ch_chain_panel_state.active = false;
+                }
+                KeyCode::Tab => {
+                    app.ch_chain_panel_state.cycle_focus();
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.ch_chain_panel_state.select_prev();
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.ch_chain_panel_state.select_next();
+                }
+                KeyCode::Left => match app.ch_chain_panel_state.focus {
+                    ChPanelFocus::ChainOrder => {
+                        app.ch_chain_panel_state.move_up();
+                        if !app.ch_chain_panel_state.clerics.is_empty() {
+                            let members: Vec<u32> = app
+                                .ch_chain_panel_state
+                                .clerics
+                                .iter()
+                                .map(|cleric| cleric.pid)
+                                .collect();
+                            orchestrator.combat.ch_chain_set_members(members);
+                            app.status_message = String::from("CH chain order updated");
+                        }
+                    }
+                    ChPanelFocus::Timing => {
+                        app.ch_chain_panel_state.chain_delay_secs =
+                            (app.ch_chain_panel_state.chain_delay_secs - 0.25).max(0.0);
+                        if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                            chain.set_interval(app.ch_chain_panel_state.chain_delay_secs);
+                        } else {
+                            app.status_message = String::from("No CH chain is running");
+                        }
+                    }
+                    ChPanelFocus::Presets => {
+                        app.ch_chain_panel_state.selected_preset =
+                            app.ch_chain_panel_state.selected_preset.saturating_sub(1);
+                    }
+                    ChPanelFocus::Target => {
+                        if let Some(first) = app.ch_chain_panel_state.clerics.first() {
+                            app.status_message =
+                                format!("Target focus: {} (PID {})", first.name, first.pid);
+                        }
+                    }
+                },
+                KeyCode::Right => match app.ch_chain_panel_state.focus {
+                    ChPanelFocus::ChainOrder => {
+                        app.ch_chain_panel_state.move_down();
+                        if !app.ch_chain_panel_state.clerics.is_empty() {
+                            let members: Vec<u32> = app
+                                .ch_chain_panel_state
+                                .clerics
+                                .iter()
+                                .map(|cleric| cleric.pid)
+                                .collect();
+                            orchestrator.combat.ch_chain_set_members(members);
+                            app.status_message = String::from("CH chain order updated");
+                        }
+                    }
+                    ChPanelFocus::Timing => {
+                        app.ch_chain_panel_state.chain_delay_secs += 0.25;
+                        if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                            chain.set_interval(app.ch_chain_panel_state.chain_delay_secs);
+                        } else {
+                            app.status_message = String::from("No CH chain is running");
+                        }
+                    }
+                    ChPanelFocus::Presets => {
+                        if !app.ch_chain_panel_state.presets.is_empty() {
+                            let max = app.ch_chain_panel_state.presets.len() - 1;
+                            if app.ch_chain_panel_state.selected_preset < max {
+                                app.ch_chain_panel_state.selected_preset += 1;
+                            }
+                        }
+                    }
+                    ChPanelFocus::Target => {
+                        if let Some(last) = app.ch_chain_panel_state.clerics.last() {
+                            app.status_message =
+                                format!("Target focus: {} (PID {})", last.name, last.pid);
+                        }
+                    }
+                },
+                KeyCode::Char('+') => {
+                    app.ch_chain_panel_state.chain_delay_secs += 0.25;
+                    if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                        chain.set_interval(app.ch_chain_panel_state.chain_delay_secs);
+                    } else {
+                        app.status_message = String::from("No CH chain is running");
+                    }
+                }
+                KeyCode::Char('-') => {
+                    app.ch_chain_panel_state.chain_delay_secs =
+                        (app.ch_chain_panel_state.chain_delay_secs - 0.25).max(0.0);
+                    if let Some(chain) = &mut orchestrator.combat.ch_chain {
+                        chain.set_interval(app.ch_chain_panel_state.chain_delay_secs);
+                    } else {
+                        app.status_message = String::from("No CH chain is running");
+                    }
+                }
+                KeyCode::Enter => {
+                    if let Some(target) = app.target.as_ref() {
+                        let target_id = target.spawn_id;
+                        app.ch_chain_panel_state.target_id = target_id;
+                        app.ch_chain_panel_state.target_name = target.displayed_name.clone();
+                        if orchestrator.combat.ch_chain.is_some() {
+                            orchestrator.combat.ch_chain_set_target(target_id);
+                            app.status_message = format!(
+                                "CH target set to {} ({})",
+                                target.displayed_name, target_id
+                            );
+                        } else {
+                            app.status_message = String::from("No CH chain is running");
+                        }
+                    } else {
+                        app.status_message = String::from("No local target available");
+                    }
+                }
+                KeyCode::Char('a') => {
+                    if let Some(chain) = orchestrator.combat.ch_chain.as_mut() {
+                        let next = !chain.is_adaptive();
+                        chain.set_adaptive(next);
+                        app.ch_chain_panel_state.adaptive = next;
+                        app.status_message = if next {
+                            String::from("CH adaptive mode: ON")
+                        } else {
+                            String::from("CH adaptive mode: OFF")
+                        };
+                    } else {
+                        app.status_message = String::from("No CH chain is running");
+                    }
+                }
+                KeyCode::Char('m') => {
+                    if let Some(chain) = orchestrator.combat.ch_chain.as_mut() {
+                        let mut members: Vec<u32> = app
+                            .ch_chain_panel_state
+                            .clerics
+                            .iter()
+                            .map(|cleric| cleric.pid)
+                            .collect();
+                        if let Some(member) = app
+                            .ch_chain_panel_state
+                            .clerics
+                            .get(app.ch_chain_panel_state.selected)
+                            .map(|m| m.pid)
+                        {
+                            members.retain(|pid| *pid != member);
+                            chain.set_members(members);
+                            app.sync_ch_chain_panel_state(orchestrator);
+                            app.status_message = format!("Removed PID {member} from CH chain");
+                        }
+                    } else {
+                        app.status_message = String::from("No CH chain is running");
+                    }
+                }
+                _ => {}
+            }
+
+            app.sync_ch_chain_state(orchestrator);
+            return Ok(true);
+        }
+
         // ── Menu bar ──
+        if key.modifiers.contains(KeyModifiers::ALT) {
+            match key.code {
+                KeyCode::F(10) | KeyCode::Char('m') | KeyCode::Char('M') => {
+                    app.menu_state.toggle();
+                    return Ok(true);
+                }
+                _ => {}
+            }
+        }
+
         if app.menu_state.active {
             match key.code {
                 KeyCode::Esc | KeyCode::F(10) => {
@@ -177,11 +360,16 @@ pub fn handle_events(
                 KeyCode::Up => app.menu_state.prev_item(),
                 KeyCode::Down => app.menu_state.next_item(),
                 KeyCode::Enter => {
-                    let cmd = app.menu_state.selected_command().to_string();
+                    let item = app.menu_state.selected_item().clone();
                     app.menu_state.active = false;
-                    app.cmd_state.command_buffer = cmd;
-                    app.execute_command(orchestrator);
-                    app.cmd_state.command_buffer.clear();
+                    if item.requires_input {
+                        app.cmd_state.enter(Some(&format!("{} ", item.command)));
+                    } else {
+                        app.cmd_state.command_buffer = item.command.to_string();
+                        app.execute_command(orchestrator);
+                        app.cmd_state.command_buffer.clear();
+                        app.cmd_state.cursor = 0;
+                    }
                 }
                 _ => {}
             }
@@ -193,6 +381,7 @@ pub fn handle_events(
                 KeyCode::Char('?') | KeyCode::Esc => {
                     app.help_visible = false;
                     app.help_scroll = 0;
+                    app.help_focus = None;
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     app.help_scroll = app.help_scroll.saturating_add(1);
@@ -241,6 +430,33 @@ pub fn handle_events(
             }
             (KeyCode::Char('!'), _) => {
                 app.set_active_group(Some(0));
+                return Ok(true);
+            }
+            (KeyCode::Char('1' | '2' | '3' | '4'), mods)
+                if app.active_screen == ActiveScreen::Tactical
+                    && mods.contains(KeyModifiers::ALT) =>
+            {
+                let layer = match key.code {
+                    KeyCode::Char('1') => 1,
+                    KeyCode::Char('2') => 2,
+                    KeyCode::Char('3') => 3,
+                    KeyCode::Char('4') => 4,
+                    _ => 0,
+                };
+                let status = app.map_state.toggle_layer(layer);
+                app.status_message = status.to_string();
+                app.active_screen = ActiveScreen::Tactical;
+                app.active_panel = ActivePanel::TacticalMap;
+                return Ok(true);
+            }
+            (KeyCode::Char('5'), mods)
+                if app.active_screen == ActiveScreen::Tactical
+                    && mods.contains(KeyModifiers::ALT) =>
+            {
+                let status = app.map_state.toggle_layer(5);
+                app.status_message = status.to_string();
+                app.active_screen = ActiveScreen::Tactical;
+                app.active_panel = ActivePanel::TacticalMap;
                 return Ok(true);
             }
             (KeyCode::Char('@'), _) => {
@@ -301,12 +517,18 @@ pub fn handle_events(
             }
             (KeyCode::Char('?'), _) => {
                 app.help_visible = !app.help_visible;
+                if app.help_visible {
+                    app.help_focus = Some(crate::tui::app::HelpFocus::Section(
+                        crate::tui::command::HelpSection::Workflows,
+                    ));
+                } else {
+                    app.help_focus = None;
+                    app.help_scroll = 0;
+                }
                 return Ok(true);
             }
             (KeyCode::Char(':'), _) => {
-                app.cmd_state.command_mode = true;
-                app.cmd_state.command_buffer.clear();
-                app.cmd_state.command_history_idx = None;
+                app.cmd_state.enter(None);
                 return Ok(true);
             }
             (KeyCode::Char('/'), _) => {

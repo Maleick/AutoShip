@@ -3,19 +3,43 @@ name: CI
 on:
   push:
     branches: [master]
-  pull_request:
-    branches: [master]
+    paths-ignore:
+      - README.md
+      - docs/**
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
-  macos:
-    name: macOS (fmt + clippy + test)
-    runs-on: macos-latest
+  submodules:
+    name: Reference submodules
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Initialize reference submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
+      - name: Verify reference trees
+        run: |
+          git submodule status --recursive
+          test -f third_party/eqlib/include/eqlib/offsets/eqgame.h
+          test -d third_party/macroquest/src/login
+          test -d third_party/macroquest/src/routing
+          test -d third_party/macroquest/src/eqlib
+
+  ubuntu:
+    name: Ubuntu (fmt + clippy + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/sync_wiki.py --check
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -26,6 +50,7 @@ jobs:
 
   windows:
     name: Windows (build only)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

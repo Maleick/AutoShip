@@ -8,7 +8,10 @@ use ratatui::{
     widgets::{Cell, Paragraph, Row, Table, Wrap},
 };
 
-use super::widgets::{hp_color, panel, spawn_info_lines, spawn_row_style, themed_header_row};
+use super::widgets::{
+    cast_summary, cast_time_remaining_label, hp_color, panel, spawn_info_lines, spawn_row_style,
+    themed_header_row,
+};
 use crate::eq::structs::SpawnInfo;
 use crate::tui::app::{ActivePanel, App};
 
@@ -76,8 +79,13 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
 
     // Show coordinate columns when terminal is wide enough (>= 120 chars)
     let show_coords = area.width >= 120;
+    // Show live cast summaries only when there's room to keep names readable.
+    let show_cast = area.width >= 145;
 
     let mut header_cells = vec!["Type", "Name", "Race", "Cls", "Lv", "HP%", "Dist2D", "ID"];
+    if show_cast {
+        header_cells.push("Cast");
+    }
     if show_coords {
         header_cells.push("X");
         header_cells.push("Y");
@@ -114,6 +122,15 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
                 Cell::from(dist_str),
                 Cell::from(spawn.spawn_id.to_string()),
             ];
+            if show_cast {
+                cells.push(Cell::from(
+                    spawn
+                        .cast_state
+                        .as_ref()
+                        .filter(|cast| cast.is_casting())
+                        .map_or_else(String::new, cast_summary),
+                ));
+            }
             if show_coords {
                 cells.push(Cell::from(format!("{:.0}", spawn.x)));
                 cells.push(Cell::from(format!("{:.0}", spawn.y)));
@@ -133,6 +150,9 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         Constraint::Length(6),  // Dist
         Constraint::Length(8),  // ID
     ];
+    if show_cast {
+        constraints.push(Constraint::Min(14)); // Cast
+    }
     if show_coords {
         constraints.push(Constraint::Length(7)); // X
         constraints.push(Constraint::Length(7)); // Y
@@ -398,28 +418,36 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     // Cast state
     if let Some(cast) = &player.cast_state {
         if cast.is_casting() {
-            lines.push(Line::from(vec![
+            let mut spans = vec![
                 Span::styled("Casting ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    format!("gem {} (ETA: {})", cast.spell_slot + 1, cast.spell_eta),
+                    cast_summary(cast),
                     Style::default()
                         .fg(t.text_highlight)
                         .add_modifier(Modifier::BOLD),
                 ),
-            ]));
+            ];
+            if let Some(remaining) = cast_time_remaining_label(cast) {
+                spans.push(Span::styled(
+                    format!("  {remaining}"),
+                    Style::default().fg(t.text_muted),
+                ));
+            }
+            lines.push(Line::from(spans));
         }
-        let recast_strs: Vec<String> = cast
-            .gem_etas
-            .iter()
-            .enumerate()
-            .filter(|(_, eta)| **eta != 0)
-            .map(|(i, eta)| format!("G{}:{}", i + 1, eta))
-            .collect();
-        if !recast_strs.is_empty() {
-            lines.push(Line::from(vec![
-                Span::styled("Recast  ", Style::default().fg(t.text_muted)),
-                Span::styled(recast_strs.join(" "), Style::default().fg(t.text_accent)),
-            ]));
+        if let Some(gem_etas) = cast.gem_etas.as_ref() {
+            let recast_strs: Vec<String> = gem_etas
+                .iter()
+                .enumerate()
+                .filter(|(_, eta)| **eta != 0)
+                .map(|(i, eta)| format!("G{}:{}", i + 1, eta))
+                .collect();
+            if !recast_strs.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("Recast  ", Style::default().fg(t.text_muted)),
+                    Span::styled(recast_strs.join(" "), Style::default().fg(t.text_accent)),
+                ]));
+            }
         }
     }
 

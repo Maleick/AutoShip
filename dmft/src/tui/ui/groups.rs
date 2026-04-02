@@ -11,11 +11,19 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use super::widgets::{hp_color, panel};
+use super::widgets::{
+    WidthClass, classify_width, hp_color, panel, render_cast_bar, truncate_inline,
+};
 use crate::eq::structs::BuffSlot;
 use crate::tui::app::extract_account_number;
 use crate::tui::app::{App, ClientState, GroupDef, LiveGroup};
 use crate::tui::theme::Theme;
+
+struct MemberRenderEntry<'a> {
+    primary: Line<'a>,
+    cast: Option<Line<'a>>,
+    buff: Option<Line<'a>>,
+}
 
 // ── Shared member-row helpers ───────────────────────────────────────────────
 
@@ -42,10 +50,11 @@ fn member_line<'a>(
     };
 
     let leader_marker = if is_leader { "*" } else { " " };
+    let short_name = truncate_inline(&display_name, 12);
 
     Line::from(vec![
         Span::styled(leader_marker, Style::default().fg(t.text_accent)),
-        Span::styled(format!("{display_name:<12}"), name_style),
+        Span::styled(format!("{short_name:<12}"), name_style),
         Span::styled(
             format!("{:<4}", player.class_str()),
             Style::default().fg(t.text_accent),
@@ -87,8 +96,34 @@ fn buff_line<'a>(player: &crate::eq::structs::SpawnInfo, t: &Theme) -> Option<Li
     Some(Line::from(buff_spans))
 }
 
-/// Build the operating mode indicator lines.
-fn mode_lines<'a>(app: &App) -> Vec<Line<'a>> {
+fn member_cast_line<'a>(
+    app: &App,
+    client: &ClientState,
+    available_width: usize,
+    t: &Theme,
+) -> Option<Line<'a>> {
+    app.client_cast_display(client).map(|cast_display| {
+        render_cast_bar(
+            &cast_display,
+            available_width.saturating_sub(2),
+            if cast_display.exact {
+                t.hp_high
+            } else {
+                t.text_highlight
+            },
+            if cast_display.exact {
+                t.hp_high
+            } else {
+                t.text_accent
+            },
+            t.text_secondary,
+            t.text_muted,
+        )
+    })
+}
+
+/// Build the operating mode indicator line.
+fn mode_line<'a>(app: &App) -> Line<'a> {
     let t = &app.theme;
     let mode_str = format!("{}", app.operating_mode);
     let mode_color = match mode_str.as_str() {
@@ -96,16 +131,76 @@ fn mode_lines<'a>(app: &App) -> Vec<Line<'a>> {
         "Hunt" => t.mode_hunt,
         _ => t.text_muted,
     };
-    vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Mode: ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                mode_str,
-                Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
-            ),
-        ]),
-    ]
+    Line::from(vec![
+        Span::styled("Mode ", Style::default().fg(t.text_muted)),
+        Span::styled(
+            mode_str,
+            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+        ),
+    ])
+}
+
+fn assemble_member_lines<'a>(
+    entries: Vec<MemberRenderEntry<'a>>,
+    max_lines: usize,
+    width_class: WidthClass,
+    mode: Option<Line<'a>>,
+) -> Vec<Line<'a>> {
+    if max_lines == 0 {
+        return Vec::new();
+    }
+
+    let visible_count = entries.len().min(max_lines);
+    let detail_capacity = max_lines.saturating_sub(visible_count);
+
+    let active_cast_total = entries
+        .iter()
+        .take(visible_count)
+        .filter(|entry| entry.cast.is_some())
+        .count();
+    let cast_budget = detail_capacity.min(active_cast_total);
+    let buff_budget =
+        if width_class == WidthClass::Wide && cast_budget > 0 && detail_capacity > cast_budget {
+            detail_capacity - cast_budget
+        } else {
+            0
+        };
+
+    let mut lines = Vec::with_capacity(max_lines);
+    let mut remaining_cast = cast_budget;
+    let mut remaining_buff = buff_budget;
+
+    for entry in entries.into_iter().take(visible_count) {
+        if lines.len() >= max_lines {
+            break;
+        }
+        lines.push(entry.primary);
+
+        if remaining_cast > 0
+            && lines.len() < max_lines
+            && let Some(detail) = entry.cast
+        {
+            lines.push(detail);
+            remaining_cast -= 1;
+        }
+
+        if remaining_buff > 0
+            && lines.len() < max_lines
+            && let Some(detail) = entry.buff
+        {
+            lines.push(detail);
+            remaining_buff -= 1;
+        }
+    }
+
+    if let Some(mode_line) = mode
+        && lines.len() < max_lines
+    {
+        lines.push(mode_line);
+    }
+
+    lines.truncate(max_lines);
+    lines
 }
 
 /// Draw the groups overview screen showing all group members.
@@ -219,50 +314,44 @@ fn draw_live_group_panel(
     frame.render_widget(blk, area);
 
     let max_lines = inner.height as usize;
-    // Reserve 2 lines for the mode indicator at the bottom
-    let member_budget = max_lines.saturating_sub(2);
-    // If panel is very tight, skip buff rows to fit more members
-    let show_buffs = member_budget > connected.len();
-
-    let mut lines: Vec<Line<'_>> = Vec::new();
+    let width_class = classify_width(inner.width);
+    let mut entries: Vec<MemberRenderEntry<'_>> = Vec::new();
 
     for (name, client_opt) in &connected {
-        if lines.len() >= member_budget {
-            break;
-        }
         if let Some(client) = client_opt {
             if let Some(player) = &client.local_player {
                 let display_name = app.redact_name(&player.displayed_name).into_owned();
                 let is_leader = *name == group.leader;
-
-                lines.push(member_line(player, is_leader, display_name, t));
-
-                if show_buffs
-                    && lines.len() < member_budget
-                    && let Some(bl) = buff_line(player, t)
-                {
-                    lines.push(bl);
-                }
+                entries.push(MemberRenderEntry {
+                    primary: member_line(player, is_leader, display_name, t),
+                    cast: member_cast_line(app, client, inner.width as usize, t),
+                    buff: buff_line(player, t),
+                });
             } else {
-                lines.push(Line::from(Span::styled(
-                    format!("  PID {} (loading…)", client.pid),
-                    Style::default().fg(t.text_muted),
-                )));
+                entries.push(MemberRenderEntry {
+                    primary: Line::from(Span::styled(
+                        format!("  PID {} (loading…)", client.pid),
+                        Style::default().fg(t.text_muted),
+                    )),
+                    cast: None,
+                    buff: None,
+                });
             }
         } else {
             // Member not connected
             let display_name = app.redact_name(name).into_owned();
-            lines.push(Line::from(vec![Span::styled(
-                format!("  {display_name:<12} offline"),
-                Style::default().fg(t.text_muted),
-            )]));
+            entries.push(MemberRenderEntry {
+                primary: Line::from(vec![Span::styled(
+                    format!("  {:<12} offline", truncate_inline(&display_name, 12)),
+                    Style::default().fg(t.text_muted),
+                )]),
+                cast: None,
+                buff: None,
+            });
         }
     }
 
-    // Operating mode indicator (only if space remains)
-    if lines.len() + 2 <= max_lines {
-        lines.extend(mode_lines(app));
-    }
+    let lines = assemble_member_lines(entries, max_lines, width_class, Some(mode_line(app)));
 
     frame.render_widget(Paragraph::new(lines), inner);
 }
@@ -466,52 +555,56 @@ fn draw_config_group_panel(
 
     let max_lines = inner.height as usize;
     let slot_count = (hi - lo + 1) as usize;
-    // Reserve 2 lines for the mode indicator at the bottom
-    let member_budget = max_lines.saturating_sub(2);
-    // If panel is very tight, skip buff rows to fit more members
-    let show_buffs = member_budget > slot_count;
-
-    let mut lines: Vec<Line<'_>> = Vec::new();
+    let width_class = classify_width(inner.width);
+    let mut entries: Vec<MemberRenderEntry<'_>> = Vec::new();
 
     for acct_num in lo..=hi {
-        if lines.len() >= member_budget {
-            break;
-        }
         if let Some(client) = slot_map.get(&acct_num) {
             if let Some(player) = &client.local_player {
                 let name = app.redact_name(&player.displayed_name).into_owned();
                 // Config groups don't have a leader concept per se; no leader marker
-                lines.push(member_line(player, false, name, t));
-
-                if show_buffs
-                    && lines.len() < member_budget
-                    && let Some(bl) = buff_line(player, t)
-                {
-                    lines.push(bl);
-                }
+                entries.push(MemberRenderEntry {
+                    primary: member_line(player, false, name, t),
+                    cast: member_cast_line(app, client, inner.width as usize, t),
+                    buff: buff_line(player, t),
+                });
             } else {
-                lines.push(Line::from(Span::styled(
-                    format!("  PID {} (loading…)", client.pid),
-                    Style::default().fg(t.text_muted),
-                )));
+                entries.push(MemberRenderEntry {
+                    primary: Line::from(Span::styled(
+                        format!("  PID {} (loading…)", client.pid),
+                        Style::default().fg(t.text_muted),
+                    )),
+                    cast: None,
+                    buff: None,
+                });
             }
         } else if let Some(acct) = config_map.get(&acct_num) {
-            lines.push(Line::from(vec![Span::styled(
-                format!("  #{:02} {:<4} offline", acct_num, acct.class),
-                Style::default().fg(t.text_muted),
-            )]));
+            entries.push(MemberRenderEntry {
+                primary: Line::from(vec![Span::styled(
+                    format!("  #{:02} {:<4} offline", acct_num, acct.class),
+                    Style::default().fg(t.text_muted),
+                )]),
+                cast: None,
+                buff: None,
+            });
         } else {
-            lines.push(Line::from(Span::styled(
-                format!("  #{acct_num:02} ── empty ──"),
-                Style::default().fg(t.text_muted),
-            )));
+            entries.push(MemberRenderEntry {
+                primary: Line::from(Span::styled(
+                    format!("  #{acct_num:02} -- empty --"),
+                    Style::default().fg(t.text_muted),
+                )),
+                cast: None,
+                buff: None,
+            });
         }
     }
 
-    // Operating mode indicator (only if space remains)
-    if lines.len() + 2 <= max_lines {
-        lines.extend(mode_lines(app));
-    }
+    let lines = assemble_member_lines(
+        entries.into_iter().take(slot_count).collect(),
+        max_lines,
+        width_class,
+        Some(mode_line(app)),
+    );
 
     frame.render_widget(Paragraph::new(lines), inner);
 }
@@ -579,5 +672,75 @@ mod tests {
         assert_eq!(grid_dims(8), (3, 3));
         assert_eq!(grid_dims(9), (3, 3));
         assert_eq!(grid_dims(10), (3, 4));
+    }
+
+    #[test]
+    fn assemble_member_lines_keeps_idle_members_single_line() {
+        let entries = vec![
+            MemberRenderEntry {
+                primary: Line::from("member-1"),
+                cast: None,
+                buff: Some(Line::from("buff-1")),
+            },
+            MemberRenderEntry {
+                primary: Line::from("member-2"),
+                cast: None,
+                buff: Some(Line::from("buff-2")),
+            },
+            MemberRenderEntry {
+                primary: Line::from("member-3"),
+                cast: None,
+                buff: None,
+            },
+        ];
+
+        let lines = assemble_member_lines(entries, 4, WidthClass::Wide, Some(Line::from("mode")));
+        let rendered: Vec<String> = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect();
+
+        assert_eq!(rendered, vec!["member-1", "member-2", "member-3", "mode"]);
+    }
+
+    #[test]
+    fn assemble_member_lines_prioritizes_cast_detail_before_buffs() {
+        let entries = vec![
+            MemberRenderEntry {
+                primary: Line::from("member-1"),
+                cast: Some(Line::from("cast-1")),
+                buff: Some(Line::from("buff-1")),
+            },
+            MemberRenderEntry {
+                primary: Line::from("member-2"),
+                cast: None,
+                buff: Some(Line::from("buff-2")),
+            },
+            MemberRenderEntry {
+                primary: Line::from("member-3"),
+                cast: None,
+                buff: None,
+            },
+        ];
+
+        let lines = assemble_member_lines(entries, 4, WidthClass::Wide, Some(Line::from("mode")));
+        let rendered: Vec<String> = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect();
+
+        assert_eq!(rendered, vec!["member-1", "cast-1", "member-2", "member-3"]);
+        assert!(!rendered.iter().any(|line| line.contains("buff")));
+        assert!(!rendered.iter().any(|line| line == "mode"));
     }
 }
