@@ -1,0 +1,64 @@
+name: Wiki Nightly
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: wiki-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Local time gate
+    runs-on: [self-hosted, Windows, X64, dmft]
+    outputs:
+      should_run: ${{ steps.gate.outputs.should_run }}
+      now_local: ${{ steps.gate.outputs.now_local }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - id: gate
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
+            "should_run=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "now_local=manual-dispatch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+
+          $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Central Standard Time")
+          $nowUtc = [DateTime]::UtcNow
+          $local = [System.TimeZoneInfo]::ConvertTimeFromUtc($nowUtc, $tz)
+          $shouldRun = if ($local.Hour -eq 3) { "true" } else { "false" }
+          "should_run=$shouldRun" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "now_local=$($local.ToString('o'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+  publish-wiki:
+    name: Publish wiki snapshot
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    runs-on: [self-hosted, Windows, X64, dmft]
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Verify runner-local GitHub CLI auth
+        run: gh auth status
+
+      - name: Validate wiki sources
+        run: python scripts/sync_wiki.py --check
+
+      - name: Publish wiki
+        run: python scripts/sync_wiki.py --push

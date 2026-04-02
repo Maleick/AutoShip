@@ -1094,6 +1094,8 @@ fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
 
     let ma_str = app.main_assist.as_deref().unwrap_or("—");
     let mt_str = app.main_tank.as_deref().unwrap_or("—");
+    let scope_str = app.group_focus_label();
+    let focused_count = app.focused_pids().len();
 
     let lines = if collapsed {
         vec![Line::from(vec![
@@ -1105,6 +1107,13 @@ fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
             Span::styled(ma_str, Style::default().fg(t.text_highlight)),
             Span::styled("  |  MT ", Style::default().fg(t.text_muted)),
             Span::styled(mt_str, Style::default().fg(t.text_highlight)),
+            Span::styled("  |  Scope ", Style::default().fg(t.text_muted)),
+            Span::styled(scope_str, Style::default().fg(t.text_accent)),
+            Span::styled("  |  F ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                focused_count.to_string(),
+                Style::default().fg(t.text_normal),
+            ),
         ])]
     } else {
         let mut lines = vec![
@@ -1129,6 +1138,21 @@ fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
                         t.text_muted
                     }),
                 ),
+            ]),
+            Line::from(vec![
+                Span::styled("Scope ", Style::default().fg(t.text_muted)),
+                Span::styled(scope_str, Style::default().fg(t.text_accent)),
+                Span::styled("  Focused ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    focused_count.to_string(),
+                    Style::default().fg(t.text_normal),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Ops   ", Style::default().fg(t.text_muted)),
+                Span::styled(":assist", Style::default().fg(t.text_highlight)),
+                Span::styled(" / :pull", Style::default().fg(t.text_highlight)),
+                Span::styled(" / :combat status", Style::default().fg(t.text_accent)),
             ]),
         ];
 

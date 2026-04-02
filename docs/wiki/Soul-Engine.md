@@ -78,5 +78,5 @@ Important current note from code:
 
 ### Roadmap and validation notes
 
-- M6 is the transition point for real external provider integrations and richer in-game chat behavior.
+- Real external provider integrations and richer in-game chat behavior now sit under `M10` in the canonical roadmap.
 - If you are documenting or demoing Soul behavior today, describe it as deterministic fallback plus persistent memory, not as fully live LLM autonomy.

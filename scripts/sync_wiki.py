@@ -302,7 +302,7 @@ def push_changes(wiki_dir: Path, display_url: str, token: str) -> None:
             "One-time bootstrap required:\n"
             "1. Open the repository's Wiki tab in the GitHub UI.\n"
             "2. Create a first page (Home is fine) and save it.\n"
-            "3. Re-run `python3 scripts/sync_wiki.py --push`.\n"
+            "3. Re-run `python scripts/sync_wiki.py --push`.\n"
         )
     fail(f"Failed to push wiki changes:\n{stderr}")
 

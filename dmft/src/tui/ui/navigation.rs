@@ -292,9 +292,10 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
     for (cmd, desc) in &[
         (":invite <n>", "Invite to group"),
         (":accept    ", "Accept invite"),
-        (":ma <name> ", "Main Assist"),
-        (":mt <name> ", "Main Tank"),
-        (":engage    ", "Start combat"),
+        (":assist <n>", "Main Assist"),
+        (":tank <n>  ", "Main Tank"),
+        (":pull      ", "Start combat"),
+        (":combat status", "Scope summary"),
         (":disengage ", "Stop combat"),
         (":ch start  ", "Start CH chain"),
         (":ch stop   ", "Stop CH chain"),

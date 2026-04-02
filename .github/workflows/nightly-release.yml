@@ -1,0 +1,118 @@
+name: Nightly Release
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    name: Local time gate
+    runs-on: [self-hosted, Windows, X64, dmft]
+    outputs:
+      should_run: ${{ steps.gate.outputs.should_run }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - id: gate
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
+            "should_run=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+
+          $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Central Standard Time")
+          $nowUtc = [DateTime]::UtcNow
+          $local = [System.TimeZoneInfo]::ConvertTimeFromUtc($nowUtc, $tz)
+          $shouldRun = if ($local.Hour -eq 3) { "true" } else { "false" }
+          "should_run=$shouldRun" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+  build-nightly:
+    name: Build rolling nightly prerelease
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    runs-on: [self-hosted, Windows, X64, dmft]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialize reference submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly
+
+      - uses: lukka/get-cmake@v4
+
+      - name: Build release binaries
+        run: cargo build --release
+        env:
+          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
+
+      - name: Package nightly artifacts
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          if (-not (Test-Path target/release/dmft.exe)) {
+            throw "Expected target/release/dmft.exe to exist after the build."
+          }
+          if (-not (Test-Path target/release/dmft_dll.dll)) {
+            throw "Expected target/release/dmft_dll.dll to exist after the build."
+          }
+          Copy-Item target/release/dmft.exe release/
+          Copy-Item target/release/dmft_dll.dll release/
+          @"
+          DMFT Nightly
+          Commit: $env:GITHUB_SHA
+          Run: $env:GITHUB_RUN_NUMBER
+          UTC: $(Get-Date -AsUTC -Format o)
+          "@ | Out-File -FilePath release/NOTES.txt -Encoding UTF8
+
+      - name: Upload nightly artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmft-nightly-${{ github.run_number }}
+          path: |
+            release/dmft.exe
+            release/dmft_dll.dll
+          if-no-files-found: error
+
+      - name: Move nightly tag to current commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa nightly -m "Nightly build $env:GITHUB_RUN_NUMBER"
+          git push origin refs/tags/nightly --force
+
+      - name: Create or update rolling nightly prerelease
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: "release/dmft.exe,release/dmft_dll.dll"
+          bodyFile: "release/NOTES.txt"
+          name: "DMFT Nightly"
+          prerelease: true
+          removeArtifacts: true
+          replacesArtifacts: true
+          tag: nightly

@@ -26,7 +26,7 @@ Rules:
 ### 2. Validate locally
 
 ```bash
-python3 scripts/sync_wiki.py --check
+python scripts/sync_wiki.py --check
 ```
 
 This validates:
@@ -39,15 +39,15 @@ This validates:
 ### 3. Preview the publish result
 
 ```bash
-python3 scripts/sync_wiki.py --dry-run
+python scripts/sync_wiki.py --dry-run
 ```
 
-This materializes a wiki checkout in a temp directory, reports adds/updates/deletes, and leaves your main repo worktree clean.
+This materializes a wiki checkout in a temp directory, reports adds, updates, and deletes, and leaves your main repo worktree clean.
 
 ### 4. Publish to the GitHub wiki
 
 ```bash
-python3 scripts/sync_wiki.py --push
+python scripts/sync_wiki.py --push
 ```
 
 What the script does:
@@ -68,28 +68,48 @@ Fix:
 
 1. open the repository Wiki tab in GitHub
 2. create the first page in the UI
-3. rerun `python3 scripts/sync_wiki.py --push`
+3. rerun `python scripts/sync_wiki.py --push`
 
 ## CI and PR Expectations
 
-- CI runs `python3 scripts/sync_wiki.py --check` on PRs.
-- Wiki updates should ship in the same PR as the behavior change whenever possible.
-- README should continue to point contributors at `docs/wiki/` and the sync script commands.
+- CI runs `python scripts/sync_wiki.py --check` on PRs
+- wiki updates should ship in the same PR as the behavior change whenever possible
+- README should continue to point contributors at `docs/wiki/` and the sync script commands
+
+## Nightly Publish
+
+The repository also has a nightly wiki publish workflow:
+
+- `.github/workflows/wiki-nightly.yml`
+
+Behavior:
+
+- runs on the self-hosted runner labeled `[self-hosted, Windows, X64, dmft]`
+- uses two UTC cron entries plus a local-time gate so the publish happens at 3 AM America/Chicago year-round
+- validates with `python scripts/sync_wiki.py --check`
+- publishes with `python scripts/sync_wiki.py --push`
+
+Auth model:
+
+- the workflow relies on runner-local `gh auth`
+- if `gh auth status` fails or the wiki remote has not been initialized, the job should fail clearly rather than silently skipping work
+
+This nightly job mirrors the repo-side canonical pages. It does not replace the requirement to update `docs/wiki/` in normal PRs.
 
 ## Content Rules
 
-- Prefer operator guidance first, internals second.
-- Separate current behavior from roadmap or not-yet-revalidated behavior.
-- Use `third_party/eqlib` as the canonical eqlib reference path.
-- Avoid stale references to old pre-submodule layouts.
+- prefer operator guidance first, internals second
+- separate current behavior from roadmap or not-yet-revalidated behavior
+- use `third_party/eqlib` as the canonical eqlib reference path
+- avoid stale references to old pre-submodule layouts
 
 ## Current Behavior vs Roadmap
 
 ### Current behavior
 
-- Wiki maintenance is intentionally manual-publish plus automated validation.
-- This keeps wiki content reviewable in normal PRs without adding auto-publish risk on every merge.
+- wiki maintenance stays repo-first and reviewable in normal PRs
+- a nightly auto-publish job now mirrors the reviewed repo state to the GitHub wiki
 
 ### Future options
 
-- If the team later wants automatic publication on merge, keep `docs/wiki/` as canonical and add automation around the same script rather than editing the wiki repo by hand.
+- if the team later wants automatic publication on merge, keep `docs/wiki/` as canonical and add automation around the same script rather than editing the wiki repo by hand

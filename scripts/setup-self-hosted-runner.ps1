@@ -2,7 +2,7 @@
 # DMFT — Self-hosted GitHub Actions runner bootstrap
 # =============================================================================
 # This script installs/updates the runner in C:\actions-runner and configures it for
-# this repository with labels [self-hosted, windows, X64, dmft].
+# this repository with labels [self-hosted, Windows, X64, dmft].
 #
 # USAGE:
 #   .\scripts\setup-self-hosted-runner.ps1 -Token "<YOUR_REGISTRATION_TOKEN>"
@@ -27,7 +27,7 @@ param(
     [string]$Version = "latest",
     [string]$RunnerRoot = "C:\actions-runner",
     [string]$RunnerName = "",
-    [string[]]$Labels = @("dmft", "windows", "X64"),
+    [string[]]$Labels = @("dmft", "Windows", "X64"),
     [switch]$InstallService,
     [string]$ServiceName = "",
     [switch]$Force
@@ -167,3 +167,7 @@ if ($InstallService) {
 
 Write-Host ""
 Write-Host "Done. Verify in GitHub under Settings → Actions → Runners that the runner is online." -ForegroundColor Green
+Write-Host "If this machine will run wiki-nightly or GitHub Project tooling, also verify local GitHub CLI auth:" -ForegroundColor Cyan
+Write-Host "  gh auth status" -ForegroundColor Yellow
+Write-Host "  gh auth refresh -s project -s read:project" -ForegroundColor Yellow
+Write-Host "The nightly wiki workflow uses runner-local gh auth for scripts/sync_wiki.py --push." -ForegroundColor Cyan
