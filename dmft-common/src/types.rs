@@ -35,7 +35,7 @@ impl GameState {
             nearby_spawns: include_spawns.then(|| self.nearby_spawns.clone()),
             timestamp_ms: self.timestamp_ms,
             nav_status: self.nav_status.clone(),
-            combat_status: self.combat_status.clone(),
+            combat_status: self.combat_status,
             zone_short_name: self.zone_short_name.clone(),
             zone_long_name: self.zone_long_name.clone(),
             spawn_epoch,

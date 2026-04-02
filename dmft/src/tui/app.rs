@@ -28,9 +28,7 @@ pub use super::state::{
     CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
     OverviewScreenState, SpawnsScreenState, TacticalScreenState,
 };
-use super::state::{
-    FilteredSpawnCache, FilteredSpawnCacheKey, MapSpawnPresentationCache,
-};
+use super::state::{FilteredSpawnCache, FilteredSpawnCacheKey, MapSpawnPresentationCache};
 
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -994,7 +992,8 @@ impl App {
     }
 
     pub(crate) fn selected_client_spawn_revision(&self) -> u64 {
-        self.active_client().map_or(0, |client| client.spawn_revision)
+        self.active_client()
+            .map_or(0, |client| client.spawn_revision)
     }
 
     fn invalidate_spawn_caches(&mut self) {
@@ -1592,11 +1591,7 @@ impl App {
         self.spawns
             .iter()
             .filter(|spawn| {
-                spawn_matches_filter(
-                    spawn,
-                    self.spawns_state.spawn_type_filter,
-                    filter.as_str(),
-                )
+                spawn_matches_filter(spawn, self.spawns_state.spawn_type_filter, filter.as_str())
             })
             .collect()
     }
@@ -1630,10 +1625,7 @@ impl App {
     }
 
     pub fn filtered_spawn_at(&mut self, filtered_index: usize) -> Option<&SpawnInfo> {
-        let spawn_index = self
-            .filtered_spawn_indices()
-            .get(filtered_index)
-            .copied()?;
+        let spawn_index = self.filtered_spawn_indices().get(filtered_index).copied()?;
         self.spawns.get(spawn_index)
     }
 
@@ -4195,7 +4187,7 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "chui"
             | "inject"
             | "all"
-)
+    )
 }
 
 fn spawn_matches_filter(spawn: &SpawnInfo, spawn_filter: SpawnFilter, text_filter: &str) -> bool {

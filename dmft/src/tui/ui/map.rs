@@ -627,7 +627,6 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         }
     }
 
-
     for status in app.named_tracker.tracked_spawns() {
         if !status.is_alive {
             let (col, row) = to_grid(-status.last_y, -status.last_x);
@@ -795,21 +794,21 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
 
     frame.render_widget(Paragraph::new(lines), inner);
 
-    if let Some(mini_bounds) = minimap_area(inner, w, h) {
-        if let Some(bounds) = map_bounds.as_ref() {
-            let (mini_title, mini_lines) = draw_minimap_widget(
-                bounds,
-                mini_bounds,
-                app,
-                app.map_spawn_cache.selected_spawn,
-                &transform,
-            );
-            frame.render_widget(Clear, mini_bounds);
-            frame.render_widget(
-                Paragraph::new(mini_lines).block(panel(mini_title.as_str(), t.border_dim, t)),
-                mini_bounds,
-            );
-        }
+    if let Some(mini_bounds) = minimap_area(inner, w, h)
+        && let Some(bounds) = map_bounds.as_ref()
+    {
+        let (mini_title, mini_lines) = draw_minimap_widget(
+            bounds,
+            mini_bounds,
+            app,
+            app.map_spawn_cache.selected_spawn,
+            &transform,
+        );
+        frame.render_widget(Clear, mini_bounds);
+        frame.render_widget(
+            Paragraph::new(mini_lines).block(panel(mini_title.as_str(), t.border_dim, t)),
+            mini_bounds,
+        );
     }
 }
 
@@ -1452,7 +1451,7 @@ fn draw_named_tracker_panel(
                 na,
             );
         } else {
-            let header = themed_header_row(vec!["Name", "St", "Timer"], t);
+            let header = themed_header_row(&["Name", "St", "Timer"], t);
             let rows: Vec<Row> = named
                 .iter()
                 .map(|s| {
@@ -1477,7 +1476,7 @@ fn draw_named_tracker_panel(
                         Style::default().fg(t.text_muted)
                     };
                     Row::new(vec![
-                        ratatui::widgets::Cell::from(s.name.clone()).style(name_style),
+                        ratatui::widgets::Cell::from(s.name.as_str()).style(name_style),
                         ratatui::widgets::Cell::from(status_str).style(Style::default().fg(color)),
                         ratatui::widgets::Cell::from(timer_str).style(Style::default().fg(
                             if s.is_alive {
@@ -1509,7 +1508,7 @@ fn draw_named_tracker_panel(
     if let Some(ua) = user_area {
         let title = format!(" Tracked ({} up / {}) ", u_up, u_tracked.len());
         let blk = panel(title.as_str(), t.border_server, t);
-        let header = themed_header_row(vec!["Name", "St"], t);
+        let header = themed_header_row(&["Name", "St"], t);
 
         let mut sorted: Vec<_> = u_tracked.values().collect();
         sorted.sort_by(|a, b| {
@@ -1527,7 +1526,7 @@ fn draw_named_tracker_panel(
             .iter()
             .map(|tr| {
                 Row::new(vec![
-                    ratatui::widgets::Cell::from(tr.name.clone())
+                    ratatui::widgets::Cell::from(tr.name.as_str())
                         .style(Style::default().fg(t.text_normal)),
                     ratatui::widgets::Cell::from(tr.status.label())
                         .style(Style::default().fg(tr.status.color())),
@@ -1778,8 +1777,14 @@ mod tests {
         let transform = test_transform();
 
         let base_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
-        let selected_key =
-            map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), Some(app.spawns[0].spawn_id));
+        let selected_key = map_spawn_cache_key(
+            &app,
+            &transform,
+            40,
+            20,
+            Some(0.0),
+            Some(app.spawns[0].spawn_id),
+        );
         assert_ne!(selected_key, base_key);
 
         app.map_state.zoom_in();

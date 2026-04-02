@@ -268,8 +268,8 @@ mod tests {
             &mut cached,
         )
         .expect("full frame should decode");
-        let incremental =
-            reconstruct_game_state(make_frame(1, None), &mut cached).expect("hot frame should decode");
+        let incremental = reconstruct_game_state(make_frame(1, None), &mut cached)
+            .expect("hot frame should decode");
 
         assert_eq!(full.nearby_spawns.len(), 2);
         assert_eq!(incremental.nearby_spawns, full.nearby_spawns);
@@ -282,8 +282,9 @@ mod tests {
             make_frame(1, Some(vec![make_spawn(10), make_spawn(20)])),
             &mut cached,
         );
-        let updated = reconstruct_game_state(make_frame(2, Some(vec![make_spawn(99)])), &mut cached)
-            .expect("updated frame should decode");
+        let updated =
+            reconstruct_game_state(make_frame(2, Some(vec![make_spawn(99)])), &mut cached)
+                .expect("updated frame should decode");
 
         assert_eq!(updated.nearby_spawns.len(), 1);
         assert_eq!(updated.nearby_spawns[0].spawn_id, 99);

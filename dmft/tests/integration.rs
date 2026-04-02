@@ -495,9 +495,7 @@ fn camp_loop_full_cycle_with_snapshot() {
         let cmds = camp.tick(None);
         assert!(matches!(camp.state, CampState::Pulling { .. }));
         // No transition commands during pull wait
-        assert!(
-            cmds.iter().all(|(_, cmd)| cmd.contains("/autoinventory"))
-        );
+        assert!(cmds.iter().all(|(_, cmd)| cmd.contains("/autoinventory")));
     }
 
     // Final pull tick: Pulling -> Fighting

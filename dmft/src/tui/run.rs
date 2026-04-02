@@ -586,7 +586,7 @@ fn refresh_eq_data_live(
                 }
             },
         };
-        let mut read_failed = false;
+        let mut hard_read_failed = false;
 
         // Read local player
         match eq::spawn::read_local_player(&proc, client.eq_base) {
@@ -619,7 +619,7 @@ fn refresh_eq_data_live(
             Err(e) => {
                 client.last_live_cast_capture = None;
                 client.client_status = format!("Player read error: {e}");
-                read_failed = true;
+                hard_read_failed = true;
             }
         }
 
@@ -630,7 +630,7 @@ fn refresh_eq_data_live(
             }
             Err(e) => {
                 client.client_status = format!("Target read error: {e}");
-                read_failed = true;
+                hard_read_failed = true;
             }
         }
         client.last_fast_refresh = Some(now);
@@ -661,7 +661,7 @@ fn refresh_eq_data_live(
                 }
                 Err(e) => {
                     client.client_status = format!("Spawn read error: {e}");
-                    read_failed = true;
+                    hard_read_failed = true;
                 }
             }
         }
@@ -672,7 +672,6 @@ fn refresh_eq_data_live(
             match eq::spawn::read_zone_name(&proc, client.eq_base) {
                 Ok(zone) => client.zone_name = zone,
                 Err(_) => {
-                    read_failed = true;
                     // Fallback: parse from window title
                     if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest")
                     {
@@ -700,11 +699,10 @@ fn refresh_eq_data_live(
             Ok(group) => client.group_info = group,
             Err(e) => {
                 tracing::trace!(pid = client.pid, error = %e, "Failed to read group info");
-                read_failed = true;
             }
         }
 
-        if !read_failed {
+        if !hard_read_failed {
             process_handles.insert(client.pid, proc);
         }
     }

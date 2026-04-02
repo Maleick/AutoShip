@@ -127,14 +127,10 @@ pub fn panel<'a>(
 
 /// Build a table header row with all cells styled using `theme.table_header`.
 #[must_use]
-pub fn themed_header_row<'a>(cells: Vec<&'a str>, t: &Theme) -> Row<'a> {
-    Row::new(
-        cells
-            .into_iter()
-            .map(|c| Cell::from(c).style(t.table_header)),
-    )
-    .height(1)
-    .bottom_margin(0)
+pub fn themed_header_row<'a>(cells: &'a [&'a str], t: &Theme) -> Row<'a> {
+    Row::new(cells.iter().map(|c| Cell::from(*c).style(t.table_header)))
+        .height(1)
+        .bottom_margin(0)
 }
 
 // ─── Color helpers ───────────────────────────────────────────────────────────

@@ -64,7 +64,12 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             app.spawns_state.spawn_filter
         )
     } else if app.spawns_state.spawn_type_filter != crate::tui::app::SpawnFilter::All {
-        format!(" Spawns: {} ({}) [{}] ", client_label, filtered_indices.len(), fl)
+        format!(
+            " Spawns: {} ({}) [{}] ",
+            client_label,
+            filtered_indices.len(),
+            fl
+        )
     } else {
         format!(" Spawns: {} ({}) ", client_label, filtered_indices.len())
     };
@@ -89,7 +94,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         header_cells.push("Y");
         header_cells.push("Z");
     }
-    let header = themed_header_row(header_cells, t);
+    let header = themed_header_row(header_cells.as_slice(), t);
 
     let highlight_style = Style::default()
         .bg(t.row_selected_bg)

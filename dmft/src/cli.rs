@@ -355,53 +355,56 @@ pub fn run_statusall_mode() -> Result<()> {
 
     for &pid in &pids {
         match shared_state_reader_for_pid(pid) {
-            Ok(mut reader) => match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
-                Some(state) => {
-                    if let Some(ref player) = state.local_player {
-                        let pos = format!("({:.0}, {:.0}, {:.0})", player.x, player.y, player.z);
-                        let hp = format!("{:.0}%", player.hp_pct());
-                        let nav = match &state.nav_status {
-                            dmft_common::nav::NavStatus::Idle => "Idle".to_string(),
-                            dmft_common::nav::NavStatus::Moving {
-                                waypoint_index,
-                                waypoint_count,
-                                ..
-                            } => {
-                                format!("{waypoint_index}/{waypoint_count}")
-                            }
-                            dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
-                            dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
-                        };
-                        let zone = if state.zone_short_name.is_empty() {
-                            "(unknown)".to_string()
+            Ok(mut reader) => {
+                match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
+                    Some(state) => {
+                        if let Some(ref player) = state.local_player {
+                            let pos =
+                                format!("({:.0}, {:.0}, {:.0})", player.x, player.y, player.z);
+                            let hp = format!("{:.0}%", player.hp_pct());
+                            let nav = match &state.nav_status {
+                                dmft_common::nav::NavStatus::Idle => "Idle".to_string(),
+                                dmft_common::nav::NavStatus::Moving {
+                                    waypoint_index,
+                                    waypoint_count,
+                                    ..
+                                } => {
+                                    format!("{waypoint_index}/{waypoint_count}")
+                                }
+                                dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
+                                dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
+                            };
+                            let zone = if state.zone_short_name.is_empty() {
+                                "(unknown)".to_string()
+                            } else {
+                                state.zone_short_name.clone()
+                            };
+                            println!(
+                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+                                pid,
+                                player.name,
+                                zone,
+                                pos,
+                                hp,
+                                player.level,
+                                nav,
+                                state.nearby_spawns.len()
+                            );
                         } else {
-                            state.zone_short_name.clone()
-                        };
+                            println!(
+                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+                                pid, "(no player)", "(not in world)", "-", "-", "-", "-", "-"
+                            );
+                        }
+                    }
+                    None => {
                         println!(
                             "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
-                            pid,
-                            player.name,
-                            zone,
-                            pos,
-                            hp,
-                            player.level,
-                            nav,
-                            state.nearby_spawns.len()
-                        );
-                    } else {
-                        println!(
-                            "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
-                            pid, "(no player)", "(not in world)", "-", "-", "-", "-", "-"
+                            pid, "(no data)", "-", "-", "-", "-", "-", "-"
                         );
                     }
                 }
-                None => {
-                    println!(
-                        "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
-                        pid, "(no data)", "-", "-", "-", "-", "-", "-"
-                    );
-                }
-            },
+            }
             Err(_) => {
                 println!(
                     "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
@@ -427,55 +430,57 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
 
     // 1. Read shared memory to get current position and zone
     let waypoints = match shared_state_reader_for_pid(pid) {
-        Ok(mut reader) => match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
-            Some(state) if !state.zone_short_name.is_empty() => {
-                let player = state
-                    .local_player
-                    .as_ref()
-                    .context("No player data in shared memory — character not in world?")?;
-                let from = (player.x, player.y, player.z);
-                let zone = &state.zone_short_name;
-                println!(
-                    "Player at ({:.1}, {:.1}, {:.1}) in zone '{}'",
-                    from.0, from.1, from.2, zone
-                );
+        Ok(mut reader) => {
+            match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
+                Some(state) if !state.zone_short_name.is_empty() => {
+                    let player = state
+                        .local_player
+                        .as_ref()
+                        .context("No player data in shared memory — character not in world?")?;
+                    let from = (player.x, player.y, player.z);
+                    let zone = &state.zone_short_name;
+                    println!(
+                        "Player at ({:.1}, {:.1}, {:.1}) in zone '{}'",
+                        from.0, from.1, from.2, zone
+                    );
 
-                // 2. Try navmesh pathfinding
-                match nav::mesh::load_zone(zone) {
-                    Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
-                        Ok(path) => {
-                            println!("Navmesh path found ({} waypoints):", path.len());
-                            for (i, (wx, wy, wz)) in path.iter().enumerate() {
-                                println!("  [{i:>3}] ({wx:.2}, {wy:.2}, {wz:.2})");
+                    // 2. Try navmesh pathfinding
+                    match nav::mesh::load_zone(zone) {
+                        Ok(loaded) => match nav::mesh::find_path(&loaded, from, (x, y, z)) {
+                            Ok(path) => {
+                                println!("Navmesh path found ({} waypoints):", path.len());
+                                for (i, (wx, wy, wz)) in path.iter().enumerate() {
+                                    println!("  [{i:>3}] ({wx:.2}, {wy:.2}, {wz:.2})");
+                                }
+                                path.iter()
+                                    .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
+                                    .collect()
                             }
-                            path.iter()
-                                .map(|&(wx, wy, wz)| Waypoint::new(wx, wy, wz))
-                                .collect()
-                        }
+                            Err(e) => {
+                                warn!(
+                                    "Navmesh path query failed: {:#} — falling back to straight line",
+                                    e
+                                );
+                                println!("Navmesh path failed: {e} — using straight line");
+                                vec![Waypoint::new(x, y, z)]
+                            }
+                        },
                         Err(e) => {
                             warn!(
-                                "Navmesh path query failed: {:#} — falling back to straight line",
-                                e
+                                "Cannot load navmesh for zone '{}': {:#} — falling back to straight line",
+                                zone, e
                             );
-                            println!("Navmesh path failed: {e} — using straight line");
+                            println!("No navmesh for '{zone}': {e} — using straight line");
                             vec![Waypoint::new(x, y, z)]
                         }
-                    },
-                    Err(e) => {
-                        warn!(
-                            "Cannot load navmesh for zone '{}': {:#} — falling back to straight line",
-                            zone, e
-                        );
-                        println!("No navmesh for '{zone}': {e} — using straight line");
-                        vec![Waypoint::new(x, y, z)]
                     }
                 }
+                _ => {
+                    println!("No shared memory data — using straight line (no navmesh)");
+                    vec![Waypoint::new(x, y, z)]
+                }
             }
-            _ => {
-                println!("No shared memory data — using straight line (no navmesh)");
-                vec![Waypoint::new(x, y, z)]
-            }
-        },
+        }
         Err(e) => {
             println!("Cannot read shared memory for PID {pid}: {e} — using straight line");
             vec![Waypoint::new(x, y, z)]

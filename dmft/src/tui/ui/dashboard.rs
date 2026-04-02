@@ -120,7 +120,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
     }
     headers.extend(["HP", "Cond", "State"]);
 
-    let header = themed_header_row(headers, t);
+    let header = themed_header_row(headers.as_slice(), t);
     let highlight_style = Style::default()
         .bg(t.row_selected_bg)
         .add_modifier(Modifier::BOLD);

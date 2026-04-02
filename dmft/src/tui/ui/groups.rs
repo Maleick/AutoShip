@@ -14,7 +14,6 @@ use ratatui::{
 use super::widgets::{
     WidthClass, classify_width, hp_color, panel, render_cast_bar, truncate_inline,
 };
-use crate::eq::structs::BuffSlot;
 use crate::tui::app::extract_account_number;
 use crate::tui::app::{App, ClientState, GroupDef, LiveGroup};
 use crate::tui::theme::Theme;
@@ -73,17 +72,10 @@ fn member_line<'a>(
 
 /// Build a buff timer row for a player (returns None if no active buffs).
 fn buff_line<'a>(player: &crate::eq::structs::SpawnInfo, t: &Theme) -> Option<Line<'a>> {
-    let active_buffs: Vec<&BuffSlot> = player
-        .buff_slots
-        .iter()
-        .filter(|b| !b.is_empty())
-        .take(6)
-        .collect();
-    if active_buffs.is_empty() {
-        return None;
-    }
     let mut buff_spans: Vec<Span<'_>> = vec![Span::raw("  ")];
-    for b in &active_buffs {
+    let mut active_count = 0;
+    for b in player.buff_slots.iter().filter(|b| !b.is_empty()).take(6) {
+        active_count += 1;
         buff_spans.push(Span::styled(
             format!("{:04X}", b.spell_id),
             Style::default().fg(t.text_highlight),
@@ -92,6 +84,10 @@ fn buff_line<'a>(player: &crate::eq::structs::SpawnInfo, t: &Theme) -> Option<Li
             format!("({}) ", b.duration_str()),
             Style::default().fg(t.text_muted),
         ));
+    }
+
+    if active_count == 0 {
+        return None;
     }
     Some(Line::from(buff_spans))
 }
@@ -538,7 +534,6 @@ fn draw_config_group_panel(
         .unwrap_or_default();
 
     let max_lines = inner.height as usize;
-    let slot_count = (hi - lo + 1) as usize;
     let width_class = classify_width(inner.width);
     let mut entries: Vec<MemberRenderEntry<'_>> = Vec::new();
 
@@ -583,12 +578,7 @@ fn draw_config_group_panel(
         }
     }
 
-    let lines = assemble_member_lines(
-        entries.into_iter().take(slot_count).collect(),
-        max_lines,
-        width_class,
-        Some(mode_line(app)),
-    );
+    let lines = assemble_member_lines(entries, max_lines, width_class, Some(mode_line(app)));
 
     frame.render_widget(Paragraph::new(lines), inner);
 }

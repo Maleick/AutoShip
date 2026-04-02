@@ -60,7 +60,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             cols[0],
         );
     } else {
-        let header = themed_header_row(vec!["", "Character", "Zone", "Status", "Destination"], t);
+        let header = themed_header_row(&["", "Character", "Zone", "Status", "Destination"], t);
 
         let rows: Vec<Row> = visible
             .iter()
