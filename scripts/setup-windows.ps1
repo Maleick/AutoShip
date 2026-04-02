@@ -121,6 +121,20 @@ if (Test-Path "Cargo.toml") {
 
 Write-Host "  OK: Repository ready at $(Get-Location)" -ForegroundColor Green
 
+# Configure a repo-local nightly override to match CI and release builds.
+Write-Host "  Configuring repo-local nightly MSVC toolchain..." -ForegroundColor Green
+try {
+    rustup toolchain install nightly-x86_64-pc-windows-msvc | Out-Null
+    rustup override set nightly-x86_64-pc-windows-msvc | Out-Null
+    Write-Host "  OK: rustup override set to nightly-x86_64-pc-windows-msvc" -ForegroundColor Green
+} catch {
+    Write-Host "  ERROR: Could not configure repo-local nightly toolchain." -ForegroundColor Red
+    Write-Host "  Run manually in the repo:" -ForegroundColor Yellow
+    Write-Host "    rustup toolchain install nightly-x86_64-pc-windows-msvc" -ForegroundColor Yellow
+    Write-Host "    rustup override set nightly-x86_64-pc-windows-msvc" -ForegroundColor Yellow
+    exit 1
+}
+
 # ---------------------------------------------------------------------------
 # Step 5: Build debug
 # ---------------------------------------------------------------------------
@@ -135,7 +149,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "  Common fixes:" -ForegroundColor Yellow
     Write-Host "  - Restart PowerShell after installing VS Build Tools" -ForegroundColor Yellow
-    Write-Host "  - Run: rustup default stable-x86_64-pc-windows-msvc" -ForegroundColor Yellow
+    Write-Host "  - Run: rustup override set nightly-x86_64-pc-windows-msvc" -ForegroundColor Yellow
     exit 1
 }
 

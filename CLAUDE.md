@@ -100,8 +100,8 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 
 ## Gotchas
 
-- **CMAKE env var**: Must `export CMAKE_POLICY_VERSION_MINIMUM=3.5` before building — the navmesh C++ FFI shim (Detour/protobuf) requires it.
+- **CMAKE env var**: `CMAKE_POLICY_VERSION_MINIMUM=3.5` is already set via `.cargo/config.toml`. Only export it manually if you are troubleshooting outside the normal Cargo flow.
 - **macOS stubs**: `#[cfg(not(windows))]` stubs return dummy data. Some code paths are unreachable on macOS — don't chase bugs in stub implementations.
 - **Offset addresses are not pointers**: Values in `offsets.rs` are preferred-base hex addresses, not ready-to-use pointers. Always `rebase()` before use.
-- **MacroQuest references are local submodules**: `third_party/eqlib` and `third_party/macroquest` are part of the repo as git submodules and are used for offset and struct-reference work. Run `git submodule update --init --recursive` after checkout. Derived offsets still live in `dmft-common/src/offsets.rs`.
+- **MacroQuest references are local submodules**: `third_party/eqlib` and `third_party/macroquest` are reference-only. They are not required for normal build, test, or runtime work. Initialize them only before offset or struct-reference work. Derived offsets still live in `dmft-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.

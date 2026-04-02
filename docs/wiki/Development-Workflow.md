@@ -2,11 +2,13 @@
 
 ## Current Daily Workflow
 
-### 1. Sync references first
+### 1. Sync references only when needed
 
 ```bash
 git submodule update --init --recursive
 ```
+
+This is optional for normal build, test, and runtime work.
 
 Do this before:
 

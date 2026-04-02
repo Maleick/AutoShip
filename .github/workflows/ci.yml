@@ -5,15 +5,24 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+    types: [opened, reopened, ready_for_review]
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
-  macos:
-    name: macOS (fmt + clippy + test)
-    runs-on: macos-latest
+  linux:
+    name: Linux (fmt + clippy + test)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/sync_wiki.py --check
@@ -27,6 +36,7 @@ jobs:
 
   windows:
     name: Windows (build only)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

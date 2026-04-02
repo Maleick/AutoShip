@@ -36,7 +36,7 @@ This wiki is the long-lived operator and developer reference for the current rep
 - Demo mode is the normal experience on macOS/Linux and also on Windows when no live EQ client is attached.
 - The TUI currently exposes four main screens: Characters, Map, Navigation, and Debug.
 - Login automation, DLL injection, navigation, CH chain management, and the Soul Engine are all present in the repository today.
-- MacroQuest reference code is tracked as git submodules under `third_party/eqlib` and `third_party/macroquest`.
+- MacroQuest reference code is tracked as git submodules under `third_party/eqlib` and `third_party/macroquest`, but those trees are reference-only and not required for normal build, test, or runtime work.
 - `third_party/eqlib` is the canonical local eqlib reference path for offsets and struct work in this repo.
 
 ## Source of Truth

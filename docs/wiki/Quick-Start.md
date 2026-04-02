@@ -4,15 +4,17 @@ This page is the fastest path to a useful DMFT session.
 
 ## Current Behavior
 
-### 1. Initialize the reference submodules
+### 1. Optional: initialize the reference submodules
 
-Run this once after clone or checkout:
+You can skip this for normal build, test, and runtime work.
+
+Run this only before offset, struct, eqlib, or MacroQuest investigation:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-This matters before any offset, struct, eqlib, or MacroQuest investigation.
+These submodules are reference-only and are not part of the normal Cargo inner loop.
 
 ### 2. Choose the runtime you are actually in
 

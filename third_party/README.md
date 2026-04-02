@@ -3,7 +3,10 @@ Third-party reference code lives here.
 `third_party/eqlib` and `third_party/macroquest` are git submodules that track the upstream
 MacroQuest repositories.
 
-Initialize or update them with:
+These trees are reference-only for DMFT. They are not required for normal build, test,
+CI, or runtime work.
+
+Initialize or update them only when doing offset, struct, eqlib, or MacroQuest research:
 
 `git submodule update --init --recursive`
 

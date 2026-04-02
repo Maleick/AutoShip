@@ -18,9 +18,10 @@ cat <<EOF
 
 Read this file + check memories (\`MEMORY.md\`) for full project context.
 
-MacroQuest reference code now lives in local git submodules at \`third_party/eqlib\`
-and \`third_party/macroquest\`. After checkout, run
-\`git submodule update --init --recursive\` before doing offset or struct work.
+MacroQuest reference code lives in local git submodules at \`third_party/eqlib\`
+and \`third_party/macroquest\`. These trees are reference-only and are not required
+for normal build, test, or runtime work. Sync them only before offset or struct work:
+\`git submodule update --init --recursive\`.
 
 ## Repository Stats
 
@@ -107,7 +108,7 @@ cat <<'BUILDEOF'
 ## Build Requirements
 
 ```bash
-# One-time (all platforms): fetch reference trees used for offset/struct work
+# Optional reference trees (only for offset/struct work)
 git submodule update --init --recursive
 
 # macOS/Linux (development — demo mode)
@@ -125,7 +126,7 @@ cargo build --release
 
 ### Dependencies
 
-- Rust (edition 2024, stable MSVC toolchain on Windows)
+- Rust (edition 2024, nightly MSVC toolchain on Windows for live/release validation)
 - CMake 3.5+ (for navmesh C++ FFI shim)
 - LLVM/Clang (Windows, for bindgen)
 
