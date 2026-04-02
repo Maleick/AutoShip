@@ -42,6 +42,23 @@
         "cargo test"
       ],
       "notes": "The Tactical map now caches Detour-derived navmesh edge geometry per zone, renders outer and inner mesh lines over the Brewall vector map, and exposes map-pane controls for manual pan, zoom, view mode cycling, and overlay toggling. No local 'simplify' executable was available in this environment."
+    },
+    {
+      "id": "dmft-repo-governance",
+      "name": "DMFT repo governance and protected master flow",
+      "status": "complete",
+      "acceptance_tests": [
+        "CI workflow runs on pull requests into master, pushes to master, and manual dispatch",
+        "Required PR gate is the self-hosted Windows `PR gate (fmt + clippy + test + python)` and still runs on README-only and docs-only changes",
+        "README Metrics workflow no longer pushes directly to protected master and bootstraps the nightly Windows Rust toolchain it actually needs",
+        "DMFT PR manager automation runs every 5 hours against /Users/maleick/Projects/DMFT",
+        "python3 scripts/sync_wiki.py --check",
+        "python3 -m unittest discover -s tests -p 'test_*.py' -v",
+        "cargo fmt --all --check",
+        "cargo clippy --all-targets --all-features -- -D warnings",
+        "cargo test"
+      ],
+      "notes": "DMFT now documents master as the protected release branch, uses the self-hosted Windows PR gate as the only required merge check, keeps release/nightly/wiki automation out of merge blocking, bootstraps the nightly MSVC toolchain that DMFT's Windows hook stack actually needs for the PR and README metrics flows, and tracks the scheduled DMFT PR manager automation that opens, updates, and merges PRs for agent-authored branches."
     }
   ]
 }

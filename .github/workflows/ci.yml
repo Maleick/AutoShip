@@ -1,47 +1,28 @@
 name: CI
 
 on:
+  pull_request:
+    branches: [master]
   push:
     branches: [master]
-    paths-ignore:
-      - README.md
-      - docs/**
   workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
-  submodules:
-    name: Reference submodules
+  pr_gate:
+    name: PR gate (fmt + clippy + test + python)
     runs-on: [self-hosted, Windows, X64, dmft]
-    timeout-minutes: 10
-    defaults:
-      run:
-        shell: cmd
-    steps:
-      - uses: actions/checkout@v4
-      - name: Initialize reference submodules
-        run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive --depth 1
-      - name: Verify reference trees
-        run: |
-          git submodule status --recursive
-          if not exist "third_party\eqlib\include\eqlib\offsets\eqgame.h" (echo missing third_party\eqlib\include\eqlib\offsets\eqgame.h & exit /b 1)
-          if not exist "third_party\macroquest\src\login" (echo missing third_party\macroquest\src\login & exit /b 1)
-          if not exist "third_party\macroquest\src\routing" (echo missing third_party\macroquest\src\routing & exit /b 1)
-          if not exist "third_party\macroquest\src\eqlib" (echo missing third_party\macroquest\src\eqlib & exit /b 1)
-
-  windows_checks:
-    name: Windows checks (fmt + clippy + test)
-    runs-on: [self-hosted, Windows, X64, dmft]
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: cmd
@@ -55,20 +36,50 @@ jobs:
           curl.exe -fsSL -o .ci-python\python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
           tar -xf .ci-python\python-embed.zip -C .ci-python
           echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
+      - name: Provision nightly toolchain via rustup
+        env:
+          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
+        run: |
+          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
+          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
+          set "PATH=%CARGO_HOME%\bin;%PATH%"
+          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
+          where rustup.exe >nul 2>nul || (
+            echo [warn] rustup.exe not found in PATH. Installing rustup bootstrap.
+            curl.exe -fSLo "%TEMP%\rustup-init.exe" https://win.rustup.rs/x86_64
+            start /wait "" "%TEMP%\rustup-init.exe" -y --no-modify-path --default-toolchain %NIGHTLY_TOOLCHAIN%
+            if errorlevel 1 (
+              echo [fatal] rustup bootstrap failed.
+              exit /b 1
+            )
+            del /f /q "%TEMP%\rustup-init.exe"
+          )
+          where rustup.exe >nul 2>nul || (
+            echo [fatal] rustup.exe still not available after bootstrap.
+            exit /b 1
+          )
+          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
+          rustup --version
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup default %NIGHTLY_TOOLCHAIN%
+          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
+          rustup run %NIGHTLY_TOOLCHAIN% rustc -V
+          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
+            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
+            exit /b 1
+          )
+          echo [info] Nightly compiler confirmed for %NIGHTLY_TOOLCHAIN%.
+      - uses: lukka/get-cmake@v4.3.1
       - run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
       - run: '%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v'
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
 
   windows:
-    name: Windows release build
+    name: Windows release build (manual)
     if: github.event_name == 'workflow_dispatch'
-    needs: submodules
+    needs: pr_gate
     runs-on: [self-hosted, Windows, X64, dmft]
     timeout-minutes: 30
     defaults:
@@ -80,11 +91,51 @@ jobs:
         run: |
           git submodule sync --recursive
           git submodule update --init --recursive --depth 1
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly
-          components: rustfmt, clippy
-      - uses: lukka/get-cmake@v4
+      - name: Provision nightly toolchain via rustup
+        env:
+          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
+        run: |
+          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
+          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
+          set "PATH=%CARGO_HOME%\bin;%PATH%"
+          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
+          where rustup.exe >nul 2>nul || (
+            echo [warn] rustup.exe not found in PATH. Installing rustup bootstrap.
+            curl.exe -fSLo "%TEMP%\rustup-init.exe" https://win.rustup.rs/x86_64
+            start /wait "" "%TEMP%\rustup-init.exe" -y --no-modify-path --default-toolchain %NIGHTLY_TOOLCHAIN%
+            if errorlevel 1 (
+              echo [fatal] rustup bootstrap failed.
+              exit /b 1
+            )
+            del /f /q "%TEMP%\rustup-init.exe"
+          )
+
+          where rustup.exe >nul 2>nul || (
+            echo [fatal] rustup.exe still not available after bootstrap.
+            exit /b 1
+          )
+          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
+          echo [info] rustup version:
+          rustup --version
+          rustup show
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup default %NIGHTLY_TOOLCHAIN%
+          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
+          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
+            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
+            exit /b 1
+          )
+      - uses: lukka/get-cmake@v4.3.1
+      - name: Nightly compiler sanity check
+        run: |
+          echo [info] Verifying required nightly compiler for release path.
+          rustc -V
+          rustc -V | findstr /i "nightly" >nul
+          if errorlevel 1 (
+            echo [fatal] Release workflow requires nightly toolchain but rustc is not reporting nightly.
+            exit /b 1
+          )
+          cargo --version
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"

@@ -3,8 +3,8 @@
 [![CI](https://github.com/Maleick/DMFT/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/DMFT/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-74%2C123-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-1%2C766%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-77%2C891-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-1%2C815%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -215,14 +215,15 @@ For workflows that now target `self-hosted` Windows runners, use:
 
 Run `setup-self-hosted-runner.ps1` from an elevated PowerShell session for automatic service install.
 If `svc.cmd` is not present in that runner package, the script prints `sc.exe` fallback commands.
-
-See [`SELF_HOSTED_RUNNER_SETUP.md`](SELF_HOSTED_RUNNER_SETUP.md) for the manual
-step-by-step flow and validation checklist.
+For unattended PR merges and nightly jobs, keep this `dmft` runner on a dedicated
+always-on Windows box or VM instead of a personal laptop. The canonical bootstrap flow
+is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1).
 
 Nightly self-hosted workflows:
 
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`
+- `.github/workflows/ci.yml` runs the required `PR gate (fmt + clippy + test + python)` job for PRs and pushes to `master` without consuming GitHub-hosted minutes
 
 If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
 
@@ -254,6 +255,27 @@ The script auto-detects the base branch from local `main`, local `master`, then
 Stale local branches are only deleted by default when they are already merged into the
 base branch or their upstream has disappeared. Use `--force-stale` if you really want
 age-only pruning.
+
+### Protected `master` workflow
+
+`master` remains the protected release branch for DMFT.
+
+1. Branch from `master` into a short-lived topic branch (`feature/*`, `hotfix/*`, `codex/*`, etc.).
+2. Push that branch. The expected path is that Codex or Claude opens the pull request back into `master`, though you can still open one manually if needed.
+3. GitHub requires `PR gate (fmt + clippy + test + python)` on every PR, including README-only and docs-only changes.
+4. Keep the PR up to date with `master`, address review comments in the PR thread, and merge once the required gate is green.
+5. Let GitHub auto-delete the merged topic branch. Auto-merge can stay enabled when the gate is already satisfied.
+
+DMFT-specific notes:
+
+- The required merge blocker is the self-hosted Windows `PR gate (fmt + clippy + test + python)` job on runner labels `self-hosted`, `Windows`, `X64`, and `dmft`.
+- That Windows gate currently boots the nightly MSVC Rust toolchain, because the Windows hook stack still depends on nightly-only `retour`.
+- No GitHub-hosted runners are used for the required PR flow.
+- The scheduled `DMFT PR manager` Codex cloud automation is expected to open missing PRs, address straightforward review feedback, and merge eligible branches into `master`.
+- Manual `CI` workflow dispatch is the place to get the heavier `Windows release build (manual)` validation on a topic branch before merge.
+- `Release`, `Nightly Release`, `README Metrics`, and `Wiki Nightly` are not required merge gates.
+- `README Metrics` should now be run on a topic branch and merged via PR instead of pushing directly into `master`.
+- If the single Windows runner starts queueing behind nightly or release work, add a second runner with the same labels instead of redesigning the workflow.
 
 ### Development (any platform — demo mode)
 
@@ -297,12 +319,13 @@ target\release\dmft.exe
 
 ## Testing
 
-Current workspace totals: 74,123 Rust lines and 1,766 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. CI runs on every push to master:
+Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate runs on the self-hosted Windows runner for every pull request into master and every push to master:
 
-| Platform | Jobs                      |
-| -------- | ------------------------- |
-| macOS    | fmt + clippy + test       |
-| Windows  | build (nightly toolchain) |
+| Trigger                  | Jobs                                                                  |
+| ------------------------ | --------------------------------------------------------------------- |
+| Pull request into master | self-hosted `PR gate (fmt + clippy + test + python)`                  |
+| Push to master           | self-hosted `PR gate (fmt + clippy + test + python)`                  |
+| Manual `CI` dispatch     | required PR gate + `Windows release build (manual)`                   |
 
 Tag-triggered releases (`v*`) build Windows binaries and create GitHub Releases automatically.
 
