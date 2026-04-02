@@ -2981,11 +2981,7 @@ impl App {
             },
             "combat" => match parts.get(1).copied() {
                 None | Some("status") | Some("summary") => {
-                    self.set_feedback(
-                        ToastLevel::Info,
-                        self.combat_status_summary(),
-                        false,
-                    );
+                    self.set_feedback(ToastLevel::Info, self.combat_status_summary(), false);
                 }
                 Some("scope") => {
                     self.set_feedback(
@@ -4442,7 +4438,10 @@ mod tests {
         assert_eq!(command::normalize_command_alias("assist Bob"), "ma Bob");
         assert_eq!(command::normalize_command_alias("tank Bob"), "mt Bob");
         assert_eq!(command::normalize_command_alias("pull 1234"), "engage 1234");
-        assert_eq!(command::normalize_command_alias("combat status"), "combat status");
+        assert_eq!(
+            command::normalize_command_alias("combat status"),
+            "combat status"
+        );
     }
 
     #[test]
