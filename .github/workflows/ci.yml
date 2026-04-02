@@ -3,11 +3,9 @@ name: CI
 on:
   push:
     branches: [master]
-  pull_request:
-    branches: [master]
-    types: [opened, reopened, ready_for_review]
-  schedule:
-    - cron: "0 7 * * *"
+    paths-ignore:
+      - README.md
+      - docs/**
   workflow_dispatch:
 
 concurrency:
@@ -36,9 +34,9 @@ jobs:
           test -d third_party/macroquest/src/routing
           test -d third_party/macroquest/src/eqlib
 
-  macos:
-    name: macOS (fmt + clippy + test)
-    runs-on: macos-latest
+  ubuntu:
+    name: Ubuntu (fmt + clippy + test)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/sync_wiki.py --check
@@ -52,7 +50,7 @@ jobs:
 
   windows:
     name: Windows (build only)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
