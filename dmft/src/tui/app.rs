@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use super::cast::{CastDisplay, heuristic_live_cast, short_cast_label};
+use super::cast::{CastDisplay, live_cast_display, short_cast_label};
 use super::config_panel::ConfigPanelState;
 use super::demo_data::{DemoRole, demo_client_cast_info, demo_client_profile};
 use super::menu::MenuState;
@@ -527,8 +527,8 @@ impl App {
             return None;
         }
 
-        Some(heuristic_live_cast(
-            cast.spell_slot,
+        Some(live_cast_display(
+            cast,
             player.class,
             self.tick_count,
             client.pid,

@@ -17,6 +17,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Initialize reference submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
       - uses: dtolnay/rust-toolchain@nightly
       - uses: lukka/get-cmake@latest
 
