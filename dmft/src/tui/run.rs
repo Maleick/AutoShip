@@ -6,8 +6,10 @@ use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
 use std::collections::{HashMap, HashSet};
 use std::io;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
+
+#[cfg(windows)]
+use std::sync::LazyLock;
 
 /// RAII guard that restores the terminal on drop, even if a panic unwinds.
 struct TerminalGuard;
@@ -49,11 +51,14 @@ const LOG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Selected-client spawn polling cadence.
+#[cfg(any(windows, test))]
 const ACTIVE_SPAWN_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Background-client spawn polling cadence.
+#[cfg(any(windows, test))]
 const BACKGROUND_SPAWN_REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
 
+#[cfg(windows)]
 static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
     std::env::var(dmft_common::ipc::PERF_TRACE_ENV)
         .map(|value| {
@@ -542,6 +547,7 @@ fn refresh_eq_data(
     }
 }
 
+#[cfg(any(windows, test))]
 fn spawn_refresh_interval(is_selected: bool) -> Duration {
     if is_selected {
         ACTIVE_SPAWN_REFRESH_INTERVAL
@@ -550,6 +556,7 @@ fn spawn_refresh_interval(is_selected: bool) -> Duration {
     }
 }
 
+#[cfg(any(windows, test))]
 fn spawn_refresh_due(last_refresh: Option<Instant>, now: Instant, is_selected: bool) -> bool {
     last_refresh.is_none_or(|last| now.duration_since(last) >= spawn_refresh_interval(is_selected))
 }
