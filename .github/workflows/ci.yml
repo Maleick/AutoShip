@@ -57,10 +57,12 @@ jobs:
             echo "PYTHON_CMD=py -3" >> "$GITHUB_ENV"
             exit 0
           fi
-          echo "Python 3 is not installed on the Windows runner." >&2
-          exit 1
-      - run: $PYTHON_CMD scripts/sync_wiki.py --check
-      - run: $PYTHON_CMD -m unittest discover -s tests -p 'test_*.py' -v
+          mkdir -p .ci-python
+          curl -fsSL -o .ci-python/python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
+          tar -xf .ci-python/python-embed.zip -C .ci-python
+          echo "PYTHON_CMD=$PWD/.ci-python/python.exe" >> "$GITHUB_ENV"
+      - run: eval "$PYTHON_CMD scripts/sync_wiki.py --check"
+      - run: eval "$PYTHON_CMD -m unittest discover -s tests -p 'test_*.py' -v"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable

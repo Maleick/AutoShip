@@ -37,15 +37,17 @@ jobs:
             echo "PYTHON_CMD=py -3" >> "$GITHUB_ENV"
             exit 0
           fi
-          echo "Python 3 is not installed on the Windows runner." >&2
-          exit 1
+          mkdir -p .ci-python
+          curl -fsSL -o .ci-python/python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
+          tar -xf .ci-python/python-embed.zip -C .ci-python
+          echo "PYTHON_CMD=$PWD/.ci-python/python.exe" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
       - name: Update README metrics
-        run: $PYTHON_CMD scripts/update_readme_metrics.py
+        run: eval "$PYTHON_CMD scripts/update_readme_metrics.py"
 
       - name: Commit updated README metrics
         run: |
