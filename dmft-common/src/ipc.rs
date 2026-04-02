@@ -249,6 +249,9 @@ pub type SessionToken = [u8; 32];
 /// Size of shared memory region allocated per client (64 KB)
 pub const SHARED_MEMORY_SIZE: usize = 64 * 1024;
 
+/// Environment variable that enables opt-in performance trace logging.
+pub const PERF_TRACE_ENV: &str = "DMFT_PERF_TRACE";
+
 /// Legacy named pipe prefix — prefer `pipe_name()` with a session ID.
 pub const PIPE_NAME_PREFIX: &str = r"\\.\pipe\dmft_";
 

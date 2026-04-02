@@ -4,7 +4,19 @@
 //! the orchestrator to read. On non-Windows platforms this is a compile-only stub.
 
 use anyhow::Result;
-use dmft_common::types::{ClientId, GameState};
+use dmft_common::types::{ClientId, SharedStateFrame};
+use std::sync::LazyLock;
+
+static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var(dmft_common::ipc::PERF_TRACE_ENV)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+});
 
 /// Writes game state to shared memory for the orchestrator to read.
 pub struct SharedStateWriter {
@@ -17,6 +29,8 @@ pub struct SharedStateWriter {
     size: usize,
     #[cfg(windows)]
     sequence: u64,
+    #[cfg(windows)]
+    encode_buffer: Vec<u8>,
 }
 
 // SAFETY: SharedStateWriter is only accessed from the game loop thread (single writer).
@@ -88,6 +102,7 @@ impl SharedStateWriter {
                 ptr: ptr.Value as *mut u8,
                 size: SHARED_MEMORY_SIZE,
                 sequence: 0,
+                encode_buffer: Vec::with_capacity(8 * 1024),
             })
         }
 
@@ -104,21 +119,18 @@ impl SharedStateWriter {
     /// ```text
     /// [sequence: u64 LE][payload_len: u32 LE][payload: bincode bytes]
     /// ```
-    pub fn write(&mut self, state: &GameState) -> Result<()> {
+    pub fn write(&mut self, frame: &SharedStateFrame) -> Result<()> {
         #[cfg(windows)]
         {
             use std::sync::atomic::{AtomicU64, Ordering};
+            use std::time::Instant;
 
-            let payload = bincode::serde::encode_to_vec(state, bincode::config::standard())
-                .map_err(|e| anyhow::anyhow!("bincode encode failed: {e}"))?;
-
-            if payload.len() + 12 > self.size {
-                anyhow::bail!(
-                    "GameState too large for shared memory: {} bytes (max {})",
-                    payload.len(),
-                    self.size - 12
-                );
-            }
+            let perf_start = if *PERF_TRACE_ENABLED {
+                Some(Instant::now())
+            } else {
+                None
+            };
+            let payload_len = encode_frame_into_buffer(frame, &mut self.encode_buffer, self.size)?;
 
             let base = self.ptr;
             // SAFETY: base points to the start of a mapped shared memory region
@@ -136,25 +148,60 @@ impl SharedStateWriter {
             // payload.len() + 12 <= self.size, so base+8 (4 bytes) and base+12
             // (payload.len() bytes) are within the mapped region. The copies are
             // non-overlapping because source is stack/heap and dest is shared memory.
-            let len_bytes = (payload.len() as u32).to_le_bytes();
+            let len_bytes = (payload_len as u32).to_le_bytes();
             unsafe {
                 std::ptr::copy_nonoverlapping(len_bytes.as_ptr(), base.add(8), 4);
-                std::ptr::copy_nonoverlapping(payload.as_ptr(), base.add(12), payload.len());
+                std::ptr::copy_nonoverlapping(
+                    self.encode_buffer.as_ptr(),
+                    base.add(12),
+                    payload_len,
+                );
             }
 
             // Mark write-complete: increment sequence to make it even
             self.sequence += 1;
             seq.store(self.sequence, Ordering::Release);
 
+            if let Some(start) = perf_start {
+                tracing::info!(
+                    target: "dmft::perf",
+                    client_id = self.client_id,
+                    payload_len,
+                    has_spawn_snapshot = frame.nearby_spawns.is_some(),
+                    spawn_epoch = frame.spawn_epoch,
+                    elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
+                    "Shared memory frame published"
+                );
+            }
+
             Ok(())
         }
 
         #[cfg(not(windows))]
         {
-            let _ = (self.client_id, state);
+            let _ = (self.client_id, frame);
             Ok(())
         }
     }
+}
+
+fn encode_frame_into_buffer(
+    frame: &SharedStateFrame,
+    buffer: &mut Vec<u8>,
+    mapping_size: usize,
+) -> Result<usize> {
+    buffer.clear();
+    let payload_len =
+        bincode::serde::encode_into_std_write(frame, buffer, bincode::config::standard())
+            .map_err(|e| anyhow::anyhow!("bincode encode failed: {e}"))?;
+    if payload_len + 12 > mapping_size {
+        anyhow::bail!(
+            "SharedStateFrame too large for shared memory: {} bytes (max {})",
+            payload_len,
+            mapping_size - 12
+        );
+    }
+    Ok(payload_len)
 }
 
 /// Owns the `SECURITY_ATTRIBUTES` and its backing buffers (absolute security
@@ -288,5 +335,75 @@ impl Drop for SharedStateWriter {
                 let _ = CloseHandle(self._handle);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_spawn(id: u32) -> dmft_common::types::SpawnData {
+        dmft_common::types::SpawnData {
+            spawn_id: id,
+            name: format!("spawn_{id}"),
+            displayed_name: format!("Spawn {id}"),
+            spawn_type: 1,
+            level: 60,
+            class_id: 1,
+            x: id as f32,
+            y: id as f32,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 50,
+            mana_max: 50,
+            endurance_current: 25,
+            endurance_max: 25,
+        }
+    }
+
+    fn make_frame(with_spawns: bool) -> SharedStateFrame {
+        SharedStateFrame {
+            client_id: 42,
+            local_player: Some(make_spawn(1)),
+            target: Some(make_spawn(2)),
+            nearby_spawns: with_spawns.then(|| (0..32).map(make_spawn).collect()),
+            timestamp_ms: 1234,
+            nav_status: dmft_common::nav::NavStatus::Idle,
+            combat_status: dmft_common::combat::CombatStatus::Idle,
+            zone_short_name: "qeynos".into(),
+            zone_long_name: "South Qeynos".into(),
+            spawn_epoch: 7,
+        }
+    }
+
+    #[test]
+    fn encode_frame_respects_shared_memory_limit() {
+        let frame = make_frame(true);
+        let mut buffer = Vec::new();
+
+        let payload_len =
+            encode_frame_into_buffer(&frame, &mut buffer, dmft_common::ipc::SHARED_MEMORY_SIZE)
+                .expect("frame should encode");
+
+        assert_eq!(payload_len, buffer.len());
+        assert!(payload_len + 12 <= dmft_common::ipc::SHARED_MEMORY_SIZE);
+    }
+
+    #[test]
+    fn encode_frame_reuses_buffer_capacity() {
+        let mut buffer = Vec::with_capacity(64);
+        let initial_capacity = buffer.capacity();
+
+        let full_len = encode_frame_into_buffer(&make_frame(true), &mut buffer, 64 * 1024)
+            .expect("full frame encodes");
+        let grown_capacity = buffer.capacity();
+        let hot_len = encode_frame_into_buffer(&make_frame(false), &mut buffer, 64 * 1024)
+            .expect("hot frame encodes");
+
+        assert!(grown_capacity >= initial_capacity);
+        assert_eq!(buffer.len(), hot_len);
+        assert!(full_len > hot_len);
     }
 }

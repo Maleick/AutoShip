@@ -28,6 +28,9 @@ pub use super::state::{
     CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
     OverviewScreenState, SpawnsScreenState, TacticalScreenState,
 };
+use super::state::{
+    FilteredSpawnCache, FilteredSpawnCacheKey, MapSpawnPresentationCache,
+};
 
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,6 +286,12 @@ pub struct App {
     pub target: Option<SpawnInfo>,
     /// Legacy: spawn list from the selected client.
     pub spawns: Vec<SpawnInfo>,
+    /// Last selected-client spawn revision copied into `spawns`.
+    synced_spawn_revision: Option<(u32, u64)>,
+    /// Cached filtered spawn indices for the selected client.
+    filtered_spawn_cache: FilteredSpawnCache,
+    /// Cached tactical-map spawn overlay cells.
+    pub(crate) map_spawn_cache: MapSpawnPresentationCache,
     /// Status bar message displayed at the bottom of the TUI.
     pub status_message: String,
     /// Monotonic tick counter incremented each refresh cycle.
@@ -431,6 +440,9 @@ impl App {
             local_player: None,
             target: None,
             spawns: Vec::new(),
+            synced_spawn_revision: None,
+            filtered_spawn_cache: FilteredSpawnCache::default(),
+            map_spawn_cache: MapSpawnPresentationCache::default(),
             status_message: String::from("Waiting for EQ process..."),
             tick_count: 0,
 
@@ -981,6 +993,21 @@ impl App {
         self.clients.get(self.selected_client)
     }
 
+    pub(crate) fn selected_client_spawn_revision(&self) -> u64 {
+        self.active_client().map_or(0, |client| client.spawn_revision)
+    }
+
+    fn invalidate_spawn_caches(&mut self) {
+        self.filtered_spawn_cache.clear();
+        self.map_spawn_cache.clear();
+    }
+
+    fn mark_client_spawn_refresh_stale(&mut self, idx: usize) {
+        if let Some(client) = self.clients.get_mut(idx) {
+            client.last_spawn_refresh = None;
+        }
+    }
+
     /// Returns the short zone name for the selected client's current zone.
     pub fn current_zone_short_name(&self) -> Option<String> {
         self.active_client()
@@ -1012,6 +1039,7 @@ impl App {
         }
 
         self.selected_client = idx;
+        self.mark_client_spawn_refresh_stale(idx);
         self.sync_from_selected_client();
         self.spawns_state.table_state.select(Some(0));
         self.reload_map_for_selected_client();
@@ -1021,16 +1049,30 @@ impl App {
     /// This keeps backward compatibility with code that reads `app.local_player`, etc.
     pub fn sync_from_selected_client(&mut self) {
         if let Some(client) = self.clients.get(self.selected_client) {
-            self.local_player = client.local_player.clone();
-            self.target = client.target.clone();
-            self.spawns = client.spawns.clone();
-            self.attached_pid = Some(client.pid);
-            self.eq_base = client.eq_base;
+            let revision_key = (client.pid, client.spawn_revision);
+            let local_player = client.local_player.clone();
+            let target = client.target.clone();
+            let updated_spawns =
+                (self.synced_spawn_revision != Some(revision_key)).then(|| client.spawns.clone());
+            let pid = client.pid;
+            let eq_base = client.eq_base;
+
+            self.local_player = local_player;
+            self.target = target;
+            if let Some(spawns) = updated_spawns {
+                self.spawns = spawns;
+                self.synced_spawn_revision = Some(revision_key);
+                self.invalidate_spawn_caches();
+            }
+            self.attached_pid = Some(pid);
+            self.eq_base = eq_base;
         } else if self.clients.is_empty() {
             // No clients — clear data
             self.local_player = None;
             self.target = None;
             self.spawns.clear();
+            self.synced_spawn_revision = None;
+            self.invalidate_spawn_caches();
         }
     }
 
@@ -1133,24 +1175,20 @@ impl App {
     /// Cycle to the next client.
     pub fn next_client(&mut self) {
         if !self.clients.is_empty() {
-            self.selected_client = (self.selected_client + 1) % self.clients.len();
-            self.sync_from_selected_client();
-            self.spawns_state.table_state.select(Some(0));
-            self.reload_map_for_selected_client();
+            let next = (self.selected_client + 1) % self.clients.len();
+            self.select_client_idx(next);
         }
     }
 
     /// Cycle to the previous client.
     pub fn prev_client(&mut self) {
         if !self.clients.is_empty() {
-            if self.selected_client == 0 {
-                self.selected_client = self.clients.len() - 1;
+            let prev = if self.selected_client == 0 {
+                self.clients.len() - 1
             } else {
-                self.selected_client -= 1;
-            }
-            self.sync_from_selected_client();
-            self.spawns_state.table_state.select(Some(0));
-            self.reload_map_for_selected_client();
+                self.selected_client - 1
+            };
+            self.select_client_idx(prev);
         }
     }
 
@@ -1550,32 +1588,58 @@ impl App {
 
     /// Returns spawns filtered by type and text search criteria.
     pub fn filtered_spawns(&self) -> Vec<&SpawnInfo> {
+        let filter = self.spawns_state.spawn_filter.to_ascii_lowercase();
         self.spawns
             .iter()
-            .filter(|s| {
-                // Type filter
-                match self.spawns_state.spawn_type_filter {
-                    SpawnFilter::All => true,
-                    SpawnFilter::Pc => s.spawn_type == SpawnType::Player,
-                    SpawnFilter::Npc => s.spawn_type == SpawnType::Npc,
-                    SpawnFilter::Named => {
-                        s.spawn_type == SpawnType::Npc
-                            && !s.displayed_name.starts_with("a ")
-                            && !s.displayed_name.starts_with("an ")
-                    }
-                }
-            })
-            .filter(|s| {
-                // Text search filter
-                if self.spawns_state.spawn_filter.is_empty() {
-                    return true;
-                }
-                let filter = self.spawns_state.spawn_filter.to_ascii_lowercase();
-                ascii_icontains(&s.displayed_name, &filter)
-                    || ascii_icontains(&s.class_str(), &filter)
-                    || ascii_icontains(s.spawn_type.as_str(), &filter)
+            .filter(|spawn| {
+                spawn_matches_filter(
+                    spawn,
+                    self.spawns_state.spawn_type_filter,
+                    filter.as_str(),
+                )
             })
             .collect()
+    }
+
+    pub fn filtered_spawn_indices(&mut self) -> &[usize] {
+        let key = FilteredSpawnCacheKey {
+            client_pid: self.active_client().map(|client| client.pid),
+            spawn_revision: self.selected_client_spawn_revision(),
+            spawn_filter: self.spawns_state.spawn_filter.to_ascii_lowercase(),
+            spawn_type_filter: self.spawns_state.spawn_type_filter,
+        };
+
+        if self.filtered_spawn_cache.key.as_ref() != Some(&key) {
+            self.filtered_spawn_cache.indices = self
+                .spawns
+                .iter()
+                .enumerate()
+                .filter_map(|(index, spawn)| {
+                    spawn_matches_filter(spawn, key.spawn_type_filter, key.spawn_filter.as_str())
+                        .then_some(index)
+                })
+                .collect();
+            self.filtered_spawn_cache.key = Some(key);
+        }
+
+        &self.filtered_spawn_cache.indices
+    }
+
+    pub fn filtered_spawn_count(&mut self) -> usize {
+        self.filtered_spawn_indices().len()
+    }
+
+    pub fn filtered_spawn_at(&mut self, filtered_index: usize) -> Option<&SpawnInfo> {
+        let spawn_index = self
+            .filtered_spawn_indices()
+            .get(filtered_index)
+            .copied()?;
+        self.spawns.get(spawn_index)
+    }
+
+    pub fn selected_filtered_spawn(&mut self) -> Option<&SpawnInfo> {
+        let selected = self.spawn_selected();
+        self.filtered_spawn_at(selected)
     }
 
     /// Cycles the spawn type filter (All -> PC -> NPC -> Named).
@@ -1587,7 +1651,7 @@ impl App {
 
     /// Moves the spawn list selection down by one row.
     pub fn spawn_list_down(&mut self) {
-        let count = self.filtered_spawns().len();
+        let count = self.filtered_spawn_count();
         self.spawns_state.table_state.select_next();
         // Clamp to last item
         if let Some(sel) = self.spawns_state.table_state.selected()
@@ -1607,7 +1671,7 @@ impl App {
     /// Moves the spawn list selection down by one page.
     pub fn spawn_list_page_down(&mut self) {
         let page_size = Self::dynamic_page_size();
-        let max = self.filtered_spawns().len().saturating_sub(1);
+        let max = self.filtered_spawn_count().saturating_sub(1);
         let current = self.spawn_selected();
         self.spawns_state
             .table_state
@@ -1655,9 +1719,7 @@ impl App {
         // Extract data from the borrow before mutating self
         let sel = self.spawn_selected();
         let info: Option<(String, u32, usize)> = {
-            let filtered = self.filtered_spawns();
-            filtered
-                .get(sel)
+            self.filtered_spawn_at(sel)
                 .map(|s| (s.displayed_name.clone(), s.spawn_id, sel))
         };
         if let Some((name, id, _idx)) = info {
@@ -4133,7 +4195,31 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "chui"
             | "inject"
             | "all"
-    )
+)
+}
+
+fn spawn_matches_filter(spawn: &SpawnInfo, spawn_filter: SpawnFilter, text_filter: &str) -> bool {
+    let matches_type = match spawn_filter {
+        SpawnFilter::All => true,
+        SpawnFilter::Pc => spawn.spawn_type == SpawnType::Player,
+        SpawnFilter::Npc => spawn.spawn_type == SpawnType::Npc,
+        SpawnFilter::Named => {
+            spawn.spawn_type == SpawnType::Npc
+                && !spawn.displayed_name.starts_with("a ")
+                && !spawn.displayed_name.starts_with("an ")
+        }
+    };
+    if !matches_type {
+        return false;
+    }
+
+    if text_filter.is_empty() {
+        return true;
+    }
+
+    ascii_icontains(&spawn.displayed_name, text_filter)
+        || ascii_icontains(&spawn.class_str(), text_filter)
+        || ascii_icontains(spawn.spawn_type.as_str(), text_filter)
 }
 
 /// Case-insensitive substring search for ASCII strings, without heap allocation.
@@ -4447,5 +4533,46 @@ mod tests {
         assert_eq!(app.toast, None);
         assert!(app.status_message.contains("CH chain inactive."));
         assert!(app.status_message.contains(":ch start <pid1,pid2,...>"));
+    }
+
+    #[test]
+    fn sync_from_selected_client_only_copies_spawns_when_revision_changes() {
+        let mut app = App::new();
+        let mut client = test_client(42, "Alpha");
+        client.spawn_revision = 1;
+        client.spawns = vec![test_spawn("Guard")];
+        app.clients.push(client);
+
+        app.sync_from_selected_client();
+        assert_eq!(app.spawns.len(), 1);
+        assert_eq!(app.spawns[0].displayed_name, "Guard");
+
+        app.clients[0].spawns = vec![test_spawn("Wizard")];
+        app.sync_from_selected_client();
+        assert_eq!(app.spawns.len(), 1);
+        assert_eq!(app.spawns[0].displayed_name, "Guard");
+
+        app.clients[0].spawn_revision = 2;
+        app.sync_from_selected_client();
+        assert_eq!(app.spawns.len(), 1);
+        assert_eq!(app.spawns[0].displayed_name, "Wizard");
+    }
+
+    #[test]
+    fn next_client_marks_new_selection_for_immediate_spawn_refresh() {
+        let now = std::time::Instant::now();
+        let mut app = App::new();
+        let mut alpha = test_client(1, "Alpha");
+        let mut bravo = test_client(2, "Bravo");
+        alpha.last_spawn_refresh = Some(now);
+        bravo.last_spawn_refresh = Some(now);
+        app.clients.push(alpha);
+        app.clients.push(bravo);
+
+        app.next_client();
+
+        assert_eq!(app.selected_client, 1);
+        assert!(app.clients[1].last_spawn_refresh.is_none());
+        assert_eq!(app.spawns_state.table_state.selected(), Some(0));
     }
 }

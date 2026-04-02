@@ -1,5 +1,6 @@
 use super::live_cast_capture::LiveCastCaptureSnapshot;
 use crate::eq::structs::{GroupInfo, SpawnInfo};
+use std::time::Instant;
 
 /// Per-client state for each attached EQ process.
 #[derive(Debug, Clone)]
@@ -14,6 +15,12 @@ pub struct ClientState {
     pub target: Option<SpawnInfo>,
     /// All nearby spawns read from the spawn linked list.
     pub spawns: Vec<SpawnInfo>,
+    /// Most recent fast-field refresh timestamp (player/target/group).
+    pub last_fast_refresh: Option<Instant>,
+    /// Most recent spawn-list refresh timestamp.
+    pub last_spawn_refresh: Option<Instant>,
+    /// Monotonic version of the last successful spawn snapshot.
+    pub spawn_revision: u64,
     /// Current zone short name.
     pub zone_name: String,
     /// Character name parsed from the DLL-renamed window title.
@@ -38,6 +45,9 @@ impl ClientState {
             local_player: None,
             target: None,
             spawns: Vec::new(),
+            last_fast_refresh: None,
+            last_spawn_refresh: None,
+            spawn_revision: 0,
             zone_name: String::from("Unknown"),
             character_name: String::new(),
             group_info: None,
@@ -70,6 +80,9 @@ mod tests {
     fn new_defaults_empty_spawns() {
         let cs = ClientState::new(1, 0);
         assert!(cs.spawns.is_empty());
+        assert_eq!(cs.spawn_revision, 0);
+        assert!(cs.last_fast_refresh.is_none());
+        assert!(cs.last_spawn_refresh.is_none());
     }
 
     #[test]
