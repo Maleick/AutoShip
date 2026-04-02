@@ -29,52 +29,59 @@ pub fn handle_events(
         if app.cmd_state.command_mode {
             match key.code {
                 KeyCode::Esc => {
-                    app.cmd_state.command_mode = false;
-                    app.cmd_state.command_buffer.clear();
+                    app.cmd_state.exit();
                     return Ok(true);
                 }
                 KeyCode::Enter => {
                     app.cmd_state.command_mode = false;
                     app.cmd_state.command_history_idx = None;
+                    app.cmd_state.history_draft = None;
                     app.execute_command(orchestrator);
                     app.cmd_state.command_buffer.clear();
+                    app.cmd_state.cursor = 0;
                     return Ok(true);
                 }
                 KeyCode::Backspace => {
-                    app.cmd_state.command_buffer.pop();
+                    app.cmd_state.backspace();
+                    return Ok(true);
+                }
+                KeyCode::Delete => {
+                    app.cmd_state.delete();
                     return Ok(true);
                 }
                 KeyCode::Up => {
-                    if !app.cmd_state.command_history.is_empty() {
-                        let idx = match app.cmd_state.command_history_idx {
-                            Some(i) => i.saturating_sub(1),
-                            None => app.cmd_state.command_history.len() - 1,
-                        };
-                        app.cmd_state.command_history_idx = Some(idx);
-                        app.cmd_state.command_buffer = app.cmd_state.command_history[idx].clone();
-                    }
+                    app.cmd_state.history_prev();
                     return Ok(true);
                 }
                 KeyCode::Down => {
-                    if let Some(idx) = app.cmd_state.command_history_idx {
-                        if idx + 1 < app.cmd_state.command_history.len() {
-                            let next = idx + 1;
-                            app.cmd_state.command_history_idx = Some(next);
-                            app.cmd_state.command_buffer =
-                                app.cmd_state.command_history[next].clone();
-                        } else {
-                            app.cmd_state.command_history_idx = None;
-                            app.cmd_state.command_buffer.clear();
-                        }
-                    }
+                    app.cmd_state.history_next();
                     return Ok(true);
                 }
                 KeyCode::Tab => {
                     app.complete_command();
                     return Ok(true);
                 }
-                KeyCode::Char(c) => {
-                    app.cmd_state.command_buffer.push(c);
+                KeyCode::Left => {
+                    app.cmd_state.move_left();
+                    return Ok(true);
+                }
+                KeyCode::Right => {
+                    app.cmd_state.move_right();
+                    return Ok(true);
+                }
+                KeyCode::Home => {
+                    app.cmd_state.move_home();
+                    return Ok(true);
+                }
+                KeyCode::End => {
+                    app.cmd_state.move_end();
+                    return Ok(true);
+                }
+                KeyCode::Char(c)
+                    if !key.modifiers.contains(KeyModifiers::CONTROL)
+                        && !key.modifiers.contains(KeyModifiers::ALT) =>
+                {
+                    app.cmd_state.insert_char(c);
                     return Ok(true);
                 }
                 _ => return Ok(false),
@@ -353,11 +360,16 @@ pub fn handle_events(
                 KeyCode::Up => app.menu_state.prev_item(),
                 KeyCode::Down => app.menu_state.next_item(),
                 KeyCode::Enter => {
-                    let cmd = app.menu_state.selected_command().to_string();
+                    let item = app.menu_state.selected_item().clone();
                     app.menu_state.active = false;
-                    app.cmd_state.command_buffer = cmd;
-                    app.execute_command(orchestrator);
-                    app.cmd_state.command_buffer.clear();
+                    if item.requires_input {
+                        app.cmd_state.enter(Some(&format!("{} ", item.command)));
+                    } else {
+                        app.cmd_state.command_buffer = item.command.to_string();
+                        app.execute_command(orchestrator);
+                        app.cmd_state.command_buffer.clear();
+                        app.cmd_state.cursor = 0;
+                    }
                 }
                 _ => {}
             }
@@ -369,6 +381,7 @@ pub fn handle_events(
                 KeyCode::Char('?') | KeyCode::Esc => {
                     app.help_visible = false;
                     app.help_scroll = 0;
+                    app.help_focus = None;
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     app.help_scroll = app.help_scroll.saturating_add(1);
@@ -504,12 +517,18 @@ pub fn handle_events(
             }
             (KeyCode::Char('?'), _) => {
                 app.help_visible = !app.help_visible;
+                if app.help_visible {
+                    app.help_focus = Some(crate::tui::app::HelpFocus::Section(
+                        crate::tui::command::HelpSection::Workflows,
+                    ));
+                } else {
+                    app.help_focus = None;
+                    app.help_scroll = 0;
+                }
                 return Ok(true);
             }
             (KeyCode::Char(':'), _) => {
-                app.cmd_state.command_mode = true;
-                app.cmd_state.command_buffer.clear();
-                app.cmd_state.command_history_idx = None;
+                app.cmd_state.enter(None);
                 return Ok(true);
             }
             (KeyCode::Char('/'), _) => {

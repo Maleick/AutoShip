@@ -121,6 +121,7 @@ fn run_loop(
         if last_refresh.elapsed() >= refresh_interval {
             refresh_eq_data(app);
             app.tick_count += 1;
+            app.clear_expired_toast();
             let demo_mode =
                 !app.clients.is_empty() && app.clients.iter().all(|client| client.is_demo);
             if demo_mode {

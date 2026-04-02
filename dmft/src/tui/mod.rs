@@ -6,6 +6,8 @@ pub mod app;
 pub mod cast;
 /// TUI client wrapper — connects process reading to app state updates.
 pub mod client;
+/// Shared command metadata for help, hints, and suggestions.
+pub mod command;
 /// Configuration panel with tree view and inline editing.
 pub mod config_panel;
 /// Demo data generator — synthetic spawns and player data for macOS development.

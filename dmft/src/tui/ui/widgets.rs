@@ -10,7 +10,7 @@ use ratatui::{
 use crate::{
     combat::spell_db,
     eq::structs::{CastState, SpawnInfo, SpawnType},
-    tui::{cast::CastDisplay, theme::Theme},
+    tui::{cast::CastDisplay, command, theme::Theme},
 };
 
 // ─── Layout breakpoints ─────────────────────────────────────────────────────
@@ -598,145 +598,20 @@ pub struct CommandHint {
 /// Return the full list of available commands with usage hints and descriptions.
 #[must_use]
 pub fn command_hints() -> Vec<CommandHint> {
-    vec![
-        CommandHint {
-            prefix: "nav",
-            usage: "nav <zone> [camp]",
-            description: "Navigate to a zone/camp",
-        },
-        CommandHint {
-            prefix: "camp start",
-            usage: "camp start <name>",
-            description: "Start a camp by name",
-        },
-        CommandHint {
-            prefix: "camp stop",
-            usage: "camp stop",
-            description: "Stop the current camp",
-        },
-        CommandHint {
-            prefix: "camp list",
-            usage: "camp list",
-            description: "List available camps",
-        },
-        CommandHint {
-            prefix: "camp add",
-            usage: "camp add <name> <zone>",
-            description: "Add a new camp",
-        },
-        CommandHint {
-            prefix: "camp rm",
-            usage: "camp rm <name>",
-            description: "Remove a camp",
-        },
-        CommandHint {
-            prefix: "ma",
-            usage: "ma <name>",
-            description: "Set main assist",
-        },
-        CommandHint {
-            prefix: "mt",
-            usage: "mt <name>",
-            description: "Set main tank",
-        },
-        CommandHint {
-            prefix: "engage",
-            usage: "engage [target_id]",
-            description: "Engage combat",
-        },
-        CommandHint {
-            prefix: "disengage",
-            usage: "disengage",
-            description: "Stop combat",
-        },
-        CommandHint {
-            prefix: "track",
-            usage: "track <spawn_name>",
-            description: "Track a spawn on the map",
-        },
-        CommandHint {
-            prefix: "all",
-            usage: "all /<command>",
-            description: "Broadcast to all characters",
-        },
-        CommandHint {
-            prefix: "invite",
-            usage: "invite <name>",
-            description: "Invite player to group",
-        },
-        CommandHint {
-            prefix: "accept",
-            usage: "accept",
-            description: "Accept pending invite",
-        },
-        CommandHint {
-            prefix: "mode",
-            usage: "mode <camp|hunt>",
-            description: "Switch operating mode",
-        },
-        CommandHint {
-            prefix: "login",
-            usage: "login <profile>",
-            description: "Login a character profile",
-        },
-        CommandHint {
-            prefix: "ch start",
-            usage: "ch start <pids> <interval>",
-            description: "Start CH chain",
-        },
-        CommandHint {
-            prefix: "ch stop",
-            usage: "ch stop",
-            description: "Stop CH chain",
-        },
-        CommandHint {
-            prefix: "ch add",
-            usage: "ch add <pid>",
-            description: "Add cleric to CH chain",
-        },
-        CommandHint {
-            prefix: "ch rm",
-            usage: "ch rm <pid>",
-            description: "Remove cleric from CH chain",
-        },
-        CommandHint {
-            prefix: "ch interval",
-            usage: "ch interval <seconds>",
-            description: "Set CH interval",
-        },
-        CommandHint {
-            prefix: "ch adaptive",
-            usage: "ch adaptive <on|off>",
-            description: "Toggle adaptive CH timing",
-        },
-    ]
+    command::command_entries()
+        .iter()
+        .map(|entry| CommandHint {
+            prefix: entry.phrase,
+            usage: entry.usage,
+            description: entry.summary,
+        })
+        .collect()
 }
 
 /// Find the best matching command hint for the current input buffer.
 #[must_use]
 pub fn find_command_hint(input: &str) -> Option<&'static str> {
-    // Static storage so we can return references.
-    // This is fine because the hints are all &'static str.
-    static HINTS: std::sync::LazyLock<Vec<CommandHint>> = std::sync::LazyLock::new(command_hints);
-
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    // Find the longest matching prefix
-    let mut best: Option<&CommandHint> = None;
-    for hint in HINTS.iter() {
-        if trimmed.starts_with(hint.prefix)
-            && (trimmed.len() == hint.prefix.len()
-                || trimmed.as_bytes().get(hint.prefix.len()) == Some(&b' '))
-            && best.is_none_or(|current| hint.prefix.len() > current.prefix.len())
-        {
-            best = Some(hint);
-        }
-    }
-
-    best.map(|h| h.usage)
+    command::find_command_hint(input).map(|hint| hint.usage)
 }
 
 // ─── Dropdown selector ─────────────────────────────────────────────────────
@@ -2246,7 +2121,7 @@ mod tests {
     #[test]
     fn find_command_hint_matches_nav() {
         let hint = find_command_hint("nav ");
-        assert_eq!(hint, Some("nav <zone> [camp]"));
+        assert_eq!(hint, Some("nav <camp_name|x y z|zone>"));
     }
 
     #[test]
