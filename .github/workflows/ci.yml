@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        shell: powershell
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules
@@ -33,10 +33,10 @@ jobs:
       - name: Verify reference trees
         run: |
           git submodule status --recursive
-          if (-not (Test-Path "third_party/eqlib/include/eqlib/offsets/eqgame.h")) { throw "missing third_party/eqlib/include/eqlib/offsets/eqgame.h" }
-          if (-not (Test-Path "third_party/macroquest/src/login")) { throw "missing third_party/macroquest/src/login" }
-          if (-not (Test-Path "third_party/macroquest/src/routing")) { throw "missing third_party/macroquest/src/routing" }
-          if (-not (Test-Path "third_party/macroquest/src/eqlib")) { throw "missing third_party/macroquest/src/eqlib" }
+          test -f third_party/eqlib/include/eqlib/offsets/eqgame.h || { echo "missing third_party/eqlib/include/eqlib/offsets/eqgame.h"; exit 1; }
+          test -d third_party/macroquest/src/login || { echo "missing third_party/macroquest/src/login"; exit 1; }
+          test -d third_party/macroquest/src/routing || { echo "missing third_party/macroquest/src/routing"; exit 1; }
+          test -d third_party/macroquest/src/eqlib || { echo "missing third_party/macroquest/src/eqlib"; exit 1; }
 
   windows_checks:
     name: Windows checks (fmt + clippy + test)
@@ -44,28 +44,23 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        shell: powershell
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Locate Python
         run: |
-          $python = (Get-Command python -ErrorAction SilentlyContinue)
-          if ($python) {
-            "PYTHON_CMD=python" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if command -v python >/dev/null 2>&1; then
+            echo "PYTHON_CMD=python" >> "$GITHUB_ENV"
             exit 0
-          }
-
-          $py = (Get-Command py -ErrorAction SilentlyContinue)
-          if ($py) {
-            "PYTHON_CMD=py -3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          fi
+          if command -v py >/dev/null 2>&1; then
+            echo "PYTHON_CMD=py -3" >> "$GITHUB_ENV"
             exit 0
-          }
-
-          throw "Python 3 is not installed on the Windows runner."
-      - run: |
-          Invoke-Expression "$env:PYTHON_CMD scripts/sync_wiki.py --check"
-      - run: |
-          Invoke-Expression "$env:PYTHON_CMD -m unittest discover -s tests -p 'test_*.py' -v"
+          fi
+          echo "Python 3 is not installed on the Windows runner." >&2
+          exit 1
+      - run: $PYTHON_CMD scripts/sync_wiki.py --check
+      - run: $PYTHON_CMD -m unittest discover -s tests -p 'test_*.py' -v
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -82,7 +77,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        shell: powershell
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules

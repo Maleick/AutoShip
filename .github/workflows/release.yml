@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        shell: powershell
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules
@@ -35,12 +35,12 @@ jobs:
 
       - name: Package artifacts
         run: |
-          New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item target/release/dmft.exe release/
-          if (Test-Path target/release/dmft_dll.dll) {
-            Copy-Item target/release/dmft_dll.dll release/
-          }
-          "DMFT ${{ github.ref_name }}" | Out-File -FilePath release/VERSION.txt -Encoding UTF8 -NoNewline
+          mkdir -p release
+          cp target/release/dmft.exe release/
+          if [ -f target/release/dmft_dll.dll ]; then
+            cp target/release/dmft_dll.dll release/
+          fi
+          printf "DMFT %s" "${{ github.ref_name }}" > release/VERSION.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

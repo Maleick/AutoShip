@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        shell: powershell
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,34 +29,27 @@ jobs:
 
       - name: Locate Python
         run: |
-          $python = (Get-Command python -ErrorAction SilentlyContinue)
-          if ($python) {
-            "PYTHON_CMD=python" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if command -v python >/dev/null 2>&1; then
+            echo "PYTHON_CMD=python" >> "$GITHUB_ENV"
             exit 0
-          }
-
-          $py = (Get-Command py -ErrorAction SilentlyContinue)
-          if ($py) {
-            "PYTHON_CMD=py -3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          fi
+          if command -v py >/dev/null 2>&1; then
+            echo "PYTHON_CMD=py -3" >> "$GITHUB_ENV"
             exit 0
-          }
-
-          throw "Python 3 is not installed on the Windows runner."
+          fi
+          echo "Python 3 is not installed on the Windows runner." >&2
+          exit 1
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
       - name: Update README metrics
-        run: |
-          Invoke-Expression "$env:PYTHON_CMD scripts/update_readme_metrics.py"
+        run: $PYTHON_CMD scripts/update_readme_metrics.py
 
       - name: Commit updated README metrics
         run: |
-          git diff --quiet -- README.md
-          if ($LASTEXITCODE -eq 0) {
-            exit 0
-          }
+          git diff --quiet -- README.md && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md
