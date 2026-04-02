@@ -16,6 +16,7 @@ env:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   gate:
@@ -138,7 +139,7 @@ jobs:
           )
           copy /Y target\release\dmft.exe release\
           copy /Y target\release\dmft_dll.dll release\
-          for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Date -AsUTC -Format o"') do set "UTC_TS=%%T"
+          for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "[DateTime]::UtcNow.ToString('o')"') do set "UTC_TS=%%T"
           echo DMFT Nightly > release\NOTES.txt
           echo Commit: %GITHUB_SHA% >> release\NOTES.txt
           echo Run: %GITHUB_RUN_NUMBER% >> release\NOTES.txt
