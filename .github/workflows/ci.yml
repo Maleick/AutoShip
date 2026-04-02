@@ -19,7 +19,8 @@ env:
 jobs:
   submodules:
     name: Reference submodules
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: [self-hosted, Windows, X64, dmft]
+    timeout-minutes: 10
     defaults:
       run:
         shell: pwsh
@@ -37,9 +38,10 @@ jobs:
           if (-not (Test-Path "third_party/macroquest/src/routing")) { throw "missing third_party/macroquest/src/routing" }
           if (-not (Test-Path "third_party/macroquest/src/eqlib")) { throw "missing third_party/macroquest/src/eqlib" }
 
-  ubuntu:
-    name: Windows (fmt + clippy + test)
-    runs-on: [self-hosted, Windows, X64]
+  windows_checks:
+    name: Windows checks (fmt + clippy + test)
+    runs-on: [self-hosted, Windows, X64, dmft]
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
@@ -58,14 +60,20 @@ jobs:
       - run: cargo test
 
   windows:
-    name: Windows (build only)
+    name: Windows release build
     if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, Windows, X64]
+    needs: submodules
+    runs-on: [self-hosted, Windows, X64, dmft]
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
+      - name: Initialize reference submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
@@ -73,16 +81,7 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt, clippy
-      - uses: lukka/get-cmake@latest
-      - run: cargo fmt --all --check
-        env:
-          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-        env:
-          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
-      - run: cargo test
-        env:
-          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
+      - uses: lukka/get-cmake@v4
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
