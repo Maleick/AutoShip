@@ -28,7 +28,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           toolchain: nightly
-      - uses: lukka/get-cmake@v3
+      - uses: lukka/get-cmake@v4.3.1
 
       - name: Nightly compiler sanity check
         run: |
