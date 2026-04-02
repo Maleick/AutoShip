@@ -1107,7 +1107,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
 mod tests {
     use super::*;
     use crate::eq::structs::{
-        BuffSlot, CastState as EqCastState, EqClass, SpawnInfo, SpawnType, StandState,
+        BuffSlot, CastDurationSource, CastState as EqCastState, EqClass, SpawnInfo, SpawnType,
+        StandState,
     };
     use crate::tui::app::{ChChainStatus, ClientState, GroupDef, NavClientStatus};
     use dmft_common::nav::NavStatus;
@@ -1257,11 +1258,14 @@ mod tests {
             if index == 2 {
                 Some(EqCastState {
                     spell_id: 1,
+                    spell_name: Some(String::from("Complete Heal")),
                     target_id: 42,
                     spell_eta: 0,
                     item_id: 0,
                     spell_slot: 0,
                     remaining_ms: Some(2_500),
+                    total_cast_ms: Some(2_500),
+                    duration_source: CastDurationSource::SpellDataBase,
                     gem_etas: None,
                 })
             } else {
