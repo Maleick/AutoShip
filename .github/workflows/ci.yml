@@ -51,6 +51,7 @@ jobs:
         with:
           python-version: "3.x"
       - run: python scripts/sync_wiki.py --check
+      - run: python -m unittest discover -s tests -p "test_*.py" -v
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable

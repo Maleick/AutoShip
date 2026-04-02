@@ -810,13 +810,13 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
     push_kv(
         &mut rows,
         None,
-        ":ma Warrior",
-        "Set Main Assist, then reuse it in slash targets and follow commands.",
+        ":assist Warrior",
+        "Set Main Assist with the faster alias, then reuse it across the focused scope.",
     );
     push_kv(
         &mut rows,
         None,
-        ":mt Paladin",
+        ":tank Paladin",
         "Show or change Main Tank without leaving the TUI.",
     );
     push_kv(
@@ -834,8 +834,8 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
     push_kv(
         &mut rows,
         None,
-        ":engage 3472 / :disengage",
-        "Start or stop combat with immediate feedback.",
+        ":pull 3472 / :combat status",
+        "Kick combat on the focused scope and inspect the current combat scope summary.",
     );
     push_kv(
         &mut rows,

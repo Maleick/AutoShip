@@ -17,6 +17,11 @@ Then use:
 
 Do not treat the vendored `third_party/macroquest/src/eqlib` copy as the primary DMFT citation path.
 
+For roadmap-facing research promotion, combine these local references with:
+
+- `docs/implementation-roadmap.md`
+- `docs/external-research/automation-source-ledger.md`
+
 ## Offset Model
 
 The compiled offsets live in `dmft-common/src/offsets.rs`.
@@ -73,6 +78,7 @@ Use it for:
 4. update `dmft-common/src/offsets.rs` and, if needed, `config/offsets.json`
 5. validate on a live Windows client
 6. update the relevant wiki page if the operator or developer workflow changed
+7. if the work changes roadmap assumptions or evidence state, update `docs/implementation-roadmap.md`
 
 ## Current Behavior vs Roadmap
 

@@ -87,7 +87,7 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
     },
     CommandEntry {
         phrase: "ma",
-        aliases: &[],
+        aliases: &["assist"],
         section: HelpSection::Combat,
         usage: "ma [character_name]",
         summary: "Show or set Main Assist and send /assist when setting it.",
@@ -95,15 +95,23 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
     },
     CommandEntry {
         phrase: "mt",
-        aliases: &[],
+        aliases: &["tank"],
         section: HelpSection::Combat,
         usage: "mt [character_name]",
         summary: "Show or set Main Tank.",
         example: "mt Paladin",
     },
     CommandEntry {
+        phrase: "combat",
+        aliases: &["fight"],
+        section: HelpSection::Combat,
+        usage: "combat [status|scope]",
+        summary: "Show a scoped combat summary for the current focus.",
+        example: "combat status",
+    },
+    CommandEntry {
         phrase: "engage",
-        aliases: &[],
+        aliases: &["pull"],
         section: HelpSection::Combat,
         usage: "engage [target_id]",
         summary: "Engage combat for the focused scope.",
@@ -597,6 +605,10 @@ mod tests {
         assert_eq!(normalize_command_alias("launch all"), "login all");
         assert_eq!(normalize_command_alias("launch Dmft01"), "login Dmft01");
         assert_eq!(normalize_command_alias("overview"), "status overview");
+        assert_eq!(normalize_command_alias("assist Warrior"), "ma Warrior");
+        assert_eq!(normalize_command_alias("tank Bob"), "mt Bob");
+        assert_eq!(normalize_command_alias("pull 1234"), "engage 1234");
+        assert_eq!(normalize_command_alias("combat status"), "combat status");
     }
 
     #[test]
@@ -632,5 +644,8 @@ mod tests {
         assert!(candidates.contains(&String::from("h")));
         assert!(candidates.contains(&String::from("login")));
         assert!(candidates.contains(&String::from("launch")));
+        assert!(candidates.contains(&String::from("assist")));
+        assert!(candidates.contains(&String::from("tank")));
+        assert!(candidates.contains(&String::from("pull")));
     }
 }

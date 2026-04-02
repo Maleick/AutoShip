@@ -1242,6 +1242,19 @@ impl App {
         }
     }
 
+    /// Summarize the current combat context for operator feedback.
+    pub fn combat_status_summary(&self) -> String {
+        let mode = format!("{}", self.operating_mode);
+        let scope = self.group_focus_label();
+        let focused = self.focused_pids().len();
+        let visible = self.visible_clients().len();
+        let ma = self.main_assist.as_deref().unwrap_or("—");
+        let mt = self.main_tank.as_deref().unwrap_or("—");
+        format!(
+            "Combat: mode={mode} | scope={scope} | focused={focused}/{visible} clients | MA={ma} | MT={mt}"
+        )
+    }
+
     /// Get a short display label for the client's configured group, if known.
     pub fn client_group_label(&self, client: &ClientState) -> Option<&'static str> {
         const LABELS: &[&str] = &["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9"];
@@ -1317,6 +1330,11 @@ impl App {
     /// Get PIDs of clients in the focused group (or all if aggregate).
     pub fn focused_pids(&self) -> Vec<u32> {
         self.visible_clients().iter().map(|c| c.pid).collect()
+    }
+
+    /// Return the number of focused clients without allocating a Vec.
+    pub fn focused_pid_count(&self) -> usize {
+        self.visible_clients().len()
     }
 
     /// Send an IPC command to all focused clients, returning the success count.
@@ -2961,6 +2979,29 @@ impl App {
                     );
                 }
             },
+            "combat" => match parts.get(1).copied() {
+                None | Some("status") | Some("summary") => {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        self.combat_status_summary(),
+                        false,
+                    );
+                }
+                Some("scope") => {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!(
+                            "Combat scope: {} | focused {} clients",
+                            self.group_focus_label(),
+                            self.focused_pids().len()
+                        ),
+                        false,
+                    );
+                }
+                Some(other) => {
+                    self.usage_feedback("combat", format!("Unknown combat option '{other}'."));
+                }
+            },
             "ma" => {
                 if let Some(name) = parts.get(1) {
                     self.main_assist = Some(name.to_string());
@@ -4176,9 +4217,13 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "track"
             | "untrack"
             | "mode"
+            | "combat"
             | "ma"
+            | "assist"
             | "mt"
+            | "tank"
             | "engage"
+            | "pull"
             | "disengage"
             | "invite"
             | "accept"
@@ -4394,6 +4439,25 @@ mod tests {
             "status overview"
         );
         assert_eq!(command::normalize_command_alias("camp start"), "camp start");
+        assert_eq!(command::normalize_command_alias("assist Bob"), "ma Bob");
+        assert_eq!(command::normalize_command_alias("tank Bob"), "mt Bob");
+        assert_eq!(command::normalize_command_alias("pull 1234"), "engage 1234");
+        assert_eq!(command::normalize_command_alias("combat status"), "combat status");
+    }
+
+    #[test]
+    fn combat_status_summary_reports_scope_and_focus() {
+        let mut app = App::new();
+        app.main_assist = Some(String::from("Warrior"));
+        app.main_tank = Some(String::from("Paladin"));
+
+        let summary = app.combat_status_summary();
+
+        assert!(summary.contains("Combat: mode=Camp"));
+        assert!(summary.contains("scope=All Groups"));
+        assert!(summary.contains("focused=0/0 clients"));
+        assert!(summary.contains("MA=Warrior"));
+        assert!(summary.contains("MT=Paladin"));
     }
 
     #[test]
@@ -4401,6 +4465,9 @@ mod tests {
         assert!(command_help_detail("h").is_some());
         assert!(command_help_detail("cmds").is_some());
         assert!(command_help_detail("cfg").is_some());
+        assert!(command_help_detail("assist").is_some());
+        assert!(command_help_detail("tank").is_some());
+        assert!(command_help_detail("pull").is_some());
         assert!(command_help_detail("bogus").is_none());
     }
 
@@ -4424,9 +4491,13 @@ mod tests {
             "track",
             "untrack",
             "mode",
+            "combat",
             "ma",
+            "assist",
             "mt",
+            "tank",
             "engage",
+            "pull",
             "disengage",
             "invite",
             "accept",

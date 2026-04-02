@@ -26,6 +26,8 @@ credentials.db*
 *.md
 !README.md
 !CLAUDE.md
+!docs/
+!docs/**/*.md
 !docs/wiki/
 !docs/wiki/*.md
 
@@ -36,6 +38,12 @@ credentials.db*
 .claude/hooks/
 .claude/worktrees/
 logs/
+autoresearch-launch.json
+autoresearch-state.json
+autoresearch-state.prev.json
+research-results.tsv
+__pycache__/
+*.pyc
 
 # Local reference repos
 mq2-definitions/

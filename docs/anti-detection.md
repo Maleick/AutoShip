@@ -1,81 +1,68 @@
-# Anti-Detection: Warden & EQ Anti-Cheat
+# Anti-Detection and Operator Risk
 
-## What is Warden?
+This document summarizes DMFT's current anti-detection posture and the rules for promoting outside research into roadmap work.
 
-EverQuest uses a proprietary anti-cheat system commonly referred to as **Warden** (originally a Blizzard term, but the EQ community uses it generically). Daybreak's implementation scans for:
+It is intentionally evidence-focused. It does not promise stealth or guarantee safety.
 
-1. **Known DLL signatures** — Warden periodically scans loaded modules in the eqgame.exe process. It checks module names and hashes against a blacklist of known cheat DLLs.
-2. **Memory pattern scanning** — The client sends memory regions to the server for analysis. Warden can read arbitrary memory pages looking for known byte patterns (e.g., hook trampolines, specific string constants).
-3. **Window enumeration** — Checks for known cheat tool window titles/classes.
-4. **Process enumeration** — Scans running processes for known cheat executables.
-5. **Integrity checks** — Validates that certain game functions haven't been modified (detour detection). Checks for inline hooks at known function entry points.
+## Canonical Inputs
 
-## How MacroQuest2 Avoids Detection
+Use these sources in this order:
 
-MQ2 has evolved its anti-detection over many years:
+1. current code and repo docs
+2. `docs/external-research/daybreak-detection-digest.md`
+3. official Daybreak policy pages linked from that digest
+4. clearly labeled community reporting
 
-### Module hiding
-- MQ2 unlinks its DLL from the PEB (Process Environment Block) loaded module list, making it invisible to `EnumProcessModules` and similar APIs.
-- The DLL name is randomized at load time — not "MacroQuest2.dll" but a random string.
-- MQ2 erases PE headers from the DLL's memory region after loading, so memory scans can't find a valid PE signature.
+## Current Measures in the Repo
 
-### String obfuscation
-- Identifying strings like "MacroQuest", "MQ2", plugin names, etc. are encrypted or obfuscated in the binary.
-- Log file paths and names avoid obvious identifiers.
+Current practical measures include:
 
-### Hook stealth
-- MQ2 uses "trampoline" hooks that preserve the original function bytes and restore them before Warden integrity checks.
-- Some builds use hardware breakpoint hooks (debug registers) instead of inline patching — these leave no modified bytes in code sections.
-- The detour library (Detours/MinHook) is configured to use page-aligned trampolines that don't stand out in memory scans.
+- randomized DLL staging names before injection
+- session-derived IPC names instead of simple fixed names
+- per-session authenticated IPC using the raw token as the first pipe message
+- constant-time token comparison inside the DLL
+- restrictive current-user DACLs for named pipes and shared memory
+- movement humanization and timing variation in higher-level behavior
+- render strobing for background clients
+- GM flag visibility in operator tooling
 
-### Timing
-- Actions are not executed instantly — MQ2 adds human-like delays between commands.
-- Frame-perfect actions are avoided; jitter is added to casting, movement, and targeting.
-- The `/stick` and `/nav` commands include configurable randomization.
+## Current Operator Implications
 
-### Warden evasion
-- MQ2 hooks `ReadProcessMemory` and `NtReadVirtualMemory` to return clean (unmodified) memory when Warden scans known regions.
-- Some builds hook Warden's scan entry point to skip or neuter the scan entirely.
-- The community maintains updated "Warden offsets" that track where the scan routines live in each client patch.
+- authenticated IPC is tied to the injected session, not only to a PID
+- reconnect-style flows depend on the retained `login_token_<pid>.bin` file
+- if clients are relaunched or copied, stale token files should not be trusted
+- machine hygiene matters because official Daybreak policy is broader than one single client session
 
-## Frostreaver Anti-Detection Strategy
+## Evidence Rules
 
-### Current measures (implemented)
+Use the following handling model:
 
-1. **Command jitter** — All IPC commands from the orchestrator are queued with a random 1-10 tick delay (250ms-2.5s) before execution. Uses Xorshift32 PRNG for deterministic per-client randomness.
+- official Daybreak guidance can tighten milestone gates immediately
+- primary docs and public code repos can create `Research-backed` slice candidates when repo fit is clear
+- community reporting can suggest validation tasks or provisional slices
+- exploit-oriented claims stay low-confidence until corroborated
+- no community claim alone can satisfy an anti-cheat milestone exit gate
 
-2. **GM detection** — The `is_gm` flag is read from every spawn in the spawn list (offset `0x03ec` in PlayerClient). The TUI can highlight GM spawns and trigger alerts.
+## What Not to Claim
 
-3. **String audit** — The dmft-dll crate has been audited for identifying strings. Tracing/log strings go to our own file appender (not visible to Warden). IPC identifiers like shared memory names (`dmft_state_*`) and pipe names (`dmft_cmd_*`) are flagged for future obfuscation.
+Do not document any of the following as established fact unless they are backed by current code or stronger evidence:
 
-### Future measures (planned)
+- exact internal Daybreak scan mechanics
+- reliable bypass claims
+- speculative hook-restoration or scanner-evasion behavior
+- exploit-grade zoning or travel shortcuts as normal operator features
 
-4. **DLL name randomization** — Generate a random DLL filename at injection time instead of `dmft_dll.dll`.
+## Near-Term `M7` Hardening Focus
 
-5. **PE header erasure** — Zero out the PE headers in memory after DLL initialization completes.
+Current roadmap work should focus on:
 
-6. **PEB unlinking** — Remove the DLL from the loaded modules list in the PEB.
+- official-policy-driven anti-cheat gates
+- hook, module, string, and environment exposure review
+- timing, naming, and operator-hygiene hardening
+- validation tasks for packet, zoning, and orchestrator changes
 
-7. **Hook restoration for scans** — Implement a mechanism to temporarily restore original bytes at hook points when Warden scans are detected.
+## Related Docs
 
-8. **IPC name obfuscation** — Replace `dmft_state_*` and `dmft_cmd_*` with randomized names, communicated via a bootstrap channel.
-
-## Strings of Concern in dmft-dll
-
-These strings appear in the compiled DLL and could be flagged by pattern scanning:
-
-| String | Location | Risk | Notes |
-|--------|----------|------|-------|
-| `dmft_state_{id}` | `ipc/shared.rs` | **Medium** | Shared memory name visible to Warden |
-| `dmft-ipc-{id}` | `ipc/mod.rs` | **Low** | Thread name, less visible |
-| `\\.\pipe\dmft_cmd_{id}` | `ipc/pipe.rs` | **Medium** | Named pipe visible to Warden |
-| `dmft-dll.log` | `lib.rs` | **Low** | Log file in temp dir |
-| `DMFT DLL *` | `lib.rs` (tracing) | **Low** | Goes to file appender only |
-
-Tracing messages (e.g., "DMFT DLL initializing", "Game loop hook installed") are safe — they go to our rolling file appender in `%TEMP%/dmft/`, not to game memory or any channel Warden scans.
-
-## References
-
-- MacroQuest2 source: `mq2-reference/` (local clone)
-- RedGuides community: Primary source for Warden bypass discussion
-- EQ Emulator forums: Anti-detection techniques for private servers
+- `docs/external-research/daybreak-detection-digest.md`
+- `docs/implementation-roadmap.md`
+- `docs/wiki/Security-and-Anti-Detection-Notes.md`

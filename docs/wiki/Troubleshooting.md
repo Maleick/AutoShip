@@ -88,11 +88,11 @@ Checks:
 
 ## Wiki publish fails with "Repository not found"
 
-If `python3 scripts/sync_wiki.py --push` reports that the wiki remote does not exist yet:
+If `python scripts/sync_wiki.py --push` reports that the wiki remote does not exist yet:
 
 1. open the repository Wiki tab in GitHub
 2. create the first page in the UI
-3. rerun `python3 scripts/sync_wiki.py --push`
+3. rerun `python scripts/sync_wiki.py --push`
 
 That is the one-time bootstrap path when wiki support is enabled but the wiki git repo is not yet initialized.
 

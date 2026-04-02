@@ -28,6 +28,7 @@ This wiki is the long-lived operator and developer reference for the current rep
 - [Soul Engine](Soul-Engine)
 - [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References)
 - [Development Workflow](Development-Workflow)
+- [Roadmap and Known Gaps](Roadmap-and-Known-Gaps)
 - [Maintaining the Wiki](Maintaining-the-Wiki)
 
 ## Current Snapshot
@@ -68,7 +69,8 @@ Repository rules that matter for documentation:
 
 ### Roadmap and validation notes
 
-- Real external LLM provider integration is still the M6 boundary; the current code keeps the queue/provider abstraction but does not spend a real token budget.
+- The canonical active roadmap now resumes at `M5` Packet Engine and places provider-backed Soul/LLM work at `M10`.
+- The current code keeps the queue/provider abstraction for Soul behavior, but routine live provider use is not yet the claimed default operating mode.
 - Some live-client behavior still needs regular Windows validation after EQ patches, especially login selectors, offsets, and nav/combat edge cases.
 - Old research docs may still say "Frostreaver"; treat the current product name as DMFT and prefer code plus current top-level docs if anything conflicts.
 

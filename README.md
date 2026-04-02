@@ -115,7 +115,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **Persistent memory** — SQLite-backed memory database for long-term character state
 - **Social dynamics** — Social graph tracking relationships between characters
 - **Idle behavior** — Personality-driven actions during downtime
-- **LLM integration** — Async request queue for Claude/Gemini-driven character responses (M6 — active development)
+- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M10` in the canonical roadmap)
 
 ### Login Automation
 
@@ -146,7 +146,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **CSPRNG session tokens** (not PID-derived)
 - **Randomized DLL staging names** (CSPRNG filename, not static)
 - **Restrictive pipe DACL** (current user only)
-- **Note:** IPC pipe names currently use a static `dmft_` prefix (randomized session-GUID names are planned)
+- **Session-derived IPC naming** — active helpers derive names from the per-session token rather than a simple fixed public prefix
 - **Human-like command jitter** (triangle distribution + hesitation spikes)
 - **Per-character personality profiles** (reaction speed, aggression, discipline variation)
 - **GM flag detection** (alerts on GM spawns)
@@ -218,6 +218,18 @@ If `svc.cmd` is not present in that runner package, the script prints `sc.exe` f
 
 See [`SELF_HOSTED_RUNNER_SETUP.md`](SELF_HOSTED_RUNNER_SETUP.md) for the manual
 step-by-step flow and validation checklist.
+
+Nightly self-hosted workflows:
+
+- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
+- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`
+
+If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
+
+```powershell
+gh auth status
+gh auth refresh -s project -s read:project
+```
 
 ### Git Hygiene (PRs + stale branches)
 
@@ -294,6 +306,11 @@ Current workspace totals: 74,123 Rust lines and 1,766 exact tests. This line and
 
 Tag-triggered releases (`v*`) build Windows binaries and create GitHub Releases automatically.
 
+Nightly automation now runs separately on the self-hosted Windows runner:
+
+- wiki auto-publish via `scripts/sync_wiki.py --push`
+- rolling nightly prerelease build and artifact upload
+
 ## Configuration
 
 ### Accounts (`config/accounts.toml`)
@@ -343,28 +360,43 @@ Run `scripts\optimize_ini.ps1` to apply minimal settings:
 
 ## Roadmap
 
-### Completed
+Canonical roadmap source:
+
+- `docs/implementation-roadmap.md`
+
+Historical milestones already implemented in the repository:
 
 - [x] **M1** — External memory reading + TUI dashboard
 - [x] **M2** — DLL injection + function hooking + IPC + self-healing monitor
 - [x] **M2.5** — Login automation + encrypted credential store + launch coordinator
 - [x] **M3** — Navigation — navmesh pathfinding (Detour), 888-zone BFS routing, movement humanization
 - [x] **M4** — Combat automation — 17 class strategies, puller FSM, HolyShit system, CH chain
-- [x] **M5** — Soul Engine — personality traits, persistent memory, social dynamics, idle behavior
 
-### Next
+Canonical active roadmap order:
 
-- [ ] **M6** — LLM Character AI — API integration (Gemini/Claude), in-game chat responses
+- [ ] **M5** — Packet Engine
+- [ ] **M6** — Zoning/Movement
+- [ ] **M7** — Anti-Cheat
+- [ ] **M8** — Orchestrator
+- [ ] **M9** — Learning/RL
+- [ ] **M10** — Soul Engine + LLM
+- [ ] **M11** — Economy
 
-### Future
+Execution rules:
 
-- [ ] **M7** — Learning/RL — behavioral cloning, RL fine-tuning
-- [ ] **M8** — Economy automation (vendor, EC tunnel trading, Bazaar, Krono farming)
+- external research can add milestone slices, but it cannot reorder milestones on its own
+- `docs/implementation-roadmap.md` is the source of truth for milestone gates and evidence states
+- GitHub Projects mirror the roadmap; they do not replace the repo docs as the source of truth
 
 ## Research Docs
 
+- `docs/implementation-roadmap.md` — canonical roadmap, evidence model, milestone gates
+- `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
+- `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native DMFT TUI translation targets
+- `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors plus secondary detection signals
+- `docs/research-imports/2026-04-02-packet-zoning/` — raw packet and zoning evidence archive
 - `docs/orchestration-design.md` — 7-phase plan, group model, camp loop design
-- `docs/anti-detection.md` — Warden research, mitigation strategies
+- `docs/anti-detection.md` — evidence-based anti-detection posture and operator-risk rules
 - `docs/redguides-automation-research.md` — KissAssist, CWTN, camp loop patterns
 - `docs/mq2-deep-dive.md` — MQ2Nav, combat, stick/follow analysis
 - `docs/eq-maps-research.md` — Brewall format, coordinate transform
@@ -380,13 +412,15 @@ The long-lived operator and developer wiki is source-controlled in `docs/wiki/` 
 the GitHub wiki with `scripts/sync_wiki.py`.
 
 ```bash
-python3 scripts/sync_wiki.py --check
-python3 scripts/sync_wiki.py --dry-run
-python3 scripts/sync_wiki.py --push
+python scripts/sync_wiki.py --check
+python scripts/sync_wiki.py --dry-run
+python scripts/sync_wiki.py --push
 ```
 
 Update the repo-side source files in `docs/wiki/` in the same PRs that change behavior, then
 publish the wiki snapshot after review.
+
+The nightly wiki publish workflow uses runner-local `gh auth`, not a repository secret token.
 
 ## Requirements
 
