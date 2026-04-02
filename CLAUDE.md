@@ -26,16 +26,16 @@ cargo test               # Run tests (macOS runs platform-independent subset)
 
 Claude is an optional issue worker in DMFT. Follow [`AGENTS.md`](AGENTS.md) and mirror these rules whenever you act through GitHub or a local Claude Code session:
 
-- Only execute an issue when it is in the `DMFT Roadmap` GitHub Project with `Status = Ready for Agent` and has label `agent:ready`.
+- Only execute an issue when it is in the `DMFT Roadmap` GitHub Project with `Agent Status = Ready for Agent` and has label `agent:ready`.
 - Claude is opt-in. Treat `worker:claude` or an explicit `@claude` mention as the routing signal. Otherwise Codex is the default worker.
-- Claim exactly one issue per run by moving `Status` to `Agent Working`, replacing `agent:ready` with `agent:working`, and posting a short claim comment.
+- Claim exactly one issue per run by moving `Agent Status` to `Agent Working`, replacing `agent:ready` with `agent:working`, and posting a short claim comment.
 - Branch from `master` as `claude/issue-<number>-<slug>`.
 - Default to implementation mode for concrete issues. Do not wait for a second instruction to start coding.
 - If an issue has `mode:research`, use the same docs-first workflow as the Codex autoresearch loop: update roadmap or research docs first, run the verifier and guard commands, and do not commit transient automation state.
 - If the task spans multiple independent surfaces, use parallel workers or subagents automatically and integrate before final verification.
 - Always run the issue's `Verify` commands. If Rust, config, or scripts changed, also run repo gate commands when feasible. If the diff is docs, workflow, or prompt only, run lightweight syntax checks plus `python3 scripts/sync_wiki.py --check`.
 - Open a non-draft PR into `master`, link the issue, and stop there. Claude never merges DMFT pull requests; the shared Codex PR manager owns merge decisions.
-- If blocked, move the issue to `Blocked`, add `agent:blocked`, and leave a concrete unblock comment.
+- If blocked, move the issue `Agent Status` to `Blocked`, add `agent:blocked`, and leave a concrete unblock comment.
 
 ## Architecture
 

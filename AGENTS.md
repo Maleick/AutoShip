@@ -13,7 +13,7 @@ Shared operating contract for autonomous coding agents in this repository.
 - Codex is the default issue worker.
 - Claude is an optional worker only when an issue is labeled `worker:claude` or a comment explicitly mentions `@claude`.
 - An issue is eligible for autonomous execution only when both are true:
-  - the `DMFT Roadmap` GitHub Project `Status` field is `Ready for Agent`
+  - the `DMFT Roadmap` GitHub Project `Agent Status` field is `Ready for Agent`
   - the issue has label `agent:ready`
 - Skip issues that already have `agent:working`, already have an open pull request, or are already blocked with `agent:blocked`.
 - GitHub label meanings:
@@ -29,7 +29,7 @@ Shared operating contract for autonomous coding agents in this repository.
 
 - Claim at most one issue per run.
 - Claim flow:
-  - move the GitHub Project `Status` to `Agent Working`
+  - move the GitHub Project `Agent Status` field to `Agent Working`
   - replace `agent:ready` with `agent:working`
   - post a short claim comment that names the branch being created
 - Branch from `master` using `codex/issue-<number>-<slug>` or `claude/issue-<number>-<slug>`.
@@ -53,7 +53,7 @@ Shared operating contract for autonomous coding agents in this repository.
 ## Pull Requests And Merge
 
 - Open a non-draft pull request into `master`, link the issue, and summarize scope plus validation.
-- Move the GitHub Project `Status` to `PR Open` after the PR exists.
+- Move the GitHub Project `Agent Status` field to `PR Open` after the PR exists.
 - Only the shared Codex PR manager may merge pull requests.
 - Merge or enable auto-merge only when all are true:
   - base branch is `master`
@@ -66,7 +66,7 @@ Shared operating contract for autonomous coding agents in this repository.
 ## Blockers
 
 - If blocked:
-  - move the GitHub Project `Status` to `Blocked`
+  - move the GitHub Project `Agent Status` field to `Blocked`
   - remove `agent:working`
   - add `agent:blocked`
   - leave a concrete unblock comment with the exact next human decision or missing prerequisite

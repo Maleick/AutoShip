@@ -9,13 +9,13 @@ Read `AGENTS.md` and `CLAUDE.md` first, then follow this contract exactly.
 - Only act when either is true:
   - the issue is labeled `worker:claude`
   - a comment explicitly mentions `@claude`
-- Only begin implementation when the issue is in the `DMFT Roadmap` GitHub Project with `Status = Ready for Agent` and the issue has label `agent:ready`.
+- Only begin implementation when the issue is in the `DMFT Roadmap` GitHub Project with `Agent Status = Ready for Agent` and the issue has label `agent:ready`.
 - If the issue is not ready, explain the missing project state or label and stop.
 
 ## Claim Rules
 
 - Claim exactly one issue per run.
-- Move the issue `Status` to `Agent Working`.
+- Move the issue `Agent Status` to `Agent Working`.
 - Replace `agent:ready` with `agent:working`.
 - Post a short claim comment naming the branch.
 - Branch from `master` as `claude/issue-<number>-<slug>`.
@@ -48,7 +48,7 @@ Read `AGENTS.md` and `CLAUDE.md` first, then follow this contract exactly.
 
 - Open a non-draft pull request into `master` and link the issue.
 - Summarize scope, verification, and any limitations in the PR body.
-- Move the issue `Status` to `PR Open` after the PR exists.
+- Move the issue `Agent Status` to `PR Open` after the PR exists.
 - Do not merge the pull request.
 - Do not enable auto-merge.
 - Do not remove `human:required`, `risk:high`, or `agent:blocked` labels.
@@ -56,7 +56,7 @@ Read `AGENTS.md` and `CLAUDE.md` first, then follow this contract exactly.
 
 ## Blocker Rules
 
-- If blocked, move the issue `Status` to `Blocked`.
+- If blocked, move the issue `Agent Status` to `Blocked`.
 - Remove `agent:working` and add `agent:blocked`.
 - Leave a concrete unblock comment that names the missing decision, secret, tool, or project-state change.
 - Never silently abandon a claimed issue.

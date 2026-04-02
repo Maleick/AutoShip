@@ -16,10 +16,10 @@ GitHub Projects mirror repo truth. The repo remains authoritative, especially [`
 
 An issue enters the autonomous queue only when both are true:
 
-1. The issue is in the `DMFT Roadmap` GitHub Project with `Status = Ready for Agent`.
+1. The issue is in the `DMFT Roadmap` GitHub Project with `Agent Status = Ready for Agent`.
 2. The issue has label `agent:ready`.
 
-Expected `Status` values:
+Expected `Agent Status` values:
 
 - `Backlog`
 - `Ready for Agent`
@@ -45,20 +45,20 @@ Queue and policy labels:
 2. Fill in `Scope`, `Done when`, `Verify`, `Out of scope`, and `Source docs`.
 3. Add the issue to the `DMFT Roadmap` GitHub Project.
 4. Leave the issue in `Backlog` until it is ready for hands-off execution.
-5. When ready, set `Status = Ready for Agent` and add `agent:ready`.
+5. When ready, set `Agent Status = Ready for Agent` and add `agent:ready`.
 6. Optionally add:
    - `mode:research` for docs-first research work
    - `worker:claude` to route execution to Claude
    - `merge:auto` to allow unattended merge
    - `human:required` or `risk:high` to require human judgment before merge
 7. The worker claims exactly one issue per run:
-   - move `Status` to `Agent Working`
+   - move `Agent Status` to `Agent Working`
    - replace `agent:ready` with `agent:working`
    - post a short claim comment
    - branch from `master`
-8. After verification succeeds, the worker opens a non-draft PR into `master` and moves the issue to `PR Open`.
-9. If blocked, the worker moves the issue to `Blocked`, adds `agent:blocked`, removes `agent:working`, and leaves a concrete unblock comment.
-10. After merge, move the issue to `Done` and clear any stale working or blocked labels.
+8. After verification succeeds, the worker opens a non-draft PR into `master` and moves the issue `Agent Status` to `PR Open`.
+9. If blocked, the worker moves the issue `Agent Status` to `Blocked`, adds `agent:blocked`, removes `agent:working`, and leaves a concrete unblock comment.
+10. After merge, move the issue `Agent Status` to `Done` and clear any stale working or blocked labels.
 
 ## Worker Rules
 
@@ -123,6 +123,7 @@ GitHub workflow:
 
 - The Codex app must stay running on the always-on machine that has `/Users/maleick/Projects/DMFT` available on disk.
 - GitHub CLI auth on that machine needs `project` and `read:project` scopes in order to inspect and mutate the `DMFT Roadmap` project state.
+- The autonomous queue uses the custom `Agent Status` field so the project can keep the built-in `Status` field for broader roadmap progress.
 - The optional Claude workflow requires repository secret `ANTHROPIC_API_KEY`.
 - `master` stays protected, with the Windows `PR gate (fmt + clippy + test + python)` check as the merge blocker.
 - Current Codex app automations only support hourly cadences. The original target cadence for issue pickup was every 15 minutes, but the installed automation currently runs hourly until minute-level scheduling becomes available or the executor is moved to an external scheduler.

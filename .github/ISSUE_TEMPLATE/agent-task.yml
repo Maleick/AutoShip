@@ -9,7 +9,7 @@ body:
 
         Queue rule:
         - the issue is only eligible for automatic pickup after it is added to the `DMFT Roadmap` GitHub Project
-        - set the project `Status` field to `Ready for Agent`
+        - set the project `Agent Status` field to `Ready for Agent`
         - add label `agent:ready`
 
         Optional routing and risk controls:
