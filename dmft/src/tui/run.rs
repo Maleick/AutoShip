@@ -24,10 +24,16 @@ use super::app::App;
 use super::app::{ChChainStatus, NavClientStatus};
 use super::cast::{CastDisplay, short_cast_label};
 use super::event::handle_events;
+use super::live_cast_capture::{LIVE_CAST_CAPTURE_ENV, live_cast_capture_enabled};
 use super::ui::ch_chain::{CastState as ChPanelCastState, ChainCleric};
 use super::ui::draw;
 use crate::eq::structs::SpawnInfo;
 use crate::orchestrator::Orchestrator;
+
+#[cfg(windows)]
+use super::live_cast_capture::{
+    LiveCastCaptureSnapshot, diff_live_cast_capture, log_live_cast_capture_event,
+};
 
 /// Soul Engine tick interval (5 seconds).
 const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
@@ -47,6 +53,15 @@ const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 ///
 /// Returns an error if the operation fails.
 pub fn run_tui(mut app: App, mut orchestrator: Orchestrator) -> Result<()> {
+    if live_cast_capture_enabled() {
+        tracing::info!(
+            target: "dmft::cast_capture",
+            env = LIVE_CAST_CAPTURE_ENV,
+            log_path = "logs/dmft.log",
+            "Live cast capture enabled"
+        );
+    }
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -514,8 +529,36 @@ fn refresh_eq_data_live(app: &mut App) {
 
         // Read local player
         match eq::spawn::read_local_player(&proc, client.eq_base) {
-            Ok(player) => client.local_player = Some(player),
-            Err(e) => client.client_status = format!("Player read error: {e}"),
+            Ok(player) => {
+                if live_cast_capture_enabled() {
+                    let current_capture =
+                        LiveCastCaptureSnapshot::from_cast(player.cast_state.as_ref());
+                    if let Some(event) = diff_live_cast_capture(
+                        client.last_live_cast_capture.as_ref(),
+                        current_capture.as_ref(),
+                    ) {
+                        let character_name = if client.character_name.is_empty() {
+                            player.displayed_name.as_str()
+                        } else {
+                            client.character_name.as_str()
+                        };
+                        log_live_cast_capture_event(
+                            app.tick_count,
+                            client.pid,
+                            character_name,
+                            &event,
+                        );
+                    }
+                    client.last_live_cast_capture = current_capture;
+                } else {
+                    client.last_live_cast_capture = None;
+                }
+                client.local_player = Some(player);
+            }
+            Err(e) => {
+                client.last_live_cast_capture = None;
+                client.client_status = format!("Player read error: {e}");
+            }
         }
 
         // Read target

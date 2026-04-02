@@ -82,6 +82,18 @@ impl CastDisplay {
             &self.label
         }
     }
+
+    /// Human-readable timing precision label for UI surfaces.
+    #[must_use]
+    pub fn timing_precision_label(&self) -> &'static str {
+        if self.exact { "exact" } else { "est" }
+    }
+
+    /// Short precision badge for width-constrained UI surfaces.
+    #[must_use]
+    pub fn short_precision_badge(&self) -> &'static str {
+        if self.exact { "ex" } else { "est" }
+    }
 }
 
 /// Build a compact label for width-constrained cast strips.
@@ -237,6 +249,30 @@ mod tests {
         assert_eq!(display.remaining_secs, Some(1.5));
         assert_eq!(display.elapsed_secs, Some(1.0));
         assert!(!display.exact);
+    }
+
+    #[test]
+    fn timing_precision_label_matches_exact_flag() {
+        assert_eq!(
+            CastDisplay::exact_progress("Complete Heal", "CH", 0.5, 10.0).timing_precision_label(),
+            "exact"
+        );
+        assert_eq!(
+            CastDisplay::provisional("Cast", "C", 0.5, None).timing_precision_label(),
+            "est"
+        );
+    }
+
+    #[test]
+    fn short_precision_badge_matches_exact_flag() {
+        assert_eq!(
+            CastDisplay::exact_progress("Complete Heal", "CH", 0.5, 10.0).short_precision_badge(),
+            "ex"
+        );
+        assert_eq!(
+            CastDisplay::provisional("Cast", "C", 0.5, None).short_precision_badge(),
+            "est"
+        );
     }
 
     #[test]

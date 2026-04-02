@@ -1,3 +1,4 @@
+use super::live_cast_capture::LiveCastCaptureSnapshot;
 use crate::eq::structs::{GroupInfo, SpawnInfo};
 
 /// Per-client state for each attached EQ process.
@@ -23,6 +24,8 @@ pub struct ClientState {
     pub client_status: String,
     /// Whether this client was created from demo data (not a real process).
     pub is_demo: bool,
+    /// Last logged live cast snapshot when `DMFT_CAST_CAPTURE=1`.
+    pub last_live_cast_capture: Option<LiveCastCaptureSnapshot>,
 }
 
 impl ClientState {
@@ -40,6 +43,7 @@ impl ClientState {
             group_info: None,
             client_status: format!("Attached to PID {pid}"),
             is_demo: false,
+            last_live_cast_capture: None,
         }
     }
 }
@@ -96,5 +100,11 @@ mod tests {
     fn new_defaults_not_demo() {
         let cs = ClientState::new(1, 0);
         assert!(!cs.is_demo);
+    }
+
+    #[test]
+    fn new_defaults_no_live_cast_capture() {
+        let cs = ClientState::new(1, 0);
+        assert!(cs.last_live_cast_capture.is_none());
     }
 }
