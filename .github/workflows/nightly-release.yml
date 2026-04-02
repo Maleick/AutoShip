@@ -25,24 +25,29 @@ jobs:
       should_run: ${{ steps.gate.outputs.should_run }}
     defaults:
       run:
-        shell: powershell
+        shell: cmd
     steps:
       - id: gate
+        shell: cmd
         run: |
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            "should_run=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            exit 0
-          }
+          setlocal
+          set "EVENT_NAME=${{ github.event_name }}"
 
-          try {
-            $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Central Standard Time")
-            $local = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)
-            $shouldRun = if ($local.Hour -eq 3) { "true" } else { "false" }
-            "should_run=$shouldRun" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } catch {
-            Write-Host "Local-time gate failed; defaulting to false." -ForegroundColor Yellow
-            "should_run=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
+          if "%EVENT_NAME%"=="workflow_dispatch" (
+            echo should_run=true>>%GITHUB_OUTPUT%
+            exit /b 0
+          )
+
+          set "should_run=false"
+          for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$tz = [System.TimeZoneInfo]::FindSystemTimeZoneById(\"Central Standard Time\"); $local = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz); if ($local.Hour -eq 3) { \"true\" } else { \"false\" }"') do set "should_run=%%T"
+
+          if errorlevel 1 (
+            echo Local-time gate failed; defaulting should_run=false.
+            echo should_run=false>>%GITHUB_OUTPUT%
+            exit /b 0
+          )
+
+          echo should_run=%should_run%>>%GITHUB_OUTPUT%
 
   build-nightly:
     name: Build rolling nightly prerelease
@@ -52,31 +57,25 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: powershell
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Configure Git safe directories for runner account
         run: |
-          if (-not $env:GITHUB_WORKSPACE) {
-            throw "GITHUB_WORKSPACE is not defined."
-          }
-          $safeDirs = @(
-            $env:GITHUB_WORKSPACE,
-            "C:\actions-runner\_work\DMFT\DMFT",
-            "C:\actions-runner\_work\DMFT"
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
           )
-          foreach ($dir in $safeDirs) {
-            if (-not $dir) {
-              continue
-            }
-            try {
-              git config --global --add safe.directory "$dir"
-            } catch {
-              throw "Failed to mark $dir as a safe.directory for git."
-            }
-          }
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+            git config --global --add safe.directory "%%~D" || (
+              echo [fatal] Failed to add safe.directory for %%~D.
+              exit /b 1
+            )
+          )
+          echo [info] Active safe.directory values:
           git config --global --get-all safe.directory
 
       - name: Initialize reference submodules
@@ -97,21 +96,22 @@ jobs:
 
       - name: Package nightly artifacts
         run: |
-          New-Item -ItemType Directory -Force release | Out-Null
-          if (-not (Test-Path target/release/dmft.exe)) {
-            throw "Expected target/release/dmft.exe to exist after the build."
-          }
-          if (-not (Test-Path target/release/dmft_dll.dll)) {
-            throw "Expected target/release/dmft_dll.dll to exist after the build."
-          }
-          Copy-Item target/release/dmft.exe release/
-          Copy-Item target/release/dmft_dll.dll release/
-          @"
-          DMFT Nightly
-          Commit: $env:GITHUB_SHA
-          Run: $env:GITHUB_RUN_NUMBER
-          UTC: $(Get-Date -AsUTC -Format o)
-          "@ | Out-File -FilePath release/NOTES.txt -Encoding UTF8
+          if not exist release mkdir release
+          if not exist target\release\dmft.exe (
+            echo [fatal] Expected target\release\dmft.exe to exist after the build.
+            exit /b 1
+          )
+          if not exist target\release\dmft_dll.dll (
+            echo [fatal] Expected target\release\dmft_dll.dll to exist after the build.
+            exit /b 1
+          )
+          copy /Y target\release\dmft.exe release\
+          copy /Y target\release\dmft_dll.dll release\
+          for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Date -AsUTC -Format o"') do set "UTC_TS=%%T"
+          echo DMFT Nightly > release\NOTES.txt
+          echo Commit: %GITHUB_SHA% >> release\NOTES.txt
+          echo Run: %GITHUB_RUN_NUMBER% >> release\NOTES.txt
+          echo UTC: %UTC_TS% >> release\NOTES.txt
 
       - name: Upload nightly artifacts
         uses: actions/upload-artifact@v4
@@ -126,7 +126,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -fa nightly -m "Nightly build $env:GITHUB_RUN_NUMBER"
+          git tag -fa nightly -m "Nightly build %GITHUB_RUN_NUMBER%"
           git push origin refs/tags/nightly --force
 
       - name: Create or update rolling nightly prerelease

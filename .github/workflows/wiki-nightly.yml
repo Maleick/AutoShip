@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        shell: powershell
+        shell: cmd
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
