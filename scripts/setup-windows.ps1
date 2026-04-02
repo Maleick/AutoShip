@@ -77,12 +77,14 @@ if (-not $hasBuildTools) {
 # ---------------------------------------------------------------------------
 Write-Host "[3/6] Checking for Rust..." -ForegroundColor Yellow
 
+$desiredToolchain = "nightly-x86_64-pc-windows-msvc"
+
 if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) {
     Write-Host "  Rust not found. Installing via rustup..." -ForegroundColor Red
     try {
         $rustupInit = "$env:TEMP\rustup-init.exe"
         Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $rustupInit
-        & $rustupInit -y --default-toolchain stable-x86_64-pc-windows-msvc
+        & $rustupInit -y --default-toolchain $desiredToolchain
         Remove-Item $rustupInit -ErrorAction SilentlyContinue
         # Refresh PATH
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -96,6 +98,34 @@ $rustVersion = rustc --version
 $cargoVersion = cargo --version
 Write-Host "  OK: $rustVersion" -ForegroundColor Green
 Write-Host "  OK: $cargoVersion" -ForegroundColor Green
+
+if (Get-Command rustup -ErrorAction SilentlyContinue) {
+    $activeToolchain = rustup show active-toolchain 2>&1
+    if ($activeToolchain -notmatch "nightly-x86_64-pc-windows-msvc") {
+        Write-Host "  Switching to required nightly MSVC toolchain..." -ForegroundColor Yellow
+        rustup toolchain install $desiredToolchain
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  ERROR: Could not install $desiredToolchain." -ForegroundColor Red
+            exit 1
+        }
+        rustup default $desiredToolchain
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  ERROR: Could not activate $desiredToolchain." -ForegroundColor Red
+            exit 1
+        }
+        $rustVersion = rustc --version
+        Write-Host "  OK: $rustVersion" -ForegroundColor Green
+    }
+
+    rustup component add rustfmt clippy | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  WARNING: Could not install rustfmt or clippy components." -ForegroundColor Yellow
+    }
+} elseif ($rustVersion -notmatch "nightly") {
+    Write-Host "  ERROR: DMFT currently requires the nightly MSVC toolchain on Windows." -ForegroundColor Red
+    Write-Host "  Install rustup and run: rustup default $desiredToolchain" -ForegroundColor Red
+    exit 1
+}
 
 # ---------------------------------------------------------------------------
 # Step 4: Clone or update repo
@@ -167,7 +197,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "  Common fixes:" -ForegroundColor Yellow
     Write-Host "  - Restart PowerShell after installing VS Build Tools" -ForegroundColor Yellow
-    Write-Host "  - Run: rustup override set nightly-x86_64-pc-windows-msvc" -ForegroundColor Yellow
+    Write-Host "  - Run: rustup default $desiredToolchain" -ForegroundColor Yellow
     exit 1
 }
 

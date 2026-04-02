@@ -192,6 +192,19 @@ DLL executes InterpretCmd with human-like jitter delay
 
 ## Quick Start
 
+### Developer Preflight (optional, recommended)
+
+```bash
+python3 scripts/dev-preflight.py
+python3 scripts/dev-preflight.py --require-reference-trees
+python3 scripts/dev-preflight.py --init-submodules --require-reference-trees
+```
+
+Use the default run for routine `cargo build` / `cargo test` work. Add
+`--require-reference-trees` when you plan to inspect or cite
+`third_party/eqlib` or `third_party/macroquest`. On Windows, use `py -3`
+instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
+
 ### Development (any platform — demo mode)
 
 ```bash
@@ -200,9 +213,6 @@ cargo run                # TUI with demo data (auto-detected on non-Windows)
 cargo test               # Run the full workspace test suite
 cargo clippy --all-targets --all-features -- -D warnings
 ```
-
-Reference submodules under `third_party/` are optional for normal build, test, and runtime work.
-Only initialize them when doing offset, struct, eqlib, or MacroQuest reference research.
 
 **Demo mode** activates automatically when no live EQ process is found (always on macOS/Linux, on Windows when EQ isn't running). It populates the TUI with 18 simulated characters across 3 groups covering all 16 EQ classes:
 
