@@ -60,6 +60,21 @@
         "cargo test"
       ],
       "notes": "DMFT now documents master as the protected release branch, uses the self-hosted Windows PR gate as the only required merge check, keeps release/nightly/wiki automation out of merge blocking, hardens the self-hosted Windows workflows around cmd-safe gates, pinned CMake setup, git safe.directory bootstrapping, and nightly rustup provisioning, and tracks the scheduled DMFT PR manager automation that opens, updates, and merges PRs for agent-authored branches."
+    },
+    {
+      "id": "autonomous-issue-pipeline",
+      "name": "Codex-first autonomous issue pipeline",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "Issue template captures Scope, Done when, Verify, Out of scope, and Source docs",
+        "AGENTS.md and CLAUDE.md define the shared autonomous worker contract",
+        "Codex issue executor automation is installed in ~/.codex/automations and claims exactly one eligible issue per run",
+        "DMFT PR manager automation requires merge:auto and refuses human:required, risk:high, or agent:blocked merges",
+        "Optional Claude GitHub Action only responds to worker:claude or @claude and never merges",
+        "python3 scripts/sync_wiki.py --check",
+        "python3 - <<'PY'\nimport json, pathlib, tomllib\nimport yaml\njson.loads(pathlib.Path('feature-list.json').read_text())\ntomllib.loads(pathlib.Path.home().joinpath('.codex/automations/dmft-pr-manager/automation.toml').read_text())\ntomllib.loads(pathlib.Path.home().joinpath('.codex/automations/dmft-issue-executor/automation.toml').read_text())\nyaml.safe_load(pathlib.Path('.github/workflows/claude-agent.yml').read_text())\nyaml.safe_load(pathlib.Path('.github/ISSUE_TEMPLATE/agent-task.yml').read_text())\nprint('ok')\nPY"
+      ],
+      "notes": "Repo docs, issue template, Claude workflow, and Codex automation files now define the autonomous queue. The installed issue executor currently runs hourly because Codex app automations do not yet support 15-minute cadences, and live GitHub Project state setup still requires `gh auth refresh -s project -s read:project` before the Ready for Agent/Agent Working/PR Open/Blocked states can be mirrored automatically."
     }
   ]
 }

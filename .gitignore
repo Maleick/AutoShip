@@ -25,6 +25,7 @@ credentials.db*
 # Markdown files (except README) — handoff docs may contain credentials
 *.md
 !README.md
+!AGENTS.md
 !CLAUDE.md
 !docs/
 !docs/**/*.md
