@@ -173,3 +173,19 @@ jobs:
           removeArtifacts: true
           replacesArtifacts: true
           tag: nightly
+
+      - name: Trigger wiki publish from successful nightly run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if "%GITHUB_TOKEN%"=="" (
+            echo [fatal] GITHUB_TOKEN is not available in this workflow context.
+            exit /b 1
+          )
+          curl.exe -fS -X POST ^
+            -H "Authorization: Bearer %GITHUB_TOKEN%" ^
+            -H "Accept: application/vnd.github+json" ^
+            -H "X-GitHub-Api-Version: 2022-11-28" ^
+            -H "Content-Type: application/json" ^
+            -d "{\"ref\":\"%GITHUB_REF%\"}" ^
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/wiki-nightly.yml/dispatches"
