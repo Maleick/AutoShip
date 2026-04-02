@@ -205,6 +205,19 @@ Use the default run for routine `cargo build` / `cargo test` work. Add
 `third_party/eqlib` or `third_party/macroquest`. On Windows, use `py -3`
 instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
 
+### Git Hygiene (PRs + stale branches)
+
+```bash
+# Preview cleanup operations (default: dry-run)
+scripts/git_prune.sh
+
+# Apply local cleanup
+scripts/git_prune.sh --apply
+
+# Also delete merged remote PR branches (requires gh auth)
+scripts/git_prune.sh --apply --include-remote
+```
+
 ### Development (any platform — demo mode)
 
 ```bash
