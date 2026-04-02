@@ -205,6 +205,20 @@ Use the default run for routine `cargo build` / `cargo test` work. Add
 `third_party/eqlib` or `third_party/macroquest`. On Windows, use `py -3`
 instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
 
+### GitHub Actions Self-hosted Runner (Windows)
+
+For workflows that now target `self-hosted` Windows runners, use:
+
+```powershell
+.\scripts\setup-self-hosted-runner.ps1 -Token "<NEW_GITHUB_TOKEN>" -InstallService
+```
+
+Run `setup-self-hosted-runner.ps1` from an elevated PowerShell session for automatic service install.
+If `svc.cmd` is not present in that runner package, the script prints `sc.exe` fallback commands.
+
+See [`SELF_HOSTED_RUNNER_SETUP.md`](SELF_HOSTED_RUNNER_SETUP.md) for the manual
+step-by-step flow and validation checklist.
+
 ### Git Hygiene (PRs + stale branches)
 
 ```bash

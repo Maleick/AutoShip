@@ -14,7 +14,10 @@ permissions:
 jobs:
   build:
     name: Build Windows release
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows, X64, dmft]
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules
@@ -30,12 +33,13 @@ jobs:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
 
       - name: Package artifacts
-        shell: bash
         run: |
-          mkdir -p release
-          cp target/release/dmft.exe release/
-          cp target/release/dmft_dll.dll release/ 2>/dev/null || true
-          echo "DMFT ${{ github.ref_name }}" > release/VERSION.txt
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item target/release/dmft.exe release/
+          if (Test-Path target/release/dmft_dll.dll) {
+            Copy-Item target/release/dmft_dll.dll release/
+          }
+          "DMFT ${{ github.ref_name }}" | Out-File -FilePath release/VERSION.txt -Encoding UTF8 -NoNewline
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
