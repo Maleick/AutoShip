@@ -18,11 +18,8 @@ env:
 
 jobs:
   submodules:
-    name: Reference submodules
-    runs-on: [self-hosted, windows, X64, dmft]
-    defaults:
-      run:
-        shell: pwsh
+    name: Reference submodules + wiki check
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules
@@ -32,38 +29,18 @@ jobs:
       - name: Verify reference trees
         run: |
           git submodule status --recursive
-          if (-not (Test-Path "third_party/eqlib/include/eqlib/offsets/eqgame.h")) { throw "missing third_party/eqlib/include/eqlib/offsets/eqgame.h" }
-          if (-not (Test-Path "third_party/macroquest/src/login")) { throw "missing third_party/macroquest/src/login" }
-          if (-not (Test-Path "third_party/macroquest/src/routing")) { throw "missing third_party/macroquest/src/routing" }
-          if (-not (Test-Path "third_party/macroquest/src/eqlib")) { throw "missing third_party/macroquest/src/eqlib" }
-
-  ubuntu:
-    name: Windows (fmt + clippy + test)
-    runs-on: [self-hosted, windows, X64, dmft]
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-      - run: python scripts/sync_wiki.py --check
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-      - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test
+          test -f third_party/eqlib/include/eqlib/offsets/eqgame.h
+          test -d third_party/macroquest/src/login
+          test -d third_party/macroquest/src/routing
+          test -d third_party/macroquest/src/eqlib
+      - name: Check wiki structure
+        run: python3 scripts/sync_wiki.py --check
 
   windows:
-    name: Windows (build only)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, windows, X64, dmft]
-    defaults:
-      run:
-        shell: pwsh
+    name: Windows (fmt + clippy + test + build)
+    runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -72,7 +49,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           toolchain: nightly
+          components: rustfmt, clippy
       - uses: lukka/get-cmake@latest
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+        env:
+          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
+      - run: cargo test
+        env:
+          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"

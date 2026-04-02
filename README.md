@@ -236,6 +236,9 @@ scripts/git_prune.sh --apply --protect 'feature/keep-*'
 scripts/git_prune.sh --apply --include-remote
 ```
 
+The script auto-detects the base branch from local `main`, local `master`, then
+`origin/HEAD` unless you pass `--base`.
+
 Stale local branches are only deleted by default when they are already merged into the
 base branch or their upstream has disappeared. Use `--force-stale` if you really want
 age-only pruning.
