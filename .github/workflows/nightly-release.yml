@@ -87,7 +87,7 @@ jobs:
         with:
           toolchain: nightly
 
-      - uses: lukka/get-cmake@v4
+      - uses: lukka/get-cmake@v3
 
       - name: Build release binaries
         run: cargo build --release
