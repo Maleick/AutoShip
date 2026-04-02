@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        shell: bash
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,29 +29,23 @@ jobs:
 
       - name: Locate Python
         run: |
-          if command -v python >/dev/null 2>&1; then
-            echo "PYTHON_CMD=python" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          if command -v py >/dev/null 2>&1; then
-            echo "PYTHON_CMD=py -3" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          mkdir -p .ci-python
-          curl -fsSL -o .ci-python/python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
-          tar -xf .ci-python/python-embed.zip -C .ci-python
-          echo "PYTHON_CMD=$PWD/.ci-python/python.exe" >> "$GITHUB_ENV"
+          where python >nul 2>nul && (echo PYTHON_CMD=python>>"%GITHUB_ENV%" & exit /b 0)
+          where py >nul 2>nul && (echo PYTHON_CMD=py -3>>"%GITHUB_ENV%" & exit /b 0)
+          if not exist .ci-python mkdir .ci-python
+          curl.exe -fsSL -o .ci-python\python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
+          tar -xf .ci-python\python-embed.zip -C .ci-python
+          echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
       - name: Update README metrics
-        run: eval "$PYTHON_CMD scripts/update_readme_metrics.py"
+        run: '%PYTHON_CMD% scripts/update_readme_metrics.py'
 
       - name: Commit updated README metrics
         run: |
-          git diff --quiet -- README.md && exit 0
+          git diff --quiet -- README.md && exit /b 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md

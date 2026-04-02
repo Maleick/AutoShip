@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        shell: bash
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules
@@ -33,10 +33,10 @@ jobs:
       - name: Verify reference trees
         run: |
           git submodule status --recursive
-          test -f third_party/eqlib/include/eqlib/offsets/eqgame.h || { echo "missing third_party/eqlib/include/eqlib/offsets/eqgame.h"; exit 1; }
-          test -d third_party/macroquest/src/login || { echo "missing third_party/macroquest/src/login"; exit 1; }
-          test -d third_party/macroquest/src/routing || { echo "missing third_party/macroquest/src/routing"; exit 1; }
-          test -d third_party/macroquest/src/eqlib || { echo "missing third_party/macroquest/src/eqlib"; exit 1; }
+          if not exist "third_party\eqlib\include\eqlib\offsets\eqgame.h" (echo missing third_party\eqlib\include\eqlib\offsets\eqgame.h & exit /b 1)
+          if not exist "third_party\macroquest\src\login" (echo missing third_party\macroquest\src\login & exit /b 1)
+          if not exist "third_party\macroquest\src\routing" (echo missing third_party\macroquest\src\routing & exit /b 1)
+          if not exist "third_party\macroquest\src\eqlib" (echo missing third_party\macroquest\src\eqlib & exit /b 1)
 
   windows_checks:
     name: Windows checks (fmt + clippy + test)
@@ -44,25 +44,19 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        shell: bash
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
       - name: Locate Python
         run: |
-          if command -v python >/dev/null 2>&1; then
-            echo "PYTHON_CMD=python" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          if command -v py >/dev/null 2>&1; then
-            echo "PYTHON_CMD=py -3" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          mkdir -p .ci-python
-          curl -fsSL -o .ci-python/python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
-          tar -xf .ci-python/python-embed.zip -C .ci-python
-          echo "PYTHON_CMD=$PWD/.ci-python/python.exe" >> "$GITHUB_ENV"
-      - run: eval "$PYTHON_CMD scripts/sync_wiki.py --check"
-      - run: eval "$PYTHON_CMD -m unittest discover -s tests -p 'test_*.py' -v"
+          where python >nul 2>nul && (echo PYTHON_CMD=python>>"%GITHUB_ENV%" & exit /b 0)
+          where py >nul 2>nul && (echo PYTHON_CMD=py -3>>"%GITHUB_ENV%" & exit /b 0)
+          if not exist .ci-python mkdir .ci-python
+          curl.exe -fsSL -o .ci-python\python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
+          tar -xf .ci-python\python-embed.zip -C .ci-python
+          echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
+      - run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
+      - run: '%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v'
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -79,7 +73,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        shell: bash
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules

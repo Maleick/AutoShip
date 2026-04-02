@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        shell: bash
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
       - name: Initialize reference submodules
@@ -35,12 +35,10 @@ jobs:
 
       - name: Package artifacts
         run: |
-          mkdir -p release
-          cp target/release/dmft.exe release/
-          if [ -f target/release/dmft_dll.dll ]; then
-            cp target/release/dmft_dll.dll release/
-          fi
-          printf "DMFT %s" "${{ github.ref_name }}" > release/VERSION.txt
+          if not exist release mkdir release
+          copy /Y target\release\dmft.exe release\dmft.exe
+          if exist target\release\dmft_dll.dll copy /Y target\release\dmft_dll.dll release\dmft_dll.dll
+          > release\VERSION.txt <nul set /p =DMFT ${{ github.ref_name }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
