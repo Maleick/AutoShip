@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::Path;
+use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
 use crate::config;
@@ -13,6 +14,22 @@ use crate::soul;
 use crate::tui;
 
 use crate::{SOUL_DB_PATH, get_module_base};
+
+fn read_shared_state_with_retry(
+    reader: &mut ipc::shared::SharedStateReader,
+    timeout: Duration,
+) -> Option<dmft_common::types::GameState> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(state) = reader.read() {
+            return Some(state);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
 
 fn load_pid_session(pid: u32) -> Result<(dmft_common::ipc::SessionToken, u64)> {
     let token = ipc::load_session_token(pid).ok_or_else(|| {
@@ -275,9 +292,9 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
 ///
 /// Returns an error if the operation fails.
 pub fn run_status_mode(pid: u32) -> Result<()> {
-    let reader = shared_state_reader_for_pid(pid)?;
+    let mut reader = shared_state_reader_for_pid(pid)?;
 
-    match reader.read() {
+    match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
         Some(state) => {
             if !state.zone_short_name.is_empty() {
                 println!("Zone: {} ({})", state.zone_long_name, state.zone_short_name);
@@ -338,7 +355,7 @@ pub fn run_statusall_mode() -> Result<()> {
 
     for &pid in &pids {
         match shared_state_reader_for_pid(pid) {
-            Ok(reader) => match reader.read() {
+            Ok(mut reader) => match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
                 Some(state) => {
                     if let Some(ref player) = state.local_player {
                         let pos = format!("({:.0}, {:.0}, {:.0})", player.x, player.y, player.z);
@@ -410,7 +427,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
 
     // 1. Read shared memory to get current position and zone
     let waypoints = match shared_state_reader_for_pid(pid) {
-        Ok(reader) => match reader.read() {
+        Ok(mut reader) => match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
             Some(state) if !state.zone_short_name.is_empty() => {
                 let player = state
                     .local_player
@@ -505,8 +522,8 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
 
     for &pid in &pids {
         // Read shared memory for position + zone
-        let waypoints = if let Ok(reader) = shared_state_reader_for_pid(pid) {
-            match reader.read() {
+        let waypoints = if let Ok(mut reader) = shared_state_reader_for_pid(pid) {
+            match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
                 Some(state) if !state.zone_short_name.is_empty() => {
                     let player = if let Some(p) = state.local_player.as_ref() {
                         p

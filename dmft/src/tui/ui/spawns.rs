@@ -22,6 +22,7 @@ pub fn draw_spawns_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &
 
 /// Draw the filterable, sortable spawn list table.
 pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    let filtered_indices = app.filtered_spawn_indices().to_vec();
     let t = &app.theme;
     let is_active = matches!(
         app.active_panel,
@@ -32,9 +33,6 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     } else {
         t.border_dim
     };
-
-    let filtered = app.filtered_spawns();
-
     let player_level: Option<u8> = app
         .active_client()
         .and_then(|c| c.local_player.as_ref())
@@ -53,7 +51,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         format!(
             " Spawns: {} ({}) [{}] search: \"{}\" [Esc to close] ",
             client_label,
-            filtered.len(),
+            filtered_indices.len(),
             fl,
             app.spawns_state.spawn_filter
         )
@@ -61,14 +59,14 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         format!(
             " Spawns: {} ({}) [{}] filter: \"{}\" ",
             client_label,
-            filtered.len(),
+            filtered_indices.len(),
             fl,
             app.spawns_state.spawn_filter
         )
     } else if app.spawns_state.spawn_type_filter != crate::tui::app::SpawnFilter::All {
-        format!(" Spawns: {} ({}) [{}] ", client_label, filtered.len(), fl)
+        format!(" Spawns: {} ({}) [{}] ", client_label, filtered_indices.len(), fl)
     } else {
-        format!(" Spawns: {} ({}) ", client_label, filtered.len())
+        format!(" Spawns: {} ({}) ", client_label, filtered_indices.len())
     };
 
     // Get local player position for distance calculation
@@ -97,8 +95,9 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         .bg(t.row_selected_bg)
         .add_modifier(Modifier::BOLD);
 
-    let rows: Vec<Row> = filtered
+    let rows: Vec<Row> = filtered_indices
         .iter()
+        .filter_map(|&index| app.spawns.get(index))
         .map(|spawn| {
             let style = spawn_row_style(spawn, player_level, t);
             let name = app.redact_name(&spawn.displayed_name);

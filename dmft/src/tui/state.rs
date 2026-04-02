@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use ratatui::style::Color;
 use ratatui::widgets::TableState;
 
 use super::app::{NavClientStatus, SpawnFilter};
+use super::theme::ThemeKind;
 use crate::eq::map_parser::ZoneMap;
 use crate::nav::mesh::NavMeshOverlay;
 
@@ -32,6 +34,66 @@ impl SpawnsScreenState {
             spawn_type_filter: SpawnFilter::All,
             search_mode: false,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FilteredSpawnCacheKey {
+    pub client_pid: Option<u32>,
+    pub spawn_revision: u64,
+    pub spawn_filter: String,
+    pub spawn_type_filter: SpawnFilter,
+}
+
+#[derive(Default)]
+pub(crate) struct FilteredSpawnCache {
+    pub key: Option<FilteredSpawnCacheKey>,
+    pub indices: Vec<usize>,
+}
+
+impl FilteredSpawnCache {
+    pub fn clear(&mut self) {
+        self.key = None;
+        self.indices.clear();
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MapSpawnPresentationKey {
+    pub client_pid: Option<u32>,
+    pub spawn_revision: u64,
+    pub selected_spawn_id: Option<u32>,
+    pub width: u16,
+    pub height: u16,
+    pub z_filter_bits: u32,
+    pub player_z_bits: Option<u32>,
+    pub show_spawns: bool,
+    pub theme_kind: ThemeKind,
+    pub center_x_bits: u32,
+    pub center_y_bits: u32,
+    pub scale_bits: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MapSpawnPresentationCell {
+    pub row: u16,
+    pub col: u16,
+    pub ch: char,
+    pub color: Color,
+}
+
+#[derive(Default)]
+pub(crate) struct MapSpawnPresentationCache {
+    pub key: Option<MapSpawnPresentationKey>,
+    pub cells: Vec<MapSpawnPresentationCell>,
+    pub selected_spawn: Option<(f32, f32, u32)>,
+}
+
+impl MapSpawnPresentationCache {
+    pub fn clear(&mut self) {
+        self.key = None;
+        self.cells.clear();
+        self.selected_spawn = None;
     }
 }
 

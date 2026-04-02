@@ -6,6 +6,7 @@ use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
 use std::collections::{HashMap, HashSet};
 use std::io;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 /// RAII guard that restores the terminal on drop, even if a panic unwinds.
@@ -46,6 +47,23 @@ const LOG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Camp loop tick interval (1 second).
 const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Selected-client spawn polling cadence.
+const ACTIVE_SPAWN_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Background-client spawn polling cadence.
+const BACKGROUND_SPAWN_REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
+
+static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var(dmft_common::ipc::PERF_TRACE_ENV)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+});
 
 /// Initialize crossterm, run the TUI loop, and clean up on exit.
 ///
@@ -524,6 +542,18 @@ fn refresh_eq_data(
     }
 }
 
+fn spawn_refresh_interval(is_selected: bool) -> Duration {
+    if is_selected {
+        ACTIVE_SPAWN_REFRESH_INTERVAL
+    } else {
+        BACKGROUND_SPAWN_REFRESH_INTERVAL
+    }
+}
+
+fn spawn_refresh_due(last_refresh: Option<Instant>, now: Instant, is_selected: bool) -> bool {
+    last_refresh.is_none_or(|last| now.duration_since(last) >= spawn_refresh_interval(is_selected))
+}
+
 /// Live EQ memory refresh — only compiles on Windows.
 /// Refreshes ALL attached clients.
 #[cfg(windows)]
@@ -534,10 +564,17 @@ fn refresh_eq_data_live(
     use crate::eq;
     use crate::process::memory::ProcessHandle;
 
-    for client in app.clients.iter_mut() {
+    let selected_index = app.selected_client;
+    let now = Instant::now();
+
+    for (client_index, client) in app.clients.iter_mut().enumerate() {
         if client.is_demo {
             continue;
         }
+
+        let is_selected = client_index == selected_index;
+        let refresh_spawns = spawn_refresh_due(client.last_spawn_refresh, now, is_selected);
+        let refresh_zone = refresh_spawns || (is_selected && client.zone_name.is_empty());
 
         let proc = match process_handles.remove(&client.pid) {
             Some(proc) => proc,
@@ -596,37 +633,62 @@ fn refresh_eq_data_live(
                 read_failed = true;
             }
         }
+        client.last_fast_refresh = Some(now);
 
-        // Read spawn list
-        match eq::spawn::read_all_spawns(&proc, client.eq_base, 200) {
-            Ok(spawns) => {
-                client.spawns = spawns;
-            }
-            Err(e) => {
-                client.client_status = format!("Spawn read error: {e}");
-                read_failed = true;
+        // Read spawn list on a staged cadence: selected client stays fast, others are throttled.
+        if refresh_spawns {
+            let perf_start = if *PERF_TRACE_ENABLED {
+                Some(Instant::now())
+            } else {
+                None
+            };
+            match eq::spawn::read_all_spawns(&proc, client.eq_base, 200) {
+                Ok(spawns) => {
+                    client.spawns = spawns;
+                    client.spawn_revision = client.spawn_revision.wrapping_add(1);
+                    client.last_spawn_refresh = Some(now);
+                    if let Some(start) = perf_start {
+                        tracing::info!(
+                            target: "dmft::perf",
+                            pid = client.pid,
+                            is_selected,
+                            spawn_count = client.spawns.len(),
+                            spawn_revision = client.spawn_revision,
+                            elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
+                            "TUI spawn snapshot refreshed"
+                        );
+                    }
+                }
+                Err(e) => {
+                    client.client_status = format!("Spawn read error: {e}");
+                    read_failed = true;
+                }
             }
         }
 
-        // Read zone name from memory (preferred) or fall back to window title
-        match eq::spawn::read_zone_name(&proc, client.eq_base) {
-            Ok(zone) => client.zone_name = zone,
-            Err(_) => {
-                read_failed = true;
-                // Fallback: parse from window title
-                if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
-                    for w in &windows {
-                        if w.pid == client.pid {
-                            let (char_name, zone) = parse_title_fields(&w.title);
-                            if !char_name.is_empty() {
-                                client.character_name = char_name;
+        // Read zone name on the same cadence as spawn snapshots unless the active client
+        // is currently missing zone data.
+        if refresh_zone {
+            match eq::spawn::read_zone_name(&proc, client.eq_base) {
+                Ok(zone) => client.zone_name = zone,
+                Err(_) => {
+                    read_failed = true;
+                    // Fallback: parse from window title
+                    if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest")
+                    {
+                        for w in &windows {
+                            if w.pid == client.pid {
+                                let (char_name, zone) = parse_title_fields(&w.title);
+                                if !char_name.is_empty() {
+                                    client.character_name = char_name;
+                                }
+                                client.zone_name = if zone.is_empty() {
+                                    String::from("Unknown")
+                                } else {
+                                    zone
+                                };
+                                break;
                             }
-                            client.zone_name = if zone.is_empty() {
-                                String::from("Unknown")
-                            } else {
-                                zone
-                            };
-                            break;
                         }
                     }
                 }
@@ -1152,5 +1214,51 @@ fn poll_log_watchers(app: &mut App) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::spawn_refresh_due;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn selected_client_spawn_refresh_uses_fast_interval() {
+        let now = Instant::now();
+
+        assert!(!spawn_refresh_due(
+            Some(now - Duration::from_millis(249)),
+            now,
+            true,
+        ));
+        assert!(spawn_refresh_due(
+            Some(now - Duration::from_millis(250)),
+            now,
+            true,
+        ));
+    }
+
+    #[test]
+    fn background_client_spawn_refresh_uses_slow_interval() {
+        let now = Instant::now();
+
+        assert!(!spawn_refresh_due(
+            Some(now - Duration::from_millis(999)),
+            now,
+            false,
+        ));
+        assert!(spawn_refresh_due(
+            Some(now - Duration::from_millis(1000)),
+            now,
+            false,
+        ));
+    }
+
+    #[test]
+    fn missing_spawn_refresh_timestamp_is_immediately_due() {
+        let now = Instant::now();
+
+        assert!(spawn_refresh_due(None, now, true));
+        assert!(spawn_refresh_due(None, now, false));
     }
 }

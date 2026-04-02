@@ -24,6 +24,71 @@ pub struct GameState {
     pub zone_long_name: String,
 }
 
+impl GameState {
+    /// Convert the public `GameState` into the internal shared-memory frame.
+    #[must_use]
+    pub fn to_shared_frame(&self, spawn_epoch: u64, include_spawns: bool) -> SharedStateFrame {
+        SharedStateFrame {
+            client_id: self.client_id,
+            local_player: self.local_player.clone(),
+            target: self.target.clone(),
+            nearby_spawns: include_spawns.then(|| self.nearby_spawns.clone()),
+            timestamp_ms: self.timestamp_ms,
+            nav_status: self.nav_status.clone(),
+            combat_status: self.combat_status.clone(),
+            zone_short_name: self.zone_short_name.clone(),
+            zone_long_name: self.zone_long_name.clone(),
+            spawn_epoch,
+        }
+    }
+}
+
+/// Internal shared-memory payload written by the DLL and reconstructed by the reader.
+///
+/// This is intentionally separate from `GameState` so spawn data can be omitted on
+/// non-refresh ticks without changing the public snapshot shape consumed elsewhere.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SharedStateFrame {
+    /// PID of the EQ client this state belongs to.
+    pub client_id: ClientId,
+    /// The local player's spawn data, if in-game.
+    pub local_player: Option<SpawnData>,
+    /// Current target's spawn data, if any.
+    pub target: Option<SpawnData>,
+    /// Nearby spawn snapshot when it changed on this tick.
+    pub nearby_spawns: Option<Vec<SpawnData>>,
+    /// Millisecond timestamp when this snapshot was captured.
+    pub timestamp_ms: u64,
+    /// Current navigation FSM state.
+    pub nav_status: crate::nav::NavStatus,
+    /// Current combat FSM state.
+    pub combat_status: crate::combat::CombatStatus,
+    /// Zone short name (e.g. "qey2hh1").
+    pub zone_short_name: String,
+    /// Zone long name (e.g. "Queynos Hills").
+    pub zone_long_name: String,
+    /// Monotonic spawn snapshot version. Increments only when `nearby_spawns` is present.
+    pub spawn_epoch: u64,
+}
+
+impl SharedStateFrame {
+    /// Reconstruct a full `GameState` by applying cached spawns when this frame omitted them.
+    #[must_use]
+    pub fn into_game_state(self, cached_spawns: Vec<SpawnData>) -> GameState {
+        GameState {
+            client_id: self.client_id,
+            local_player: self.local_player,
+            target: self.target,
+            nearby_spawns: self.nearby_spawns.unwrap_or(cached_spawns),
+            timestamp_ms: self.timestamp_ms,
+            nav_status: self.nav_status,
+            combat_status: self.combat_status,
+            zone_short_name: self.zone_short_name,
+            zone_long_name: self.zone_long_name,
+        }
+    }
+}
+
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SpawnData {
@@ -255,6 +320,69 @@ mod tests {
         let json = serde_json::to_string(&gs).expect("serialize");
         let restored: GameState = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored, gs);
+    }
+
+    #[test]
+    fn shared_state_frame_includes_spawns_when_requested() {
+        let gs = GameState {
+            client_id: 7,
+            local_player: Some(make_spawn(1000, 1000, 500, 500)),
+            target: None,
+            nearby_spawns: vec![make_spawn(10, 10, 0, 0), make_spawn(20, 20, 0, 0)],
+            timestamp_ms: 55,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "soldunga".into(),
+            zone_long_name: "Solusek's Eye".into(),
+        };
+
+        let frame = gs.to_shared_frame(3, true);
+
+        assert_eq!(frame.spawn_epoch, 3);
+        assert_eq!(frame.nearby_spawns.as_ref().map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn shared_state_frame_omits_spawns_when_not_requested() {
+        let gs = GameState {
+            client_id: 7,
+            local_player: Some(make_spawn(1000, 1000, 500, 500)),
+            target: None,
+            nearby_spawns: vec![make_spawn(10, 10, 0, 0)],
+            timestamp_ms: 55,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "soldunga".into(),
+            zone_long_name: "Solusek's Eye".into(),
+        };
+
+        let frame = gs.to_shared_frame(4, false);
+
+        assert_eq!(frame.spawn_epoch, 4);
+        assert!(frame.nearby_spawns.is_none());
+    }
+
+    #[test]
+    fn shared_state_frame_reconstructs_game_state_with_cached_spawns() {
+        let cached_spawns = vec![make_spawn(10, 10, 0, 0), make_spawn(20, 20, 0, 0)];
+        let frame = SharedStateFrame {
+            client_id: 11,
+            local_player: Some(make_spawn(1000, 1000, 500, 500)),
+            target: Some(make_spawn(200, 400, 0, 0)),
+            nearby_spawns: None,
+            timestamp_ms: 999,
+            nav_status: crate::nav::NavStatus::Arrived,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "qcat".into(),
+            zone_long_name: "Qeynos Catacombs".into(),
+            spawn_epoch: 9,
+        };
+
+        let state = frame.into_game_state(cached_spawns.clone());
+
+        assert_eq!(state.nearby_spawns, cached_spawns);
+        assert_eq!(state.zone_short_name, "qcat");
+        assert_eq!(state.timestamp_ms, 999);
     }
 
     #[test]

@@ -687,6 +687,7 @@ fn read_and_publish_state(tick: u64) {
     // On refresh ticks (every 30): rebuild spawns + all fields.
     // On other ticks: update only cheap fields in place (no heap allocations for spawns).
     static CACHED_STATE: Mutex<Option<dmft_common::types::GameState>> = Mutex::new(None);
+    static SPAWN_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
     let Ok(mut cached) = CACHED_STATE.lock() else {
         return;
@@ -722,7 +723,13 @@ fn read_and_publish_state(tick: u64) {
     }
 
     if let Some(ref state) = *cached {
-        crate::ipc::publish_state(state);
+        let spawn_epoch = if refresh_spawns {
+            SPAWN_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
+        } else {
+            SPAWN_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
+        };
+        let frame = state.to_shared_frame(spawn_epoch, refresh_spawns);
+        crate::ipc::publish_state(&frame);
     }
 }
 

@@ -15,7 +15,7 @@ use std::sync::{Mutex, OnceLock};
 use std::thread;
 
 use dmft_common::ipc::{Command, Response, SessionToken};
-use dmft_common::types::{ClientId, GameState};
+use dmft_common::types::{ClientId, SharedStateFrame};
 
 use self::pipe::CommandListener;
 use self::shared::SharedStateWriter;
@@ -96,7 +96,7 @@ pub fn poll_commands() -> Vec<Command> {
 
 /// Publish a game state snapshot to shared memory. Intended to be called once
 /// per game tick from the hook thread.
-pub fn publish_state(state: &GameState) {
+pub fn publish_state(frame: &SharedStateFrame) {
     let Some(writer_lock) = SHARED_WRITER.get() else {
         return;
     };
@@ -104,7 +104,7 @@ pub fn publish_state(state: &GameState) {
         tracing::error!("IPC shared memory writer mutex poisoned");
         return;
     };
-    if let Err(e) = writer.write(state) {
+    if let Err(e) = writer.write(frame) {
         tracing::error!(error = %e, "Failed to publish game state");
     }
 }
