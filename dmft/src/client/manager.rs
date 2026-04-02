@@ -9,6 +9,7 @@ use std::path::Path;
 /// Manages all EQ client sessions.
 pub struct ClientManager {
     sessions: HashMap<ClientId, EqSession>,
+    sessions_by_pid: HashMap<u32, ClientId>,
     next_client_id: ClientId,
     eq_process_name: String,
 }
@@ -19,6 +20,7 @@ impl ClientManager {
     pub fn new(process_name: &str) -> Self {
         Self {
             sessions: HashMap::new(),
+            sessions_by_pid: HashMap::new(),
             next_client_id: 1,
             eq_process_name: process_name.to_string(),
         }
@@ -34,7 +36,7 @@ impl ClientManager {
         let mut new_clients = Vec::new();
 
         for pid in pids {
-            if self.sessions.values().any(|s| s.pid == pid) {
+            if self.sessions_by_pid.contains_key(&pid) {
                 continue;
             }
             let id = self.next_client_id;
@@ -42,6 +44,7 @@ impl ClientManager {
             let session = EqSession::new(id, pid);
             tracing::info!(client_id = id, pid, "Discovered new EQ process");
             self.sessions.insert(id, session);
+            self.sessions_by_pid.insert(pid, id);
             new_clients.push(id);
         }
 
@@ -71,12 +74,15 @@ impl ClientManager {
 
     /// Inject all discovered but un-injected clients.
     pub fn inject_all(&mut self, dll_source: &Path) -> Vec<(ClientId, Result<()>)> {
-        let uninjected: Vec<ClientId> = self
-            .sessions
-            .iter()
-            .filter(|(_, s)| matches!(s.hook_status, dmft_common::types::HookStatus::NotInjected))
-            .map(|(id, _)| *id)
-            .collect();
+        let mut uninjected = Vec::new();
+        for (id, session) in &self.sessions {
+            if matches!(
+                session.hook_status,
+                dmft_common::types::HookStatus::NotInjected
+            ) {
+                uninjected.push(*id);
+            }
+        }
 
         uninjected
             .into_iter()
@@ -132,6 +138,7 @@ impl ClientManager {
     /// Remove a session (client was shut down intentionally).
     pub fn remove(&mut self, client_id: ClientId) -> Option<EqSession> {
         if let Some(session) = self.sessions.remove(&client_id) {
+            self.sessions_by_pid.remove(&session.pid);
             if let Some(ref dll_path) = session.dll_path {
                 crate::inject::dll_prep::cleanup_dll(dll_path);
             }

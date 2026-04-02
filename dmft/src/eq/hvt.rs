@@ -188,8 +188,7 @@ note = "Drops Mithril Two-Handed Sword"
         f.write_all(sample_toml().as_bytes()).unwrap();
 
         let wl = HvtWatchlist::load(&path).unwrap();
-        let names: Vec<_> = wl.iter().map(|t| t.name.clone()).collect();
-        assert_eq!(names.len(), 3);
+        assert_eq!(wl.iter().count(), 3);
     }
 
     #[test]
@@ -263,8 +262,9 @@ priority = "{v}"
 
         let wl = HvtWatchlist::load(&path).unwrap();
         let target = wl.is_hvt("Emperor Crush").unwrap();
-        let cloned = target.clone();
-        assert_eq!(cloned, *target);
+        assert_eq!(target.name, "Emperor Crush");
+        assert_eq!(target.zone, "crushbone");
+        assert_eq!(target.priority, HvtPriority::High);
     }
 
     #[test]

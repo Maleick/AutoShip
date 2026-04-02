@@ -495,11 +495,9 @@ fn camp_loop_full_cycle_with_snapshot() {
         let cmds = camp.tick(None);
         assert!(matches!(camp.state, CampState::Pulling { .. }));
         // No transition commands during pull wait
-        let non_autoinv: Vec<_> = cmds
-            .iter()
-            .filter(|(_, cmd)| !cmd.contains("/autoinventory"))
-            .collect();
-        assert!(non_autoinv.is_empty());
+        assert!(
+            cmds.iter().all(|(_, cmd)| cmd.contains("/autoinventory"))
+        );
     }
 
     // Final pull tick: Pulling -> Fighting
@@ -632,11 +630,7 @@ fn camp_idle_respects_healer_mana_threshold() {
         matches!(camp.state, CampState::Idle),
         "camp should not pull when healer mana is low"
     );
-    let non_autoinv: Vec<_> = cmds
-        .iter()
-        .filter(|(_, cmd)| !cmd.contains("/autoinventory"))
-        .collect();
-    assert!(non_autoinv.is_empty());
+    assert!(cmds.iter().all(|(_, cmd)| cmd.contains("/autoinventory")));
 }
 
 // ============================================================================

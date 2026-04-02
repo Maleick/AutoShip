@@ -363,21 +363,25 @@ impl Orchestrator {
         };
 
         // Calculate average level from game states of camp members
-        let levels: Vec<f32> = camp
-            .members
-            .iter()
-            .filter_map(|m| {
-                self.game_states
-                    .get(&m.pid)
-                    .and_then(|gs| gs.local_player.as_ref().map(|lp| f32::from(lp.level)))
-            })
-            .collect();
+        let mut level_sum = 0.0f32;
+        let mut level_count = 0u32;
 
-        if levels.is_empty() {
+        for m in &camp.members {
+            if let Some(level) = self
+                .game_states
+                .get(&m.pid)
+                .and_then(|gs| gs.local_player.as_ref().map(|lp| f32::from(lp.level)))
+            {
+                level_sum += level;
+                level_count += 1;
+            }
+        }
+
+        if level_count == 0 {
             return;
         }
 
-        let avg_level = levels.iter().sum::<f32>() / levels.len() as f32;
+        let avg_level = level_sum / level_count as f32;
 
         match check_progression(&camp.config, avg_level, db) {
             Some(CampProgressionEvent::AdvanceToNext { to_camp, .. }) => {
@@ -413,7 +417,7 @@ impl Orchestrator {
     /// Produce camp events by comparing current state to previous tick state.
     /// Detects charm breaks, new adds, and expiring CC.
     fn produce_camp_events(&mut self, _snapshot: &Option<CampSnapshot>) {
-        let Some(camp) = &self.active_camp else {
+        let Some(camp) = &mut self.active_camp else {
             return;
         };
 
@@ -428,58 +432,56 @@ impl Orchestrator {
         }
 
         // --- Charm break detection ---
-        let current_cc: HashMap<u32, CcType> = camp
-            .cc_tracker
-            .targets
-            .iter()
-            .filter_map(|t| t.cc_applied.map(|cc| (t.spawn_id, cc)))
-            .collect();
+        let previous_cc = std::mem::take(&mut self.prev_cc_state);
 
-        for (spawn_id, prev_cc) in &self.prev_cc_state {
-            if *prev_cc == CcType::Charm && !current_cc.contains_key(spawn_id) {
+        for (spawn_id, prev_cc) in &previous_cc {
+            if *prev_cc != CcType::Charm {
+                continue;
+            }
+
+            let still_charmed =
+                camp.cc_tracker.targets.iter().any(|t| {
+                    t.spawn_id == *spawn_id && matches!(t.cc_applied, Some(CcType::Charm))
+                });
+
+            if !still_charmed {
                 // Charm was on this mob last tick but isn't now
-                if let Some(camp) = &mut self.active_camp {
-                    camp.push_event(CampEvent::CharmBreak {
-                        spawn_id: *spawn_id,
-                    });
-                }
+                camp.push_event(CampEvent::CharmBreak {
+                    spawn_id: *spawn_id,
+                });
             }
         }
-        self.prev_cc_state = current_cc;
+
+        for target in &camp.cc_tracker.targets {
+            if let Some(cc) = target.cc_applied {
+                self.prev_cc_state.insert(target.spawn_id, cc);
+            }
+        }
 
         // --- Add detection: new NPCs within camp radius ---
         // Use the tank's nearby_spawns as the source
-        let Some(camp) = &self.active_camp else {
-            return;
-        };
         let tank = camp.members.iter().find(|m| m.role == Role::Tank);
         if let Some(tank) = tank
             && let Some(gs) = self.game_states.get(&tank.pid)
         {
-            let current_nearby: HashMap<u32, String> = gs
-                .nearby_spawns
-                .iter()
-                .filter(|s| s.spawn_type == 1) // NPCs only
-                .map(|s| (s.spawn_id, s.name.clone()))
-                .collect();
+            let previous_nearby = std::mem::take(&mut self.prev_nearby_spawns);
 
-            for (spawn_id, name) in &current_nearby {
-                if !self.prev_nearby_spawns.contains_key(spawn_id)
-                    && let Some(camp) = &mut self.active_camp
-                {
+            for spawn in gs.nearby_spawns.iter().filter(|s| s.spawn_type == 1)
+            // NPCs only
+            {
+                if !previous_nearby.contains_key(&spawn.spawn_id) {
                     camp.push_event(CampEvent::AddSpawned {
-                        spawn_id: *spawn_id,
-                        name: name.clone(),
+                        spawn_id: spawn.spawn_id,
+                        name: spawn.name.clone(),
                     });
                 }
+
+                self.prev_nearby_spawns
+                    .insert(spawn.spawn_id, spawn.name.clone());
             }
-            self.prev_nearby_spawns = current_nearby;
         }
 
         // --- CC expiry detection ---
-        let Some(camp) = &self.active_camp else {
-            return;
-        };
         let tick = camp.tick;
         let expiring: Vec<u32> = camp
             .cc_tracker
@@ -494,9 +496,7 @@ impl Orchestrator {
             .collect();
 
         for spawn_id in expiring {
-            if let Some(camp) = &mut self.active_camp {
-                camp.push_event(CampEvent::CcExpiring { spawn_id });
-            }
+            camp.push_event(CampEvent::CcExpiring { spawn_id });
         }
     }
 

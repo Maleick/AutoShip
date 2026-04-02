@@ -530,8 +530,7 @@ fn draw_dashboard_sidebar(
         .constraints(
             sections
                 .iter()
-                .map(|section| Constraint::Length(section.height))
-                .collect::<Vec<_>>(),
+                .map(|section| Constraint::Length(section.height)),
         )
         .split(area);
 
@@ -1033,7 +1032,7 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     let lines = if collapsed {
         vec![Line::from(vec![
             Span::styled(
-                focus.clone(),
+                focus,
                 Style::default()
                     .fg(t.text_accent)
                     .add_modifier(Modifier::BOLD),

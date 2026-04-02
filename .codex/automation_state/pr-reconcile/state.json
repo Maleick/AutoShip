@@ -1,0 +1,99 @@
+{
+    "summary":  {
+                    "run_count":  1,
+                    "last_completed_at":  "2026-04-02T01:07:21.9217009-05:00",
+                    "last_mode":  "merge",
+                    "recommended_next_mode":  "comment_fix_only",
+                    "failure_reason_histogram":  {
+                                                     "branch_target_mismatch_main_vs_master":  1,
+                                                     "gh_auth_invalid":  1,
+                                                     "github_shell_proxy_dead":  1,
+                                                     "worktree_index_lock_permission_denied":  1,
+                                                     "wsl_bash_launcher_unavailable":  1,
+                                                     "recastnavigation_pkg_config_native_build_blocker":  1
+                                                 },
+                    "mode_changes":  [
+                                         {
+                                             "at":  "2026-04-02T01:07:21.9217009-05:00",
+                                             "from":  null,
+                                             "to":  "merge"
+                                         }
+                                     ],
+                    "next_action_hypothesis":  "Restore direct GitHub shell access and worktree branch switching, then rerun in comment_fix_only mode to push the prepared PR #39 fixes and reassess PR #38 merge readiness."
+                },
+    "runs":  [
+                 {
+                     "completed_at":  "2026-04-02T01:07:21.9217009-05:00",
+                     "requested_target_branch":  "main",
+                     "effective_target_branch":  "master",
+                     "mode":  "merge",
+                     "mode_reason":  "No prior telemetry existed, so the run defaulted to merge mode.",
+                     "open_prs":  [
+                                      {
+                                          "number":  38,
+                                          "title":  "ci: replace failing Ubuntu job with Windows-only validation",
+                                          "base":  "master",
+                                          "head":  "copilot/update-ci-to-windows-only",
+                                          "mergeable":  true,
+                                          "blocking_comments_estimate":  0,
+                                          "comments_fixed_local":  0,
+                                          "comments_fixed_remote":  0,
+                                          "action":  "commented_skip",
+                                          "blockers":  [
+                                                           "thread_state_unavailable",
+                                                           "live_checks_unavailable",
+                                                           "github_shell_proxy_dead",
+                                                           "gh_auth_invalid",
+                                                           "worktree_index_lock_permission_denied"
+                                                       ],
+                                          "issue_comment_id":  4174888021
+                                      },
+                                      {
+                                          "number":  39,
+                                          "title":  "Add git hygiene helper for stale branch and PR cleanup",
+                                          "base":  "master",
+                                          "head":  "codex/clean-up-prs-and-stale-branches",
+                                          "mergeable":  true,
+                                          "blocking_comments_estimate":  5,
+                                          "comments_fixed_local":  5,
+                                          "comments_fixed_remote":  0,
+                                          "action":  "commented_skip",
+                                          "blockers":  [
+                                                           "push_blocked",
+                                                           "thread_state_unavailable",
+                                                           "github_shell_proxy_dead",
+                                                           "gh_auth_invalid",
+                                                           "worktree_index_lock_permission_denied"
+                                                       ],
+                                          "issue_comment_id":  4174887961
+                                      }
+                                  ],
+                     "metrics":  {
+                                     "prs_seen":  2,
+                                     "prs_targeting_requested_branch":  0,
+                                     "prs_targeting_effective_branch":  2,
+                                     "unresolved_comments_estimate":  5,
+                                     "comments_fixed_local":  5,
+                                     "comments_fixed_remote":  0,
+                                     "merge_skips":  2,
+                                     "merge_failures":  0,
+                                     "unresolved_comment_rate_estimate":  2.5
+                                 },
+                     "validation":  {
+                                        "cargo_fmt_check":  "passed",
+                                        "cargo_clippy_all_targets":  "failed: recastnavigation-sys native build blocked because pkg-config is unavailable",
+                                        "cargo_test":  "failed: recastnavigation-sys native build blocked because pkg-config is unavailable",
+                                        "bash_validation":  "blocked: bash.exe is the WSL launcher here and WSL requires an update"
+                                    },
+                     "failure_reasons":  [
+                                             "branch_target_mismatch_main_vs_master",
+                                             "gh_auth_invalid",
+                                             "github_shell_proxy_dead",
+                                             "worktree_index_lock_permission_denied",
+                                             "wsl_bash_launcher_unavailable",
+                                             "recastnavigation_pkg_config_native_build_blocker"
+                                         ],
+                     "next_action_hypothesis":  "Restore direct GitHub shell access and worktree branch switching, then rerun in comment_fix_only mode to push the prepared PR #39 fixes and reassess PR #38 merge readiness."
+                 }
+             ]
+}

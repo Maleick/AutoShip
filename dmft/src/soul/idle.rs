@@ -796,10 +796,9 @@ mod tests {
             ticks_remaining: 5,
             flavor_text: Some("Walking around...".into()),
         };
-        let cloned = active.clone();
-        assert_eq!(cloned.ticks_remaining, 5);
-        assert_eq!(cloned.flavor_text.as_deref(), Some("Walking around..."));
-        let _ = format!("{:?}", cloned);
+        assert_eq!(active.ticks_remaining, 5);
+        assert_eq!(active.flavor_text.as_deref(), Some("Walking around..."));
+        let _ = format!("{:?}", active);
     }
 
     #[test]
@@ -827,9 +826,8 @@ mod tests {
             behavior: IdleBehaviorType::Craft,
             weight: 0.42,
         };
-        let c = pb.clone();
-        assert!((c.weight - 0.42).abs() < f32::EPSILON);
-        let _ = format!("{:?}", c);
+        assert!((pb.weight - 0.42).abs() < f32::EPSILON);
+        let _ = format!("{:?}", pb);
     }
 
     #[test]

@@ -169,7 +169,7 @@ mod tests {
     fn update_state_stores_last_state() {
         let mut s = EqSession::new(1, 100);
         let state = make_game_state("Test");
-        s.update_state(state.clone());
+        s.update_state(state);
         assert!(s.last_state.is_some());
         assert_eq!(s.last_state.as_ref().unwrap().client_id, 1);
     }
@@ -247,8 +247,7 @@ mod tests {
     #[test]
     fn post_login_phase_clone() {
         let p = PostLoginPhase::Buffing;
-        let c = p.clone();
-        assert_eq!(p, c);
+        assert!(matches!(p, PostLoginPhase::Buffing));
     }
 
     #[test]
