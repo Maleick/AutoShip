@@ -53,7 +53,7 @@ python scripts/sync_wiki.py --push
 What the script does:
 
 - resolves the GitHub repo from `origin`
-- gets auth from `GH_TOKEN` or `gh auth token`
+- gets auth from `GH_TOKEN` or falls back to `gh auth token`
 - checks whether the wiki git remote exists
 - clones or initializes a wiki checkout
 - syncs all markdown pages from `docs/wiki/`
@@ -85,13 +85,13 @@ The repository also has a nightly wiki publish workflow:
 Behavior:
 
 - runs on the self-hosted runner labeled `[self-hosted, Windows, X64, dmft]`
-- uses two UTC cron entries plus a local-time gate so the publish happens at 3 AM America/Chicago year-round
+- runs on the configured UTC schedule, on manual dispatch, and after a successful `Nightly Release` workflow
 - validates with `python scripts/sync_wiki.py --check`
 - publishes with `python scripts/sync_wiki.py --push`
 
 Auth model:
 
-- the workflow relies on runner-local `gh auth`
+- the workflow exports `GH_TOKEN` from GitHub Actions and uses the same `scripts/sync_wiki.py` auth path as local runs
 - if `gh auth status` fails or the wiki remote has not been initialized, the job should fail clearly rather than silently skipping work
 
 This nightly job mirrors the repo-side canonical pages. It does not replace the requirement to update `docs/wiki/` in normal PRs.

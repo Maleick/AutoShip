@@ -87,7 +87,7 @@ When behavior or roadmap guidance changes:
 
 Nightly automation now runs on the self-hosted Windows runner:
 
-- `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot
+- `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot on schedule, manual dispatch, and after successful nightly releases
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
 - the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
 

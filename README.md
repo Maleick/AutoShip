@@ -82,7 +82,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 :G1-G6 /cmd             Send to group
 :all /sit                Broadcast to all clients
 :camp start|stop|list    Camp loop control
-:camp add|rm             Add/remove camp config
+:camp add|remove         Add/remove camp config
 :nav <dest>              Navigate to camp, coords, or slash fallback
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist
@@ -221,7 +221,7 @@ is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1
 
 Nightly self-hosted workflows:
 
-- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
+- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/`, publishes the GitHub wiki on schedule or manual dispatch, and also runs after a successful `Nightly Release` workflow
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`
 - `.github/workflows/ci.yml` runs the required `PR gate (fmt + clippy + test + python)` job for PRs and pushes to `master` without consuming GitHub-hosted minutes
 
@@ -443,7 +443,9 @@ python scripts/sync_wiki.py --push
 Update the repo-side source files in `docs/wiki/` in the same PRs that change behavior, then
 publish the wiki snapshot after review.
 
-The nightly wiki publish workflow uses runner-local `gh auth`, not a repository secret token.
+The nightly wiki publish workflow exports `GH_TOKEN` in GitHub Actions and runs the same
+`scripts/sync_wiki.py` flow used locally. Manual wiki publishing can still use either
+`GH_TOKEN` or `gh auth login`.
 
 ## Requirements
 
