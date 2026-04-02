@@ -205,6 +205,20 @@ Use the default run for routine `cargo build` / `cargo test` work. Add
 `third_party/eqlib` or `third_party/macroquest`. On Windows, use `py -3`
 instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
 
+### GitHub Actions Self-hosted Runner (Windows)
+
+For workflows that now target `self-hosted` Windows runners, use:
+
+```powershell
+.\scripts\setup-self-hosted-runner.ps1 -Token "<NEW_GITHUB_TOKEN>" -InstallService
+```
+
+Run `setup-self-hosted-runner.ps1` from an elevated PowerShell session for automatic service install.
+If `svc.cmd` is not present in that runner package, the script prints `sc.exe` fallback commands.
+
+See [`SELF_HOSTED_RUNNER_SETUP.md`](SELF_HOSTED_RUNNER_SETUP.md) for the manual
+step-by-step flow and validation checklist.
+
 ### Git Hygiene (PRs + stale branches)
 
 ```bash
@@ -221,6 +235,9 @@ scripts/git_prune.sh --apply --protect 'feature/keep-*'
 # Also delete merged remote PR branches (requires gh auth)
 scripts/git_prune.sh --apply --include-remote
 ```
+
+The script auto-detects the base branch from local `main`, local `master`, then
+`origin/HEAD` unless you pass `--base`.
 
 Stale local branches are only deleted by default when they are already merged into the
 base branch or their upstream has disappeared. Use `--force-stale` if you really want

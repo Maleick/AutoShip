@@ -8,7 +8,8 @@ Usage: scripts/git_prune.sh [options]
 Clean up merged PR branches and stale local branches.
 
 Options:
-  --base <branch>     Base branch to compare against (default: main, falls back to master)
+  --base <branch>     Base branch to compare against (default: auto-detect
+                      local main/master, then origin/HEAD)
   --days <n>          Consider local branches stale after n days without commits (default: 30)
   --protect <glob>    Protect branches matching this shell glob (repeatable)
   --no-default-protect
@@ -117,6 +118,11 @@ else
   exit 1
 fi
 
+REMOTE_BASE_REF="$BASE_REF"
+if git show-ref --verify --quiet "refs/remotes/origin/$BASE_BRANCH"; then
+  REMOTE_BASE_REF="origin/$BASE_BRANCH"
+fi
+
 CURRENT_BRANCH="$(git branch --show-current)"
 NOW_EPOCH="$(date +%s)"
 CUTOFF_EPOCH=$((NOW_EPOCH - STALE_DAYS * 24 * 60 * 60))
@@ -160,8 +166,20 @@ branch_is_merged() {
   git merge-base --is-ancestor "$1" "$BASE_REF"
 }
 
+remote_ref_exists() {
+  git show-ref --verify --quiet "refs/remotes/origin/$1"
+}
+
+remote_branch_is_merged() {
+  git merge-base --is-ancestor "origin/$1" "$REMOTE_BASE_REF"
+}
+
 echo "== Syncing remotes =="
-run_or_echo git fetch --prune --all
+if [[ "$APPLY" -eq 1 ]]; then
+  git fetch --prune --all
+else
+  git fetch --all
+fi
 
 echo "Protected branch globs:"
 for pattern in "${PROTECTED_GLOBS[@]}"; do
@@ -218,19 +236,31 @@ if [[ "$INCLUDE_REMOTE" -eq 1 ]]; then
   if ! command -v gh >/dev/null 2>&1; then
     echo "gh CLI not found; skipping remote PR cleanup."
   else
-    mapfile -t REMOTE_BRANCHES < <(gh pr list --state merged --limit 200 --json headRefName -q '.[].headRefName' 2>/dev/null || true)
-    if [[ "${#REMOTE_BRANCHES[@]}" -eq 0 ]]; then
-      echo "No merged PR branches returned by gh pr list (or gh auth missing)."
-    else
-      for branch in "${REMOTE_BRANCHES[@]}"; do
-        [[ -z "$branch" ]] && continue
-        if is_protected_branch "$branch"; then
-          echo "Keeping protected remote branch: origin/$branch"
-          continue
-        fi
-        echo "Deleting remote branch origin/$branch"
-        run_or_echo git push origin --delete "$branch"
-      done
+    remote_found=0
+    while IFS= read -r branch; do
+      [[ -z "$branch" ]] && continue
+      remote_found=1
+      if is_protected_branch "$branch"; then
+        echo "Keeping protected remote branch: origin/$branch"
+        continue
+      fi
+      if ! remote_ref_exists "$branch"; then
+        echo "Skipping remote branch origin/$branch: not found on origin."
+        continue
+      fi
+      if ! remote_branch_is_merged "$branch"; then
+        echo "Skipping remote branch origin/$branch: not fully merged into $REMOTE_BASE_REF."
+        continue
+      fi
+      echo "Deleting remote branch origin/$branch"
+      run_or_echo git push origin --delete "$branch"
+    done < <(
+      gh pr list --state merged --base "$BASE_BRANCH" --limit 200 \
+        --json headRefName,isCrossRepository \
+        -q '.[] | select(.isCrossRepository | not) | .headRefName' 2>/dev/null || true
+    )
+    if [[ "$remote_found" -eq 0 ]]; then
+      echo "No eligible merged PR branches returned by gh pr list (or gh auth missing)."
     fi
   fi
 fi

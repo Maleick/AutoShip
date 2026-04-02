@@ -126,7 +126,7 @@ impl Orchestrator {
                 }
             }
 
-            if let Some(reader) = self.state_readers.get(&pid)
+            if let Some(reader) = self.state_readers.get_mut(&pid)
                 && let Some(state) = reader.read()
             {
                 self.game_states.insert(pid, state);

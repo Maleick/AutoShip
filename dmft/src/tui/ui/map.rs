@@ -1,6 +1,8 @@
 //! Map screen — zone map renderer, spawn position list, named tracker panel.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
+use std::time::Instant;
 
 use ratatui::{
     Frame,
@@ -19,7 +21,19 @@ use super::{
 };
 use crate::eq::structs::SpawnType;
 use crate::tui::app::{ActivePanel, App, MapViewportMode};
+use crate::tui::state::{MapSpawnPresentationCell, MapSpawnPresentationKey};
 use crate::tui::theme::Theme;
+
+static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var(dmft_common::ipc::PERF_TRACE_ENV)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+});
 
 /// Draw the zone map screen with spawn positions and navigation overlay.
 pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
@@ -146,14 +160,161 @@ fn draw_maximized_map_screen(
 
 // ─── Map view ────────────────────────────────────────────────────────────────
 
-fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+#[derive(Default)]
+struct PendingSpawnCell {
+    count: u16,
+    last_glyph: Option<(char, Color)>,
+    selected_glyph: Option<(char, Color)>,
+}
+
+fn map_spawn_cache_key(
+    app: &App,
+    transform: &MapTransform,
+    w: usize,
+    h: usize,
+    player_z: Option<f32>,
+    selected_spawn_id: Option<u32>,
+) -> MapSpawnPresentationKey {
+    MapSpawnPresentationKey {
+        client_pid: app.active_client().map(|client| client.pid),
+        spawn_revision: app.selected_client_spawn_revision(),
+        selected_spawn_id,
+        width: w as u16,
+        height: h as u16,
+        z_filter_bits: app.map_state.z_filter_range.to_bits(),
+        player_z_bits: player_z.map(f32::to_bits),
+        show_spawns: app.map_state.show_spawns,
+        theme_kind: app.theme_kind,
+        center_x_bits: transform.center_x.to_bits(),
+        center_y_bits: transform.center_y.to_bits(),
+        scale_bits: transform.scale_x.to_bits(),
+    }
+}
+
+fn rebuild_map_spawn_cache<F>(
+    app: &mut App,
+    key: MapSpawnPresentationKey,
+    player_z: Option<f32>,
+    selected_spawn: Option<&crate::eq::structs::SpawnInfo>,
+    to_grid: F,
+) -> bool
+where
+    F: Fn(f32, f32) -> (i32, i32),
+{
+    if app.map_spawn_cache.key.as_ref() == Some(&key) {
+        return false;
+    }
+
+    let perf_start = if *PERF_TRACE_ENABLED {
+        Some(Instant::now())
+    } else {
+        None
+    };
+    let mut pending: HashMap<(usize, usize), PendingSpawnCell> = HashMap::new();
+    let use_clustering = app.map_state.zoom <= 0.95;
+    let z_range = app.map_state.z_filter_range;
+    let selected_spawn_id = selected_spawn.map(|spawn| spawn.spawn_id);
+
+    app.map_spawn_cache.cells.clear();
+    app.map_spawn_cache.selected_spawn =
+        selected_spawn.map(|spawn| (-spawn.y, -spawn.x, spawn.spawn_id));
+
+    if key.show_spawns {
+        for spawn in &app.spawns {
+            if let Some(pz) = player_z
+                && (spawn.z - pz).abs() > z_range
+            {
+                continue;
+            }
+
+            let (col, row) = to_grid(-spawn.y, -spawn.x);
+            if col < 0 || row < 0 || col >= i32::from(key.width) || row >= i32::from(key.height) {
+                continue;
+            }
+
+            let entry = pending.entry((row as usize, col as usize)).or_default();
+            entry.count = entry.count.saturating_add(1);
+
+            let glyph = if Some(spawn.spawn_id) == selected_spawn_id {
+                ('◍', app.theme.text_highlight)
+            } else {
+                match spawn.spawn_type {
+                    SpawnType::Player => ('@', app.theme.map_pc),
+                    SpawnType::Npc => {
+                        if !spawn.displayed_name.starts_with("a ")
+                            && !spawn.displayed_name.starts_with("an ")
+                        {
+                            ('!', app.theme.map_named)
+                        } else {
+                            ('·', app.theme.map_npc)
+                        }
+                    }
+                    SpawnType::Corpse => ('.', app.theme.map_corpse),
+                    SpawnType::Unknown(_) => ('?', app.theme.spawn_unknown),
+                }
+            };
+
+            if Some(spawn.spawn_id) == selected_spawn_id {
+                entry.selected_glyph = Some(glyph);
+            } else {
+                entry.last_glyph = Some(glyph);
+            }
+        }
+
+        app.map_spawn_cache.cells = pending
+            .into_iter()
+            .filter_map(|((row, col), entry)| {
+                let (ch, color) = if use_clustering && entry.count > 2 {
+                    let digit = if entry.count > 9 {
+                        '+'
+                    } else {
+                        char::from_digit(entry.count as u32, 10).unwrap_or('+')
+                    };
+                    (digit, app.theme.text_highlight)
+                } else if let Some(selected) = entry.selected_glyph {
+                    selected
+                } else {
+                    entry.last_glyph?
+                };
+
+                Some(MapSpawnPresentationCell {
+                    row: row as u16,
+                    col: col as u16,
+                    ch,
+                    color,
+                })
+            })
+            .collect();
+    }
+
+    app.map_spawn_cache.key = Some(key.clone());
+
+    if let Some(start) = perf_start {
+        tracing::info!(
+            target: "dmft::perf",
+            client_pid = key.client_pid,
+            spawn_revision = key.spawn_revision,
+            cell_count = app.map_spawn_cache.cells.len(),
+            show_spawns = key.show_spawns,
+            elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
+            "Tactical map spawn cache rebuilt"
+        );
+    }
+
+    true
+}
+
+fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     use ratatui::style::Color;
-    let t = &app.theme;
+    let theme = app.theme.clone();
+    let t = &theme;
     let zone_label = app
         .active_client()
-        .map_or("Unknown", |c| c.zone_name.as_str());
+        .map_or_else(|| String::from("Unknown"), |c| c.zone_name.clone());
     let z_range = app.map_state.z_filter_range;
     let player_z = app.local_player.as_ref().map(|p| p.z);
+    let selected_spawn = app.selected_filtered_spawn().cloned();
+    let selected_spawn_id = selected_spawn.as_ref().map(|spawn| spawn.spawn_id);
     let player_pos_label = app
         .local_player
         .as_ref()
@@ -164,9 +325,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             )
         })
         .unwrap_or_default();
-    let selected_spawn_label = app
-        .filtered_spawns()
-        .get(app.spawn_selected())
+    let selected_spawn_label = selected_spawn
+        .as_ref()
         .map(|spawn| {
             format!(
                 " | Sel {} y:{:.0} x:{:.0} z:{:.0}",
@@ -451,79 +611,22 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         }
     }
 
-    let selected_spawn_id = app
-        .filtered_spawns()
-        .get(app.spawn_selected())
-        .map(|spawn| spawn.spawn_id);
-
-    if app.map_state.show_spawns {
-        // Spawn clustering: count spawns per grid cell when zoomed out
-        let mut spawn_counts: HashMap<(usize, usize), u16> = HashMap::new();
-        let use_clustering = app.map_state.zoom <= 0.95;
-
-        for spawn in &app.spawns {
-            // EQ Z = altitude; filter spawns more than z_range units above/below player.
-            if let Some(pz) = player_z
-                && (spawn.z - pz).abs() > z_range
-            {
-                continue;
-            }
-            let mx = -spawn.y;
-            let my = -spawn.x;
-            let (col, row) = to_grid(mx, my);
-            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
-                let key = (row as usize, col as usize);
-                *spawn_counts.entry(key).or_insert(0) += 1;
-            }
-        }
-
-        for spawn in &app.spawns {
-            if let Some(pz) = player_z
-                && (spawn.z - pz).abs() > z_range
-            {
-                continue;
-            }
-            let mx = -spawn.y;
-            let my = -spawn.x;
-            let (col, row) = to_grid(mx, my);
-            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
-                let key = (row as usize, col as usize);
-                let count = spawn_counts.get(&key).copied().unwrap_or(1);
-
-                // Show count badge when multiple spawns overlap at zoomed-out view
-                if count > 2 && use_clustering {
-                    let digit = if count > 9 {
-                        '+'
-                    } else {
-                        char::from_digit(count as u32, 10).unwrap_or('+')
-                    };
-                    grid[row as usize][col as usize] = (digit, t.text_highlight);
-                    // Only render once per cell
-                    spawn_counts.insert(key, 0);
-                } else if count > 0 {
-                    let (ch, color) = if Some(spawn.spawn_id) == selected_spawn_id {
-                        ('◎', t.text_highlight)
-                    } else {
-                        match spawn.spawn_type {
-                            SpawnType::Player => ('@', t.map_pc),
-                            SpawnType::Npc => {
-                                if !spawn.displayed_name.starts_with("a ")
-                                    && !spawn.displayed_name.starts_with("an ")
-                                {
-                                    ('!', t.map_named)
-                                } else {
-                                    ('·', t.map_npc)
-                                }
-                            }
-                            SpawnType::Corpse => ('.', t.map_corpse),
-                            SpawnType::Unknown(_) => ('?', t.spawn_unknown),
-                        }
-                    };
-                    grid[row as usize][col as usize] = (ch, color);
-                }
-            }
+    let spawn_cache_key = map_spawn_cache_key(app, &transform, w, h, player_z, selected_spawn_id);
+    rebuild_map_spawn_cache(
+        app,
+        spawn_cache_key,
+        player_z,
+        selected_spawn.as_ref(),
+        to_grid,
+    );
+    for cell in &app.map_spawn_cache.cells {
+        let row = cell.row as usize;
+        let col = cell.col as usize;
+        if row < h && col < w {
+            grid[row][col] = (cell.ch, cell.color);
         }
     }
+
 
     for status in app.named_tracker.tracked_spawns() {
         if !status.is_alive {
@@ -693,13 +796,14 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines), inner);
 
     if let Some(mini_bounds) = minimap_area(inner, w, h) {
-        let selected_spawn = app
-            .filtered_spawns()
-            .get(app.spawn_selected())
-            .map(|spawn| (-spawn.y, -spawn.x, spawn.spawn_id));
         if let Some(bounds) = map_bounds.as_ref() {
-            let (mini_title, mini_lines) =
-                draw_minimap_widget(bounds, mini_bounds, app, selected_spawn, &transform);
+            let (mini_title, mini_lines) = draw_minimap_widget(
+                bounds,
+                mini_bounds,
+                app,
+                app.map_spawn_cache.selected_spawn,
+                &transform,
+            );
             frame.render_widget(Clear, mini_bounds);
             frame.render_widget(
                 Paragraph::new(mini_lines).block(panel(mini_title.as_str(), t.border_dim, t)),
@@ -1059,12 +1163,8 @@ fn draw_minimap_widget(
     {
         mini_grid[row][col] = ('◆', t.map_you);
     }
-    if let Some((_x, _y, spawn_id)) = selected_spawn
-        && let Some((col, row)) = app
-            .filtered_spawns()
-            .iter()
-            .find(|s| s.spawn_id == spawn_id)
-            .and_then(|s| to_mini(-s.y, -s.x))
+    if let Some((spawn_x, spawn_y, _spawn_id)) = selected_spawn
+        && let Some((col, row)) = to_mini(spawn_x, spawn_y)
     {
         mini_grid[row][col] = ('◎', t.text_highlight);
     }
@@ -1587,4 +1687,127 @@ fn draw_navigation_summary(
         Paragraph::new(lines).block(panel(title.as_str(), border_style, t)),
         area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
+    use crate::tui::app::ClientState;
+
+    fn test_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnInfo {
+        SpawnInfo {
+            name: name.into(),
+            displayed_name: name.into(),
+            lastname: String::new(),
+            spawn_id: id,
+            spawn_type: SpawnType::Npc,
+            level: 60,
+            class_id: 1,
+            class: None,
+            stand_state: StandState::Standing,
+            x,
+            y,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 100,
+            mana_max: 100,
+            endurance_current: 100,
+            endurance_max: 100,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: Vec::new(),
+            cast_state: None,
+        }
+    }
+
+    fn test_app_with_spawns() -> App {
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        client.spawns = vec![
+            test_spawn(1, "orc pawn", 4.0, 4.0),
+            test_spawn(2, "orc centurion", 5.0, 4.0),
+        ];
+        client.local_player = Some(test_spawn(99, "Player", 0.0, 0.0));
+        app.clients.push(client);
+        app.sync_from_selected_client();
+        app
+    }
+
+    fn test_transform() -> MapTransform {
+        MapTransform {
+            center_x: 0.0,
+            center_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            using_local_view: false,
+        }
+    }
+
+    #[test]
+    fn rebuild_map_spawn_cache_reuses_cached_cells_for_unchanged_inputs() {
+        let mut app = test_app_with_spawns();
+        let transform = test_transform();
+        let key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+
+        assert!(rebuild_map_spawn_cache(
+            &mut app,
+            key.clone(),
+            Some(0.0),
+            None,
+            |x, y| (x as i32, y as i32),
+        ));
+
+        let cells = app.map_spawn_cache.cells.clone();
+        assert!(!rebuild_map_spawn_cache(
+            &mut app,
+            key,
+            Some(0.0),
+            None,
+            |x, y| (x as i32, y as i32),
+        ));
+        assert_eq!(app.map_spawn_cache.cells, cells);
+    }
+
+    #[test]
+    fn map_spawn_cache_key_tracks_selection_zoom_and_z_filter() {
+        let mut app = test_app_with_spawns();
+        let transform = test_transform();
+
+        let base_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        let selected_key =
+            map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), Some(app.spawns[0].spawn_id));
+        assert_ne!(selected_key, base_key);
+
+        app.map_state.zoom_in();
+        let zoomed_transform = MapTransform {
+            scale_x: 1.25,
+            scale_y: 1.25,
+            ..transform
+        };
+        let zoomed_key = map_spawn_cache_key(&app, &zoomed_transform, 40, 20, Some(0.0), None);
+        assert_ne!(zoomed_key, base_key);
+
+        app.map_state.increase_z_filter();
+        let z_changed_key = map_spawn_cache_key(&app, &zoomed_transform, 40, 20, Some(0.0), None);
+        assert_ne!(z_changed_key, zoomed_key);
+    }
+
+    #[test]
+    fn map_spawn_cache_key_only_changes_for_spawn_layer_visibility() {
+        let mut app = test_app_with_spawns();
+        let transform = test_transform();
+
+        let base_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        app.map_state.toggle_layer(1);
+        let geometry_toggled_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        assert_eq!(geometry_toggled_key, base_key);
+
+        app.map_state.toggle_layer(2);
+        let spawns_toggled_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        assert_ne!(spawns_toggled_key, base_key);
+    }
 }

@@ -737,7 +737,7 @@ pub fn handle_events(
                 KeyCode::PageUp => app.spawn_list_page_up(),
                 KeyCode::Home => app.spawns_state.table_state.select(Some(0)),
                 KeyCode::End => {
-                    let max = app.filtered_spawns().len().saturating_sub(1);
+                    let max = app.filtered_spawn_count().saturating_sub(1);
                     app.spawns_state.table_state.select(Some(max));
                 }
                 KeyCode::Enter => app.debug_selected_spawn(),

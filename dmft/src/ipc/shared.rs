@@ -5,7 +5,19 @@
 //! On non-Windows platforms it returns an empty stub so the project compiles.
 
 use anyhow::Result;
-use dmft_common::types::{ClientId, GameState};
+use dmft_common::types::{ClientId, GameState, SharedStateFrame, SpawnData};
+use std::sync::LazyLock;
+
+static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var(dmft_common::ipc::PERF_TRACE_ENV)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+});
 
 /// Reads game state from shared memory for a specific client.
 pub struct SharedStateReader {
@@ -17,6 +29,7 @@ pub struct SharedStateReader {
     _ptr: *mut u8,
     #[cfg(windows)]
     _size: usize,
+    cached_spawns: Option<(u64, Vec<SpawnData>)>,
 }
 
 // SAFETY: SharedStateReader is only accessed from the orchestrator's poll thread (single reader).
@@ -73,13 +86,17 @@ impl SharedStateReader {
                 _handle: handle,
                 _ptr: ptr.Value as *mut u8,
                 _size: SHARED_MEMORY_SIZE,
+                cached_spawns: None,
             })
         }
 
         #[cfg(not(windows))]
         {
             let _ = session_id;
-            Ok(Self { client_id })
+            Ok(Self {
+                client_id,
+                cached_spawns: None,
+            })
         }
     }
 
@@ -91,10 +108,17 @@ impl SharedStateReader {
     /// ```
     /// A zero sequence number means the DLL hasn't written yet.
     #[must_use]
-    pub fn read(&self) -> Option<GameState> {
+    pub fn read(&mut self) -> Option<GameState> {
         #[cfg(windows)]
         {
             use std::sync::atomic::{AtomicU64, Ordering};
+            use std::time::Instant;
+
+            let perf_start = if *PERF_TRACE_ENABLED {
+                Some(Instant::now())
+            } else {
+                None
+            };
 
             let base = self._ptr;
             let seq = unsafe { &*(base as *const AtomicU64) };
@@ -128,9 +152,22 @@ impl SharedStateReader {
             }
 
             // 6. Decode only if both sequence reads match and are even
-            let (state, _): (GameState, _) =
+            let (frame, _): (SharedStateFrame, _) =
                 bincode::serde::decode_from_slice(&payload_copy, bincode::config::standard())
                     .ok()?;
+
+            let state = reconstruct_game_state(frame, &mut self.cached_spawns)?;
+
+            if let Some(start) = perf_start {
+                tracing::info!(
+                    target: "dmft::perf",
+                    client_id = self.client_id,
+                    nearby_spawns = state.nearby_spawns.len(),
+                    cached_spawn_epoch = self.cached_spawns.as_ref().map(|(epoch, _)| *epoch),
+                    elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
+                    "Shared memory frame consumed"
+                );
+            }
 
             Some(state)
         }
@@ -141,6 +178,18 @@ impl SharedStateReader {
             None
         }
     }
+}
+
+fn reconstruct_game_state(
+    frame: SharedStateFrame,
+    cached_spawns: &mut Option<(u64, Vec<SpawnData>)>,
+) -> Option<GameState> {
+    if let Some(spawns) = frame.nearby_spawns.as_ref() {
+        *cached_spawns = Some((frame.spawn_epoch, spawns.clone()));
+    }
+
+    let spawns = cached_spawns.as_ref().map(|(_, spawns)| spawns.clone())?;
+    Some(frame.into_game_state(spawns))
 }
 
 impl Drop for SharedStateReader {
@@ -158,5 +207,86 @@ impl Drop for SharedStateReader {
                 let _ = CloseHandle(self._handle);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_spawn(id: u32) -> SpawnData {
+        SpawnData {
+            spawn_id: id,
+            name: format!("spawn_{id}"),
+            displayed_name: format!("Spawn {id}"),
+            spawn_type: 1,
+            level: 60,
+            class_id: 1,
+            x: id as f32,
+            y: id as f32,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 50,
+            mana_max: 50,
+            endurance_current: 25,
+            endurance_max: 25,
+        }
+    }
+
+    fn make_frame(epoch: u64, nearby_spawns: Option<Vec<SpawnData>>) -> SharedStateFrame {
+        SharedStateFrame {
+            client_id: 42,
+            local_player: Some(make_spawn(1)),
+            target: Some(make_spawn(2)),
+            nearby_spawns,
+            timestamp_ms: 1234,
+            nav_status: dmft_common::nav::NavStatus::Idle,
+            combat_status: dmft_common::combat::CombatStatus::Idle,
+            zone_short_name: "qeynos".into(),
+            zone_long_name: "South Qeynos".into(),
+            spawn_epoch: epoch,
+        }
+    }
+
+    #[test]
+    fn incremental_frame_before_first_spawn_snapshot_returns_none() {
+        let mut cached = None;
+
+        let state = reconstruct_game_state(make_frame(0, None), &mut cached);
+
+        assert!(state.is_none());
+        assert!(cached.is_none());
+    }
+
+    #[test]
+    fn incremental_frame_reuses_cached_spawns() {
+        let mut cached = None;
+        let full = reconstruct_game_state(
+            make_frame(1, Some(vec![make_spawn(10), make_spawn(20)])),
+            &mut cached,
+        )
+        .expect("full frame should decode");
+        let incremental =
+            reconstruct_game_state(make_frame(1, None), &mut cached).expect("hot frame should decode");
+
+        assert_eq!(full.nearby_spawns.len(), 2);
+        assert_eq!(incremental.nearby_spawns, full.nearby_spawns);
+    }
+
+    #[test]
+    fn new_spawn_epoch_replaces_cached_spawns() {
+        let mut cached = None;
+        let _ = reconstruct_game_state(
+            make_frame(1, Some(vec![make_spawn(10), make_spawn(20)])),
+            &mut cached,
+        );
+        let updated = reconstruct_game_state(make_frame(2, Some(vec![make_spawn(99)])), &mut cached)
+            .expect("updated frame should decode");
+
+        assert_eq!(updated.nearby_spawns.len(), 1);
+        assert_eq!(updated.nearby_spawns[0].spawn_id, 99);
+        assert_eq!(cached.as_ref().map(|(epoch, _)| *epoch), Some(2));
     }
 }
