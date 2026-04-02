@@ -175,7 +175,11 @@ remote_branch_is_merged() {
 }
 
 echo "== Syncing remotes =="
-git fetch --prune --all
+if [[ "$APPLY" -eq 1 ]]; then
+  git fetch --prune --all
+else
+  git fetch --all
+fi
 
 echo "Protected branch globs:"
 for pattern in "${PROTECTED_GLOBS[@]}"; do
