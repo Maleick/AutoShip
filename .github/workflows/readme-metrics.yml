@@ -17,7 +17,7 @@ permissions:
 jobs:
   refresh-readme-metrics:
     name: Refresh README metrics
-    runs-on: [self-hosted, windows, X64, dmft]
+    runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
         shell: pwsh
