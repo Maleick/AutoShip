@@ -26,6 +26,27 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
+      - name: Configure Git safe directories for runner account
+        run: |
+          echo [info] Marking workflow directories as trusted for Git.
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
+          )
+          git config --global --add safe.directory "%GITHUB_WORKSPACE%" || (
+            echo [fatal] Unable to add safe.directory for %GITHUB_WORKSPACE%.
+            exit /b 1
+          )
+          git config --global --add safe.directory "C:\actions-runner\_work\DMFT\DMFT" || (
+            echo [fatal] Unable to add safe.directory for C:\actions-runner\_work\DMFT\DMFT.
+            exit /b 1
+          )
+          git config --global --add safe.directory "C:\actions-runner\_work\DMFT" || (
+            echo [fatal] Unable to add safe.directory for C:\actions-runner\_work\DMFT.
+            exit /b 1
+          )
+          echo [info] Active safe.directory values:
+          git config --global --get-all safe.directory
       - name: Initialize reference submodules
         run: |
           git submodule sync --recursive
@@ -47,6 +68,27 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
+      - name: Configure Git safe directories for runner account
+        run: |
+          echo [info] Marking workflow directories as trusted for Git.
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
+          )
+          git config --global --add safe.directory "%GITHUB_WORKSPACE%" || (
+            echo [fatal] Unable to add safe.directory for %GITHUB_WORKSPACE%.
+            exit /b 1
+          )
+          git config --global --add safe.directory "C:\actions-runner\_work\DMFT\DMFT" || (
+            echo [fatal] Unable to add safe.directory for C:\actions-runner\_work\DMFT\DMFT.
+            exit /b 1
+          )
+          git config --global --add safe.directory "C:\actions-runner\_work\DMFT" || (
+            echo [fatal] Unable to add safe.directory for C:\actions-runner\_work\DMFT.
+            exit /b 1
+          )
+          echo [info] Active safe.directory values:
+          git config --global --get-all safe.directory
       - name: Locate Python
         run: |
           where python >nul 2>nul && (echo PYTHON_CMD=python>>"%GITHUB_ENV%" & exit /b 0)
@@ -76,6 +118,27 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
+      - name: Configure Git safe directories for runner account
+        run: |
+          echo [info] Marking workflow directories as trusted for Git.
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
+          )
+          git config --global --add safe.directory "%GITHUB_WORKSPACE%" || (
+            echo [fatal] Unable to add safe.directory for %GITHUB_WORKSPACE%.
+            exit /b 1
+          )
+          git config --global --add safe.directory "C:\actions-runner\_work\DMFT\DMFT" || (
+            echo [fatal] Unable to add safe.directory for C:\actions-runner\_work\DMFT\DMFT.
+            exit /b 1
+          )
+          git config --global --add safe.directory "C:\actions-runner\_work\DMFT" || (
+            echo [fatal] Unable to add safe.directory for C:\actions-runner\_work\DMFT.
+            exit /b 1
+          )
+          echo [info] Active safe.directory values:
+          git config --global --get-all safe.directory
       - name: Initialize reference submodules
         run: |
           git submodule sync --recursive

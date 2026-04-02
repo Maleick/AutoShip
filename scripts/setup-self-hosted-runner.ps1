@@ -35,6 +35,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Add-SafeGitDirectory {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return
+    }
+
+    if (-not (Test-Path $Path)) {
+        Write-Host "Skipping non-existent safe.directory path: $Path" -ForegroundColor Yellow
+        return
+    }
+
+    git config --global --add safe.directory $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to mark $Path as safe.directory for git."
+    }
+
+    Write-Host "Marked Git safe.directory: $Path" -ForegroundColor Green
+}
+
 if ([string]::IsNullOrWhiteSpace($Token)) {
     throw "A runner registration token is required. Generate one from GitHub Settings → Actions → Runners."
 }
@@ -110,6 +130,24 @@ if ($InstallService) { $runnerConfigArgs += "--runasservice" }
 }
 
 Write-Host "Runner configured with labels: self-hosted, $($Labels -join ', ')." -ForegroundColor Green
+Write-Host "Seeding Git safe.directory entries for this runner..." -ForegroundColor Yellow
+
+$repoName = "DMFT"
+try {
+    $repoName = ([System.Uri]$RepositoryUrl).Segments[-1].TrimEnd("/")
+} catch {
+    Write-Host "Could not parse repository name from RepositoryUrl, using fallback 'DMFT'." -ForegroundColor Yellow
+}
+if ([string]::IsNullOrWhiteSpace($repoName)) {
+    $repoName = "DMFT"
+}
+
+$workRoot = Join-Path $RunnerRoot "_work"
+Add-SafeGitDirectory -Path (Join-Path $workRoot "$repoName\$repoName")
+Add-SafeGitDirectory -Path (Join-Path $workRoot $repoName)
+Add-SafeGitDirectory -Path "C:\actions-runner\_work\$repoName\$repoName"
+Add-SafeGitDirectory -Path "C:\actions-runner\_work\$repoName"
+Write-Host "Completed git safe.directory seeding." -ForegroundColor Green
 
 if (-not $ServiceName) {
     $ServiceName = "GitHubActionsRunner-$RunnerName"

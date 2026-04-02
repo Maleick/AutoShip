@@ -26,12 +26,37 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive --depth 1
       - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly
       - uses: lukka/get-cmake@v4
+
+      - name: Nightly compiler sanity check
+        run: |
+          echo [info] Verifying required nightly compiler for release path.
+          rustc -V
+          rustc -V | findstr /i "nightly" >nul
+          if errorlevel 1 (
+            echo [fatal] Release workflow requires nightly toolchain but rustc is not reporting nightly.
+            exit /b 1
+          )
+          cargo --version
 
       - name: Build release binaries
         run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
+
+      - name: Verify release outputs
+        run: |
+          if not exist target\release\dmft.exe (
+            echo [fatal] target\release\dmft.exe missing after cargo build.
+            exit /b 1
+          )
+          if not exist target\release\dmft_dll.dll (
+            echo [fatal] target\release\dmft_dll.dll missing after cargo build.
+            exit /b 1
+          )
+          echo [info] Release artifact check passed.
 
       - name: Package artifacts
         run: |
