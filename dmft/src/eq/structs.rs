@@ -369,6 +369,16 @@ impl CastState {
     pub fn has_exact_total_cast_time(&self) -> bool {
         self.is_casting() && self.duration_source.is_exact() && self.total_cast_ms.is_some()
     }
+
+    /// Human-readable timing precision label for UI consumers.
+    #[must_use]
+    pub fn timing_precision_label(&self) -> &'static str {
+        if self.has_exact_total_cast_time() {
+            "exact"
+        } else {
+            "est"
+        }
+    }
 }
 
 /// Group membership info read from `CGroup` in memory.
@@ -1038,6 +1048,16 @@ mod tests {
         assert!(CastDurationSource::ExactRuntime.is_exact());
         assert!(!CastDurationSource::Unknown.is_exact());
         assert!(!CastDurationSource::SpellDataBase.is_exact());
+    }
+
+    #[test]
+    fn cast_state_precision_label_matches_duration_source() {
+        let mut exact = make_cast_state();
+        exact.duration_source = CastDurationSource::ExactRuntime;
+        assert_eq!(exact.timing_precision_label(), "exact");
+
+        let estimated = make_cast_state();
+        assert_eq!(estimated.timing_precision_label(), "est");
     }
 
     // --- SpawnInfo display edge cases ---
