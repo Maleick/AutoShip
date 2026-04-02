@@ -279,6 +279,8 @@ def has_git_changes(wiki_dir: Path) -> bool:
 
 
 def commit_changes(wiki_dir: Path) -> None:
+    run(["git", "config", "user.name", "github-actions[bot]"], cwd=wiki_dir)
+    run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], cwd=wiki_dir)
     run(["git", "add", "-A"], cwd=wiki_dir)
     if not has_git_changes(wiki_dir):
         return
