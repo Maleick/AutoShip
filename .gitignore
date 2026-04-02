@@ -40,6 +40,7 @@ logs/
 # Local reference repos
 mq2-definitions/
 mq2-eqlib/
+mq2-reference/
 
 # Account credentials
 accounts.csv

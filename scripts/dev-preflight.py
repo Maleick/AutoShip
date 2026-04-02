@@ -50,6 +50,19 @@ def command_path(name: str) -> str | None:
     return shutil.which(name)
 
 
+def declared_submodule_paths() -> list[str]:
+    config = run_command("git", "config", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$")
+    if config.returncode != 0:
+        return []
+
+    paths: list[str] = []
+    for raw_line in config.stdout.splitlines():
+        parts = raw_line.strip().split(maxsplit=1)
+        if len(parts) == 2 and parts[1]:
+            paths.append(parts[1].strip())
+    return paths
+
+
 def check_command(results: list[CheckResult], name: str, command: str, *args: str, fix: str | None = None) -> bool:
     path = command_path(command)
     if not path:
@@ -159,7 +172,8 @@ def detect_windows_toolchain(results: list[CheckResult]) -> None:
 
 def sync_submodules(results: list[CheckResult]) -> None:
     print("Initializing submodules with `git submodule update --init --recursive`...")
-    sync = run_command("git", "submodule", "sync", "--recursive")
+    target_args = ["--", *declared_submodule_paths()]
+    sync = run_command("git", "submodule", "sync", "--recursive", *target_args)
     if sync.returncode != 0:
         record(
             results,
@@ -171,7 +185,7 @@ def sync_submodules(results: list[CheckResult]) -> None:
         return
 
     update = subprocess.run(
-        ["git", "submodule", "update", "--init", "--recursive"],
+        ["git", "submodule", "update", "--init", "--recursive", *target_args],
         cwd=REPO_ROOT,
         check=False,
     )
@@ -192,7 +206,12 @@ def check_reference_submodules(results: list[CheckResult], require_reference_tre
         record(results, "PASS", "Reference submodules", "No `.gitmodules` file present.")
         return
 
-    status = run_command("git", "submodule", "status", "--recursive")
+    submodule_paths = declared_submodule_paths()
+    if not submodule_paths:
+        record(results, "PASS", "Reference submodules", "No submodule paths declared in `.gitmodules`.")
+        return
+
+    status = run_command("git", "submodule", "status", "--recursive", "--", *submodule_paths)
     if status.returncode != 0:
         record(
             results,
