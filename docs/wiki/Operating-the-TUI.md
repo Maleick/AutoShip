@@ -8,7 +8,7 @@ DMFT's default interface is a ratatui-based dashboard with four main screens:
 | --- | --- | --- |
 | Characters | `1` | Roster, selected character state, group and scope panels |
 | Map | `2` | Zone geometry, spawn overlays, named tracking, nav path overlays |
-| Navigation | `3` | Per-character nav status, route state, waypoint visibility |
+| Navigation | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue |
 | Debug | `4` | Spawn table, filters, live search, target detail, hex dump |
 
 ### Core keys

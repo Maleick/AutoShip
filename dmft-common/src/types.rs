@@ -125,6 +125,11 @@ pub struct SpawnData {
     /// Unsigned in the EQ struct (`PlayerZoneClient`). Do not compare directly
     /// with `endurance_current` without casting — signedness differs intentionally.
     pub endurance_max: u32,
+    /// Current movement speed (`SpeedRun`). Non-zero means the character is in motion.
+    pub speed_run: f32,
+    /// Stand state: 0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking,
+    /// 110=feigned, 111=dead. Only 0 (standing) allows spell casting.
+    pub stand_state: u8,
 }
 
 impl SpawnData {
@@ -146,6 +151,92 @@ impl SpawnData {
         } else {
             100.0
         }
+    }
+
+    /// Returns `true` when the character is in motion (speed is non-negligible).
+    ///
+    /// EQ sets `SpeedRun` to a non-zero value while the character is moving.
+    /// A small epsilon avoids false positives from floating-point noise.
+    #[must_use]
+    pub fn is_moving(&self) -> bool {
+        self.speed_run.abs() > 0.01
+    }
+
+    /// Returns `true` when the character is standing and eligible to cast spells.
+    ///
+    /// Stand state 0 is the only state from which a spell cast can be initiated.
+    /// Sitting (3), ducking (4), feigning death (110), and dead (111) all prevent casting.
+    #[must_use]
+    pub fn is_standing(&self) -> bool {
+        self.stand_state == 0
+    }
+}
+
+/// Operator-visible lifecycle state for a single managed session slot.
+///
+/// This is a display-oriented summary derived from the launcher `LoginPhase`,
+/// hook status, and self-healing monitor state.  It gives operators a stable,
+/// named vocabulary for what each slot is doing without exposing internal FSM
+/// details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotLifecycle {
+    /// Slot is defined in config but no launch has been initiated.
+    Configured,
+    /// EQ process is being spawned (pre-login screen).
+    Launching,
+    /// Process is running and working through the login / server / character
+    /// select screens.
+    WaitingForLogin,
+    /// Character is zoning in or running post-login setup (buffs, group join).
+    EnteringWorld,
+    /// Slot is fully attached, hooks active, and ready for orchestration.
+    Live,
+    /// Slot experienced a crash or timeout and is being restarted.
+    Recovering,
+    /// Slot failed in a way that prevents automatic recovery; needs operator
+    /// intervention.
+    Blocked,
+}
+
+impl SlotLifecycle {
+    /// Short operator-facing label (fits in ≤ 8 chars for compact display).
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Configured => "CFG",
+            Self::Launching => "LAUNCH",
+            Self::WaitingForLogin => "LOGIN",
+            Self::EnteringWorld => "ZONE",
+            Self::Live => "LIVE",
+            Self::Recovering => "RECOV",
+            Self::Blocked => "BLOCK",
+        }
+    }
+
+    /// Long operator-facing label for sidebar panels.
+    #[must_use]
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Configured => "Configured",
+            Self::Launching => "Launching",
+            Self::WaitingForLogin => "Waiting for login",
+            Self::EnteringWorld => "Entering world",
+            Self::Live => "Live",
+            Self::Recovering => "Recovering",
+            Self::Blocked => "Blocked",
+        }
+    }
+
+    /// Whether this lifecycle state represents a healthy, operational slot.
+    #[must_use]
+    pub fn is_healthy(self) -> bool {
+        matches!(self, Self::Live)
+    }
+
+    /// Whether this lifecycle state represents a degraded or blocked slot.
+    #[must_use]
+    pub fn is_degraded(self) -> bool {
+        matches!(self, Self::Recovering | Self::Blocked)
     }
 }
 
@@ -188,6 +279,8 @@ mod tests {
             mana_max,
             endurance_current: 100,
             endurance_max: 100,
+            speed_run: 0.0,
+            stand_state: 0,
         }
     }
 
@@ -430,6 +523,49 @@ mod tests {
     }
 
     #[test]
+    fn slot_lifecycle_labels() {
+        assert_eq!(SlotLifecycle::Configured.label(), "CFG");
+        assert_eq!(SlotLifecycle::Launching.label(), "LAUNCH");
+        assert_eq!(SlotLifecycle::WaitingForLogin.label(), "LOGIN");
+        assert_eq!(SlotLifecycle::EnteringWorld.label(), "ZONE");
+        assert_eq!(SlotLifecycle::Live.label(), "LIVE");
+        assert_eq!(SlotLifecycle::Recovering.label(), "RECOV");
+        assert_eq!(SlotLifecycle::Blocked.label(), "BLOCK");
+    }
+
+    #[test]
+    fn slot_lifecycle_descriptions_non_empty() {
+        let variants = [
+            SlotLifecycle::Configured,
+            SlotLifecycle::Launching,
+            SlotLifecycle::WaitingForLogin,
+            SlotLifecycle::EnteringWorld,
+            SlotLifecycle::Live,
+            SlotLifecycle::Recovering,
+            SlotLifecycle::Blocked,
+        ];
+        for v in variants {
+            assert!(!v.description().is_empty());
+        }
+    }
+
+    #[test]
+    fn slot_lifecycle_healthy_only_live() {
+        assert!(SlotLifecycle::Live.is_healthy());
+        assert!(!SlotLifecycle::Configured.is_healthy());
+        assert!(!SlotLifecycle::Recovering.is_healthy());
+        assert!(!SlotLifecycle::Blocked.is_healthy());
+    }
+
+    #[test]
+    fn slot_lifecycle_degraded_states() {
+        assert!(SlotLifecycle::Recovering.is_degraded());
+        assert!(SlotLifecycle::Blocked.is_degraded());
+        assert!(!SlotLifecycle::Live.is_degraded());
+        assert!(!SlotLifecycle::Configured.is_degraded());
+    }
+
+    #[test]
     fn hook_status_equality() {
         assert_eq!(HookStatus::NotInjected, HookStatus::NotInjected);
         assert_ne!(HookStatus::NotInjected, HookStatus::Injected);
@@ -470,5 +606,90 @@ mod tests {
             ..SpawnData::default()
         };
         assert_ne!(spawn.name, spawn.displayed_name);
+    }
+
+    #[test]
+    fn is_moving_false_when_stationary() {
+        let spawn = SpawnData {
+            speed_run: 0.0,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_moving());
+    }
+
+    #[test]
+    fn is_moving_false_below_epsilon() {
+        let spawn = SpawnData {
+            speed_run: 0.005,
+            ..SpawnData::default()
+        };
+        assert!(
+            !spawn.is_moving(),
+            "tiny speed below epsilon should not count as moving"
+        );
+    }
+
+    #[test]
+    fn is_moving_true_when_running() {
+        let spawn = SpawnData {
+            speed_run: 1.4,
+            ..SpawnData::default()
+        };
+        assert!(spawn.is_moving());
+    }
+
+    #[test]
+    fn is_moving_true_for_negative_speed() {
+        let spawn = SpawnData {
+            speed_run: -0.5,
+            ..SpawnData::default()
+        };
+        assert!(
+            spawn.is_moving(),
+            "negative speed (backing up) counts as moving"
+        );
+    }
+
+    #[test]
+    fn is_standing_true_for_state_zero() {
+        let spawn = SpawnData {
+            stand_state: 0,
+            ..SpawnData::default()
+        };
+        assert!(spawn.is_standing());
+    }
+
+    #[test]
+    fn is_standing_false_for_sitting() {
+        let spawn = SpawnData {
+            stand_state: 3,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_standing());
+    }
+
+    #[test]
+    fn is_standing_false_for_ducking() {
+        let spawn = SpawnData {
+            stand_state: 4,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_standing());
+    }
+
+    #[test]
+    fn is_standing_false_for_feigning_death() {
+        let spawn = SpawnData {
+            stand_state: 110,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_standing());
+    }
+
+    #[test]
+    fn spawn_data_default_is_stationary_and_standing() {
+        let spawn = SpawnData::default();
+        assert!(!spawn.is_moving(), "default spawn should be stationary");
+        assert!(spawn.is_standing(), "default spawn should be standing");
     }
 }

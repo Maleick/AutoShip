@@ -275,10 +275,10 @@ pub mod eqgame {
     // ─── CListWnd offsets (for character list reading) ───
     // Source: third_party/eqlib/include/eqlib/game/UI.h — CListWnd inherits CSidlScreenWnd
 
-    /// `CListWnd::ItemsArray` (`ArrayClass<SListWndLine>`) — row count (int at +0x270)
-    pub const CLISTWND_ITEMS_COUNT: usize = 0x270;
-    /// `CListWnd::ItemsArray.m_array` — pointer to `SListWndLine` array (at +0x278)
-    pub const CLISTWND_ITEMS_ARRAY: usize = 0x278;
+    /// `CListWnd::ItemsArray.m_array` — pointer to `SListWndLine` array (at +0x270)
+    pub const CLISTWND_ITEMS_ARRAY: usize = 0x270;
+    /// `CListWnd::ItemsArray.m_length` — row count (int at +0x278)
+    pub const CLISTWND_ITEMS_COUNT: usize = 0x278;
 
     /// sizeof(SListWndLine) — each row in the list
     pub const SLISTWNDLINE_SIZE: usize = 0x138;
