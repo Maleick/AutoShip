@@ -49,6 +49,10 @@ Initial slices:
 - packet-driven validation tasks for combat, utility, and chat paths
 - evidence-backed packet vs in-process control matrix
 
+Current curated intake:
+
+- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
+
 Entry gate:
 
 - imported packet and network research archived and indexed
@@ -70,6 +74,10 @@ Initial slices:
 - movement validation rules and queue flushing
 - safe-coord, zone-line, and teleport category handling
 - TUI visibility for route state, stuck state, and zoning blockers
+
+Current curated intake:
+
+- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
 
 Entry gate:
 
