@@ -96,7 +96,10 @@ jobs:
           if not exist release mkdir release
           copy /Y target\release\dmft.exe release\dmft.exe
           if exist target\release\dmft_dll.dll copy /Y target\release\dmft_dll.dll release\dmft_dll.dll
-          > release\VERSION.txt <nul set /p =DMFT ${{ github.ref_name }}
+
+      - name: Write release version file
+        shell: pwsh
+        run: Set-Content -Path release/VERSION.txt -NoNewline -Value ("DMFT " + $env:GITHUB_REF_NAME)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
