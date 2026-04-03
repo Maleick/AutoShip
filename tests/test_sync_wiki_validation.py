@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 import unittest
@@ -64,6 +66,19 @@ class WikiValidationTests(unittest.TestCase):
             finally:
                 self.module.SOURCE_DIR = original_source_dir
 
+    def test_run_includes_stdout_and_stderr_on_failure(self) -> None:
+        command = [
+            os.environ.get("PYTHON", sys.executable),
+            "-c",
+            "import sys; print('hello from stdout'); print('hello from stderr', file=sys.stderr); raise SystemExit(7)",
+        ]
+
+        with self.assertRaisesRegex(self.module.WikiSyncError, "hello from stderr"):
+            self.module.run(command, cwd=REPO_ROOT)
+
+        with self.assertRaisesRegex(self.module.WikiSyncError, "hello from stdout"):
+            self.module.run(command, cwd=REPO_ROOT)
+
     def test_github_token_requires_gh_when_env_missing(self) -> None:
         with mock.patch.dict(self.module.os.environ, {}, clear=True):
             with mock.patch.object(self.module.shutil, "which", return_value=None):
@@ -71,11 +86,7 @@ class WikiValidationTests(unittest.TestCase):
                     self.module.github_token()
 
     def test_github_token_reports_missing_local_auth_clearly(self) -> None:
-        error = subprocess.CalledProcessError(
-            returncode=1,
-            cmd=["gh", "auth", "token"],
-            stderr="You are not logged into any GitHub hosts.",
-        )
+        error = self.module.WikiSyncError("Command failed (cwd: /repo): gh auth token\n\nstderr:\nmissing auth")
         with mock.patch.dict(self.module.os.environ, {}, clear=True):
             with mock.patch.object(self.module.shutil, "which", return_value="/usr/bin/gh"):
                 with mock.patch.object(self.module, "run", side_effect=error):
