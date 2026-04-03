@@ -166,8 +166,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             );
 
             // Write credentials inline FIRST (before mem::take).
-            // Use the proven CStrRep + vtable click approach that worked at 22:04 UTC,
-            // plus WM_CHAR as backup.
+            // Use the proven CStrRep + vtable click approach that worked at 22:04 UTC.
             let eqmain_base = crate::login::eqmain::find_eqmain();
             if eqmain_base != 0 {
                 let wrote = crate::login::widgets::type_credentials_to_window(
@@ -176,10 +175,6 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                     &password,
                 );
                 tracing::info!(wrote, "Inline: type_credentials_to_window");
-                if wrote {
-                    tracing::info!("Also typing password via WM_CHAR for reliability");
-                    crate::login::widgets::type_password_wm_char(eqmain_base, &password);
-                }
             }
 
             // Store credentials in the FSM for character select phase.
