@@ -35,7 +35,7 @@ The repository also sets this through repo configuration, but the explicit expor
 - Codex and other local tooling will automatically pick up checked-in repo configuration such as `.cargo/config.toml`.
 - There is no required project `.env` file today.
 - The main user-provided setup is installing the host tools: Rust, CMake, and on Windows LLVM/Clang.
-- The main optional secret is `GH_TOKEN` for wiki publishing; `gh auth login` works too.
+- Wiki publishing can use `GH_TOKEN`, but the nightly self-hosted workflow expects a runner-local `gh auth login`.
 
 ## Build Commands
 
