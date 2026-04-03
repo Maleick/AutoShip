@@ -433,6 +433,22 @@ impl NavClientStatus {
                 (*waypoint_count).max(1),
                 distance_remaining
             ),
+            dmft_common::nav::NavStatus::Paused {
+                reason,
+                waypoint_index,
+                waypoint_count,
+                distance_remaining,
+            } => {
+                let reason_label = match reason {
+                    dmft_common::nav::PauseReason::Warp => "warp",
+                };
+                format!(
+                    "Paused ({reason_label}) • WP {}/{} • {:.0}u remaining",
+                    waypoint_index.saturating_add(1),
+                    (*waypoint_count).max(1),
+                    distance_remaining
+                )
+            }
             dmft_common::nav::NavStatus::Stuck { recovery_attempt } => {
                 format!("Recovery attempt {}", recovery_attempt)
             }
@@ -3701,7 +3717,7 @@ impl App {
     ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
     ///   ch stop                  — Stop the running CH chain
     ///   ch add <pid>             — Add a cleric to the chain
-    ///   ch rm <pid>              — Remove a cleric from the chain
+    ///   ch remove <pid>          — Remove a cleric from the chain (`rm` alias supported)
     ///   ch interval <seconds>    — Set the interval between casts
     ///   ch adaptive on|off       — Toggle adaptive timing mode
     ///   ch status                — Show current chain status
@@ -3824,10 +3840,10 @@ impl App {
                             self.usage_feedback("ch start", "No CH chain is running.");
                         }
                     } else {
-                        self.usage_feedback("ch rm", format!("Invalid PID '{pid_str}'."));
+                        self.usage_feedback("ch remove", format!("Invalid PID '{pid_str}'."));
                     }
                 } else {
-                    self.usage_feedback("ch rm", "Missing cleric PID.");
+                    self.usage_feedback("ch remove", "Missing cleric PID.");
                 }
             }
             Some("interval") => {

@@ -38,6 +38,13 @@ impl Xorshift32 {
     }
 }
 
+/// Reasons navigation can be paused without abandoning the path.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PauseReason {
+    /// Target or anchor warped unexpectedly — wait for stability.
+    Warp,
+}
+
 /// A single point in 3D space with optional metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Waypoint {
@@ -132,6 +139,17 @@ pub enum NavStatus {
         /// Distance to current waypoint.
         distance_remaining: f32,
     },
+    /// Paused (path retained) due to a safety condition.
+    Paused {
+        /// Why navigation was paused.
+        reason: PauseReason,
+        /// Current waypoint index in the path.
+        waypoint_index: usize,
+        /// Total waypoints in path.
+        waypoint_count: usize,
+        /// Distance to current waypoint.
+        distance_remaining: f32,
+    },
     /// Stuck and attempting recovery.
     Stuck {
         /// Which recovery attempt this is (1, 2, 3...).
@@ -157,6 +175,7 @@ impl NavStatus {
         match self {
             Self::Idle => "Idle",
             Self::Moving { .. } => "Navigating",
+            Self::Paused { .. } => "Paused",
             Self::Stuck { .. } => "Stuck",
             Self::Arrived => "Arrived",
             Self::Sticking { .. } => "Sticking",
@@ -167,6 +186,12 @@ impl NavStatus {
     #[must_use]
     pub fn is_moving(&self) -> bool {
         matches!(self, Self::Moving { .. })
+    }
+
+    /// Returns true if navigation is currently paused.
+    #[must_use]
+    pub fn is_paused(&self) -> bool {
+        matches!(self, Self::Paused { .. })
     }
 
     /// Returns true if stuck and attempting recovery.

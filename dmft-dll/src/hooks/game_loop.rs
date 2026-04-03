@@ -541,11 +541,12 @@ fn on_game_tick() {
     }
 
     // Lazy-init the navigator once we're in-world.
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+
     {
         static NAV_INITIALIZED: std::sync::atomic::AtomicBool =
             std::sync::atomic::AtomicBool::new(false);
         if !NAV_INITIALIZED.load(std::sync::atomic::Ordering::Relaxed) {
-            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
             if eq_base != 0
                 && let Some(player_addr) =
                     dmft_common::offsets::rebase(dmft_common::offsets::PINST_LOCAL_PLAYER, eq_base)
@@ -564,14 +565,19 @@ fn on_game_tick() {
     }
 
     // Run navigation state machine.
-    // Pass current target and cached nearby spawns for the stick engine.
+    // Pass current target and cached nearby spawns for the stick engine,
+    // plus a target sample for the warp monitor.
     {
         let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
         let nav_target = if eq_base != 0 { read_target_state(eq_base) } else { None };
+        let target_sample = nav_target.as_ref().map(|t| crate::nav::warp::TargetSample {
+            id: t.spawn_id,
+            position: dmft_common::nav::Waypoint::new(t.x, t.y, t.z),
+        });
         let nearby_guard = CACHED_NEARBY_FOR_STICK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        crate::nav::tick(nav_target.as_ref(), &nearby_guard);
+        crate::nav::tick(nav_target.as_ref(), &nearby_guard, target_sample.as_ref());
     }
 
     // Run login FSM when not yet in world (local_player is null).

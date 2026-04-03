@@ -302,12 +302,12 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "ch add 1003",
     },
     CommandEntry {
-        phrase: "ch rm",
-        aliases: &[],
+        phrase: "ch remove",
+        aliases: &["ch rm"],
         section: HelpSection::ChChain,
-        usage: "ch rm <pid>",
+        usage: "ch remove <pid>",
         summary: "Remove one cleric PID from the running CH chain.",
-        example: "ch rm 1003",
+        example: "ch remove 1003",
     },
     CommandEntry {
         phrase: "ch interval",

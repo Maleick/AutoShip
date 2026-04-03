@@ -371,6 +371,9 @@ pub fn run_statusall_mode() -> Result<()> {
                                 } => {
                                     format!("{waypoint_index}/{waypoint_count}")
                                 }
+                                dmft_common::nav::NavStatus::Paused { reason, .. } => {
+                                    format!("Paused({reason:?})")
+                                }
                                 dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
                                 dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
                                 dmft_common::nav::NavStatus::Sticking { target_id, .. } => {

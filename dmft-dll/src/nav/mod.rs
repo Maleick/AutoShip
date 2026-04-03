@@ -4,10 +4,12 @@ pub mod humanize;
 pub mod state;
 pub mod stick;
 pub mod stuck;
+pub mod warp;
 pub mod waypoint;
 pub mod zone_graph;
 
 pub use state::Navigator;
+use warp::TargetSample;
 
 use std::sync::Mutex;
 
@@ -31,12 +33,17 @@ pub fn init(player_base: usize, client_id: u32) {
 /// Run one navigation tick. Call from `on_game_tick()`.
 ///
 /// `current_target` and `nearby` are used by the stick engine.
-pub fn tick(current_target: Option<&SpawnData>, nearby: &[SpawnData]) {
+/// `target_sample` is used by the warp monitor.
+pub fn tick(
+    current_target: Option<&SpawnData>,
+    nearby: &[SpawnData],
+    target_sample: Option<&TargetSample>,
+) {
     if let Some(ref mut nav) = *NAVIGATOR
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
     {
-        nav.tick(current_target, nearby);
+        nav.tick(current_target, nearby, target_sample);
     }
 }
 

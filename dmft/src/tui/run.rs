@@ -394,6 +394,9 @@ fn apply_demo_scenario(app: &mut App) {
                             dmft_common::nav::NavStatus::Moving { .. } => {
                                 String::from("Regroup route")
                             }
+                            dmft_common::nav::NavStatus::Paused { .. } => {
+                                String::from("Route paused")
+                            }
                             dmft_common::nav::NavStatus::Stuck { .. } => {
                                 String::from("Recovery route")
                             }
@@ -407,11 +410,18 @@ fn apply_demo_scenario(app: &mut App) {
                             dmft_common::nav::NavStatus::Stuck { recovery_attempt } => Some(
                                 format!("Trying alternate line (attempt {})", recovery_attempt),
                             ),
+                            dmft_common::nav::NavStatus::Paused { .. } => {
+                                Some(String::from("Waiting for target stability"))
+                            }
                             _ => None,
                         },
                         blockers: match &nav.status {
                             dmft_common::nav::NavStatus::Stuck { .. } => vec![format!(
                                 "Path to {} is obstructed; waiting for recovery movement.",
+                                nav.destination
+                            )],
+                            dmft_common::nav::NavStatus::Paused { .. } => vec![format!(
+                                "Navigation paused near {}; waiting for stable target.",
                                 nav.destination
                             )],
                             _ => Vec::new(),
@@ -1044,6 +1054,21 @@ fn load_demo_data(app: &mut App) {
         client.character_name = name.to_string();
         client.client_status = format!("Connected: {name}");
         client.is_demo = true;
+        // Demo: assign lifecycle, launch profile, and session preset per group.
+        // Two clients show non-Live states for visual demo variety.
+        let lifecycle = match i {
+            16 => dmft_common::types::SlotLifecycle::WaitingForLogin,
+            17 => dmft_common::types::SlotLifecycle::Recovering,
+            _ => dmft_common::types::SlotLifecycle::Live,
+        };
+        client.slot_lifecycle = lifecycle;
+        let (profile, preset) = match i {
+            0..=5 => ("frostreaver-main", "Group Alpha"),
+            6..=11 => ("frostreaver-main", "Group Beta"),
+            _ => ("frostreaver-main", "Group Gamma"),
+        };
+        client.launch_profile = Some(profile.to_string());
+        client.session_preset = Some(preset.to_string());
         app.clients.push(client);
     }
 
