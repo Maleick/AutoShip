@@ -87,18 +87,24 @@ jobs:
                     run.status === "completed" &&
                     run.conclusion === "action_required"
                 );
-                const blockedWorkflowDispatchRun = sameShaRuns.some(
+                const hasBlockingWorkflowDispatchRun = sameShaRuns.some(
                   (run) =>
                     run.event === "workflow_dispatch" &&
                     run.status === "completed" &&
                     run.conclusion === "action_required"
                 );
+                const hasRecoverableCancelledDispatchRun = sameShaRuns.some(
+                  (run) =>
+                    run.event === "workflow_dispatch" &&
+                    run.status === "completed" &&
+                    run.conclusion === "cancelled"
+                );
 
                 if (
                   hasActiveRun ||
                   hasAuthoritativeResult ||
-                  blockedWorkflowDispatchRun ||
-                  (!blockedForApproval && sameShaRuns.length > 0)
+                  hasBlockingWorkflowDispatchRun ||
+                  (!blockedForApproval && !hasRecoverableCancelledDispatchRun && sameShaRuns.length > 0)
                 ) {
                   skipped.push(
                     `#${pr.number} ${pr.head.ref} (${sameShaRuns[0]?.event || "no-run"} ${sameShaRuns[0]?.status || "no-op"}/${sameShaRuns[0]?.conclusion || "n/a"})`
