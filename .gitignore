@@ -27,6 +27,7 @@ credentials.db*
 !README.md
 !AGENTS.md
 !CLAUDE.md
+!AGENTS.md
 !docs/
 !docs/**/*.md
 !docs/wiki/

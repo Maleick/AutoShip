@@ -90,6 +90,8 @@ Nightly automation now runs on the self-hosted Windows runner:
 - `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
 - the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
+- the issue executor opens trusted agent PRs with `merge:auto` by default unless the PR or linked issue is marked `human:required`, `risk:high`, or `agent:blocked`
+- the PR manager may resolve clearly addressed bot review threads, merge clean trusted PRs once the required gate is green, and close stale or superseded trusted agent PRs automatically
 
 These workflows mirror repo state. They do not replace keeping source docs current.
 

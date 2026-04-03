@@ -22,8 +22,8 @@ Shared operating contract for autonomous coding agents in this repository.
   - `agent:blocked` — concrete blocker surfaced back to the operator
   - `mode:research` — use the research-first workflow
   - `worker:claude` — route implementation to Claude instead of Codex
-  - `merge:auto` — PR is allowed to merge unattended once all gates are clear
-  - `human:required` or `risk:high` — never auto-merge
+  - `merge:auto` — trusted automation may merge unattended once all gates are clear
+  - `human:required` or `risk:high` — never auto-merge or auto-close
 
 ## Claiming And Execution
 
@@ -41,6 +41,15 @@ Shared operating contract for autonomous coding agents in this repository.
 - If the issue spans multiple independent surfaces, use subagents or parallel workers automatically and integrate the results before opening the PR.
 - Never commit transient automation state or autoresearch runtime artifacts.
 
+## Pull Requests
+
+- Open a non-draft pull request into `master`, link the issue, and summarize scope plus validation.
+- Agent-authored PRs are trusted by default:
+  - add `codex` for Codex-authored PRs or keep the equivalent worker label already in use
+  - add `codex-automation` for automation-opened PRs
+  - add `merge:auto` when neither the PR nor the linked issue has `human:required`, `risk:high`, or `agent:blocked`
+- Move the GitHub Project `Agent Status` field to `PR Open` after the PR exists.
+- When behavior or operator guidance changes, update README and the matching `docs/wiki/` page in the same PR.
 ## Verification
 
 - Always run every command listed in the issue template's `Verify` section.
@@ -50,11 +59,12 @@ Shared operating contract for autonomous coding agents in this repository.
   - any directly relevant Python or wiki validation commands
 - If the diff is docs, workflow, or prompt only, run lightweight syntax or parse checks plus `python3 scripts/sync_wiki.py --check`.
 
-## Pull Requests And Merge
+## PR Manager
 
-- Open a non-draft pull request into `master`, link the issue, and summarize scope plus validation.
-- Move the GitHub Project `Agent Status` field to `PR Open` after the PR exists.
-- Only the shared Codex PR manager may merge pull requests.
+- The shared Codex PR manager owns unattended merge and cleanup for agent-authored PRs targeting `master`.
+- Treat top-level bot overview comments as non-blocking.
+- Read inline review state through GraphQL `reviewThreads`; unresolved, non-outdated threads remain blocking until they are actually addressed.
+- The PR manager may resolve bot-authored review threads only when the thread is clearly addressed in-branch by a pushed fix or the requested change was already present on the branch.
 - Merge or enable auto-merge only when all are true:
   - base branch is `master`
   - PR is non-draft
@@ -62,6 +72,12 @@ Shared operating contract for autonomous coding agents in this repository.
   - no unresolved review threads remain
   - the PR or linked issue has `merge:auto`
   - neither the PR nor linked issue has `human:required`, `risk:high`, or `agent:blocked`
+- Close stale or superseded agent-authored PRs automatically when both are true:
+  - neither the PR nor linked issue has `human:required`, `risk:high`, or `agent:blocked`
+  - one of these disposal conditions holds:
+    - a newer agent PR for the same linked issue or branch surface is already open or merged
+    - the PR has been idle for at least 72 hours and is still conflict-dirty or failing required checks with no check run in progress
+- When auto-closing a PR, leave a short comment stating whether it was superseded or stale and what branch or issue should be used instead.
 
 ## Blockers
 
