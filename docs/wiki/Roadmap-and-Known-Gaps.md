@@ -82,8 +82,22 @@ Use:
 - `docs/external-research/automation-source-ledger.md`
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
 - `docs/external-research/kissassist-gap-and-tui-translation.md`
+- `docs/external-research/jmb-session-and-relay-comparison.md`
 - `docs/external-research/daybreak-detection-digest.md`
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md`
+
+## Current `M8` orchestration guidance
+
+The current JMB comparison keeps `M8` bounded to operator-visible orchestration work:
+
+- formalize routing scopes as `one-toon`, `group`, and `all-session`
+- translate launch profile, session preset, and slot lifecycle concepts into TUI-visible state
+- keep command routing on the existing authenticated IPC path instead of treating JMB hook examples as direct implementation targets
+
+The current follow-on implementation slices remain:
+
+- #152 for the addressable actor routing abstraction
+- #109 for launch profiles, session presets, and slot-health visibility
 
 ## Developer Guidance
 
