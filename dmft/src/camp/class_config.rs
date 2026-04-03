@@ -70,6 +70,9 @@ pub struct ClassConfig {
     pub class_name: String,
     /// Role this class fills (e.g., "tank", "healer", "cc").
     pub role: String,
+    /// Level-gated ability profile overrides for this class.
+    #[serde(default)]
+    pub level_overrides: Vec<AbilityProfileOverride>,
     /// Abilities to use during active combat.
     #[serde(default)]
     pub combat_abilities: Vec<ClassAbility>,
@@ -95,6 +98,96 @@ pub struct ClassConfig {
 
 fn default_rest_command() -> String {
     "/sit".into()
+}
+
+/// Resolved ability profile after applying any level-based overrides.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AbilityProfile {
+    /// Abilities to use during active combat.
+    pub combat_abilities: Vec<ClassAbility>,
+    /// Buff spells to maintain on group members.
+    pub buff_abilities: Vec<ClassAbility>,
+    /// Emergency abilities (heal, defensive cooldowns).
+    pub emergency_abilities: Vec<ClassAbility>,
+    /// Crowd control abilities (mez, stun, charm).
+    pub cc_abilities: Vec<CcAbilityConfig>,
+    /// Resist debuffs to land before CC (Tash, Malo).
+    pub debuff_abilities: Vec<DebuffAbilityConfig>,
+}
+
+impl AbilityProfile {
+    fn from_config(config: &ClassConfig) -> Self {
+        Self {
+            combat_abilities: config.combat_abilities.clone(),
+            buff_abilities: config.buff_abilities.clone(),
+            emergency_abilities: config.emergency_abilities.clone(),
+            cc_abilities: config.cc_abilities.clone(),
+            debuff_abilities: config.debuff_abilities.clone(),
+        }
+    }
+}
+
+/// A level-gated override that can replace portions of the base ability profile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AbilityProfileOverride {
+    /// Human-friendly name for this override profile.
+    pub name: String,
+    /// Inclusive minimum level where this override applies.
+    #[serde(default)]
+    pub min_level: Option<u8>,
+    /// Inclusive maximum level where this override applies.
+    #[serde(default)]
+    pub max_level: Option<u8>,
+    /// Combat abilities specific to this override.
+    #[serde(default)]
+    pub combat_abilities: Option<Vec<ClassAbility>>,
+    /// Buff abilities specific to this override.
+    #[serde(default)]
+    pub buff_abilities: Option<Vec<ClassAbility>>,
+    /// Emergency abilities specific to this override.
+    #[serde(default)]
+    pub emergency_abilities: Option<Vec<ClassAbility>>,
+    /// CC abilities specific to this override.
+    #[serde(default)]
+    pub cc_abilities: Option<Vec<CcAbilityConfig>>,
+    /// Debuff abilities specific to this override.
+    #[serde(default)]
+    pub debuff_abilities: Option<Vec<DebuffAbilityConfig>>,
+}
+
+impl AbilityProfileOverride {
+    /// Whether this override applies to the provided level.
+    #[must_use]
+    pub fn applies_to(&self, level: u8) -> bool {
+        let min = self.min_level.unwrap_or(0);
+        let max = self.max_level.unwrap_or(u8::MAX);
+        level >= min && level <= max
+    }
+
+    fn apply(&self, base: &AbilityProfile) -> AbilityProfile {
+        AbilityProfile {
+            combat_abilities: self
+                .combat_abilities
+                .clone()
+                .unwrap_or_else(|| base.combat_abilities.clone()),
+            buff_abilities: self
+                .buff_abilities
+                .clone()
+                .unwrap_or_else(|| base.buff_abilities.clone()),
+            emergency_abilities: self
+                .emergency_abilities
+                .clone()
+                .unwrap_or_else(|| base.emergency_abilities.clone()),
+            cc_abilities: self
+                .cc_abilities
+                .clone()
+                .unwrap_or_else(|| base.cc_abilities.clone()),
+            debuff_abilities: self
+                .debuff_abilities
+                .clone()
+                .unwrap_or_else(|| base.debuff_abilities.clone()),
+        }
+    }
 }
 
 impl ClassConfig {
@@ -126,6 +219,27 @@ impl ClassConfig {
             .with_context(|| format!("Failed to write class config: {}", path.display()))?;
         Ok(())
     }
+
+    /// Resolve the effective ability profile for a given level, applying the most
+    /// specific matching override when available.
+    #[must_use]
+    pub fn profile_for_level(&self, level: Option<u8>) -> AbilityProfile {
+        let base = AbilityProfile::from_config(self);
+        let level = match level {
+            Some(level) => level,
+            None => return base,
+        };
+
+        let selected_override = self
+            .level_overrides
+            .iter()
+            .filter(|o| o.applies_to(level))
+            .max_by_key(|o| (o.min_level.unwrap_or(0), o.max_level.unwrap_or(u8::MAX)));
+
+        selected_override
+            .map(|ovr| ovr.apply(&base))
+            .unwrap_or(base)
+    }
 }
 
 #[cfg(test)]
@@ -136,6 +250,7 @@ mod tests {
         ClassConfig {
             class_name: "warrior".into(),
             role: "tank".into(),
+            level_overrides: Vec::new(),
             combat_abilities: vec![
                 ClassAbility {
                     name: "Taunt".into(),
@@ -219,6 +334,100 @@ mod tests {
             config.emergency_abilities[0].condition.as_deref(),
             Some("target_hp_below_20")
         );
+    }
+
+    #[test]
+    fn profile_for_level_applies_override_and_falls_back() {
+        let base_combat = ClassAbility {
+            name: "Kick".into(),
+            command: "/kick".into(),
+            cooldown_secs: 6.0,
+            priority: 2,
+            condition: None,
+            duration_secs: None,
+        };
+        let base_buff = ClassAbility {
+            name: "Base Buff".into(),
+            command: "/cast 4".into(),
+            cooldown_secs: 200.0,
+            priority: 1,
+            condition: None,
+            duration_secs: None,
+        };
+        let override_combat = ClassAbility {
+            name: "Flying Kick".into(),
+            command: "/doability 1".into(),
+            cooldown_secs: 5.0,
+            priority: 1,
+            condition: None,
+            duration_secs: None,
+        };
+
+        let config = ClassConfig {
+            class_name: "monk".into(),
+            role: "dps".into(),
+            level_overrides: vec![AbilityProfileOverride {
+                name: "low-level".into(),
+                min_level: Some(1),
+                max_level: Some(20),
+                combat_abilities: Some(vec![override_combat.clone()]),
+                ..AbilityProfileOverride::default()
+            }],
+            combat_abilities: vec![base_combat.clone()],
+            buff_abilities: vec![base_buff.clone()],
+            emergency_abilities: vec![],
+            cc_abilities: vec![],
+            debuff_abilities: vec![],
+            rest_command: "/sit".into(),
+            twist_interval_secs: None,
+        };
+
+        let low_profile = config.profile_for_level(Some(10));
+        assert_eq!(
+            low_profile.combat_abilities[0].name, "Flying Kick",
+            "Override should replace combat abilities when level matches"
+        );
+        assert_eq!(
+            low_profile.buff_abilities[0].name, "Base Buff",
+            "Override should fall back to base for missing categories"
+        );
+
+        let high_profile = config.profile_for_level(Some(50));
+        assert_eq!(
+            high_profile.combat_abilities[0].name, "Kick",
+            "Base profile should be used when no override applies"
+        );
+    }
+
+    #[test]
+    fn level_overrides_parse_from_toml() {
+        let toml_str = r#"
+            class_name = "cleric"
+            role = "healer"
+
+            [[level_overrides]]
+            name = "low"
+            min_level = 1
+            max_level = 20
+
+            [[level_overrides.buff_abilities]]
+            name = "Minor HP Buff"
+            command = "/cast 1"
+            cooldown_secs = 30.0
+            priority = 1
+        "#;
+        let config: ClassConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.level_overrides.len(), 1);
+        let override_profile = &config.level_overrides[0];
+        assert_eq!(override_profile.name, "low");
+        assert_eq!(override_profile.min_level, Some(1));
+        assert_eq!(override_profile.max_level, Some(20));
+        let buff = override_profile
+            .buff_abilities
+            .as_ref()
+            .expect("buff overrides should parse");
+        assert_eq!(buff[0].name, "Minor HP Buff");
+        assert_eq!(config.rest_command, "/sit");
     }
 
     #[test]
