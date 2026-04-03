@@ -189,6 +189,7 @@ fn map_spawn_cache_key(
         z_filter_bits: app.map_state.z_filter_range.to_bits(),
         player_z_bits: player_z.map(f32::to_bits),
         show_spawns: app.map_state.show_spawns,
+        map_filter_bits: app.map_state.filters.cache_key_bits(),
         theme_kind: app.theme_kind,
         center_x_bits: transform.center_x.to_bits(),
         center_y_bits: transform.center_y.to_bits(),
@@ -219,6 +220,7 @@ where
     let use_clustering = app.map_state.zoom <= 0.95;
     let z_range = app.map_state.z_filter_range;
     let selected_spawn_id = selected_spawn.map(|spawn| spawn.spawn_id);
+    let filters = &app.map_state.filters;
 
     app.map_spawn_cache.cells.clear();
     app.map_spawn_cache.selected_spawn =
@@ -226,6 +228,9 @@ where
 
     if key.show_spawns {
         for spawn in &app.spawns {
+            if !filters.allows_spawn(spawn) {
+                continue;
+            }
             if let Some(pz) = player_z
                 && (spawn.z - pz).abs() > z_range
             {
@@ -355,6 +360,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     } else {
         String::from("off")
     };
+    let filter_label = app.map_state.filters.inline_flags();
     let layer_label = format!(
         " layers[{}{}{}{}{}]",
         if app.map_state.show_geometry {
@@ -406,12 +412,12 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         .map_or_else(
             || {
                 format!(
-                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{provisional_view_center} | {layer_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
+                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{provisional_view_center} | {layer_label} | {filter_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
                 )
             },
             |m| {
                 format!(
-                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {provisional_view_center} | {layer_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
+                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {provisional_view_center} | {layer_label} | {filter_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
                     zone_label,
                     m.lines.len(),
                     m.points.len(),
@@ -452,12 +458,12 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         .map_or_else(
             || {
                 format!(
-                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{view_center} | {layer_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
+                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{view_center} | {layer_label} | {filter_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
                 )
             },
             |m| {
                 format!(
-                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {view_center} | {layer_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
+                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {view_center} | {layer_label} | {filter_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
                     zone_label,
                     m.lines.len(),
                     m.points.len(),
@@ -1741,6 +1747,12 @@ mod tests {
         app
     }
 
+    fn spawn_with_type(id: u32, name: &str, x: f32, y: f32, spawn_type: SpawnType) -> SpawnInfo {
+        let mut spawn = test_spawn(id, name, x, y);
+        spawn.spawn_type = spawn_type;
+        spawn
+    }
+
     fn test_transform() -> MapTransform {
         MapTransform {
             center_x: 0.0,
@@ -1819,5 +1831,72 @@ mod tests {
         app.map_state.toggle_layer(2);
         let spawns_toggled_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
         assert_ne!(spawns_toggled_key, base_key);
+    }
+
+    #[test]
+    fn map_spawn_cache_key_changes_when_filters_toggle() {
+        let mut app = test_app_with_spawns();
+        let transform = test_transform();
+        let base_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        app.map_state
+            .filters
+            .set(crate::tui::state::MapFilterKind::Npc, false);
+        let toggled_key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        assert_ne!(base_key, toggled_key);
+    }
+
+    #[test]
+    fn map_filters_hide_disabled_categories() {
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        let pc = spawn_with_type(1, "Dmft01", -1.0, -1.0, SpawnType::Player);
+        let npc = spawn_with_type(2, "a skeleton", -2.0, -2.0, SpawnType::Npc);
+        client.spawns = vec![pc.clone(), npc];
+        client.local_player = Some(pc);
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        let transform = test_transform();
+        let key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        rebuild_map_spawn_cache(&mut app, key, Some(0.0), None, |x, y| (x as i32, y as i32));
+        let all_cells = app.map_spawn_cache.cells.len();
+        assert!(all_cells >= 2);
+
+        app.map_state
+            .filters
+            .set(crate::tui::state::MapFilterKind::Npc, false);
+        let key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        rebuild_map_spawn_cache(&mut app, key, Some(0.0), None, |x, y| (x as i32, y as i32));
+        let filtered_cells = app.map_spawn_cache.cells.len();
+        assert_eq!(filtered_cells, 1);
+    }
+
+    #[test]
+    fn map_filters_hide_named_when_disabled() {
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        client.spawns = vec![
+            spawn_with_type(1, "Emperor Crush", -3.0, -3.0, SpawnType::Npc),
+            spawn_with_type(2, "a legionnaire", -4.0, -4.0, SpawnType::Npc),
+        ];
+        client.local_player = Some(spawn_with_type(99, "You", -0.5, -0.5, SpawnType::Player));
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        let transform = test_transform();
+        let key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        rebuild_map_spawn_cache(&mut app, key, Some(0.0), None, |x, y| (x as i32, y as i32));
+        let with_named = app.map_spawn_cache.cells.len();
+        assert!(with_named >= 2);
+
+        app.map_state
+            .filters
+            .set(crate::tui::state::MapFilterKind::Named, false);
+        let key = map_spawn_cache_key(&app, &transform, 40, 20, Some(0.0), None);
+        rebuild_map_spawn_cache(&mut app, key, Some(0.0), None, |x, y| (x as i32, y as i32));
+        let without_named = app.map_spawn_cache.cells.len();
+        assert_eq!(without_named, 1);
     }
 }

@@ -28,7 +28,9 @@ pub use super::state::{
     CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
     OverviewScreenState, SpawnsScreenState, TacticalScreenState,
 };
-use super::state::{FilteredSpawnCache, FilteredSpawnCacheKey, MapSpawnPresentationCache};
+use super::state::{
+    FilteredSpawnCache, FilteredSpawnCacheKey, MapFilterKind, MapSpawnPresentationCache,
+};
 
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2981,6 +2983,62 @@ impl App {
                     }
                 }
             }
+            "mapfilter" => match parts.get(1).copied() {
+                None => {
+                    self.set_feedback(ToastLevel::Info, self.map_state.filters.summary(), false);
+                }
+                Some(arg) if arg.eq_ignore_ascii_case("reset") => {
+                    self.map_state.filters.set_all(true);
+                    self.map_spawn_cache.clear();
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        String::from("Map filters reset (all ON)"),
+                        true,
+                    );
+                }
+                Some(arg) => {
+                    let Some(kind) = MapFilterKind::from_str(arg) else {
+                        self.usage_feedback(
+                            "mapfilter",
+                            "Usage: mapfilter <npc|pc|corpse|ground|pet|named|untargetable> [on|off]",
+                        );
+                        return;
+                    };
+                    let new_state = if let Some(state) = parts.get(2) {
+                        match state.to_ascii_lowercase().as_str() {
+                            "on" | "1" | "true" => {
+                                self.map_state.filters.set(kind, true);
+                                true
+                            }
+                            "off" | "0" | "false" => {
+                                self.map_state.filters.set(kind, false);
+                                false
+                            }
+                            _ => {
+                                self.usage_feedback(
+                                    "mapfilter",
+                                    "Usage: mapfilter <npc|pc|corpse|ground|pet|named|untargetable> [on|off]",
+                                );
+                                return;
+                            }
+                        }
+                    } else {
+                        self.map_state.filters.toggle(kind)
+                    };
+                    self.map_spawn_cache.clear();
+                    let status = if new_state { "ON" } else { "OFF" };
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!(
+                            "{} {} | {}",
+                            kind.label(),
+                            status,
+                            self.map_state.filters.summary()
+                        ),
+                        true,
+                    );
+                }
+            },
             "loot" => {
                 let ok = self.send_ipc_to_focused(&dmft_common::ipc::Command::LootCorpse);
                 if ok == 0 {
