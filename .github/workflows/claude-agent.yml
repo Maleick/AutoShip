@@ -37,6 +37,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
+          allowed_bots: Copilot
           prompt: |
             Follow `docs/claude-issue-worker.md` exactly.
             Read `AGENTS.md` and `CLAUDE.md` before editing.

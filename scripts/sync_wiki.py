@@ -294,7 +294,21 @@ def commit_changes(wiki_dir: Path) -> None:
     run(["git", "add", "-A"], cwd=wiki_dir)
     if not has_git_changes(wiki_dir):
         return
-    run(["git", "commit", "-m", COMMIT_MESSAGE], cwd=wiki_dir)
+    result = run(["git", "commit", "-m", COMMIT_MESSAGE], cwd=wiki_dir, check=False)
+    if result.returncode == 0:
+        return
+
+    details: list[str] = []
+    stdout = result.stdout.strip()
+    if stdout:
+        details.append(f"stdout:\n{stdout}")
+    stderr = result.stderr.strip()
+    if stderr:
+        details.append(f"stderr:\n{stderr}")
+    fail(
+        f"Failed to commit wiki changes (exit code {result.returncode}).\n"
+        + ("\n\n".join(details) if details else "git commit exited without any output.")
+    )
 
 
 def push_changes(wiki_dir: Path, display_url: str, token: str) -> None:
