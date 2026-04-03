@@ -455,6 +455,13 @@ impl NavClientStatus {
                 format!("Recovery attempt {}", recovery_attempt)
             }
             dmft_common::nav::NavStatus::Arrived => String::from("Destination reached"),
+            dmft_common::nav::NavStatus::Sticking { target_id, distance, in_range } => {
+                if *in_range {
+                    format!("Sticking #{target_id} • {distance:.0}u (in range)")
+                } else {
+                    format!("Sticking #{target_id} • {distance:.0}u")
+                }
+            }
         }
     }
 

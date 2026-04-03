@@ -423,6 +423,9 @@ fn apply_demo_scenario(app: &mut App) {
                             }
                             dmft_common::nav::NavStatus::Arrived => String::from("Route complete"),
                             dmft_common::nav::NavStatus::Idle => String::from("Standing by"),
+                            dmft_common::nav::NavStatus::Sticking { target_id, .. } => {
+                                format!("Sticking to #{target_id}")
+                            }
                         },
                         recovery_state: match &nav.status {
                             dmft_common::nav::NavStatus::Stuck { recovery_attempt } => Some(
