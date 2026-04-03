@@ -1,5 +1,6 @@
 //! Navigation state machine — runs once per game tick.
 //! Transitions: Idle -> Moving -> Arrived -> Idle
+//! Stick mode: activated via `stick_to()`, runs until `stick_off()` or stop.
 //!
 //! Follow mode (player anchor): Idle -> Following -> (navigating back when
 //! leash exceeded) -> Following -> ...
@@ -9,16 +10,20 @@
 
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
-use dmft_common::nav::{CampSpot, FollowConfig, NavStatus, Waypoint};
+use dmft_common::nav::{CampSpot, FollowConfig, NavStatus, PauseReason, StickConfig, Waypoint};
+use dmft_common::types::SpawnData;
 
 use super::humanize::MovementPersonality;
+use super::stick::StickEngine;
 use super::stuck::StuckDetector;
+use super::warp::{TargetSample, WarpAction, WarpMonitor};
 use super::waypoint::WaypointQueue;
 
 /// Internal state for the navigation FSM.
 enum State {
     Idle,
     Moving,
+    Paused(PauseReason),
     Arrived,
     /// Player follow mode: anchor tracks a leader's position.
     Following {
@@ -29,6 +34,7 @@ enum State {
         /// Whether we are currently navigating back toward the anchor.
         returning: bool,
     },
+    Sticking,
 }
 
 /// The navigation engine, owned per-client in the DLL.
@@ -44,6 +50,13 @@ pub struct Navigator {
     personality: MovementPersonality,
     /// Cached distance to current waypoint (updated each tick, read by status()).
     cached_distance: f32,
+    /// Stick-to-target engine.
+    stick: StickEngine,
+    /// Cached stick reporting fields (updated each Sticking tick).
+    cached_stick_target_id: u32,
+    cached_stick_distance: f32,
+    /// Warp detection + pause gate.
+    warp: WarpMonitor,
 }
 
 impl Navigator {
@@ -56,6 +69,10 @@ impl Navigator {
             stuck: StuckDetector::new(),
             personality: MovementPersonality::from_client_id(client_id),
             cached_distance: 0.0,
+            stick: StickEngine::new(),
+            cached_stick_target_id: 0,
+            cached_stick_distance: 0.0,
+            warp: WarpMonitor::new(),
         }
     }
 
@@ -70,6 +87,8 @@ impl Navigator {
         self.queue.set_path(waypoints);
         self.camp = None;
         self.stuck.reset();
+        self.stick.stop();
+        self.warp.reset();
         self.state = State::Moving;
     }
 
@@ -79,6 +98,8 @@ impl Navigator {
         self.queue.set_path(vec![spot.position]);
         self.camp = Some(spot);
         self.stuck.reset();
+        self.stick.stop();
+        self.warp.reset();
         self.state = State::Moving;
     }
 
@@ -88,15 +109,13 @@ impl Navigator {
         self.queue.clear();
         self.camp = None;
         self.stuck.reset();
+        self.stick.stop();
+        self.warp.reset();
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
     }
 
     /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
-    ///
-    /// The navigator will continuously track `anchor` as the leader's position.
-    /// When the follower exceeds `config.leash_distance` from the anchor it
-    /// navigates back; once within `config.follow_distance` it stops and waits.
     pub fn follow_player(&mut self, config: FollowConfig, anchor: Waypoint) {
         tracing::info!(
             leader = %config.leader_name,
@@ -116,9 +135,6 @@ impl Navigator {
     }
 
     /// Update the dynamic anchor position in an active follow mode.
-    ///
-    /// Called by the orchestrator each tick when the leader has moved. If follow
-    /// mode is not active this is a no-op.
     pub fn update_follow_anchor(&mut self, new_anchor: Waypoint) {
         if let State::Following { ref mut anchor, .. } = self.state {
             *anchor = new_anchor;
@@ -136,12 +152,66 @@ impl Navigator {
         }
     }
 
+    /// Begin a stick-to-target session.
+    pub fn stick_to(&mut self, config: StickConfig, current_target_id: Option<u32>) {
+        self.controller.stop_forward();
+        self.queue.clear();
+        self.camp = None;
+        self.stuck.reset();
+        self.stick.start(config, current_target_id);
+        self.state = State::Sticking;
+    }
+
+    /// Stop sticking and return to `Idle`.
+    pub fn stick_off(&mut self) {
+        self.controller.stop_forward();
+        self.stick.stop();
+        self.state = State::Idle;
+        tracing::info!("Stick off — returning to Idle");
+    }
+
+    /// Apply a distance modifier delta to the active stick session (`/stick mod #`).
+    pub fn stick_mod(&mut self, delta: f32) {
+        self.stick.apply_mod(delta);
+    }
+
     /// Run one tick of the navigation state machine. Call from on_game_tick().
-    pub fn tick(&mut self) {
+    ///
+    /// `current_target` and `nearby` are used by the stick engine.
+    /// `target_sample` is used by the warp monitor.
+    pub fn tick(
+        &mut self,
+        current_target: Option<&SpawnData>,
+        nearby: &[SpawnData],
+        target_sample: Option<&TargetSample>,
+    ) {
+        let warp_action = match self.state {
+            State::Idle | State::Arrived => WarpAction::None,
+            _ => self.warp.update(target_sample),
+        };
+
+        match warp_action {
+            WarpAction::Pause => {
+                self.controller.stop_forward();
+                self.state = State::Paused(PauseReason::Warp);
+                return;
+            }
+            WarpAction::Resume => {
+                if matches!(self.state, State::Paused(_)) {
+                    tracing::info!("Warp pause cleared — resuming navigation");
+                    self.state = State::Moving;
+                    self.stuck.reset();
+                }
+            }
+            WarpAction::None => {}
+        }
+
         match self.state {
             State::Idle | State::Arrived => {}
+            State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
             State::Following { .. } => self.tick_following(),
+            State::Sticking => self.tick_sticking(current_target, nearby),
         }
     }
 
@@ -162,6 +232,12 @@ impl Navigator {
                     distance_remaining: self.cached_distance,
                 }
             }
+            State::Paused(reason) => NavStatus::Paused {
+                reason: reason.clone(),
+                waypoint_index: self.queue.index(),
+                waypoint_count: self.queue.len(),
+                distance_remaining: self.cached_distance,
+            },
             State::Arrived => NavStatus::Arrived,
             State::Following {
                 config,
@@ -175,7 +251,25 @@ impl Navigator {
                     returning: *returning,
                 }
             }
+            State::Sticking => {
+                let effective_dist = self.stick.effective_distance();
+                NavStatus::Sticking {
+                    target_id: self.cached_stick_target_id,
+                    distance: self.cached_stick_distance,
+                    in_range: self.cached_stick_distance
+                        <= effective_dist + super::stick::STICK_ARRIVAL_THRESHOLD,
+                }
+            }
         }
+    }
+
+    fn tick_paused(&mut self) {
+        // Update cached distance for UI/telemetry while paused.
+        if let Some(target) = self.queue.current() {
+            let dist = self.controller.read_position().distance_2d(target);
+            self.cached_distance = dist;
+        }
+        self.controller.stop_forward();
     }
 
     fn tick_moving(&mut self) {
@@ -225,6 +319,47 @@ impl Navigator {
         }
     }
 
+    fn tick_sticking(&mut self, current_target: Option<&SpawnData>, nearby: &[SpawnData]) {
+        use super::stick::StickTickResult;
+
+        let player_pos = self.controller.read_position();
+        let result = self.stick.tick(&player_pos, current_target, nearby);
+
+        match result {
+            StickTickResult::Inactive => {
+                // Engine deactivated externally — go idle.
+                self.state = State::Idle;
+            }
+            StickTickResult::TargetLost => {
+                // `always` mode: stay armed, stop movement.
+                self.controller.stop_forward();
+                // Keep cached values from last known contact.
+                if !self.stick.is_active() {
+                    self.state = State::Idle;
+                }
+            }
+            StickTickResult::InRange { target_id, distance } => {
+                self.cached_stick_target_id = target_id;
+                self.cached_stick_distance = distance;
+                self.controller.stop_forward();
+            }
+            StickTickResult::OutOfRange {
+                target_id,
+                distance,
+                desired_pos,
+            } => {
+                self.cached_stick_target_id = target_id;
+                self.cached_stick_distance = distance;
+                // Face and move toward the desired stick position.
+                let heading = movement::calc_heading(&player_pos, &desired_pos);
+                let wobbled = self.personality.wobble_heading(heading);
+                self.controller.write_heading(wobbled);
+                self.controller.write_speed_heading(wobbled);
+                self.controller.press_forward();
+            }
+        }
+    }
+
     fn on_path_complete(&mut self) {
         self.controller.stop_forward();
         if let Some(ref camp) = self.camp {
@@ -234,6 +369,7 @@ impl Navigator {
             tracing::info!("Navigation path complete");
         }
         self.stuck.reset();
+        self.warp.reset();
         self.state = State::Arrived;
     }
 
@@ -313,5 +449,40 @@ impl Navigator {
             // Within acceptable range — ensure we're not still moving.
             self.controller.stop_forward();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pauses_and_resumes_on_warp() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+
+        let stable = TargetSample {
+            id: 99,
+            position: Waypoint::new(0.0, 0.0, 0.0),
+        };
+        nav.tick(None, &[], Some(&stable));
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+
+        let warped = TargetSample {
+            id: 99,
+            position: Waypoint::new(200.0, 0.0, 0.0),
+        };
+        nav.tick(None, &[], Some(&warped));
+        assert!(matches!(nav.status(), NavStatus::Paused { .. }));
+
+        // Feed stable samples to clear the pause
+        let stable_again = TargetSample {
+            id: 99,
+            position: Waypoint::new(200.5, 0.5, 0.0),
+        };
+        for _ in 0..15 {
+            nav.tick(None, &[], Some(&stable_again));
+        }
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
     }
 }

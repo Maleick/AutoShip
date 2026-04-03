@@ -4,6 +4,64 @@ use super::healing::{ClientHealth, HealthMonitor};
 use dmft_common::types::{ClientId, GameState, HookStatus};
 use std::path::PathBuf;
 
+/// Outer lifecycle state for a managed client slot.
+///
+/// Tracks the full slot lifecycle from initial configuration through to live
+/// operation and recovery.  This is the M8 slot-lifecycle model derived from
+/// the JMB session-and-relay comparison.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SlotLifecycle {
+    /// Slot is configured with account/character info but the process has not
+    /// been started yet.
+    Configured,
+    /// EQ process is being spawned by the launcher.
+    Launching,
+    /// EQ client is running and showing the login screen.
+    WaitingForLogin,
+    /// Character has passed login and is loading into the world.
+    EnteringWorld,
+    /// Slot is fully operational: hooks active, in-zone, ready for commands.
+    Live,
+    /// Slot is recovering from a crash, disconnect, or unexpected state.
+    Recovering,
+    /// Slot is blocked and requires operator attention before it can proceed.
+    Blocked,
+}
+
+impl SlotLifecycle {
+    /// Returns a short human-readable label for the lifecycle state.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Configured => "configured",
+            Self::Launching => "launching",
+            Self::WaitingForLogin => "login",
+            Self::EnteringWorld => "entering",
+            Self::Live => "live",
+            Self::Recovering => "recovering",
+            Self::Blocked => "blocked",
+        }
+    }
+
+    /// Returns `true` when the slot is fully operational.
+    #[must_use]
+    pub fn is_live(&self) -> bool {
+        matches!(self, Self::Live)
+    }
+
+    /// Returns `true` when the slot needs operator attention.
+    #[must_use]
+    pub fn is_blocked(&self) -> bool {
+        matches!(self, Self::Blocked)
+    }
+}
+
+impl std::fmt::Display for SlotLifecycle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
 /// Post-login setup phases after a client reaches `InWorld`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PostLoginPhase {
@@ -41,6 +99,8 @@ pub struct EqSession {
     pub bound_toon: Option<dmft_common::login::AccountInfo>,
     /// Current phase of post-login setup.
     pub post_login_phase: PostLoginPhase,
+    /// Current outer lifecycle state for this slot.
+    pub slot_lifecycle: SlotLifecycle,
 }
 
 impl EqSession {
@@ -58,6 +118,7 @@ impl EqSession {
             account_name: None,
             bound_toon: None,
             post_login_phase: PostLoginPhase::NotStarted,
+            slot_lifecycle: SlotLifecycle::Configured,
         }
     }
 
@@ -131,6 +192,7 @@ mod tests {
         assert!(s.account_name.is_none());
         assert!(s.bound_toon.is_none());
         assert!(matches!(s.post_login_phase, PostLoginPhase::NotStarted));
+        assert!(matches!(s.slot_lifecycle, SlotLifecycle::Configured));
     }
 
     #[test]
@@ -257,5 +319,53 @@ mod tests {
         assert_eq!(s.account_name.as_deref(), Some("test_account"));
         s.hook_status = HookStatus::HooksActive;
         assert!(s.is_active());
+    }
+
+    // ── SlotLifecycle tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn slot_lifecycle_default_is_configured() {
+        let s = EqSession::new(1, 100);
+        assert_eq!(s.slot_lifecycle, SlotLifecycle::Configured);
+    }
+
+    #[test]
+    fn slot_lifecycle_is_live() {
+        let mut s = EqSession::new(1, 100);
+        assert!(!s.slot_lifecycle.is_live());
+        s.slot_lifecycle = SlotLifecycle::Live;
+        assert!(s.slot_lifecycle.is_live());
+    }
+
+    #[test]
+    fn slot_lifecycle_is_blocked() {
+        let mut s = EqSession::new(1, 100);
+        assert!(!s.slot_lifecycle.is_blocked());
+        s.slot_lifecycle = SlotLifecycle::Blocked;
+        assert!(s.slot_lifecycle.is_blocked());
+    }
+
+    #[test]
+    fn slot_lifecycle_labels() {
+        assert_eq!(SlotLifecycle::Configured.label(), "configured");
+        assert_eq!(SlotLifecycle::Launching.label(), "launching");
+        assert_eq!(SlotLifecycle::WaitingForLogin.label(), "login");
+        assert_eq!(SlotLifecycle::EnteringWorld.label(), "entering");
+        assert_eq!(SlotLifecycle::Live.label(), "live");
+        assert_eq!(SlotLifecycle::Recovering.label(), "recovering");
+        assert_eq!(SlotLifecycle::Blocked.label(), "blocked");
+    }
+
+    #[test]
+    fn slot_lifecycle_display_matches_label() {
+        let lifecycle = SlotLifecycle::Recovering;
+        assert_eq!(format!("{lifecycle}"), lifecycle.label());
+    }
+
+    #[test]
+    fn slot_lifecycle_clone_and_eq() {
+        let a = SlotLifecycle::Live;
+        let b = a.clone();
+        assert_eq!(a, b);
     }
 }

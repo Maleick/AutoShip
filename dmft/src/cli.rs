@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
+use zeroize::Zeroizing;
 
 use crate::config;
 use crate::eq;
@@ -371,10 +372,16 @@ pub fn run_statusall_mode() -> Result<()> {
                                 } => {
                                     format!("{waypoint_index}/{waypoint_count}")
                                 }
+                                dmft_common::nav::NavStatus::Paused { reason, .. } => {
+                                    format!("Paused({reason:?})")
+                                }
                                 dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
                                 dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
                                 dmft_common::nav::NavStatus::Following { leader_name, .. } => {
                                     format!("Follow:{leader_name}")
+                                }
+                                dmft_common::nav::NavStatus::Sticking { target_id, .. } => {
+                                    format!("Sticking #{target_id}")
                                 }
                             };
                             let zone = if state.zone_short_name.is_empty() {
@@ -643,7 +650,7 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
 pub fn run_login_pid_mode(
     pid: u32,
     account: &str,
-    password: &str,
+    mut password: Zeroizing<String>,
     server: &str,
     character: &str,
 ) -> Result<()> {
@@ -652,9 +659,10 @@ pub fn run_login_pid_mode(
     println!("Sending StartLogin to PID {pid} (account: {account}, server: {server})...");
 
     let pipe = connect_authenticated_pipe(pid)?;
+    let password = std::mem::take(&mut *password);
     let cmd = Command::StartLogin {
         account_name: account.to_string(),
-        password: password.to_string(),
+        password,
         server_name: server.to_string(),
         character_name: character.to_string(),
     };
@@ -670,7 +678,12 @@ pub fn run_login_pid_mode(
 /// # Errors
 ///
 /// Returns an error if the operation fails.
-pub fn run_login_mode(account: &str, password: &str, server: &str, character: &str) -> Result<()> {
+pub fn run_login_mode(
+    account: &str,
+    password: Zeroizing<String>,
+    server: &str,
+    character: &str,
+) -> Result<()> {
     use dmft_common::ipc::Command;
 
     let config = load_config()?;
@@ -679,6 +692,12 @@ pub fn run_login_mode(account: &str, password: &str, server: &str, character: &s
     if pids.is_empty() {
         println!("No EQ processes found. Launch EQ first, then inject, then login.");
         return Ok(());
+    }
+
+    if pids.len() == 1 {
+        let result = run_login_pid_mode(pids[0], account, password, server, character);
+        println!("\nLogin commands sent. Check DLL log for progress.");
+        return result;
     }
 
     for &pid in &pids {

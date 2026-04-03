@@ -296,8 +296,6 @@ impl LoginFsm {
                 );
                 if wrote {
                     tracing::info!("Credentials written + Login clicked");
-                    // Also type password via WM_CHAR as backup
-                    widgets::type_password_wm_char(self.eqmain_base, &creds.password);
                     self.action_taken = true;
                     self.transition(State::WaitForServerSelect);
                 }
@@ -343,10 +341,6 @@ impl LoginFsm {
         }
 
         tracing::info!(account = %account, "Credentials written to EQ memory");
-
-        // Strategy 2: Also type password via PostMessage as backup
-        // (CXStr writes may not be read by EQ's submit handler)
-        widgets::type_password_wm_char(self.eqmain_base, &password);
 
         // Zeroize credentials from FSM memory
         self.credentials = None;

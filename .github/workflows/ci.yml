@@ -25,31 +25,16 @@ env:
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
-  pr_gate:
+  pr_gate_untrusted:
     name: PR gate (fmt + clippy + test + python)
-    runs-on: [self-hosted, Windows, X64, dmft]
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: windows-latest
     timeout-minutes: 45
     defaults:
       run:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
-
-      - name: Configure Git safe directories for runner account
-        run: |
-          echo [info] Marking workflow directories as trusted for Git.
-          if "%GITHUB_WORKSPACE%"=="" (
-            echo [fatal] GITHUB_WORKSPACE is not defined.
-            exit /b 1
-          )
-          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
-            git config --global --add safe.directory "%%~D" || (
-              echo [fatal] Unable to add safe.directory for %%~D.
-              exit /b 1
-            )
-          )
-          echo [info] Active safe.directory values:
-          git config --global --get-all safe.directory
 
       - name: Initialize reference submodules
         run: |
@@ -64,21 +49,14 @@ jobs:
           if not exist "third_party\macroquest\src\routing" (echo missing third_party\macroquest\src\routing & exit /b 1)
           if not exist "third_party\macroquest\src\eqlib" (echo missing third_party\macroquest\src\eqlib & exit /b 1)
 
-      - name: Locate Python
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.10'
+
+      - name: Configure Python command
         run: |
-          where python >nul 2>nul && (echo PYTHON_CMD=python>>"%GITHUB_ENV%" & exit /b 0)
-          where py >nul 2>nul && (echo PYTHON_CMD=py -3>>"%GITHUB_ENV%" & exit /b 0)
-          if not exist .ci-python mkdir .ci-python
-          set "PYTHON_EMBED_ZIP=.ci-python\python-embed.zip"
-          set "PYTHON_EMBED_SHA256=4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3"
-          curl.exe -fsSL -o "%PYTHON_EMBED_ZIP%" https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
-          for /f "tokens=1" %%i in ('certutil -hashfile "%PYTHON_EMBED_ZIP%" SHA256 ^| findstr /R /I "^[0-9A-F][0-9A-F]*$"') do set "DOWNLOADED_PYTHON_SHA256=%%i"
-          if /I not "%DOWNLOADED_PYTHON_SHA256%"=="%PYTHON_EMBED_SHA256%" (
-            echo [fatal] Python embed archive checksum mismatch.
-            exit /b 1
-          )
-          tar -xf "%PYTHON_EMBED_ZIP%" -C .ci-python
-          echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
+          echo PYTHON_CMD=python>>"%GITHUB_ENV%"
+          python --version
 
       - name: Provision nightly toolchain via rustup
         env:
@@ -121,10 +99,161 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
 
+  pr_gate_trusted:
+    name: PR gate (fmt + clippy + test + python)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Windows, X64, dmft]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Git safe directories for runner account
+        run: |
+          echo [info] Marking workflow directories as trusted for Git.
+          if "%GITHUB_WORKSPACE%"=="" (
+            echo [fatal] GITHUB_WORKSPACE is not defined.
+            exit /b 1
+          )
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+            git config --global --add safe.directory "%%~D" || (
+              echo [fatal] Unable to add safe.directory for %%~D.
+              exit /b 1
+            )
+          )
+          echo [info] Active safe.directory values:
+          git config --global --get-all safe.directory
+
+      - name: Initialize reference submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
+
+      - name: Verify reference trees
+        run: |
+          git submodule status --recursive
+          if not exist "third_party\eqlib\include\eqlib\offsets\eqgame.h" (echo missing third_party\eqlib\include\eqlib\offsets\eqgame.h & exit /b 1)
+          if not exist "third_party\macroquest\src\login" (echo missing third_party\macroquest\src\login & exit /b 1)
+          if not exist "third_party\macroquest\src\routing" (echo missing third_party\macroquest\src\routing & exit /b 1)
+          if not exist "third_party\macroquest\src\eqlib" (echo missing third_party\macroquest\src\eqlib & exit /b 1)
+
+      - name: Locate or provision verified Python
+        env:
+          PYTHON_EMBED_URL: https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
+          PYTHON_EMBED_SHA256: 4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3
+        run: |
+          where python >nul 2>nul && (
+            echo PYTHON_CMD=python>>"%GITHUB_ENV%"
+            python --version
+            exit /b 0
+          )
+          where py >nul 2>nul && (
+            echo PYTHON_CMD=py -3>>"%GITHUB_ENV%"
+            py -3 --version
+            exit /b 0
+          )
+          setlocal EnableDelayedExpansion
+          if exist .ci-python rmdir /s /q .ci-python
+          mkdir .ci-python
+          curl.exe -fsSL -o .ci-python\python-embed.zip "%PYTHON_EMBED_URL%"
+          for /f "tokens=* delims=" %%H in ('certutil -hashfile ".ci-python\python-embed.zip" SHA256 ^| findstr /r /v /c:"^SHA256" /c:"^CertUtil" /c:"^$"') do (
+            set "PYTHON_EMBED_ACTUAL_SHA256=%%H"
+          )
+          set "PYTHON_EMBED_ACTUAL_SHA256=!PYTHON_EMBED_ACTUAL_SHA256: =!"
+          if /I not "!PYTHON_EMBED_ACTUAL_SHA256!"=="%PYTHON_EMBED_SHA256%" (
+            echo [fatal] Verified Python download checksum mismatch.
+            echo [fatal] Expected: %PYTHON_EMBED_SHA256%
+            echo [fatal] Actual:   !PYTHON_EMBED_ACTUAL_SHA256!
+            exit /b 1
+          )
+          tar -xf .ci-python\python-embed.zip -C .ci-python
+          if not exist .ci-python\python.exe (
+            echo [fatal] Extracted python.exe not found after verified download.
+            exit /b 1
+          )
+          endlocal & (
+            echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
+          )
+          "%CD%\.ci-python\python.exe" --version
+
+      - name: Provision nightly toolchain via rustup
+        env:
+          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
+        run: |
+          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
+          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
+          set "PATH=%CARGO_HOME%\bin;%PATH%"
+          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
+          where rustup.exe >nul 2>nul || (
+            echo [warn] rustup.exe not found in PATH. Installing rustup bootstrap.
+            curl.exe -fSLo "%TEMP%\rustup-init.exe" https://win.rustup.rs/x86_64
+            start /wait "" "%TEMP%\rustup-init.exe" -y --no-modify-path --default-toolchain %NIGHTLY_TOOLCHAIN%
+            if errorlevel 1 (
+              echo [fatal] rustup bootstrap failed.
+              exit /b 1
+            )
+            del /f /q "%TEMP%\rustup-init.exe"
+          )
+          where rustup.exe >nul 2>nul || (
+            echo [fatal] rustup.exe still not available after bootstrap.
+            exit /b 1
+          )
+          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
+          rustup --version
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup default %NIGHTLY_TOOLCHAIN%
+          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
+          rustup run %NIGHTLY_TOOLCHAIN% rustc -V
+          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
+            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
+            exit /b 1
+          )
+          echo [info] Nightly compiler confirmed for %NIGHTLY_TOOLCHAIN%.
+
+      - name: Ensure cmake on PATH
+        shell: pwsh
+        run: |
+          if (Get-Command cmake -ErrorAction SilentlyContinue) {
+            Write-Host "[info] cmake already on PATH: $(cmake --version | Select-Object -First 1)"
+            exit 0
+          }
+          $candidates = @(
+            'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\CMake\bin'
+          )
+          foreach ($dir in $candidates) {
+            if (Test-Path (Join-Path $dir 'cmake.exe')) {
+              Write-Host "[info] Found cmake at $dir"
+              Add-Content $env:GITHUB_PATH $dir
+              $env:PATH = "${dir};${env:PATH}"
+              cmake --version
+              if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake sanity check failed at $dir"; exit 1 }
+              exit 0
+            }
+          }
+          Write-Host "[info] cmake not found in well-known paths; installing via winget..."
+          winget install --id Kitware.CMake -e --source winget --accept-package-agreements --accept-source-agreements --silent
+          if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] winget cmake install failed"; exit 1 }
+          $installPath = 'C:\Program Files\CMake\bin'
+          Add-Content $env:GITHUB_PATH $installPath
+          $env:PATH = "${installPath};${env:PATH}"
+          cmake --version
+          if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake not available after install"; exit 1 }
+      - run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
+      - run: '%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v'
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test
+
   windows:
     name: Windows release build (manual)
     if: github.event_name == 'workflow_dispatch' && inputs.run_release_build
-    needs: pr_gate
+    needs: pr_gate_trusted
     runs-on: [self-hosted, Windows, X64, dmft]
     timeout-minutes: 30
     defaults:
@@ -188,7 +317,38 @@ jobs:
             exit /b 1
           )
 
-      - uses: lukka/get-cmake@v4.3.1
+      - name: Ensure cmake on PATH
+        shell: pwsh
+        run: |
+          if (Get-Command cmake -ErrorAction SilentlyContinue) {
+            Write-Host "[info] cmake already on PATH: $(cmake --version | Select-Object -First 1)"
+            exit 0
+          }
+          $candidates = @(
+            'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\CMake\bin'
+          )
+          foreach ($dir in $candidates) {
+            if (Test-Path (Join-Path $dir 'cmake.exe')) {
+              Write-Host "[info] Found cmake at $dir"
+              Add-Content $env:GITHUB_PATH $dir
+              $env:PATH = "${dir};${env:PATH}"
+              cmake --version
+              if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake sanity check failed at $dir"; exit 1 }
+              exit 0
+            }
+          }
+          Write-Host "[info] cmake not found in well-known paths; installing via winget..."
+          winget install --id Kitware.CMake -e --source winget --accept-package-agreements --accept-source-agreements --silent
+          if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] winget cmake install failed"; exit 1 }
+          $installPath = 'C:\Program Files\CMake\bin'
+          Add-Content $env:GITHUB_PATH $installPath
+          $env:PATH = "${installPath};${env:PATH}"
+          cmake --version
+          if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake not available after install"; exit 1 }
 
       - name: Nightly compiler sanity check
         run: |

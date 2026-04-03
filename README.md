@@ -44,7 +44,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 | ---------- | --- | --------------------------------------------------------------------------------------------------- |
 | Characters | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels |
 | Map        | `2` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers, Z-slice control |
-| Navigation | `3` | Per-character nav status, route progress, recovery state, zoning blockers, and waypoint queue      |
+| Navigation | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue |
 | Debug      | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), hex dump, target detail           |
 
 **Themes:** Dark Modern (default), Dracula, Classic — cycle with `T`
@@ -77,12 +77,12 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 ### Command Bar (`:` mode)
 
-```
+```text
 :<name> /sit             Send slash command to character
 :G1-G6 /cmd             Send to group
 :all /sit                Broadcast to all clients
-:camp start|stop|list    Camp loop control
-:camp add|rm             Add/remove camp config
+:camp start|stop|list|status|next|prev  Camp loop control
+:camp add|remove        Add/remove camp config
 :nav <dest>              Navigate to camp, coords, or slash fallback
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist
@@ -92,14 +92,14 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 :accept                  Accept group invite
 :mode camp|hunt          Set operating mode
 :ch start <pids> <int>   Start CH chain
-:ch stop|add|rm          CH chain management
+:ch stop|add|remove      CH chain management (`rm` also works)
 :ch adaptive on|off      Adaptive CH timing
 :help                    Show all commands
 ```
 
 ### Camp Loop Automation
 
-- **5-phase state machine**: Idle -> Pull -> Fight -> Loot -> Med
+- **6-phase state machine**: Idle -> Pulling -> Fighting -> Looting -> Medding -> Buffing
 - **Smart decisions** from real game state (HP/mana-driven, not timers)
 - **16 class ability configs** (TOML) with cooldowns, priorities, conditions
 - **CC system**: Charm/mez tracking, Tash->Malo debuff chain, charm break emergency response
@@ -168,7 +168,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 ## Architecture
 
-```
+```text
 DMFT Workspace (3 crates, ~57K lines of Rust)
 ├── dmft/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
 ├── dmft-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
@@ -177,15 +177,15 @@ DMFT Workspace (3 crates, ~57K lines of Rust)
 
 ### Command Pipeline
 
-```
+```text
 TUI :command  →  Orchestrator  →  Named Pipe  →  DLL  →  InterpretCmd  →  EQ
-     or                                                    (invisible to game)
+     or  (invisible to game)
 Discord msg
 ```
 
 ### Camp Loop
 
-```
+```text
 Orchestrator ticks camp loop → reads game state from shared memory →
 generates (pid, slash_command) pairs per role → sends via IPC pipe →
 DLL executes InterpretCmd with human-like jitter delay
@@ -222,9 +222,14 @@ is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1
 
 CI and nightly automation:
 
+- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
+- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`
+- `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
+- self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using the workflow-provided `GH_TOKEN` (`secrets.GITHUB_TOKEN`) for `gh`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
-- `.github/workflows/ci.yml` runs the required `PR gate (fmt + clippy + test + python)` job for PRs and pushes to `master` without consuming GitHub-hosted minutes
+- `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
+- self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
 - `.github/workflows/copilot-ci-dispatch.yml` runs on GitHub-hosted Linux from `master`, dispatches `CI` on same-repo Copilot PR heads when GitHub leaves the PR-triggered run in `action_required`, and skips PRs that edit workflow files so approval-sensitive changes still require manual review
 
 If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
@@ -270,9 +275,13 @@ age-only pruning.
 
 DMFT-specific notes:
 
-- The required merge blocker is the self-hosted Windows `PR gate (fmt + clippy + test + python)` job on runner labels `self-hosted`, `Windows`, `X64`, and `dmft`.
+- The required merge blocker remains `PR gate (fmt + clippy + test + python)`.
+- Same-repo PRs, pushes to `master`, and manual `CI` dispatches run that gate on runner labels `self-hosted`, `Windows`, `X64`, and `dmft`.
+- Fork or otherwise untrusted PRs run the same visible gate name on GitHub-hosted `windows-latest` instead of the self-hosted runner.
+- The GitHub-hosted fork path uses `actions/setup-python@v6`; the self-hosted path stays cmd-safe and verifies any fallback Python ZIP before extraction.
 - That Windows gate currently boots the nightly MSVC Rust toolchain, because the Windows hook stack still depends on nightly-only `retour`.
-- No GitHub-hosted runners are used for the required PR flow.
+- The scheduled `DMFT PR manager` Codex cloud automation is expected to open missing PRs, address straightforward review feedback, and merge eligible branches into `master`.
+- Manual `CI` workflow dispatch is the place to get the heavier `Windows release build (manual)` validation on a topic branch before merge.
 - Trusted agent PRs should carry `merge:auto` by default unless the PR or linked issue is labeled `human:required`, `risk:high`, or `agent:blocked`.
 - The scheduled `DMFT issue executor` opens trusted agent PRs into `master`, adds automation labels, and should default `merge:auto` on those PRs when the linked issue is not explicitly blocked from unattended merge.
 - The scheduled `DMFT PR manager` Codex cloud automation is expected to address straightforward review feedback, resolve clearly addressed bot review threads, merge eligible agent-authored PRs into `master`, and close stale or superseded agent-authored PRs when the queue has moved on.
@@ -326,11 +335,12 @@ target\release\dmft.exe
 
 ## Testing
 
-Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate runs on the self-hosted Windows runner for every pull request into master and every push to master:
+Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                  | Jobs                                                                  |
 | ------------------------ | --------------------------------------------------------------------- |
-| Pull request into master | self-hosted `PR gate (fmt + clippy + test + python)`                  |
+| Same-repo pull request   | self-hosted `PR gate (fmt + clippy + test + python)`                  |
+| Fork pull request        | GitHub-hosted `PR gate (fmt + clippy + test + python)` on Windows     |
 | Push to master           | self-hosted `PR gate (fmt + clippy + test + python)`                  |
 | Manual `CI` dispatch     | required PR gate, with optional `Windows release build (manual)` input |
 
@@ -338,6 +348,7 @@ Tag-triggered releases (`v*`) build Windows binaries and create GitHub Releases 
 
 Release and wiki automation now run separately on the self-hosted Windows runner:
 
+- wiki auto-publish via `scripts/sync_wiki.py --check`
 - wiki auto-publish via `scripts/sync_wiki.py --push`
 - rolling nightly prerelease build and artifact upload
 
@@ -370,6 +381,7 @@ pull_mana_pct = 60
 ### Class Ability Configs (`config/classes/*.toml`)
 
 16 classes: WAR, CLR, PAL, RNG, SK, DRU, MNK, BRD, ROG, SHM, NEC, WIZ, MAG, ENC, BST, BER
+- Optional `[[level_overrides]]` blocks gate alternate combat/buff/emergency/cc/debuff ability lists by level range; categories omitted inside an override fall back to the base class lists, and the base profile is used when no override matches.
 
 ### HVT Watchlist (`config/hvt_watchlist.toml`)
 
@@ -424,11 +436,11 @@ Execution rules:
 - `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md` — curated `M5`/`M6` control-path ledger that separates in-process defaults from packet candidates and blocked protocol gaps
 - `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native DMFT TUI translation targets
-- `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors plus secondary detection signals
+- `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors, `M5`-`M8` risk gates, and operator hygiene inputs
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md` — curated `M6` checkpoint note for queue flush, timeout, and safe-coordinate recovery
 - `docs/research-imports/2026-04-02-packet-zoning/` — raw packet and zoning evidence archive
 - `docs/orchestration-design.md` — 7-phase plan, group model, camp loop design
-- `docs/anti-detection.md` — evidence-based anti-detection posture and operator-risk rules
+- `docs/anti-detection.md` — evidence-based anti-detection posture, gate matrix, and operator-risk rules
 - `docs/redguides-automation-research.md` — KissAssist, CWTN, camp loop patterns
 - `docs/mq2-deep-dive.md` — MQ2Nav, combat, stick/follow analysis
 - `docs/eq-maps-research.md` — Brewall format, coordinate transform
