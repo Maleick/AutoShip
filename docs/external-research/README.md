@@ -9,7 +9,8 @@ Use these files in order:
 3. `kissassist-gap-and-tui-translation.md`
 4. `daybreak-detection-digest.md`
 5. `zoning-queue-and-safe-coord-validation.md`
-6. `../research-imports/2026-04-02-packet-zoning/`
+6. `ability-packet-coverage-and-targetability-validation.md`
+7. `../research-imports/2026-04-02-packet-zoning/`
 
 Rules:
 
