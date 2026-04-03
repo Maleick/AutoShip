@@ -79,7 +79,7 @@ verifier_cmd    = "python scripts/validate_roadmap_unknowns.py --plan docs/imple
 # Script used to promote items and record sync results.
 sync_script     = "python scripts/sync_project.py"
 # GitHub Project to mirror into.
-project_url     = "https://github.com/users/Maleick/projects/1"
+project_url     = "https://github.com/users/Maleick/projects/1"  # canonical URL from docs/implementation-roadmap.md §GitHub Project Mirror
 # Required GitHub scopes for project sync.
 gh_auth_scopes  = ["read:project", "project"]
 

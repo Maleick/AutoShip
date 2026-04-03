@@ -41,6 +41,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STATE_FILE  = REPO_ROOT / "autoresearch-state.json"
 DEFAULT_ROADMAP     = REPO_ROOT / "docs" / "implementation-roadmap.md"
 DEFAULT_OUT_FILE    = REPO_ROOT / "autoresearch-project-sync.json"
+# Canonical project URL declared in docs/implementation-roadmap.md §GitHub Project Mirror.
+# Override via --project-url when running against a fork or a different project.
 DEFAULT_PROJECT_URL = "https://github.com/users/Maleick/projects/1"
 
 # Evidence states ordered from weakest to strongest.
@@ -138,7 +140,7 @@ def run_verifier(roadmap: Path) -> tuple[bool, str]:
         "--strict",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         output = result.stdout + result.stderr
         return result.returncode == 0, output.strip()
     except FileNotFoundError as exc:
@@ -149,7 +151,7 @@ def gh(*args: str, capture: bool = True) -> tuple[int, str]:
     """Run a `gh` CLI command; return (returncode, stdout+stderr)."""
     cmd = ["gh", *args]
     try:
-        result = subprocess.run(cmd, capture_output=capture, text=True)
+        result = subprocess.run(cmd, capture_output=capture, text=True, check=False)
         output = (result.stdout or "") + (result.stderr or "")
         return result.returncode, output.strip()
     except FileNotFoundError:
