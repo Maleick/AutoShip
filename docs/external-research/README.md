@@ -5,13 +5,14 @@ This directory holds curated external research that can feed milestone slices, v
 Use these files in order:
 
 1. `automation-source-ledger.md`
-2. `packet-zoning-send-path-and-state-ledger.md`
-3. `kissassist-gap-and-tui-translation.md`
-4. `jmb-session-and-relay-comparison.md`
-5. `daybreak-detection-digest.md`
-6. `zoning-queue-and-safe-coord-validation.md`
-7. `ability-packet-coverage-and-targetability-validation.md`
-8. `../research-imports/2026-04-02-packet-zoning/`
+2. `packet-engine-send-receive-pipeline.md`
+3. `packet-zoning-send-path-and-state-ledger.md`
+4. `ability-packet-coverage-and-targetability-validation.md`
+5. `kissassist-gap-and-tui-translation.md`
+6. `jmb-session-and-relay-comparison.md`
+7. `daybreak-detection-digest.md`
+8. `zoning-queue-and-safe-coord-validation.md`
+9. `../research-imports/2026-04-02-packet-zoning/`
 
 Rules:
 
