@@ -480,7 +480,11 @@ impl NavClientStatus {
                     format!("Following {leader_name} ({distance_to_anchor:.0}u)")
                 }
             }
-            dmft_common::nav::NavStatus::Sticking { target_id, distance, in_range } => {
+            dmft_common::nav::NavStatus::Sticking {
+                target_id,
+                distance,
+                in_range,
+            } => {
                 if *in_range {
                     format!("Sticking #{target_id} • {distance:.0}u (in range)")
                 } else {
