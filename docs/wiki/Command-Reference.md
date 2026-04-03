@@ -75,7 +75,7 @@ Top-level commands come from `KNOWN_COMMANDS` and the parser in `dmft/src/tui/ap
 - `:ch stop`
 - `:ch status`
 - `:ch add <pid>`
-- `:ch rm <pid>`
+- `:ch remove <pid>` (`:ch rm <pid>` remains supported)
 - `:ch interval <seconds>`
 - `:ch adaptive <on|off>`
 - `:chui`
