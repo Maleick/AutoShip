@@ -4,51 +4,64 @@ set -euo pipefail
 REPO="${1:-${GITHUB_REPOSITORY:-Maleick/DMFT}}"
 READY_LABEL="agent:ready"
 SKIP_LABEL="agent:skip-ready"
-MILESTONE_PREFIXES=("M5" "M6" "M7" "M8")
 
-if ! gh label list --repo "$REPO" --json name | jq -e 'map(.name) | index("agent:skip-ready")' >/dev/null; then
+ALL_LABELS="$(gh label list --repo "$REPO" --limit 500 --json name)"
+
+if ! jq -e --arg skip "$SKIP_LABEL" 'map(.name) | index($skip)' >/dev/null <<< "$ALL_LABELS"; then
   gh label create --repo "$REPO" "$SKIP_LABEL" \
     --color "D93F0B" \
     --description "Roadmap container issues are intentionally excluded from agent-ready."
 fi
 
-echo "Applying agent:skip-ready to roadmap containers in ${REPO}: ${MILESTONE_PREFIXES[*]}"
+ALL_OPEN_ISSUES="$(gh issue list --repo "$REPO" --state open --limit 500 --json number,title,labels)"
+
+echo "Applying agent:skip-ready to roadmap containers in ${REPO}"
 
 TOTAL=0
 
-for prefix in "${MILESTONE_PREFIXES[@]}"; do
-  ISSUE_NUMBERS="$(gh issue list --repo "$REPO" --state open --json number,title,labels | jq -r --arg p "$prefix" '
+ISSUE_ROWS="$(
+  jq -c '
     .[]
-    | select(((.title // "") | startswith($p)))
-    | .number
-  ')"
+    | select(((.title // "") | test("^M[0-9]+\\b")))
+    | {
+        number: .number,
+        has_ready: ((.labels | map(.name) | index("agent:ready")) != null)
+      }
+  ' <<< "$ALL_OPEN_ISSUES"
+)"
 
-  if [ -z "$ISSUE_NUMBERS" ]; then
-    continue
-  fi
+while IFS= read -r issue_row; do
+  [ -z "$issue_row" ] && continue
+  issue_number="$(jq -r '.number' <<< "$issue_row")"
+  has_ready="$(jq -r '.has_ready' <<< "$issue_row")"
 
-  while IFS= read -r issue_number; do
-    [ -z "$issue_number" ] && continue
+  if [ "$has_ready" = "true" ]; then
     gh issue edit --repo "$REPO" "$issue_number" \
       --add-label "$SKIP_LABEL" \
       --remove-label "$READY_LABEL" \
       >/dev/null
-    echo "Labeled issue #${issue_number} with agent:skip-ready"
-    TOTAL=$((TOTAL + 1))
-  done <<< "$ISSUE_NUMBERS"
-done
+  else
+    gh issue edit --repo "$REPO" "$issue_number" \
+      --add-label "$SKIP_LABEL" \
+      >/dev/null
+  fi
+
+  echo "Labeled issue #${issue_number} with agent:skip-ready"
+  TOTAL=$((TOTAL + 1))
+done <<< "$ISSUE_ROWS"
 
 echo "Updated ${TOTAL} issue(s)."
 
 SKIP_COUNT=$TOTAL
 TOTAL_READY=0
 TO_LABEL=$(
-  gh issue list --repo "$REPO" --state open --json number,labels | jq -r --arg ready "$READY_LABEL" --arg skip "$SKIP_LABEL" '
+  jq -r --arg ready "$READY_LABEL" --arg skip "$SKIP_LABEL" '
     .[]
     | select((.labels | map(.name) | index($skip) | not))
     | select((.labels | map(.name) | index($ready) | not))
     | .number
   '
+  <<< "$ALL_OPEN_ISSUES"
 )
 
 while IFS= read -r issue_number; do
