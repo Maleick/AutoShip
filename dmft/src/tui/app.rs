@@ -439,6 +439,22 @@ impl NavClientStatus {
                 (*waypoint_count).max(1),
                 distance_remaining
             ),
+            dmft_common::nav::NavStatus::Paused {
+                reason,
+                waypoint_index,
+                waypoint_count,
+                distance_remaining,
+            } => {
+                let reason_label = match reason {
+                    dmft_common::nav::PauseReason::Warp => "warp",
+                };
+                format!(
+                    "Paused ({reason_label}) • WP {}/{} • {:.0}u remaining",
+                    waypoint_index.saturating_add(1),
+                    (*waypoint_count).max(1),
+                    distance_remaining
+                )
+            }
             dmft_common::nav::NavStatus::Stuck { recovery_attempt } => {
                 format!("Recovery attempt {}", recovery_attempt)
             }
