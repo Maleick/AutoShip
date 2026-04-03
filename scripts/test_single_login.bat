@@ -9,8 +9,22 @@ set EQ_PATH=C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest
 set DMFT_PATH=C:\Users\xmale\Projects\DMFT
 set DMFT_EXE=%DMFT_PATH%\target\release\dmft.exe
 set SERVER=Firiona Vie
-set ACCOUNT=frostreaver01
-set PASSWORD=dr698iDBBa1IpTS
+
+if not defined ACCOUNT (
+    set /p ACCOUNT=Enter account name:
+)
+if not defined PASSWORD (
+    set /p PASSWORD=Enter password:
+)
+
+if "%ACCOUNT%"=="" (
+    echo ERROR: ACCOUNT cannot be empty.
+    exit /b 1
+)
+if "%PASSWORD%"=="" (
+    echo ERROR: PASSWORD cannot be empty.
+    exit /b 1
+)
 
 REM Kill any existing EQ
 echo [1/5] Killing existing EQ processes...

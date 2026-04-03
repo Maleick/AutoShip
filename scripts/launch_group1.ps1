@@ -7,18 +7,37 @@ $Server = "Firiona Vie"
 $InjectWait = 12
 $HookWait = 2
 $Stagger = 15
+$AccountsFile = Join-Path $PSScriptRoot "accounts_group1.txt"
 
-$Accounts = @(
-    @{ Name = "frostreaver01"; Pass = "dr698iDBBa1IpTS" },
-    @{ Name = "frostreaver02"; Pass = "rLlkT9TEzVzbtAJ" },
-    @{ Name = "frostreaver03"; Pass = "2U2dDrgMuI6sDTi" },
-    @{ Name = "frostreaver04"; Pass = "67FbF2LmZMEFIR7" },
-    @{ Name = "frostreaver06"; Pass = "DXOXKC1dIvSFXDB" },
-    @{ Name = "frostreaver07"; Pass = "aTWmNmNn4jYAXYf" }
-)
+if (-not (Test-Path -LiteralPath $AccountsFile)) {
+    Write-Error "Accounts file not found: $AccountsFile"
+    Write-Host "Create it from scripts/accounts_group1.txt.example with one 'username password' entry per line."
+    exit 1
+}
+
+$Accounts = @()
+foreach ($line in (Get-Content -LiteralPath $AccountsFile)) {
+    $trimmed = $line.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+        continue
+    }
+
+    $parts = $trimmed -split '\s+', 2
+    if ($parts.Count -eq 2) {
+        $Accounts += @{
+            Name = $parts[0]
+            Pass = $parts[1]
+        }
+    }
+}
+
+if ($Accounts.Count -eq 0) {
+    Write-Error "No valid account entries found in $AccountsFile"
+    exit 1
+}
 
 Write-Host "============================================"
-Write-Host " DMFT - Group 1 Launch (6 clients)"
+Write-Host " DMFT - Group 1 Launch ($($Accounts.Count) clients)"
 Write-Host "============================================"
 Write-Host ""
 
@@ -36,7 +55,7 @@ for ($i = 0; $i -lt $Accounts.Count; $i++) {
     $acct = $Accounts[$i]
     $num = $i + 1
     Write-Host ""
-    Write-Host "[$num/6] Launching $($acct.Name)..."
+    Write-Host "[$num/$($Accounts.Count)] Launching $($acct.Name)..."
 
     # Launch EQ
     $proc = Start-Process -FilePath "$EqPath\eqgame.exe" `
@@ -75,7 +94,7 @@ for ($i = 0; $i -lt $Accounts.Count; $i++) {
 
 Write-Host ""
 Write-Host "============================================"
-Write-Host " All 6 clients launched!"
+Write-Host " All clients launched!"
 Write-Host "============================================"
 Write-Host ""
 Write-Host "Account PIDs:"

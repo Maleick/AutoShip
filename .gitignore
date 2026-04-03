@@ -58,3 +58,6 @@ config/accounts.toml
 data/
 config/maps/*.txt
 config/accounts.csv
+
+# Local credential files
+scripts/accounts_group1.txt

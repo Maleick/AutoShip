@@ -13,14 +13,14 @@ set SERVER=Firiona Vie
 set INJECT_WAIT=12
 set HOOK_WAIT=2
 set STAGGER=15
+set ACCOUNTS_FILE=%~dp0accounts_group1.txt
+set EXPECTED_CLIENTS=6
 
-REM Account list: name password
-set ACCT1=frostreaver01 dr698iDBBa1IpTS
-set ACCT2=frostreaver02 rLlkT9TEzVzbtAJ
-set ACCT3=frostreaver03 2U2dDrgMuI6sDTi
-set ACCT4=frostreaver04 67FbF2LmZMEFIR7
-set ACCT5=frostreaver06 DXOXKC1dIvSFXDB
-set ACCT6=frostreaver07 aTWmNmNn4jYAXYf
+if not exist "%ACCOUNTS_FILE%" (
+    echo ERROR: Accounts file not found: "%ACCOUNTS_FILE%"
+    echo Create it from scripts\accounts_group1.txt.example and add one "username password" per line.
+    exit /b 1
+)
 
 REM Kill any existing EQ
 echo Killing existing EQ processes...
@@ -30,27 +30,14 @@ timeout /t 3 /nobreak >nul
 REM Clear DLL logs
 del /q "%TEMP%\dmft\dmft-dll.log.*" 2>nul
 
-REM Snapshot existing PIDs before first launch
-for /f "tokens=2" %%a in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
-    set "EXISTING_%%a=1"
-)
-
 set CLIENT_NUM=0
 
-REM --- Launch function ---
-REM Uses: ACCT (name password), CLIENT_NUM, captures PID
-for %%A in (
-    "frostreaver01 dr698iDBBa1IpTS"
-    "frostreaver02 rLlkT9TEzVzbtAJ"
-    "frostreaver03 2U2dDrgMuI6sDTi"
-    "frostreaver04 67FbF2LmZMEFIR7"
-    "frostreaver06 DXOXKC1dIvSFXDB"
-    "frostreaver07 aTWmNmNn4jYAXYf"
-) do (
-    set /a CLIENT_NUM+=1
-    for /f "tokens=1,2" %%U in (%%A) do (
+for /f "usebackq tokens=1,2 eol=#" %%U in ("%ACCOUNTS_FILE%") do (
+    if not "%%U"=="" if not "%%V"=="" (
+        set /a CLIENT_NUM+=1
+
         echo.
-        echo [!CLIENT_NUM!/6] Launching %%U...
+        echo [!CLIENT_NUM!/%EXPECTED_CLIENTS%] Launching %%U...
 
         REM Launch EQ
         cd /d "%EQ_PATH%"
@@ -87,17 +74,20 @@ for %%A in (
             echo   %%U login sent to PID !NEW_PID!
 
             REM Stagger before next client
-            if !CLIENT_NUM! LSS 6 (
-                echo   Waiting %STAGGER%s before next client...
-                timeout /t %STAGGER% /nobreak >nul
-            )
+            echo   Waiting %STAGGER%s before next client...
+            timeout /t %STAGGER% /nobreak >nul
         )
     )
 )
 
+if %CLIENT_NUM% EQU 0 (
+    echo ERROR: No valid account entries found in "%ACCOUNTS_FILE%".
+    exit /b 1
+)
+
 echo.
 echo ============================================
-echo  All 6 clients launched!
+echo  %CLIENT_NUM% clients launched!
 echo  Each will auto-login and enter world.
 echo ============================================
 echo.
