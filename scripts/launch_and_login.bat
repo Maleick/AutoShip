@@ -5,8 +5,8 @@ echo ============================================
 echo.
 
 REM Configuration
-set ACCOUNT=frostreaver01
-set PASSWORD=dr698iDBBa1IpTS
+if "%DMFT_ACCOUNT%"=="" (set ACCOUNT=<SET_DMFT_ACCOUNT>) else (set ACCOUNT=%DMFT_ACCOUNT%)
+if "%DMFT_PASSWORD%"=="" (set PASSWORD=<SET_DMFT_PASSWORD>) else (set PASSWORD=%DMFT_PASSWORD%)
 set SERVER=Firiona Vie
 set EQ_PATH=C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest
 set DMFT_PATH=C:\Users\xmale\Projects\DMFT

@@ -9,12 +9,12 @@ $HookWait = 2
 $Stagger = 15
 
 $Accounts = @(
-    @{ Name = "frostreaver01"; Pass = "dr698iDBBa1IpTS" },
-    @{ Name = "frostreaver02"; Pass = "rLlkT9TEzVzbtAJ" },
-    @{ Name = "frostreaver03"; Pass = "2U2dDrgMuI6sDTi" },
-    @{ Name = "frostreaver04"; Pass = "67FbF2LmZMEFIR7" },
-    @{ Name = "frostreaver06"; Pass = "DXOXKC1dIvSFXDB" },
-    @{ Name = "frostreaver07"; Pass = "aTWmNmNn4jYAXYf" }
+    @{ Name = "frostreaver01"; Pass = "<ACCOUNT1_PASSWORD>" },
+    @{ Name = "frostreaver02"; Pass = "<ACCOUNT2_PASSWORD>" },
+    @{ Name = "frostreaver03"; Pass = "<ACCOUNT3_PASSWORD>" },
+    @{ Name = "frostreaver04"; Pass = "<ACCOUNT4_PASSWORD>" },
+    @{ Name = "frostreaver06"; Pass = "<ACCOUNT5_PASSWORD>" },
+    @{ Name = "frostreaver07"; Pass = "<ACCOUNT6_PASSWORD>" }
 )
 
 Write-Host "============================================"

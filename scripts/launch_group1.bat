@@ -15,12 +15,12 @@ set HOOK_WAIT=2
 set STAGGER=15
 
 REM Account list: name password
-set ACCT1=frostreaver01 dr698iDBBa1IpTS
-set ACCT2=frostreaver02 rLlkT9TEzVzbtAJ
-set ACCT3=frostreaver03 2U2dDrgMuI6sDTi
-set ACCT4=frostreaver04 67FbF2LmZMEFIR7
-set ACCT5=frostreaver06 DXOXKC1dIvSFXDB
-set ACCT6=frostreaver07 aTWmNmNn4jYAXYf
+set ACCT1=frostreaver01 <ACCOUNT1_PASSWORD>
+set ACCT2=frostreaver02 <ACCOUNT2_PASSWORD>
+set ACCT3=frostreaver03 <ACCOUNT3_PASSWORD>
+set ACCT4=frostreaver04 <ACCOUNT4_PASSWORD>
+set ACCT5=frostreaver06 <ACCOUNT5_PASSWORD>
+set ACCT6=frostreaver07 <ACCOUNT6_PASSWORD>
 
 REM Kill any existing EQ
 echo Killing existing EQ processes...
@@ -40,12 +40,12 @@ set CLIENT_NUM=0
 REM --- Launch function ---
 REM Uses: ACCT (name password), CLIENT_NUM, captures PID
 for %%A in (
-    "frostreaver01 dr698iDBBa1IpTS"
-    "frostreaver02 rLlkT9TEzVzbtAJ"
-    "frostreaver03 2U2dDrgMuI6sDTi"
-    "frostreaver04 67FbF2LmZMEFIR7"
-    "frostreaver06 DXOXKC1dIvSFXDB"
-    "frostreaver07 aTWmNmNn4jYAXYf"
+    "frostreaver01 <ACCOUNT1_PASSWORD>"
+    "frostreaver02 <ACCOUNT2_PASSWORD>"
+    "frostreaver03 <ACCOUNT3_PASSWORD>"
+    "frostreaver04 <ACCOUNT4_PASSWORD>"
+    "frostreaver06 <ACCOUNT5_PASSWORD>"
+    "frostreaver07 <ACCOUNT6_PASSWORD>"
 ) do (
     set /a CLIENT_NUM+=1
     for /f "tokens=1,2" %%U in (%%A) do (
