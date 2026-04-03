@@ -1759,6 +1759,9 @@ impl App {
         use crate::process::memory::ProcessHandle;
         use dmft_common::offsets;
 
+        // Bound traversal to avoid hangs on corrupt or cyclic spawn lists.
+        const MAX_HEX_SPAWN_SCAN: usize = 4096;
+
         if let Some(client) = self.active_client()
             && let Ok(proc) = ProcessHandle::open(client.pid)
         {
@@ -1774,7 +1777,8 @@ impl App {
 
             let list_addr = mgr_addr + offsets::spawn_manager::PLAYER_LIST;
             let mut current = proc.read_ptr(list_addr).unwrap_or(0);
-            while current != 0 {
+            let mut scanned = 0usize;
+            while current != 0 && scanned < MAX_HEX_SPAWN_SCAN {
                 let sid = proc
                     .read::<u32>(current + offsets::player_base::SPAWN_ID)
                     .unwrap_or(0);
@@ -1784,6 +1788,7 @@ impl App {
                 current = proc
                     .read_ptr(current + offsets::player_base::NEXT)
                     .unwrap_or(0);
+                scanned += 1;
             }
         }
         Vec::new()
