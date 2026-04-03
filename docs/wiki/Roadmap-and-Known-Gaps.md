@@ -81,6 +81,7 @@ Use:
 - `docs/external-research/automation-source-ledger.md`
 - `docs/external-research/kissassist-gap-and-tui-translation.md`
 - `docs/external-research/daybreak-detection-digest.md`
+- `docs/external-research/zoning-queue-and-safe-coord-validation.md`
 
 ## Developer Guidance
 
@@ -90,3 +91,4 @@ When writing docs, PRs, or GitHub Project mirror items:
 - separate current behavior from provisional findings
 - mark live-validation gaps explicitly
 - prefer evidence-state language over vague confidence claims
+- treat zoning queue flush, timeout handling, and safe-coordinate recovery as `Needs Live Proof` until current-build validation exists

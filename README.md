@@ -420,6 +420,7 @@ Execution rules:
 - `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
 - `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native DMFT TUI translation targets
 - `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors plus secondary detection signals
+- `docs/external-research/zoning-queue-and-safe-coord-validation.md` — curated `M6` checkpoint note for queue flush, timeout, and safe-coordinate recovery
 - `docs/research-imports/2026-04-02-packet-zoning/` — raw packet and zoning evidence archive
 - `docs/orchestration-design.md` — 7-phase plan, group model, camp loop design
 - `docs/anti-detection.md` — evidence-based anti-detection posture and operator-risk rules

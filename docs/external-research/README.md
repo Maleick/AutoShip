@@ -7,7 +7,8 @@ Use these files in order:
 1. `automation-source-ledger.md`
 2. `kissassist-gap-and-tui-translation.md`
 3. `daybreak-detection-digest.md`
-4. `../research-imports/2026-04-02-packet-zoning/`
+4. `zoning-queue-and-safe-coord-validation.md`
+5. `../research-imports/2026-04-02-packet-zoning/`
 
 Rules:
 
