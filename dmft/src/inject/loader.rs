@@ -2,7 +2,12 @@ use std::path::Path;
 
 use anyhow::Result;
 #[cfg(windows)]
-use anyhow::bail;
+use anyhow::{Context, bail};
+
+#[cfg(windows)]
+const INJECTION_TIMEOUT_MS: u32 = 10_000;
+#[cfg(windows)]
+const DLL_PATH_LEN_LIMIT: usize = 8192;
 
 /// Inject a DLL into a target process by PID.
 /// Uses `CreateRemoteThread` + `LoadLibraryW` (classic injection technique).
@@ -30,12 +35,18 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
 
     use anyhow::Context;
 
+    validate_dll_path(dll_path)?;
+
     let dll_path_wide: Vec<u16> = dll_path
         .as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
-    let dll_path_bytes = dll_path_wide.len() * 2; // UTF-16 byte count
+    let dll_path_bytes = dll_path_wide
+        .len()
+        .checked_mul(2)
+        .filter(|&n| n <= DLL_PATH_LEN_LIMIT)
+        .ok_or_else(|| anyhow::anyhow!("DLL path too long: {}", dll_path.display()))?;
 
     // Open target process
     let process = unsafe {
@@ -52,7 +63,6 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     .context("Failed to open target process")?;
 
     let result = (|| -> Result<()> {
-        // Allocate memory in target process for the DLL path
         let remote_buf = unsafe {
             VirtualAllocEx(
                 process,
@@ -68,7 +78,7 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
         }
 
         // Write DLL path to target process memory
-        unsafe {
+        let write_result = unsafe {
             WriteProcessMemory(
                 process,
                 remote_buf,
@@ -76,8 +86,13 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
                 dll_path_bytes,
                 None,
             )
+        };
+        if let Err(err) = write_result {
+            unsafe {
+                let _ = VirtualFreeEx(process, remote_buf, 0, MEM_RELEASE);
+            }
+            return Err(err).context("WriteProcessMemory failed");
         }
-        .context("WriteProcessMemory failed")?;
 
         // Get address of LoadLibraryW in kernel32.dll
         let kernel32 = unsafe { GetModuleHandleW(w!("kernel32.dll")) }
@@ -111,10 +126,10 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
 
         // Wait for the remote thread to complete
         unsafe {
-            let wait_result = WaitForSingleObject(thread, 10000); // 10s timeout
+            let wait_result = WaitForSingleObject(thread, INJECTION_TIMEOUT_MS);
             if wait_result != WAIT_OBJECT_0 {
-                // Don't free remote_buf — safer to leak than crash the target
                 CloseHandle(thread)?;
+                let _ = VirtualFreeEx(process, remote_buf, 0, MEM_RELEASE);
                 anyhow::bail!(
                     "DLL injection timed out — LoadLibrary did not complete within the timeout period"
                 );
@@ -135,6 +150,37 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
         let _ = CloseHandle(process);
     }
     result
+}
+
+#[cfg(windows)]
+fn validate_dll_path(path: &Path) -> Result<()> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    if path.as_os_str().is_empty() {
+        anyhow::bail!("DLL path is empty");
+    }
+
+    let Some(dll_ext) = path.extension().and_then(OsStr::to_str) else {
+        anyhow::bail!("DLL path has invalid characters: {}", path.display());
+    };
+    if !dll_ext.eq_ignore_ascii_case("dll") {
+        anyhow::bail!("DLL path must point to a .dll file: {}", path.display());
+    }
+
+    if path.as_os_str().encode_wide().any(|wchar| wchar == 0u16) {
+        anyhow::bail!(
+            "DLL path contains embedded NUL character: {}",
+            path.display()
+        );
+    }
+
+    let meta = std::fs::metadata(path).context("Failed to inspect DLL path")?;
+    if !meta.is_file() {
+        anyhow::bail!("DLL path is not a regular file: {}", path.display());
+    }
+
+    Ok(())
 }
 
 /// Eject a DLL from a target process via `CreateRemoteThread(FreeLibrary, module_base)`.

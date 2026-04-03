@@ -80,6 +80,8 @@ mod tests {
             mana_max: 10000,
             endurance_current: 100,
             endurance_max: 100,
+            speed_run: 0.0,
+            stand_state: 0,
         }
     }
 
@@ -101,6 +103,8 @@ mod tests {
             mana_max: 0,
             endurance_current: 0,
             endurance_max: 0,
+            speed_run: 0.0,
+            stand_state: 0,
         }
     }
 

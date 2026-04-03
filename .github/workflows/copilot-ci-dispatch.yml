@@ -81,12 +81,6 @@ jobs:
                     run.status === "completed" &&
                     ["success", "failure", "timed_out", "neutral"].includes(run.conclusion)
                 );
-                const blockedForApproval = sameShaRuns.some(
-                  (run) =>
-                    run.event === "pull_request" &&
-                    run.status === "completed" &&
-                    run.conclusion === "action_required"
-                );
                 const blockedWorkflowDispatchRun = sameShaRuns.some(
                   (run) =>
                     run.event === "workflow_dispatch" &&
@@ -98,7 +92,7 @@ jobs:
                   hasActiveRun ||
                   hasAuthoritativeResult ||
                   blockedWorkflowDispatchRun ||
-                  (!blockedForApproval && sameShaRuns.length > 0)
+                  sameShaRuns.length > 0
                 ) {
                   skipped.push(
                     `#${pr.number} ${pr.head.ref} (${sameShaRuns[0]?.event || "no-run"} ${sameShaRuns[0]?.status || "no-op"}/${sameShaRuns[0]?.conclusion || "n/a"})`

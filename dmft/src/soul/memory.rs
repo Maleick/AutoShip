@@ -213,6 +213,32 @@ impl MemoryStore {
         Ok(())
     }
 
+    /// Prune old conversation lines, keeping only the most recent `max_rows`
+    /// for a character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    pub fn prune_conversations(&self, character_id: ClientId, max_rows: usize) -> Result<usize> {
+        let deleted = self
+            .conn
+            .execute(
+                "DELETE FROM conversations
+                 WHERE character_id = ?1
+                   AND id IN (
+                       SELECT id
+                       FROM conversations
+                       WHERE character_id = ?1
+                       ORDER BY created_at DESC, id DESC
+                       LIMIT -1 OFFSET ?2
+                   )",
+                params![character_id, max_rows as i64],
+            )
+            .context("Failed to prune conversations")?;
+
+        Ok(deleted)
+    }
+
     /// Recall recent conversations for a character.
     ///
     /// # Errors
@@ -1050,6 +1076,22 @@ mod tests {
         }
         let convos = store.recall_conversations(1, 3).unwrap();
         assert_eq!(convos.len(), 3);
+    }
+
+    #[test]
+    fn prune_conversations_keeps_only_recent_rows() {
+        let store = open_memory_store();
+        for i in 0..5 {
+            store
+                .record_conversation(1, "Alice", true, "say", &format!("msg-{i}"), Some(0.5))
+                .unwrap();
+        }
+
+        let deleted = store.prune_conversations(1, 2).unwrap();
+        assert_eq!(deleted, 3);
+
+        let convos = store.recall_conversations(1, 10).unwrap();
+        assert_eq!(convos.len(), 2);
     }
 
     #[test]
