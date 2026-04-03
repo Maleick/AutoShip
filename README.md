@@ -82,7 +82,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 :G1-G6 /cmd             Send to group
 :all /sit                Broadcast to all clients
 :camp start|stop|list    Camp loop control
-:camp add|remove         Add/remove camp config
+:camp add|remove        Add/remove camp config
 :nav <dest>              Navigate to camp, coords, or slash fallback
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist

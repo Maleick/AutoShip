@@ -92,7 +92,7 @@ Behavior:
 Auth model:
 
 - the workflow exports `GH_TOKEN` from GitHub Actions and uses the same `scripts/sync_wiki.py` auth path as local runs
-- if `gh auth status` fails or the wiki remote has not been initialized, the job should fail clearly rather than silently skipping work
+- if `GH_TOKEN` is missing, invalid, or the wiki remote has not been initialized, the job should fail clearly rather than silently skipping work
 
 This nightly job mirrors the repo-side canonical pages. It does not replace the requirement to update `docs/wiki/` in normal PRs.
 
