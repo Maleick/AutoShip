@@ -369,6 +369,7 @@ fn default_query_filter() -> recastnavigation_sys::dtQueryFilter {
 ///
 /// Returns an error if the operation fails.
 pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
+    let zone_short_name = sanitize_zone_short_name(zone_short_name)?;
     let cache_path = mesh_cache_path(zone_short_name);
 
     if cache_path.exists() {
@@ -881,7 +882,9 @@ pub fn load_zone_overlay(zone_short_name: &str) -> Result<NavMeshOverlay> {
 }
 
 pub fn has_cached_zone_mesh(zone_short_name: &str) -> bool {
-    mesh_cache_path(zone_short_name).exists()
+    sanitize_zone_short_name(zone_short_name)
+        .map(|zone| mesh_cache_path(zone).exists())
+        .unwrap_or(false)
 }
 
 /// Plan a navigation route between two points in a zone using the navmesh.
@@ -934,6 +937,21 @@ fn mesh_cache_path(zone_short_name: &str) -> PathBuf {
     Path::new(MESH_CACHE_DIR).join(format!("{zone_short_name}.navmesh"))
 }
 
+fn sanitize_zone_short_name(zone_short_name: &str) -> Result<&str> {
+    if zone_short_name.is_empty() {
+        bail!("Zone short name is empty");
+    }
+
+    if !zone_short_name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        bail!("Invalid zone short name: {zone_short_name:?}");
+    }
+
+    Ok(zone_short_name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -978,6 +996,18 @@ mod tests {
     fn mesh_cache_path_format() {
         let p = mesh_cache_path("befallen");
         assert!(p.to_string_lossy().contains("befallen.navmesh"));
+    }
+
+    #[test]
+    fn sanitize_zone_short_name_rejects_path_traversal() {
+        let result = sanitize_zone_short_name("../../tmp/evil");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sanitize_zone_short_name_accepts_expected_chars() {
+        let result = sanitize_zone_short_name("qeynos2_test-zone");
+        assert_eq!(result.expect("expected valid zone"), "qeynos2_test-zone");
     }
 
     #[test]
