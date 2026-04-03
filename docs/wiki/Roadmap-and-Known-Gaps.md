@@ -41,6 +41,8 @@ External research may add slices and validation tasks, but it may not reorder mi
 ## Main Gaps Still Requiring Live Validation
 
 - packet-level control paths inferred from research rather than live validation
+- the current packet inventory keeps combat, utility, and chat packet seams separate from the existing IPC plus in-process DLL control boundary; see `docs/external-research/packet-engine-send-receive-pipeline.md` for the full send/receive layer inventory and capability boundary summary
+- the send pipeline requires opcode scrambling and anti-cheat counter synchronization before any packet-first path can be treated as safe
 - zoning state-machine details and recovery behavior after client changes
 - offset stability after upstream EQ updates
 - cross-zone travel behavior in more zones than the current dev/test set
@@ -79,8 +81,26 @@ Current deep-dive order:
 Use:
 
 - `docs/external-research/automation-source-ledger.md`
+- `docs/external-research/packet-engine-send-receive-pipeline.md`
+- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
+- `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
 - `docs/external-research/kissassist-gap-and-tui-translation.md`
+- `docs/external-research/jmb-session-and-relay-comparison.md`
 - `docs/external-research/daybreak-detection-digest.md`
+- `docs/external-research/zoning-queue-and-safe-coord-validation.md`
+
+## Current `M8` orchestration guidance
+
+The current JMB comparison keeps `M8` bounded to operator-visible orchestration work:
+
+- formalize routing scopes as `one-toon`, `group`, and `all-session`
+- translate launch profile, session preset, and slot lifecycle concepts into TUI-visible state
+- keep command routing on the existing authenticated IPC path instead of treating JMB hook examples as direct implementation targets
+
+The current follow-on implementation slices remain:
+
+- #152 for the addressable actor routing abstraction
+- #109 for launch profiles, session presets, and slot-health visibility
 
 ## Developer Guidance
 
@@ -90,3 +110,4 @@ When writing docs, PRs, or GitHub Project mirror items:
 - separate current behavior from provisional findings
 - mark live-validation gaps explicitly
 - prefer evidence-state language over vague confidence claims
+- treat zoning queue flush, timeout handling, and safe-coordinate recovery as `Needs Live Proof` until current-build validation exists

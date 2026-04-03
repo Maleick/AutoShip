@@ -47,6 +47,52 @@ const MAX_WINDOW_COUNT: u32 = 500;
 /// Maximum child nodes to walk (prevents infinite loops on corrupted `TLists`).
 const MAX_CHILD_WALK: u32 = 200;
 
+/// Depth-first walk of a `CXWnd` child list (FirstNode/Next), applying `visitor`
+/// to each node until it returns `false` or the walk limit is reached.
+///
+/// `first_child` is the parent's `FirstNode` pointer. `get_first_child` and
+/// `get_next` fetch the offsets for a given node. This helper is platform
+/// agnostic and testable; callers supply unsafe pointer readers as needed.
+fn walk_child_list_depth_first<FChild, FNext, FVisit>(
+    first_child: usize,
+    mut get_first_child: FChild,
+    mut get_next: FNext,
+    mut visitor: FVisit,
+) where
+    FChild: FnMut(usize) -> usize,
+    FNext: FnMut(usize) -> usize,
+    FVisit: FnMut(usize) -> bool,
+{
+    if first_child == 0 {
+        return;
+    }
+
+    let mut stack = Vec::new();
+    let mut node = first_child;
+    while node != 0 && (stack.len() as u32) < MAX_CHILD_WALK {
+        stack.push(node);
+        node = get_next(node);
+    }
+
+    let mut walked = 0u32;
+    while let Some(current) = stack.pop() {
+        walked += 1;
+        if walked > MAX_CHILD_WALK {
+            break;
+        }
+
+        if !visitor(current) {
+            break;
+        }
+
+        let mut child = get_first_child(current);
+        while child != 0 && walked + (stack.len() as u32) < MAX_CHILD_WALK {
+            stack.push(child);
+            child = get_next(child);
+        }
+    }
+}
+
 // ─── Window Finding ───
 
 /// Find a SIDL window by exact `WindowText` match (case-insensitive).
@@ -147,34 +193,25 @@ pub unsafe fn find_child_button_by_text(parent_wnd: usize, button_text: &str) ->
     use dmft_common::offsets::eqmain as off;
     let needle = button_text.to_ascii_lowercase();
 
-    let mut child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
-    let mut count = 0u32;
+    let mut found: Option<usize> = None;
 
-    while child != 0 && count < MAX_CHILD_WALK {
-        count += 1;
-
-        if let Some(text) = read_cxstr(child + off::CXWND_WINDOW_TEXT) {
-            if text.to_ascii_lowercase().contains(&needle) {
-                return Some(child);
-            }
-        }
-
-        // Recurse one level into grandchildren
-        let mut grandchild = *((child + off::CXWND_FIRST_NODE) as *const usize);
-        let mut gc_count = 0u32;
-        while grandchild != 0 && gc_count < MAX_CHILD_WALK {
-            gc_count += 1;
-            if let Some(text) = read_cxstr(grandchild + off::CXWND_WINDOW_TEXT) {
+    let first_child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
+    walk_child_list_depth_first(
+        first_child,
+        |node| *((node + off::CXWND_FIRST_NODE) as *const usize),
+        |node| *((node + off::CXWND_NEXT) as *const usize),
+        |node| {
+            if let Some(text) = read_cxstr(node + off::CXWND_WINDOW_TEXT) {
                 if text.to_ascii_lowercase().contains(&needle) {
-                    return Some(grandchild);
+                    found = Some(node);
+                    return false;
                 }
             }
-            grandchild = *((grandchild + off::CXWND_NEXT) as *const usize);
-        }
+            true
+        },
+    );
 
-        child = *((child + off::CXWND_NEXT) as *const usize);
-    }
-    None
+    found
 }
 
 #[cfg(not(windows))]
@@ -749,7 +786,54 @@ pub unsafe fn list_row_count(_list_wnd: usize) -> usize {
 
 #[cfg(all(test, not(windows)))]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
+
+    #[test]
+    fn walk_child_list_depth_first_recurses_beyond_two_levels() {
+        #[derive(Clone, Copy)]
+        struct Node {
+            first: usize,
+            next: usize,
+        }
+
+        let mut nodes = HashMap::new();
+        nodes.insert(1usize, Node { first: 3, next: 2 });
+        nodes.insert(2usize, Node { first: 0, next: 0 });
+        nodes.insert(3usize, Node { first: 4, next: 0 });
+        nodes.insert(4usize, Node { first: 5, next: 0 });
+        nodes.insert(5usize, Node { first: 0, next: 0 });
+
+        let mut visited = Vec::new();
+        walk_child_list_depth_first(
+            1,
+            |id| nodes.get(&id).map(|n| n.first).unwrap_or(0),
+            |id| nodes.get(&id).map(|n| n.next).unwrap_or(0),
+            |id| {
+                visited.push(id);
+                true
+            },
+        );
+
+        assert!(visited.contains(&5), "expected to reach great-grandchild node");
+    }
+
+    #[test]
+    fn walk_child_list_depth_first_respects_walk_limit_on_cycle() {
+        let mut visited = 0usize;
+        walk_child_list_depth_first(
+            1,
+            |_id| 0, // no children
+            |_id| 1, // cycle back to itself
+            |_id| {
+                visited += 1;
+                true
+            },
+        );
+
+        assert_eq!(visited, MAX_CHILD_WALK as usize);
+    }
 
     #[test]
     fn read_cxstr_returns_none_on_non_windows() {

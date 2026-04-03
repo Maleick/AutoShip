@@ -15,6 +15,7 @@ use super::widgets::{
 };
 use crate::eq::structs::{EqClass, StandState};
 use crate::tui::app::{ActivePanel, App, ClientState};
+use dmft_common::types::SlotLifecycle;
 
 const MIN_HEIGHT_FOR_FOCUS_STRIP: u16 = 28;
 const STACKED_ROSTER_TALL_HEIGHT_THRESHOLD: u16 = 28;
@@ -362,7 +363,17 @@ fn group_focus_strip_height(area: Rect) -> u16 {
 
 fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'static str, Style) {
     let Some(player) = &client.local_player else {
-        return ("Offline", Style::default().fg(t.hp_low));
+        // Use lifecycle label when there is no in-world player data yet.
+        let (label, color) = match client.slot_lifecycle {
+            SlotLifecycle::Launching => ("Launching", t.text_accent),
+            SlotLifecycle::WaitingForLogin => ("Login…", t.text_accent),
+            SlotLifecycle::EnteringWorld => ("Zoning…", t.text_accent),
+            SlotLifecycle::Recovering => ("Recovering", t.text_highlight),
+            SlotLifecycle::Blocked => ("Blocked", t.hp_low),
+            SlotLifecycle::Configured => ("Configured", t.text_muted),
+            SlotLifecycle::Live => ("Offline", t.hp_low),
+        };
+        return (label, Style::default().fg(color));
     };
 
     if matches!(player.stand_state, StandState::Dead) {
@@ -506,6 +517,8 @@ enum OverviewSectionKind {
     Filters,
     Combat,
     Session,
+    /// Launch profile, session preset, and slot lifecycle for the selected client.
+    SlotProfile,
 }
 
 #[derive(Clone, Copy)]
@@ -550,6 +563,9 @@ fn draw_dashboard_sidebar(
             }
             OverviewSectionKind::Session => {
                 draw_session_stats(frame, *chunk, app, section.collapsed);
+            }
+            OverviewSectionKind::SlotProfile => {
+                draw_slot_profile(frame, *chunk, app, section.collapsed);
             }
         }
     }
@@ -613,6 +629,18 @@ fn overview_sections(app: &App, area: Rect, stacked: bool) -> Vec<OverviewSectio
         },
         collapsed: app.overview_state.session_collapsed,
     });
+
+    if app.overview_state.show_profile {
+        sections.push(OverviewSectionLayout {
+            kind: OverviewSectionKind::SlotProfile,
+            height: if app.overview_state.profile_collapsed {
+                3
+            } else {
+                6
+            },
+            collapsed: app.overview_state.profile_collapsed,
+        });
+    }
 
     if stacked {
         stacked_overview_sections(app, area, &sections)
@@ -689,10 +717,11 @@ fn stacked_priority(app: &App, kind: OverviewSectionKind, order: usize) -> (u8, 
     let priority = match kind {
         OverviewSectionKind::Character => 0,
         OverviewSectionKind::Combat if app.ch_chain_status.is_some() => 1,
-        OverviewSectionKind::Groups => 2,
-        OverviewSectionKind::Filters => 3,
-        OverviewSectionKind::Combat => 4,
-        OverviewSectionKind::Session => 5,
+        OverviewSectionKind::SlotProfile => 2,
+        OverviewSectionKind::Groups => 3,
+        OverviewSectionKind::Filters => 4,
+        OverviewSectionKind::Combat => 5,
+        OverviewSectionKind::Session => 6,
     };
     (priority, order)
 }
@@ -700,10 +729,11 @@ fn stacked_priority(app: &App, kind: OverviewSectionKind, order: usize) -> (u8, 
 fn natural_section_order(kind: OverviewSectionKind) -> u8 {
     match kind {
         OverviewSectionKind::Character => 0,
-        OverviewSectionKind::Groups => 1,
-        OverviewSectionKind::Filters => 2,
-        OverviewSectionKind::Combat => 3,
-        OverviewSectionKind::Session => 4,
+        OverviewSectionKind::SlotProfile => 1,
+        OverviewSectionKind::Groups => 2,
+        OverviewSectionKind::Filters => 3,
+        OverviewSectionKind::Combat => 4,
+        OverviewSectionKind::Session => 5,
     }
 }
 
@@ -763,13 +793,15 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
         || String::from("—"),
         |target| app.redact_name(&target.displayed_name).into_owned(),
     );
-    let (nav_label, nav_style, nav_destination) =
+    let (nav_label, nav_style, nav_destination, nav_route_state, nav_blocker_summary) =
         app.nav_state.nav_statuses.get(&client.pid).map_or_else(
             || {
                 (
                     String::from("Idle"),
                     Style::default().fg(t.text_muted),
                     String::from("—"),
+                    String::new(),
+                    None,
                 )
             },
             |nav| {
@@ -787,7 +819,13 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                 } else {
                     nav.destination.clone()
                 };
-                (nav.status.label().to_string(), style, destination)
+                (
+                    nav.status.label().to_string(),
+                    style,
+                    destination,
+                    nav.route_state.clone(),
+                    nav.blocker_summary(),
+                )
             },
         );
 
@@ -916,6 +954,28 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                         Style::default().fg(t.text_secondary),
                     )
                 },
+            ]));
+        }
+
+        if !nav_route_state.is_empty() || nav_blocker_summary.is_some() {
+            lines.push(Line::from(vec![
+                Span::styled("Route ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    truncate_inline(&nav_route_state, 20),
+                    Style::default().fg(t.text_highlight),
+                ),
+                Span::styled("  Hold ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    truncate_inline(
+                        nav_blocker_summary.as_deref().unwrap_or("clear"),
+                        inner.width.saturating_sub(33) as usize,
+                    ),
+                    Style::default().fg(if nav_blocker_summary.is_some() {
+                        t.hp_low
+                    } else {
+                        t.hp_high
+                    }),
+                ),
             ]));
         }
 
@@ -1306,6 +1366,91 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
         }
 
         lines
+    };
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel(title.as_str(), border_style, t))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
+// ─── Slot profile panel ───────────────────────────────────────────────────────
+
+/// Return the theme colour for a given `SlotLifecycle` state.
+fn lifecycle_color(state: SlotLifecycle, t: &crate::tui::theme::Theme) -> ratatui::style::Color {
+    match state {
+        SlotLifecycle::Live => t.hp_high,
+        SlotLifecycle::Recovering => t.text_highlight,
+        SlotLifecycle::Blocked => t.hp_low,
+        SlotLifecycle::Launching
+        | SlotLifecycle::WaitingForLogin
+        | SlotLifecycle::EnteringWorld => t.text_accent,
+        SlotLifecycle::Configured => t.text_muted,
+    }
+}
+
+/// Sidebar panel: launch profile, session preset, and slot lifecycle.
+fn draw_slot_profile(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+    let t = &app.theme;
+    let border_style = t.border_primary;
+    let title = section_title("Slot Profile", None, collapsed);
+
+    let Some(client) = app.active_client() else {
+        frame.render_widget(
+            Paragraph::new("No client selected")
+                .block(panel(title.as_str(), border_style, t))
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
+    };
+
+    let lifecycle = client.slot_lifecycle;
+    let lifecycle_style = Style::default()
+        .fg(lifecycle_color(lifecycle, t))
+        .add_modifier(if lifecycle.is_degraded() {
+            Modifier::BOLD
+        } else {
+            Modifier::empty()
+        });
+
+    let lines = if collapsed {
+        let profile_label = client.launch_profile.as_deref().unwrap_or("—");
+        vec![Line::from(vec![
+            Span::styled(lifecycle.label(), lifecycle_style),
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                truncate_inline(profile_label, 20),
+                Style::default().fg(t.text_secondary),
+            ),
+        ])]
+    } else {
+        let profile_label = client.launch_profile.as_deref().unwrap_or("—");
+        let preset_label = client.session_preset.as_deref().unwrap_or("—");
+        vec![
+            Line::from(vec![
+                Span::styled("State  ", Style::default().fg(t.text_muted)),
+                Span::styled(lifecycle.description(), lifecycle_style),
+            ]),
+            Line::from(vec![
+                Span::styled("Profile", Style::default().fg(t.text_muted)),
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    truncate_inline(profile_label, area.width.saturating_sub(9) as usize),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Preset ", Style::default().fg(t.text_muted)),
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    truncate_inline(preset_label, area.width.saturating_sub(9) as usize),
+                    Style::default().fg(t.text_accent),
+                ),
+            ]),
+        ]
     };
 
     frame.render_widget(

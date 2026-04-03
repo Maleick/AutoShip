@@ -4,12 +4,11 @@
 //! through the Idle → Engaging → Casting → `OnGcd` → Engaging loop, with
 //! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
 
-use std::collections::HashMap;
-
 use dmft_common::combat::{CombatConfig, CombatRole, CombatStatus, HolyShitAction};
 use dmft_common::nav::Waypoint;
 use dmft_common::types::SpawnData;
 
+use super::ability_cooldowns::AbilityCooldownTracker;
 use super::dot_tracker::DotTracker;
 use super::gcd::GcdTracker;
 use super::holyshit::HolyShitEvaluator;
@@ -77,8 +76,8 @@ pub struct Combatant {
     /// heal targets. Empty until the orchestrator sends group state updates.
     group_members: Vec<GroupMemberState>,
     skill_cooldowns: SkillCooldownTracker,
-    /// Discipline cooldowns keyed by `spell_id` → ticks remaining.
-    disc_cooldowns: HashMap<i32, u32>,
+    /// Cooldown state for disciplines and AA-like activations.
+    ability_cooldowns: AbilityCooldownTracker,
     dot_tracker: DotTracker,
     tick_count: u32,
     client_id: u32,
@@ -117,7 +116,7 @@ impl Combatant {
             needs_on_engage: false,
             group_members: Vec::new(),
             skill_cooldowns: SkillCooldownTracker::new(),
-            disc_cooldowns: HashMap::new(),
+            ability_cooldowns: AbilityCooldownTracker::new(),
             dot_tracker: DotTracker::new(),
             tick_count: 0,
             client_id,
@@ -131,12 +130,7 @@ impl Combatant {
         self.tick_count += 1;
         self.gcd.tick();
         self.skill_cooldowns.tick();
-
-        // Tick discipline cooldowns
-        self.disc_cooldowns.retain(|_, ticks| {
-            *ticks = ticks.saturating_sub(1);
-            *ticks > 0
-        });
+        self.ability_cooldowns.tick(self.tick_count);
 
         // Periodically prune expired DoT entries to prevent unbounded growth.
         // Every 120 ticks (~6 seconds at 20 ticks/sec).
@@ -232,8 +226,20 @@ impl Combatant {
                     return;
                 }
                 HolyShitAction::UseAbility(ability_id) => {
+                    if !self
+                        .ability_cooldowns
+                        .can_use(*ability_id as i32, self.tick_count)
+                    {
+                        tracing::debug!(
+                            ability_id,
+                            "HolyShit: ability blocked by cooldown/metadata"
+                        );
+                        return;
+                    }
                     tracing::warn!(ability_id, "HolyShit: using emergency ability");
                     crate::eq::do_combat_ability(*ability_id as i32, true);
+                    self.ability_cooldowns
+                        .consume(*ability_id as i32, None, self.tick_count);
                     self.gcd.consume();
                     self.state = CombatState::OnGcd;
                     return;
@@ -585,8 +591,16 @@ impl Combatant {
 
         // Disciplines are pre-sorted by priority in new(), iterate directly.
         for disc in &self.config.disciplines {
-            // Skip if on cooldown
-            if self.disc_cooldowns.contains_key(&disc.spell_id) {
+            let availability = self
+                .ability_cooldowns
+                .availability(disc.spell_id, self.tick_count);
+            if !availability.is_ready_at(self.tick_count) {
+                tracing::trace!(
+                    name = %disc.name,
+                    spell_id = disc.spell_id,
+                    ?availability,
+                    "Discipline not ready"
+                );
                 continue;
             }
 
@@ -605,9 +619,19 @@ impl Combatant {
                 spell_id = disc.spell_id,
                 "Firing discipline"
             );
+            let cooldown = if disc.cooldown_ticks > 0 {
+                Some(disc.cooldown_ticks)
+            } else {
+                tracing::debug!(
+                    name = %disc.name,
+                    spell_id = disc.spell_id,
+                    "Discipline cooldown unknown; scheduling fallback retry"
+                );
+                None
+            };
             crate::eq::do_combat_ability(disc.spell_id, true);
-            self.disc_cooldowns
-                .insert(disc.spell_id, disc.cooldown_ticks);
+            self.ability_cooldowns
+                .consume(disc.spell_id, cooldown, self.tick_count);
 
             // Only one disc per tick
             return;
@@ -619,6 +643,7 @@ impl Combatant {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
+    use crate::combat::ability_cooldowns::AbilityAvailability;
     use dmft_common::combat::CombatConfig;
 
     fn test_config() -> CombatConfig {
@@ -782,8 +807,10 @@ mod tests {
         c.tick(&player, Some(&target), &[]);
 
         // Disc should be on cooldown now (meaning it fired)
-        assert!(c.disc_cooldowns.contains_key(&1001));
-        assert_eq!(c.disc_cooldowns[&1001], 100);
+        assert_eq!(
+            c.ability_cooldowns.availability(1001, c.tick_count),
+            AbilityAvailability::CoolingDown(100)
+        );
     }
 
     #[test]
@@ -797,15 +824,20 @@ mod tests {
 
         // First tick fires the disc
         c.tick(&player, Some(&target), &[]);
-        assert!(c.disc_cooldowns.contains_key(&1001));
-        let cd_after_first = c.disc_cooldowns[&1001];
+        assert_eq!(
+            c.ability_cooldowns.availability(1001, c.tick_count),
+            AbilityAvailability::CoolingDown(100)
+        );
 
         // Second tick should NOT re-fire (still on cooldown).
         c.state = CombatState::Engaging { target_id: 100 };
         c.tick(&player, Some(&target), &[]);
 
         // Cooldown should be decremented, not reset to 100
-        assert!(c.disc_cooldowns[&1001] < cd_after_first);
+        assert_eq!(
+            c.ability_cooldowns.availability(1001, c.tick_count),
+            AbilityAvailability::CoolingDown(99)
+        );
     }
 
     #[test]
@@ -822,7 +854,10 @@ mod tests {
         c.state = CombatState::Engaging { target_id: 100 };
         c.tick(&player_full, Some(&target), &[]);
         assert!(
-            !c.disc_cooldowns.contains_key(&2001),
+            matches!(
+                c.ability_cooldowns.availability(2001, c.tick_count),
+                AbilityAvailability::Ready
+            ),
             "Should not fire at full HP"
         );
 
@@ -832,7 +867,10 @@ mod tests {
         c2.state = CombatState::Engaging { target_id: 100 };
         c2.tick(&player_low, Some(&target), &[]);
         assert!(
-            c2.disc_cooldowns.contains_key(&2001),
+            matches!(
+                c2.ability_cooldowns.availability(2001, c2.tick_count),
+                AbilityAvailability::CoolingDown(_)
+            ),
             "Should fire at 40% HP"
         );
     }
@@ -852,11 +890,17 @@ mod tests {
 
         // Only the higher-priority (lower number) disc should have fired
         assert!(
-            c.disc_cooldowns.contains_key(&1001),
+            matches!(
+                c.ability_cooldowns.availability(1001, c.tick_count),
+                AbilityAvailability::CoolingDown(_)
+            ),
             "Priority 1 disc should fire"
         );
         assert!(
-            !c.disc_cooldowns.contains_key(&1002),
+            matches!(
+                c.ability_cooldowns.availability(1002, c.tick_count),
+                AbilityAvailability::Ready
+            ),
             "Priority 2 disc should NOT fire on same tick"
         );
     }
@@ -874,7 +918,10 @@ mod tests {
         c.state = CombatState::Engaging { target_id: 100 };
         c.tick(&player_low_end, Some(&target), &[]);
         assert!(
-            !c.disc_cooldowns.contains_key(&1001),
+            matches!(
+                c.ability_cooldowns.availability(1001, c.tick_count),
+                AbilityAvailability::Ready
+            ),
             "Should not fire with low endurance"
         );
     }
@@ -1017,7 +1064,10 @@ mod tests {
         // Fire the disc
         c.state = CombatState::Engaging { target_id: 100 };
         c.tick(&player, Some(&target), &[]);
-        assert!(c.disc_cooldowns.contains_key(&3001));
+        assert_eq!(
+            c.ability_cooldowns.availability(3001, c.tick_count),
+            AbilityAvailability::CoolingDown(3)
+        );
 
         // Tick 3 more times (cooldown=3). Each tick() decrements at the start.
         for _ in 0..3 {
@@ -1028,7 +1078,10 @@ mod tests {
         // After 3 ticks the cooldown expired and the disc re-fired,
         // so it should be back on cooldown with the full duration.
         assert!(
-            c.disc_cooldowns.contains_key(&3001),
+            matches!(
+                c.ability_cooldowns.availability(3001, c.tick_count),
+                AbilityAvailability::CoolingDown(3)
+            ),
             "Disc should re-fire after cooldown expires"
         );
     }

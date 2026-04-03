@@ -189,6 +189,8 @@ pub struct CampMember {
     pub name: String,
     /// Assigned role in the camp group.
     pub role: Role,
+    /// Current character level, if known.
+    pub level: Option<u8>,
     /// Personality profile for humanization and idle behavior.
     pub personality: PersonalityProfile,
 }
@@ -202,8 +204,16 @@ impl CampMember {
             pid,
             name,
             role,
+            level: None,
             personality,
         }
+    }
+
+    /// Attach a known character level to this member.
+    #[must_use]
+    pub fn with_level(mut self, level: u8) -> Self {
+        self.level = Some(level);
+        self
     }
 }
 
@@ -1157,6 +1167,7 @@ mod tests {
             ClassConfig {
                 class_name: "cleric".into(),
                 role: "healer".into(),
+                level_overrides: Vec::new(),
                 combat_abilities: vec![],
                 buff_abilities: vec![ClassAbility {
                     name: "Symbol of Naltron".into(),
@@ -1214,6 +1225,7 @@ mod tests {
             ClassConfig {
                 class_name: "cleric".into(),
                 role: "healer".into(),
+                level_overrides: Vec::new(),
                 combat_abilities: vec![],
                 buff_abilities: vec![ClassAbility {
                     name: "Symbol of Naltron".into(),
