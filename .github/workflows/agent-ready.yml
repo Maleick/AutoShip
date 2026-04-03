@@ -2,7 +2,7 @@ name: Auto-label agent-ready
 
 on:
   issues:
-    types: [opened, edited, reopened, labeled, unlabeled]
+    types: [opened, edited, reopened, closed, labeled, unlabeled]
   schedule:
     - cron: "0 * * * *"
 
@@ -149,16 +149,17 @@ jobs:
               }
             }
 
-            async function ensureReadyState({ number, title = "", labels: currentLabels = [] }) {
+            async function ensureReadyState({ number, state = "open", title = "", labels: currentLabels = [] }) {
               const normalized = new Set((currentLabels || []).map((label) => (label.name || "").toLowerCase()));
               const hasReady = normalized.has(readyLabel);
               const shouldSkip = shouldSkipFromEventLabels(currentLabels, title);
+              const isClosed = state !== "open";
               const shouldWithholdReady =
                 normalized.has("agent:working") ||
                 normalized.has("agent:blocked") ||
                 (await hasOpenLinkedPr(number));
 
-              if ((shouldSkip || shouldWithholdReady) && hasReady) {
+              if ((isClosed || shouldSkip || shouldWithholdReady) && hasReady) {
                 await github.rest.issues.removeLabel({
                   owner,
                   repo,
@@ -168,7 +169,7 @@ jobs:
                 return;
               }
 
-              if (!shouldSkip && !shouldWithholdReady && !hasReady) {
+              if (!isClosed && !shouldSkip && !shouldWithholdReady && !hasReady) {
                 await github.rest.issues.addLabels({
                   owner,
                   repo,

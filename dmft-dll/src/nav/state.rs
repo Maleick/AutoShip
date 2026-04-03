@@ -6,16 +6,18 @@
 
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
-use dmft_common::nav::{CampSpot, NavStatus, Waypoint};
+use dmft_common::nav::{CampSpot, NavStatus, PauseReason, Waypoint};
 
 use super::humanize::MovementPersonality;
 use super::stuck::StuckDetector;
+use super::warp::{TargetSample, WarpAction, WarpMonitor};
 use super::waypoint::WaypointQueue;
 
 /// Internal state for the navigation FSM.
 enum State {
     Idle,
     Moving,
+    Paused(PauseReason),
     Arrived,
 }
 
@@ -32,6 +34,8 @@ pub struct Navigator {
     personality: MovementPersonality,
     /// Cached distance to current waypoint (updated each tick, read by status()).
     cached_distance: f32,
+    /// Warp detection + pause gate.
+    warp: WarpMonitor,
 }
 
 impl Navigator {
@@ -44,6 +48,7 @@ impl Navigator {
             stuck: StuckDetector::new(),
             personality: MovementPersonality::from_client_id(client_id),
             cached_distance: 0.0,
+            warp: WarpMonitor::new(),
         }
     }
 
@@ -58,6 +63,7 @@ impl Navigator {
         self.queue.set_path(waypoints);
         self.camp = None;
         self.stuck.reset();
+        self.warp.reset();
         self.state = State::Moving;
     }
 
@@ -67,6 +73,7 @@ impl Navigator {
         self.queue.set_path(vec![spot.position]);
         self.camp = Some(spot);
         self.stuck.reset();
+        self.warp.reset();
         self.state = State::Moving;
     }
 
@@ -76,14 +83,37 @@ impl Navigator {
         self.queue.clear();
         self.camp = None;
         self.stuck.reset();
+        self.warp.reset();
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
     }
 
     /// Run one tick of the navigation state machine. Call from on_game_tick().
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, target: Option<&TargetSample>) {
+        let warp_action = match self.state {
+            State::Idle | State::Arrived => WarpAction::None,
+            _ => self.warp.update(target),
+        };
+
+        match warp_action {
+            WarpAction::Pause => {
+                self.controller.stop_forward();
+                self.state = State::Paused(PauseReason::Warp);
+                return;
+            }
+            WarpAction::Resume => {
+                if matches!(self.state, State::Paused(_)) {
+                    tracing::info!("Warp pause cleared — resuming navigation");
+                    self.state = State::Moving;
+                    self.stuck.reset();
+                }
+            }
+            WarpAction::None => {}
+        }
+
         match self.state {
             State::Idle | State::Arrived => {}
+            State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
         }
     }
@@ -105,8 +135,23 @@ impl Navigator {
                     distance_remaining: self.cached_distance,
                 }
             }
+            State::Paused(reason) => NavStatus::Paused {
+                reason: reason.clone(),
+                waypoint_index: self.queue.index(),
+                waypoint_count: self.queue.len(),
+                distance_remaining: self.cached_distance,
+            },
             State::Arrived => NavStatus::Arrived,
         }
+    }
+
+    fn tick_paused(&mut self) {
+        // Update cached distance for UI/telemetry while paused.
+        if let Some(target) = self.queue.current() {
+            let dist = self.controller.read_position().distance_2d(target);
+            self.cached_distance = dist;
+        }
+        self.controller.stop_forward();
     }
 
     fn tick_moving(&mut self) {
@@ -165,6 +210,42 @@ impl Navigator {
             tracing::info!("Navigation path complete");
         }
         self.stuck.reset();
+        self.warp.reset();
         self.state = State::Arrived;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pauses_and_resumes_on_warp() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+
+        let stable = TargetSample {
+            id: 99,
+            position: Waypoint::new(0.0, 0.0, 0.0),
+        };
+        nav.tick(Some(&stable));
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+
+        let warped = TargetSample {
+            id: 99,
+            position: Waypoint::new(200.0, 0.0, 0.0),
+        };
+        nav.tick(Some(&warped));
+        assert!(matches!(nav.status(), NavStatus::Paused { .. }));
+
+        // Feed stable samples to clear the pause
+        let stable_again = TargetSample {
+            id: 99,
+            position: Waypoint::new(200.5, 0.5, 0.0),
+        };
+        for _ in 0..15 {
+            nav.tick(Some(&stable_again));
+        }
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
     }
 }
