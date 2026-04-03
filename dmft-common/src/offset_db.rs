@@ -20,6 +20,9 @@ pub struct OffsetDatabase {
     pub player_zone: HashMap<String, usize>,
     /// SpawnManager struct offsets keyed by name.
     pub spawn_manager: HashMap<String, usize>,
+    /// Internal function addresses keyed by name (e.g. "castSpell").
+    #[serde(default)]
+    pub functions: HashMap<String, u64>,
 }
 
 impl OffsetDatabase {
@@ -62,6 +65,12 @@ impl OffsetDatabase {
         self.player_zone.get(name).copied()
     }
 
+    /// Look up a function address by name.
+    #[must_use]
+    pub fn get_function(&self, name: &str) -> Option<u64> {
+        self.functions.get(name).copied()
+    }
+
     /// Convert a preferred-base address to a runtime address using this database's preferred base.
     #[must_use]
     pub fn rebase(&self, preferred_addr: u64, actual_base: u64) -> Option<usize> {
@@ -73,9 +82,18 @@ impl OffsetDatabase {
     #[must_use]
     pub fn from_compiled_offsets() -> Self {
         use crate::offsets::{
-            EQ_PREFERRED_BASE, PINST_CDISPLAY, PINST_CEVERQUEST, PINST_CONTROLLED_PLAYER,
-            PINST_LOCAL_PC, PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER,
-            PINST_TARGET, player_base, player_zone, spawn_manager,
+            CAST_SPELL, CCHAT_MGR_CREATE_CHAT_WINDOW, CCHAT_MGR_FREE_CHAT_WINDOW,
+            CCHAT_MGR_GET_RGBA, CCHAT_MGR_INIT_CONTEXT_MENU, CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
+            CHANGE_HEIGHT, CHAR_LIST_ENTER_WORLD, CHAR_LIST_SELECT_CHAR, CLICKED_PLAYER,
+            CAN_USE_ITEM, DO_ATTACK, DO_COMBAT_ABILITY, DO_LOOT, EQ_PREFERRED_BASE, EXECUTE_CMD,
+            FILE_INTEGRITY_DISPATCHER, FIX_HEADING, FREE_TARGET_CAST_SPELL, GET_BEARING,
+            GET_CON_LEVEL, GET_PC_CLIENT, INBOUND_MSG_COUNTER, INTERPRET_CMD,
+            INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM, INV_SLOT_MGR_SELECT_SLOT,
+            ISSUE_PET_COMMAND, NET_SEND, OUTBOUND_MSG_COUNTER, PINST_CDISPLAY, PINST_CEVERQUEST,
+            PINST_CONTROLLED_PLAYER, PINST_LOCAL_PC, PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER,
+            PINST_SPELL_MANAGER, PINST_TARGET, PROCESS_GAME_EVENTS, REAL_RENDER_WORLD,
+            SERVER_MEMCHECK_HANDLER, SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL,
+            WORLD_AUTHENTICATE, ZONE_GUIDE_MANAGER, player_base, player_zone, spawn_manager,
         };
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
@@ -120,6 +138,48 @@ impl OffsetDatabase {
         let mut sm = HashMap::new();
         sm.insert("playerList".to_string(), spawn_manager::PLAYER_LIST);
 
+        let mut funcs = HashMap::new();
+        funcs.insert("castSpell".into(), CAST_SPELL);
+        funcs.insert("doCombatAbility".into(), DO_COMBAT_ABILITY);
+        funcs.insert("useSkill".into(), USE_SKILL);
+        funcs.insert("canUseItem".into(), CAN_USE_ITEM);
+        funcs.insert("doAttack".into(), DO_ATTACK);
+        funcs.insert("executeCmd".into(), EXECUTE_CMD);
+        funcs.insert("interpretCmd".into(), INTERPRET_CMD);
+        funcs.insert("clickedPlayer".into(), CLICKED_PLAYER);
+        funcs.insert("issuePetCommand".into(), ISSUE_PET_COMMAND);
+        funcs.insert("getConLevel".into(), GET_CON_LEVEL);
+        funcs.insert("getPcClient".into(), GET_PC_CLIENT);
+        funcs.insert("doLoot".into(), DO_LOOT);
+        funcs.insert("processGameEvents".into(), PROCESS_GAME_EVENTS);
+        funcs.insert("realRenderWorld".into(), REAL_RENDER_WORLD);
+        funcs.insert("fixHeading".into(), FIX_HEADING);
+        funcs.insert("getBearing".into(), GET_BEARING);
+        funcs.insert("freeTargetCastSpell".into(), FREE_TARGET_CAST_SPELL);
+        funcs.insert("changeHeight".into(), CHANGE_HEIGHT);
+        funcs.insert("zoneGuideManager".into(), ZONE_GUIDE_MANAGER);
+        funcs.insert("charListEnterWorld".into(), CHAR_LIST_ENTER_WORLD);
+        funcs.insert("charListSelectChar".into(), CHAR_LIST_SELECT_CHAR);
+        funcs.insert("cchatMgrGetRgba".into(), CCHAT_MGR_GET_RGBA);
+        funcs.insert("cchatMgrInitContextMenu".into(), CCHAT_MGR_INIT_CONTEXT_MENU);
+        funcs.insert("cchatMgrFreeChatWindow".into(), CCHAT_MGR_FREE_CHAT_WINDOW);
+        funcs.insert(
+            "cchatMgrSetLockedActiveChat".into(),
+            CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
+        );
+        funcs.insert("cchatMgrCreateChatWindow".into(), CCHAT_MGR_CREATE_CHAT_WINDOW);
+        funcs.insert("invSlotMgrFindSlot".into(), INV_SLOT_MGR_FIND_SLOT);
+        funcs.insert("invSlotMgrMoveItem".into(), INV_SLOT_MGR_MOVE_ITEM);
+        funcs.insert("invSlotMgrSelectSlot".into(), INV_SLOT_MGR_SELECT_SLOT);
+        funcs.insert("spellBookWndMemorizeSet".into(), SPELL_BOOK_WND_MEMORIZE_SET);
+        funcs.insert("netSend".into(), NET_SEND);
+        funcs.insert("outboundMsgCounter".into(), OUTBOUND_MSG_COUNTER);
+        funcs.insert("inboundMsgCounter".into(), INBOUND_MSG_COUNTER);
+        funcs.insert("fileIntegrityDispatcher".into(), FILE_INTEGRITY_DISPATCHER);
+        funcs.insert("serverMemcheckHandler".into(), SERVER_MEMCHECK_HANDLER);
+        funcs.insert("worldAuthenticate".into(), WORLD_AUTHENTICATE);
+        funcs.insert("systemFingerprint".into(), SYSTEM_FINGERPRINT);
+
         Self {
             client_date: "20260310".to_string(),
             eq_preferred_base: EQ_PREFERRED_BASE,
@@ -127,6 +187,7 @@ impl OffsetDatabase {
             player_base: pb,
             player_zone: pz,
             spawn_manager: sm,
+            functions: funcs,
         }
     }
 }
@@ -179,6 +240,10 @@ mod tests {
         assert_eq!(
             restored.get_player_zone_offset("hpMax"),
             db.get_player_zone_offset("hpMax")
+        );
+        assert_eq!(
+            restored.get_function("castSpell"),
+            db.get_function("castSpell")
         );
     }
 
@@ -345,5 +410,80 @@ mod tests {
             );
         }
         assert_eq!(db.player_zone.len(), expected.len());
+    }
+
+    #[test]
+    fn from_compiled_offsets_has_all_expected_functions() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let expected_functions = [
+            "castSpell",
+            "doCombatAbility",
+            "useSkill",
+            "canUseItem",
+            "doAttack",
+            "executeCmd",
+            "interpretCmd",
+            "clickedPlayer",
+            "issuePetCommand",
+            "getConLevel",
+            "getPcClient",
+            "doLoot",
+            "processGameEvents",
+            "realRenderWorld",
+            "fixHeading",
+            "getBearing",
+            "freeTargetCastSpell",
+            "changeHeight",
+            "zoneGuideManager",
+            "charListEnterWorld",
+            "charListSelectChar",
+            "cchatMgrGetRgba",
+            "cchatMgrInitContextMenu",
+            "cchatMgrFreeChatWindow",
+            "cchatMgrSetLockedActiveChat",
+            "cchatMgrCreateChatWindow",
+            "invSlotMgrFindSlot",
+            "invSlotMgrMoveItem",
+            "invSlotMgrSelectSlot",
+            "spellBookWndMemorizeSet",
+            "netSend",
+            "outboundMsgCounter",
+            "inboundMsgCounter",
+            "fileIntegrityDispatcher",
+            "serverMemcheckHandler",
+            "worldAuthenticate",
+            "systemFingerprint",
+        ];
+        for key in &expected_functions {
+            assert!(
+                db.get_function(key).is_some(),
+                "missing function: {}",
+                key
+            );
+        }
+        assert_eq!(db.functions.len(), expected_functions.len());
+    }
+
+    #[test]
+    fn get_function_returns_correct_value() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert_eq!(
+            db.get_function("castSpell"),
+            Some(crate::offsets::CAST_SPELL)
+        );
+        assert_eq!(
+            db.get_function("netSend"),
+            Some(crate::offsets::NET_SEND)
+        );
+        assert_eq!(
+            db.get_function("systemFingerprint"),
+            Some(crate::offsets::SYSTEM_FINGERPRINT)
+        );
+    }
+
+    #[test]
+    fn get_function_returns_none_for_missing() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_function("does_not_exist").is_none());
     }
 }
