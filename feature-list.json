@@ -92,6 +92,17 @@
         "python3 - <<'PY'\nimport json, pathlib\npayload = json.loads(pathlib.Path('feature-list.json').read_text())\nassert any(item['id'] == 'm5-packet-control-path-matrix' and item['status'] == 'complete' for item in payload['features'])\nprint('ok')\nPY"
       ],
       "notes": "Issue #49 now lands as a docs-first M5 slice: the packet/zoning ledger separates live in-process control paths from packet candidates and blocked protocol variants, the external research index and wiki mirror point back to that ledger, and the dedicated unittest plus roadmap/wiki guards are passing on the branch."
+    },
+    {
+      "id": "dll-injection-staging-hardening",
+      "name": "DLL injection staging hardening",
+      "status": "complete",
+      "acceptance_tests": [
+        "prepare_dll rejects non-DLL source paths",
+        "prepare_dll validates staging directory is a real directory",
+        "Token file helpers reject symlink token paths"
+      ],
+      "notes": "Preparing for injection now validates source DLL metadata and destination staging directory/file safety before copy; token helper now validates token-directory and token-path symlink safety before writing or reading session tokens. Final injection step now also validates DLL path inputs, bounds-checks path allocation size, frees remote staging memory on write/timeout failures, and avoids the prior manual cleanup leak in timeout handling."
     }
   ]
 }
