@@ -41,6 +41,9 @@ pub struct SoulCoordinator {
     tick_count: u64,
 }
 
+const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
+const MAX_CONVERSATIONS_PER_CHARACTER: usize = 1000;
+
 impl SoulCoordinator {
     /// Create a new `SoulCoordinator` from config.
     ///
@@ -222,10 +225,19 @@ impl SoulCoordinator {
             return;
         };
 
+        let message = message.trim();
+        if message.is_empty() {
+            return;
+        }
+        let message = truncate_utf8(message, MAX_PLAYER_CHAT_MESSAGE_BYTES);
+
         // Record the conversation
         let _ =
             self.memory
                 .record_conversation(client_id, player_name, true, channel, message, None);
+        let _ = self
+            .memory
+            .prune_conversations(client_id, MAX_CONVERSATIONS_PER_CHARACTER);
 
         // Capture mood before event processing for accurate memory recording
         let mood_before = soul.mood;
@@ -250,7 +262,7 @@ impl SoulCoordinator {
             speech_style: soul.speech_style.clone(),
             situation: Situation::PlayerChat {
                 player_name: player_name.to_string(),
-                message: message.to_string(),
+                message: message.to_owned(),
                 channel: channel.to_string(),
             },
             priority: LlmPriority::High,
@@ -312,6 +324,18 @@ impl SoulCoordinator {
     pub fn memory_store(&self) -> &MemoryStore {
         &self.memory
     }
+}
+
+fn truncate_utf8(input: &str, max_bytes: usize) -> &str {
+    if input.len() <= max_bytes {
+        return input;
+    }
+
+    let mut end = max_bytes;
+    while !input.is_char_boundary(end) {
+        end -= 1;
+    }
+    &input[..end]
 }
 
 /// Check if a client is currently in combat based on game state.
@@ -484,6 +508,22 @@ mod tests {
         // Should not panic for unregistered client
         coord.on_player_message(99, "Dave", "Hello!", "say");
         assert_eq!(coord.llm_queue.pending_count(), 0);
+    }
+
+    #[test]
+    fn on_player_message_ignores_empty_message() {
+        let mut coord = make_coordinator(true);
+        coord.config.player_chat_enabled = true;
+        coord.register_character(1, &make_char_config("Test"));
+        coord.on_player_message(1, "Dave", "   ", "say");
+        assert_eq!(coord.llm_queue.pending_count(), 0);
+    }
+
+    #[test]
+    fn truncate_utf8_does_not_split_multibyte_codepoint() {
+        let input = "hello🙂";
+        let truncated = truncate_utf8(input, 6);
+        assert_eq!(truncated, "hello");
     }
 
     #[test]

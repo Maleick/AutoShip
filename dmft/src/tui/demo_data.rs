@@ -1387,6 +1387,7 @@ fn demo_nav_from_profile(
         NavStatus::Stuck { .. } => vec![Waypoint::new(x, y, z), Waypoint::new(x + 2.0, y + 1.0, z)],
         NavStatus::Arrived => vec![Waypoint::new(x, y, z)],
         NavStatus::Idle => Vec::new(),
+        NavStatus::Sticking { .. } => Vec::new(),
     };
 
     DemoNavInfo {

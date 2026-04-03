@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -134,7 +134,7 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
     let mut lines = Vec::new();
     let mut points = Vec::new();
 
-    let zone_lower = zone_name.to_lowercase();
+    let zone_lower = sanitize_zone_name(zone_name)?;
 
     // Load layers 0-3
     let suffixes = ["", "_1", "_2", "_3"];
@@ -184,6 +184,22 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
         points,
         bounds,
     })
+}
+
+fn sanitize_zone_name(zone_name: &str) -> Result<String> {
+    let normalized = zone_name.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        bail!("zone name cannot be empty");
+    }
+
+    if !normalized
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    {
+        bail!("zone name contains invalid characters");
+    }
+
+    Ok(normalized)
 }
 
 fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoint>) -> Result<()> {
@@ -578,5 +594,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let map = load_zone_map(dir.path(), "Crushbone").unwrap();
         assert_eq!(map.name, "Crushbone");
+    }
+
+    #[test]
+    fn load_zone_map_rejects_path_traversal_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = load_zone_map(dir.path(), "../secret").unwrap_err();
+        assert!(err.to_string().contains("invalid characters"));
+    }
+
+    #[test]
+    fn load_zone_map_rejects_path_separator_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = load_zone_map(dir.path(), "qeynos/cat").unwrap_err();
+        assert!(err.to_string().contains("invalid characters"));
     }
 }

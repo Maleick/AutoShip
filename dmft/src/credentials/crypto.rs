@@ -18,11 +18,11 @@ fn argon2_instance() -> Result<Argon2<'static>> {
 /// # Errors
 ///
 /// Returns an error if the operation fails.
-pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
+pub fn derive_key<M: AsRef<str>>(master_password: M, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     let argon2 = argon2_instance()?;
     let mut key = Zeroizing::new([0u8; 32]);
     argon2
-        .hash_password_into(master_password.as_bytes(), salt, &mut *key)
+        .hash_password_into(master_password.as_ref().as_bytes(), salt, &mut *key)
         .map_err(|e| anyhow::anyhow!("argon2 key derivation failed: {e}"))?;
     Ok(key)
 }
@@ -32,7 +32,15 @@ pub fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 3
 /// # Errors
 ///
 /// Returns an error if the operation fails.
-pub fn derive_key_from_master(master_key: &[u8; 32], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
+pub fn derive_key_from_master(
+    master_key: impl AsRef<[u8]>,
+    salt: &[u8],
+) -> Result<Zeroizing<[u8; 32]>> {
+    let master_key = master_key.as_ref();
+    if master_key.len() != 32 {
+        anyhow::bail!("master key must be 32 bytes");
+    }
+
     let argon2 = argon2_instance()?;
     let mut key = Zeroizing::new([0u8; 32]);
     argon2
@@ -86,6 +94,16 @@ pub fn generate_salt() -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn derive_key_accepts_zeroizing_master_password() {
+        let password = Zeroizing::new("test_password".to_string());
+        let salt = generate_salt();
+        let key_zeroized = derive_key(&password, &salt).unwrap();
+        let key_plain = derive_key("test_password", &salt).unwrap();
+
+        assert_eq!(*key_zeroized, *key_plain);
+    }
 
     #[test]
     fn generate_salt_returns_32_bytes() {
