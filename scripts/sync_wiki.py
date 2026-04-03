@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,14 +58,30 @@ def run(
     check: bool = True,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        check=check,
-        text=True,
-        capture_output=True,
-        env=env,
-    )
+    try:
+        result = subprocess.run(
+            args,
+            cwd=str(cwd) if cwd else None,
+            check=False,
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+    except OSError as exc:
+        location = f" (cwd: {cwd})" if cwd else ""
+        raise WikiSyncError(
+            f"Command failed{location}: {' '.join(args)}\n\n"
+            f"stderr:\n{exc}"
+        ) from exc
+    if check and result.returncode != 0:
+        location = f" (cwd: {cwd})" if cwd else ""
+        details: list[str] = [f"Command failed{location}: {' '.join(args)}"]
+        if result.stdout.strip():
+            details.append(f"stdout:\n{result.stdout.strip()}")
+        if result.stderr.strip():
+            details.append(f"stderr:\n{result.stderr.strip()}")
+        raise WikiSyncError("\n\n".join(details))
+    return result
 
 
 def fail(message: str) -> None:
@@ -114,11 +131,7 @@ def validate_sources() -> dict[str, Path]:
 
 
 def git_remote_repo_full_name() -> str:
-    try:
-        origin = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT).stdout.strip()
-    except subprocess.CalledProcessError as exc:
-        fail(f"Unable to determine origin remote: {exc.stderr.strip()}")
-
+    origin = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT).stdout.strip()
     normalized = origin.rstrip("/").removesuffix(".git")
     for prefix in ("https://github.com/", "git@github.com:", "ssh://git@github.com/"):
         if normalized.startswith(prefix):
@@ -131,15 +144,23 @@ def github_token() -> str:
     token = os.environ.get("GH_TOKEN")
     if token:
         return token
+    if shutil.which("gh") is None:
+        fail(
+            "GitHub CLI (`gh`) is not installed or not on PATH, and GH_TOKEN is unset.\n"
+            "Install `gh` and run `gh auth login`, or provide GH_TOKEN."
+        )
     try:
         token = run(["gh", "auth", "token"], cwd=REPO_ROOT).stdout.strip()
-    except subprocess.CalledProcessError as exc:
+    except WikiSyncError as exc:
         fail(
-            "Unable to obtain GitHub token. Set GH_TOKEN or run `gh auth login`.\n"
-            + exc.stderr.strip()
+            "Unable to obtain GitHub auth from the local GitHub CLI session.\n"
+            "Run `gh auth status` to verify the runner login, then `gh auth login` if needed.\n"
+            f"\n{exc}"
         )
     if not token:
-        fail("GitHub token lookup returned an empty value.")
+        fail(
+            "GitHub CLI auth did not return a token. Run `gh auth status` and refresh the local login."
+        )
     return token
 
 
@@ -284,7 +305,21 @@ def commit_changes(wiki_dir: Path) -> None:
     run(["git", "add", "-A"], cwd=wiki_dir)
     if not has_git_changes(wiki_dir):
         return
-    run(["git", "commit", "-m", COMMIT_MESSAGE], cwd=wiki_dir)
+    result = run(["git", "commit", "-m", COMMIT_MESSAGE], cwd=wiki_dir, check=False)
+    if result.returncode == 0:
+        return
+
+    details: list[str] = []
+    stdout = result.stdout.strip()
+    if stdout:
+        details.append(f"stdout:\n{stdout}")
+    stderr = result.stderr.strip()
+    if stderr:
+        details.append(f"stderr:\n{stderr}")
+    fail(
+        f"Failed to commit wiki changes (exit code {result.returncode}).\n"
+        + ("\n\n".join(details) if details else "git commit exited without any output.")
+    )
 
 
 def push_changes(wiki_dir: Path, display_url: str, token: str) -> None:
@@ -297,9 +332,10 @@ def push_changes(wiki_dir: Path, display_url: str, token: str) -> None:
     if result.returncode == 0:
         return
     stderr = result.stderr.strip()
-    if "Repository not found" in stderr:
+    normalized_stderr = stderr.lower()
+    if "repository not found" in normalized_stderr:
         fail(
-            "GitHub has wiki support enabled for the repository, but the wiki git remote still does not exist: "
+            "GitHub wiki remote is not initialized yet: "
             f"{display_url}\n\n"
             "One-time bootstrap required:\n"
             "1. Open the repository's Wiki tab in the GitHub UI.\n"
