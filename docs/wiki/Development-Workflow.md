@@ -97,9 +97,10 @@ Nightly automation now runs across the self-hosted Windows runner and GitHub-hos
 - `.github/workflows/agent-ready.yml` keeps `agent:ready` vs `agent:skip-ready` aligned on issue events plus an hourly sweep, suppresses `agent:ready` when an issue already has an open linked PR or active `agent:working` / `agent:blocked` state, bootstraps those labels when missing, and treats roadmap-container titles that start with `M<number>` or `Mx` as skip-ready
 - `scripts/reconcile-agent-queue.sh` plus the scheduled DMFT issue-queue reconciler automation add missing open issues to the roadmap project, set `Agent Status`, clean stale `agent:ready` / `agent:working` labels off non-ready items, and promote every other open non-epic issue to `Ready for Agent`
 - `.github/workflows/agent-close-pr.yml` closes only agent-authored PRs when they carry the `agent:close` label and the PR is agent-owned via a `codex/*` or `claude/*` head branch or the literal `codex-automation` label
-- the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
+- the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current (currently paused — Codex quota exhausted until April 8, 2026)
 - the issue executor opens trusted agent PRs with `merge:auto` by default unless the PR or linked issue is marked `human:required`, `risk:high`, or `agent:blocked`
 - the PR manager may resolve clearly addressed bot review threads, merge clean trusted PRs once the required gate is green, and close stale or superseded trusted agent PRs automatically
+- as of 2026-04-03, Claude Code is the primary active agent worker; Codex automations are paused
 
 These workflows mirror repo state. They do not replace keeping source docs current.
 

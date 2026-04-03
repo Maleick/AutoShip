@@ -30,6 +30,8 @@ External research may add slices and validation tasks, but it may not reorder mi
 
 ## Current Validated State
 
+As of 2026-04-03: 856 commits, ~83.5K lines of Rust, 1,958 tests (all passing).
+
 - TUI with four primary screens and command bar
 - demo mode for non-Windows and no-client workflows
 - live Windows injection and authenticated IPC path
@@ -37,6 +39,10 @@ External research may add slices and validation tasks, but it may not reorder mi
 - navmesh-backed routing and map overlays
 - combat FSM plus class strategies and CH chain
 - Soul Engine with deterministic fallback and persistent memory
+- stick-to-target and player-follow navigation modes
+- camp loop state machine with buff/CC/loot/positioning
+- Discord webhook integration and command bridge
+- encrypted credential store (Argon2id + AES-256-GCM)
 
 ## Main Gaps Still Requiring Live Validation
 

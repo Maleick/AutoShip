@@ -397,14 +397,14 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
         .with_context(|| format!("HTTP request failed for {url}"))?
         .error_for_status()
         .with_context(|| format!("Server returned error for {url}"))?;
-    if let Some(content_len) = response.content_length() {
-        if content_len as usize > MAX_MESH_DOWNLOAD_BYTES {
-            bail!(
-                "Navmesh download too large ({} bytes, max {})",
-                content_len,
-                MAX_MESH_DOWNLOAD_BYTES
-            );
-        }
+    if let Some(content_len) = response.content_length()
+        && content_len as usize > MAX_MESH_DOWNLOAD_BYTES
+    {
+        bail!(
+            "Navmesh download too large ({} bytes, max {})",
+            content_len,
+            MAX_MESH_DOWNLOAD_BYTES
+        );
     }
 
     let mut data = Vec::new();

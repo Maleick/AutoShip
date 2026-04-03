@@ -2,7 +2,7 @@ name: Auto-label agent-ready
 
 on:
   issues:
-    types: [opened, edited, reopened, closed, labeled, unlabeled]
+    types: [opened, closed, labeled, reopened]
   schedule:
     - cron: "0 * * * *"
 

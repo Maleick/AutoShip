@@ -338,7 +338,10 @@ impl Navigator {
                     self.state = State::Idle;
                 }
             }
-            StickTickResult::InRange { target_id, distance } => {
+            StickTickResult::InRange {
+                target_id,
+                distance,
+            } => {
                 self.cached_stick_target_id = target_id;
                 self.cached_stick_distance = distance;
                 self.controller.stop_forward();

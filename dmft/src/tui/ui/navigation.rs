@@ -213,7 +213,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         lines.push(Line::from(vec![
             Span::styled("  Failure: ", Style::default().fg(t.text_muted)),
             Span::styled(
-                truncate_inline(&failure_reason, cols[1].width.saturating_sub(14) as usize),
+                truncate_inline(failure_reason, cols[1].width.saturating_sub(14) as usize),
                 Style::default().fg(if failure_reason == "None" {
                     t.hp_high
                 } else {
