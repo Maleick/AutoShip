@@ -10,6 +10,7 @@ use ratatui::{
 
 use super::widgets::{panel, themed_header_row};
 use crate::tui::app::App;
+use crate::tui::ui::widgets::truncate_inline;
 
 fn nav_status_color(
     status: &dmft_common::nav::NavStatus,
@@ -17,6 +18,8 @@ fn nav_status_color(
 ) -> ratatui::style::Color {
     if status.is_moving() {
         t.text_highlight
+    } else if status.is_paused() {
+        t.text_secondary
     } else if status.is_arrived() {
         t.hp_high
     } else if status.is_stuck() {
@@ -115,7 +118,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         );
     }
 
-    // ── Right: commands reference ──────────────────────────────────────
+    // ── Right: selected detail + commands reference ───────────────────
     let mode_str = format!("{}", app.operating_mode);
     let mode_color = match mode_str.as_str() {
         "Camp" => t.mode_camp,
@@ -139,7 +142,100 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         })
         .unwrap_or_else(|| String::from("—"));
 
-    let mut lines: Vec<Line<'_>> = vec![
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    if let Some(client) = app.active_client() {
+        let client_name = client.local_player.as_ref().map_or_else(
+            || app.client_command_target(client),
+            |player| app.redact_name(&player.displayed_name).into_owned(),
+        );
+        let zone_name = client.zone_name.clone();
+        let nav = app.nav_state.nav_statuses.get(&client.pid);
+        let route_state = nav.map_or("Standing by", |status| status.route_state.as_str());
+        let progress = nav.map_or_else(String::new, |status| status.progress_summary());
+        let recovery = nav
+            .and_then(|status| status.recovery_state.as_deref())
+            .unwrap_or("—");
+        let path_exists = nav.map(|status| status.path_exists).unwrap_or(false);
+        let path_length = nav
+            .and_then(|status| status.path_length)
+            .map(|len| format!("{len:.0}u"))
+            .unwrap_or_else(|| String::from("—"));
+        let failure_reason = nav
+            .and_then(|status| status.failure_reason.as_deref())
+            .unwrap_or("None");
+        let blockers = nav
+            .and_then(|status| status.blocker_summary())
+            .unwrap_or_else(|| String::from("None"));
+
+        lines.extend([
+            Line::from(Span::styled(
+                "Selected Route",
+                Style::default()
+                    .fg(t.text_accent)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Toon: ", Style::default().fg(t.text_muted)),
+                Span::styled(client_name, Style::default().fg(t.text_normal)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Zone: ", Style::default().fg(t.text_muted)),
+                Span::styled(zone_name, Style::default().fg(t.text_secondary)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Route: ", Style::default().fg(t.text_muted)),
+                Span::styled(route_state, Style::default().fg(t.text_highlight)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Path: ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    if path_exists { "Yes" } else { "No" },
+                    Style::default().fg(if path_exists { t.hp_high } else { t.hp_low }),
+                ),
+                Span::styled("  Len: ", Style::default().fg(t.text_muted)),
+                Span::styled(path_length, Style::default().fg(t.text_secondary)),
+            ]),
+        ]);
+
+        if !progress.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("  Prog: ", Style::default().fg(t.text_muted)),
+                Span::styled(progress, Style::default().fg(t.text_secondary)),
+            ]));
+        }
+
+        lines.push(Line::from(vec![
+            Span::styled("  Recovery: ", Style::default().fg(t.text_muted)),
+            Span::styled(recovery, Style::default().fg(t.hp_low)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Failure: ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                truncate_inline(&failure_reason, cols[1].width.saturating_sub(14) as usize),
+                Style::default().fg(if failure_reason == "None" {
+                    t.hp_high
+                } else {
+                    t.hp_low
+                }),
+            ),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Blockers: ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                truncate_inline(&blockers, cols[1].width.saturating_sub(14) as usize),
+                Style::default().fg(if blockers == "None" {
+                    t.hp_high
+                } else {
+                    t.hp_low
+                }),
+            ),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    lines.extend([
         Line::from(Span::styled(
             "Operating Mode",
             Style::default()
@@ -164,7 +260,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             Span::styled("  Enter", Style::default().fg(t.text_muted)),
             Span::styled(" back to map", Style::default().fg(t.text_secondary)),
         ]),
-    ];
+    ]);
 
     if let Some(ma) = &app.main_assist {
         lines.push(Line::from(vec![

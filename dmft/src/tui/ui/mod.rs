@@ -1146,6 +1146,20 @@ mod tests {
     }
 
     #[test]
+    fn navigation_render_surfaces_route_state_and_blockers() {
+        let mut app = sample_app();
+        app.active_screen = ActiveScreen::Navigation;
+        app.selected_client = 2;
+        app.sync_from_selected_client();
+
+        let rendered = render_app(app, 130, 34);
+
+        assert!(rendered.contains("Selected Route"));
+        assert!(rendered.contains("Navmesh route"));
+        assert!(rendered.contains("No cached navmesh"));
+    }
+
+    #[test]
     fn help_overlay_small_host_uses_compact_rows() {
         let mut app = sample_app();
         app.help_visible = true;
@@ -1231,6 +1245,14 @@ mod tests {
                 },
                 eta_secs: Some(12),
                 waypoints: Vec::new(),
+                path_exists: true,
+                path_length: Some(42.0),
+                failure_reason: None,
+                route_state: String::from("Navmesh route"),
+                recovery_state: None,
+                blockers: vec![String::from(
+                    "No cached navmesh for poknowledge; using straight-line fallback.",
+                )],
                 is_demo_scripted: false,
             },
         );

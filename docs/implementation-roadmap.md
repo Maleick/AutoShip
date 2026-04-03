@@ -49,13 +49,22 @@ Initial slices:
 - packet-driven validation tasks for combat, utility, and chat paths
 - evidence-backed packet vs in-process control matrix
 
+Current curated intake:
+
+- `docs/external-research/packet-engine-send-receive-pipeline.md`
+- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
+- `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
+
 Entry gate:
 
 - imported packet and network research archived and indexed
+- send and receive pipeline inventory completed with evidence states
 
 Exit gate:
 
 - packet control paths have explicit acceptance criteria
+- send and receive pipeline layers are inventoried with `In-process`, `Packet candidate`, or `Blocked` labels
+- anti-cheat counter and opcode scrambler requirements are documented
 - critical packet unknowns are either live-validated, blocked, or explicitly provisional
 
 ### `M6` Zoning/Movement
@@ -70,6 +79,10 @@ Initial slices:
 - movement validation rules and queue flushing
 - safe-coord, zone-line, and teleport category handling
 - TUI visibility for route state, stuck state, and zoning blockers
+
+Current curated intake:
+
+- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
 
 Entry gate:
 

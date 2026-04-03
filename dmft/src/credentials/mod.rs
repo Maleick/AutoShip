@@ -6,3 +6,5 @@ pub mod crypto;
 pub mod prompt;
 /// SQLite-backed credential store with encrypted account entries.
 pub mod store;
+
+pub use self::prompt::prompt_password;
