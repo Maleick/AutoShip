@@ -6,6 +6,8 @@
 #   :login all        — launch all accounts below
 #   :login G1         — launch only accounts in group 1
 #   :login frostreaver01 — launch a single account
+#   :profile launch MainRaid  — launch all accounts in the "MainRaid" profile group
+#   F1 (hotkey)       — launch the profile group assigned to F1
 
 [[accounts]]
 name = "frostreaver01"
@@ -99,3 +101,19 @@ group = 2
 # character = "TBD"
 # class = "SK"
 # group = 3
+
+# ─── Profile Groups ────────────────────────────────────────────────────────
+# Named profile groups for one-action multi-character launches.
+# Each profile maps a name and optional hotkey (F1–F9) to a numeric group ID.
+# Press the hotkey in the TUI to launch all accounts in that group.
+# Use `:profile list` to view profiles, `:profile launch <name>` to launch.
+
+[[profile_groups]]
+id = 1
+name = "MainRaid"
+hotkey = "F1"
+
+[[profile_groups]]
+id = 2
+name = "SecondRaid"
+hotkey = "F2"

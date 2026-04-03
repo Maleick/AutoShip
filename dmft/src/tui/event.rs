@@ -570,6 +570,11 @@ pub fn handle_events(
                 }
                 return Ok(true);
             }
+            (KeyCode::F(n), KeyModifiers::CONTROL) if (1..=9).contains(&n) => {
+                let hotkey = format!("F{n}");
+                app.launch_profile_hotkey(&hotkey);
+                return Ok(true);
+            }
             (KeyCode::F(10), _) => {
                 app.menu_state.toggle();
                 return Ok(true);

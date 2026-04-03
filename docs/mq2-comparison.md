@@ -30,7 +30,7 @@ MQ2: `mq2-reference/src/plugins/autologin/`
 | Kick handling | KickActiveCharacter setting + offline trader detection | Auto-kick KickActiveCharacter dialog, offline trader surfaced as error | ✅ | Handles already-logged-in/offline-trader dialogs deterministically |
 | Error dialog parsing | Full STML text extraction + specific error routing | Generic okdialog detection + dismiss | ⚠️ | MQ2 identifies specific errors (wrong password, account locked); Frostreaver detects but doesn't parse error text |
 | Camping/relog | /relog command, InGameCamping state, fast-camp detection | Not implemented | ❌ | MQ2 manages camp→relog→relogin cycle |
-| Profile groups | Multi-character profiles with hotkeys | Single-character login commands | ⚠️ | MQ2 has named profile groups; Frostreaver manages via orchestrator config |
+| Profile groups | Multi-character profiles with hotkeys | Named profile groups with F-key hotkeys (Ctrl+F1–F9 in TUI) | ✅ | Both have named profile groups; Frostreaver uses `[[profile_groups]]` in accounts.toml |
 | Auto-detect characters | Saves class/level on manual login | Not implemented | ❌ | MQ2 auto-creates DB entries for seen characters |
 | Pause/Resume | HOME/END hotkeys + ImGui overlay | IPC command only | ⚠️ | MQ2 has in-game UI; Frostreaver pauses via orchestrator |
 | /switchserver, /switchcharacter | Full server/character switching mid-session | Not implemented | ❌ | |
