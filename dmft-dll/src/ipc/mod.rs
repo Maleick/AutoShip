@@ -135,6 +135,8 @@ pub fn drain_responses() -> Vec<Response> {
 /// Handle commands that must work even before the game loop runs
 /// (e.g., at the login screen). Returns true if handled.
 fn handle_immediate_command(cmd: &Command) -> bool {
+    const MAX_LOGIN_FIELD_CHARS: usize = 128;
+
     match cmd {
         Command::CalibrateLogin => {
             let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
@@ -153,10 +155,13 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             server_name,
             character_name,
         } => {
+            let account_name: String = account_name.chars().take(MAX_LOGIN_FIELD_CHARS).collect();
+            let password: String = password.chars().take(MAX_LOGIN_FIELD_CHARS).collect();
+
             // Clone password into Zeroizing wrapper so the local copy is wiped
             // from memory when this scope exits — prevents plaintext from
             // lingering on the IPC thread's stack after credential entry.
-            let mut password = zeroize::Zeroizing::new(password.clone());
+            let mut password = zeroize::Zeroizing::new(password);
 
             tracing::info!(
                 account = %account_name,
@@ -172,7 +177,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             if eqmain_base != 0 {
                 let wrote = crate::login::widgets::type_credentials_to_window(
                     eqmain_base,
-                    account_name,
+                    &account_name,
                     &password,
                 );
                 tracing::info!(wrote, "Inline: type_credentials_to_window");
@@ -184,7 +189,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 
             // Store credentials in the FSM for character select phase.
             crate::login::start_login(
-                account_name.to_string(),
+                account_name,
                 std::mem::take(&mut *password),
                 server_name.to_string(),
                 character_name.to_string(),
