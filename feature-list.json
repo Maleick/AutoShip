@@ -49,17 +49,49 @@
       "status": "complete",
       "acceptance_tests": [
         "CI workflow runs on pull requests into master, pushes to master, and manual dispatch",
-        "Required PR gate is the self-hosted Windows `PR gate (fmt + clippy + test + python)` and still runs on README-only and docs-only changes",
-        "README Metrics workflow no longer pushes directly to protected master and bootstraps the nightly Windows Rust toolchain it actually needs",
+        "Required PR gate keeps the `PR gate (fmt + clippy + test + python)` name, routes same-repo PRs to self-hosted Windows, routes fork PRs to GitHub-hosted Windows, and still runs on README-only and docs-only changes",
+        "README Metrics workflow no longer pushes directly to protected master, and CI/wiki Python setup now uses either runner-local Python or a checksum-verified Python 3.12.10 embeddable ZIP instead of downloading an unchecked Python ZIP",
         "Nightly Release, Release, and Wiki Nightly workflows are hardened for the self-hosted Windows runner without depending on runner-local pwsh or preinstalled toolchains",
-        "DMFT PR manager automation runs every 5 hours against /Users/maleick/Projects/DMFT",
+        "DMFT PR manager automation runs every 5 hours against the DMFT repository checkout on the automation host",
         "python3 scripts/sync_wiki.py --check",
         "python3 -m unittest discover -s tests -p 'test_*.py' -v",
         "cargo fmt --all --check",
         "cargo clippy --all-targets --all-features -- -D warnings",
         "cargo test"
       ],
-      "notes": "DMFT now documents master as the protected release branch, uses the self-hosted Windows PR gate as the only required merge check, keeps release/nightly/wiki automation out of merge blocking, hardens the self-hosted Windows workflows around cmd-safe gates, pinned CMake setup, git safe.directory bootstrapping, and nightly rustup provisioning, and tracks the scheduled DMFT PR manager automation that opens, updates, and merges PRs for agent-authored branches."
+      "notes": "DMFT now documents master as the protected release branch, keeps `PR gate (fmt + clippy + test + python)` as the only required merge check while routing same-repo PRs to the self-hosted Windows runner and fork PRs to GitHub-hosted Windows, uses `actions/setup-python@v6` only on the GitHub-hosted fork path, keeps self-hosted CI/wiki jobs cmd-safe with runner-local Python or a checksum-verified Python 3.12.10 embeddable ZIP fallback, keeps release/nightly/wiki automation out of merge blocking, hardens the self-hosted Windows workflows around cmd-safe gates, pinned CMake setup, git safe.directory bootstrapping, and nightly rustup provisioning, now relies on the existing Nightly Release -> Wiki Nightly workflow_run chain instead of a redundant manual dispatch, surfaces wiki sync commit stderr more clearly, and tracks the scheduled DMFT PR manager automation that opens, updates, and merges PRs for agent-authored branches."
+    },
+    {
+      "id": "autonomous-issue-pipeline",
+      "name": "Codex-first autonomous issue pipeline",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "Issue template captures Scope, Done when, Verify, Out of scope, and Source docs",
+        "AGENTS.md and CLAUDE.md define the shared autonomous worker contract",
+        "Codex issue executor automation is installed on the automation host and claims exactly one eligible issue per run",
+        "DMFT PR manager automation requires merge:auto and refuses human:required, risk:high, or agent:blocked merges",
+        "Trusted agent PRs default `merge:auto` unless the PR or linked issue is explicitly blocked by labels",
+        "DMFT PR manager can auto-close stale or superseded trusted agent PRs with a reason comment",
+        "Optional Claude GitHub Action only responds to worker:claude or @claude and never merges",
+        "python3 scripts/sync_wiki.py --check",
+        "python3 - <<'PY'\nimport json, pathlib\nimport yaml\njson.loads(pathlib.Path('feature-list.json').read_text())\nyaml.safe_load(pathlib.Path('.github/workflows/claude-agent.yml').read_text())\nyaml.safe_load(pathlib.Path('.github/ISSUE_TEMPLATE/agent-task.yml').read_text())\nprint('ok')\nPY"
+      ],
+      "notes": "Repo docs, issue template, worker contract, Claude workflow, and Codex automation files now define the autonomous queue. The installed issue executor currently runs hourly because Codex app automations do not yet support 15-minute cadences. Trusted agent PRs now default `merge:auto` unless explicitly blocked, the Claude worker explicitly trusts the `Copilot` bot actor instead of failing repository-permission lookup for that GitHub App identity, the PR manager is allowed to resolve addressed bot threads plus close stale or superseded agent PRs, the queue now has a deterministic `scripts/reconcile-agent-queue.sh` repair path plus a dedicated issue-queue reconciler automation that adds missing open issues to the roadmap project and aligns `Agent Status` with ready/working/PR/block states, the label workflow now suppresses `agent:ready` while an issue has an open linked PR or active non-ready label state, the `agent:close` workflow can automatically close agent-authored PRs without touching unrelated human PRs, and a master-owned Copilot CI dispatcher can re-dispatch blocked same-repo Copilot PR heads through `CI` until the repository-level skip-approval setting is enabled while skipping workflow-editing PRs, recognizing the current `Copilot` actor name, and isolating per-PR dispatch failures. The `DMFT Roadmap` project now uses a dedicated `Agent Status` field for queue state so the built-in `Status` field can keep its broader roadmap-progress meaning."
+    },
+    {
+      "id": "m5-packet-control-path-matrix",
+      "name": "M5 packet control-path matrix",
+      "status": "complete",
+      "acceptance_tests": [
+        "docs/external-research/packet-zoning-send-path-and-state-ledger.md inventories combat, utility, and chat control surfaces",
+        "The ledger labels current paths as in-process, packet candidate, or blocked instead of implying support by enum shape alone",
+        "docs/wiki/Roadmap-and-Known-Gaps.md and docs/wiki/Architecture-Overview.md mirror the current IPC plus in-process control boundary and link back to the packet ledger",
+        "python3 -m unittest discover -s tests -p 'test_packet_control_path_inventory.py' -v",
+        "python3 scripts/validate_roadmap_unknowns.py --plan docs/implementation-roadmap.md --domains packet",
+        "python3 scripts/sync_wiki.py --check",
+        "python3 - <<'PY'\nimport json, pathlib\npayload = json.loads(pathlib.Path('feature-list.json').read_text())\nassert any(item['id'] == 'm5-packet-control-path-matrix' and item['status'] == 'complete' for item in payload['features'])\nprint('ok')\nPY"
+      ],
+      "notes": "Issue #49 now lands as a docs-first M5 slice: the packet/zoning ledger separates live in-process control paths from packet candidates and blocked protocol variants, the external research index and wiki mirror point back to that ledger, and the dedicated unittest plus roadmap/wiki guards are passing on the branch."
     }
   ]
 }
