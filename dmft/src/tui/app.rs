@@ -403,6 +403,9 @@ pub struct App {
     pub command_aliases: HashMap<String, String>,
     /// Transient toast feedback shown above the main chrome.
     pub toast: Option<Toast>,
+
+    /// Whether operator has paused all automation (HOME to pause, END to resume).
+    pub automation_paused: bool,
 }
 
 /// Navigation status for a single client.
@@ -610,6 +613,7 @@ impl App {
 
             command_aliases: Self::build_default_aliases(),
             toast: None,
+            automation_paused: false,
         };
         app.cmd_state.load_history_from_disk();
         app
@@ -5226,5 +5230,31 @@ mod tests {
         assert!(is_reserved_command_name("session"));
         assert!(is_reserved_command_name("SCOPE"));
         assert!(is_reserved_command_name("SESSION"));
+    }
+
+    #[test]
+    fn automation_paused_starts_false() {
+        let app = App::new();
+        assert!(!app.automation_paused);
+    }
+
+    #[test]
+    fn automation_pause_resume_toggles() {
+        let mut app = App::new();
+        assert!(!app.automation_paused);
+
+        app.automation_paused = true;
+        assert!(app.automation_paused);
+
+        app.automation_paused = false;
+        assert!(!app.automation_paused);
+    }
+
+    #[test]
+    fn automation_pause_idempotent() {
+        let mut app = App::new();
+        app.automation_paused = true;
+        app.automation_paused = true;
+        assert!(app.automation_paused);
     }
 }
