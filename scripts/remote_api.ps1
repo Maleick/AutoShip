@@ -6,7 +6,7 @@
 #
 #  Endpoints:
 #    GET  /status       - EQ process status + DLL log tail
-#    POST /run          - Execute PowerShell command (body = command string)
+#    POST /run          - Disabled (was command execution; removed for security)
 #    POST /screenshot   - Capture screen, return base64 PNG
 #    GET  /test-results - Latest test_loop results
 #    GET  /dll-log      - Latest DLL log tail
@@ -20,20 +20,19 @@ $ProjectDir = "C:\Users\xmale\Projects\DMFT"
 
 Write-Host "Starting DMFT Remote API on port $Port..."
 
-# Create HTTP listener
+# Create HTTP listener (localhost-only to avoid remote exposure)
 $listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://+:$Port/")
+$listener.Prefixes.Add("http://localhost:$Port/")
 
 try {
     $listener.Start()
 } catch {
-    Write-Host "Failed to start listener. Try running as Administrator, or use:"
-    Write-Host "  netsh http add urlacl url=http://+:$Port/ user=$env:USERNAME"
+    Write-Host "Failed to start listener on localhost:$Port."
     exit 1
 }
 
 Write-Host "Listening on http://localhost:$Port/"
-Write-Host "Endpoints: /status, /run, /screenshot, /test-results, /dll-log"
+Write-Host "Endpoints: /status, /run (disabled), /screenshot, /test-results, /dll-log"
 Write-Host "Press Ctrl+C to stop."
 
 function Get-EqStatus {
@@ -230,24 +229,9 @@ while ($listener.IsListening) {
                 if ($method -ne "POST") {
                     Send-JsonResponse $response @{ error = "POST required" } 405
                 } else {
-                    $reader = New-Object System.IO.StreamReader($request.InputStream)
-                    $body = $reader.ReadToEnd()
-                    $reader.Close()
-
-                    # Parse JSON body if present, otherwise treat as raw command
-                    try {
-                        $parsed = $body | ConvertFrom-Json
-                        $cmd = $parsed.command
-                    } catch {
-                        $cmd = $body
-                    }
-
-                    if (-not $cmd) {
-                        Send-JsonResponse $response @{ error = "No command provided" } 400
-                    } else {
-                        $result = Invoke-RemoteCommand -Command $cmd
-                        Send-JsonResponse $response $result
-                    }
+                    Send-JsonResponse $response @{
+                        error = "The /run endpoint has been disabled for security reasons."
+                    } 403
                 }
             }
             "/screenshot" {
@@ -332,7 +316,7 @@ while ($listener.IsListening) {
                 $help = @{
                     endpoints = @(
                         "GET  /status       - EQ process status + DLL log summary"
-                        "POST /run          - Execute command (body: {`"command`":`"...`"})"
+                        "POST /run          - Disabled for security"
                         "POST /launch-eq    - Launch EQ (body: {`"account`":`"name`"})"
                         "POST /inject       - Inject DLL into running EQ"
                         "POST /kill-eq      - Kill all EQ processes"
