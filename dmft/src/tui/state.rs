@@ -285,6 +285,8 @@ pub struct OverviewScreenState {
     pub show_groups: bool,
     /// Whether the filters/scope panel is visible.
     pub show_filters: bool,
+    /// Whether the slot-profile panel is visible.
+    pub show_profile: bool,
     /// Whether the character detail panel is collapsed.
     pub character_collapsed: bool,
     /// Whether the groups panel is collapsed.
@@ -295,6 +297,8 @@ pub struct OverviewScreenState {
     pub combat_collapsed: bool,
     /// Whether the session stats panel is collapsed.
     pub session_collapsed: bool,
+    /// Whether the slot-profile panel is collapsed.
+    pub profile_collapsed: bool,
 }
 
 impl OverviewScreenState {
@@ -304,11 +308,13 @@ impl OverviewScreenState {
         Self {
             show_groups: true,
             show_filters: true,
+            show_profile: true,
             character_collapsed: false,
             groups_collapsed: false,
             filters_collapsed: false,
             combat_collapsed: false,
             session_collapsed: false,
+            profile_collapsed: false,
         }
     }
 }

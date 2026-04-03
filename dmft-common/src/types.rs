@@ -149,6 +149,74 @@ impl SpawnData {
     }
 }
 
+/// Operator-visible lifecycle state for a single managed session slot.
+///
+/// This is a display-oriented summary derived from the launcher `LoginPhase`,
+/// hook status, and self-healing monitor state.  It gives operators a stable,
+/// named vocabulary for what each slot is doing without exposing internal FSM
+/// details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotLifecycle {
+    /// Slot is defined in config but no launch has been initiated.
+    Configured,
+    /// EQ process is being spawned (pre-login screen).
+    Launching,
+    /// Process is running and working through the login / server / character
+    /// select screens.
+    WaitingForLogin,
+    /// Character is zoning in or running post-login setup (buffs, group join).
+    EnteringWorld,
+    /// Slot is fully attached, hooks active, and ready for orchestration.
+    Live,
+    /// Slot experienced a crash or timeout and is being restarted.
+    Recovering,
+    /// Slot failed in a way that prevents automatic recovery; needs operator
+    /// intervention.
+    Blocked,
+}
+
+impl SlotLifecycle {
+    /// Short operator-facing label (fits in ≤ 8 chars for compact display).
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Configured => "CFG",
+            Self::Launching => "LAUNCH",
+            Self::WaitingForLogin => "LOGIN",
+            Self::EnteringWorld => "ZONE",
+            Self::Live => "LIVE",
+            Self::Recovering => "RECOV",
+            Self::Blocked => "BLOCK",
+        }
+    }
+
+    /// Long operator-facing label for sidebar panels.
+    #[must_use]
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Configured => "Configured",
+            Self::Launching => "Launching",
+            Self::WaitingForLogin => "Waiting for login",
+            Self::EnteringWorld => "Entering world",
+            Self::Live => "Live",
+            Self::Recovering => "Recovering",
+            Self::Blocked => "Blocked",
+        }
+    }
+
+    /// Whether this lifecycle state represents a healthy, operational slot.
+    #[must_use]
+    pub fn is_healthy(self) -> bool {
+        matches!(self, Self::Live)
+    }
+
+    /// Whether this lifecycle state represents a degraded or blocked slot.
+    #[must_use]
+    pub fn is_degraded(self) -> bool {
+        matches!(self, Self::Recovering | Self::Blocked)
+    }
+}
+
 /// Status of the in-process hook inside an EQ client
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum HookStatus {
@@ -427,6 +495,49 @@ mod tests {
         let original = make_spawn(500, 1000, 200, 400);
         let cloned = original.clone();
         assert_eq!(original, cloned);
+    }
+
+    #[test]
+    fn slot_lifecycle_labels() {
+        assert_eq!(SlotLifecycle::Configured.label(), "CFG");
+        assert_eq!(SlotLifecycle::Launching.label(), "LAUNCH");
+        assert_eq!(SlotLifecycle::WaitingForLogin.label(), "LOGIN");
+        assert_eq!(SlotLifecycle::EnteringWorld.label(), "ZONE");
+        assert_eq!(SlotLifecycle::Live.label(), "LIVE");
+        assert_eq!(SlotLifecycle::Recovering.label(), "RECOV");
+        assert_eq!(SlotLifecycle::Blocked.label(), "BLOCK");
+    }
+
+    #[test]
+    fn slot_lifecycle_descriptions_non_empty() {
+        let variants = [
+            SlotLifecycle::Configured,
+            SlotLifecycle::Launching,
+            SlotLifecycle::WaitingForLogin,
+            SlotLifecycle::EnteringWorld,
+            SlotLifecycle::Live,
+            SlotLifecycle::Recovering,
+            SlotLifecycle::Blocked,
+        ];
+        for v in variants {
+            assert!(!v.description().is_empty());
+        }
+    }
+
+    #[test]
+    fn slot_lifecycle_healthy_only_live() {
+        assert!(SlotLifecycle::Live.is_healthy());
+        assert!(!SlotLifecycle::Configured.is_healthy());
+        assert!(!SlotLifecycle::Recovering.is_healthy());
+        assert!(!SlotLifecycle::Blocked.is_healthy());
+    }
+
+    #[test]
+    fn slot_lifecycle_degraded_states() {
+        assert!(SlotLifecycle::Recovering.is_degraded());
+        assert!(SlotLifecycle::Blocked.is_degraded());
+        assert!(!SlotLifecycle::Live.is_degraded());
+        assert!(!SlotLifecycle::Configured.is_degraded());
     }
 
     #[test]

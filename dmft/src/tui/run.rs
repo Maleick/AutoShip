@@ -1041,6 +1041,21 @@ fn load_demo_data(app: &mut App) {
         client.character_name = name.to_string();
         client.client_status = format!("Connected: {name}");
         client.is_demo = true;
+        // Demo: assign lifecycle, launch profile, and session preset per group.
+        // Two clients show non-Live states for visual demo variety.
+        let lifecycle = match i {
+            16 => dmft_common::types::SlotLifecycle::WaitingForLogin,
+            17 => dmft_common::types::SlotLifecycle::Recovering,
+            _ => dmft_common::types::SlotLifecycle::Live,
+        };
+        client.slot_lifecycle = lifecycle;
+        let (profile, preset) = match i {
+            0..=5 => ("frostreaver-main", "Group Alpha"),
+            6..=11 => ("frostreaver-main", "Group Beta"),
+            _ => ("frostreaver-main", "Group Gamma"),
+        };
+        client.launch_profile = Some(profile.to_string());
+        client.session_preset = Some(preset.to_string());
         app.clients.push(client);
     }
 
