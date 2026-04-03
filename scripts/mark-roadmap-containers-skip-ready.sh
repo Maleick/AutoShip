@@ -13,12 +13,11 @@ if ! jq -e --arg skip "$SKIP_LABEL" 'map(.name) | index($skip)' >/dev/null <<< "
     --description "Roadmap container issues are intentionally excluded from agent-ready."
 fi
 
-ALL_OPEN_ISSUES="$(gh issue list --repo "$REPO" --state open --limit 500 --json number,title,labels)"
+ALL_OPEN_ISSUES="$(gh issue list --repo "$REPO" --state open --limit 1000 --json number,title,labels)"
 
 echo "Applying agent:skip-ready to roadmap containers in ${REPO}"
 
 TOTAL=0
-
 ISSUE_ROWS="$(
   jq -c '
     .[]
@@ -36,10 +35,8 @@ while IFS= read -r issue_row; do
   has_ready="$(jq -r '.has_ready' <<< "$issue_row")"
 
   if [ "$has_ready" = "true" ]; then
-    gh issue edit --repo "$REPO" "$issue_number" \
-      --add-label "$SKIP_LABEL" \
-      --remove-label "$READY_LABEL" \
-      >/dev/null
+    gh issue edit --repo "$REPO" "$issue_number" --add-label "$SKIP_LABEL" >/dev/null
+    gh issue edit --repo "$REPO" "$issue_number" --remove-label "$READY_LABEL" >/dev/null 2>&1 || true
   else
     gh issue edit --repo "$REPO" "$issue_number" \
       --add-label "$SKIP_LABEL" \
