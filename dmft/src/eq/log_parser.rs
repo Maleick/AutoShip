@@ -318,8 +318,12 @@ impl LootDatabase {
     /// XP events per hour within the last `window` duration.
     #[must_use]
     pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
-        let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
-        let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;
+        let now = Instant::now();
+        let count = match now.checked_sub(window) {
+            Some(cutoff) => self.xp_event_times.iter().filter(|t| **t >= cutoff).count(),
+            // Window exceeds OS uptime; all recorded events are within the window.
+            None => self.xp_event_times.len(),
+        } as f64;
         let window_hours = window.as_secs_f64() / 3600.0;
         if window_hours > 0.0 {
             count / window_hours
