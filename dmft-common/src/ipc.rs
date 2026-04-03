@@ -1,4 +1,109 @@
 use crate::types::ClientId;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Generates monotonically increasing correlation IDs for IPC request-response matching.
+///
+/// Each orchestrator instance should create one generator and use it for all
+/// outgoing commands. The DLL echoes back the correlation ID in its response,
+/// enabling deterministic matching even when multiple commands are in flight.
+pub struct CorrelationIdGenerator {
+    next: AtomicU64,
+}
+
+impl CorrelationIdGenerator {
+    /// Create a new generator starting at 1 (0 is reserved as "no correlation").
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            next: AtomicU64::new(1),
+        }
+    }
+
+    /// Generate the next unique correlation ID.
+    pub fn next_id(&self) -> u64 {
+        self.next.fetch_add(1, Ordering::Relaxed)
+    }
+}
+
+impl Default for CorrelationIdGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A command paired with an optional correlation ID for request-response matching.
+///
+/// When the orchestrator sends a command with a `correlation_id`, the DLL should
+/// echo that ID back in the corresponding `IpcResponse`. Commands without a
+/// correlation ID (`None`) are fire-and-forget or matched by convention.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct IpcCommand {
+    /// The command to execute.
+    pub command: Command,
+    /// Optional correlation ID for matching this command to its response.
+    pub correlation_id: Option<u64>,
+}
+
+impl IpcCommand {
+    /// Wrap a command without a correlation ID (backward-compatible default).
+    #[must_use]
+    pub fn new(command: Command) -> Self {
+        Self {
+            command,
+            correlation_id: None,
+        }
+    }
+
+    /// Wrap a command with a correlation ID for request-response tracking.
+    #[must_use]
+    pub fn with_correlation(command: Command, correlation_id: u64) -> Self {
+        Self {
+            command,
+            correlation_id: Some(correlation_id),
+        }
+    }
+}
+
+impl From<Command> for IpcCommand {
+    fn from(command: Command) -> Self {
+        Self::new(command)
+    }
+}
+
+/// A response paired with an optional correlation ID echoed from the originating command.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IpcResponse {
+    /// The response payload.
+    pub response: Response,
+    /// Correlation ID echoed from the originating `IpcCommand`, if present.
+    pub correlation_id: Option<u64>,
+}
+
+impl IpcResponse {
+    /// Wrap a response without a correlation ID.
+    #[must_use]
+    pub fn new(response: Response) -> Self {
+        Self {
+            response,
+            correlation_id: None,
+        }
+    }
+
+    /// Wrap a response echoing the correlation ID from the originating command.
+    #[must_use]
+    pub fn echo(response: Response, correlation_id: Option<u64>) -> Self {
+        Self {
+            response,
+            correlation_id,
+        }
+    }
+}
+
+impl From<Response> for IpcResponse {
+    fn from(response: Response) -> Self {
+        Self::new(response)
+    }
+}
 
 /// Commands sent from the manager to an injected DLL
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -876,6 +981,155 @@ mod tests {
             assert!((delta - (-5.0)).abs() < f32::EPSILON);
         } else {
             panic!("expected StickMod");
+        }
+    }
+
+    #[test]
+    fn correlation_id_generator_starts_at_one() {
+        let id_gen = CorrelationIdGenerator::new();
+        assert_eq!(id_gen.next_id(), 1);
+        assert_eq!(id_gen.next_id(), 2);
+        assert_eq!(id_gen.next_id(), 3);
+    }
+
+    #[test]
+    fn correlation_id_generator_default() {
+        let id_gen = CorrelationIdGenerator::default();
+        assert_eq!(id_gen.next_id(), 1);
+    }
+
+    #[test]
+    fn ipc_command_new_has_no_correlation() {
+        let ipc_cmd = IpcCommand::new(Command::Ping);
+        assert!(ipc_cmd.correlation_id.is_none());
+        assert_eq!(ipc_cmd.command, Command::Ping);
+    }
+
+    #[test]
+    fn ipc_command_with_correlation() {
+        let ipc_cmd = IpcCommand::with_correlation(Command::Ping, 42);
+        assert_eq!(ipc_cmd.correlation_id, Some(42));
+    }
+
+    #[test]
+    fn ipc_command_from_command() {
+        let ipc_cmd: IpcCommand = Command::Sit.into();
+        assert_eq!(ipc_cmd.command, Command::Sit);
+        assert!(ipc_cmd.correlation_id.is_none());
+    }
+
+    #[test]
+    fn ipc_response_new_has_no_correlation() {
+        let ipc_resp = IpcResponse::new(Response::Pong {
+            client_id: 1,
+            timestamp_ms: 100,
+        });
+        assert!(ipc_resp.correlation_id.is_none());
+    }
+
+    #[test]
+    fn ipc_response_echo_preserves_correlation() {
+        let ipc_resp = IpcResponse::echo(
+            Response::CommandResult {
+                success: true,
+                message: "ok".into(),
+            },
+            Some(99),
+        );
+        assert_eq!(ipc_resp.correlation_id, Some(99));
+    }
+
+    #[test]
+    fn ipc_response_echo_none_correlation() {
+        let ipc_resp = IpcResponse::echo(
+            Response::CommandResult {
+                success: true,
+                message: "ok".into(),
+            },
+            None,
+        );
+        assert!(ipc_resp.correlation_id.is_none());
+    }
+
+    #[test]
+    fn ipc_response_from_response() {
+        let ipc_resp: IpcResponse = Response::Pong {
+            client_id: 5,
+            timestamp_ms: 0,
+        }
+        .into();
+        assert!(ipc_resp.correlation_id.is_none());
+    }
+
+    #[test]
+    fn ipc_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let ipc_cmd = IpcCommand::with_correlation(Command::Ping, 12345);
+        let encoded = encode(&ipc_cmd).expect("encode IpcCommand");
+        let (decoded, _): (IpcCommand, _) = decode(&encoded).expect("decode IpcCommand");
+        assert_eq!(decoded.command, Command::Ping);
+        assert_eq!(decoded.correlation_id, Some(12345));
+    }
+
+    #[test]
+    fn ipc_command_roundtrip_no_correlation() {
+        use crate::protocol::{decode, encode};
+
+        let ipc_cmd = IpcCommand::new(Command::StopMovement);
+        let encoded = encode(&ipc_cmd).expect("encode");
+        let (decoded, _): (IpcCommand, _) = decode(&encoded).expect("decode");
+        assert_eq!(decoded.command, Command::StopMovement);
+        assert!(decoded.correlation_id.is_none());
+    }
+
+    #[test]
+    fn ipc_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let ipc_resp = IpcResponse::echo(
+            Response::CommandResult {
+                success: true,
+                message: "done".into(),
+            },
+            Some(777),
+        );
+        let encoded = encode(&ipc_resp).expect("encode IpcResponse");
+        let (decoded, _): (IpcResponse, _) = decode(&encoded).expect("decode IpcResponse");
+        assert_eq!(decoded.correlation_id, Some(777));
+        if let Response::CommandResult { success, message } = decoded.response {
+            assert!(success);
+            assert_eq!(message, "done");
+        } else {
+            panic!("expected CommandResult");
+        }
+    }
+
+    #[test]
+    fn ipc_command_complex_payload_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let id_gen = CorrelationIdGenerator::new();
+        let cid = id_gen.next_id();
+        let ipc_cmd = IpcCommand::with_correlation(
+            Command::CastSpell {
+                spell_slot: 3,
+                target_id: 9999,
+            },
+            cid,
+        );
+        let encoded = encode(&ipc_cmd).expect("encode");
+        let (decoded, _): (IpcCommand, _) = decode(&encoded).expect("decode");
+        assert_eq!(decoded.correlation_id, Some(1));
+        if let Command::CastSpell {
+            spell_slot,
+            target_id,
+        } = decoded.command
+        {
+            assert_eq!(spell_slot, 3);
+            assert_eq!(target_id, 9999);
+        } else {
+            panic!("expected CastSpell");
         }
     }
 
