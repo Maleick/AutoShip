@@ -61,7 +61,38 @@ jobs:
             exit /b 1
           )
 
-      - uses: lukka/get-cmake@v4.3.1
+      - name: Ensure cmake on PATH
+        shell: pwsh
+        run: |
+          if (Get-Command cmake -ErrorAction SilentlyContinue) {
+            Write-Host "[info] cmake already on PATH: $(cmake --version | Select-Object -First 1)"
+            exit 0
+          }
+          $candidates = @(
+            'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+            'C:\Program Files\CMake\bin'
+          )
+          foreach ($dir in $candidates) {
+            if (Test-Path (Join-Path $dir 'cmake.exe')) {
+              Write-Host "[info] Found cmake at $dir"
+              Add-Content $env:GITHUB_PATH $dir
+              $env:PATH = "${dir};${env:PATH}"
+              cmake --version
+              if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake sanity check failed at $dir"; exit 1 }
+              exit 0
+            }
+          }
+          Write-Host "[info] cmake not found in well-known paths; installing via winget..."
+          winget install --id Kitware.CMake -e --source winget --accept-package-agreements --accept-source-agreements --silent
+          if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] winget cmake install failed"; exit 1 }
+          $installPath = 'C:\Program Files\CMake\bin'
+          Add-Content $env:GITHUB_PATH $installPath
+          $env:PATH = "${installPath};${env:PATH}"
+          cmake --version
+          if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake not available after install"; exit 1 }
 
       - name: Nightly compiler sanity check
         run: |
@@ -96,7 +127,10 @@ jobs:
           if not exist release mkdir release
           copy /Y target\release\dmft.exe release\dmft.exe
           if exist target\release\dmft_dll.dll copy /Y target\release\dmft_dll.dll release\dmft_dll.dll
-          > release\VERSION.txt <nul set /p =DMFT ${{ github.ref_name }}
+
+      - name: Write release version file
+        shell: pwsh
+        run: Set-Content -Path release/VERSION.txt -NoNewline -Value ("DMFT " + $env:GITHUB_REF_NAME)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

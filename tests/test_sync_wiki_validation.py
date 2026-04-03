@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 import unittest
@@ -67,17 +65,23 @@ class WikiValidationTests(unittest.TestCase):
                 self.module.SOURCE_DIR = original_source_dir
 
     def test_run_includes_stdout_and_stderr_on_failure(self) -> None:
-        command = [
-            os.environ.get("PYTHON", sys.executable),
-            "-c",
-            "import sys; print('hello from stdout'); print('hello from stderr', file=sys.stderr); raise SystemExit(7)",
-        ]
+        # Mock subprocess.run so this test is not sensitive to whether the
+        # current Python interpreter can be launched as a child process (e.g.
+        # the Windows embedded distribution fails with FileNotFoundError when
+        # used as a subprocess target).  The test is verifying error-message
+        # formatting logic, not Python's subprocess module itself.
+        fake_result = subprocess.CompletedProcess(
+            args=["dummy"],
+            returncode=7,
+            stdout="hello from stdout\n",
+            stderr="hello from stderr\n",
+        )
+        with mock.patch.object(self.module.subprocess, "run", return_value=fake_result):
+            with self.assertRaisesRegex(self.module.WikiSyncError, "hello from stderr"):
+                self.module.run(["dummy"], cwd=REPO_ROOT)
 
-        with self.assertRaisesRegex(self.module.WikiSyncError, "hello from stderr"):
-            self.module.run(command, cwd=REPO_ROOT)
-
-        with self.assertRaisesRegex(self.module.WikiSyncError, "hello from stdout"):
-            self.module.run(command, cwd=REPO_ROOT)
+            with self.assertRaisesRegex(self.module.WikiSyncError, "hello from stdout"):
+                self.module.run(["dummy"], cwd=REPO_ROOT)
 
     def test_github_token_requires_gh_when_env_missing(self) -> None:
         with mock.patch.dict(self.module.os.environ, {}, clear=True):

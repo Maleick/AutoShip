@@ -138,6 +138,10 @@ pub struct DiscordConfig {
     pub alert_mass_failures: bool,
     /// Whether to send status updates (camp started, login complete).
     pub alert_status: bool,
+    /// Discord sender names allowed to execute bridge commands.
+    /// Empty list disables remote command execution.
+    #[serde(default)]
+    pub command_allowed_senders: Vec<String>,
 }
 
 impl Default for DiscordConfig {
@@ -148,6 +152,7 @@ impl Default for DiscordConfig {
             alert_crashes: true,
             alert_mass_failures: true,
             alert_status: false,
+            command_allowed_senders: Vec::new(),
         }
     }
 }
@@ -468,6 +473,7 @@ character = "Foo"
         assert!(cfg.alert_crashes);
         assert!(cfg.alert_mass_failures);
         assert!(!cfg.alert_status);
+        assert!(cfg.command_allowed_senders.is_empty());
     }
 
     #[test]
@@ -528,6 +534,7 @@ character = "Foo"
             alert_crashes = true
             alert_mass_failures = false
             alert_status = true
+            command_allowed_senders = ["RaidLead", "OfficerBot"]
         "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.process_name, "custom.exe");
@@ -544,6 +551,8 @@ character = "Foo"
         assert!(cfg.discord.alert_crashes);
         assert!(!cfg.discord.alert_mass_failures);
         assert!(cfg.discord.alert_status);
+        assert_eq!(cfg.discord.command_allowed_senders.len(), 2);
+        assert_eq!(cfg.discord.command_allowed_senders[0], "RaidLead");
     }
 
     #[test]
