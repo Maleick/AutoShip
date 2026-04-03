@@ -222,9 +222,14 @@ is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1
 
 CI and nightly automation:
 
+- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
+- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`
+- `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
+- self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using the workflow-provided `GH_TOKEN` (`secrets.GITHUB_TOKEN`) for `gh`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
-- `.github/workflows/ci.yml` runs the required `PR gate (fmt + clippy + test + python)` job for PRs and pushes to `master` without consuming GitHub-hosted minutes
+- `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
+- self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
 - `.github/workflows/copilot-ci-dispatch.yml` runs on GitHub-hosted Linux from `master`, dispatches `CI` on same-repo Copilot PR heads when GitHub leaves the PR-triggered run in `action_required`, and skips PRs that edit workflow files so approval-sensitive changes still require manual review
 
 If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
@@ -270,9 +275,13 @@ age-only pruning.
 
 DMFT-specific notes:
 
-- The required merge blocker is the self-hosted Windows `PR gate (fmt + clippy + test + python)` job on runner labels `self-hosted`, `Windows`, `X64`, and `dmft`.
+- The required merge blocker remains `PR gate (fmt + clippy + test + python)`.
+- Same-repo PRs, pushes to `master`, and manual `CI` dispatches run that gate on runner labels `self-hosted`, `Windows`, `X64`, and `dmft`.
+- Fork or otherwise untrusted PRs run the same visible gate name on GitHub-hosted `windows-latest` instead of the self-hosted runner.
+- The GitHub-hosted fork path uses `actions/setup-python@v6`; the self-hosted path stays cmd-safe and verifies any fallback Python ZIP before extraction.
 - That Windows gate currently boots the nightly MSVC Rust toolchain, because the Windows hook stack still depends on nightly-only `retour`.
-- No GitHub-hosted runners are used for the required PR flow.
+- The scheduled `DMFT PR manager` Codex cloud automation is expected to open missing PRs, address straightforward review feedback, and merge eligible branches into `master`.
+- Manual `CI` workflow dispatch is the place to get the heavier `Windows release build (manual)` validation on a topic branch before merge.
 - Trusted agent PRs should carry `merge:auto` by default unless the PR or linked issue is labeled `human:required`, `risk:high`, or `agent:blocked`.
 - The scheduled `DMFT issue executor` opens trusted agent PRs into `master`, adds automation labels, and should default `merge:auto` on those PRs when the linked issue is not explicitly blocked from unattended merge.
 - The scheduled `DMFT PR manager` Codex cloud automation is expected to address straightforward review feedback, resolve clearly addressed bot review threads, merge eligible agent-authored PRs into `master`, and close stale or superseded agent-authored PRs when the queue has moved on.
@@ -326,11 +335,12 @@ target\release\dmft.exe
 
 ## Testing
 
-Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate runs on the self-hosted Windows runner for every pull request into master and every push to master:
+Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                  | Jobs                                                                  |
 | ------------------------ | --------------------------------------------------------------------- |
-| Pull request into master | self-hosted `PR gate (fmt + clippy + test + python)`                  |
+| Same-repo pull request   | self-hosted `PR gate (fmt + clippy + test + python)`                  |
+| Fork pull request        | GitHub-hosted `PR gate (fmt + clippy + test + python)` on Windows     |
 | Push to master           | self-hosted `PR gate (fmt + clippy + test + python)`                  |
 | Manual `CI` dispatch     | required PR gate, with optional `Windows release build (manual)` input |
 
