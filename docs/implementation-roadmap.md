@@ -304,12 +304,17 @@ Expected outputs:
 
 The nightly external-research digest runs as a Codex automation after the GitHub workflows. It is intentionally separate from GitHub Actions because it needs evidence modeling, source weighting, and slice promotion rules that are easier to enforce in a Codex-guided research loop.
 
+Automation definition: `.codex/automations/dmft-night-research/automation.toml`
+
 Nightly project-sync rules:
 
-- repo docs remain the source of truth
+- repo docs remain the source of truth; project sync only begins after the roadmap verifier and wiki guard both pass
 - the active checkpoint batch may update GitHub Project fields after the docs pass guard and verifier checks
-- mature, cited, evidence-scored items may be promoted into GitHub issues
-- provisional or low-confidence findings should remain draft items until they are strong enough to promote
+- mature, cited, evidence-scored items (Research-backed or higher) may be promoted into GitHub issues using `python scripts/sync_project.py --promote`
+- provisional or low-confidence findings must remain draft project items until they are strengthened by additional research or live validation
+- after promoting a draft item to an issue, remove the overlapping draft from the project board so the active board has exactly one execution item per slice
+- every project-sync run records its results (items promoted, skipped, errored) in `autoresearch-project-sync.json` before the loop exits
+- `autoresearch-project-sync.json` and all other transient loop state files are excluded from git via `.gitignore` and must never be committed
 
 ## Near-Term Backlog
 
