@@ -89,7 +89,7 @@ def main() -> int:
         (
             f"Current workspace totals: {loc:,} Rust lines and {tests:,} exact tests. "
             "This line and the badges above are auto-refreshed by "
-            "`scripts/update_readme_metrics.py`. The required PR gate runs on the self-hosted Windows runner for every pull request into master and every push to master:"
+            "`scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:"
         ),
     )
 
