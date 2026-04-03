@@ -678,6 +678,28 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         }
     }
 
+    // ─── Target line overlay ─────────────────────────────────────────────────
+    if app.map_state.show_nav_paths
+        && let (Some(player), Some(target)) = (&app.local_player, &app.target)
+    {
+        let (pc, pr) = to_grid(-player.y, -player.x);
+        let (tc, tr) = to_grid(-target.y, -target.x);
+        bresenham_line(
+            pc,
+            pr,
+            tc,
+            tr,
+            w,
+            h,
+            &mut grid,
+            t.text_highlight,
+            LinePaintMode::OverwriteLinework,
+        );
+        if tc >= 0 && tc < w as i32 && tr >= 0 && tr < h as i32 {
+            grid[tr as usize][tc as usize] = ('✚', t.text_highlight);
+        }
+    }
+
     // ─── Player marker + FOV cone ────────────────────────────────────────
     if let Some(player) = &app.local_player {
         let (col, row) = to_grid(-player.y, -player.x);
@@ -785,6 +807,14 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                         Span::raw(" │ "),
                         Span::styled("★ ", Style::default().fg(t.text_accent)),
                         Span::styled("Path", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
+                if app.target.is_some() && app.map_state.show_nav_paths {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("✚ ", Style::default().fg(t.text_highlight)),
+                        Span::styled("Target", Style::default().fg(t.text_muted)),
                     ]);
                 }
 
@@ -1179,12 +1209,54 @@ fn draw_minimap_widget(
         mini_grid[row][col] = ('◎', t.text_highlight);
     }
 
+    if app.map_state.show_nav_paths
+        && let (Some(player), Some(target)) = (&app.local_player, &app.target)
+        && let (Some((pc, pr)), Some((tc, tr))) =
+            (to_mini(-player.y, -player.x), to_mini(-target.y, -target.x))
+    {
+        bresenham_line(
+            pc as i32,
+            pr as i32,
+            tc as i32,
+            tr as i32,
+            mini_width,
+            mini_height,
+            &mut mini_grid,
+            t.text_highlight,
+            LinePaintMode::OverwriteLinework,
+        );
+        mini_grid[tr][tc] = ('✚', t.text_highlight);
+    }
+
     if let Some(client) = app.active_client()
         && let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
-        && let Some(dest) = nav.waypoints.last()
-        && let Some((col, row)) = to_mini(-dest.y, -dest.x)
     {
-        mini_grid[row][col] = ('★', t.text_accent);
+        if app.map_state.show_nav_paths && nav.waypoints.len() >= 2 {
+            for pair in nav.waypoints.windows(2) {
+                if let (Some((c1, r1)), Some((c2, r2))) = (
+                    to_mini(-pair[0].y, -pair[0].x),
+                    to_mini(-pair[1].y, -pair[1].x),
+                ) {
+                    bresenham_line(
+                        c1 as i32,
+                        r1 as i32,
+                        c2 as i32,
+                        r2 as i32,
+                        mini_width,
+                        mini_height,
+                        &mut mini_grid,
+                        t.text_accent,
+                        LinePaintMode::OverwriteLinework,
+                    );
+                }
+            }
+        }
+
+        if let Some(dest) = nav.waypoints.last()
+            && let Some((col, row)) = to_mini(-dest.y, -dest.x)
+        {
+            mini_grid[row][col] = ('★', t.text_accent);
+        }
     }
 
     let header = format!(
