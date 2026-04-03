@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
       issues: write
     steps:
@@ -39,8 +39,6 @@ jobs:
           allowed_tools: |
             Bash(cargo fmt --all --check)
             Bash(cargo clippy --all-targets --all-features -- -D warnings)
-            Bash(cargo test)
-            Bash(cargo build)
             Bash(git diff *)
             Bash(git log *)
             Bash(git status)
