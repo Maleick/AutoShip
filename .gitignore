@@ -44,6 +44,7 @@ autoresearch-launch.json
 autoresearch-state.json
 autoresearch-state.prev.json
 research-results.tsv
+autoresearch-project-sync.json
 __pycache__/
 *.pyc
 
