@@ -258,6 +258,60 @@ pub const PIPE_NAME_PREFIX: &str = r"\\.\pipe\dmft_";
 /// Legacy shared memory name prefix — prefer `shared_memory_name()` with a session ID.
 pub const SHARED_MEMORY_NAME_PREFIX: &str = "dmft_state_";
 
+const SESSION_TOKEN_DIR: &str = "dmft";
+
+fn token_dir() -> std::io::Result<std::path::PathBuf> {
+    let dir = std::env::temp_dir().join(SESSION_TOKEN_DIR);
+    if let Ok(meta) = std::fs::symlink_metadata(&dir) {
+        if meta.file_type().is_symlink() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Token directory is a symlink",
+            ));
+        }
+        if !meta.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Token path is not a directory",
+            ));
+        }
+    }
+    Ok(dir)
+}
+
+fn verify_not_symlink_path(path: &std::path::Path) -> std::io::Result<()> {
+    if let Ok(meta) = std::fs::symlink_metadata(path)
+        && meta.file_type().is_symlink()
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Refusing to read/write symlink token path",
+        ));
+    }
+    Ok(())
+}
+
+fn write_session_token_path(path: &std::path::Path, token: SessionToken) -> std::io::Result<()> {
+    verify_not_symlink_path(path)?;
+    std::fs::write(path, token)?;
+    Ok(())
+}
+
+fn read_session_token_path(path: &std::path::Path) -> Option<SessionToken> {
+    if verify_not_symlink_path(path).is_err() {
+        return None;
+    }
+
+    if let Ok(data) = std::fs::read(path)
+        && data.len() == 32
+    {
+        let mut token = [0u8; 32];
+        token.copy_from_slice(&data);
+        return Some(token);
+    }
+    None
+}
+
 /// Derive a deterministic `u64` session ID from a 32-byte session token.
 /// Uses the first 8 bytes interpreted as little-endian. Both the DLL and
 /// orchestrator call this on the same token to produce matching IPC names.
@@ -282,16 +336,16 @@ pub fn generate_random_token() -> SessionToken {
 ///
 /// Returns an error if the operation fails.
 pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
-    let token_dir = std::env::temp_dir().join("dmft");
+    let token_dir = token_dir()?;
     std::fs::create_dir_all(&token_dir)?;
     let token_path = token_dir.join(format!("token_{pid}.bin"));
 
     let token = generate_random_token();
 
-    std::fs::write(&token_path, token)?;
+    write_session_token_path(&token_path, token)?;
     // Also persist a copy for later CLI commands that reconnect to the injected client.
     let login_token_path = token_dir.join(format!("login_token_{pid}.bin"));
-    std::fs::write(&login_token_path, token)?;
+    write_session_token_path(&login_token_path, token)?;
 
     Ok(())
 }
@@ -299,18 +353,46 @@ pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
 /// Read the session token for authenticating with an already-injected DLL.
 #[must_use]
 pub fn load_session_token(pid: u32) -> Option<SessionToken> {
-    let token_path = std::env::temp_dir()
-        .join("dmft")
-        .join(format!("login_token_{pid}.bin"));
+    let token_path = token_dir().ok()?.join(format!("login_token_{pid}.bin"));
+    read_session_token_path(&token_path)
+}
 
-    if let Ok(data) = std::fs::read(&token_path)
-        && data.len() == 32
-    {
-        let mut token = [0u8; 32];
-        token.copy_from_slice(&data);
-        return Some(token);
+#[cfg(test)]
+mod token_tests {
+    use super::*;
+
+    #[test]
+    fn write_session_token_rejects_symlink_directory_target() {
+        let token_path = std::env::temp_dir()
+            .join(SESSION_TOKEN_DIR)
+            .join("write_token_rejects_symlink");
+        let meta = std::fs::symlink_metadata(&token_path).ok();
+        if meta.is_some() {
+            let _ = std::fs::remove_file(&token_path);
+        }
+
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::symlink;
+            let target = std::env::temp_dir().join("dmft-symlink-target");
+            let _ = std::fs::remove_file(&target);
+            std::fs::write(&target, b"z").expect("write target");
+            // creating symlink may fail on platforms not supporting std::os::unix::fs::symlink in this config
+            if symlink(&target, &token_path).is_ok() {
+                let token_path = token_path.clone();
+                assert!(
+                    write_session_token_path(&token_path, [0x42; 32]).is_err(),
+                    "symlink token write should fail"
+                );
+                let _ = std::fs::remove_file(&token_path);
+                let _ = std::fs::remove_file(&target);
+            }
+        }
+        #[cfg(windows)]
+        {
+            // Not executed on windows-only test config.
+        }
     }
-    None
 }
 
 /// Build a per-client pipe name incorporating a random session ID.

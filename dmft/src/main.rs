@@ -122,13 +122,13 @@ fn main() -> Result<()> {
             character,
             pid,
         }) => {
-            let password =
-                rpassword::prompt_password("Password: ").context("Failed to read password")?;
+            let password = dmft::credentials::prompt::prompt_password("Password: ")
+                .context("Failed to read password")?;
             let character = character.unwrap_or_default();
             if let Some(pid) = pid {
-                cli::run_login_pid_mode(pid, &account, &password, &server, &character)
+                cli::run_login_pid_mode(pid, &account, password, &server, &character)
             } else {
-                cli::run_login_mode(&account, &password, &server, &character)
+                cli::run_login_mode(&account, password, &server, &character)
             }
         }
         Some(Commands::Cmd { pid, command }) => cli::run_cmd_mode(pid, &command),
