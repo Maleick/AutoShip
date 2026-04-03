@@ -242,6 +242,38 @@ pub fn click_yesno_yes(dialog_wnd: usize) -> bool {
     }
 }
 
+/// Click the No button in a `YesNo` dialog by finding the `YESNO_NoButton` child.
+pub fn click_yesno_no(dialog_wnd: usize) -> bool {
+    #[cfg(windows)]
+    {
+        if dialog_wnd == 0 {
+            return false;
+        }
+        if let Some(no_btn) = find_visible_child_by_sidl(dialog_wnd, SIDL_YESNO_NO_BUTTON) {
+            unsafe {
+                crate::eq::widgets::click_button_via_vtable(no_btn);
+            }
+            true
+        } else {
+            // Fallback: try finding by WindowText
+            unsafe {
+                if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "No")
+                {
+                    crate::eq::widgets::click_button_via_vtable(btn);
+                    return true;
+                }
+            }
+            false
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = dialog_wnd;
+        false
+    }
+}
+
 /// Click the OK button in an OK dialog.
 pub fn click_ok_dialog(dialog_wnd: usize) -> bool {
     #[cfg(windows)]
@@ -1297,6 +1329,11 @@ mod tests {
     #[test]
     fn click_yesno_yes_returns_false_on_macos() {
         assert!(!click_yesno_yes(0));
+    }
+
+    #[test]
+    fn click_yesno_no_returns_false_on_macos() {
+        assert!(!click_yesno_no(0));
     }
 
     #[test]
