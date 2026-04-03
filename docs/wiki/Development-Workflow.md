@@ -57,6 +57,10 @@ Supporting research surfaces live in:
 - `docs/external-research/`
 - `docs/research-imports/`
 
+Current packet/zoning intake rule:
+
+- curate send-path, state, and validation conclusions into `docs/external-research/packet-zoning-send-path-and-state-ledger.md` before treating raw imports as roadmap-ready
+
 Rules:
 
 - external research may add milestone slices, validation tasks, and evidence updates
@@ -85,10 +89,14 @@ When behavior or roadmap guidance changes:
 
 ## Nightly Automation
 
-Nightly automation now runs on the self-hosted Windows runner:
+Nightly automation now runs across the self-hosted Windows runner and GitHub-hosted Linux jobs:
 
 - `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
+- `.github/workflows/copilot-ci-dispatch.yml` sweeps open same-repo Copilot PRs from `master`, dispatches `CI` when the PR-triggered run is stuck in approval, and skips PRs that edit workflow files so those still require manual review
+- `.github/workflows/agent-ready.yml` keeps `agent:ready` vs `agent:skip-ready` aligned on issue events plus an hourly sweep, suppresses `agent:ready` when an issue already has an open linked PR or active `agent:working` / `agent:blocked` state, bootstraps those labels when missing, and treats roadmap-container titles that start with `M<number>` or `Mx` as skip-ready
+- `scripts/reconcile-agent-queue.sh` plus the scheduled DMFT issue-queue reconciler automation add missing open issues to the roadmap project, set `Agent Status`, clean stale `agent:ready` / `agent:working` labels off non-ready items, and promote every other open non-epic issue to `Ready for Agent`
+- `.github/workflows/agent-close-pr.yml` closes only agent-authored PRs when they carry the `agent:close` label and the PR is agent-owned via a `codex/*` or `claude/*` head branch or the literal `codex-automation` label
 - the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
 - the issue executor opens trusted agent PRs with `merge:auto` by default unless the PR or linked issue is marked `human:required`, `risk:high`, or `agent:blocked`
 - the PR manager may resolve clearly addressed bot review threads, merge clean trusted PRs once the required gate is green, and close stale or superseded trusted agent PRs automatically
