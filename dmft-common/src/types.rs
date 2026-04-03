@@ -125,6 +125,11 @@ pub struct SpawnData {
     /// Unsigned in the EQ struct (`PlayerZoneClient`). Do not compare directly
     /// with `endurance_current` without casting — signedness differs intentionally.
     pub endurance_max: u32,
+    /// Current movement speed (`SpeedRun`). Non-zero means the character is in motion.
+    pub speed_run: f32,
+    /// Stand state: 0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking,
+    /// 110=feigned, 111=dead. Only 0 (standing) allows spell casting.
+    pub stand_state: u8,
 }
 
 impl SpawnData {
@@ -146,6 +151,24 @@ impl SpawnData {
         } else {
             100.0
         }
+    }
+
+    /// Returns `true` when the character is in motion (speed is non-negligible).
+    ///
+    /// EQ sets `SpeedRun` to a non-zero value while the character is moving.
+    /// A small epsilon avoids false positives from floating-point noise.
+    #[must_use]
+    pub fn is_moving(&self) -> bool {
+        self.speed_run.abs() > 0.01
+    }
+
+    /// Returns `true` when the character is standing and eligible to cast spells.
+    ///
+    /// Stand state 0 is the only state from which a spell cast can be initiated.
+    /// Sitting (3), ducking (4), feigning death (110), and dead (111) all prevent casting.
+    #[must_use]
+    pub fn is_standing(&self) -> bool {
+        self.stand_state == 0
     }
 }
 
@@ -188,6 +211,8 @@ mod tests {
             mana_max,
             endurance_current: 100,
             endurance_max: 100,
+            speed_run: 0.0,
+            stand_state: 0,
         }
     }
 
@@ -470,5 +495,84 @@ mod tests {
             ..SpawnData::default()
         };
         assert_ne!(spawn.name, spawn.displayed_name);
+    }
+
+    #[test]
+    fn is_moving_false_when_stationary() {
+        let spawn = SpawnData {
+            speed_run: 0.0,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_moving());
+    }
+
+    #[test]
+    fn is_moving_false_below_epsilon() {
+        let spawn = SpawnData {
+            speed_run: 0.005,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_moving(), "tiny speed below epsilon should not count as moving");
+    }
+
+    #[test]
+    fn is_moving_true_when_running() {
+        let spawn = SpawnData {
+            speed_run: 1.4,
+            ..SpawnData::default()
+        };
+        assert!(spawn.is_moving());
+    }
+
+    #[test]
+    fn is_moving_true_for_negative_speed() {
+        let spawn = SpawnData {
+            speed_run: -0.5,
+            ..SpawnData::default()
+        };
+        assert!(spawn.is_moving(), "negative speed (backing up) counts as moving");
+    }
+
+    #[test]
+    fn is_standing_true_for_state_zero() {
+        let spawn = SpawnData {
+            stand_state: 0,
+            ..SpawnData::default()
+        };
+        assert!(spawn.is_standing());
+    }
+
+    #[test]
+    fn is_standing_false_for_sitting() {
+        let spawn = SpawnData {
+            stand_state: 3,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_standing());
+    }
+
+    #[test]
+    fn is_standing_false_for_ducking() {
+        let spawn = SpawnData {
+            stand_state: 4,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_standing());
+    }
+
+    #[test]
+    fn is_standing_false_for_feigning_death() {
+        let spawn = SpawnData {
+            stand_state: 110,
+            ..SpawnData::default()
+        };
+        assert!(!spawn.is_standing());
+    }
+
+    #[test]
+    fn spawn_data_default_is_stationary_and_standing() {
+        let spawn = SpawnData::default();
+        assert!(!spawn.is_moving(), "default spawn should be stationary");
+        assert!(spawn.is_standing(), "default spawn should be standing");
     }
 }

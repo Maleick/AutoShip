@@ -903,6 +903,8 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     let endurance_current =
         unsafe { *((spawn_ptr + player_zone::ENDURANCE_CURRENT) as *const i32) };
     let endurance_max = unsafe { *((spawn_ptr + player_zone::ENDURANCE_MAX) as *const u32) };
+    let speed_run = unsafe { *((spawn_ptr + player_base::SPEED_RUN) as *const f32) };
+    let stand_state = unsafe { *((spawn_ptr + player_zone::STANDSTATE) as *const u8) };
 
     dmft_common::types::SpawnData {
         spawn_id,
@@ -921,6 +923,8 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
         mana_max,
         endurance_current,
         endurance_max,
+        speed_run,
+        stand_state,
     }
 }
 
