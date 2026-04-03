@@ -196,6 +196,94 @@ impl Default for CombatConfig {
     }
 }
 
+/// Whether a character is ready to cast a spell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CastReadiness {
+    /// Ready to cast — no cooldowns or active casts.
+    Ready,
+    /// Currently casting a spell.
+    Casting,
+    /// Waiting for the global cooldown to expire.
+    GlobalCooldown,
+    /// Post-cast recovery window.
+    Recovering,
+    /// Spell is not memorized in any gem slot.
+    NotMemorized,
+}
+
+impl std::fmt::Display for CastReadiness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ready => write!(f, "Ready"),
+            Self::Casting => write!(f, "Casting"),
+            Self::GlobalCooldown => write!(f, "GCD"),
+            Self::Recovering => write!(f, "Recovering"),
+            Self::NotMemorized => write!(f, "Not Memorized"),
+        }
+    }
+}
+
+/// Outcome of a cast attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CastResult {
+    /// Spell landed successfully.
+    Success,
+    /// Cast was interrupted (took damage, moved, etc.).
+    Interrupted,
+    /// Spell fizzled (failed skill check).
+    Fizzled,
+    /// Target was out of range.
+    OutOfRange,
+    /// Not enough mana to cast.
+    OutOfMana,
+    /// Target is immune to this spell.
+    Immune,
+    /// Target resisted the spell.
+    Resisted,
+    /// Caster was not ready (GCD, already casting, etc.).
+    NotReady,
+}
+
+impl std::fmt::Display for CastResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Success => write!(f, "Success"),
+            Self::Interrupted => write!(f, "Interrupted"),
+            Self::Fizzled => write!(f, "Fizzled"),
+            Self::OutOfRange => write!(f, "Out of Range"),
+            Self::OutOfMana => write!(f, "Out of Mana"),
+            Self::Immune => write!(f, "Immune"),
+            Self::Resisted => write!(f, "Resisted"),
+            Self::NotReady => write!(f, "Not Ready"),
+        }
+    }
+}
+
+/// Telemetry snapshot for a single cast attempt.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CastTelemetry {
+    /// Outcome of the cast.
+    pub result: CastResult,
+    /// Wall-clock duration of the cast in milliseconds.
+    pub cast_duration_ms: u64,
+    /// EQ spell ID that was cast.
+    pub spell_id: i32,
+    /// Spawn ID of the cast target (0 = self/none).
+    pub target_id: u32,
+    /// Unix timestamp (milliseconds) when the cast completed.
+    pub timestamp_ms: u64,
+}
+
+impl std::fmt::Display for CastTelemetry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "spell={} target={} result={} duration={}ms",
+            self.spell_id, self.target_id, self.result, self.cast_duration_ms
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,5 +506,142 @@ mod tests {
             let restored: CombatStatus = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(*status, restored);
         }
+    }
+
+    #[test]
+    fn cast_readiness_all_variants_constructible() {
+        let variants = [
+            CastReadiness::Ready,
+            CastReadiness::Casting,
+            CastReadiness::GlobalCooldown,
+            CastReadiness::Recovering,
+            CastReadiness::NotMemorized,
+        ];
+        assert_eq!(variants.len(), 5);
+    }
+
+    #[test]
+    fn cast_readiness_display() {
+        assert_eq!(CastReadiness::Ready.to_string(), "Ready");
+        assert_eq!(CastReadiness::Casting.to_string(), "Casting");
+        assert_eq!(CastReadiness::GlobalCooldown.to_string(), "GCD");
+        assert_eq!(CastReadiness::Recovering.to_string(), "Recovering");
+        assert_eq!(CastReadiness::NotMemorized.to_string(), "Not Memorized");
+    }
+
+    #[test]
+    fn cast_readiness_serialization_roundtrip() {
+        let variants = [
+            CastReadiness::Ready,
+            CastReadiness::Casting,
+            CastReadiness::GlobalCooldown,
+            CastReadiness::Recovering,
+            CastReadiness::NotMemorized,
+        ];
+        for variant in &variants {
+            let json = serde_json::to_string(variant).expect("serialize");
+            let restored: CastReadiness = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(*variant, restored);
+        }
+    }
+
+    #[test]
+    fn cast_result_all_variants_constructible() {
+        let variants = [
+            CastResult::Success,
+            CastResult::Interrupted,
+            CastResult::Fizzled,
+            CastResult::OutOfRange,
+            CastResult::OutOfMana,
+            CastResult::Immune,
+            CastResult::Resisted,
+            CastResult::NotReady,
+        ];
+        assert_eq!(variants.len(), 8);
+    }
+
+    #[test]
+    fn cast_result_display() {
+        assert_eq!(CastResult::Success.to_string(), "Success");
+        assert_eq!(CastResult::Interrupted.to_string(), "Interrupted");
+        assert_eq!(CastResult::Fizzled.to_string(), "Fizzled");
+        assert_eq!(CastResult::OutOfRange.to_string(), "Out of Range");
+        assert_eq!(CastResult::OutOfMana.to_string(), "Out of Mana");
+        assert_eq!(CastResult::Immune.to_string(), "Immune");
+        assert_eq!(CastResult::Resisted.to_string(), "Resisted");
+        assert_eq!(CastResult::NotReady.to_string(), "Not Ready");
+    }
+
+    #[test]
+    fn cast_result_serialization_roundtrip() {
+        let variants = [
+            CastResult::Success,
+            CastResult::Interrupted,
+            CastResult::Fizzled,
+            CastResult::OutOfRange,
+            CastResult::OutOfMana,
+            CastResult::Immune,
+            CastResult::Resisted,
+            CastResult::NotReady,
+        ];
+        for variant in &variants {
+            let json = serde_json::to_string(variant).expect("serialize");
+            let restored: CastResult = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(*variant, restored);
+        }
+    }
+
+    #[test]
+    fn cast_telemetry_construction_and_display() {
+        let telemetry = CastTelemetry {
+            result: CastResult::Success,
+            cast_duration_ms: 2500,
+            spell_id: 12345,
+            target_id: 42,
+            timestamp_ms: 1700000000000,
+        };
+        assert_eq!(telemetry.result, CastResult::Success);
+        assert_eq!(telemetry.cast_duration_ms, 2500);
+        assert_eq!(telemetry.spell_id, 12345);
+        assert_eq!(telemetry.target_id, 42);
+        let display = telemetry.to_string();
+        assert!(display.contains("spell=12345"));
+        assert!(display.contains("target=42"));
+        assert!(display.contains("result=Success"));
+        assert!(display.contains("duration=2500ms"));
+    }
+
+    #[test]
+    fn cast_telemetry_serialization_roundtrip() {
+        let telemetry = CastTelemetry {
+            result: CastResult::Interrupted,
+            cast_duration_ms: 1200,
+            spell_id: 9999,
+            target_id: 100,
+            timestamp_ms: 1700000001000,
+        };
+        let json = serde_json::to_string(&telemetry).expect("serialize");
+        let restored: CastTelemetry = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(telemetry, restored);
+    }
+
+    #[test]
+    fn cast_readiness_equality_and_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CastReadiness::Ready);
+        set.insert(CastReadiness::Ready);
+        set.insert(CastReadiness::Casting);
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn cast_result_equality_and_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CastResult::Success);
+        set.insert(CastResult::Success);
+        set.insert(CastResult::Fizzled);
+        assert_eq!(set.len(), 2);
     }
 }
