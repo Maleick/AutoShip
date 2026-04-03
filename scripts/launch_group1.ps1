@@ -9,12 +9,12 @@ $HookWait = 2
 $Stagger = 15
 
 $Accounts = @(
-    @{ Name = "frostreaver01"; Pass = "dr698iDBBa1IpTS" },
-    @{ Name = "frostreaver02"; Pass = "rLlkT9TEzVzbtAJ" },
-    @{ Name = "frostreaver03"; Pass = "2U2dDrgMuI6sDTi" },
-    @{ Name = "frostreaver04"; Pass = "67FbF2LmZMEFIR7" },
-    @{ Name = "frostreaver06"; Pass = "DXOXKC1dIvSFXDB" },
-    @{ Name = "frostreaver07"; Pass = "aTWmNmNn4jYAXYf" }
+    @{ Name = "frostreaver01" },
+    @{ Name = "frostreaver02" },
+    @{ Name = "frostreaver03" },
+    @{ Name = "frostreaver04" },
+    @{ Name = "frostreaver06" },
+    @{ Name = "frostreaver07" }
 )
 
 Write-Host "============================================"
@@ -57,8 +57,8 @@ for ($i = 0; $i -lt $Accounts.Count; $i++) {
     Start-Sleep -Seconds $HookWait
 
     # Login
-    Write-Host "  Sending login..."
-    & $DmftExe --login-pid $procId $acct.Name $acct.Pass $Server
+    Write-Host "  Sending login (you will be prompted for password)..."
+    & $DmftExe login $acct.Name --pid $procId --server $Server
     Write-Host "  $($acct.Name) login sent to PID $procId"
 
     $Results += [PSCustomObject]@{
