@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -131,15 +132,24 @@ def github_token() -> str:
     token = os.environ.get("GH_TOKEN")
     if token:
         return token
+    if shutil.which("gh") is None:
+        fail(
+            "GitHub CLI (`gh`) is not installed or not on PATH, and GH_TOKEN is unset.\n"
+            "Install `gh` and run `gh auth login`, or provide GH_TOKEN."
+        )
     try:
         token = run(["gh", "auth", "token"], cwd=REPO_ROOT).stdout.strip()
     except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
         fail(
-            "Unable to obtain GitHub token. Set GH_TOKEN or run `gh auth login`.\n"
-            + exc.stderr.strip()
+            "Unable to obtain GitHub auth from the local GitHub CLI session.\n"
+            "Run `gh auth status` to verify the runner login, then `gh auth login` if needed.\n"
+            + (f"\nGitHub CLI output:\n{stderr}" if stderr else "")
         )
     if not token:
-        fail("GitHub token lookup returned an empty value.")
+        fail(
+            "GitHub CLI auth did not return a token. Run `gh auth status` and refresh the local login."
+        )
     return token
 
 
@@ -297,9 +307,10 @@ def push_changes(wiki_dir: Path, display_url: str, token: str) -> None:
     if result.returncode == 0:
         return
     stderr = result.stderr.strip()
-    if "Repository not found" in stderr:
+    normalized_stderr = stderr.lower()
+    if "repository not found" in normalized_stderr:
         fail(
-            "GitHub has wiki support enabled for the repository, but the wiki git remote still does not exist: "
+            "GitHub wiki remote is not initialized yet: "
             f"{display_url}\n\n"
             "One-time bootstrap required:\n"
             "1. Open the repository's Wiki tab in the GitHub UI.\n"

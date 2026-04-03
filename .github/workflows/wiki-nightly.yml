@@ -25,25 +25,21 @@ jobs:
     defaults:
       run:
         shell: cmd
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
-      - name: Locate Python
-        run: |
-          where python >nul 2>nul && (echo PYTHON_CMD=python>>"%GITHUB_ENV%" & exit /b 0)
-          where py >nul 2>nul && (echo PYTHON_CMD=py -3>>"%GITHUB_ENV%" & exit /b 0)
-          if not exist .ci-python mkdir .ci-python
-          curl.exe -fsSL -o .ci-python\python-embed.zip https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
-          tar -xf .ci-python\python-embed.zip -C .ci-python
-          echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.10"
+
+      - name: Validate runner-local gh auth
+        run: gh auth status
 
       - name: Validate wiki sources
-        run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
+        run: python scripts/sync_wiki.py --check
 
       - name: Publish wiki
-        run: '%PYTHON_CMD% scripts/sync_wiki.py --push'
+        run: python scripts/sync_wiki.py --push

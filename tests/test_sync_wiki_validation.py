@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +63,37 @@ class WikiValidationTests(unittest.TestCase):
                     self.module.validate_sources()
             finally:
                 self.module.SOURCE_DIR = original_source_dir
+
+    def test_github_token_requires_gh_when_env_missing(self) -> None:
+        with mock.patch.dict(self.module.os.environ, {}, clear=True):
+            with mock.patch.object(self.module.shutil, "which", return_value=None):
+                with self.assertRaisesRegex(self.module.WikiSyncError, "GitHub CLI \\(`gh`\\) is not installed"):
+                    self.module.github_token()
+
+    def test_github_token_reports_missing_local_auth_clearly(self) -> None:
+        error = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["gh", "auth", "token"],
+            stderr="You are not logged into any GitHub hosts.",
+        )
+        with mock.patch.dict(self.module.os.environ, {}, clear=True):
+            with mock.patch.object(self.module.shutil, "which", return_value="/usr/bin/gh"):
+                with mock.patch.object(self.module, "run", side_effect=error):
+                    with self.assertRaisesRegex(self.module.WikiSyncError, "Unable to obtain GitHub auth from the local GitHub CLI session"):
+                        self.module.github_token()
+
+    def test_github_token_reports_empty_cli_token_clearly(self) -> None:
+        result = subprocess.CompletedProcess(
+            args=["gh", "auth", "token"],
+            returncode=0,
+            stdout="   \n",
+            stderr="",
+        )
+        with mock.patch.dict(self.module.os.environ, {}, clear=True):
+            with mock.patch.object(self.module.shutil, "which", return_value="/usr/bin/gh"):
+                with mock.patch.object(self.module, "run", return_value=result):
+                    with self.assertRaisesRegex(self.module.WikiSyncError, "did not return a token"):
+                        self.module.github_token()
 
 
 if __name__ == "__main__":
