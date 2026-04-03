@@ -286,8 +286,7 @@ impl LoginFsm {
         // before the FSM rewrite. It scans for USERNAME/PASSWORD labels and
         // writes credentials + clicks Login. If it succeeds, skip to server select.
         if !self.action_taken {
-            let creds = self.credentials.as_ref();
-            if let Some(creds) = creds {
+            if let Some(creds) = self.credentials.take() {
                 // Try writing credentials (proven working approach)
                 let wrote = widgets::type_credentials_to_window(
                     self.eqmain_base,
@@ -298,6 +297,9 @@ impl LoginFsm {
                     tracing::info!("Credentials written + Login clicked");
                     self.action_taken = true;
                     self.transition(State::WaitForServerSelect);
+                } else {
+                    // Keep credentials for retry if credential entry failed.
+                    self.credentials = Some(creds);
                 }
             }
         }
