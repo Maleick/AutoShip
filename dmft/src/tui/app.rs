@@ -417,6 +417,12 @@ pub struct NavClientStatus {
     pub eta_secs: Option<u32>,
     /// Active navigation waypoints for map overlay rendering.
     pub waypoints: Vec<dmft_common::nav::Waypoint>,
+    /// Whether a navmesh-backed path exists.
+    pub path_exists: bool,
+    /// Total planned path length (world units), if known.
+    pub path_length: Option<f32>,
+    /// Human-readable reason when pathfinding failed.
+    pub failure_reason: Option<String>,
     /// Human-readable route selection or wait state.
     pub route_state: String,
     /// Human-readable recovery state when navigation is blocked or stuck.
@@ -476,10 +482,16 @@ impl NavClientStatus {
     /// Single-line blocker summary suitable for narrow cards and tables.
     #[must_use]
     pub fn blocker_summary(&self) -> Option<String> {
-        if self.blockers.is_empty() {
+        let mut reasons = Vec::new();
+        if let Some(reason) = &self.failure_reason {
+            reasons.push(reason.clone());
+        }
+        reasons.extend(self.blockers.clone());
+
+        if reasons.is_empty() {
             None
         } else {
-            Some(self.blockers.join(" | "))
+            Some(reasons.join(" | "))
         }
     }
 }
@@ -2587,6 +2599,12 @@ impl App {
                         status: dmft_common::nav::NavStatus::Idle,
                         eta_secs: None,
                         waypoints: Vec::new(),
+                        path_exists: false,
+                        path_length: None,
+                        failure_reason: Some(format!(
+                            "Zone mismatch: {} vs expected {}",
+                            focused_client.zone_short, expected_zone
+                        )),
                         route_state: String::from("Awaiting zone match"),
                         recovery_state: Some(String::from("Zone transition pending")),
                         blockers: vec![format!(
@@ -2661,6 +2679,9 @@ impl App {
                         status,
                         eta_secs: None,
                         waypoints: route.waypoints,
+                        path_exists: route.metrics.path_exists,
+                        path_length: route.metrics.path_length,
+                        failure_reason: route.metrics.failure_reason.clone(),
                         route_state: match route.source {
                             crate::nav::mesh::RouteSource::NavMesh => String::from("Navmesh route"),
                             crate::nav::mesh::RouteSource::StraightLineFallback => {

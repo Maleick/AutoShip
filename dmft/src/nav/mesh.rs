@@ -2,7 +2,7 @@
 //! load into Detour for pathfinding.
 
 use anyhow::{Context, Result, bail};
-use dmft_common::nav::Waypoint;
+use dmft_common::nav::{NavPathMetrics, Waypoint};
 use flate2::read::ZlibDecoder;
 use prost::Message;
 use std::io::Read;
@@ -564,6 +564,21 @@ pub struct RoutePlan {
     pub source: RouteSource,
     /// Whether the zone mesh was loaded from cache.
     pub mesh_cached: bool,
+    /// Path existence/length diagnostics for operator visibility.
+    pub metrics: NavPathMetrics,
+}
+
+fn path_length(waypoints: &[Waypoint]) -> Option<f32> {
+    if waypoints.is_empty() {
+        return None;
+    }
+
+    let mut total = 0.0f32;
+    for window in waypoints.windows(2) {
+        total += window[0].distance_3d(&window[1]);
+    }
+
+    Some(total)
 }
 
 /// Load a parsed navmesh into Detour, returning a query-ready object.
@@ -887,17 +902,25 @@ pub fn has_cached_zone_mesh(zone_short_name: &str) -> bool {
 /// Plan a navigation route between two points in a zone using the navmesh.
 pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> RoutePlan {
     let mesh_cached = has_cached_zone_mesh(zone_short_name);
+    let origin = Waypoint::new(from.0, from.1, from.2);
+    let destination = Waypoint::new(to.0, to.1, to.2);
 
     match load_zone(zone_short_name) {
         Ok(loaded) => match find_path(&loaded, from, to) {
-            Ok(path) => RoutePlan {
-                waypoints: path
+            Ok(path) => {
+                let waypoints: Vec<Waypoint> = path
                     .into_iter()
                     .map(|(x, y, z)| Waypoint::new(x, y, z))
-                    .collect(),
-                source: RouteSource::NavMesh,
-                mesh_cached,
-            },
+                    .collect();
+                let path_length = path_length(&waypoints);
+
+                RoutePlan {
+                    waypoints,
+                    source: RouteSource::NavMesh,
+                    mesh_cached,
+                    metrics: NavPathMetrics::success(path_length),
+                }
+            }
             Err(error) => {
                 tracing::warn!(
                     zone = zone_short_name,
@@ -905,9 +928,13 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
                     "Navmesh path query failed; falling back to straight-line route"
                 );
                 RoutePlan {
-                    waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                    waypoints: vec![destination],
                     source: RouteSource::StraightLineFallback,
                     mesh_cached,
+                    metrics: NavPathMetrics::failure(
+                        format!("Navmesh path query failed: {error}"),
+                        path_length(&[origin, destination]),
+                    ),
                 }
             }
         },
@@ -918,9 +945,13 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
                 "Navmesh load failed; falling back to straight-line route"
             );
             RoutePlan {
-                waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                waypoints: vec![destination],
                 source: RouteSource::StraightLineFallback,
                 mesh_cached,
+                metrics: NavPathMetrics::failure(
+                    format!("Navmesh load failed: {error}"),
+                    path_length(&[origin, destination]),
+                ),
             }
         }
     }
@@ -993,5 +1024,29 @@ mod tests {
     fn navmesh_overlay_bounds_empty_dimension_is_one() {
         let bounds = NavMeshOverlayBounds::empty();
         assert!((bounds.max_dimension() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn path_length_empty_returns_none() {
+        assert!(path_length(&[]).is_none());
+    }
+
+    #[test]
+    fn path_length_two_points_returns_distance() {
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(3.0, 4.0, 0.0);
+        let len = path_length(&[a, b]).unwrap();
+        assert!((len - 5.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn path_length_three_points_sums_segments() {
+        let points = [
+            Waypoint::new(0.0, 0.0, 0.0),
+            Waypoint::new(0.0, 0.0, 5.0),
+            Waypoint::new(3.0, 4.0, 5.0),
+        ];
+        let len = path_length(&points).unwrap();
+        assert!((len - 10.0).abs() < f32::EPSILON);
     }
 }
