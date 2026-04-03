@@ -80,6 +80,28 @@ Treat the first four categories as directly repo-grounded when the code clearly 
 - document operator hygiene tasks, including clean machine expectations
 - require new `M7` tasks to name which exposure categories they touch and whether the confidence is high, medium, or low
 
+## `M5` Through `M8` Validation Gate Matrix
+
+Use this matrix when a task touches a risky control path. The point is to make the gate explicit before implementation or live claims.
+
+| Milestone | Risky path or change type | Required gate | Default label or evidence handling |
+| --- | --- | --- | --- |
+| `M5` Packet Engine | new packet send path, packet fallback, or targetability claim | document the packet path, state why the existing in-process route is not sufficient, and open a validation task before claiming support | mark exploit-adjacent or unclear routes as `Provisional` or `Needs Live Proof`; keep high-risk travel shortcuts blocked by default |
+| `M6` Zoning/Movement | zone transition automation, movement queue flushing, safe-coord recovery, or teleport-style routing | name the transition or recovery checkpoint, record the failure state, and define a live-proof step before promoting the path as normal operator workflow | keep risky movement claims labeled `Needs Live Proof`; separate exploit-style travel from normal zoning support |
+| `M7` Anti-Cheat | new hook, wider module footprint, string or artifact exposure change, or new timing hardening claim | map the change to one or more exposure categories, cite whether the support comes from repo evidence or official policy, and record the confidence level | official-policy-backed items can be `Research-backed`; community-only claims stay `Provisional` |
+| `M8` Orchestrator | broader broadcast scope, relay expansion, launch/session orchestration change, or more visible automation behavior | state the lowest-exposure control path, preserve operator-visible scope boundaries, and confirm the change does not silently widen packet, hook, or movement risk | if the change depends on an unresolved `M5`-`M7` risk, keep the item blocked or explicitly cross-link the validation task |
+
+## Required Labels For New `M7` Tasks
+
+Every new anti-cheat task or validation item should name:
+
+- the exposure categories it touches
+- the confidence level for each claim (`High`, `Medium`, or `Low`)
+- whether the support comes from official policy, repo-grounded evidence, or community reporting
+- whether the outcome is a hard gate, operator checklist item, or follow-on validation task
+
+This keeps anti-cheat work reviewable and prevents broad safety claims from entering roadmap execution without evidence.
+
 ## Evidence State
 
 - official policy anchors: `Research-backed`
