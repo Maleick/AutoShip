@@ -6,6 +6,12 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      run_release_build:
+        description: "Also run the Windows release build after the PR gate"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -117,7 +123,7 @@ jobs:
 
   windows:
     name: Windows release build (manual)
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_release_build
     needs: pr_gate
     runs-on: [self-hosted, Windows, X64, dmft]
     timeout-minutes: 30
