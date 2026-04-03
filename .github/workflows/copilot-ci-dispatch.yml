@@ -87,14 +87,17 @@ jobs:
                     run.status === "completed" &&
                     run.conclusion === "action_required"
                 );
-                const hasWorkflowDispatchRun = sameShaRuns.some(
-                  (run) => run.event === "workflow_dispatch"
+                const blockedWorkflowDispatchRun = sameShaRuns.some(
+                  (run) =>
+                    run.event === "workflow_dispatch" &&
+                    run.status === "completed" &&
+                    run.conclusion === "action_required"
                 );
 
                 if (
                   hasActiveRun ||
                   hasAuthoritativeResult ||
-                  hasWorkflowDispatchRun ||
+                  blockedWorkflowDispatchRun ||
                   (!blockedForApproval && sameShaRuns.length > 0)
                 ) {
                   skipped.push(
