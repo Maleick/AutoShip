@@ -28,8 +28,8 @@ jobs:
           done
 
           linked_issues=$(echo "$PR_BODY" | grep -oiE '(fix(es)?|close(s)?|resolve(s)?)\s+#[0-9]+' | grep -oE '#[0-9]+' | tr -d '#' || true)
-
-          if [ -z "$linked_issues" ]; then
+          body=$(gh api "repos/${repo}/pulls/${pr_number}" --jq '.body // ""')
+          linked_issues=$(printf '%s\n' "$body" | grep -oiE '(fix(es)?|close(s)?|resolve(s)?)\s+#[0-9]+' | grep -oE '#[0-9]+' | tr -d '#' || true)
             echo "No linked issues found in PR body."
             exit 0
           fi
