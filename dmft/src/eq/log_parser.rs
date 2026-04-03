@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// EQ chat channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -268,6 +268,9 @@ pub struct LootDatabase {
 }
 
 impl LootDatabase {
+    /// Maximum amount of XP event history retained for windowed rate calculations.
+    const XP_EVENT_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
+
     /// Creates a new empty loot database.
     #[must_use]
     pub fn new() -> Self {
@@ -296,12 +299,27 @@ impl LootDatabase {
             }
             LogEvent::Experience { .. } => {
                 self.total_xp_events += 1;
-                self.xp_event_times.push_back(Instant::now());
+                let now = Instant::now();
+                self.xp_event_times.push_back(now);
+                self.prune_xp_events_older_than(now, Self::XP_EVENT_RETENTION);
             }
             LogEvent::Death { .. } => {
                 self.deaths += 1;
             }
             LogEvent::ZoneEnter { .. } | LogEvent::Chat(_) => {}
+        }
+    }
+
+    fn prune_xp_events_older_than(&mut self, now: Instant, window: Duration) {
+        let Some(cutoff) = now.checked_sub(window) else {
+            return;
+        };
+        while let Some(&ts) = self.xp_event_times.front() {
+            if ts < cutoff {
+                self.xp_event_times.pop_front();
+            } else {
+                break;
+            }
         }
     }
 
@@ -319,7 +337,12 @@ impl LootDatabase {
     #[must_use]
     pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
         let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
-        let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;
+        let count = self
+            .xp_event_times
+            .iter()
+            .rev()
+            .take_while(|t| **t >= cutoff)
+            .count() as f64;
         let window_hours = window.as_secs_f64() / 3600.0;
         if window_hours > 0.0 {
             count / window_hours
@@ -454,6 +477,21 @@ mod tests {
         // 2 events just now in a 15-min window → rate > 0
         let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
         assert!(rate > 0.0);
+    }
+
+    #[test]
+    fn test_xp_events_are_pruned() {
+        let mut db = LootDatabase::new();
+        let now = Instant::now();
+        db.xp_event_times.push_back(
+            now.checked_sub(Duration::from_secs(2 * 24 * 60 * 60))
+                .unwrap_or(now),
+        );
+        db.xp_event_times.push_back(now);
+
+        db.prune_xp_events_older_than(now, LootDatabase::XP_EVENT_RETENTION);
+
+        assert_eq!(db.xp_event_times.len(), 1);
     }
 
     #[test]
