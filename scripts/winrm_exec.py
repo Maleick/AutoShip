@@ -9,9 +9,15 @@ Usage:
   python3 winrm_exec.py "Get-Process"                    # session 0
   python3 winrm_exec.py --interactive "Start-Process notepad"  # session 1 (GUI)
   python3 winrm_exec.py --interactive --no-capture "Start-Process eqgame.exe"  # fire-and-forget
+
+Required environment variables:
+  WINRM_HOST, WINRM_USER, WINRM_PASS
+Optional: WINRM_SCHEME (default: https), WINRM_PORT, WINRM_TRANSPORT,
+          WINRM_SERVER_CERT_VALIDATION, WINRM_ALLOW_INSECURE_HTTP=1
 """
 
 import argparse
+import os
 import sys
 import time
 import uuid
@@ -19,14 +25,36 @@ import uuid
 import winrm
 
 
-HOST = "frostreaver"
-USER = "maleick"
-PASS = "1118"
-WINRM_URL = f"http://{HOST}:5985/wsman"
+def _env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
 
 
 def get_session():
-    return winrm.Session(WINRM_URL, auth=(USER, PASS), transport="basic")
+    host = _env("WINRM_HOST")
+    user = _env("WINRM_USER")
+    password = _env("WINRM_PASS")
+
+    scheme = os.getenv("WINRM_SCHEME", "https").lower()
+    if scheme not in {"http", "https"}:
+        raise RuntimeError("WINRM_SCHEME must be one of: http, https")
+    if scheme == "http" and os.getenv("WINRM_ALLOW_INSECURE_HTTP") != "1":
+        raise RuntimeError("Refusing insecure HTTP WinRM. Set WINRM_ALLOW_INSECURE_HTTP=1 to override.")
+
+    port_default = "5986" if scheme == "https" else "5985"
+    port = os.getenv("WINRM_PORT", port_default)
+    transport = os.getenv("WINRM_TRANSPORT", "ntlm")
+    cert_validation = os.getenv("WINRM_SERVER_CERT_VALIDATION", "validate")
+    winrm_url = f"{scheme}://{host}:{port}/wsman"
+
+    return winrm.Session(
+        winrm_url,
+        auth=(user, password),
+        transport=transport,
+        server_cert_validation=cert_validation,
+    )
 
 
 def run_session0(command: str, use_ps: bool = True) -> tuple[str, str, int]:
@@ -75,7 +103,7 @@ $bat = "$home\\frost_exec_{task_id}.bat"
 {bat_content}
 "@ | Out-File -FilePath $bat -Encoding ascii
 
-schtasks /Create /TN "{task_name}" /TR $bat /SC ONCE /ST 00:00 /F /RU {USER} /RP {PASS} /IT /RL HIGHEST 2>&1 | Out-Null
+schtasks /Create /TN "{task_name}" /TR $bat /SC ONCE /ST 00:00 /F /IT /RL HIGHEST 2>&1 | Out-Null
 schtasks /Run /TN "{task_name}" 2>&1 | Out-Null
 """
 
