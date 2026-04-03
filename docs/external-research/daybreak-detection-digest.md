@@ -48,6 +48,19 @@ Rules:
 - exploit-style or hack-style travel/control claims stay low-confidence until corroborated
 - no secondary source alone can satisfy an anti-cheat milestone exit gate
 
+## Exposure Categories For `M7`
+
+Use these categories when turning the digest into roadmap tasks or operator checklists:
+
+- `Module presence` — the injected DLL and any additional loaded module surface
+- `Detour hooks` — game-loop, render, or future hook installation inside the client
+- `In-process control paths` — `InterpretCmd`, UI widget clicks, login helpers, or similar internal calls
+- `IPC and token handling` — named pipes, shared memory, session tokens, and local artifact retention
+- `Timing and behavior visibility` — movement pacing, command jitter, and other observable automation patterns
+- `Operator environment hygiene` — clean machines, runner boundaries, and avoiding unrelated cheat tooling
+
+Treat the first four categories as directly repo-grounded when the code clearly implements them. Treat timing value and environment safety as bounded operational guidance, not proof of stealth.
+
 ## Current Milestone Inputs
 
 ### `M5` Packet Engine
@@ -65,6 +78,7 @@ Rules:
 - build gates around official policy categories
 - separate module, hook, timing, and environment risks
 - document operator hygiene tasks, including clean machine expectations
+- require new `M7` tasks to name which exposure categories they touch and whether the confidence is high, medium, or low
 
 ## Evidence State
 
