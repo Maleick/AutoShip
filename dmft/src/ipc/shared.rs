@@ -232,6 +232,8 @@ mod tests {
             mana_max: 50,
             endurance_current: 25,
             endurance_max: 25,
+            speed_run: 0.0,
+            stand_state: 0,
         }
     }
 

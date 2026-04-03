@@ -57,10 +57,10 @@ impl CredentialStore {
     /// # Errors
     ///
     /// Returns an error if the operation fails.
-    pub fn add_account(&self, account_name: &str, password: &str) -> Result<()> {
+    pub fn add_account(&self, account_name: &str, password: impl AsRef<[u8]>) -> Result<()> {
         let salt = crypto::generate_salt();
         let account_key = crypto::derive_key_from_master(&self.master_key, &salt)?;
-        let (ciphertext, nonce) = crypto::encrypt(password.as_bytes(), &account_key)?;
+        let (ciphertext, nonce) = crypto::encrypt(password.as_ref(), &account_key)?;
 
         let conn = self
             .conn
@@ -298,5 +298,16 @@ mod tests {
         store.add_account("long_pass_acct", &long_pass).unwrap();
         let password = store.get_password("long_pass_acct").unwrap();
         assert_eq!(&*password, &*long_pass);
+    }
+
+    #[test]
+    fn add_account_accepts_zeroizing_password() {
+        let store = open_memory_store();
+        let password = Zeroizing::new("zeroized_pass".to_string());
+
+        store.add_account("zeroized", password).unwrap();
+
+        let stored = store.get_password("zeroized").unwrap();
+        assert_eq!(&*stored, "zeroized_pass");
     }
 }

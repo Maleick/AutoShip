@@ -6,6 +6,8 @@ use ratatui::widgets::TableState;
 use super::app::{NavClientStatus, SpawnFilter};
 use super::theme::ThemeKind;
 use crate::eq::map_parser::ZoneMap;
+use crate::eq::named_tracker;
+use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::nav::mesh::NavMeshOverlay;
 
 // ─── Per-screen state sub-structs ────────────────────────────────────────────
@@ -68,6 +70,7 @@ pub(crate) struct MapSpawnPresentationKey {
     pub z_filter_bits: u32,
     pub player_z_bits: Option<u32>,
     pub show_spawns: bool,
+    pub map_filter_bits: u8,
     pub theme_kind: ThemeKind,
     pub center_x_bits: u32,
     pub center_y_bits: u32,
@@ -144,6 +147,232 @@ impl MapViewportMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapFilterKind {
+    Npc,
+    Pc,
+    Corpse,
+    Ground,
+    Pet,
+    Named,
+    Untargetable,
+}
+
+impl MapFilterKind {
+    pub fn from_str(input: &str) -> Option<Self> {
+        match input.to_ascii_lowercase().as_str() {
+            "npc" => Some(Self::Npc),
+            "pc" => Some(Self::Pc),
+            "corpse" | "corpses" => Some(Self::Corpse),
+            "ground" => Some(Self::Ground),
+            "pet" | "pets" => Some(Self::Pet),
+            "named" | "nameds" => Some(Self::Named),
+            "untargetable" | "untargetables" | "untarget" => Some(Self::Untargetable),
+            _ => None,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Npc => "NPC",
+            Self::Pc => "PC",
+            Self::Corpse => "Corpse",
+            Self::Ground => "Ground",
+            Self::Pet => "Pet",
+            Self::Named => "Named",
+            Self::Untargetable => "Untargetable",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MapFilters {
+    pub show_npc: bool,
+    pub show_pc: bool,
+    pub show_corpse: bool,
+    pub show_ground: bool,
+    pub show_pet: bool,
+    pub show_named: bool,
+    pub show_untargetable: bool,
+}
+
+impl Default for MapFilters {
+    fn default() -> Self {
+        Self {
+            show_npc: true,
+            show_pc: true,
+            show_corpse: true,
+            show_ground: true,
+            show_pet: true,
+            show_named: true,
+            show_untargetable: true,
+        }
+    }
+}
+
+impl MapFilters {
+    #[must_use]
+    pub fn toggle(&mut self, kind: MapFilterKind) -> bool {
+        let current = self.get(kind);
+        self.set(kind, !current);
+        !current
+    }
+
+    pub fn set(&mut self, kind: MapFilterKind, enabled: bool) {
+        match kind {
+            MapFilterKind::Npc => self.show_npc = enabled,
+            MapFilterKind::Pc => self.show_pc = enabled,
+            MapFilterKind::Corpse => self.show_corpse = enabled,
+            MapFilterKind::Ground => self.show_ground = enabled,
+            MapFilterKind::Pet => self.show_pet = enabled,
+            MapFilterKind::Named => self.show_named = enabled,
+            MapFilterKind::Untargetable => self.show_untargetable = enabled,
+        }
+    }
+
+    #[must_use]
+    pub fn get(&self, kind: MapFilterKind) -> bool {
+        match kind {
+            MapFilterKind::Npc => self.show_npc,
+            MapFilterKind::Pc => self.show_pc,
+            MapFilterKind::Corpse => self.show_corpse,
+            MapFilterKind::Ground => self.show_ground,
+            MapFilterKind::Pet => self.show_pet,
+            MapFilterKind::Named => self.show_named,
+            MapFilterKind::Untargetable => self.show_untargetable,
+        }
+    }
+
+    pub fn set_all(&mut self, enabled: bool) {
+        self.show_npc = enabled;
+        self.show_pc = enabled;
+        self.show_corpse = enabled;
+        self.show_ground = enabled;
+        self.show_pet = enabled;
+        self.show_named = enabled;
+        self.show_untargetable = enabled;
+    }
+
+    #[must_use]
+    pub fn cache_key_bits(&self) -> u8 {
+        let mut bits = 0u8;
+        bits |= u8::from(self.show_npc) << 0;
+        bits |= u8::from(self.show_pc) << 1;
+        bits |= u8::from(self.show_corpse) << 2;
+        bits |= u8::from(self.show_ground) << 3;
+        bits |= u8::from(self.show_pet) << 4;
+        bits |= u8::from(self.show_named) << 5;
+        bits |= u8::from(self.show_untargetable) << 6;
+        bits
+    }
+
+    #[must_use]
+    pub fn allows_spawn(&self, spawn: &SpawnInfo) -> bool {
+        let is_pc = spawn.spawn_type == SpawnType::Player;
+        let is_corpse = spawn.spawn_type == SpawnType::Corpse;
+        let is_npc = matches!(spawn.spawn_type, SpawnType::Npc);
+        let is_pet = is_npc && Self::looks_like_pet(spawn);
+        let is_named = is_npc && named_tracker::is_named(&spawn.displayed_name);
+        let is_untargetable = matches!(spawn.spawn_type, SpawnType::Unknown(_));
+
+        if is_pc && !self.show_pc {
+            return false;
+        }
+        if is_corpse && !self.show_corpse {
+            return false;
+        }
+        if is_pet && !self.show_pet {
+            return false;
+        }
+        if is_named && !self.show_named {
+            return false;
+        }
+        if is_untargetable && !self.show_untargetable {
+            return false;
+        }
+        if is_npc && !self.show_npc {
+            return false;
+        }
+        if Self::looks_like_ground(spawn) && !self.show_ground {
+            return false;
+        }
+
+        true
+    }
+
+    #[must_use]
+    pub fn summary(&self) -> String {
+        let mut off: Vec<&'static str> = Vec::new();
+        if !self.show_npc {
+            off.push("NPC");
+        }
+        if !self.show_pc {
+            off.push("PC");
+        }
+        if !self.show_corpse {
+            off.push("Corpse");
+        }
+        if !self.show_ground {
+            off.push("Ground");
+        }
+        if !self.show_pet {
+            off.push("Pet");
+        }
+        if !self.show_named {
+            off.push("Named");
+        }
+        if !self.show_untargetable {
+            off.push("Untargetable");
+        }
+
+        if off.is_empty() {
+            String::from("Map filters: all ON")
+        } else {
+            format!("Map filters off: {}", off.join(", "))
+        }
+    }
+
+    #[must_use]
+    pub fn inline_flags(&self) -> String {
+        let mut out = String::from("filters[");
+        out.push_str(if self.show_npc { "Npc" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_pc { "Pc" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_corpse { "Corp" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_ground { "Gnd" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_pet { "Pet" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_named { "Nm" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_untargetable { "Unt" } else { "-" });
+        out.push(']');
+        out
+    }
+
+    fn looks_like_pet(spawn: &SpawnInfo) -> bool {
+        if matches!(spawn.spawn_type, SpawnType::Player | SpawnType::Corpse) {
+            return false;
+        }
+        let lower = spawn.displayed_name.to_ascii_lowercase();
+        lower.contains("`s pet")
+            || lower.contains("'s pet")
+            || lower.contains("`s warder")
+            || lower.contains("'s warder")
+            || lower.contains(" warder of ")
+            || lower.starts_with("pet of ")
+    }
+
+    fn looks_like_ground(spawn: &SpawnInfo) -> bool {
+        // Ground spawns are not currently emitted by the reader; keep a hook
+        // for future support without filtering anything today.
+        let _ = spawn;
+        false
+    }
+}
+
 /// State for the Map screen.
 pub struct MapScreenState {
     /// Parsed zone map data (lines and points), if loaded.
@@ -165,6 +394,8 @@ pub struct MapScreenState {
     pub show_spawns: bool,
     pub show_nav_paths: bool,
     pub show_labels: bool,
+    /// MQ2Map-style visibility toggles for map overlay entities.
+    pub filters: MapFilters,
 }
 
 impl MapScreenState {
@@ -187,6 +418,7 @@ impl MapScreenState {
             show_spawns: true,
             show_nav_paths: true,
             show_labels: true,
+            filters: MapFilters::default(),
         }
     }
 
@@ -285,6 +517,8 @@ pub struct OverviewScreenState {
     pub show_groups: bool,
     /// Whether the filters/scope panel is visible.
     pub show_filters: bool,
+    /// Whether the slot-profile panel is visible.
+    pub show_profile: bool,
     /// Whether the character detail panel is collapsed.
     pub character_collapsed: bool,
     /// Whether the groups panel is collapsed.
@@ -295,6 +529,8 @@ pub struct OverviewScreenState {
     pub combat_collapsed: bool,
     /// Whether the session stats panel is collapsed.
     pub session_collapsed: bool,
+    /// Whether the slot-profile panel is collapsed.
+    pub profile_collapsed: bool,
 }
 
 impl OverviewScreenState {
@@ -304,11 +540,13 @@ impl OverviewScreenState {
         Self {
             show_groups: true,
             show_filters: true,
+            show_profile: true,
             character_collapsed: false,
             groups_collapsed: false,
             filters_collapsed: false,
             combat_collapsed: false,
             session_collapsed: false,
+            profile_collapsed: false,
         }
     }
 }
