@@ -13,7 +13,7 @@ use warp::TargetSample;
 
 use std::sync::Mutex;
 
-use dmft_common::nav::{CampSpot, NavStatus, StickConfig, Waypoint};
+use dmft_common::nav::{CampSpot, FollowConfig, NavStatus, StickConfig, Waypoint};
 use dmft_common::types::SpawnData;
 
 /// Global navigator instance, persists across game ticks.
@@ -66,6 +66,9 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::Navigate(waypoints) => nav.navigate(waypoints),
             NavCommand::SetCamp(spot) => nav.set_camp(spot),
             NavCommand::Stop => nav.stop(),
+            NavCommand::FollowPlayer { config, anchor } => nav.follow_player(config, anchor),
+            NavCommand::UpdateFollowAnchor(anchor) => nav.update_follow_anchor(anchor),
+            NavCommand::StopFollow => nav.stop_follow(),
             NavCommand::StickTo { config, current_target_id } => {
                 nav.stick_to(config, current_target_id);
             }
@@ -80,6 +83,17 @@ pub enum NavCommand {
     Navigate(Vec<Waypoint>),
     SetCamp(CampSpot),
     Stop,
+    /// Start MQ2MoveUtils-style player follow mode.
+    FollowPlayer {
+        /// Follow configuration (leader name, follow distance, leash distance).
+        config: FollowConfig,
+        /// Initial anchor position (leader's current location).
+        anchor: Waypoint,
+    },
+    /// Update the dynamic anchor in an active follow mode.
+    UpdateFollowAnchor(Waypoint),
+    /// Stop player follow mode.
+    StopFollow,
     /// Begin a stick session with the given config.
     /// `current_target_id` is used for `hold` locking.
     StickTo {

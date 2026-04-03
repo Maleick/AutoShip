@@ -56,6 +56,35 @@ pub enum Command {
     },
     /// Stop navigating, stay where you are.
     StopNavigation,
+    /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
+    ///
+    /// The DLL navigator tracks a dynamic anchor (the leader's last-known position).
+    /// When the follower strays beyond `leash_distance` it automatically navigates
+    /// back. Once within `follow_distance` it holds position until the anchor moves.
+    FollowPlayer {
+        /// Follow configuration (leader name, follow distance, leash distance).
+        config: crate::nav::FollowConfig,
+        /// Initial anchor position (leader's current location).
+        anchor_x: f32,
+        /// Initial anchor Y coordinate.
+        anchor_y: f32,
+        /// Initial anchor Z coordinate.
+        anchor_z: f32,
+    },
+    /// Update the dynamic anchor position in an active follow mode.
+    ///
+    /// Sent by the orchestrator each tick when the leader has moved more than
+    /// a minimum threshold, keeping the DLL's anchor in sync with the leader.
+    UpdateFollowAnchor {
+        /// New anchor X coordinate.
+        x: f32,
+        /// New anchor Y coordinate.
+        y: f32,
+        /// New anchor Z coordinate.
+        z: f32,
+    },
+    /// Stop player follow mode and return to idle navigation.
+    StopFollow,
     // Login automation
     /// Query the current login phase from the DLL.
     LoginPhaseQuery,

@@ -2,12 +2,15 @@
 //! Transitions: Idle -> Moving -> Arrived -> Idle
 //! Stick mode: activated via `stick_to()`, runs until `stick_off()` or stop.
 //!
+//! Follow mode (player anchor): Idle -> Following -> (navigating back when
+//! leash exceeded) -> Following -> ...
+//!
 //! Stuck detection and recovery are handled inline by `StuckDetector`
 //! rather than via a separate FSM state.
 
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
-use dmft_common::nav::{CampSpot, NavStatus, PauseReason, StickConfig, Waypoint};
+use dmft_common::nav::{CampSpot, FollowConfig, NavStatus, PauseReason, StickConfig, Waypoint};
 use dmft_common::types::SpawnData;
 
 use super::humanize::MovementPersonality;
@@ -22,6 +25,15 @@ enum State {
     Moving,
     Paused(PauseReason),
     Arrived,
+    /// Player follow mode: anchor tracks a leader's position.
+    Following {
+        /// Current follow configuration (leader name, distances).
+        config: FollowConfig,
+        /// Last-known anchor position (leader's position).
+        anchor: Waypoint,
+        /// Whether we are currently navigating back toward the anchor.
+        returning: bool,
+    },
     Sticking,
 }
 
@@ -103,11 +115,44 @@ impl Navigator {
         tracing::info!("Navigation stopped");
     }
 
+    /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
+    pub fn follow_player(&mut self, config: FollowConfig, anchor: Waypoint) {
+        tracing::info!(
+            leader = %config.leader_name,
+            follow_dist = config.follow_distance,
+            leash_dist = config.leash_distance,
+            "Starting player follow mode"
+        );
+        self.controller.stop_forward();
+        self.queue.clear();
+        self.camp = None;
+        self.stuck.reset();
+        self.state = State::Following {
+            config,
+            anchor,
+            returning: false,
+        };
+    }
+
+    /// Update the dynamic anchor position in an active follow mode.
+    pub fn update_follow_anchor(&mut self, new_anchor: Waypoint) {
+        if let State::Following { ref mut anchor, .. } = self.state {
+            *anchor = new_anchor;
+        }
+    }
+
+    /// Stop player follow mode and return to idle.
+    pub fn stop_follow(&mut self) {
+        if matches!(self.state, State::Following { .. }) {
+            self.controller.stop_forward();
+            self.queue.clear();
+            self.stuck.reset();
+            self.state = State::Idle;
+            tracing::info!("Player follow mode stopped");
+        }
+    }
+
     /// Begin a stick-to-target session.
-    ///
-    /// Cancels any in-progress waypoint navigation.
-    /// `current_target_id` should be the spawn ID of the game's current target
-    /// at the moment the command arrives (used for `hold` locking).
     pub fn stick_to(&mut self, config: StickConfig, current_target_id: Option<u32>) {
         self.controller.stop_forward();
         self.queue.clear();
@@ -165,6 +210,7 @@ impl Navigator {
             State::Idle | State::Arrived => {}
             State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
+            State::Following { .. } => self.tick_following(),
             State::Sticking => self.tick_sticking(current_target, nearby),
         }
     }
@@ -193,6 +239,18 @@ impl Navigator {
                 distance_remaining: self.cached_distance,
             },
             State::Arrived => NavStatus::Arrived,
+            State::Following {
+                config,
+                anchor,
+                returning,
+            } => {
+                let current_pos = self.controller.read_position();
+                NavStatus::Following {
+                    leader_name: config.leader_name.clone(),
+                    distance_to_anchor: current_pos.distance_2d(anchor),
+                    returning: *returning,
+                }
+            }
             State::Sticking => {
                 let effective_dist = self.stick.effective_distance();
                 NavStatus::Sticking {
@@ -313,6 +371,84 @@ impl Navigator {
         self.stuck.reset();
         self.warp.reset();
         self.state = State::Arrived;
+    }
+
+    /// One tick for player follow mode.
+    ///
+    /// Implements the leash/return logic:
+    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back.
+    /// - If currently returning and distance <= `follow_distance`: stop, hold position.
+    fn tick_following(&mut self) {
+        // Extract values without holding a mutable borrow on self.state.
+        let (leash_distance, follow_distance, anchor, currently_returning) =
+            if let State::Following {
+                ref config,
+                ref anchor,
+                returning,
+            } = self.state
+            {
+                (
+                    config.leash_distance,
+                    config.follow_distance,
+                    *anchor,
+                    returning,
+                )
+            } else {
+                return;
+            };
+
+        let current_pos = self.controller.read_position();
+        let dist = current_pos.distance_2d(&anchor);
+        self.cached_distance = dist;
+
+        if dist > leash_distance {
+            // Beyond the leash — navigate back toward the anchor.
+            if !currently_returning {
+                tracing::debug!(
+                    dist,
+                    leash = leash_distance,
+                    "Follow leash exceeded — returning to anchor"
+                );
+                if let State::Following {
+                    ref mut returning, ..
+                } = self.state
+                {
+                    *returning = true;
+                }
+                self.stuck.reset();
+            }
+
+            // Stuck detection while returning.
+            if self.stuck.check(&current_pos) {
+                if !self.stuck.recover(&self.controller) {
+                    // Give up stuck recovery but stay in follow mode — the anchor
+                    // may move closer on its own.
+                    self.stuck.reset();
+                }
+                return;
+            }
+
+            // Face and step toward anchor.
+            let heading = movement::calc_heading(&current_pos, &anchor);
+            let wobbled = self.personality.wobble_heading(heading);
+            self.controller.write_heading(wobbled);
+            self.controller.write_speed_heading(wobbled);
+            self.controller.press_forward();
+        } else if currently_returning && dist <= follow_distance {
+            // Arrived back within follow range — stop moving.
+            tracing::debug!(dist, follow = follow_distance, "Returned to follow range");
+            self.controller.stop_forward();
+            self.stuck.reset();
+            if let State::Following {
+                ref mut returning, ..
+            } = self.state
+            {
+                *returning = false;
+            }
+        } else {
+            // Within acceptable range — ensure we're not still moving.
+            self.controller.stop_forward();
+        }
     }
 }
 

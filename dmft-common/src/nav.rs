@@ -77,6 +77,34 @@ impl Waypoint {
     }
 }
 
+/// Configuration for MQ2MoveUtils-style `/makecamp player` follow mode.
+///
+/// Establishes a dynamic camp anchor that tracks another player's position.
+/// Followers maintain `follow_distance` from the anchor and are forced back
+/// within `leash_distance` when they stray too far.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FollowConfig {
+    /// Name of the player being followed (for logging and status display).
+    pub leader_name: String,
+    /// Desired distance to maintain from the leader's position.
+    pub follow_distance: f32,
+    /// Maximum distance from the anchor before forcing a return.
+    /// Mirrors MQ2MoveUtils `/makecamp leash` enforcement radius.
+    pub leash_distance: f32,
+}
+
+impl FollowConfig {
+    /// Create a new follow configuration.
+    #[must_use]
+    pub fn new(leader_name: impl Into<String>, follow_distance: f32, leash_distance: f32) -> Self {
+        Self {
+            leader_name: leader_name.into(),
+            follow_distance,
+            leash_distance,
+        }
+    }
+}
+
 /// Distance specification for a `/stick` command.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum StickDistance {
@@ -157,6 +185,15 @@ pub enum NavStatus {
     },
     /// Arrived at final destination.
     Arrived,
+    /// Player follow mode active (`/makecamp player` equivalent).
+    Following {
+        /// Name of the player being followed.
+        leader_name: String,
+        /// 2-D distance from self to the current anchor position.
+        distance_to_anchor: f32,
+        /// Whether the follower is currently navigating back to the anchor.
+        returning: bool,
+    },
     /// Actively sticking to a target spawn (MQ2MoveUtils `/stick` equivalent).
     Sticking {
         /// Spawn ID of the current stick target (0 when target is temporarily lost).
@@ -178,6 +215,7 @@ impl NavStatus {
             Self::Paused { .. } => "Paused",
             Self::Stuck { .. } => "Stuck",
             Self::Arrived => "Arrived",
+            Self::Following { .. } => "Following",
             Self::Sticking { .. } => "Sticking",
         }
     }
@@ -204,6 +242,12 @@ impl NavStatus {
     #[must_use]
     pub fn is_arrived(&self) -> bool {
         matches!(self, Self::Arrived)
+    }
+
+    /// Returns true if player follow mode is active.
+    #[must_use]
+    pub fn is_following(&self) -> bool {
+        matches!(self, Self::Following { .. })
     }
 
     /// Returns true if actively sticking to a target.
@@ -427,6 +471,71 @@ pub struct CampDefinition {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ─── FollowConfig tests ───
+
+    #[test]
+    fn follow_config_new_stores_all_fields() {
+        let cfg = FollowConfig::new("Camrene", 15.0, 60.0);
+        assert_eq!(cfg.leader_name, "Camrene");
+        assert!((cfg.follow_distance - 15.0).abs() < f32::EPSILON);
+        assert!((cfg.leash_distance - 60.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn follow_config_new_accepts_string_or_str() {
+        let cfg1 = FollowConfig::new("Leader", 10.0, 50.0);
+        let cfg2 = FollowConfig::new(String::from("Leader"), 10.0, 50.0);
+        assert_eq!(cfg1.leader_name, cfg2.leader_name);
+    }
+
+    // ─── NavStatus tests ───
+
+    #[test]
+    fn nav_status_following_label() {
+        let status = NavStatus::Following {
+            leader_name: "Camrene".to_string(),
+            distance_to_anchor: 25.0,
+            returning: false,
+        };
+        assert_eq!(status.label(), "Following");
+    }
+
+    #[test]
+    fn nav_status_is_following() {
+        let following = NavStatus::Following {
+            leader_name: "Test".to_string(),
+            distance_to_anchor: 5.0,
+            returning: false,
+        };
+        assert!(following.is_following());
+        assert!(!NavStatus::Idle.is_following());
+        assert!(!NavStatus::Arrived.is_following());
+    }
+
+    #[test]
+    fn nav_status_following_is_not_moving_or_stuck() {
+        let following = NavStatus::Following {
+            leader_name: "Test".to_string(),
+            distance_to_anchor: 5.0,
+            returning: false,
+        };
+        assert!(!following.is_moving());
+        assert!(!following.is_stuck());
+        assert!(!following.is_arrived());
+    }
+
+    #[test]
+    fn nav_status_following_serialization_roundtrip() {
+        let original = NavStatus::Following {
+            leader_name: "Leader".to_string(),
+            distance_to_anchor: 42.5,
+            returning: true,
+        };
+        let json = serde_json::to_string(&original).expect("serialize");
+        let deserialized: NavStatus = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(original, deserialized);
+    }
 
     #[test]
     fn xorshift32_from_client_id_zero_guards_against_zero_seed() {

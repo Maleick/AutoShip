@@ -1,8 +1,70 @@
 //! Camp position management — assign characters to role-based spots.
 
-use dmft_common::nav::{CampDefinition, CampSpot, Waypoint};
+use dmft_common::nav::{CampDefinition, CampSpot, FollowConfig, Waypoint};
 use dmft_common::types::ClientId;
 use std::collections::HashMap;
+
+/// Minimum leader movement distance (2-D) that triggers an `UpdateFollowAnchor`
+/// broadcast. Below this threshold we skip the update to avoid churning IPC.
+pub const FOLLOW_ANCHOR_UPDATE_THRESHOLD: f32 = 2.0;
+
+/// Orchestrator-side state for MQ2MoveUtils `/makecamp player` follow mode.
+///
+/// Tracks the leader's last-known position and determines when to broadcast
+/// `UpdateFollowAnchor` IPC commands to the followers.
+#[derive(Debug, Clone)]
+pub struct PlayerFollowMode {
+    /// Follow configuration shared with each follower DLL.
+    pub config: FollowConfig,
+    /// Last anchor position broadcast to followers.
+    last_anchor: Option<Waypoint>,
+}
+
+impl PlayerFollowMode {
+    /// Create a new player follow mode tracker.
+    #[must_use]
+    pub fn new(config: FollowConfig) -> Self {
+        Self {
+            config,
+            last_anchor: None,
+        }
+    }
+
+    /// Check whether the leader has moved far enough to warrant an anchor update.
+    ///
+    /// Returns the new anchor if the leader has moved more than
+    /// `FOLLOW_ANCHOR_UPDATE_THRESHOLD` units since the last broadcast, or if
+    /// this is the initial position. Returns `None` if no update is needed.
+    pub fn check_anchor_update(&mut self, leader_pos: Waypoint) -> Option<Waypoint> {
+        match self.last_anchor {
+            None => {
+                // First position — always broadcast.
+                self.last_anchor = Some(leader_pos);
+                Some(leader_pos)
+            }
+            Some(prev) => {
+                if prev.distance_2d(&leader_pos) >= FOLLOW_ANCHOR_UPDATE_THRESHOLD {
+                    self.last_anchor = Some(leader_pos);
+                    Some(leader_pos)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Force the last anchor to the given position without triggering an update.
+    /// Used when follow mode is first set up to avoid a double-broadcast.
+    pub fn set_last_anchor(&mut self, pos: Waypoint) {
+        self.last_anchor = Some(pos);
+    }
+
+    /// Returns the last anchor position that was broadcast to followers.
+    #[must_use]
+    pub fn last_anchor(&self) -> Option<Waypoint> {
+        self.last_anchor
+    }
+}
 
 /// Manages camp assignments for a group.
 pub struct CampManager {
@@ -10,6 +72,8 @@ pub struct CampManager {
     active_camp: Option<CampDefinition>,
     /// `client_id` -> assigned role.
     assignments: HashMap<ClientId, String>,
+    /// Optional player follow mode (dynamic anchor).
+    follow_mode: Option<PlayerFollowMode>,
 }
 
 impl CampManager {
@@ -19,6 +83,7 @@ impl CampManager {
         Self {
             active_camp: None,
             assignments: HashMap::new(),
+            follow_mode: None,
         }
     }
 
@@ -29,6 +94,9 @@ impl CampManager {
         camp: CampDefinition,
         role_map: &HashMap<ClientId, String>,
     ) -> Vec<(ClientId, CampSpot)> {
+        // Starting a static camp clears any active follow mode.
+        self.follow_mode = None;
+
         let mut result = Vec::new();
 
         for (client_id, role) in role_map {
@@ -42,6 +110,91 @@ impl CampManager {
 
         self.active_camp = Some(camp);
         result
+    }
+
+    /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
+    ///
+    /// Enables a dynamic anchor that tracks the named leader's position.
+    /// Returns the initial `FollowPlayer` commands for each follower client
+    /// (all client IDs in `follower_ids`) using `initial_anchor` as the
+    /// starting position.
+    ///
+    /// Clears any active static camp; the two modes are mutually exclusive.
+    pub fn set_player_follow(
+        &mut self,
+        config: FollowConfig,
+        follower_ids: &[ClientId],
+        initial_anchor: Waypoint,
+    ) -> Vec<(ClientId, dmft_common::ipc::Command)> {
+        // Player follow mode replaces any static camp.
+        self.active_camp = None;
+        self.assignments.clear();
+
+        let mut mode = PlayerFollowMode::new(config.clone());
+        mode.set_last_anchor(initial_anchor);
+        self.follow_mode = Some(mode);
+
+        follower_ids
+            .iter()
+            .map(|&id| {
+                (
+                    id,
+                    dmft_common::ipc::Command::FollowPlayer {
+                        config: config.clone(),
+                        anchor_x: initial_anchor.x,
+                        anchor_y: initial_anchor.y,
+                        anchor_z: initial_anchor.z,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// Stop player follow mode.
+    ///
+    /// Returns `StopFollow` commands for every client in `follower_ids`.
+    pub fn clear_follow(
+        &mut self,
+        follower_ids: &[ClientId],
+    ) -> Vec<(ClientId, dmft_common::ipc::Command)> {
+        self.follow_mode = None;
+        follower_ids
+            .iter()
+            .map(|&id| (id, dmft_common::ipc::Command::StopFollow))
+            .collect()
+    }
+
+    /// Tick player follow mode: check whether the leader has moved and return
+    /// `UpdateFollowAnchor` commands for all followers if so.
+    ///
+    /// Returns an empty `Vec` if follow mode is not active, or if the leader
+    /// hasn't moved far enough to warrant a broadcast.
+    pub fn tick_follow(
+        &mut self,
+        leader_pos: Waypoint,
+        follower_ids: &[ClientId],
+    ) -> Vec<(ClientId, dmft_common::ipc::Command)> {
+        let follow = match self.follow_mode.as_mut() {
+            Some(f) => f,
+            None => return Vec::new(),
+        };
+
+        match follow.check_anchor_update(leader_pos) {
+            None => Vec::new(),
+            Some(anchor) => follower_ids
+                .iter()
+                .map(|&id| {
+                    (
+                        id,
+                        dmft_common::ipc::Command::UpdateFollowAnchor {
+                            x: anchor.x,
+                            y: anchor.y,
+                            z: anchor.z,
+                        },
+                    )
+                })
+                .collect(),
+        }
     }
 
     /// Get the camp spot for a specific client.
@@ -59,12 +212,25 @@ impl CampManager {
     pub fn clear(&mut self) {
         self.active_camp = None;
         self.assignments.clear();
+        self.follow_mode = None;
     }
 
     /// Whether a camp is active.
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.active_camp.is_some()
+    }
+
+    /// Whether player follow mode is active.
+    #[must_use]
+    pub fn is_following(&self) -> bool {
+        self.follow_mode.is_some()
+    }
+
+    /// Returns the active follow configuration, if any.
+    #[must_use]
+    pub fn follow_config(&self) -> Option<&FollowConfig> {
+        self.follow_mode.as_ref().map(|f| &f.config)
     }
 }
 
@@ -313,5 +479,226 @@ mod tests {
 
         mgr.clear();
         assert!(mgr.get_spot(1).is_none());
+    }
+
+    // ─── Player follow mode tests ───
+
+    fn make_follow_config() -> FollowConfig {
+        FollowConfig::new("Leader", 10.0, 50.0)
+    }
+
+    #[test]
+    fn follow_mode_starts_inactive() {
+        let mgr = CampManager::new();
+        assert!(!mgr.is_following());
+        assert!(mgr.follow_config().is_none());
+    }
+
+    #[test]
+    fn set_player_follow_activates_follow_mode() {
+        let mut mgr = CampManager::new();
+        let anchor = Waypoint::new(100.0, 200.0, 0.0);
+        let cmds = mgr.set_player_follow(make_follow_config(), &[1, 2, 3], anchor);
+
+        assert!(mgr.is_following());
+        assert_eq!(cmds.len(), 3);
+        // Each command should be a FollowPlayer with matching anchor coords.
+        for (_, cmd) in &cmds {
+            match cmd {
+                dmft_common::ipc::Command::FollowPlayer {
+                    anchor_x,
+                    anchor_y,
+                    anchor_z,
+                    ..
+                } => {
+                    assert!((*anchor_x - 100.0).abs() < f32::EPSILON);
+                    assert!((*anchor_y - 200.0).abs() < f32::EPSILON);
+                    assert!((*anchor_z - 0.0).abs() < f32::EPSILON);
+                }
+                other => panic!("Expected FollowPlayer, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn set_player_follow_clears_static_camp() {
+        let mut mgr = CampManager::new();
+        let camp = make_camp(1);
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        mgr.set_camp(camp, &role_map);
+        assert!(mgr.is_active());
+
+        // Activating follow mode should clear the static camp.
+        let anchor = Waypoint::new(0.0, 0.0, 0.0);
+        mgr.set_player_follow(make_follow_config(), &[1], anchor);
+        assert!(
+            !mgr.is_active(),
+            "Static camp should be cleared by follow mode"
+        );
+    }
+
+    #[test]
+    fn set_camp_clears_follow_mode() {
+        let mut mgr = CampManager::new();
+        let anchor = Waypoint::new(0.0, 0.0, 0.0);
+        mgr.set_player_follow(make_follow_config(), &[1], anchor);
+        assert!(mgr.is_following());
+
+        let camp = make_camp(1);
+        let mut role_map = HashMap::new();
+        role_map.insert(1, "tank".to_string());
+        mgr.set_camp(camp, &role_map);
+        assert!(
+            !mgr.is_following(),
+            "Follow mode should be cleared by set_camp"
+        );
+    }
+
+    #[test]
+    fn clear_follow_stops_follow_mode() {
+        let mut mgr = CampManager::new();
+        let anchor = Waypoint::new(0.0, 0.0, 0.0);
+        mgr.set_player_follow(make_follow_config(), &[1, 2], anchor);
+
+        let cmds = mgr.clear_follow(&[1, 2]);
+        assert!(!mgr.is_following());
+        assert_eq!(cmds.len(), 2);
+        for (_, cmd) in &cmds {
+            assert!(
+                matches!(cmd, dmft_common::ipc::Command::StopFollow),
+                "Expected StopFollow command"
+            );
+        }
+    }
+
+    #[test]
+    fn tick_follow_no_update_when_not_following() {
+        let mut mgr = CampManager::new();
+        let cmds = mgr.tick_follow(Waypoint::new(10.0, 10.0, 0.0), &[1, 2]);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn tick_follow_broadcasts_initial_anchor() {
+        let mut mgr = CampManager::new();
+        let config = make_follow_config();
+        let initial = Waypoint::new(0.0, 0.0, 0.0);
+
+        // Manually create follow mode without setting last_anchor to test first tick.
+        let mode = PlayerFollowMode::new(config.clone());
+        mgr.follow_mode = Some(mode);
+
+        // First tick should always broadcast.
+        let cmds = mgr.tick_follow(initial, &[1, 2]);
+        assert_eq!(cmds.len(), 2);
+    }
+
+    #[test]
+    fn tick_follow_no_update_when_leader_stationary() {
+        let mut mgr = CampManager::new();
+        let anchor = Waypoint::new(100.0, 100.0, 0.0);
+        mgr.set_player_follow(make_follow_config(), &[1], anchor);
+
+        // Leader stays put — no update expected.
+        let cmds = mgr.tick_follow(anchor, &[1]);
+        assert!(
+            cmds.is_empty(),
+            "Should not broadcast if leader hasn't moved"
+        );
+    }
+
+    #[test]
+    fn tick_follow_broadcasts_when_leader_moves_past_threshold() {
+        let mut mgr = CampManager::new();
+        let anchor = Waypoint::new(0.0, 0.0, 0.0);
+        mgr.set_player_follow(make_follow_config(), &[1], anchor);
+
+        // Move leader past the threshold (2.0 units).
+        let new_pos = Waypoint::new(5.0, 0.0, 0.0); // 5 > 2.0 threshold
+        let cmds = mgr.tick_follow(new_pos, &[1]);
+        assert_eq!(cmds.len(), 1);
+        match &cmds[0].1 {
+            dmft_common::ipc::Command::UpdateFollowAnchor { x, y, z } => {
+                assert!((*x - 5.0).abs() < f32::EPSILON);
+                assert!((*y - 0.0).abs() < f32::EPSILON);
+                assert!((*z - 0.0).abs() < f32::EPSILON);
+            }
+            other => panic!("Expected UpdateFollowAnchor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tick_follow_no_update_when_leader_moves_below_threshold() {
+        let mut mgr = CampManager::new();
+        let anchor = Waypoint::new(0.0, 0.0, 0.0);
+        mgr.set_player_follow(make_follow_config(), &[1], anchor);
+
+        // Move leader less than threshold (2.0 units).
+        let new_pos = Waypoint::new(1.0, 0.0, 0.0); // 1.0 < 2.0 threshold
+        let cmds = mgr.tick_follow(new_pos, &[1]);
+        assert!(cmds.is_empty(), "Should not broadcast minor movement");
+    }
+
+    #[test]
+    fn follow_config_stored_and_accessible() {
+        let mut mgr = CampManager::new();
+        let config = FollowConfig::new("Camrene", 15.0, 75.0);
+        let anchor = Waypoint::new(0.0, 0.0, 0.0);
+        mgr.set_player_follow(config.clone(), &[1], anchor);
+
+        let stored = mgr
+            .follow_config()
+            .expect("follow config should be present");
+        assert_eq!(stored.leader_name, "Camrene");
+        assert!((stored.follow_distance - 15.0).abs() < f32::EPSILON);
+        assert!((stored.leash_distance - 75.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn player_follow_mode_check_anchor_first_call_always_broadcasts() {
+        let config = make_follow_config();
+        let mut mode = PlayerFollowMode::new(config);
+        let pos = Waypoint::new(50.0, 50.0, 0.0);
+        assert!(
+            mode.check_anchor_update(pos).is_some(),
+            "First call must broadcast regardless of position"
+        );
+    }
+
+    #[test]
+    fn player_follow_mode_check_anchor_no_update_below_threshold() {
+        let config = make_follow_config();
+        let mut mode = PlayerFollowMode::new(config);
+        let pos = Waypoint::new(0.0, 0.0, 0.0);
+        mode.set_last_anchor(pos);
+
+        // Small movement below threshold.
+        let minor = Waypoint::new(1.0, 0.0, 0.0);
+        assert!(
+            mode.check_anchor_update(minor).is_none(),
+            "Should not broadcast for sub-threshold movement"
+        );
+    }
+
+    #[test]
+    fn player_follow_mode_check_anchor_update_above_threshold() {
+        let config = make_follow_config();
+        let mut mode = PlayerFollowMode::new(config);
+        let origin = Waypoint::new(0.0, 0.0, 0.0);
+        mode.set_last_anchor(origin);
+
+        let far = Waypoint::new(10.0, 0.0, 0.0);
+        let result = mode.check_anchor_update(far);
+        assert!(
+            result.is_some(),
+            "Should broadcast for significant movement"
+        );
+        let new_anchor = result.unwrap();
+        assert!((new_anchor.x - 10.0).abs() < f32::EPSILON);
+
+        // Last anchor should now be updated.
+        assert!(mode.last_anchor().is_some());
+        assert!((mode.last_anchor().unwrap().x - 10.0).abs() < f32::EPSILON);
     }
 }
