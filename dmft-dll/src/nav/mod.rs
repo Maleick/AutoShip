@@ -3,10 +3,12 @@
 pub mod humanize;
 pub mod state;
 pub mod stuck;
+pub mod warp;
 pub mod waypoint;
 pub mod zone_graph;
 
 pub use state::Navigator;
+use warp::TargetSample;
 
 use std::sync::Mutex;
 
@@ -27,12 +29,12 @@ pub fn init(player_base: usize, client_id: u32) {
 }
 
 /// Run one navigation tick. Call from `on_game_tick()`.
-pub fn tick() {
+pub fn tick(target: Option<&TargetSample>) {
     if let Some(ref mut nav) = *NAVIGATOR
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
     {
-        nav.tick();
+        nav.tick(target);
     }
 }
 
