@@ -3,6 +3,7 @@ use serde::{Serialize, de::DeserializeOwned};
 /// Maximum allowed message size (64 KB). Frames larger than this are rejected
 /// during decode to prevent memory exhaustion from malformed or malicious input.
 pub const MAX_MESSAGE_SIZE: u32 = 65536;
+const MAX_MESSAGE_SIZE_USIZE: usize = MAX_MESSAGE_SIZE as usize;
 
 /// Encode a message as a length-prefixed bincode frame.
 ///
@@ -41,8 +42,8 @@ pub fn decode<T: DeserializeOwned>(data: &[u8]) -> Option<(T, usize)> {
     if data.len() < 4 + len {
         return None;
     }
-    let (msg, _) =
-        bincode::serde::decode_from_slice(&data[4..4 + len], bincode::config::standard()).ok()?;
+    let config = bincode::config::standard().with_limit::<MAX_MESSAGE_SIZE_USIZE>();
+    let (msg, _) = bincode::serde::decode_from_slice(&data[4..4 + len], config).ok()?;
     Some((msg, 4 + len))
 }
 
@@ -180,6 +181,22 @@ mod tests {
         let mut buf = oversized_len.to_vec();
         buf.extend_from_slice(&[0u8; 100]);
         assert!(decode::<Command>(&buf).is_none());
+    }
+
+    #[test]
+    fn decode_rejects_length_prefixes_inside_payload_that_exceed_limit() {
+        let huge_len_prefix = bincode::serde::encode_to_vec(
+            u64::from(MAX_MESSAGE_SIZE) + 1,
+            bincode::config::standard(),
+        )
+        .expect("encode failed");
+
+        let mut frame = (huge_len_prefix.len() as u32).to_le_bytes().to_vec();
+        frame.extend_from_slice(&huge_len_prefix);
+
+        // Attempt to decode this frame as a String payload. The payload itself is tiny,
+        // but the embedded length prefix claims content larger than the decode limit.
+        assert!(decode::<String>(&frame).is_none());
     }
 
     #[test]
