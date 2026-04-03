@@ -8,6 +8,16 @@ on:
     - cron: "0 8 * * *"
     - cron: "0 9 * * *"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Push wiki changes instead of running in dry-run validation mode"
+        required: false
+        default: false
+        type: boolean
+      source_sha:
+        description: "Optional commit SHA to check out before syncing the wiki"
+        required: false
+        type: string
 
 concurrency:
   group: wiki-nightly-${{ github.ref }}
@@ -31,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event_name == 'workflow_dispatch' && inputs.source_sha || github.ref }}
 
       - name: Locate Python
         run: |

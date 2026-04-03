@@ -223,7 +223,7 @@ is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1
 Nightly self-hosted workflows:
 
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
-- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`
+- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
 - `.github/workflows/ci.yml` runs the required `PR gate (fmt + clippy + test + python)` job for PRs and pushes to `master` without consuming GitHub-hosted minutes
 
 If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
