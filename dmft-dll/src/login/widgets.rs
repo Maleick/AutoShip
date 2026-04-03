@@ -387,7 +387,7 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
 /// This is the MQ2 approach — no keyboard simulation. We:
 /// 1. Walk `CXWndManager::pWindows` to find username/password edit widgets
 /// 2. Write directly to `CEditBaseWnd::InputText` (`CXStr` at +0x278)
-/// 3. Click the Login button via vtable WndNotification(XWM_LCLICK)
+/// 3. Queue a Login button click on the game loop thread
 pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]
     {
@@ -576,17 +576,18 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
             tracing::info!("=== END HEX DUMP ===");
 
-            // Click the Login button directly via vtable WndNotification.
-            // Previous crash may have been from wrong button pointer (now fixed).
+            // Queue the Login button click for the game loop thread.
+            // `click_button_via_vtable` is main-thread-only; callers of this
+            // helper may run on IPC/background threads.
             if login_button != 0 {
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
-                    "Clicking Login button via WndNotification"
+                    "Queueing Login button click"
                 );
                 // Small delay to let credential writes settle
                 std::thread::sleep(std::time::Duration::from_millis(100));
-                crate::eq::widgets::click_button_via_vtable(login_button);
-                tracing::info!("Login button clicked");
+                crate::hooks::game_loop::queue_button_click(login_button);
+                tracing::info!("Login button click queued");
             } else {
                 tracing::warn!("Login button not found — credentials written but not submitted");
             }
