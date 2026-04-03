@@ -390,6 +390,9 @@ fn apply_demo_scenario(app: &mut App) {
                         status: nav.status.clone(),
                         eta_secs: None,
                         waypoints: nav.waypoints.clone(),
+                        path_exists: true,
+                        path_length: None,
+                        failure_reason: None,
                         route_state: match &nav.status {
                             dmft_common::nav::NavStatus::Moving { .. } => {
                                 String::from("Regroup route")

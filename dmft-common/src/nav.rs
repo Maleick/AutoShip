@@ -124,6 +124,39 @@ impl NavStatus {
     }
 }
 
+/// Navigation path health metrics.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct NavPathMetrics {
+    /// Whether a navmesh-backed path was successfully computed.
+    pub path_exists: bool,
+    /// Total distance of the planned path (in world units), if known.
+    pub path_length: Option<f32>,
+    /// Human-readable reason when no navmesh path could be found.
+    pub failure_reason: Option<String>,
+}
+
+impl NavPathMetrics {
+    /// Construct metrics for a successful navmesh query.
+    #[must_use]
+    pub fn success(path_length: Option<f32>) -> Self {
+        Self {
+            path_exists: true,
+            path_length,
+            failure_reason: None,
+        }
+    }
+
+    /// Construct metrics for a failed navmesh query.
+    #[must_use]
+    pub fn failure(reason: impl Into<String>, path_length: Option<f32>) -> Self {
+        Self {
+            path_exists: false,
+            path_length,
+            failure_reason: Some(reason.into()),
+        }
+    }
+}
+
 /// A generic indexed cursor over a `Vec<T>`.
 ///
 /// Provides sequential traversal with `current()` / `advance()` semantics.
