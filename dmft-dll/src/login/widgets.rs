@@ -576,17 +576,15 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
             tracing::info!("=== END HEX DUMP ===");
 
-            // Click the Login button directly via vtable WndNotification.
-            // Previous crash may have been from wrong button pointer (now fixed).
+            // Queue Login button click for execution on EQ's main game loop thread.
+            // Never invoke WndNotification directly from IPC/background threads.
             if login_button != 0 {
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
-                    "Clicking Login button via WndNotification"
+                    "Queueing Login button click on game loop thread"
                 );
-                // Small delay to let credential writes settle
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                crate::eq::widgets::click_button_via_vtable(login_button);
-                tracing::info!("Login button clicked");
+                crate::hooks::game_loop::queue_button_click(login_button);
+                tracing::info!("Login button click queued");
             } else {
                 tracing::warn!("Login button not found — credentials written but not submitted");
             }
