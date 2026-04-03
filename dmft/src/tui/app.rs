@@ -407,8 +407,64 @@ pub struct NavClientStatus {
     pub eta_secs: Option<u32>,
     /// Active navigation waypoints for map overlay rendering.
     pub waypoints: Vec<dmft_common::nav::Waypoint>,
+    /// Human-readable route selection or wait state.
+    pub route_state: String,
+    /// Human-readable recovery state when navigation is blocked or stuck.
+    pub recovery_state: Option<String>,
+    /// Operator-visible blockers that explain why travel is waiting or degraded.
+    pub blockers: Vec<String>,
     /// Whether this status was injected by the deterministic demo script.
     pub is_demo_scripted: bool,
+}
+
+impl NavClientStatus {
+    /// Short progress label for the current navigation status.
+    #[must_use]
+    pub fn progress_summary(&self) -> String {
+        match &self.status {
+            dmft_common::nav::NavStatus::Idle => String::from("Standing by"),
+            dmft_common::nav::NavStatus::Moving {
+                waypoint_index,
+                waypoint_count,
+                distance_remaining,
+            } => format!(
+                "WP {}/{} • {:.0}u remaining",
+                waypoint_index.saturating_add(1),
+                (*waypoint_count).max(1),
+                distance_remaining
+            ),
+            dmft_common::nav::NavStatus::Paused {
+                reason,
+                waypoint_index,
+                waypoint_count,
+                distance_remaining,
+            } => {
+                let reason_label = match reason {
+                    dmft_common::nav::PauseReason::Warp => "warp",
+                };
+                format!(
+                    "Paused ({reason_label}) • WP {}/{} • {:.0}u remaining",
+                    waypoint_index.saturating_add(1),
+                    (*waypoint_count).max(1),
+                    distance_remaining
+                )
+            }
+            dmft_common::nav::NavStatus::Stuck { recovery_attempt } => {
+                format!("Recovery attempt {}", recovery_attempt)
+            }
+            dmft_common::nav::NavStatus::Arrived => String::from("Destination reached"),
+        }
+    }
+
+    /// Single-line blocker summary suitable for narrow cards and tables.
+    #[must_use]
+    pub fn blocker_summary(&self) -> Option<String> {
+        if self.blockers.is_empty() {
+            None
+        } else {
+            Some(self.blockers.join(" | "))
+        }
+    }
 }
 
 struct FocusedNavClient {
@@ -2499,6 +2555,22 @@ impl App {
             if let Some(expected_zone) = zone_hint
                 && focused_client.zone_short != expected_zone
             {
+                self.nav_state.nav_statuses.insert(
+                    focused_client.pid,
+                    NavClientStatus {
+                        destination: destination_label.to_string(),
+                        status: dmft_common::nav::NavStatus::Idle,
+                        eta_secs: None,
+                        waypoints: Vec::new(),
+                        route_state: String::from("Awaiting zone match"),
+                        recovery_state: Some(String::from("Zone transition pending")),
+                        blockers: vec![format!(
+                            "Current zone {} does not match route zone {}.",
+                            focused_client.zone_short, expected_zone
+                        )],
+                        is_demo_scripted: false,
+                    },
+                );
                 skipped += 1;
                 continue;
             }
@@ -2564,6 +2636,29 @@ impl App {
                         status,
                         eta_secs: None,
                         waypoints: route.waypoints,
+                        route_state: match route.source {
+                            crate::nav::mesh::RouteSource::NavMesh => String::from("Navmesh route"),
+                            crate::nav::mesh::RouteSource::StraightLineFallback => {
+                                String::from("Fallback route")
+                            }
+                        },
+                        recovery_state: None,
+                        blockers: match route.source {
+                            crate::nav::mesh::RouteSource::NavMesh => Vec::new(),
+                            crate::nav::mesh::RouteSource::StraightLineFallback => {
+                                if route.mesh_cached {
+                                    vec![format!(
+                                        "Mesh exists for {} but path query fell back to a straight line.",
+                                        focused_client.zone_short
+                                    )]
+                                } else {
+                                    vec![format!(
+                                        "No cached navmesh for {}; using straight-line fallback.",
+                                        focused_client.zone_short
+                                    )]
+                                }
+                            }
+                        },
                         is_demo_scripted: false,
                     },
                 );
