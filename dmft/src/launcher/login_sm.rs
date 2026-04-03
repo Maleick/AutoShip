@@ -233,6 +233,8 @@ impl LoginStateMachine {
             // Fatal errors — abort immediately
             LoginError::WrongPassword
             | LoginError::AccountLocked
+            | LoginError::CharacterAlreadyLoggedIn
+            | LoginError::OfflineTrader
             | LoginError::CharacterNotFound { .. } => {
                 self.transition_to(LoginPhase::Failed {
                     reason: error.clone(),

@@ -100,6 +100,12 @@ enum State {
 /// At ~30fps game loop, 15 ticks = ~500ms.
 const ACTION_COOLDOWN_TICKS: u32 = 15;
 
+#[derive(Debug, Clone, PartialEq)]
+enum ConflictDialog {
+    KickActiveCharacter,
+    OfflineTrader,
+}
+
 /// Credentials stored temporarily in memory, zeroized after use.
 ///
 /// The `password` field uses `Zeroizing<String>` which overwrites the heap buffer
@@ -247,19 +253,9 @@ impl LoginFsm {
             let dialog_text = widgets::read_yesno_dialog_text(dialog_wnd).unwrap_or_default();
             tracing::info!(text = %dialog_text, "YesNo dialog detected");
 
-            // "Already logged in" dialogs → click Yes to kick
-            if dialog_text.to_ascii_lowercase().contains("logged in")
-                || dialog_text.to_ascii_lowercase().contains("kick")
-                || dialog_text.to_ascii_lowercase().contains("already")
-            {
-                tracing::info!("Clicking YES to dismiss 'already logged in' dialog");
-                widgets::click_yesno_yes(dialog_wnd);
-                return false; // Not an error, just a dialog to dismiss
+            if self.handle_yesno_dialog(dialog_wnd, &dialog_text) {
+                return true;
             }
-
-            // Unknown YesNo — click Yes as a safe default
-            tracing::info!("Clicking YES on unknown YesNo dialog");
-            widgets::click_yesno_yes(dialog_wnd);
             return false;
         }
 
@@ -275,6 +271,53 @@ impl LoginFsm {
         }
 
         false
+    }
+
+    fn handle_yesno_dialog(&mut self, dialog_wnd: usize, dialog_text: &str) -> bool {
+        match Self::classify_conflict_dialog(dialog_text) {
+            Some(ConflictDialog::KickActiveCharacter) => {
+                tracing::warn!("KickActiveCharacter dialog detected — clicking YES to continue");
+                widgets::click_yesno_yes(dialog_wnd);
+                // Reset timeout/retry window after kicking the other session
+                self.state_entered_at = Instant::now();
+                self.retries = 0;
+                false
+            }
+            Some(ConflictDialog::OfflineTrader) => {
+                tracing::error!(
+                    text = dialog_text,
+                    "Offline trader conflict detected — stopping login"
+                );
+                widgets::click_yesno_no(dialog_wnd);
+                self.transition(State::Error(LoginError::OfflineTrader));
+                true
+            }
+            None => {
+                tracing::info!("Clicking YES on unknown YesNo dialog");
+                widgets::click_yesno_yes(dialog_wnd);
+                false
+            }
+        }
+    }
+
+    fn classify_conflict_dialog(text: &str) -> Option<ConflictDialog> {
+        let normalized = text.to_ascii_lowercase();
+        if normalized.contains("kickactivecharacter")
+            || normalized.contains("kick active character")
+            || normalized.contains("already logged in")
+            || normalized.contains("logged in elsewhere")
+            || normalized.contains("active character")
+        {
+            Some(ConflictDialog::KickActiveCharacter)
+        } else if normalized.contains("offline trader")
+            || normalized.contains("offline mode")
+            || normalized.contains("trader mode")
+            || normalized.contains("bazaar trader")
+        {
+            Some(ConflictDialog::OfflineTrader)
+        } else {
+            None
+        }
     }
 
     fn tick_wait_for_login_screen(&mut self) {
@@ -745,5 +788,40 @@ mod tests {
         // Change
         fsm.transition(State::WaitForLoginScreen);
         assert!(fsm.phase_if_changed(&prev).is_some());
+    }
+
+    #[test]
+    fn classify_conflict_dialog_detects_variants() {
+        assert_eq!(
+            LoginFsm::classify_conflict_dialog("Kick Active Character?"),
+            Some(ConflictDialog::KickActiveCharacter)
+        );
+        assert_eq!(
+            LoginFsm::classify_conflict_dialog("Character is in offline trader mode"),
+            Some(ConflictDialog::OfflineTrader)
+        );
+        assert!(LoginFsm::classify_conflict_dialog("random dialog").is_none());
+    }
+
+    #[test]
+    fn offline_trader_dialog_transitions_to_error() {
+        let mut fsm = LoginFsm::new();
+        fsm.transition(State::WaitForLoginScreen);
+        let transitioned = fsm.handle_yesno_dialog(0, "Character is in offline trader mode.");
+        assert!(transitioned);
+        assert!(matches!(
+            fsm.state,
+            State::Error(LoginError::OfflineTrader)
+        ));
+    }
+
+    #[test]
+    fn kick_active_character_dialog_retries_without_error() {
+        let mut fsm = LoginFsm::new();
+        fsm.transition(State::WaitForLoginScreen);
+        let transitioned =
+            fsm.handle_yesno_dialog(0, "This account already has an active character.");
+        assert!(!transitioned);
+        assert_eq!(fsm.state, State::WaitForLoginScreen);
     }
 }

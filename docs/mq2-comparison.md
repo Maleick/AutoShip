@@ -27,7 +27,7 @@ MQ2: `mq2-reference/src/plugins/autologin/`
 | Credential entry | SetEditWndText on CEditWnd | Direct char[] memory write (primary) + SIDL CXStr (fallback) | ✅ | Frostreaver has two paths; direct write bypasses SIDL entirely |
 | Server selection | JoinServer() API + list scanning + long-name DB | "PLAY EVERQUEST!" click + JoinServer stub | ⚠️ | MQ2 has server ID lookup and long-name→short-name mapping; Frostreaver relies on last-server |
 | Character selection | Full CCharacterListWnd scan by name | Stub — CCharacterListWnd scan TODO | ⚠️ | MQ2 scans character list rows; Frostreaver has EnterWorld() but character-by-name selection is pending |
-| Kick handling | KickActiveCharacter setting + offline trader detection | Not implemented | ❌ | MQ2 handles "character already logged in" dialogs |
+| Kick handling | KickActiveCharacter setting + offline trader detection | Auto-kick KickActiveCharacter dialog, offline trader surfaced as error | ✅ | Handles already-logged-in/offline-trader dialogs deterministically |
 | Error dialog parsing | Full STML text extraction + specific error routing | Generic okdialog detection + dismiss | ⚠️ | MQ2 identifies specific errors (wrong password, account locked); Frostreaver detects but doesn't parse error text |
 | Camping/relog | /relog command, InGameCamping state, fast-camp detection | Not implemented | ❌ | MQ2 manages camp→relog→relogin cycle |
 | Profile groups | Multi-character profiles with hotkeys | Single-character login commands | ⚠️ | MQ2 has named profile groups; Frostreaver manages via orchestrator config |

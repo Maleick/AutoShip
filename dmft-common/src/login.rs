@@ -37,6 +37,10 @@ pub enum LoginError {
     WrongPassword,
     /// Account is locked or suspended.
     AccountLocked,
+    /// Character is already logged in and needs an explicit kick.
+    CharacterAlreadyLoggedIn,
+    /// Character is in offline trader mode and cannot log in automatically.
+    OfflineTrader,
     /// Target server is down.
     ServerDown,
     /// Target server is at capacity.
@@ -110,6 +114,8 @@ mod tests {
         let errors = [
             LoginError::WrongPassword,
             LoginError::AccountLocked,
+            LoginError::CharacterAlreadyLoggedIn,
+            LoginError::OfflineTrader,
             LoginError::ServerDown,
             LoginError::ServerFull,
             LoginError::CharacterNotFound {
@@ -121,7 +127,7 @@ mod tests {
             },
             LoginError::MassFailure,
         ];
-        assert_eq!(errors.len(), 7);
+        assert_eq!(errors.len(), 9);
     }
 
     #[test]
@@ -222,6 +228,11 @@ mod tests {
     fn login_error_equality() {
         assert_eq!(LoginError::WrongPassword, LoginError::WrongPassword);
         assert_eq!(LoginError::ServerDown, LoginError::ServerDown);
+        assert_eq!(
+            LoginError::CharacterAlreadyLoggedIn,
+            LoginError::CharacterAlreadyLoggedIn
+        );
+        assert_eq!(LoginError::OfflineTrader, LoginError::OfflineTrader);
         assert_ne!(LoginError::WrongPassword, LoginError::AccountLocked);
         assert_ne!(LoginError::ServerDown, LoginError::ServerFull);
     }
@@ -231,6 +242,8 @@ mod tests {
         let errors = vec![
             LoginError::WrongPassword,
             LoginError::AccountLocked,
+            LoginError::CharacterAlreadyLoggedIn,
+            LoginError::OfflineTrader,
             LoginError::ServerDown,
             LoginError::ServerFull,
             LoginError::MassFailure,
