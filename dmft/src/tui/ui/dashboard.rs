@@ -763,13 +763,15 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
         || String::from("—"),
         |target| app.redact_name(&target.displayed_name).into_owned(),
     );
-    let (nav_label, nav_style, nav_destination) =
+    let (nav_label, nav_style, nav_destination, nav_route_state, nav_blocker_summary) =
         app.nav_state.nav_statuses.get(&client.pid).map_or_else(
             || {
                 (
                     String::from("Idle"),
                     Style::default().fg(t.text_muted),
                     String::from("—"),
+                    String::new(),
+                    None,
                 )
             },
             |nav| {
@@ -787,7 +789,13 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                 } else {
                     nav.destination.clone()
                 };
-                (nav.status.label().to_string(), style, destination)
+                (
+                    nav.status.label().to_string(),
+                    style,
+                    destination,
+                    nav.route_state.clone(),
+                    nav.blocker_summary(),
+                )
             },
         );
 
@@ -916,6 +924,28 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
                         Style::default().fg(t.text_secondary),
                     )
                 },
+            ]));
+        }
+
+        if !nav_route_state.is_empty() || nav_blocker_summary.is_some() {
+            lines.push(Line::from(vec![
+                Span::styled("Route ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    truncate_inline(&nav_route_state, 20),
+                    Style::default().fg(t.text_highlight),
+                ),
+                Span::styled("  Hold ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    truncate_inline(
+                        nav_blocker_summary.as_deref().unwrap_or("clear"),
+                        inner.width.saturating_sub(33) as usize,
+                    ),
+                    Style::default().fg(if nav_blocker_summary.is_some() {
+                        t.hp_low
+                    } else {
+                        t.hp_high
+                    }),
+                ),
             ]));
         }
 
