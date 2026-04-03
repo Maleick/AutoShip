@@ -127,6 +127,13 @@ static ENTER_WORLD_RETRIES: std::sync::atomic::AtomicU32 = std::sync::atomic::At
 static PENDING_CHAR_NAME: std::sync::OnceLock<std::sync::Mutex<String>> =
     std::sync::OnceLock::new();
 
+/// Cached nearby spawns used by the stick-to-target engine.
+///
+/// Updated every 30 ticks in `read_and_publish_state`; consumed every tick
+/// by `crate::nav::tick()` for target resolution (`hold` / `id` / `always`).
+static CACHED_NEARBY_FOR_STICK: std::sync::Mutex<Vec<dmft_common::types::SpawnData>> =
+    std::sync::Mutex::new(Vec::new());
+
 /// Set a button widget address to be clicked on the next game loop tick.
 /// Called from the IPC thread after writing credentials.
 pub fn queue_button_click(button_wnd: usize) {
@@ -557,7 +564,15 @@ fn on_game_tick() {
     }
 
     // Run navigation state machine.
-    crate::nav::tick();
+    // Pass current target and cached nearby spawns for the stick engine.
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        let nav_target = if eq_base != 0 { read_target_state(eq_base) } else { None };
+        let nearby_guard = CACHED_NEARBY_FOR_STICK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        crate::nav::tick(nav_target.as_ref(), &nearby_guard);
+    }
 
     // Run login FSM when not yet in world (local_player is null).
     // The login FSM drives credential entry, server/char selection autonomously.
@@ -701,6 +716,12 @@ fn read_and_publish_state(tick: u64) {
         };
         let spawns = read_nearby_spawns(eq_base, player.x, player.y, player.z);
         let (zone_short, zone_long) = read_zone_names(eq_base);
+
+        // Update cached nearby spawns for the stick engine (accessed by nav::tick each frame).
+        if let Ok(mut cached_nearby) = CACHED_NEARBY_FOR_STICK.lock() {
+            cached_nearby.clone_from(&spawns);
+        }
+
         *cached = Some(dmft_common::types::GameState {
             client_id: std::process::id(),
             local_player,
@@ -1282,6 +1303,37 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         }
         Command::StopNavigation => {
             crate::nav::handle_command(crate::nav::NavCommand::Stop);
+        }
+        Command::StickTo { config } => {
+            tracing::info!(
+                hold = config.hold,
+                always = config.always,
+                id = config.id,
+                distance_mod = config.distance_mod,
+                "StickTo received"
+            );
+            // Read current target ID to support the `hold` modifier — when `hold` is
+            // set, we lock onto whichever spawn is targeted at the moment stick starts.
+            // We read it unconditionally here (it's a cheap pointer deref) and pass it
+            // to the stick engine, which ignores it when an explicit `id` is configured.
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            let current_target_id = if eq_base != 0 {
+                read_target_state(eq_base).map(|t| t.spawn_id)
+            } else {
+                None
+            };
+            crate::nav::handle_command(crate::nav::NavCommand::StickTo {
+                config,
+                current_target_id,
+            });
+        }
+        Command::StickOff => {
+            tracing::info!("StickOff received");
+            crate::nav::handle_command(crate::nav::NavCommand::StickOff);
+        }
+        Command::StickMod { delta } => {
+            tracing::info!(delta, "StickMod received");
+            crate::nav::handle_command(crate::nav::NavCommand::StickMod(delta));
         }
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");

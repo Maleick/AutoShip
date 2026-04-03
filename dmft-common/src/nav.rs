@@ -70,6 +70,54 @@ impl Waypoint {
     }
 }
 
+/// Distance specification for a `/stick` command.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum StickDistance {
+    /// Stick at the default melee range (~15 EQ units).
+    #[default]
+    Default,
+    /// Stick at an explicit absolute distance in EQ units (`/stick #`).
+    Absolute(f32),
+    /// Stick at a percentage of the default range (`/stick #%`).
+    Percent(f32),
+}
+
+/// Configuration for a `/stick` session (MQ2MoveUtils compatible).
+///
+/// Maps the MQ2MoveUtils command surface:
+/// - `/stick #`      → `distance = StickDistance::Absolute(#)`
+/// - `/stick #%`     → `distance = StickDistance::Percent(#)`
+/// - `/stick mod #`  → `distance_mod += #` (applied via `StickMod` command)
+/// - `/stick hold`   → `hold = true`
+/// - `/stick always` → `always = true`
+/// - `/stick id #`   → `id = Some(#)`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StickConfig {
+    /// Base distance to maintain from the target.
+    pub distance: StickDistance,
+    /// Additive distance modifier applied on top of `distance` (from `/stick mod #`).
+    pub distance_mod: f32,
+    /// Lock onto the current target's spawn ID even if the player retargets (`hold`).
+    pub hold: bool,
+    /// Keep the stick engine active and auto-resume on the next valid NPC
+    /// when the current target is lost (`always`).
+    pub always: bool,
+    /// Stick to a specific spawn ID regardless of current target (`id #`).
+    pub id: Option<u32>,
+}
+
+impl Default for StickConfig {
+    fn default() -> Self {
+        Self {
+            distance: StickDistance::Default,
+            distance_mod: 0.0,
+            hold: false,
+            always: false,
+            id: None,
+        }
+    }
+}
+
 /// Current navigation state reported from DLL to orchestrator.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NavStatus {
@@ -91,6 +139,15 @@ pub enum NavStatus {
     },
     /// Arrived at final destination.
     Arrived,
+    /// Actively sticking to a target spawn (MQ2MoveUtils `/stick` equivalent).
+    Sticking {
+        /// Spawn ID of the current stick target (0 when target is temporarily lost).
+        target_id: u32,
+        /// Current 2D distance to the stick target.
+        distance: f32,
+        /// `true` when within the desired stick range.
+        in_range: bool,
+    },
 }
 
 impl NavStatus {
@@ -102,6 +159,7 @@ impl NavStatus {
             Self::Moving { .. } => "Navigating",
             Self::Stuck { .. } => "Stuck",
             Self::Arrived => "Arrived",
+            Self::Sticking { .. } => "Sticking",
         }
     }
 
@@ -121,6 +179,12 @@ impl NavStatus {
     #[must_use]
     pub fn is_arrived(&self) -> bool {
         matches!(self, Self::Arrived)
+    }
+
+    /// Returns true if actively sticking to a target.
+    #[must_use]
+    pub fn is_sticking(&self) -> bool {
+        matches!(self, Self::Sticking { .. })
     }
 }
 
@@ -823,4 +887,55 @@ mod tests {
         // Verify path still works
         assert_eq!(restored.find_path(1, 3).unwrap().len(), 3);
     }
+
+    // ─── StickConfig / StickDistance tests ─────────────────────────────────
+
+    #[test]
+    fn stick_distance_default_is_default_variant() {
+        let d = StickDistance::default();
+        assert!(matches!(d, StickDistance::Default));
+    }
+
+    #[test]
+    fn stick_config_default_has_sensible_values() {
+        let cfg = StickConfig::default();
+        assert!(matches!(cfg.distance, StickDistance::Default));
+        assert!((cfg.distance_mod).abs() < f32::EPSILON);
+        assert!(!cfg.hold);
+        assert!(!cfg.always);
+        assert!(cfg.id.is_none());
+    }
+
+    #[test]
+    fn nav_status_is_sticking() {
+        let s = NavStatus::Sticking {
+            target_id: 7,
+            distance: 10.0,
+            in_range: true,
+        };
+        assert!(s.is_sticking());
+        assert!(!s.is_moving());
+        assert!(!s.is_stuck());
+        assert!(!s.is_arrived());
+        assert_eq!(s.label(), "Sticking");
+    }
+
+    #[test]
+    fn nav_status_sticking_serialization_roundtrip() {
+        let s = NavStatus::Sticking {
+            target_id: 42,
+            distance: 8.5,
+            in_range: false,
+        };
+        let json = serde_json::to_string(&s).expect("serialize");
+        let restored: NavStatus = serde_json::from_str(&json).expect("deserialize");
+        if let NavStatus::Sticking { target_id, distance, in_range } = restored {
+            assert_eq!(target_id, 42);
+            assert!((distance - 8.5).abs() < f32::EPSILON);
+            assert!(!in_range);
+        } else {
+            panic!("expected Sticking variant");
+        }
+    }
 }
+

@@ -1,14 +1,17 @@
 //! Navigation state machine — runs once per game tick.
 //! Transitions: Idle -> Moving -> Arrived -> Idle
+//! Stick mode: activated via `stick_to()`, runs until `stick_off()` or stop.
 //!
 //! Stuck detection and recovery are handled inline by `StuckDetector`
 //! rather than via a separate FSM state.
 
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
-use dmft_common::nav::{CampSpot, NavStatus, Waypoint};
+use dmft_common::nav::{CampSpot, NavStatus, StickConfig, Waypoint};
+use dmft_common::types::SpawnData;
 
 use super::humanize::MovementPersonality;
+use super::stick::StickEngine;
 use super::stuck::StuckDetector;
 use super::waypoint::WaypointQueue;
 
@@ -17,6 +20,7 @@ enum State {
     Idle,
     Moving,
     Arrived,
+    Sticking,
 }
 
 /// The navigation engine, owned per-client in the DLL.
@@ -32,6 +36,11 @@ pub struct Navigator {
     personality: MovementPersonality,
     /// Cached distance to current waypoint (updated each tick, read by status()).
     cached_distance: f32,
+    /// Stick-to-target engine.
+    stick: StickEngine,
+    /// Cached stick reporting fields (updated each Sticking tick).
+    cached_stick_target_id: u32,
+    cached_stick_distance: f32,
 }
 
 impl Navigator {
@@ -44,6 +53,9 @@ impl Navigator {
             stuck: StuckDetector::new(),
             personality: MovementPersonality::from_client_id(client_id),
             cached_distance: 0.0,
+            stick: StickEngine::new(),
+            cached_stick_target_id: 0,
+            cached_stick_distance: 0.0,
         }
     }
 
@@ -58,6 +70,7 @@ impl Navigator {
         self.queue.set_path(waypoints);
         self.camp = None;
         self.stuck.reset();
+        self.stick.stop();
         self.state = State::Moving;
     }
 
@@ -67,6 +80,7 @@ impl Navigator {
         self.queue.set_path(vec![spot.position]);
         self.camp = Some(spot);
         self.stuck.reset();
+        self.stick.stop();
         self.state = State::Moving;
     }
 
@@ -76,15 +90,46 @@ impl Navigator {
         self.queue.clear();
         self.camp = None;
         self.stuck.reset();
+        self.stick.stop();
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
     }
 
+    /// Begin a stick-to-target session.
+    ///
+    /// Cancels any in-progress waypoint navigation.
+    /// `current_target_id` should be the spawn ID of the game's current target
+    /// at the moment the command arrives (used for `hold` locking).
+    pub fn stick_to(&mut self, config: StickConfig, current_target_id: Option<u32>) {
+        self.controller.stop_forward();
+        self.queue.clear();
+        self.camp = None;
+        self.stuck.reset();
+        self.stick.start(config, current_target_id);
+        self.state = State::Sticking;
+    }
+
+    /// Stop sticking and return to `Idle`.
+    pub fn stick_off(&mut self) {
+        self.controller.stop_forward();
+        self.stick.stop();
+        self.state = State::Idle;
+        tracing::info!("Stick off — returning to Idle");
+    }
+
+    /// Apply a distance modifier delta to the active stick session (`/stick mod #`).
+    pub fn stick_mod(&mut self, delta: f32) {
+        self.stick.apply_mod(delta);
+    }
+
     /// Run one tick of the navigation state machine. Call from on_game_tick().
-    pub fn tick(&mut self) {
+    ///
+    /// `current_target` and `nearby` are used by the stick engine.
+    pub fn tick(&mut self, current_target: Option<&SpawnData>, nearby: &[SpawnData]) {
         match self.state {
             State::Idle | State::Arrived => {}
             State::Moving => self.tick_moving(),
+            State::Sticking => self.tick_sticking(current_target, nearby),
         }
     }
 
@@ -106,6 +151,15 @@ impl Navigator {
                 }
             }
             State::Arrived => NavStatus::Arrived,
+            State::Sticking => {
+                let effective_dist = self.stick.effective_distance();
+                NavStatus::Sticking {
+                    target_id: self.cached_stick_target_id,
+                    distance: self.cached_stick_distance,
+                    in_range: self.cached_stick_distance
+                        <= effective_dist + super::stick::STICK_ARRIVAL_THRESHOLD,
+                }
+            }
         }
     }
 
@@ -153,6 +207,47 @@ impl Navigator {
             self.controller.write_speed_heading(wobbled);
             // Actually walk forward via ExecuteCmd.
             self.controller.press_forward();
+        }
+    }
+
+    fn tick_sticking(&mut self, current_target: Option<&SpawnData>, nearby: &[SpawnData]) {
+        use super::stick::StickTickResult;
+
+        let player_pos = self.controller.read_position();
+        let result = self.stick.tick(&player_pos, current_target, nearby);
+
+        match result {
+            StickTickResult::Inactive => {
+                // Engine deactivated externally — go idle.
+                self.state = State::Idle;
+            }
+            StickTickResult::TargetLost => {
+                // `always` mode: stay armed, stop movement.
+                self.controller.stop_forward();
+                // Keep cached values from last known contact.
+                if !self.stick.is_active() {
+                    self.state = State::Idle;
+                }
+            }
+            StickTickResult::InRange { target_id, distance } => {
+                self.cached_stick_target_id = target_id;
+                self.cached_stick_distance = distance;
+                self.controller.stop_forward();
+            }
+            StickTickResult::OutOfRange {
+                target_id,
+                distance,
+                desired_pos,
+            } => {
+                self.cached_stick_target_id = target_id;
+                self.cached_stick_distance = distance;
+                // Face and move toward the desired stick position.
+                let heading = movement::calc_heading(&player_pos, &desired_pos);
+                let wobbled = self.personality.wobble_heading(heading);
+                self.controller.write_heading(wobbled);
+                self.controller.write_speed_heading(wobbled);
+                self.controller.press_forward();
+            }
         }
     }
 

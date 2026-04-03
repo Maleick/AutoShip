@@ -132,6 +132,28 @@ pub enum Command {
         /// The soul action to perform.
         action: crate::soul::SoulAction,
     },
+    /// Stick to a target — MQ2MoveUtils `/stick` equivalent.
+    ///
+    /// Supported modifiers (via `StickConfig`):
+    /// - `/stick #`      → `config.distance = Absolute(#)`
+    /// - `/stick #%`     → `config.distance = Percent(#)`
+    /// - `/stick mod #`  → apply after start via `StickMod`
+    /// - `/stick hold`   → `config.hold = true`
+    /// - `/stick always` → `config.always = true`
+    /// - `/stick id #`   → `config.id = Some(#)`
+    StickTo {
+        /// Stick configuration including distance, hold, always, and id options.
+        config: crate::nav::StickConfig,
+    },
+    /// Stop sticking — `/stick off`.
+    StickOff,
+    /// Adjust the active stick distance modifier — `/stick mod #`.
+    ///
+    /// Adds `delta` to `StickConfig::distance_mod` on the running stick session.
+    StickMod {
+        /// Delta to add to the current distance modifier (may be negative).
+        delta: f32,
+    },
     /// Execute a slash command as if typed in the chat window.
     /// Uses EQ's `InterpretCmd` internally (e.g. "/target Camrene", "/follow").
     SlashCommand {
@@ -691,6 +713,78 @@ mod tests {
             assert_eq!(waypoints.len(), 2);
         } else {
             panic!("expected NavigateTo");
+        }
+    }
+
+    #[test]
+    fn command_stick_to_roundtrip() {
+        use crate::nav::{StickConfig, StickDistance};
+        use crate::protocol::{decode, encode};
+        let config = StickConfig {
+            distance: StickDistance::Absolute(20.0),
+            distance_mod: 3.5,
+            hold: true,
+            always: false,
+            id: Some(42),
+        };
+        let cmd = Command::StickTo { config };
+        let encoded = encode(&cmd).expect("encode StickTo");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode StickTo");
+        if let Command::StickTo { config: decoded_config } = decoded {
+            assert!(matches!(decoded_config.distance, StickDistance::Absolute(d) if (d - 20.0).abs() < f32::EPSILON));
+            assert!((decoded_config.distance_mod - 3.5).abs() < f32::EPSILON);
+            assert!(decoded_config.hold);
+            assert!(!decoded_config.always);
+            assert_eq!(decoded_config.id, Some(42));
+        } else {
+            panic!("expected StickTo");
+        }
+    }
+
+    #[test]
+    fn command_stick_off_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::StickOff;
+        let encoded = encode(&cmd).expect("encode StickOff");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode StickOff");
+        assert!(matches!(decoded, Command::StickOff));
+    }
+
+    #[test]
+    fn command_stick_mod_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::StickMod { delta: -5.0 };
+        let encoded = encode(&cmd).expect("encode StickMod");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode StickMod");
+        if let Command::StickMod { delta } = decoded {
+            assert!((delta - (-5.0)).abs() < f32::EPSILON);
+        } else {
+            panic!("expected StickMod");
+        }
+    }
+
+    #[test]
+    fn nav_status_sticking_roundtrip() {
+        use crate::nav::NavStatus;
+        use crate::protocol::{decode, encode};
+        let resp = Response::NavUpdate {
+            status: NavStatus::Sticking {
+                target_id: 99,
+                distance: 12.5,
+                in_range: true,
+            },
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, usize) = decode(&encoded).expect("decode");
+        if let Response::NavUpdate {
+            status: NavStatus::Sticking { target_id, distance, in_range },
+        } = decoded
+        {
+            assert_eq!(target_id, 99);
+            assert!((distance - 12.5).abs() < f32::EPSILON);
+            assert!(in_range);
+        } else {
+            panic!("expected NavUpdate(Sticking)");
         }
     }
 }

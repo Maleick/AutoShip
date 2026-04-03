@@ -373,6 +373,9 @@ pub fn run_statusall_mode() -> Result<()> {
                                 }
                                 dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
                                 dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
+                                dmft_common::nav::NavStatus::Sticking { target_id, .. } => {
+                                    format!("Sticking #{target_id}")
+                                }
                             };
                             let zone = if state.zone_short_name.is_empty() {
                                 "(unknown)".to_string()
