@@ -381,100 +381,39 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     }
 }
 
-/// Write credentials directly to `CEditWnd` widgets by finding them in `CXWndManager`'s
-/// window list and setting their `InputText` `CXStr` in-place.
+/// Write credentials directly to login `CEditWnd` widgets and optionally click Login.
 ///
-/// This is the MQ2 approach — no keyboard simulation. We:
-/// 1. Walk `CXWndManager::pWindows` to find username/password edit widgets
-/// 2. Write directly to `CEditBaseWnd::InputText` (`CXStr` at +0x278)
-/// 3. Click the Login button via vtable WndNotification(XWM_LCLICK)
+/// Security note: this function only writes when the login SIDL screen (`connect`)
+/// is visible and all widgets are resolved by stable XML/SIDL names. This avoids
+/// positional pointer inference from `CXWndManager::pWindows`.
 pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]
     {
         use dmft_common::offsets::eqmain as off;
 
-        let Some(cxwnd_mgr) = super::eqmain::resolve_cxwnd_manager(eqmain_base) else {
-            tracing::warn!("Cannot write credentials — CXWndManager not resolved");
+        // Only write credentials when we are definitely on the login screen.
+        if !is_sidl_window_visible(eqmain_base, SIDL_CONNECT) {
+            tracing::warn!("Refusing credential write — login screen is not active");
+            return false;
+        }
+
+        let Some(username_edit) = find_window_by_name(eqmain_base, LOGIN_USERNAME_EDIT) else {
+            tracing::warn!("Could not resolve username edit widget by SIDL name");
             return false;
         };
+        let Some(password_edit) = find_window_by_name(eqmain_base, LOGIN_PASSWORD_EDIT) else {
+            tracing::warn!("Could not resolve password edit widget by SIDL name");
+            return false;
+        };
+        let login_button = find_window_by_name(eqmain_base, LOGIN_CONNECT_BUTTON);
 
         unsafe {
-            let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-            let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-
-            if array_ptr == 0 || count == 0 || count > 500 {
-                tracing::warn!(count, "Invalid CXWndManager window array");
-                return false;
-            }
-
-            // Find username and password edit widgets by scanning for the
-            // "USERNAME" and "PASSWORD" label windows. The edit fields are
-            // the windows immediately before their labels in the array.
-            let mut username_edit: usize = 0;
-            let mut password_edit: usize = 0;
-            let mut login_button: usize = 0;
-            let mut prev_wnd: usize = 0;
-            let mut prev_prev_wnd: usize = 0;
-            // Collect all "LOGIN" buttons — the login form submit button appears
-            // BEFORE the credential fields in the window array
-            let mut login_candidates: Vec<usize> = Vec::new();
-
-            for i in 0..count as usize {
-                let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-                if wnd_ptr == 0 {
-                    continue;
-                }
-
-                if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT)
-                {
-                    if text == "USERNAME" && prev_prev_wnd != 0 {
-                        username_edit = prev_prev_wnd;
-                        tracing::info!(
-                            ptr = format!("{:#x}", username_edit),
-                            "Found username edit widget (2 before USERNAME label)"
-                        );
-                    }
-                    if text == "PASSWORD" && prev_prev_wnd != 0 {
-                        password_edit = prev_prev_wnd;
-                        tracing::info!(
-                            ptr = format!("{:#x}", password_edit),
-                            "Found password edit widget (2 before PASSWORD label)"
-                        );
-                    }
-                    if text == "LOGIN" {
-                        login_candidates.push(wnd_ptr);
-                    }
-                }
-
-                prev_prev_wnd = prev_wnd;
-                prev_wnd = wnd_ptr;
-
-                // Stop scanning once we have both edit widgets + at least one login button.
-                // Continuing to scan can crash on bad window pointers later in the array.
-                if username_edit != 0 && password_edit != 0 && !login_candidates.is_empty() {
-                    break;
-                }
-            }
-
-            // The login form submit button is typically the second "LOGIN" in the list
-            // (idx=12 is the main menu LOGIN tab, idx=18 is the form submit button)
-            if login_candidates.len() >= 2 {
-                login_button = login_candidates[1]; // Form submit button
-            } else if login_candidates.len() == 1 {
-                login_button = login_candidates[0];
-            }
-            if login_button != 0 {
-                tracing::info!(
-                    ptr = format!("{:#x}", login_button),
-                    candidates = login_candidates.len(),
-                    "Found Login button"
-                );
-            }
-
-            if username_edit == 0 || password_edit == 0 {
-                tracing::warn!("Could not find username/password edit widgets");
-                return false;
-            }
+            tracing::info!(
+                username_edit = format!("{:#x}", username_edit),
+                password_edit = format!("{:#x}", password_edit),
+                has_login_button = login_button.is_some(),
+                "Resolved login widgets by SIDL names"
+            );
 
             // Find a valid CStrRep donor from ANY field on the username widget.
             // The /login: flag inconsistently populates InputText vs WindowText.
@@ -578,7 +517,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
             // Click the Login button directly via vtable WndNotification.
             // Previous crash may have been from wrong button pointer (now fixed).
-            if login_button != 0 {
+            if let Some(login_button) = login_button {
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
                     "Clicking Login button via WndNotification"
