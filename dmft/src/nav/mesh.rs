@@ -2,7 +2,7 @@
 //! load into Detour for pathfinding.
 
 use anyhow::{Context, Result, bail};
-use dmft_common::nav::Waypoint;
+use dmft_common::nav::{NavPathMetrics, Waypoint};
 use flate2::read::ZlibDecoder;
 use prost::Message;
 use std::io::Read;
@@ -94,6 +94,8 @@ const NAVMESH_FILE_MAGIC: u32 = u32::from_le_bytes([b'T', b'E', b'S', b'M']);
 const FLAG_COMPRESSED: u16 = 0x0001;
 const NAVMESH_QUERY_MAX_NODES: i32 = 16384;
 const MESH_CACHE_DIR: &str = "data/meshes";
+const MAX_MESH_DOWNLOAD_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
+const MAX_PROTO_PAYLOAD_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
 const DT_EXT_LINK: u16 = 0x8000;
 const DT_NULL_LINK: u32 = 0xffff_ffff;
 
@@ -369,10 +371,21 @@ fn default_query_filter() -> recastnavigation_sys::dtQueryFilter {
 ///
 /// Returns an error if the operation fails.
 pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
+    let zone_short_name = sanitize_zone_short_name(zone_short_name)?;
     let cache_path = mesh_cache_path(zone_short_name);
 
     if cache_path.exists() {
         tracing::info!(zone = zone_short_name, path = %cache_path.display(), "Loading cached navmesh");
+        let cached_len = std::fs::metadata(&cache_path)
+            .with_context(|| format!("Failed to stat cached mesh: {}", cache_path.display()))?
+            .len() as usize;
+        if cached_len > MAX_MESH_DOWNLOAD_BYTES {
+            bail!(
+                "Cached navmesh too large ({} bytes, max {})",
+                cached_len,
+                MAX_MESH_DOWNLOAD_BYTES
+            );
+        }
         return std::fs::read(&cache_path)
             .with_context(|| format!("Failed to read cached mesh: {}", cache_path.display()));
     }
@@ -380,13 +393,31 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     let url = format!("https://mqmesh.com/resources/meshes/{zone_short_name}.navmesh");
     tracing::info!(zone = zone_short_name, %url, "Downloading navmesh");
 
-    let data = reqwest::blocking::get(&url)
+    let response = reqwest::blocking::get(&url)
         .with_context(|| format!("HTTP request failed for {url}"))?
         .error_for_status()
-        .with_context(|| format!("Server returned error for {url}"))?
-        .bytes()
-        .context("Failed to read response body")?
-        .to_vec();
+        .with_context(|| format!("Server returned error for {url}"))?;
+    if let Some(content_len) = response.content_length() {
+        if content_len as usize > MAX_MESH_DOWNLOAD_BYTES {
+            bail!(
+                "Navmesh download too large ({} bytes, max {})",
+                content_len,
+                MAX_MESH_DOWNLOAD_BYTES
+            );
+        }
+    }
+
+    let mut data = Vec::new();
+    response
+        .take((MAX_MESH_DOWNLOAD_BYTES + 1) as u64)
+        .read_to_end(&mut data)
+        .context("Failed to read response body")?;
+    if data.len() > MAX_MESH_DOWNLOAD_BYTES {
+        bail!(
+            "Navmesh download exceeded size limit (max {} bytes)",
+            MAX_MESH_DOWNLOAD_BYTES
+        );
+    }
 
     if let Some(parent) = cache_path.parent() {
         std::fs::create_dir_all(parent).ok();
@@ -451,11 +482,18 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     let payload = &data[payload_offset..];
 
     let proto_bytes = if compressed {
-        let mut decoder = ZlibDecoder::new(payload);
+        let decoder = ZlibDecoder::new(payload);
         let mut decompressed = Vec::new();
         decoder
+            .take((MAX_PROTO_PAYLOAD_BYTES + 1) as u64)
             .read_to_end(&mut decompressed)
             .context("Zlib decompression failed")?;
+        if decompressed.len() > MAX_PROTO_PAYLOAD_BYTES {
+            bail!(
+                "Decompressed navmesh payload too large (max {} bytes)",
+                MAX_PROTO_PAYLOAD_BYTES
+            );
+        }
         tracing::debug!(
             compressed_bytes = payload.len(),
             decompressed_bytes = decompressed.len(),
@@ -463,6 +501,13 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
         );
         decompressed
     } else {
+        if payload.len() > MAX_PROTO_PAYLOAD_BYTES {
+            bail!(
+                "Navmesh payload too large ({} bytes, max {})",
+                payload.len(),
+                MAX_PROTO_PAYLOAD_BYTES
+            );
+        }
         payload.to_vec()
     };
 
@@ -564,6 +609,21 @@ pub struct RoutePlan {
     pub source: RouteSource,
     /// Whether the zone mesh was loaded from cache.
     pub mesh_cached: bool,
+    /// Path existence/length diagnostics for operator visibility.
+    pub metrics: NavPathMetrics,
+}
+
+fn path_length(waypoints: &[Waypoint]) -> Option<f32> {
+    if waypoints.is_empty() {
+        return None;
+    }
+
+    let mut total = 0.0f32;
+    for window in waypoints.windows(2) {
+        total += window[0].distance_3d(&window[1]);
+    }
+
+    Some(total)
 }
 
 /// Load a parsed navmesh into Detour, returning a query-ready object.
@@ -881,23 +941,33 @@ pub fn load_zone_overlay(zone_short_name: &str) -> Result<NavMeshOverlay> {
 }
 
 pub fn has_cached_zone_mesh(zone_short_name: &str) -> bool {
-    mesh_cache_path(zone_short_name).exists()
+    sanitize_zone_short_name(zone_short_name)
+        .map(|zone| mesh_cache_path(zone).exists())
+        .unwrap_or(false)
 }
 
 /// Plan a navigation route between two points in a zone using the navmesh.
 pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> RoutePlan {
     let mesh_cached = has_cached_zone_mesh(zone_short_name);
+    let origin = Waypoint::new(from.0, from.1, from.2);
+    let destination = Waypoint::new(to.0, to.1, to.2);
 
     match load_zone(zone_short_name) {
         Ok(loaded) => match find_path(&loaded, from, to) {
-            Ok(path) => RoutePlan {
-                waypoints: path
+            Ok(path) => {
+                let waypoints: Vec<Waypoint> = path
                     .into_iter()
                     .map(|(x, y, z)| Waypoint::new(x, y, z))
-                    .collect(),
-                source: RouteSource::NavMesh,
-                mesh_cached,
-            },
+                    .collect();
+                let path_length = path_length(&waypoints);
+
+                RoutePlan {
+                    waypoints,
+                    source: RouteSource::NavMesh,
+                    mesh_cached,
+                    metrics: NavPathMetrics::success(path_length),
+                }
+            }
             Err(error) => {
                 tracing::warn!(
                     zone = zone_short_name,
@@ -905,9 +975,13 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
                     "Navmesh path query failed; falling back to straight-line route"
                 );
                 RoutePlan {
-                    waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                    waypoints: vec![destination],
                     source: RouteSource::StraightLineFallback,
                     mesh_cached,
+                    metrics: NavPathMetrics::failure(
+                        format!("Navmesh path query failed: {error}"),
+                        path_length(&[origin, destination]),
+                    ),
                 }
             }
         },
@@ -918,9 +992,13 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
                 "Navmesh load failed; falling back to straight-line route"
             );
             RoutePlan {
-                waypoints: vec![Waypoint::new(to.0, to.1, to.2)],
+                waypoints: vec![destination],
                 source: RouteSource::StraightLineFallback,
                 mesh_cached,
+                metrics: NavPathMetrics::failure(
+                    format!("Navmesh load failed: {error}"),
+                    path_length(&[origin, destination]),
+                ),
             }
         }
     }
@@ -934,9 +1012,27 @@ fn mesh_cache_path(zone_short_name: &str) -> PathBuf {
     Path::new(MESH_CACHE_DIR).join(format!("{zone_short_name}.navmesh"))
 }
 
+fn sanitize_zone_short_name(zone_short_name: &str) -> Result<&str> {
+    if zone_short_name.is_empty() {
+        bail!("Zone short name is empty");
+    }
+
+    if !zone_short_name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        bail!("Invalid zone short name: {zone_short_name:?}");
+    }
+
+    Ok(zone_short_name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::Compression;
+    use flate2::write::ZlibEncoder;
+    use std::io::Write;
 
     #[test]
     fn magic_constant_matches_mset() {
@@ -975,9 +1071,45 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_oversized_compressed_payload() {
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(&vec![0u8; MAX_PROTO_PAYLOAD_BYTES + 1])
+            .unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&NAVMESH_FILE_MAGIC.to_le_bytes());
+        data.extend_from_slice(&4u16.to_le_bytes());
+        data.extend_from_slice(&FLAG_COMPRESSED.to_le_bytes());
+        data.extend_from_slice(&compressed);
+
+        let result = parse_navmesh(&data);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Decompressed navmesh payload too large")
+        );
+    }
+
+    #[test]
     fn mesh_cache_path_format() {
         let p = mesh_cache_path("befallen");
         assert!(p.to_string_lossy().contains("befallen.navmesh"));
+    }
+
+    #[test]
+    fn sanitize_zone_short_name_rejects_path_traversal() {
+        let result = sanitize_zone_short_name("../../tmp/evil");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sanitize_zone_short_name_accepts_expected_chars() {
+        let result = sanitize_zone_short_name("qeynos2_test-zone");
+        assert_eq!(result.expect("expected valid zone"), "qeynos2_test-zone");
     }
 
     #[test]
@@ -993,5 +1125,29 @@ mod tests {
     fn navmesh_overlay_bounds_empty_dimension_is_one() {
         let bounds = NavMeshOverlayBounds::empty();
         assert!((bounds.max_dimension() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn path_length_empty_returns_none() {
+        assert!(path_length(&[]).is_none());
+    }
+
+    #[test]
+    fn path_length_two_points_returns_distance() {
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(3.0, 4.0, 0.0);
+        let len = path_length(&[a, b]).unwrap();
+        assert!((len - 5.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn path_length_three_points_sums_segments() {
+        let points = [
+            Waypoint::new(0.0, 0.0, 0.0),
+            Waypoint::new(0.0, 0.0, 5.0),
+            Waypoint::new(3.0, 4.0, 5.0),
+        ];
+        let len = path_length(&points).unwrap();
+        assert!((len - 10.0).abs() < f32::EPSILON);
     }
 }

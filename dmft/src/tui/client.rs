@@ -1,5 +1,6 @@
 use super::live_cast_capture::LiveCastCaptureSnapshot;
 use crate::eq::structs::{GroupInfo, SpawnInfo};
+use dmft_common::types::SlotLifecycle;
 use std::time::Instant;
 
 /// Per-client state for each attached EQ process.
@@ -33,6 +34,12 @@ pub struct ClientState {
     pub is_demo: bool,
     /// Last logged live cast snapshot when `DMFT_CAST_CAPTURE=1`.
     pub last_live_cast_capture: Option<LiveCastCaptureSnapshot>,
+    /// Operator-visible lifecycle state for this slot.
+    pub slot_lifecycle: SlotLifecycle,
+    /// Name of the launch profile used to start this session slot, if any.
+    pub launch_profile: Option<String>,
+    /// Name of the active session preset that this slot belongs to, if any.
+    pub session_preset: Option<String>,
 }
 
 impl ClientState {
@@ -54,6 +61,9 @@ impl ClientState {
             client_status: format!("Attached to PID {pid}"),
             is_demo: false,
             last_live_cast_capture: None,
+            slot_lifecycle: SlotLifecycle::Configured,
+            launch_profile: None,
+            session_preset: None,
         }
     }
 }
@@ -119,5 +129,26 @@ mod tests {
     fn new_defaults_no_live_cast_capture() {
         let cs = ClientState::new(1, 0);
         assert!(cs.last_live_cast_capture.is_none());
+    }
+
+    #[test]
+    fn new_defaults_slot_lifecycle_configured() {
+        let cs = ClientState::new(1, 0);
+        assert!(matches!(
+            cs.slot_lifecycle,
+            dmft_common::types::SlotLifecycle::Configured
+        ));
+    }
+
+    #[test]
+    fn new_defaults_no_launch_profile() {
+        let cs = ClientState::new(1, 0);
+        assert!(cs.launch_profile.is_none());
+    }
+
+    #[test]
+    fn new_defaults_no_session_preset() {
+        let cs = ClientState::new(1, 0);
+        assert!(cs.session_preset.is_none());
     }
 }
