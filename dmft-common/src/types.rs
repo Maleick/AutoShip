@@ -512,7 +512,10 @@ mod tests {
             speed_run: 0.005,
             ..SpawnData::default()
         };
-        assert!(!spawn.is_moving(), "tiny speed below epsilon should not count as moving");
+        assert!(
+            !spawn.is_moving(),
+            "tiny speed below epsilon should not count as moving"
+        );
     }
 
     #[test]
@@ -530,7 +533,10 @@ mod tests {
             speed_run: -0.5,
             ..SpawnData::default()
         };
-        assert!(spawn.is_moving(), "negative speed (backing up) counts as moving");
+        assert!(
+            spawn.is_moving(),
+            "negative speed (backing up) counts as moving"
+        );
     }
 
     #[test]
