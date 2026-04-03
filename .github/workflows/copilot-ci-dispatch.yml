@@ -24,6 +24,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const workflowId = "ci.yml";
+            const copilotLogins = new Set(["app/copilot-swe-agent", "Copilot"]);
 
             const openPrs = await github.paginate(github.rest.pulls.list, {
               owner,
@@ -34,54 +35,87 @@ jobs:
 
             const copilotPrs = openPrs.filter((pr) => {
               const sameRepo = pr.head?.repo?.full_name === `${owner}/${repo}`;
-              const copilotAuthor = pr.user?.login === "app/copilot-swe-agent";
+              const copilotAuthor = copilotLogins.has(pr.user?.login);
               const copilotBranch = typeof pr.head?.ref === "string" && pr.head.ref.startsWith("copilot/");
               return sameRepo && (copilotAuthor || copilotBranch);
             });
 
             const dispatched = [];
             const skipped = [];
+            const failed = [];
 
             for (const pr of copilotPrs) {
-              const runPage = await github.rest.actions.listWorkflowRuns({
-                owner,
-                repo,
-                workflow_id: workflowId,
-                branch: pr.head.ref,
-                per_page: 20,
-              });
-
-              const sameShaRuns = (runPage.data.workflow_runs || []).filter(
-                (run) => run.head_sha === pr.head.sha
-              );
-
-              const hasActiveRun = sameShaRuns.some((run) =>
-                ["queued", "in_progress", "pending", "requested", "waiting"].includes(run.status)
-              );
-              const hasAuthoritativeResult = sameShaRuns.some(
-                (run) =>
-                  run.status === "completed" &&
-                  ["success", "failure", "timed_out", "neutral"].includes(run.conclusion)
-              );
-              const blockedForApproval = sameShaRuns.some(
-                (run) => run.status === "completed" && run.conclusion === "action_required"
-              );
-
-              if (hasActiveRun || hasAuthoritativeResult || (!blockedForApproval && sameShaRuns.length > 0)) {
-                skipped.push(
-                  `#${pr.number} ${pr.head.ref} (${sameShaRuns[0]?.status || "no-op"}/${sameShaRuns[0]?.conclusion || "n/a"})`
+              try {
+                const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
+                  owner,
+                  repo,
+                  pull_number: pr.number,
+                  per_page: 100,
+                });
+                const touchesWorkflowFiles = changedFiles.some((file) =>
+                  file.filename.startsWith(".github/workflows/")
                 );
-                continue;
+
+                if (touchesWorkflowFiles) {
+                  skipped.push(`#${pr.number} ${pr.head.ref} (workflow changes require manual approval)`);
+                  continue;
+                }
+
+                const runPage = await github.rest.actions.listWorkflowRuns({
+                  owner,
+                  repo,
+                  workflow_id: workflowId,
+                  branch: pr.head.ref,
+                  per_page: 20,
+                });
+
+                const sameShaRuns = (runPage.data.workflow_runs || []).filter(
+                  (run) => run.head_sha === pr.head.sha
+                );
+
+                const hasActiveRun = sameShaRuns.some((run) =>
+                  ["queued", "in_progress", "pending", "requested", "waiting"].includes(run.status)
+                );
+                const hasAuthoritativeResult = sameShaRuns.some(
+                  (run) =>
+                    run.status === "completed" &&
+                    ["success", "failure", "timed_out", "neutral"].includes(run.conclusion)
+                );
+                const blockedForApproval = sameShaRuns.some(
+                  (run) =>
+                    run.event === "pull_request" &&
+                    run.status === "completed" &&
+                    run.conclusion === "action_required"
+                );
+                const hasWorkflowDispatchRun = sameShaRuns.some(
+                  (run) => run.event === "workflow_dispatch"
+                );
+
+                if (
+                  hasActiveRun ||
+                  hasAuthoritativeResult ||
+                  hasWorkflowDispatchRun ||
+                  (!blockedForApproval && sameShaRuns.length > 0)
+                ) {
+                  skipped.push(
+                    `#${pr.number} ${pr.head.ref} (${sameShaRuns[0]?.event || "no-run"} ${sameShaRuns[0]?.status || "no-op"}/${sameShaRuns[0]?.conclusion || "n/a"})`
+                  );
+                  continue;
+                }
+
+                await github.rest.actions.createWorkflowDispatch({
+                  owner,
+                  repo,
+                  workflow_id: workflowId,
+                  ref: pr.head.ref,
+                });
+
+                dispatched.push(`#${pr.number} ${pr.head.ref} @ ${pr.head.sha}`);
+              } catch (error) {
+                failed.push(
+                  `#${pr.number} ${pr.head.ref} (${error.status || "error"} ${error.message || String(error)})`
+                );
               }
-
-              await github.rest.actions.createWorkflowDispatch({
-                owner,
-                repo,
-                workflow_id: workflowId,
-                ref: pr.head.ref,
-              });
-
-              dispatched.push(`#${pr.number} ${pr.head.ref} @ ${pr.head.sha}`);
             }
 
             core.summary
@@ -90,4 +124,6 @@ jobs:
               .addList(dispatched.length ? dispatched : ["None"])
               .addRaw(`\nSkipped: ${skipped.length}\n\n`)
               .addList(skipped.length ? skipped : ["None"])
+              .addRaw(`\nFailed: ${failed.length}\n\n`)
+              .addList(failed.length ? failed : ["None"])
               .write();

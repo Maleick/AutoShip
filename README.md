@@ -222,10 +222,10 @@ is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1
 
 CI and nightly automation:
 
-- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
+- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using the workflow-provided `GH_TOKEN` (`secrets.GITHUB_TOKEN`) for `gh`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
 - `.github/workflows/ci.yml` runs the required `PR gate (fmt + clippy + test + python)` job for PRs and pushes to `master` without consuming GitHub-hosted minutes
-- `.github/workflows/copilot-ci-dispatch.yml` runs on GitHub-hosted Linux from `master` and dispatches `CI` on same-repo Copilot PR heads when GitHub leaves the PR-triggered run in `action_required`
+- `.github/workflows/copilot-ci-dispatch.yml` runs on GitHub-hosted Linux from `master`, dispatches `CI` on same-repo Copilot PR heads when GitHub leaves the PR-triggered run in `action_required`, and skips PRs that edit workflow files so approval-sensitive changes still require manual review
 
 If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
 
@@ -336,7 +336,7 @@ Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and
 
 Tag-triggered releases (`v*`) build Windows binaries and create GitHub Releases automatically.
 
-Release and wiki automation now runs separately on the self-hosted Windows runner:
+Release and wiki automation now run separately on the self-hosted Windows runner:
 
 - wiki auto-publish via `scripts/sync_wiki.py --push`
 - rolling nightly prerelease build and artifact upload
