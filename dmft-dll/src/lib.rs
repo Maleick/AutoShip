@@ -245,20 +245,24 @@ fn generate_session_token(pid: u32) -> dmft_common::ipc::SessionToken {
         .join("dmft")
         .join(format!("token_{pid}.bin"));
 
-    if let Ok(data) = std::fs::read(&token_path) {
+    if let Ok(mut file) = std::fs::File::open(&token_path) {
+        // Read a fixed-size token without ever allocating based on attacker-controlled file size.
+        let mut token = [0u8; 32];
+        let read_ok = std::io::Read::read_exact(&mut file, &mut token).is_ok();
+        let mut extra = [0u8; 1];
+        let has_extra = std::io::Read::read(&mut file, &mut extra)
+            .map(|n| n > 0)
+            .unwrap_or(false);
+
         // Clean up — token is single-use
         let _ = std::fs::remove_file(&token_path);
 
-        if data.len() == 32 {
-            let mut token = [0u8; 32];
-            token.copy_from_slice(&data);
+        if read_ok && !has_extra {
             tracing::info!("Loaded CSPRNG session token from orchestrator");
             return token;
         }
-        tracing::warn!(
-            len = data.len(),
-            "Token file has wrong size — falling back to PID-derived token"
-        );
+
+        tracing::warn!("Token file has wrong size — falling back to PID-derived token");
     } else {
         tracing::warn!(
             "No orchestrator token file at {} — generating random fallback token",

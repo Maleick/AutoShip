@@ -1,6 +1,6 @@
 //! Auto-accept dialog handling.
 //!
-//! Scans for common EQ dialog windows (group invite, trade, task, resurrect, etc.)
+//! Scans a limited allowlist of EQ dialog windows (trade, task, resurrect)
 //! and automatically clicks the accept/yes button. Similar to `MQ2AutoAccept`.
 //!
 //! Only active when in-world (local player != null) and enabled via IPC command.
@@ -8,8 +8,8 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Whether auto-accept is enabled. Toggled via IPC `SetAutoAccept` command.
-static AUTO_ACCEPT_ENABLED: AtomicBool = AtomicBool::new(true);
+/// Whether auto-accept is enabled. Disabled by default; toggled via IPC `SetAutoAccept`.
+static AUTO_ACCEPT_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Enable or disable auto-accept.
 pub fn set_enabled(enabled: bool) {
@@ -28,19 +28,12 @@ pub fn is_enabled() -> bool {
 /// These are stable SIDL names from EQ's UI XML definitions.
 /// We intentionally exclude dangerous dialogs (delete character, etc.).
 const DIALOG_ACCEPT_PAIRS: &[(&str, &str)] = &[
-    // Generic yes/no confirmation — used for group invites, raid invites, etc.
-    ("ConfirmationDialogBox", "CD_Yes_Button"),
-    ("ConfirmationDialogBox", "Yes"),
-    // Large dialog variant
-    ("LargeDialogWindow", "LDW_YesButton"),
     // Trade window — accept trade
     ("TradeWnd", "TRDW_Trade_Button"),
     // Task/expedition confirmation
     ("TaskSelectWnd", "TaskSelectAcceptButton"),
     // Resurrect/respawn
     ("RespawnWnd", "RW_SelectButton"),
-    // Loot confirmation (rolling on items)
-    ("ConfirmationDialogBox", "CD_Yes_Button"),
 ];
 
 /// Scan for visible dialogs and auto-click the accept button.
@@ -167,14 +160,6 @@ mod tests {
     }
 
     #[test]
-    fn dialog_pairs_contain_confirmation_dialog() {
-        let has_confirm = DIALOG_ACCEPT_PAIRS
-            .iter()
-            .any(|(parent, _)| *parent == "ConfirmationDialogBox");
-        assert!(has_confirm, "Must have ConfirmationDialogBox pair");
-    }
-
-    #[test]
     fn dialog_pairs_contain_trade_window() {
         let has_trade = DIALOG_ACCEPT_PAIRS
             .iter()
@@ -191,9 +176,9 @@ mod tests {
     }
 
     #[test]
-    fn auto_accept_starts_enabled() {
+    fn auto_accept_starts_disabled() {
         let _guard = auto_accept_test_lock();
-        set_enabled(true);
-        assert!(is_enabled());
+        set_enabled(false);
+        assert!(!is_enabled());
     }
 }

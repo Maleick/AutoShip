@@ -20,7 +20,12 @@ set ACCT2=frostreaver02 rLlkT9TEzVzbtAJ
 set ACCT3=frostreaver03 2U2dDrgMuI6sDTi
 set ACCT4=frostreaver04 67FbF2LmZMEFIR7
 set ACCT5=frostreaver06 DXOXKC1dIvSFXDB
-set ACCT6=frostreaver07 aTWmNmNn4jYAXYf
+if not defined ACCT6_PASS (
+    echo ERROR: ACCT6_PASS environment variable is not set.
+    echo Set ACCT6_PASS before running this script.
+    exit /b 1
+)
+set ACCT6=frostreaver07 %ACCT6_PASS%
 
 REM Kill any existing EQ
 echo Killing existing EQ processes...
@@ -45,7 +50,7 @@ for %%A in (
     "frostreaver03 2U2dDrgMuI6sDTi"
     "frostreaver04 67FbF2LmZMEFIR7"
     "frostreaver06 DXOXKC1dIvSFXDB"
-    "frostreaver07 aTWmNmNn4jYAXYf"
+    "!ACCT6!"
 ) do (
     set /a CLIENT_NUM+=1
     for /f "tokens=1,2" %%U in (%%A) do (
