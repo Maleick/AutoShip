@@ -41,6 +41,54 @@ Current practical measures include:
 - personality and timing variation in higher-level behavior
 - render strobing for background clients
 
+## Exposure Review
+
+Use these categories when anti-cheat work needs a bounded review instead of vague “stealth” language:
+
+| Category | Current repo surface | Confidence | Why it matters |
+| --- | --- | --- | --- |
+| Module presence | `dmft-dll` is injected into `eqgame.exe` and remains loaded in-process | High | A loaded third-party DLL is itself an exposure surface. |
+| Detour hooks | The DLL installs the game-loop and render hooks | High | Hooked code paths should be reviewed separately from normal operator behavior. |
+| In-process control paths | DMFT uses internal function calls, widget clicks, and login helpers inside the client | High | Internal control differs from external input simulation and needs explicit risk labeling. |
+| IPC naming and authentication | Session-derived names, raw-token auth, and current-user DACLs | High | These harden local IPC but do not erase host-level risk. |
+| Timing variation | Command jitter and movement humanization | Medium | Useful hardening, but not proof of safety against a specific detection path. |
+| Operator environment | Live-machine cleanliness, runner boundaries, and artifact handling | High | Official Daybreak policy is broader than one session or one executable. |
+| Community detection claims | Forum and community reporting | Low | Good for validation hypotheses only, not safety guarantees. |
+
+### Confidence rules
+
+- `High`: directly grounded in current code or official Daybreak policy
+- `Medium`: current-code behavior with anti-detection value inferred rather than proven
+- `Low`: community reporting or speculative interpretation
+
+## Operator Hygiene Checklist
+
+### Live machine hygiene
+
+- keep live-play machines free of unrelated cheat tooling and stale test binaries
+- avoid reusing stale DLLs, copied token files, or mixed old/new build artifacts
+- treat `%TEMP%/dmft` logs and token-bearing files as sensitive operational data
+- separate speculative packet or exploit-adjacent research from normal live-play hosts
+
+### Runner and build hygiene
+
+- keep the self-hosted runner focused on build, test, wiki, and release work
+- do not assume a clean runner proves that live-play hosts are also clean
+- prefer reproducible branch builds over hand-copied binaries
+
+### Runtime discipline
+
+- verify the exact branch, commit, and config before injection
+- choose the lowest-exposure control path that still satisfies the task
+- keep operator-visible behavior conservative enough that reports do not become the main risk vector
+- record whether a conclusion came from official policy, repo observation, or community reporting
+
+### Escalation triggers
+
+- new hooks, broader module footprint, or riskier movement/control paths should be labeled as an exposure increase before implementation
+- claims backed only by community reporting should stay provisional and become validation tasks instead of “facts”
+- if a machine cannot be shown to be clean, treat that as a blocker
+
 Current documentation rules:
 
 - official Daybreak guidance can tighten milestone gates immediately
