@@ -96,23 +96,70 @@ Exit gate:
 
 Objective:
 
-- harden operational boundaries and validation rules using official Daybreak signals plus clearly labeled secondary community reporting
+- harden the injected DLL against detection by replacing every high-signal artifact (injection method, hook style, memory layout, syscall pattern, thread model) with evasion-grade alternatives sourced from modern C2 research and SME-guided Ghidra decompilation
 
-Initial slices:
+Full research: [`docs/anti-detection.md`](anti-detection.md)
 
-- official Daybreak detection digest
-- hook and module exposure review
-- timing, session, and naming hardening tasks
-- milestone-level validation gates for risky movement and control paths
+#### Implementation slices (GitHub issues #344–#354)
+
+**P1 — Critical path (implement in order)**
+
+| Issue | Slice                            | Summary                                                                                                              |
+| ----- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| #344  | Reflective DLL injection         | Replace `CreateRemoteThread` + `LoadLibraryW` with reflective loader; DLL never touches disk or appears in `PEB.Ldr` |
+| #345  | Hardware breakpoint hooking      | Replace detour (inline patch) hooks with DR0–DR3 hardware breakpoint hooks; zero modified bytes in `.text`           |
+| #346  | Per-frame sleep obfuscation      | Gargoyle-style timer-based sleep with XOR encryption of DLL pages while idle; wake via APC                           |
+| #347  | Indirect syscalls (RecycledGate) | Replace all `ntdll.dll` imports with indirect syscalls resolved at runtime; no direct `ntdll` calls in IAT           |
+
+**P2 — Hardening**
+
+| Issue | Slice                             | Summary                                                                                                |
+| ----- | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| #348  | PEB unlinking + PE header erasure | Unlink DLL from `PEB.Ldr` doubly-linked lists and zero PE headers in-memory after init                 |
+| #349  | DLL staging with legitimate names | Stage the DLL using legitimate Microsoft process/module names to blend with expected loaded modules    |
+| #350  | Replace VirtualAlloc              | Use `HeapAlloc` / `NtCreateSection` instead of `VirtualAlloc` for memory allocation; avoid `RWX` pages |
+| #351  | Patchless ETW blinding            | Blind ETW via hardware breakpoints on `NtTraceEvent` rather than patching `EtwEventWrite`              |
+| #352  | Thread pool execution (PoolParty) | Replace `CreateThread` with Windows thread pool work items (`TpAllocWork` / `TpPostWork`)              |
+
+**P3 — Advanced**
+
+| Issue | Slice                           | Summary                                                                                             |
+| ----- | ------------------------------- | --------------------------------------------------------------------------------------------------- |
+| #353  | Per-API call stack spoofing     | Spoof return addresses on sensitive API calls to appear as legitimate caller chains                 |
+| #354  | Nighthawk-style page encryption | Per-page encryption with ~2% plaintext exposure; only the executing page is decrypted at any moment |
+
+#### Rust crate dependencies
+
+- **`dinvoke_rs`** — dynamic invocation and indirect syscalls
+- **`rust_syscalls`** — raw syscall wrappers
+- **`goblin`** — PE parsing for reflective loader and header erasure
+- **`hypnus`** — Gargoyle-style sleep obfuscation primitives
+- **`shelter`** — PEB manipulation and module unlinking
+
+#### Critical constraints
+
+- **Main game loop is a NO-TOUCH ZONE**: the game's inline byte count + memshift with circular protection makes patching the main loop a guaranteed detection vector. All hooks target secondary functions only.
+- **Per-frame overhead budget**: 1–2 ms per 33 ms frame (3–6% ceiling). Every P1/P2 slice must benchmark against this budget.
+- **SME-sourced intel**: Key findings from Matt (Blownt) via Ghidra decompilation of the EQ client informed hook target selection and memory layout constraints.
+
+#### Implementation order
+
+1. **P1 in sequence**: injection (#344) → hooking (#345) → sleep obfuscation (#346) → syscalls (#347). Each layer depends on the previous — reflective injection must land before hooks can be installed without detection.
+2. **P2 in parallel**: once P1 is stable, P2 slices (#348–#352) are largely independent and can be worked concurrently.
+3. **P3 after P2**: call stack spoofing (#353) and page encryption (#354) are polish layers that build on the full P1+P2 stack.
 
 Entry gate:
 
 - Daybreak detection digest exists and separates official policy from community inference
+- full anti-detection research complete ([`docs/anti-detection.md`](anti-detection.md))
+- SME decompilation findings reviewed and integrated
 
 Exit gate:
 
 - anti-cheat gates exist for packet, zoning, and orchestration work
 - unsupported high-risk inputs are labeled as low-confidence or blocked
+- all P1 slices pass per-frame overhead benchmark (≤2 ms)
+- DLL has zero static detection signatures (no `PEB.Ldr` entry, no IAT imports to `ntdll`, no `RWX` pages, no detour patches)
 
 ### `M8` Orchestrator
 
