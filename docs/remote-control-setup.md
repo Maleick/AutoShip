@@ -23,7 +23,7 @@ Three methods are available for remote command execution on frostreaver from mac
 
 - **URL**: `http://frostreaver:5985/wsman`
 - **Transport**: basic
-- **User**: maleick / 1118
+- **Credentials**: Use your local WinRM username/password (do not commit secrets)
 
 ### Session isolation finding
 
@@ -89,5 +89,5 @@ For EQ operations, prefer the remote API. Use WinRM for general system administr
 WinRM service is set to auto-start, but if config resets:
 
 ```bash
-sshpass -p '1118' ssh maleick@frostreaver "winrm set winrm/config/service @{AllowUnencrypted=\"true\"} && winrm set winrm/config/service/auth @{Basic=\"true\"}"
+ssh frostreaver "winrm set winrm/config/service @{AllowUnencrypted=\"true\"} && winrm set winrm/config/service/auth @{Basic=\"true\"}"
 ```
