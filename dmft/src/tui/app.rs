@@ -4097,6 +4097,22 @@ impl App {
         }
     }
 
+    /// Launch the profile group assigned to the given hotkey string (e.g., `"F1"`).
+    ///
+    /// Called directly from the TUI event handler for `Ctrl+F1`–`Ctrl+F9` keypresses.
+    pub fn launch_profile_hotkey(&mut self, hotkey: &str) {
+        let Some(accounts) = self.accounts_config.clone() else {
+            self.status_message = String::from("No accounts config — create config/accounts.toml");
+            return;
+        };
+        let Some(pg) = accounts.profile_by_hotkey(hotkey) else {
+            self.status_message = format!("Ctrl+{hotkey}: no profile group assigned this hotkey");
+            return;
+        };
+        let name = pg.name.clone();
+        self.launch_profile_by_name(&name, &accounts);
+    }
+
     /// Handle `stop <name|all>` — eject DLL and remove client.
     ///
     ///   stop all         — eject all connected clients
