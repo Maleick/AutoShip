@@ -182,6 +182,14 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "nav gfay",
     },
     CommandEntry {
+        phrase: "mapfilter",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "mapfilter <npc|pc|corpse|ground|pet|named|untargetable> [on|off]",
+        summary: "Toggle map visibility for MQ2Map-style categories.",
+        example: "mapfilter npc off",
+    },
+    CommandEntry {
         phrase: "track",
         aliases: &[],
         section: HelpSection::Navigation,
