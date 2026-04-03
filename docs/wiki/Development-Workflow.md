@@ -85,10 +85,12 @@ When behavior or roadmap guidance changes:
 
 ## Nightly Automation
 
-Nightly automation now runs on the self-hosted Windows runner:
+Nightly automation now runs across the self-hosted Windows runner and GitHub-hosted Linux jobs:
 
 - `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
+- `.github/workflows/agent-ready.yml` reconciles `agent:ready` vs `agent:skip-ready`, reacts to label add/remove events, bootstraps those labels when missing, and treats roadmap-container titles that start with `M1`, `M2`, or the placeholder `Mx` as skip-ready
+- `.github/workflows/agent-close-pr.yml` closes only agent-authored PRs when they carry the `agent:close` label and the PR is agent-owned via a `codex/*` or `claude/*` head branch or the literal `codex-automation` label
 - the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
 - the issue executor opens trusted agent PRs with `merge:auto` by default unless the PR or linked issue is marked `human:required`, `risk:high`, or `agent:blocked`
 - the PR manager may resolve clearly addressed bot review threads, merge clean trusted PRs once the required gate is green, and close stale or superseded trusted agent PRs automatically

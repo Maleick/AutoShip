@@ -275,6 +275,8 @@ DMFT-specific notes:
 - Trusted agent PRs should carry `merge:auto` by default unless the PR or linked issue is labeled `human:required`, `risk:high`, or `agent:blocked`.
 - The scheduled `DMFT issue executor` opens trusted agent PRs into `master`, adds automation labels, and should default `merge:auto` on those PRs when the linked issue is not explicitly blocked from unattended merge.
 - The scheduled `DMFT PR manager` Codex cloud automation is expected to address straightforward review feedback, resolve clearly addressed bot review threads, merge eligible agent-authored PRs into `master`, and close stale or superseded agent-authored PRs when the queue has moved on.
+- The issue queue reconciliation workflow now reacts to `issues.labeled` and `issues.unlabeled` in addition to open/edit events, bootstraps the `agent:ready` and `agent:skip-ready` labels before applying them, and treats roadmap-container titles that start with `M1`, `M2`, or the placeholder `Mx` as skip-ready epics.
+- The `agent:close` label lets repo automation close only agent-authored PRs (`codex/*`, `claude/*`, or PRs carrying the `codex-automation` label) without touching unrelated human PRs.
 - Manual `CI` workflow dispatch is the place to get the heavier `Windows release build (manual)` validation on a topic branch before merge.
 - `Release`, `Nightly Release`, `README Metrics`, and `Wiki Nightly` are not required merge gates.
 - `README Metrics` should now be run on a topic branch and merged via PR instead of pushing directly into `master`.
