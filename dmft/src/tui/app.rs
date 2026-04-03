@@ -2042,6 +2042,7 @@ impl App {
     fn complete_with_candidates(&mut self, cmd_prefix: &str, input: &str, candidates: &[String]) {
         // For multi-word matching, strip leading quote
         let search = input.trim_start_matches('"').to_lowercase();
+        let raw_search = input.trim_start_matches('"');
 
         let matches: Vec<&String> = candidates
             .iter()
@@ -2063,20 +2064,23 @@ impl App {
             }
             _ => {
                 // Complete common prefix
-                let first = matches[0].to_lowercase();
-                let common_len = first
-                    .char_indices()
-                    .take_while(|&(i, ch)| {
-                        matches.iter().all(|s| {
-                            s.to_lowercase().get(i..i + ch.len_utf8())
-                                == first.get(i..i + ch.len_utf8())
-                        })
-                    })
-                    .map(|(i, ch)| i + ch.len_utf8())
-                    .last()
-                    .unwrap_or(0);
+                let first = matches[0];
+                let mut common_len = 0usize;
 
-                if common_len > search.len() {
+                for (char_idx, (byte_idx, first_ch)) in first.char_indices().enumerate() {
+                    let matches_all = matches.iter().all(|candidate| {
+                        candidate.chars().nth(char_idx).is_some_and(|candidate_ch| {
+                            candidate_ch.to_lowercase().to_string()
+                                == first_ch.to_lowercase().to_string()
+                        })
+                    });
+                    if !matches_all {
+                        break;
+                    }
+                    common_len = byte_idx + first_ch.len_utf8();
+                }
+
+                if common_len > raw_search.len() {
                     let common = &matches[0][..common_len];
                     self.cmd_state.set_buffer(format!("{cmd_prefix}{common}"));
                 }
@@ -4636,5 +4640,16 @@ mod tests {
         assert_eq!(app.selected_client, 1);
         assert!(app.clients[1].last_spawn_refresh.is_none());
         assert_eq!(app.spawns_state.table_state.selected(), Some(0));
+    }
+
+    #[test]
+    fn tab_completion_handles_unicode_case_expansion_without_panicking() {
+        let mut app = App::new();
+        let candidates = vec![String::from("İ"), String::from("İx")];
+
+        app.complete_with_candidates("track ", "i", &candidates);
+
+        assert_eq!(app.cmd_state.command_buffer, "track İ");
+        assert!(app.status_message.starts_with("Matches: "));
     }
 }
