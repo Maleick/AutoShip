@@ -912,22 +912,18 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> dmft_common::types::SpawnData {
     let z = unsafe { *((spawn_ptr + player_base::Z) as *const f32) };
     let heading = unsafe { *((spawn_ptr + player_base::HEADING) as *const f32) };
 
-    // Diagnostic: log once if position looks suspicious (near-zero with valid name)
+    // Diagnostic: log once if position looks suspicious (near-zero with valid name).
+    // Log metadata only (never raw process memory or addresses).
     {
         use std::sync::atomic::{AtomicU64, Ordering};
         static DIAG_TICK: AtomicU64 = AtomicU64::new(0);
         let tick = DIAG_TICK.fetch_add(1, Ordering::Relaxed);
         if x.abs() < 1.0 && y.abs() < 1.0 && tick.is_multiple_of(300) {
-            // Dump raw bytes from 0x060..0x0b0 to verify position offsets
-            let raw: [u8; 0x50] =
-                unsafe { std::ptr::read((spawn_ptr + 0x060) as *const [u8; 0x50]) };
             tracing::warn!(
-                spawn_ptr = format!("{:#x}", spawn_ptr),
                 name = %name,
                 spawn_id,
                 x, y, z,
-                hex_0x060_to_0x0b0 = format!("{:02x?}", &raw[..]),
-                "DLL: position near zero — hex dump for offset verification"
+                "DLL: position near zero — possible offset mismatch"
             );
         }
     }

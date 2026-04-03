@@ -56,20 +56,13 @@ pub fn read_spawn(
     let heading = proc.read::<f32>(addr + player_base::HEADING).unwrap_or(0.0);
 
     // Diagnostic: if position looks suspicious (all near-zero) but name is valid,
-    // hex-dump the region around the position offsets so we can verify them.
-    if x.abs() < 1.0
-        && y.abs() < 1.0
-        && !name.is_empty()
-        && name != "<unreadable>"
-        && let Ok(bytes) = proc.read_bytes(addr + 0x060, 0x50)
-    {
+    // log metadata only (never raw process memory or addresses).
+    if x.abs() < 1.0 && y.abs() < 1.0 && !name.is_empty() && name != "<unreadable>" {
         tracing::warn!(
-            spawn_addr = format!("{:#x}", addr),
             name = %name,
             spawn_id,
             x, y, z,
-            hex_0x060_to_0x0b0 = format!("{:02x?}", bytes),
-            "Position near zero — hex dump of PlayerBase 0x060..0x0b0 for offset verification"
+            "Position near zero — possible offset mismatch"
         );
     }
 
