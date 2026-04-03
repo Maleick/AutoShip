@@ -224,6 +224,8 @@ pub fn rescan_char_list_wnd() -> Option<usize> {
 /// Returns the matched index, or 0 as fallback if the name is empty or not found.
 #[cfg(windows)]
 fn find_character_index(char_list_wnd: usize, character_name: &str) -> i32 {
+    const MAX_CHARACTER_LIST_SCAN_ROWS: usize = 64;
+
     if character_name.is_empty() {
         tracing::info!("Character name empty — defaulting to index 0");
         return 0;
@@ -239,15 +241,24 @@ fn find_character_index(char_list_wnd: usize, character_name: &str) -> i32 {
         };
 
         let row_count = crate::eq::widgets::list_row_count(list_wnd);
+        let bounded_row_count = row_count.min(MAX_CHARACTER_LIST_SCAN_ROWS);
+        if row_count > bounded_row_count {
+            tracing::warn!(
+                row_count,
+                bounded_row_count,
+                "Character_List row count exceeds scan cap; limiting traversal"
+            );
+        }
         tracing::info!(
             list_wnd = format!("{:#x}", list_wnd),
             row_count,
+            bounded_row_count,
             target = character_name,
             "Searching Character_List for character"
         );
 
         // Column 2 is the character name (MQ2 convention)
-        for i in 0..row_count {
+        for i in 0..bounded_row_count {
             if let Some(name) = crate::eq::widgets::read_list_item_text(list_wnd, i, 2) {
                 tracing::info!(row = i, name = %name, "Character_List row");
                 if name.eq_ignore_ascii_case(character_name) {
