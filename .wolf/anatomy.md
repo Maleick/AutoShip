@@ -1,6 +1,6 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-04-03T23:07:56.185Z
+> Auto-maintained by OpenWolf. Last scanned: 2026-04-03T23:11:08.922Z
 > Files: 579 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../.claude/
@@ -702,7 +702,7 @@
 
 ## dmft-common/src/
 
-- `offsets.rs` — Preferred base address of eqgame.exe (64-bit) (~10879 tok)
+- `offsets.rs` — Preferred base address of eqgame.exe (64-bit) (~11145 tok)
 
 ## docs/
 

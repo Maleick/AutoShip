@@ -149,6 +149,31 @@ pub const CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT: u64 = 0x0001_403B_B240;
 /// Signature: CChatWindow* CreateChatWindow(CTabWnd* pTabs, int, int, CXStr name, int, int, int, int, int)
 pub const CCHAT_MGR_CREATE_CHAT_WINDOW: u64 = 0x0001_403B_1780;
 
+// ─── Anti-Cheat / Network Internals (Ghidra-verified) ───
+// Source: Ghidra analysis of eqgame.exe, 2026-04-03
+// These addresses were discovered via binary analysis, not eqlib headers.
+
+/// Main network packet send function (247 bytes, 29+ callers)
+pub const NET_SEND: u64 = 0x0001_4056_3130;
+
+/// Global outbound message counter (decremented by every opcode handler)
+pub const OUTBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0ED8;
+
+/// Global inbound message counter
+pub const INBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0ED4;
+
+/// File integrity check dispatcher (EXE self-hash + data files)
+pub const FILE_INTEGRITY_DISPATCHER: u64 = 0x0001_4021_D730;
+
+/// Server memcheck opcode 0x4f27 handler (returns region hashes)
+pub const SERVER_MEMCHECK_HANDLER: u64 = 0x0001_400B_5720;
+
+/// World authentication function
+pub const WORLD_AUTHENTICATE: u64 = 0x0001_402C_9C80;
+
+/// SystemFingerprint: sends VideoCardId, NetworkCardId, HardriveId, ComputerName
+pub const SYSTEM_FINGERPRINT: u64 = 0x0001_4059_4840;
+
 // ─── CInvSlotMgr function addresses ───
 // Source: eqgame.h, client date 20260310
 
