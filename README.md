@@ -44,7 +44,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 | ---------- | --- | --------------------------------------------------------------------------------------------------- |
 | Characters | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels |
 | Map        | `2` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers, Z-slice control |
-| Navigation | `3` | Per-character nav status, operating mode, waypoint queue                                            |
+| Navigation | `3` | Per-character nav status, route progress, recovery state, zoning blockers, and waypoint queue      |
 | Debug      | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), hex dump, target detail           |
 
 **Themes:** Dark Modern (default), Dracula, Classic — cycle with `T`
@@ -131,6 +131,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **Navigator FSM** — Waypoint following with stuck detection and recovery
 - **Movement humanization** — Natural-looking movement patterns
 - **Waypoint recording** — RDP simplification for path recording
+- **Travel diagnostics** — Navigation screen calls out fallback routing, stuck recovery, and pending zone-match blockers
 
 ### Combat
 

@@ -390,6 +390,29 @@ fn apply_demo_scenario(app: &mut App) {
                         status: nav.status.clone(),
                         eta_secs: None,
                         waypoints: nav.waypoints.clone(),
+                        route_state: match &nav.status {
+                            dmft_common::nav::NavStatus::Moving { .. } => {
+                                String::from("Regroup route")
+                            }
+                            dmft_common::nav::NavStatus::Stuck { .. } => {
+                                String::from("Recovery route")
+                            }
+                            dmft_common::nav::NavStatus::Arrived => String::from("Route complete"),
+                            dmft_common::nav::NavStatus::Idle => String::from("Standing by"),
+                        },
+                        recovery_state: match &nav.status {
+                            dmft_common::nav::NavStatus::Stuck { recovery_attempt } => Some(
+                                format!("Trying alternate line (attempt {})", recovery_attempt),
+                            ),
+                            _ => None,
+                        },
+                        blockers: match &nav.status {
+                            dmft_common::nav::NavStatus::Stuck { .. } => vec![format!(
+                                "Path to {} is obstructed; waiting for recovery movement.",
+                                nav.destination
+                            )],
+                            _ => Vec::new(),
+                        },
                         is_demo_scripted: true,
                     },
                 );
