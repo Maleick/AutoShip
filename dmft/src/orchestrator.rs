@@ -896,6 +896,8 @@ mod tests {
                 mana_max,
                 endurance_current: 100,
                 endurance_max: 100,
+                speed_run: 0.0,
+                stand_state: 0,
             }
         }
 
@@ -984,6 +986,8 @@ mod tests {
                 mana_max,
                 endurance_current: 100,
                 endurance_max: 100,
+                speed_run: 0.0,
+                stand_state: 0,
             }
         }
 
@@ -1265,6 +1269,8 @@ mod tests {
             mana_max: 0,
             endurance_current: 100,
             endurance_max: 100,
+            speed_run: 0.0,
+            stand_state: 0,
         };
         orch.game_states.insert(
             100,
@@ -1287,6 +1293,8 @@ mod tests {
                     mana_max: 0,
                     endurance_current: 100,
                     endurance_max: 100,
+                    speed_run: 0.0,
+                    stand_state: 0,
                 }),
                 target: None,
                 nearby_spawns: vec![new_npc],
