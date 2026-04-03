@@ -121,7 +121,9 @@ pub fn check_buffs(
         };
 
         if let Some(config) = class_configs.get(role_str) {
-            for ability in &config.buff_abilities {
+            let profile = config.profile_for_level(member.level);
+
+            for ability in &profile.buff_abilities {
                 // Each buff caster buffs all members
                 // Use explicit buff duration if set, else fall back to cooldown
                 let duration_ticks = ability.effective_duration_secs() as u64;
@@ -160,7 +162,7 @@ pub fn check_buffs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::camp::class_config::ClassAbility;
+    use crate::camp::class_config::{AbilityProfileOverride, ClassAbility, ClassConfig};
 
     fn test_members() -> Vec<CampMember> {
         vec![
@@ -177,6 +179,7 @@ mod tests {
             ClassConfig {
                 class_name: "cleric".into(),
                 role: "healer".into(),
+                level_overrides: Vec::new(),
                 combat_abilities: vec![],
                 buff_abilities: vec![ClassAbility {
                     name: "Symbol of Naltron".into(),
@@ -198,6 +201,7 @@ mod tests {
             ClassConfig {
                 class_name: "enchanter".into(),
                 role: "cc".into(),
+                level_overrides: Vec::new(),
                 combat_abilities: vec![],
                 buff_abilities: vec![
                     ClassAbility {
@@ -446,5 +450,65 @@ mod tests {
         let configs = test_class_configs();
         let cmds = check_buffs(&tracker, &[], &configs, 0, &CampState::Idle);
         assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn test_check_buffs_uses_level_override_profile() {
+        let tracker = BuffTracker::new();
+        let members = vec![
+            CampMember::new(100, "Warrior01".into(), Role::Tank),
+            CampMember::new(101, "Cleric01".into(), Role::Healer).with_level(15),
+        ];
+
+        let base_buff = ClassAbility {
+            name: "Base Buff".into(),
+            command: "/cast 1".into(),
+            cooldown_secs: 120.0,
+            priority: 1,
+            condition: None,
+            duration_secs: None,
+        };
+
+        let override_buff = ClassAbility {
+            name: "Low Level Buff".into(),
+            command: "/cast 2".into(),
+            cooldown_secs: 90.0,
+            priority: 1,
+            condition: None,
+            duration_secs: None,
+        };
+
+        let mut configs = HashMap::new();
+        configs.insert(
+            "healer".into(),
+            ClassConfig {
+                class_name: "cleric".into(),
+                role: "healer".into(),
+                level_overrides: vec![AbilityProfileOverride {
+                    name: "low-range".into(),
+                    min_level: Some(1),
+                    max_level: Some(20),
+                    buff_abilities: Some(vec![override_buff.clone()]),
+                    ..AbilityProfileOverride::default()
+                }],
+                combat_abilities: vec![],
+                buff_abilities: vec![base_buff],
+                emergency_abilities: vec![],
+                cc_abilities: vec![],
+                debuff_abilities: vec![],
+                rest_command: "/sit".into(),
+                twist_interval_secs: None,
+            },
+        );
+
+        let commands = check_buffs(&tracker, &members, &configs, 0, &CampState::Idle);
+        assert!(
+            commands.iter().any(|(_, cmd)| cmd == "/cast 2"),
+            "override buff should be used when level matches"
+        );
+        assert!(
+            !commands.iter().any(|(_, cmd)| cmd == "/cast 1"),
+            "base buff should not be used when override applies"
+        );
     }
 }

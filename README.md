@@ -381,6 +381,7 @@ pull_mana_pct = 60
 ### Class Ability Configs (`config/classes/*.toml`)
 
 16 classes: WAR, CLR, PAL, RNG, SK, DRU, MNK, BRD, ROG, SHM, NEC, WIZ, MAG, ENC, BST, BER
+- Optional `[[level_overrides]]` blocks gate alternate combat/buff/emergency/cc/debuff ability lists by level range; categories omitted inside an override fall back to the base class lists, and the base profile is used when no override matches.
 
 ### HVT Watchlist (`config/hvt_watchlist.toml`)
 
