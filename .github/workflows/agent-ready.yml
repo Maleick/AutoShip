@@ -2,7 +2,7 @@ name: Auto-label agent-ready
 
 on:
   issues:
-    types: [opened, edited, reopened]
+    types: [opened, edited, reopened, labeled, unlabeled]
   schedule:
     - cron: "0 * * * *"
 
@@ -23,10 +23,43 @@ jobs:
             const repo = context.repo.repo;
             const readyLabel = "agent:ready";
             const skipLabel = "agent:skip-ready";
+            const requiredLabels = [
+              {
+                name: readyLabel,
+                color: "0E8A16",
+                description: "Issue is eligible for autonomous pickup.",
+              },
+              {
+                name: skipLabel,
+                color: "D93F0B",
+                description: "Roadmap container issues are intentionally excluded from agent-ready.",
+              },
+            ];
 
             function shouldSkipFromEventLabels(labels) {
               const normalized = new Set((labels || []).map((label) => (label.name || "").toLowerCase()));
               return normalized.has(skipLabel);
+            }
+
+            async function ensureLabel(definition) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner,
+                  repo,
+                  name: definition.name,
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: definition.name,
+                  color: definition.color,
+                  description: definition.description,
+                });
+              }
             }
 
             async function ensureReadyState({ number, labels: currentLabels = [] }) {
@@ -55,8 +88,15 @@ jobs:
             }
 
             if (context.eventName === "issues") {
+              for (const definition of requiredLabels) {
+                await ensureLabel(definition);
+              }
               await ensureReadyState(issue);
               return;
+            }
+
+            for (const definition of requiredLabels) {
+              await ensureLabel(definition);
             }
 
             const openIssues = await github.paginate(github.rest.issues.listForRepo, {

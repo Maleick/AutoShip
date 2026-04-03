@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${1:-${GITHUB_REPOSITORY:-Maleick/DMFT}}"
+if [ -n "${1:-}" ]; then
+  REPO="$1"
+elif [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  REPO="$GITHUB_REPOSITORY"
+else
+  echo "Error: repository must be provided as the first argument or via GITHUB_REPOSITORY." >&2
+  exit 1
+fi
+
 READY_LABEL="agent:ready"
 SKIP_LABEL="agent:skip-ready"
 
 ALL_LABELS="$(gh label list --repo "$REPO" --limit 500 --json name)"
+
+if ! jq -e --arg ready "$READY_LABEL" 'map(.name) | index($ready)' >/dev/null <<< "$ALL_LABELS"; then
+  gh label create --repo "$REPO" "$READY_LABEL" \
+    --color "0E8A16" \
+    --description "Issue is eligible for autonomous pickup."
+fi
 
 if ! jq -e --arg skip "$SKIP_LABEL" 'map(.name) | index($skip)' >/dev/null <<< "$ALL_LABELS"; then
   gh label create --repo "$REPO" "$SKIP_LABEL" \

@@ -272,6 +272,7 @@ DMFT-specific notes:
 - That Windows gate currently boots the nightly MSVC Rust toolchain, because the Windows hook stack still depends on nightly-only `retour`.
 - No GitHub-hosted runners are used for the required PR flow.
 - The scheduled `DMFT PR manager` Codex cloud automation is expected to open missing PRs, address straightforward review feedback, and merge eligible branches into `master`.
+- The issue queue reconciliation workflow now reacts to `issues.labeled` and `issues.unlabeled` in addition to open/edit events, and it bootstraps the `agent:ready` and `agent:skip-ready` labels before applying them.
 - Manual `CI` workflow dispatch is the place to get the heavier `Windows release build (manual)` validation on a topic branch before merge.
 - `Release`, `Nightly Release`, `README Metrics`, and `Wiki Nightly` are not required merge gates.
 - `README Metrics` should now be run on a topic branch and merged via PR instead of pushing directly into `master`.

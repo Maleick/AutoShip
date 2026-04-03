@@ -89,6 +89,7 @@ Nightly automation now runs on the self-hosted Windows runner:
 
 - `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
+- `.github/workflows/agent-ready.yml` reconciles `agent:ready` vs `agent:skip-ready`, reacts to label add/remove events, and bootstraps those labels when missing
 - the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
 
 These workflows mirror repo state. They do not replace keeping source docs current.
