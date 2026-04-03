@@ -437,6 +437,17 @@ impl NavClientStatus {
                 format!("Recovery attempt {}", recovery_attempt)
             }
             dmft_common::nav::NavStatus::Arrived => String::from("Destination reached"),
+            dmft_common::nav::NavStatus::Following {
+                leader_name,
+                distance_to_anchor,
+                returning,
+            } => {
+                if *returning {
+                    format!("Returning to {leader_name} ({distance_to_anchor:.0}u)")
+                } else {
+                    format!("Following {leader_name} ({distance_to_anchor:.0}u)")
+                }
+            }
         }
     }
 

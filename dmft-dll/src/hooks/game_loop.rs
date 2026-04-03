@@ -1283,6 +1283,29 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         Command::StopNavigation => {
             crate::nav::handle_command(crate::nav::NavCommand::Stop);
         }
+        Command::FollowPlayer {
+            config,
+            anchor_x,
+            anchor_y,
+            anchor_z,
+        } => {
+            tracing::info!(
+                leader = %config.leader_name,
+                follow_dist = config.follow_distance,
+                leash_dist = config.leash_distance,
+                "FollowPlayer received"
+            );
+            let anchor = dmft_common::nav::Waypoint::new(anchor_x, anchor_y, anchor_z);
+            crate::nav::handle_command(crate::nav::NavCommand::FollowPlayer { config, anchor });
+        }
+        Command::UpdateFollowAnchor { x, y, z } => {
+            let anchor = dmft_common::nav::Waypoint::new(x, y, z);
+            crate::nav::handle_command(crate::nav::NavCommand::UpdateFollowAnchor(anchor));
+        }
+        Command::StopFollow => {
+            tracing::info!("StopFollow received");
+            crate::nav::handle_command(crate::nav::NavCommand::StopFollow);
+        }
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);

@@ -373,6 +373,9 @@ pub fn run_statusall_mode() -> Result<()> {
                                 }
                                 dmft_common::nav::NavStatus::Stuck { .. } => "Stuck".to_string(),
                                 dmft_common::nav::NavStatus::Arrived => "Done".to_string(),
+                                dmft_common::nav::NavStatus::Following { leader_name, .. } => {
+                                    format!("Follow:{leader_name}")
+                                }
                             };
                             let zone = if state.zone_short_name.is_empty() {
                                 "(unknown)".to_string()

@@ -10,7 +10,7 @@ pub use state::Navigator;
 
 use std::sync::Mutex;
 
-use dmft_common::nav::{CampSpot, NavStatus, Waypoint};
+use dmft_common::nav::{CampSpot, FollowConfig, NavStatus, Waypoint};
 
 /// Global navigator instance, persists across game ticks.
 /// `Mutex<Option<...>>` because the game loop is single-threaded but
@@ -55,6 +55,9 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::Navigate(waypoints) => nav.navigate(waypoints),
             NavCommand::SetCamp(spot) => nav.set_camp(spot),
             NavCommand::Stop => nav.stop(),
+            NavCommand::FollowPlayer { config, anchor } => nav.follow_player(config, anchor),
+            NavCommand::UpdateFollowAnchor(anchor) => nav.update_follow_anchor(anchor),
+            NavCommand::StopFollow => nav.stop_follow(),
         }
     }
 }
@@ -64,4 +67,15 @@ pub enum NavCommand {
     Navigate(Vec<Waypoint>),
     SetCamp(CampSpot),
     Stop,
+    /// Start MQ2MoveUtils-style player follow mode.
+    FollowPlayer {
+        /// Follow configuration (leader name, follow distance, leash distance).
+        config: FollowConfig,
+        /// Initial anchor position (leader's current location).
+        anchor: Waypoint,
+    },
+    /// Update the dynamic anchor in an active follow mode.
+    UpdateFollowAnchor(Waypoint),
+    /// Stop player follow mode.
+    StopFollow,
 }
