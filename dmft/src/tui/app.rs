@@ -3011,6 +3011,9 @@ impl App {
             "login" => {
                 self.execute_login_command(&parts[1..]);
             }
+            "profile" => {
+                self.execute_profile_command(&parts[1..]);
+            }
             "stop" => {
                 self.execute_stop_command(&parts[1..], orchestrator);
             }
@@ -3999,6 +4002,101 @@ impl App {
         }
     }
 
+    /// Handle `profile <subcommand>` from the command bar.
+    ///
+    /// Subcommands:
+    ///   profile             — list all configured profile groups
+    ///   profile list        — list all configured profile groups
+    ///   profile launch <name> — queue all accounts in the named profile for launch
+    fn execute_profile_command(&mut self, args: &[&str]) {
+        let accounts = if let Some(cfg) = &self.accounts_config {
+            cfg.clone()
+        } else {
+            self.status_message = String::from("No accounts config — create config/accounts.toml");
+            return;
+        };
+
+        match args.first().copied() {
+            None | Some("list") => {
+                if accounts.profile_groups.is_empty() {
+                    self.status_message = String::from(
+                        "No profile groups configured. Add [[profile_groups]] to accounts.toml",
+                    );
+                    return;
+                }
+                let online_chars: Vec<String> = self
+                    .clients
+                    .iter()
+                    .map(|c| c.character_name.to_lowercase())
+                    .collect();
+                let mut lines: Vec<String> = Vec::new();
+                for pg in &accounts.profile_groups {
+                    let count = accounts.accounts_for_group(pg.id).len();
+                    let online = accounts
+                        .accounts_for_group(pg.id)
+                        .iter()
+                        .filter(|a| {
+                            online_chars
+                                .iter()
+                                .any(|c| !c.is_empty() && c == &a.character.to_lowercase())
+                        })
+                        .count();
+                    let hotkey_str = pg
+                        .hotkey
+                        .as_deref()
+                        .map_or(String::from("(no hotkey)"), |h| format!("[{h}]"));
+                    lines.push(format!(
+                        "  {} (G{}) {} — {}/{} online",
+                        pg.name, pg.id, hotkey_str, online, count,
+                    ));
+                }
+                self.status_message = format!(
+                    "{} profile group(s). Use :profile launch <name>",
+                    accounts.profile_groups.len()
+                );
+                for line in &lines {
+                    tracing::info!("{}", line);
+                }
+            }
+
+            Some("launch") => {
+                let name = args.get(1).copied().unwrap_or("");
+                if name.is_empty() {
+                    self.usage_feedback("profile launch", "Missing profile name.");
+                    return;
+                }
+                self.launch_profile_by_name(name, &accounts);
+            }
+
+            Some(sub) => {
+                self.usage_feedback(
+                    "profile",
+                    format!(
+                        "Unknown subcommand '{sub}'. Use: profile list | profile launch <name>"
+                    ),
+                );
+            }
+        }
+    }
+
+    /// Launch all accounts in the named profile group.
+    fn launch_profile_by_name(&mut self, name: &str, accounts: &crate::config::AccountsConfig) {
+        match accounts.accounts_for_profile_name(name) {
+            None => {
+                self.status_message = format!("Profile '{name}' not found in accounts.toml");
+            }
+            Some(group_accounts) if group_accounts.is_empty() => {
+                self.status_message =
+                    format!("Profile '{name}' has no accounts configured (check group ID)");
+            }
+            Some(group_accounts) => {
+                let owned: Vec<crate::config::AccountEntry> =
+                    group_accounts.into_iter().cloned().collect();
+                self.enqueue_account_launches(&owned);
+            }
+        }
+    }
+
     /// Handle `stop <name|all>` — eject DLL and remove client.
     ///
     ///   stop all         — eject all connected clients
@@ -4306,6 +4404,7 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "ch"
             | "chui"
             | "inject"
+            | "profile"
             | "all"
     )
 }
@@ -4564,6 +4663,7 @@ mod tests {
             "loot",
             "login",
             "launch",
+            "profile",
             "stop",
             "restart",
             "track",

@@ -31,12 +31,44 @@ fn default_group() -> u32 {
     0
 }
 
+/// A named profile group mapping a human-readable name and optional hotkey to a group ID.
+///
+/// Profile groups allow launching all accounts in a numeric group with a single name or
+/// keyboard hotkey, matching the MQ2 AutoLogin profile group concept.
+///
+/// # TOML example
+///
+/// ```toml
+/// [[profile_groups]]
+/// id = 1
+/// name = "MainRaid"
+/// hotkey = "F1"
+///
+/// [[profile_groups]]
+/// id = 2
+/// name = "SecondRaid"
+/// hotkey = "F2"
+/// ```
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct ProfileGroup {
+    /// Numeric group ID matching `AccountEntry::group`.
+    pub id: u32,
+    /// Human-readable profile name (e.g., "MainRaid").
+    pub name: String,
+    /// Optional function key hotkey to launch this profile from the TUI (e.g., `"F1"`–`"F9"`).
+    #[serde(default)]
+    pub hotkey: Option<String>,
+}
+
 /// Top-level wrapper for config/accounts.toml.
 #[derive(Debug, Deserialize, Clone)]
 pub struct AccountsConfig {
     /// List of account entries defined in the config file.
     #[serde(default)]
     pub accounts: Vec<AccountEntry>,
+    /// Named profile groups with optional hotkeys for one-action multi-character launches.
+    #[serde(default)]
+    pub profile_groups: Vec<ProfileGroup>,
 }
 
 impl AccountsConfig {
@@ -60,6 +92,35 @@ impl AccountsConfig {
             .iter()
             .filter(|a| a.group == group_id)
             .collect()
+    }
+
+    /// Return all accounts belonging to a named profile group.
+    ///
+    /// Returns `None` if no profile group with that name exists.
+    #[must_use]
+    pub fn accounts_for_profile_name(&self, name: &str) -> Option<Vec<&AccountEntry>> {
+        let pg = self.profile_by_name(name)?;
+        Some(self.accounts_for_group(pg.id))
+    }
+
+    /// Find a profile group by name (case-insensitive).
+    #[must_use]
+    pub fn profile_by_name(&self, name: &str) -> Option<&ProfileGroup> {
+        let lower = name.to_lowercase();
+        self.profile_groups
+            .iter()
+            .find(|pg| pg.name.to_lowercase() == lower)
+    }
+
+    /// Find a profile group by hotkey (case-insensitive, e.g., `"F1"`).
+    #[must_use]
+    pub fn profile_by_hotkey(&self, hotkey: &str) -> Option<&ProfileGroup> {
+        let lower = hotkey.to_lowercase();
+        self.profile_groups.iter().find(|pg| {
+            pg.hotkey
+                .as_ref()
+                .is_some_and(|h| h.to_lowercase() == lower)
+        })
     }
 
     /// Find a single account by name (case-insensitive).
@@ -597,5 +658,123 @@ character = "Foo"
     #[test]
     fn default_max_spawns_fn() {
         assert_eq!(default_max_spawns(), 2048);
+    }
+
+    // ─── Profile Group Tests ────────────────────────────────────────────────
+
+    const SAMPLE_WITH_PROFILES: &str = r#"
+[[accounts]]
+name = "dmft01"
+server = "Firiona Vie"
+character = "Camrene"
+class = "WAR"
+group = 1
+
+[[accounts]]
+name = "dmft02"
+server = "Firiona Vie"
+character = "Zisdarenu"
+class = "SHM"
+group = 1
+
+[[accounts]]
+name = "dmft07"
+server = "Firiona Vie"
+character = "Paladin"
+class = "PAL"
+group = 2
+
+[[profile_groups]]
+id = 1
+name = "MainRaid"
+hotkey = "F1"
+
+[[profile_groups]]
+id = 2
+name = "SecondRaid"
+hotkey = "F2"
+
+[[profile_groups]]
+id = 3
+name = "AltGroup"
+"#;
+
+    fn parse_with_profiles() -> AccountsConfig {
+        toml::from_str(SAMPLE_WITH_PROFILES).unwrap()
+    }
+
+    #[test]
+    fn parse_profile_groups() {
+        let cfg = parse_with_profiles();
+        assert_eq!(cfg.profile_groups.len(), 3);
+        assert_eq!(cfg.profile_groups[0].id, 1);
+        assert_eq!(cfg.profile_groups[0].name, "MainRaid");
+        assert_eq!(cfg.profile_groups[0].hotkey, Some("F1".to_string()));
+        assert_eq!(cfg.profile_groups[1].id, 2);
+        assert_eq!(cfg.profile_groups[1].name, "SecondRaid");
+        assert_eq!(cfg.profile_groups[1].hotkey, Some("F2".to_string()));
+        assert_eq!(cfg.profile_groups[2].id, 3);
+        assert_eq!(cfg.profile_groups[2].name, "AltGroup");
+        assert!(cfg.profile_groups[2].hotkey.is_none());
+    }
+
+    #[test]
+    fn profile_groups_empty_when_not_in_toml() {
+        let cfg = parse_sample();
+        assert!(cfg.profile_groups.is_empty());
+    }
+
+    #[test]
+    fn profile_by_name_case_insensitive() {
+        let cfg = parse_with_profiles();
+        assert!(cfg.profile_by_name("mainraid").is_some());
+        assert!(cfg.profile_by_name("MAINRAID").is_some());
+        assert!(cfg.profile_by_name("MainRaid").is_some());
+        assert_eq!(cfg.profile_by_name("MainRaid").unwrap().id, 1);
+        assert!(cfg.profile_by_name("NoSuchProfile").is_none());
+    }
+
+    #[test]
+    fn profile_by_hotkey_case_insensitive() {
+        let cfg = parse_with_profiles();
+        assert!(cfg.profile_by_hotkey("f1").is_some());
+        assert!(cfg.profile_by_hotkey("F1").is_some());
+        assert_eq!(cfg.profile_by_hotkey("F1").unwrap().name, "MainRaid");
+        assert!(cfg.profile_by_hotkey("F2").is_some());
+        assert_eq!(cfg.profile_by_hotkey("F2").unwrap().name, "SecondRaid");
+        assert!(cfg.profile_by_hotkey("F9").is_none());
+    }
+
+    #[test]
+    fn profile_by_hotkey_no_hotkey_returns_none() {
+        let cfg = parse_with_profiles();
+        // AltGroup has no hotkey
+        assert!(cfg.profile_by_hotkey("").is_none());
+    }
+
+    #[test]
+    fn accounts_for_profile_name_returns_correct_accounts() {
+        let cfg = parse_with_profiles();
+        let accts = cfg.accounts_for_profile_name("MainRaid").unwrap();
+        assert_eq!(accts.len(), 2);
+        assert!(accts.iter().all(|a| a.group == 1));
+
+        let accts2 = cfg.accounts_for_profile_name("SecondRaid").unwrap();
+        assert_eq!(accts2.len(), 1);
+        assert_eq!(accts2[0].name, "dmft07");
+    }
+
+    #[test]
+    fn accounts_for_profile_name_unknown_returns_none() {
+        let cfg = parse_with_profiles();
+        assert!(cfg.accounts_for_profile_name("NoSuchProfile").is_none());
+    }
+
+    #[test]
+    fn accounts_for_profile_name_empty_group_returns_empty_vec() {
+        let cfg = parse_with_profiles();
+        // AltGroup (id=3) exists but no accounts have group=3
+        let accts = cfg.accounts_for_profile_name("AltGroup").unwrap();
+        assert!(accts.is_empty());
     }
 }

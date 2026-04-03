@@ -570,6 +570,24 @@ pub fn handle_events(
                 }
                 return Ok(true);
             }
+            (KeyCode::F(n), KeyModifiers::CONTROL) if (1..=9).contains(&n) => {
+                let hotkey = format!("F{n}");
+                let cmd = {
+                    app.accounts_config
+                        .as_ref()
+                        .and_then(|cfg| cfg.profile_by_hotkey(&hotkey))
+                        .map(|pg| pg.name.clone())
+                };
+                if let Some(name) = cmd {
+                    app.cmd_state.command_buffer = format!("profile launch {name}");
+                    app.execute_command(orchestrator);
+                    app.cmd_state.command_buffer.clear();
+                } else {
+                    app.status_message =
+                        format!("Ctrl+F{n}: no profile group assigned this hotkey");
+                }
+                return Ok(true);
+            }
             (KeyCode::F(10), _) => {
                 app.menu_state.toggle();
                 return Ok(true);
