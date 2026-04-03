@@ -1,0 +1,88 @@
+name: Ensure cmake on PATH
+description: >
+  Locate a trusted cmake installation or install one via winget.
+  Validates cmake lives in an allowlisted directory to prevent PATH-hijack attacks.
+
+inputs:
+  minimum-version:
+    description: "Minimum cmake version (unused today — reserved for future validation)"
+    required: false
+    default: "3.5"
+
+runs:
+  using: composite
+  steps:
+    - name: Ensure cmake on PATH
+      shell: pwsh
+      run: |
+        $candidates = @(
+          'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+          'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+          'C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+          'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin',
+          'C:\Program Files\CMake\bin',
+          'C:\Program Files (x86)\CMake\bin',
+          'C:\ProgramData\chocolatey\bin',
+          'C:\tools\cmake\bin'
+        )
+
+        # GitHub Actions tool cache (e.g. from lukka/get-cmake)
+        if ($env:RUNNER_TOOL_CACHE) {
+          $toolCacheCmake = Join-Path $env:RUNNER_TOOL_CACHE 'cmake'
+          if (Test-Path $toolCacheCmake) {
+            Get-ChildItem -Path $toolCacheCmake -Recurse -Filter 'cmake.exe' -ErrorAction SilentlyContinue |
+              ForEach-Object { $candidates += $_.DirectoryName }
+          }
+        }
+
+        $trusted = @{}
+        foreach ($candidate in $candidates) {
+          $normalized = $candidate.TrimEnd('\').ToLowerInvariant()
+          $trusted[$normalized] = $true
+        }
+
+        # Check if cmake is already on PATH and in a trusted location
+        $existing = Get-Command cmake -CommandType Application -ErrorAction SilentlyContinue
+        if ($existing) {
+          $existingDir = Split-Path -Parent $existing.Source
+          $normalizedExistingDir = $existingDir.TrimEnd('\').ToLowerInvariant()
+          if ($trusted.ContainsKey($normalizedExistingDir)) {
+            Write-Host "[info] Using trusted cmake already on PATH: $($existing.Source)"
+            & $existing.Source --version
+            if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake sanity check failed at $($existing.Source)"; exit 1 }
+            exit 0
+          }
+
+          Write-Warning "[warn] Ignoring untrusted cmake on PATH: $($existing.Source)"
+        }
+
+        # Probe trusted candidate directories for cmake.exe
+        foreach ($dir in $candidates) {
+          $candidateExe = Join-Path $dir 'cmake.exe'
+          if (Test-Path $candidateExe) {
+            Write-Host "[info] Found trusted cmake at $candidateExe"
+            Add-Content $env:GITHUB_PATH $dir
+            $env:PATH = "${dir};${env:PATH}"
+            & $candidateExe --version
+            if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake sanity check failed at $candidateExe"; exit 1 }
+            exit 0
+          }
+        }
+
+        # Fallback: install via winget, resolving winget to a known path first
+        Write-Host "[info] cmake not found in trusted paths; installing via winget..."
+
+        $wingetCommand = Get-Command "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" -ErrorAction SilentlyContinue
+        if (-not $wingetCommand) { $wingetCommand = Get-Command winget -ErrorAction SilentlyContinue }
+        if (-not $wingetCommand) { Write-Error "[fatal] winget not found — cannot install cmake"; exit 1 }
+
+        & $wingetCommand.Source install --id Kitware.CMake -e --source winget --accept-package-agreements --accept-source-agreements --silent
+        if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] winget cmake install failed"; exit 1 }
+
+        $installPath = 'C:\Program Files\CMake\bin'
+        $installExe = Join-Path $installPath 'cmake.exe'
+        if (-not (Test-Path $installExe)) { Write-Error "[fatal] cmake.exe missing at expected install path: $installExe"; exit 1 }
+        Add-Content $env:GITHUB_PATH $installPath
+        $env:PATH = "${installPath};${env:PATH}"
+        & $installExe --version
+        if ($LASTEXITCODE -ne 0) { Write-Error "[fatal] cmake not available after install"; exit 1 }
