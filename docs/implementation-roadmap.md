@@ -51,15 +51,20 @@ Initial slices:
 
 Current curated intake:
 
+- `docs/external-research/packet-engine-send-receive-pipeline.md`
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
+- `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
 
 Entry gate:
 
 - imported packet and network research archived and indexed
+- send and receive pipeline inventory completed with evidence states
 
 Exit gate:
 
 - packet control paths have explicit acceptance criteria
+- send and receive pipeline layers are inventoried with `In-process`, `Packet candidate`, or `Blocked` labels
+- anti-cheat counter and opcode scrambler requirements are documented
 - critical packet unknowns are either live-validated, blocked, or explicitly provisional
 
 ### `M6` Zoning/Movement

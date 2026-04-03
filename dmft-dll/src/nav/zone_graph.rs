@@ -17,6 +17,11 @@ pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
     use crate::eq::widgets::read_cxstr;
     use dmft_common::nav::{ZoneConnection, ZoneNode};
     use dmft_common::offsets::{self, zone_guide as zg};
+    use windows::Win32::System::Memory::{
+        MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
+        PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY,
+        PAGE_READWRITE, PAGE_WRITECOPY, VirtualQuery,
+    };
 
     if eq_base == 0 {
         tracing::warn!("read_zone_graph called with eq_base=0");
@@ -30,16 +35,71 @@ pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
     // called from the game loop thread where the zone guide data is stable.
     // If any pointer is invalid, we return None rather than crashing.
 
+    unsafe fn is_readable_range(addr: usize, size: usize) -> bool {
+        if addr < 0x10000 || size == 0 {
+            return false;
+        }
+        let end = match addr.checked_add(size.saturating_sub(1)) {
+            Some(v) => v,
+            None => return false,
+        };
+
+        let mut cursor = addr;
+        while cursor <= end {
+            let mut mbi = MEMORY_BASIC_INFORMATION::default();
+            if VirtualQuery(
+                Some(cursor as *const _),
+                &mut mbi,
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            ) == 0
+            {
+                return false;
+            }
+
+            if mbi.State != MEM_COMMIT || (mbi.Protect.0 & (PAGE_GUARD.0 | PAGE_NOACCESS.0)) != 0 {
+                return false;
+            }
+
+            let readable = matches!(
+                mbi.Protect.0,
+                x if x == PAGE_READONLY.0
+                    || x == PAGE_READWRITE.0
+                    || x == PAGE_WRITECOPY.0
+                    || x == PAGE_EXECUTE.0
+                    || x == PAGE_EXECUTE_READ.0
+                    || x == PAGE_EXECUTE_READWRITE.0
+                    || x == PAGE_EXECUTE_WRITECOPY.0
+            );
+            if !readable {
+                return false;
+            }
+
+            let region_end = (mbi.BaseAddress as usize).saturating_add(mbi.RegionSize);
+            if region_end == 0 || region_end <= cursor {
+                return false;
+            }
+            if region_end > end {
+                return true;
+            }
+            cursor = region_end;
+        }
+        true
+    }
+
+    unsafe fn read_checked<T: Copy>(addr: usize) -> Option<T> {
+        is_readable_range(addr, std::mem::size_of::<T>()).then(|| *(addr as *const T))
+    }
+
     // Resolve the singleton pointer
     let mgr_ptr_addr = offsets::rebase(offsets::ZONE_GUIDE_MANAGER, eq_base)?;
-    let mgr_ptr = *(mgr_ptr_addr as *const usize);
-    if mgr_ptr == 0 || mgr_ptr < 0x10000 {
+    let mgr_ptr = read_checked::<usize>(mgr_ptr_addr)?;
+    if mgr_ptr == 0 {
         tracing::warn!("ZoneGuideManagerClient pointer is null");
         return None;
     }
 
     // Check if zone guide data is populated
-    let data_set = *((mgr_ptr + zg::DATA_SET) as *const u8);
+    let data_set = read_checked::<u8>(mgr_ptr + zg::DATA_SET)?;
     if data_set == 0 {
         tracing::warn!("ZoneGuideManagerClient.zoneGuideDataSet is false");
         return None;
@@ -51,7 +111,9 @@ pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
     for i in 0..zg::ZONE_COUNT {
         let zone_addr = zones_base + i * zg::ZONE_SIZE;
 
-        let zone_id = *((zone_addr + zg::ZONE_ID) as *const i32);
+        let Some(zone_id) = read_checked::<i32>(zone_addr + zg::ZONE_ID) else {
+            continue;
+        };
         if zone_id <= 0 || zone_id > zg::ZONE_COUNT as i32 {
             continue;
         }
@@ -61,27 +123,43 @@ pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
             continue;
         }
 
-        let min_level = *((zone_addr + zg::ZONE_MIN_LEVEL) as *const i32);
-        let max_level = *((zone_addr + zg::ZONE_MAX_LEVEL) as *const i32);
+        let Some(min_level) = read_checked::<i32>(zone_addr + zg::ZONE_MIN_LEVEL) else {
+            continue;
+        };
+        let Some(max_level) = read_checked::<i32>(zone_addr + zg::ZONE_MAX_LEVEL) else {
+            continue;
+        };
 
         // Read connections ArrayClass
-        let conn_count = *((zone_addr + zg::ZONE_CONNECTIONS_COUNT) as *const i32);
-        let conn_array = *((zone_addr + zg::ZONE_CONNECTIONS_ARRAY) as *const usize);
+        let Some(conn_count) = read_checked::<i32>(zone_addr + zg::ZONE_CONNECTIONS_COUNT) else {
+            continue;
+        };
+        let Some(conn_array) = read_checked::<usize>(zone_addr + zg::ZONE_CONNECTIONS_ARRAY) else {
+            continue;
+        };
 
         let mut connections = Vec::new();
-        if conn_count > 0 && conn_count < 200 && conn_array != 0 && conn_array > 0x10000 {
+        if conn_count > 0 && conn_count < 200 && conn_array != 0 {
             for j in 0..conn_count as usize {
                 let conn_addr = conn_array + j * zg::CONNECTION_SIZE;
 
-                let dest_zone_id = *((conn_addr + zg::CONN_DEST_ZONE_ID) as *const i32);
-                let transfer_type = *((conn_addr + zg::CONN_TRANSFER_TYPE) as *const i32);
-                let disabled = *((conn_addr + zg::CONN_DISABLED) as *const u8) != 0;
+                let Some(dest_zone_id) = read_checked::<i32>(conn_addr + zg::CONN_DEST_ZONE_ID)
+                else {
+                    continue;
+                };
+                let Some(transfer_type) = read_checked::<i32>(conn_addr + zg::CONN_TRANSFER_TYPE)
+                else {
+                    continue;
+                };
+                let Some(disabled) = read_checked::<u8>(conn_addr + zg::CONN_DISABLED) else {
+                    continue;
+                };
 
                 if dest_zone_id > 0 && dest_zone_id <= zg::ZONE_COUNT as i32 {
                     connections.push(ZoneConnection {
                         dest_zone_id: dest_zone_id as u16,
                         transfer_type: transfer_type.clamp(0, 255) as u8,
-                        disabled,
+                        disabled: disabled != 0,
                     });
                 }
             }
