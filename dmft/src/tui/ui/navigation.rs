@@ -18,6 +18,8 @@ fn nav_status_color(
 ) -> ratatui::style::Color {
     if status.is_moving() {
         t.text_highlight
+    } else if status.is_paused() {
+        t.text_secondary
     } else if status.is_arrived() {
         t.hp_high
     } else if status.is_stuck() {
