@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
@@ -54,6 +54,30 @@ fn shared_state_reader_for_pid(pid: u32) -> Result<ipc::shared::SharedStateReade
     let (_, session_id) = load_pid_session(pid)?;
     ipc::shared::SharedStateReader::new(pid, session_id)
         .with_context(|| format!("Cannot open shared memory for PID {pid} — is the DLL injected?"))
+}
+
+fn resolve_built_dll_path() -> Result<PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .context("Failed to resolve current executable path")?
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| anyhow::anyhow!("Current executable has no parent directory"))?;
+
+    let dll_candidates = [
+        exe_dir.join("dmft_dll.dll"),
+        exe_dir.join("target/release/dmft_dll.dll"),
+        exe_dir.join("target/debug/dmft_dll.dll"),
+    ];
+
+    dll_candidates
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Cannot find dmft_dll.dll near the dmft executable. Run `cargo build --release` first."
+            )
+        })
 }
 
 /// TUI mode — the default. Shows ShowEQ-inspired live dashboard.
@@ -148,21 +172,13 @@ pub fn run_inject_mode() -> Result<()> {
 
     println!("Found {} EQ process(es): {:?}", pids.len(), pids);
 
-    // Locate the DLL — check release first, then debug
-    let project_dir = std::env::current_dir().unwrap_or_default();
-    let dll_candidates = [
-        project_dir.join("target/release/dmft_dll.dll"),
-        project_dir.join("target/debug/dmft_dll.dll"),
-    ];
-
-    let source_dll = dll_candidates.iter().find(|p| p.exists()).ok_or_else(|| {
-        anyhow::anyhow!("Cannot find dmft_dll.dll. Run `cargo build --release` first.")
-    })?;
+    // Locate the DLL relative to the executable, not the current working directory.
+    let source_dll = resolve_built_dll_path()?;
 
     println!("Using DLL: {}", source_dll.display());
 
     // Stage the DLL (copies with randomized name)
-    let staged_dll = inject::dll_prep::prepare_dll(source_dll)?;
+    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
     println!("Staged DLL: {}", staged_dll.display());
 
     let mut success = 0u32;
@@ -611,20 +627,12 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
 pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     info!(pid, "DMFT inject-pid mode — targeting single process");
 
-    let project_dir = std::env::current_dir().unwrap_or_default();
-    let dll_candidates = [
-        project_dir.join("target/release/dmft_dll.dll"),
-        project_dir.join("target/debug/dmft_dll.dll"),
-    ];
-
-    let source_dll = dll_candidates.iter().find(|p| p.exists()).ok_or_else(|| {
-        anyhow::anyhow!("Cannot find dmft_dll.dll. Run `cargo build --release` first.")
-    })?;
+    let source_dll = resolve_built_dll_path()?;
 
     // Write session token file BEFORE injection so DLL can read it during init.
     ipc::write_session_token_file(pid)?;
 
-    let staged_dll = inject::dll_prep::prepare_dll(source_dll)?;
+    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
     println!("Injecting into PID {pid}...");
 
     inject::loader::inject_dll(pid, &staged_dll)?;
