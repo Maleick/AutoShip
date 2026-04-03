@@ -1170,6 +1170,9 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
 }
 
 /// Walk `CXWndManager`'s window array and log each window for calibration.
+///
+/// NOTE: Do not log raw `WindowText` here because edit controls can contain
+/// sensitive user-entered values (e.g. credentials). Only log metadata.
 #[cfg(windows)]
 fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
     use dmft_common::offsets::eqmain as off;
@@ -1184,14 +1187,17 @@ fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
             let window_text = text.unwrap_or_default();
             let visible = crate::eq::widgets::is_visible(wnd_ptr);
             let xml_idx = crate::eq::widgets::xml_index(wnd_ptr);
+            let has_text = !window_text.is_empty();
+            let text_len = window_text.chars().count();
 
-            if visible || !window_text.is_empty() {
+            if visible || has_text {
                 tracing::info!(
                     idx = i,
                     ptr = format!("{:#x}", wnd_ptr),
                     xml_index = xml_idx,
                     visible,
-                    text = %window_text,
+                    has_text,
+                    text_len,
                     "Window"
                 );
             }
