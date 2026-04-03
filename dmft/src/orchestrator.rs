@@ -698,8 +698,8 @@ impl Orchestrator {
         let Some(pipe) = self.get_pipe(pid) else {
             return;
         };
-        match pipe.send_async(&cmd) {
-            Ok(()) => {
+        match pipe.send(&cmd) {
+            Ok(_response) => {
                 tracing::debug!(pid, name = %name, ?cmd, "Dispatched IPC command");
             }
             Err(e) => {
@@ -750,8 +750,8 @@ impl Orchestrator {
         let cmd = Command::SlashCommand {
             command: command.to_string(),
         };
-        match pipe.send_async(&cmd) {
-            Ok(()) => {
+        match pipe.send(&cmd) {
+            Ok(_response) => {
                 tracing::debug!(pid, name = %name, %command, "Dispatched command");
             }
             Err(e) => {
