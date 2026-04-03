@@ -103,8 +103,27 @@ function Invoke-RemoteCommand {
     $allowed = @("tasklist", "netstat", "cargo", "git", "Get-Process", "Get-Content",
                  "Get-ChildItem", "Test-Path", "dir", "type", "systeminfo", "hostname",
                  "Start-Process", "Stop-Process", "powershell")
-    $firstWord = ($Command -split '\s+')[0]
-    $isAllowed = $allowed | Where-Object { $firstWord -like "$_*" }
+
+    # Reject command separator characters to prevent multi-command injection.
+    if ($Command -match "[;|&]" -or $Command.Contains("`n") -or $Command.Contains("`r")) {
+        return @{
+            success = $false
+            output  = "Command contains disallowed separators"
+            exit_code = -1
+        }
+    }
+
+    $trimmed = $Command.Trim()
+    if (-not $trimmed) {
+        return @{
+            success = $false
+            output  = "No command provided"
+            exit_code = -1
+        }
+    }
+
+    $firstWord = ($trimmed -split '\s+', 2)[0]
+    $isAllowed = $allowed -contains $firstWord
     if (-not $isAllowed) {
         return @{
             success = $false
