@@ -7,10 +7,11 @@ Use these files in order:
 1. `automation-source-ledger.md`
 2. `packet-zoning-send-path-and-state-ledger.md`
 3. `kissassist-gap-and-tui-translation.md`
-4. `daybreak-detection-digest.md`
-5. `zoning-queue-and-safe-coord-validation.md`
-6. `ability-packet-coverage-and-targetability-validation.md`
-7. `../research-imports/2026-04-02-packet-zoning/`
+4. `jmb-session-and-relay-comparison.md`
+5. `daybreak-detection-digest.md`
+6. `zoning-queue-and-safe-coord-validation.md`
+7. `ability-packet-coverage-and-targetability-validation.md`
+8. `../research-imports/2026-04-02-packet-zoning/`
 
 Rules:
 
