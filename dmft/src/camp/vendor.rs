@@ -104,11 +104,13 @@ impl SellCycle {
     }
 
     /// Set the list of items to sell this cycle. Call before `start_sell`.
-    /// Filters out any items in the keep list.
+    /// Filters out keep-list items, and applies `sellable_items` as an allowlist when non-empty.
     pub fn queue_sell_items(&mut self, inventory: &[String]) {
+        let use_allowlist = !self.config.sellable_items.is_empty();
         self.sell_queue = inventory
             .iter()
             .filter(|item| !self.should_keep(item))
+            .filter(|item| !use_allowlist || self.config.sellable_items.contains(*item))
             .cloned()
             .collect();
     }
@@ -338,6 +340,22 @@ mod tests {
             "Bone Chips".into(),
         ]);
         assert_eq!(cycle.sell_queue, vec!["Cracked Staff", "Rusty Axe"]);
+    }
+
+    #[test]
+    fn test_queue_sell_items_honors_sellable_allowlist() {
+        let mut config = test_vendor_config();
+        config.sellable_items = vec!["Rusty Axe".into()];
+        let mut cycle = SellCycle::new(config);
+
+        cycle.queue_sell_items(&[
+            "Cracked Staff".into(),
+            "Fine Steel Dagger".into(),
+            "Rusty Axe".into(),
+            "Bone Chips".into(),
+        ]);
+
+        assert_eq!(cycle.sell_queue, vec!["Rusty Axe"]);
     }
 
     #[test]

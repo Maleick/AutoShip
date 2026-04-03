@@ -44,7 +44,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 | ---------- | --- | --------------------------------------------------------------------------------------------------- |
 | Characters | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels |
 | Map        | `2` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers, Z-slice control |
-| Navigation | `3` | Per-character nav status, route progress, recovery state, zoning blockers, and waypoint queue      |
+| Navigation | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue |
 | Debug      | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), hex dump, target detail           |
 
 **Themes:** Dark Modern (default), Dracula, Classic — cycle with `T`
@@ -77,12 +77,12 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 ### Command Bar (`:` mode)
 
-```
+```text
 :<name> /sit             Send slash command to character
 :G1-G6 /cmd             Send to group
 :all /sit                Broadcast to all clients
-:camp start|stop|list    Camp loop control
-:camp add|rm             Add/remove camp config
+:camp start|stop|list|status|next|prev  Camp loop control
+:camp add|remove        Add/remove camp config
 :nav <dest>              Navigate to camp, coords, or slash fallback
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist
@@ -92,14 +92,14 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 :accept                  Accept group invite
 :mode camp|hunt          Set operating mode
 :ch start <pids> <int>   Start CH chain
-:ch stop|add|rm          CH chain management
+:ch stop|add|remove      CH chain management (`rm` also works)
 :ch adaptive on|off      Adaptive CH timing
 :help                    Show all commands
 ```
 
 ### Camp Loop Automation
 
-- **5-phase state machine**: Idle -> Pull -> Fight -> Loot -> Med
+- **6-phase state machine**: Idle -> Pulling -> Fighting -> Looting -> Medding -> Buffing
 - **Smart decisions** from real game state (HP/mana-driven, not timers)
 - **16 class ability configs** (TOML) with cooldowns, priorities, conditions
 - **CC system**: Charm/mez tracking, Tash->Malo debuff chain, charm break emergency response
@@ -168,7 +168,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 ## Architecture
 
-```
+```text
 DMFT Workspace (3 crates, ~57K lines of Rust)
 ├── dmft/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
 ├── dmft-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
@@ -177,15 +177,15 @@ DMFT Workspace (3 crates, ~57K lines of Rust)
 
 ### Command Pipeline
 
-```
+```text
 TUI :command  →  Orchestrator  →  Named Pipe  →  DLL  →  InterpretCmd  →  EQ
-     or                                                    (invisible to game)
+     or  (invisible to game)
 Discord msg
 ```
 
 ### Camp Loop
 
-```
+```text
 Orchestrator ticks camp loop → reads game state from shared memory →
 generates (pid, slash_command) pairs per role → sends via IPC pipe →
 DLL executes InterpretCmd with human-like jitter delay
@@ -348,6 +348,7 @@ Tag-triggered releases (`v*`) build Windows binaries and create GitHub Releases 
 
 Release and wiki automation now run separately on the self-hosted Windows runner:
 
+- wiki auto-publish via `scripts/sync_wiki.py --check`
 - wiki auto-publish via `scripts/sync_wiki.py --push`
 - rolling nightly prerelease build and artifact upload
 
@@ -380,6 +381,7 @@ pull_mana_pct = 60
 ### Class Ability Configs (`config/classes/*.toml`)
 
 16 classes: WAR, CLR, PAL, RNG, SK, DRU, MNK, BRD, ROG, SHM, NEC, WIZ, MAG, ENC, BST, BER
+- Optional `[[level_overrides]]` blocks gate alternate combat/buff/emergency/cc/debuff ability lists by level range; categories omitted inside an override fall back to the base class lists, and the base profile is used when no override matches.
 
 ### HVT Watchlist (`config/hvt_watchlist.toml`)
 
@@ -434,11 +436,11 @@ Execution rules:
 - `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md` — curated `M5`/`M6` control-path ledger that separates in-process defaults from packet candidates and blocked protocol gaps
 - `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native DMFT TUI translation targets
-- `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors plus secondary detection signals
+- `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors, `M5`-`M8` risk gates, and operator hygiene inputs
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md` — curated `M6` checkpoint note for queue flush, timeout, and safe-coordinate recovery
 - `docs/research-imports/2026-04-02-packet-zoning/` — raw packet and zoning evidence archive
 - `docs/orchestration-design.md` — 7-phase plan, group model, camp loop design
-- `docs/anti-detection.md` — evidence-based anti-detection posture and operator-risk rules
+- `docs/anti-detection.md` — evidence-based anti-detection posture, gate matrix, and operator-risk rules
 - `docs/redguides-automation-research.md` — KissAssist, CWTN, camp loop patterns
 - `docs/mq2-deep-dive.md` — MQ2Nav, combat, stick/follow analysis
 - `docs/eq-maps-research.md` — Brewall format, coordinate transform
