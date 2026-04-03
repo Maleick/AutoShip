@@ -204,6 +204,19 @@ fn run_loop(
                 "Discord command received"
             );
             let channel_id = cmd.channel_id.clone();
+            if !discord_sender_is_authorized(app, &cmd.sender) {
+                tracing::warn!(
+                    sender = %cmd.sender,
+                    "Rejected Discord command from unauthorized sender"
+                );
+                if let Some(ref bridge) = app.discord_bridge {
+                    bridge.respond(crate::discord::bridge::BridgeResponse {
+                        message: "Discord command rejected: unauthorized sender".to_string(),
+                        channel_id,
+                    });
+                }
+                continue;
+            }
             app.cmd_state.command_buffer = cmd.command;
             app.execute_command(orchestrator);
             let response = app.status_message.clone();
@@ -224,6 +237,14 @@ fn run_loop(
     }
 
     Ok(())
+}
+
+fn discord_sender_is_authorized(app: &App, sender: &str) -> bool {
+    let allowlist = &app.discord_command_allowed_senders;
+    if allowlist.is_empty() {
+        return false;
+    }
+    allowlist.contains(&sender.trim().to_ascii_lowercase())
 }
 
 /// Scan for EQ processes and update the client list.
@@ -1272,7 +1293,8 @@ fn poll_log_watchers(app: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::spawn_refresh_due;
+    use super::{discord_sender_is_authorized, spawn_refresh_due};
+    use crate::tui::app::App;
     use std::time::{Duration, Instant};
 
     #[test]
@@ -1313,5 +1335,19 @@ mod tests {
 
         assert!(spawn_refresh_due(None, now, true));
         assert!(spawn_refresh_due(None, now, false));
+    }
+
+    #[test]
+    fn discord_sender_auth_denies_when_allowlist_empty() {
+        let app = App::new();
+        assert!(!discord_sender_is_authorized(&app, "RaidLead"));
+    }
+
+    #[test]
+    fn discord_sender_auth_matches_case_insensitively_with_trim() {
+        let mut app = App::new();
+        app.discord_command_allowed_senders
+            .insert("raidlead".to_string());
+        assert!(discord_sender_is_authorized(&app, "  RaidLead  "));
     }
 }

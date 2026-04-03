@@ -379,6 +379,8 @@ pub struct App {
     pub discord_webhook: Option<crate::discord::webhook::WebhookSender>,
     /// Discord bridge for bidirectional chat relay.
     pub discord_bridge: Option<crate::discord::bridge::TuiBridge>,
+    /// Normalized sender allowlist for Discord bridge command execution.
+    pub discord_command_allowed_senders: std::collections::HashSet<String>,
 
     /// Dropdown menu bar state.
     pub menu_state: MenuState,
@@ -556,6 +558,7 @@ impl App {
 
             discord_webhook: None,
             discord_bridge: None,
+            discord_command_allowed_senders: std::collections::HashSet::new(),
 
             menu_state: MenuState::new(),
             wizard_state: WizardState::new(),
@@ -666,6 +669,12 @@ impl App {
 
     /// Initialize Discord integration from config.
     pub fn init_discord(&mut self, config: &crate::config::DiscordConfig) {
+        self.discord_command_allowed_senders = config
+            .command_allowed_senders
+            .iter()
+            .map(|sender| sender.trim().to_ascii_lowercase())
+            .filter(|sender| !sender.is_empty())
+            .collect();
         if !config.webhook_url.is_empty() {
             tracing::info!("Discord webhook enabled");
             self.discord_webhook = Some(crate::discord::webhook::WebhookSender::new(
