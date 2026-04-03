@@ -94,6 +94,8 @@ const NAVMESH_FILE_MAGIC: u32 = u32::from_le_bytes([b'T', b'E', b'S', b'M']);
 const FLAG_COMPRESSED: u16 = 0x0001;
 const NAVMESH_QUERY_MAX_NODES: i32 = 16384;
 const MESH_CACHE_DIR: &str = "data/meshes";
+const MAX_MESH_DOWNLOAD_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
+const MAX_PROTO_PAYLOAD_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
 const DT_EXT_LINK: u16 = 0x8000;
 const DT_NULL_LINK: u32 = 0xffff_ffff;
 
@@ -373,6 +375,16 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
 
     if cache_path.exists() {
         tracing::info!(zone = zone_short_name, path = %cache_path.display(), "Loading cached navmesh");
+        let cached_len = std::fs::metadata(&cache_path)
+            .with_context(|| format!("Failed to stat cached mesh: {}", cache_path.display()))?
+            .len() as usize;
+        if cached_len > MAX_MESH_DOWNLOAD_BYTES {
+            bail!(
+                "Cached navmesh too large ({} bytes, max {})",
+                cached_len,
+                MAX_MESH_DOWNLOAD_BYTES
+            );
+        }
         return std::fs::read(&cache_path)
             .with_context(|| format!("Failed to read cached mesh: {}", cache_path.display()));
     }
@@ -380,13 +392,31 @@ pub fn download_zone_mesh(zone_short_name: &str) -> Result<Vec<u8>> {
     let url = format!("https://mqmesh.com/resources/meshes/{zone_short_name}.navmesh");
     tracing::info!(zone = zone_short_name, %url, "Downloading navmesh");
 
-    let data = reqwest::blocking::get(&url)
+    let response = reqwest::blocking::get(&url)
         .with_context(|| format!("HTTP request failed for {url}"))?
         .error_for_status()
-        .with_context(|| format!("Server returned error for {url}"))?
-        .bytes()
-        .context("Failed to read response body")?
-        .to_vec();
+        .with_context(|| format!("Server returned error for {url}"))?;
+    if let Some(content_len) = response.content_length() {
+        if content_len as usize > MAX_MESH_DOWNLOAD_BYTES {
+            bail!(
+                "Navmesh download too large ({} bytes, max {})",
+                content_len,
+                MAX_MESH_DOWNLOAD_BYTES
+            );
+        }
+    }
+
+    let mut data = Vec::new();
+    response
+        .take((MAX_MESH_DOWNLOAD_BYTES + 1) as u64)
+        .read_to_end(&mut data)
+        .context("Failed to read response body")?;
+    if data.len() > MAX_MESH_DOWNLOAD_BYTES {
+        bail!(
+            "Navmesh download exceeded size limit (max {} bytes)",
+            MAX_MESH_DOWNLOAD_BYTES
+        );
+    }
 
     if let Some(parent) = cache_path.parent() {
         std::fs::create_dir_all(parent).ok();
@@ -451,11 +481,18 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     let payload = &data[payload_offset..];
 
     let proto_bytes = if compressed {
-        let mut decoder = ZlibDecoder::new(payload);
+        let decoder = ZlibDecoder::new(payload);
         let mut decompressed = Vec::new();
         decoder
+            .take((MAX_PROTO_PAYLOAD_BYTES + 1) as u64)
             .read_to_end(&mut decompressed)
             .context("Zlib decompression failed")?;
+        if decompressed.len() > MAX_PROTO_PAYLOAD_BYTES {
+            bail!(
+                "Decompressed navmesh payload too large (max {} bytes)",
+                MAX_PROTO_PAYLOAD_BYTES
+            );
+        }
         tracing::debug!(
             compressed_bytes = payload.len(),
             decompressed_bytes = decompressed.len(),
@@ -463,6 +500,13 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
         );
         decompressed
     } else {
+        if payload.len() > MAX_PROTO_PAYLOAD_BYTES {
+            bail!(
+                "Navmesh payload too large ({} bytes, max {})",
+                payload.len(),
+                MAX_PROTO_PAYLOAD_BYTES
+            );
+        }
         payload.to_vec()
     };
 
@@ -937,6 +981,9 @@ fn mesh_cache_path(zone_short_name: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::Compression;
+    use flate2::write::ZlibEncoder;
+    use std::io::Write;
 
     #[test]
     fn magic_constant_matches_mset() {
@@ -972,6 +1019,30 @@ mod tests {
         let file = result.unwrap();
         assert_eq!(file.zone_short_name, "");
         assert!(file.tile_set.is_none());
+    }
+
+    #[test]
+    fn parse_rejects_oversized_compressed_payload() {
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(&vec![0u8; MAX_PROTO_PAYLOAD_BYTES + 1])
+            .unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&NAVMESH_FILE_MAGIC.to_le_bytes());
+        data.extend_from_slice(&4u16.to_le_bytes());
+        data.extend_from_slice(&FLAG_COMPRESSED.to_le_bytes());
+        data.extend_from_slice(&compressed);
+
+        let result = parse_navmesh(&data);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Decompressed navmesh payload too large")
+        );
     }
 
     #[test]
