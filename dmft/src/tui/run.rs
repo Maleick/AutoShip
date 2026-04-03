@@ -394,6 +394,9 @@ fn apply_demo_scenario(app: &mut App) {
                             dmft_common::nav::NavStatus::Moving { .. } => {
                                 String::from("Regroup route")
                             }
+                            dmft_common::nav::NavStatus::Paused { .. } => {
+                                String::from("Route paused")
+                            }
                             dmft_common::nav::NavStatus::Stuck { .. } => {
                                 String::from("Recovery route")
                             }
@@ -404,11 +407,18 @@ fn apply_demo_scenario(app: &mut App) {
                             dmft_common::nav::NavStatus::Stuck { recovery_attempt } => Some(
                                 format!("Trying alternate line (attempt {})", recovery_attempt),
                             ),
+                            dmft_common::nav::NavStatus::Paused { .. } => {
+                                Some(String::from("Waiting for target stability"))
+                            }
                             _ => None,
                         },
                         blockers: match &nav.status {
                             dmft_common::nav::NavStatus::Stuck { .. } => vec![format!(
                                 "Path to {} is obstructed; waiting for recovery movement.",
+                                nav.destination
+                            )],
+                            dmft_common::nav::NavStatus::Paused { .. } => vec![format!(
+                                "Navigation paused near {}; waiting for stable target.",
                                 nav.destination
                             )],
                             _ => Vec::new(),
