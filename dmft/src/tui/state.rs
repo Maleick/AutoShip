@@ -159,7 +159,7 @@ pub enum MapFilterKind {
 }
 
 impl MapFilterKind {
-    pub fn from_str(input: &str) -> Option<Self> {
+    pub fn parse_kind(input: &str) -> Option<Self> {
         match input.to_ascii_lowercase().as_str() {
             "npc" => Some(Self::Npc),
             "pc" => Some(Self::Pc),
@@ -256,7 +256,7 @@ impl MapFilters {
     #[must_use]
     pub fn cache_key_bits(&self) -> u8 {
         let mut bits = 0u8;
-        bits |= u8::from(self.show_npc) << 0;
+        bits |= u8::from(self.show_npc);
         bits |= u8::from(self.show_pc) << 1;
         bits |= u8::from(self.show_corpse) << 2;
         bits |= u8::from(self.show_ground) << 3;

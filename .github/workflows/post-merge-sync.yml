@@ -1,0 +1,42 @@
+name: Post-merge project sync
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  sync-project:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update linked issues and clean labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          pr_number="${{ github.event.pull_request.number }}"
+          repo="${{ github.repository }}"
+          echo "PR #${pr_number} merged into ${{ github.event.pull_request.base.ref }}"
+
+          for label in "agent:working" "agent:ready" "merge:auto"; do
+            gh pr edit "$pr_number" --repo "$repo" --remove-label "$label" 2>/dev/null || true
+          done
+
+          linked_issues=$(echo "$PR_BODY" | grep -oiE '(fix(es)?|close(s)?|resolve(s)?)\s+#[0-9]+' | grep -oE '#[0-9]+' | tr -d '#' || true)
+
+          if [ -z "$linked_issues" ]; then
+            echo "No linked issues found in PR body."
+            exit 0
+          fi
+
+          for issue in $linked_issues; do
+            echo "Cleaning labels on issue #${issue}"
+            for label in "agent:working" "agent:ready" "agent:blocked"; do
+              gh issue edit "$issue" --repo "$repo" --remove-label "$label" 2>/dev/null || true
+            done
+          done

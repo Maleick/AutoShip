@@ -3038,7 +3038,7 @@ impl App {
                     );
                 }
                 Some(arg) => {
-                    let Some(kind) = MapFilterKind::from_str(arg) else {
+                    let Some(kind) = MapFilterKind::parse_kind(arg) else {
                         self.usage_feedback(
                             "mapfilter",
                             "Usage: mapfilter <npc|pc|corpse|ground|pet|named|untargetable> [on|off]",
@@ -4399,31 +4399,31 @@ impl App {
             }
             Some(arg) => {
                 // Check for G<n> group syntax
-                if let Some(stripped) = arg.strip_prefix('G').or_else(|| arg.strip_prefix('g')) {
-                    if let Ok(group_id) = stripped.parse::<u8>() {
-                        // group_id is 1-based; groups vec is 0-indexed
-                        let idx = (group_id as usize).saturating_sub(1);
-                        if idx < self.groups.len() {
-                            let g = &self.groups[idx];
-                            let label = g.name.clone();
-                            self.routing_scope = RoutingScope::Group {
-                                group_id,
-                                label: label.clone(),
-                            };
-                            self.set_active_group(Some(idx));
-                            self.set_feedback(
-                                ToastLevel::Success,
-                                format!("Scope → G{group_id} {label}"),
-                                true,
-                            );
-                        } else {
-                            self.usage_feedback(
-                                "scope",
-                                format!("Group G{group_id} not found. Use :scope G1..G6."),
-                            );
-                        }
-                        return;
+                if let Some(stripped) = arg.strip_prefix('G').or_else(|| arg.strip_prefix('g'))
+                    && let Ok(group_id) = stripped.parse::<u8>()
+                {
+                    // group_id is 1-based; groups vec is 0-indexed
+                    let idx = (group_id as usize).saturating_sub(1);
+                    if idx < self.groups.len() {
+                        let g = &self.groups[idx];
+                        let label = g.name.clone();
+                        self.routing_scope = RoutingScope::Group {
+                            group_id,
+                            label: label.clone(),
+                        };
+                        self.set_active_group(Some(idx));
+                        self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Scope → G{group_id} {label}"),
+                            true,
+                        );
+                    } else {
+                        self.usage_feedback(
+                            "scope",
+                            format!("Group G{group_id} not found. Use :scope G1..G6."),
+                        );
                     }
+                    return;
                 }
                 // Treat as character name
                 if self.find_client_by_name(arg).is_some() {
