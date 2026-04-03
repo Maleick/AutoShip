@@ -1014,12 +1014,16 @@ mod tests {
 
     #[test]
     fn cchat_window_manager_pointer_above_preferred_base() {
-        const { assert!(PINST_CCHAT_WINDOW_MANAGER > EQ_PREFERRED_BASE) };
+        const _: () = {
+            assert!(PINST_CCHAT_WINDOW_MANAGER > EQ_PREFERRED_BASE);
+        };
     }
 
     #[test]
     fn cinv_slot_mgr_pointer_above_preferred_base() {
-        const { assert!(PINST_CINV_SLOT_MGR > EQ_PREFERRED_BASE) };
+        const _: () = {
+            assert!(PINST_CINV_SLOT_MGR > EQ_PREFERRED_BASE);
+        };
     }
 
     #[test]
