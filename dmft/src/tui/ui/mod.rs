@@ -1245,6 +1245,9 @@ mod tests {
                 },
                 eta_secs: Some(12),
                 waypoints: Vec::new(),
+                path_exists: true,
+                path_length: Some(42.0),
+                failure_reason: None,
                 route_state: String::from("Navmesh route"),
                 recovery_state: None,
                 blockers: vec![String::from(

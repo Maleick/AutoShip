@@ -204,6 +204,19 @@ fn run_loop(
                 "Discord command received"
             );
             let channel_id = cmd.channel_id.clone();
+            if !discord_sender_is_authorized(app, &cmd.sender) {
+                tracing::warn!(
+                    sender = %cmd.sender,
+                    "Rejected Discord command from unauthorized sender"
+                );
+                if let Some(ref bridge) = app.discord_bridge {
+                    bridge.respond(crate::discord::bridge::BridgeResponse {
+                        message: "Discord command rejected: unauthorized sender".to_string(),
+                        channel_id,
+                    });
+                }
+                continue;
+            }
             app.cmd_state.command_buffer = cmd.command;
             app.execute_command(orchestrator);
             let response = app.status_message.clone();
@@ -224,6 +237,14 @@ fn run_loop(
     }
 
     Ok(())
+}
+
+fn discord_sender_is_authorized(app: &App, sender: &str) -> bool {
+    let allowlist = &app.discord_command_allowed_senders;
+    if allowlist.is_empty() {
+        return false;
+    }
+    allowlist.contains(&sender.trim().to_ascii_lowercase())
 }
 
 /// Scan for EQ processes and update the client list.
@@ -390,6 +411,9 @@ fn apply_demo_scenario(app: &mut App) {
                         status: nav.status.clone(),
                         eta_secs: None,
                         waypoints: nav.waypoints.clone(),
+                        path_exists: true,
+                        path_length: None,
+                        failure_reason: None,
                         route_state: match &nav.status {
                             dmft_common::nav::NavStatus::Moving { .. } => {
                                 String::from("Regroup route")
@@ -402,6 +426,9 @@ fn apply_demo_scenario(app: &mut App) {
                             }
                             dmft_common::nav::NavStatus::Arrived => String::from("Route complete"),
                             dmft_common::nav::NavStatus::Idle => String::from("Standing by"),
+                            dmft_common::nav::NavStatus::Sticking { target_id, .. } => {
+                                format!("Sticking to #{target_id}")
+                            }
                         },
                         recovery_state: match &nav.status {
                             dmft_common::nav::NavStatus::Stuck { recovery_attempt } => Some(
@@ -1051,6 +1078,21 @@ fn load_demo_data(app: &mut App) {
         client.character_name = name.to_string();
         client.client_status = format!("Connected: {name}");
         client.is_demo = true;
+        // Demo: assign lifecycle, launch profile, and session preset per group.
+        // Two clients show non-Live states for visual demo variety.
+        let lifecycle = match i {
+            16 => dmft_common::types::SlotLifecycle::WaitingForLogin,
+            17 => dmft_common::types::SlotLifecycle::Recovering,
+            _ => dmft_common::types::SlotLifecycle::Live,
+        };
+        client.slot_lifecycle = lifecycle;
+        let (profile, preset) = match i {
+            0..=5 => ("frostreaver-main", "Group Alpha"),
+            6..=11 => ("frostreaver-main", "Group Beta"),
+            _ => ("frostreaver-main", "Group Gamma"),
+        };
+        client.launch_profile = Some(profile.to_string());
+        client.session_preset = Some(preset.to_string());
         app.clients.push(client);
     }
 
@@ -1257,7 +1299,8 @@ fn poll_log_watchers(app: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::spawn_refresh_due;
+    use super::{discord_sender_is_authorized, spawn_refresh_due};
+    use crate::tui::app::App;
     use std::time::{Duration, Instant};
 
     #[test]
@@ -1298,5 +1341,19 @@ mod tests {
 
         assert!(spawn_refresh_due(None, now, true));
         assert!(spawn_refresh_due(None, now, false));
+    }
+
+    #[test]
+    fn discord_sender_auth_denies_when_allowlist_empty() {
+        let app = App::new();
+        assert!(!discord_sender_is_authorized(&app, "RaidLead"));
+    }
+
+    #[test]
+    fn discord_sender_auth_matches_case_insensitively_with_trim() {
+        let mut app = App::new();
+        app.discord_command_allowed_senders
+            .insert("raidlead".to_string());
+        assert!(discord_sender_is_authorized(&app, "  RaidLead  "));
     }
 }

@@ -146,6 +146,10 @@ impl FormationManager {
         tank_name: &str,
         in_combat: bool,
     ) -> Vec<String> {
+        if matches!(member.role, Role::Tank | Role::Puller) {
+            return Vec::new();
+        }
+
         let dist = member_pos.distance_to(tank_pos);
         let (desired, leash) = self.role_distances(&member.role);
 
@@ -274,7 +278,7 @@ impl HuntLoop {
         commands
     }
 
-    /// Generate formation movement commands for all non-tank members.
+    /// Generate formation movement commands for all followers (non-tank/non-puller).
     fn formation_tick(&self, snap: &HuntSnapshot) -> Vec<(u32, String)> {
         let mut commands = Vec::new();
         let tank_name = self
@@ -289,7 +293,7 @@ impl HuntLoop {
         let in_combat = matches!(self.state, HuntState::Fighting { .. });
 
         for member in &self.members {
-            if member.role == Role::Tank {
+            if matches!(member.role, Role::Tank | Role::Puller) {
                 continue;
             }
 
@@ -784,6 +788,20 @@ mod tests {
     fn test_formation_puller_is_in_position() {
         let fm = FormationManager::new(FormationConfig::default());
         assert!(fm.is_in_position(&Role::Puller, 999.0));
+    }
+
+    #[test]
+    fn test_formation_puller_gets_no_movement_commands() {
+        let fm = FormationManager::new(FormationConfig::default());
+        let member = CampMember::new(105, "Puller01".into(), Role::Puller);
+        let member_pos = Pos2D::new(100.0, 260.0); // displaced from tank
+        let tank_pos = Pos2D::new(100.0, 200.0);
+
+        let cmds = fm.formation_commands(&member, &member_pos, &tank_pos, "Tank", false);
+        assert!(
+            cmds.is_empty(),
+            "Puller should not receive formation movement commands"
+        );
     }
 
     #[test]

@@ -522,6 +522,8 @@ MQ2Map hooks into EQ's existing map window (accessible via `/map` in-game). It d
 | `TargetPath` | Draw path line to target |
 | `TargetLine` | Draw direct line to target |
 
+TUI parity: `:mapfilter <npc|pc|corpse|ground|pet|named|untargetable> [on|off]` toggles these categories in the map overlay.
+
 **`/mapshow` / `/maphide`** — Show/hide specific spawns by search criteria. Changes persist until zone reload.
 
 **`/highlight`** — Highlight specific spawns with custom color, size, and pulse effect.
