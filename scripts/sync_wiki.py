@@ -58,14 +58,30 @@ def run(
     check: bool = True,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        check=check,
-        text=True,
-        capture_output=True,
-        env=env,
-    )
+    try:
+        result = subprocess.run(
+            args,
+            cwd=str(cwd) if cwd else None,
+            check=False,
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+    except OSError as exc:
+        location = f" (cwd: {cwd})" if cwd else ""
+        raise WikiSyncError(
+            f"Command failed{location}: {' '.join(args)}\n\n"
+            f"stderr:\n{exc}"
+        ) from exc
+    if check and result.returncode != 0:
+        location = f" (cwd: {cwd})" if cwd else ""
+        details: list[str] = [f"Command failed{location}: {' '.join(args)}"]
+        if result.stdout.strip():
+            details.append(f"stdout:\n{result.stdout.strip()}")
+        if result.stderr.strip():
+            details.append(f"stderr:\n{result.stderr.strip()}")
+        raise WikiSyncError("\n\n".join(details))
+    return result
 
 
 def fail(message: str) -> None:
@@ -115,11 +131,7 @@ def validate_sources() -> dict[str, Path]:
 
 
 def git_remote_repo_full_name() -> str:
-    try:
-        origin = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT).stdout.strip()
-    except subprocess.CalledProcessError as exc:
-        fail(f"Unable to determine origin remote: {exc.stderr.strip()}")
-
+    origin = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT).stdout.strip()
     normalized = origin.rstrip("/").removesuffix(".git")
     for prefix in ("https://github.com/", "git@github.com:", "ssh://git@github.com/"):
         if normalized.startswith(prefix):
@@ -139,12 +151,11 @@ def github_token() -> str:
         )
     try:
         token = run(["gh", "auth", "token"], cwd=REPO_ROOT).stdout.strip()
-    except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "").strip()
+    except WikiSyncError as exc:
         fail(
             "Unable to obtain GitHub auth from the local GitHub CLI session.\n"
             "Run `gh auth status` to verify the runner login, then `gh auth login` if needed.\n"
-            + (f"\nGitHub CLI output:\n{stderr}" if stderr else "")
+            f"\n{exc}"
         )
     if not token:
         fail(

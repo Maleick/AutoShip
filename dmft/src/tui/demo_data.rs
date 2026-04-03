@@ -1374,6 +1374,16 @@ fn demo_nav_from_profile(
                 Waypoint::new(x + step * 2.0, y + step, z),
             ]
         }
+        NavStatus::Paused { waypoint_count, .. } => {
+            let step = 10.0 + (profile.index as f32 * 0.5);
+            let offset =
+                demo_cycle_phase(tick_count, profile.index as u64, waypoint_count as u64) as f32;
+            vec![
+                Waypoint::new(x, y, z),
+                Waypoint::new(x + step + offset, y + step * 0.25, z),
+                Waypoint::new(x + step * 1.5, y + step * 0.75, z),
+            ]
+        }
         NavStatus::Stuck { .. } => vec![Waypoint::new(x, y, z), Waypoint::new(x + 2.0, y + 1.0, z)],
         NavStatus::Arrived => vec![Waypoint::new(x, y, z)],
         NavStatus::Idle => Vec::new(),

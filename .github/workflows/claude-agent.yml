@@ -21,9 +21,12 @@ permissions:
 jobs:
   claude:
     if: |
-      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'worker:claude')) ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      github.actor != 'Copilot' &&
+      (
+        (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'worker:claude')) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
