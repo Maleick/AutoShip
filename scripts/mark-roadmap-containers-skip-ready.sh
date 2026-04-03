@@ -63,6 +63,8 @@ done <<< "$ISSUE_ROWS"
 
 echo "Updated ${TOTAL} issue(s)."
 
+ALL_OPEN_ISSUES="$(gh issue list --repo "$REPO" --state open --limit 1000 --json number,title,labels)"
+
 SKIP_COUNT=$TOTAL
 TOTAL_READY=0
 TO_LABEL=$(
