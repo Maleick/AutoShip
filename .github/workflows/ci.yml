@@ -21,7 +21,7 @@ env:
 jobs:
   pr_gate:
     name: PR gate (fmt + clippy + test + python)
-    runs-on: [self-hosted, Windows, X64, dmft]
+    runs-on: windows-latest
     timeout-minutes: 45
     defaults:
       run:
