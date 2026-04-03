@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   sync-project:
-    if: github.event.pull_request.merged == true
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'master'
     runs-on: ubuntu-latest
     steps:
       - name: Update linked issues and clean labels
@@ -26,8 +28,9 @@ jobs:
             gh pr edit "$pr_number" --repo "$repo" --remove-label "$label" 2>/dev/null || true
           done
 
-          body=$(gh api "repos/${repo}/pulls/${pr_number}" --jq '.body // ""')
-          linked_issues=$(printf '%s\n' "$body" | grep -oiE '(fix(es)?|close(s)?|resolve(s)?)\s+#[0-9]+' | grep -oE '#[0-9]+' | tr -d '#' || true)
+          pr_body=$(gh pr view "$pr_number" --repo "$repo" --json body --jq '.body // ""')
+          linked_issues=$(echo "$pr_body" | grep -oiE '(fix(es)?|close(s)?|resolve(s)?)\s+#[0-9]+' | grep -oE '#[0-9]+' | tr -d '#' || true)
+
           if [ -z "$linked_issues" ]; then
             echo "No linked issues found in PR body."
             exit 0
