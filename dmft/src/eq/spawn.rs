@@ -9,6 +9,10 @@ use dmft_common::offsets::{
 };
 use std::mem::size_of;
 
+fn sanitize_terminal_text(input: String) -> String {
+    input.chars().filter(|ch| !ch.is_control()).collect()
+}
+
 /// Read a single spawn's data from the process at the given `PlayerClient` address.
 ///
 /// # Errors
@@ -24,6 +28,7 @@ pub fn read_spawn(
     let name = proc
         .read_string(addr + player_base::NAME, 64)
         .context("critical field: name")?;
+    let name = sanitize_terminal_text(name);
     let spawn_type_id = proc
         .read::<u8>(addr + player_base::TYPE)
         .context("critical field: spawn_type")?;
@@ -41,9 +46,11 @@ pub fn read_spawn(
     let displayed_name = proc
         .read_string(addr + player_base::DISPLAYED_NAME, 64)
         .unwrap_or_else(|_| String::from("<unreadable>"));
+    let displayed_name = sanitize_terminal_text(displayed_name);
     let lastname = proc
         .read_string(addr + player_base::LASTNAME, 32)
         .unwrap_or_default();
+    let lastname = sanitize_terminal_text(lastname);
 
     let spawn_id = proc.read::<u32>(addr + player_base::SPAWN_ID).unwrap_or(0);
     let heading = proc.read::<f32>(addr + player_base::HEADING).unwrap_or(0.0);
@@ -662,6 +669,12 @@ mod tests {
             spell_name: Some(name.to_string()),
             base_cast_ms: Some(base_cast_ms),
         }
+    }
+
+    #[test]
+    fn sanitize_terminal_text_removes_ansi_control_bytes() {
+        let raw = "Guard\u{1b}[31mHACK\u{1b}[0m\u{7}".to_string();
+        assert_eq!(sanitize_terminal_text(raw), "Guard[31mHACK[0m");
     }
 
     #[test]
