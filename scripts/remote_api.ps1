@@ -101,10 +101,9 @@ function Invoke-RemoteCommand {
     param([string]$Command)
     # Allowlist: only permit known-safe commands
     $allowed = @("tasklist", "netstat", "cargo", "git", "Get-Process", "Get-Content",
-                 "Get-ChildItem", "Test-Path", "dir", "type", "systeminfo", "hostname",
-                 "Start-Process", "Stop-Process", "powershell")
+                 "Get-ChildItem", "Test-Path", "dir", "type", "systeminfo", "hostname")
     $firstWord = ($Command -split '\s+')[0]
-    $isAllowed = $allowed | Where-Object { $firstWord -like "$_*" }
+    $isAllowed = $allowed | Where-Object { $firstWord -ieq $_ }
     if (-not $isAllowed) {
         return @{
             success = $false
