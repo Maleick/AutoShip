@@ -80,6 +80,11 @@ pub enum LogEvent {
     Chat(ChatEvent),
 }
 
+/// Strip terminal/control characters from untrusted log-derived text.
+fn strip_control_chars(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
+}
+
 /// Parse a single EQ log line into a `LogEvent`, if it matches a known pattern.
 pub fn parse_log_line(line: &str) -> Option<LogEvent> {
     // Strip the EQ timestamp prefix: "[Thu Mar 28 12:34:56 2026] "
@@ -98,7 +103,7 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
     {
         return Some(LogEvent::Loot {
             character: String::new(),
-            item: item.to_string(),
+            item: strip_control_chars(item),
         });
     }
 
@@ -107,7 +112,7 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
         && let Some(mob) = rest.strip_suffix('!')
     {
         return Some(LogEvent::Kill {
-            mob: mob.to_string(),
+            mob: strip_control_chars(mob),
         });
     }
 
@@ -116,7 +121,7 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
         && let Some(killed_by) = rest.strip_suffix('!')
     {
         return Some(LogEvent::Death {
-            killed_by: killed_by.to_string(),
+            killed_by: strip_control_chars(killed_by),
         });
     }
 
@@ -167,7 +172,7 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
         && let Some(zone) = rest.strip_suffix('.')
     {
         return Some(LogEvent::ZoneEnter {
-            zone: zone.to_string(),
+            zone: strip_control_chars(zone),
         });
     }
 
@@ -708,6 +713,19 @@ mod tests {
             LogEvent::Loot {
                 character: String::new(),
                 item: "Glowing Black Stone".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_loot_item_strips_control_chars() {
+        let line = "--You have looted a \u{1b}[31mRusty Dagger\u{1b}[0m.--";
+        let event = parse_log_line(line).unwrap();
+        assert_eq!(
+            event,
+            LogEvent::Loot {
+                character: String::new(),
+                item: "[31mRusty Dagger[0m".to_string(),
             }
         );
     }
