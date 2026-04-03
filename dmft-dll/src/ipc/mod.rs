@@ -144,7 +144,11 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 eqmain_base = format!("{:#x}", eqmain_base),
                 "CalibrateLogin: running calibration dump"
             );
-            crate::login::widgets::calibrate_login_dump(eqmain_base);
+            if eqmain_base == 0 {
+                tracing::warn!("CalibrateLogin: eqmain.dll not loaded yet; skipping dump");
+            } else {
+                crate::login::widgets::calibrate_login_dump(eqmain_base);
+            }
             true
         }
         Command::StartLogin {
