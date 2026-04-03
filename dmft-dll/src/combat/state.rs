@@ -39,6 +39,24 @@ enum CombatState {
     Recovering,
 }
 
+/// Normalize a user/config spell slot into a safe EQ gem index.
+///
+/// Canonical FFI gem IDs are 0-based (0-12). For backward compatibility,
+/// slot 13 is treated as 1-based and normalized to gem 12.
+fn normalize_gem_id(slot: u8) -> Option<u8> {
+    match slot {
+        0..=12 => Some(slot),
+        13 => {
+            tracing::warn!(
+                slot,
+                "Normalizing legacy 1-based spell slot to 0-based gem index"
+            );
+            Some(12)
+        }
+        _ => None,
+    }
+}
+
 /// The main combat state machine for a single EQ character.
 pub struct Combatant {
     state: CombatState,
@@ -199,11 +217,16 @@ impl Combatant {
 
             match action {
                 HolyShitAction::CastSpell(slot) => {
-                    tracing::warn!(slot, "HolyShit: casting emergency spell");
-                    crate::eq::cast_spell(*slot, 0); // spell_id 0 = use whatever is in the gem
+                    let Some(gem_id) = normalize_gem_id(*slot) else {
+                        tracing::warn!(slot, "HolyShit: skipping cast with invalid spell slot");
+                        return;
+                    };
+
+                    tracing::warn!(slot, gem_id, "HolyShit: casting emergency spell");
+                    crate::eq::cast_spell(gem_id, 0); // spell_id 0 = use whatever is in the gem
                     self.gcd.consume();
                     self.state = CombatState::Casting {
-                        spell_slot: *slot,
+                        spell_slot: gem_id,
                         ticks_remaining: 20,
                     };
                     return;
@@ -307,14 +330,19 @@ impl Combatant {
                         "Strategy selected spell"
                     );
 
+                    let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                        tracing::warn!(slot = spell.slot, "Skipping cast with invalid spell slot");
+                        return;
+                    };
+
                     // Call the real EQ CastSpell function via FFI
-                    crate::eq::cast_spell(spell.slot, spell.spell_id);
+                    crate::eq::cast_spell(gem_id, spell.spell_id);
 
                     // Apply humanization delay (cast_start_delay absorbed into cast time)
                     let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
                     self.state = CombatState::Casting {
-                        spell_slot: spell.slot,
+                        spell_slot: gem_id,
                         ticks_remaining: 20 + cast_delay, // base ~1s + jitter
                     };
                 }
