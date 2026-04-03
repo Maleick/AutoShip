@@ -41,7 +41,8 @@ External research may add slices and validation tasks, but it may not reorder mi
 ## Main Gaps Still Requiring Live Validation
 
 - packet-level control paths inferred from research rather than live validation
-- the current packet inventory keeps combat, utility, and chat packet seams separate from the existing IPC plus in-process DLL control boundary
+- the current packet inventory keeps combat, utility, and chat packet seams separate from the existing IPC plus in-process DLL control boundary; see `docs/external-research/packet-engine-send-receive-pipeline.md` for the full send/receive layer inventory and capability boundary summary
+- the send pipeline requires opcode scrambling and anti-cheat counter synchronization before any packet-first path can be treated as safe
 - zoning state-machine details and recovery behavior after client changes
 - offset stability after upstream EQ updates
 - cross-zone travel behavior in more zones than the current dev/test set
@@ -80,7 +81,9 @@ Current deep-dive order:
 Use:
 
 - `docs/external-research/automation-source-ledger.md`
+- `docs/external-research/packet-engine-send-receive-pipeline.md`
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
+- `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
 - `docs/external-research/kissassist-gap-and-tui-translation.md`
 - `docs/external-research/jmb-session-and-relay-comparison.md`
 - `docs/external-research/daybreak-detection-digest.md`

@@ -18,6 +18,8 @@ pub mod offset_db;
 pub mod offsets;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
+/// Routing scope types for cross-client command dispatch (M8 Orchestrator).
+pub mod routing;
 /// Soul Engine shared types (LLM personalities, memory, social dynamics).
 pub mod soul;
 /// Common type aliases and utility structures.

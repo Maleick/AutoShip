@@ -135,6 +135,8 @@ pub fn drain_responses() -> Vec<Response> {
 /// Handle commands that must work even before the game loop runs
 /// (e.g., at the login screen). Returns true if handled.
 fn handle_immediate_command(cmd: &Command) -> bool {
+    const MAX_LOGIN_FIELD_CHARS: usize = 128;
+
     match cmd {
         Command::CalibrateLogin => {
             let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
@@ -144,7 +146,11 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 eqmain_base = format!("{:#x}", eqmain_base),
                 "CalibrateLogin: running calibration dump"
             );
-            crate::login::widgets::calibrate_login_dump(eqmain_base);
+            if eqmain_base == 0 {
+                tracing::warn!("CalibrateLogin: eqmain.dll not loaded yet; skipping dump");
+            } else {
+                crate::login::widgets::calibrate_login_dump(eqmain_base);
+            }
             true
         }
         Command::StartLogin {
@@ -153,10 +159,13 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             server_name,
             character_name,
         } => {
+            let account_name: String = account_name.chars().take(MAX_LOGIN_FIELD_CHARS).collect();
+            let password: String = password.chars().take(MAX_LOGIN_FIELD_CHARS).collect();
+
             // Clone password into Zeroizing wrapper so the local copy is wiped
             // from memory when this scope exits — prevents plaintext from
             // lingering on the IPC thread's stack after credential entry.
-            let mut password = zeroize::Zeroizing::new(password.clone());
+            let mut password = zeroize::Zeroizing::new(password);
 
             tracing::info!(
                 account = %account_name,
@@ -166,25 +175,20 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             );
 
             // Write credentials inline FIRST (before mem::take).
-            // Use the proven CStrRep + vtable click approach that worked at 22:04 UTC,
-            // plus WM_CHAR as backup.
+            // Use the proven CStrRep + vtable click approach that worked at 22:04 UTC.
             let eqmain_base = crate::login::eqmain::find_eqmain();
             if eqmain_base != 0 {
                 let wrote = crate::login::widgets::type_credentials_to_window(
                     eqmain_base,
-                    account_name,
+                    &account_name,
                     &password,
                 );
                 tracing::info!(wrote, "Inline: type_credentials_to_window");
-                if wrote {
-                    tracing::info!("Also typing password via WM_CHAR for reliability");
-                    crate::login::widgets::type_password_wm_char(eqmain_base, &password);
-                }
             }
 
             // Store credentials in the FSM for character select phase.
             crate::login::start_login(
-                account_name.to_string(),
+                account_name,
                 std::mem::take(&mut *password),
                 server_name.to_string(),
                 character_name.to_string(),

@@ -329,8 +329,7 @@ impl LoginFsm {
         // before the FSM rewrite. It scans for USERNAME/PASSWORD labels and
         // writes credentials + clicks Login. If it succeeds, skip to server select.
         if !self.action_taken {
-            let creds = self.credentials.as_ref();
-            if let Some(creds) = creds {
+            if let Some(creds) = self.credentials.take() {
                 // Try writing credentials (proven working approach)
                 let wrote = widgets::type_credentials_to_window(
                     self.eqmain_base,
@@ -339,10 +338,11 @@ impl LoginFsm {
                 );
                 if wrote {
                     tracing::info!("Credentials written + Login clicked");
-                    // Also type password via WM_CHAR as backup
-                    widgets::type_password_wm_char(self.eqmain_base, &creds.password);
                     self.action_taken = true;
                     self.transition(State::WaitForServerSelect);
+                } else {
+                    // Keep credentials for retry if credential entry failed.
+                    self.credentials = Some(creds);
                 }
             }
         }
@@ -386,10 +386,6 @@ impl LoginFsm {
         }
 
         tracing::info!(account = %account, "Credentials written to EQ memory");
-
-        // Strategy 2: Also type password via PostMessage as backup
-        // (CXStr writes may not be read by EQ's submit handler)
-        widgets::type_password_wm_char(self.eqmain_base, &password);
 
         // Zeroize credentials from FSM memory
         self.credentials = None;

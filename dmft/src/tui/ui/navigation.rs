@@ -156,6 +156,14 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         let recovery = nav
             .and_then(|status| status.recovery_state.as_deref())
             .unwrap_or("—");
+        let path_exists = nav.map(|status| status.path_exists).unwrap_or(false);
+        let path_length = nav
+            .and_then(|status| status.path_length)
+            .map(|len| format!("{len:.0}u"))
+            .unwrap_or_else(|| String::from("—"));
+        let failure_reason = nav
+            .and_then(|status| status.failure_reason.as_deref())
+            .unwrap_or("None");
         let blockers = nav
             .and_then(|status| status.blocker_summary())
             .unwrap_or_else(|| String::from("None"));
@@ -180,6 +188,15 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 Span::styled("  Route: ", Style::default().fg(t.text_muted)),
                 Span::styled(route_state, Style::default().fg(t.text_highlight)),
             ]),
+            Line::from(vec![
+                Span::styled("  Path: ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    if path_exists { "Yes" } else { "No" },
+                    Style::default().fg(if path_exists { t.hp_high } else { t.hp_low }),
+                ),
+                Span::styled("  Len: ", Style::default().fg(t.text_muted)),
+                Span::styled(path_length, Style::default().fg(t.text_secondary)),
+            ]),
         ]);
 
         if !progress.is_empty() {
@@ -192,6 +209,17 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         lines.push(Line::from(vec![
             Span::styled("  Recovery: ", Style::default().fg(t.text_muted)),
             Span::styled(recovery, Style::default().fg(t.hp_low)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Failure: ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                truncate_inline(&failure_reason, cols[1].width.saturating_sub(14) as usize),
+                Style::default().fg(if failure_reason == "None" {
+                    t.hp_high
+                } else {
+                    t.hp_low
+                }),
+            ),
         ]));
         lines.push(Line::from(vec![
             Span::styled("  Blockers: ", Style::default().fg(t.text_muted)),

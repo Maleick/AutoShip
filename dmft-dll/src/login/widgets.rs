@@ -608,17 +608,15 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
             tracing::info!("=== END HEX DUMP ===");
 
-            // Click the Login button directly via vtable WndNotification.
-            // Previous crash may have been from wrong button pointer (now fixed).
+            // Queue Login button click for execution on EQ's main game loop thread.
+            // Never invoke WndNotification directly from IPC/background threads.
             if login_button != 0 {
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
-                    "Clicking Login button via WndNotification"
+                    "Queueing Login button click on game loop thread"
                 );
-                // Small delay to let credential writes settle
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                crate::eq::widgets::click_button_via_vtable(login_button);
-                tracing::info!("Login button clicked");
+                crate::hooks::game_loop::queue_button_click(login_button);
+                tracing::info!("Login button click queued");
             } else {
                 tracing::warn!("Login button not found — credentials written but not submitted");
             }
@@ -1202,6 +1200,9 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
 }
 
 /// Walk `CXWndManager`'s window array and log each window for calibration.
+///
+/// NOTE: Do not log raw `WindowText` here because edit controls can contain
+/// sensitive user-entered values (e.g. credentials). Only log metadata.
 #[cfg(windows)]
 fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
     use dmft_common::offsets::eqmain as off;
@@ -1216,14 +1217,17 @@ fn enumerate_cxwnd_windows(cxwnd_mgr: usize) {
             let window_text = text.unwrap_or_default();
             let visible = crate::eq::widgets::is_visible(wnd_ptr);
             let xml_idx = crate::eq::widgets::xml_index(wnd_ptr);
+            let has_text = !window_text.is_empty();
+            let text_len = window_text.chars().count();
 
-            if visible || !window_text.is_empty() {
+            if visible || has_text {
                 tracing::info!(
                     idx = i,
                     ptr = format!("{:#x}", wnd_ptr),
                     xml_index = xml_idx,
                     visible,
-                    text = %window_text,
+                    has_text,
+                    text_len,
                     "Window"
                 );
             }

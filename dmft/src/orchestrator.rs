@@ -698,8 +698,8 @@ impl Orchestrator {
         let Some(pipe) = self.get_pipe(pid) else {
             return;
         };
-        match pipe.send_async(&cmd) {
-            Ok(()) => {
+        match pipe.send(&cmd) {
+            Ok(_response) => {
                 tracing::debug!(pid, name = %name, ?cmd, "Dispatched IPC command");
             }
             Err(e) => {
@@ -750,8 +750,8 @@ impl Orchestrator {
         let cmd = Command::SlashCommand {
             command: command.to_string(),
         };
-        match pipe.send_async(&cmd) {
-            Ok(()) => {
+        match pipe.send(&cmd) {
+            Ok(_response) => {
                 tracing::debug!(pid, name = %name, %command, "Dispatched command");
             }
             Err(e) => {
@@ -896,6 +896,8 @@ mod tests {
                 mana_max,
                 endurance_current: 100,
                 endurance_max: 100,
+                speed_run: 0.0,
+                stand_state: 0,
             }
         }
 
@@ -984,6 +986,8 @@ mod tests {
                 mana_max,
                 endurance_current: 100,
                 endurance_max: 100,
+                speed_run: 0.0,
+                stand_state: 0,
             }
         }
 
@@ -1265,6 +1269,8 @@ mod tests {
             mana_max: 0,
             endurance_current: 100,
             endurance_max: 100,
+            speed_run: 0.0,
+            stand_state: 0,
         };
         orch.game_states.insert(
             100,
@@ -1287,6 +1293,8 @@ mod tests {
                     mana_max: 0,
                     endurance_current: 100,
                     endurance_max: 100,
+                    speed_run: 0.0,
+                    stand_state: 0,
                 }),
                 target: None,
                 nearby_spawns: vec![new_npc],
