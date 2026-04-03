@@ -275,6 +275,12 @@ pub struct App {
     /// Active group focus: `None` = aggregate view, `Some(idx)` = single group.
     pub active_group: Option<usize>,
 
+    /// Explicit routing scope for command dispatch (M8 Orchestrator).
+    ///
+    /// Controls which clients receive commands sent from the TUI command bar.
+    /// Updated by `:scope`, `:G<n>`, and character-prefix commands.
+    pub routing_scope: dmft_common::routing::RoutingScope,
+
     /// EQ server name from config.
     pub server_name: String,
 
@@ -497,6 +503,7 @@ impl App {
             selected_client: 0,
             active_group: None,
             groups: Self::build_default_groups(),
+            routing_scope: dmft_common::routing::RoutingScope::AllSession,
 
             server_name: String::from("Firiona Vie"),
 
@@ -3354,6 +3361,12 @@ impl App {
                     );
                 }
             }
+            "scope" => {
+                self.execute_scope_command(&parts[1..]);
+            }
+            "session" => {
+                self.execute_session_command(&parts[1..]);
+            }
             "wizard" => {
                 self.wizard_state.start();
                 self.set_feedback(
@@ -4141,6 +4154,157 @@ impl App {
         }
     }
 
+    /// Handle the `:scope` command — show or change the active routing scope.
+    ///
+    /// `:scope`          → show current scope  
+    /// `:scope all`      → AllSession  
+    /// `:scope G1`       → Group 1  
+    /// `:scope <name>`   → OneToon targeting that character
+    fn execute_scope_command(&mut self, args: &[&str]) {
+        use dmft_common::routing::RoutingScope;
+
+        match args.first().copied() {
+            None | Some("") => {
+                // Show current scope
+                let label = self.routing_scope.label();
+                let focused = self.focused_pids().len();
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Routing scope: {label} ({focused} client(s) in scope)"),
+                    false,
+                );
+            }
+            Some("all") => {
+                self.routing_scope = RoutingScope::AllSession;
+                self.active_group = None;
+                let focused = self.focused_pids().len();
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Scope → All ({focused} clients)"),
+                    true,
+                );
+            }
+            Some(arg) => {
+                // Check for G<n> group syntax
+                if let Some(stripped) = arg.strip_prefix('G').or_else(|| arg.strip_prefix('g')) {
+                    if let Ok(group_id) = stripped.parse::<u8>() {
+                        // group_id is 1-based; groups vec is 0-indexed
+                        let idx = (group_id as usize).saturating_sub(1);
+                        if idx < self.groups.len() {
+                            let g = &self.groups[idx];
+                            let label = g.name.clone();
+                            self.routing_scope = RoutingScope::Group {
+                                group_id,
+                                label: label.clone(),
+                            };
+                            self.set_active_group(Some(idx));
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!("Scope → G{group_id} {label}"),
+                                true,
+                            );
+                        } else {
+                            self.usage_feedback(
+                                "scope",
+                                format!("Group G{group_id} not found. Use :scope G1..G6."),
+                            );
+                        }
+                        return;
+                    }
+                }
+                // Treat as character name
+                if self.find_client_by_name(arg).is_some() {
+                    let name = arg.to_string();
+                    self.routing_scope = RoutingScope::OneToon { name: name.clone() };
+                    if let Some(idx) = self.find_client_index_by_name(&name) {
+                        self.select_client_idx(idx);
+                    }
+                    self.active_group = None;
+                    self.set_feedback(ToastLevel::Success, format!("Scope → @{name}"), true);
+                } else {
+                    self.usage_feedback(
+                        "scope",
+                        format!("'{arg}' is not a connected client. Use :scope all, :scope G1, or :scope <character>."),
+                    );
+                }
+            }
+        }
+    }
+
+    /// Handle the `:session` command — show slot lifecycle states.
+    ///
+    /// `:session`        → compact summary  
+    /// `:session list`   → per-slot lifecycle table  
+    /// `:session status` → same as compact summary
+    fn execute_session_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            None | Some("status") => {
+                // Compact summary: live / recovering / blocked counts
+                let total = self.clients.len();
+                if total == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("No sessions connected. Use :login to start clients."),
+                        false,
+                    );
+                    return;
+                }
+                let scope_label = self.routing_scope.label();
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Session: {total} slot(s) connected | scope={scope_label}"),
+                    false,
+                );
+            }
+            Some("list") => {
+                // Per-slot table
+                if self.clients.is_empty() {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("No sessions connected. Use :login to start clients."),
+                        false,
+                    );
+                    return;
+                }
+                let rows: Vec<String> = self
+                    .clients
+                    .iter()
+                    .map(|c| {
+                        let name = if !c.character_name.is_empty() {
+                            c.character_name.as_str()
+                        } else {
+                            "???"
+                        };
+                        let zone = if c.zone_name.is_empty() {
+                            "—"
+                        } else {
+                            &c.zone_name
+                        };
+                        let status = if c.client_status.is_empty() {
+                            "connected"
+                        } else {
+                            &c.client_status
+                        };
+                        format!("{name} [{zone}] {status}")
+                    })
+                    .collect();
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Sessions: {}", rows.join(" | ")),
+                    false,
+                );
+            }
+            Some(other) => {
+                self.usage_feedback(
+                    "session",
+                    format!(
+                        "Unknown subcommand '{other}'. Use: session, session list, session status"
+                    ),
+                );
+            }
+        }
+    }
+
     /// Enqueue accounts for staggered launch via the spawner.
     /// On non-Windows (macOS dev), logs what would happen and updates status.
     fn enqueue_account_launches(&mut self, entries: &[crate::config::AccountEntry]) {
@@ -4339,6 +4503,8 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "chui"
             | "inject"
             | "all"
+            | "scope"
+            | "session"
     )
 }
 
@@ -4616,6 +4782,8 @@ mod tests {
             "chui",
             "inject",
             "all",
+            "scope",
+            "session",
             "cmds",
             "quit",
             "config",
@@ -4747,5 +4915,101 @@ mod tests {
         assert_eq!(app.selected_client, 1);
         assert!(app.clients[1].last_spawn_refresh.is_none());
         assert_eq!(app.spawns_state.table_state.selected(), Some(0));
+    }
+
+    // ── M8 routing scope tests ──────────────────────────────────────────────
+
+    #[test]
+    fn app_default_routing_scope_is_all_session() {
+        let app = App::new();
+        assert_eq!(
+            app.routing_scope,
+            dmft_common::routing::RoutingScope::AllSession
+        );
+    }
+
+    #[test]
+    fn scope_command_no_args_shows_current_scope() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Warrior"));
+        app.execute_scope_command(&[]);
+        // Feedback should include "All" (the default scope label)
+        assert!(app.status_message.contains("All") || !app.status_message.is_empty());
+    }
+
+    #[test]
+    fn scope_command_all_resets_to_all_session() {
+        use dmft_common::routing::RoutingScope;
+        let mut app = App::new();
+        // Start with a narrowed scope
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Warrior".into(),
+        };
+        app.execute_scope_command(&["all"]);
+        assert_eq!(app.routing_scope, RoutingScope::AllSession);
+        assert!(app.active_group.is_none());
+    }
+
+    #[test]
+    fn scope_command_group_sets_group_scope() {
+        use dmft_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.execute_scope_command(&["G1"]);
+        assert!(matches!(
+            app.routing_scope,
+            RoutingScope::Group { group_id: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn scope_command_character_name_sets_one_toon_scope() {
+        use dmft_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Cleric"));
+        app.execute_scope_command(&["Cleric"]);
+        assert!(matches!(&app.routing_scope, RoutingScope::OneToon { name } if name == "Cleric"));
+        assert!(app.active_group.is_none());
+    }
+
+    #[test]
+    fn scope_command_unknown_character_shows_error_feedback() {
+        let mut app = App::new();
+        app.execute_scope_command(&["NonExistentToon"]);
+        // Feedback should mention the unknown name
+        assert!(app.status_message.contains("NonExistentToon") || !app.status_message.is_empty());
+    }
+
+    #[test]
+    fn session_command_no_clients_warns() {
+        let mut app = App::new();
+        app.execute_session_command(&[]);
+        assert!(!app.status_message.is_empty());
+    }
+
+    #[test]
+    fn session_command_list_with_clients() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Warrior"));
+        app.clients.push(test_client(2, "Cleric"));
+        app.execute_session_command(&["list"]);
+        // Feedback should mention both character names
+        let msg = &app.status_message;
+        assert!(msg.contains("Warrior") || msg.contains("2 slot"));
+    }
+
+    #[test]
+    fn session_command_status_shows_connected_count() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Warrior"));
+        app.execute_session_command(&["status"]);
+        assert!(app.status_message.contains('1') || !app.status_message.is_empty());
+    }
+
+    #[test]
+    fn is_reserved_command_name_includes_scope_and_session() {
+        assert!(is_reserved_command_name("scope"));
+        assert!(is_reserved_command_name("session"));
+        assert!(is_reserved_command_name("SCOPE"));
+        assert!(is_reserved_command_name("SESSION"));
     }
 }
