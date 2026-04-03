@@ -420,6 +420,7 @@ Execution rules:
 
 - `docs/implementation-roadmap.md` — canonical roadmap, evidence model, milestone gates
 - `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
+- `docs/external-research/packet-zoning-send-path-and-state-ledger.md` — curated `M5`/`M6` control-path ledger that separates in-process defaults from packet candidates and blocked protocol gaps
 - `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native DMFT TUI translation targets
 - `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors plus secondary detection signals
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md` — curated `M6` checkpoint note for queue flush, timeout, and safe-coordinate recovery

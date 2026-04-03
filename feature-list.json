@@ -77,6 +77,21 @@
         "python3 - <<'PY'\nimport json, pathlib\nimport yaml\njson.loads(pathlib.Path('feature-list.json').read_text())\nyaml.safe_load(pathlib.Path('.github/workflows/claude-agent.yml').read_text())\nyaml.safe_load(pathlib.Path('.github/ISSUE_TEMPLATE/agent-task.yml').read_text())\nprint('ok')\nPY"
       ],
       "notes": "Repo docs, issue template, worker contract, Claude workflow, and Codex automation files now define the autonomous queue. The installed issue executor currently runs hourly because Codex app automations do not yet support 15-minute cadences. Trusted agent PRs now default `merge:auto` unless explicitly blocked, the Claude worker explicitly trusts the `Copilot` bot actor instead of failing repository-permission lookup for that GitHub App identity, the PR manager is allowed to resolve addressed bot threads plus close stale or superseded agent PRs, and the `agent:close` workflow can automatically close agent-authored PRs without touching unrelated human PRs. The `DMFT Roadmap` project now uses a dedicated `Agent Status` field for queue state so the built-in `Status` field can keep its broader roadmap-progress meaning."
+    },
+    {
+      "id": "m5-packet-control-path-matrix",
+      "name": "M5 packet control-path matrix",
+      "status": "complete",
+      "acceptance_tests": [
+        "docs/external-research/packet-zoning-send-path-and-state-ledger.md inventories combat, utility, and chat control surfaces",
+        "The ledger labels current paths as in-process, packet candidate, or blocked instead of implying support by enum shape alone",
+        "docs/wiki/Roadmap-and-Known-Gaps.md and docs/wiki/Architecture-Overview.md mirror the current IPC plus in-process control boundary and link back to the packet ledger",
+        "python3 -m unittest discover -s tests -p 'test_packet_control_path_inventory.py' -v",
+        "python3 scripts/validate_roadmap_unknowns.py --plan docs/implementation-roadmap.md --domains packet",
+        "python3 scripts/sync_wiki.py --check",
+        "python3 - <<'PY'\nimport json, pathlib\npayload = json.loads(pathlib.Path('feature-list.json').read_text())\nassert any(item['id'] == 'm5-packet-control-path-matrix' and item['status'] == 'complete' for item in payload['features'])\nprint('ok')\nPY"
+      ],
+      "notes": "Issue #49 now lands as a docs-first M5 slice: the packet/zoning ledger separates live in-process control paths from packet candidates and blocked protocol variants, the external research index and wiki mirror point back to that ledger, and the dedicated unittest plus roadmap/wiki guards are passing on the branch."
     }
   ]
 }

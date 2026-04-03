@@ -113,6 +113,16 @@ When documenting behavior, prefer the active helper behavior over legacy constan
 - operator mistakes such as stale tokens, wrong build artifacts, or high-visibility behavior can still expose brittle paths
 - packet or zoning research does not automatically mean a path is safe to execute live
 
+## Packet and Zoning Intake Rule
+
+Use `docs/external-research/packet-zoning-send-path-and-state-ledger.md` when packet or zoning work needs a current classification.
+
+Current handling rule:
+
+- prefer the existing `In-process` path when the repo already has one
+- treat researched send paths as `Packet candidate` until validation work promotes them
+- treat protocol-defined but unhandled commands as `Blocked`, not as partial support
+
 ## Current Behavior vs Roadmap
 
 ### Current behavior

@@ -57,6 +57,10 @@ Supporting research surfaces live in:
 - `docs/external-research/`
 - `docs/research-imports/`
 
+Current packet/zoning intake rule:
+
+- curate send-path, state, and validation conclusions into `docs/external-research/packet-zoning-send-path-and-state-ledger.md` before treating raw imports as roadmap-ready
+
 Rules:
 
 - external research may add milestone slices, validation tasks, and evidence updates
