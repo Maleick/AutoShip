@@ -318,14 +318,23 @@ impl LootDatabase {
     /// XP events per hour within the last `window` duration.
     #[must_use]
     pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
-        let cutoff = Instant::now().checked_sub(window).unwrap_or(Instant::now());
-        let count = self.xp_event_times.iter().filter(|t| **t >= cutoff).count() as f64;
         let window_hours = window.as_secs_f64() / 3600.0;
-        if window_hours > 0.0 {
-            count / window_hours
-        } else {
-            0.0
+        if window_hours == 0.0 {
+            return 0.0;
         }
+
+        let now = Instant::now();
+        let count = self
+            .xp_event_times
+            .iter()
+            .filter(|t| {
+                now.checked_duration_since(**t)
+                    .map(|elapsed| elapsed <= window)
+                    .unwrap_or(false)
+            })
+            .count() as f64;
+
+        count / window_hours
     }
 }
 
@@ -453,6 +462,14 @@ mod tests {
         db.process_line("You gain experience!");
         // 2 events just now in a 15-min window → rate > 0
         let rate = db.xp_rate_windowed(std::time::Duration::from_secs(900));
+        assert!(rate > 0.0);
+    }
+
+    #[test]
+    fn test_xp_rate_windowed_counts_when_window_exceeds_uptime() {
+        let mut db = LootDatabase::new();
+        db.xp_event_times.push_back(Instant::now());
+        let rate = db.xp_rate_windowed(std::time::Duration::from_secs(86_400));
         assert!(rate > 0.0);
     }
 
