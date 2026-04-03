@@ -33,6 +33,14 @@ pub const PINST_CDISPLAY: u64 = 0x0001_40E8_E450;
 /// Pointer to `CEverQuest`
 pub const PINST_CEVERQUEST: u64 = 0x0001_40F1_1758;
 
+/// Pointer to `CChatWindowManager` (in-game chat window manager)
+/// Source: eqgame.h `pinstCChatWindowManager_x`
+pub const PINST_CCHAT_WINDOW_MANAGER: u64 = 0x0001_40F2_2B20;
+
+/// Pointer to `CInvSlotMgr` (inventory slot manager)
+/// Source: eqgame.h `pinstCInvSlotMgr_x`
+pub const PINST_CINV_SLOT_MGR: u64 = 0x0001_40DD_D5F0;
+
 // ─── EQ Internal Function Addresses ───
 // These are preferred-base addresses for EQ's internal functions.
 // Used for calling game functions directly from the injected DLL.
@@ -117,6 +125,51 @@ pub const CHANGE_HEIGHT: u64 = 0x0001_4031_AB80;
 /// `ZoneGuideManagerClient` singleton (preferred base)
 /// Source: eqgame.h `ZoneGuideManagerClient__Instance_x`
 pub const ZONE_GUIDE_MANAGER: u64 = 0x0001_4035_71F0;
+
+// ─── CChatWindowManager function addresses ───
+// Source: eqgame.h, client date 20260310
+// Calling convention: x64 MSVC (this in RCX for member functions)
+
+/// `CChatWindowManager::GetRGBAFromIndex` — get an RGBA color from a chat color index
+/// Signature: COLORREF GetRGBAFromIndex(int index)
+pub const CCHAT_MGR_GET_RGBA: u64 = 0x0001_403B_2D40;
+
+/// `CChatWindowManager::InitContextMenu` — initialize the chat window context menu
+pub const CCHAT_MGR_INIT_CONTEXT_MENU: u64 = 0x0001_403B_2ED0;
+
+/// `CChatWindowManager::FreeChatWindow` — free/destroy a chat window
+/// Signature: void FreeChatWindow(CChatWindow* pWnd)
+pub const CCHAT_MGR_FREE_CHAT_WINDOW: u64 = 0x0001_403B_1D40;
+
+/// `CChatWindowManager::SetLockedActiveChatWindow` — lock the active chat window
+/// Signature: void SetLockedActiveChatWindow(CChatWindow* pWnd)
+pub const CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT: u64 = 0x0001_403B_B240;
+
+/// `CChatWindowManager::CreateChatWindow` — create a new chat window
+/// Signature: CChatWindow* CreateChatWindow(CTabWnd* pTabs, int, int, CXStr name, int, int, int, int, int)
+pub const CCHAT_MGR_CREATE_CHAT_WINDOW: u64 = 0x0001_403B_1780;
+
+// ─── CInvSlotMgr function addresses ───
+// Source: eqgame.h, client date 20260310
+
+/// `CInvSlotMgr::FindInvSlot` — find an inventory slot by location
+/// Signature: CInvSlot* FindInvSlot(int, int, ItemContainerInstance, int, bool)
+pub const INV_SLOT_MGR_FIND_SLOT: u64 = 0x0001_4042_1100;
+
+/// `CInvSlotMgr::MoveItem` — move an item between inventory slots
+/// Signature: bool MoveItem(ItemGlobalIndex const&, ItemGlobalIndex const&, bool, bool, bool, bool)
+pub const INV_SLOT_MGR_MOVE_ITEM: u64 = 0x0001_4042_1C90;
+
+/// `CInvSlotMgr::SelectSlot` — select an inventory slot
+/// Signature: void SelectSlot(CInvSlot* pSlot, bool)
+pub const INV_SLOT_MGR_SELECT_SLOT: u64 = 0x0001_4042_3FC0;
+
+// ─── CSpellBookWnd function addresses ───
+// Source: eqgame.h, client date 20260310
+
+/// `CSpellBookWnd::MemorizeSet` — memorize a set of spells into gem slots
+/// Signature: void MemorizeSet(int*, int)
+pub const SPELL_BOOK_WND_MEMORIZE_SET: u64 = 0x0001_4050_EFE0;
 
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
@@ -764,6 +817,8 @@ mod tests {
             PINST_CEVERQUEST,
             PINST_CXWND_MANAGER,
             PINST_ACTIVE_CORPSE,
+            PINST_CCHAT_WINDOW_MANAGER,
+            PINST_CINV_SLOT_MGR,
         ];
         for addr in &globals {
             assert!(
@@ -798,6 +853,15 @@ mod tests {
             ZONE_GUIDE_MANAGER,
             CHAR_LIST_ENTER_WORLD,
             CHAR_LIST_SELECT_CHAR,
+            CCHAT_MGR_GET_RGBA,
+            CCHAT_MGR_INIT_CONTEXT_MENU,
+            CCHAT_MGR_FREE_CHAT_WINDOW,
+            CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
+            CCHAT_MGR_CREATE_CHAT_WINDOW,
+            INV_SLOT_MGR_FIND_SLOT,
+            INV_SLOT_MGR_MOVE_ITEM,
+            INV_SLOT_MGR_SELECT_SLOT,
+            SPELL_BOOK_WND_MEMORIZE_SET,
         ];
         for addr in &funcs {
             assert!(
@@ -946,5 +1010,56 @@ mod tests {
         // SELECT_CHARACTER and CHAR_LIST_SELECT_CHAR should be the same
         assert_eq!(SELECT_CHARACTER, CHAR_LIST_SELECT_CHAR);
         assert_eq!(ENTER_WORLD, CHAR_LIST_ENTER_WORLD);
+    }
+
+    #[test]
+    fn cchat_window_manager_pointer_above_preferred_base() {
+        assert!(PINST_CCHAT_WINDOW_MANAGER > EQ_PREFERRED_BASE);
+    }
+
+    #[test]
+    fn cinv_slot_mgr_pointer_above_preferred_base() {
+        assert!(PINST_CINV_SLOT_MGR > EQ_PREFERRED_BASE);
+    }
+
+    #[test]
+    fn cchat_mgr_function_addresses_match_eqgame_20260310() {
+        assert_eq!(CCHAT_MGR_GET_RGBA, 0x0001_403B_2D40);
+        assert_eq!(CCHAT_MGR_INIT_CONTEXT_MENU, 0x0001_403B_2ED0);
+        assert_eq!(CCHAT_MGR_FREE_CHAT_WINDOW, 0x0001_403B_1D40);
+        assert_eq!(CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT, 0x0001_403B_B240);
+        assert_eq!(CCHAT_MGR_CREATE_CHAT_WINDOW, 0x0001_403B_1780);
+    }
+
+    #[test]
+    fn inv_slot_mgr_function_addresses_match_eqgame_20260310() {
+        assert_eq!(INV_SLOT_MGR_FIND_SLOT, 0x0001_4042_1100);
+        assert_eq!(INV_SLOT_MGR_MOVE_ITEM, 0x0001_4042_1C90);
+        assert_eq!(INV_SLOT_MGR_SELECT_SLOT, 0x0001_4042_3FC0);
+    }
+
+    #[test]
+    fn spell_book_wnd_function_address_matches_eqgame_20260310() {
+        assert_eq!(SPELL_BOOK_WND_MEMORIZE_SET, 0x0001_4050_EFE0);
+    }
+
+    #[test]
+    fn new_function_addresses_all_rebase_successfully() {
+        let actual_base: u64 = 0x7FF600000000;
+        let funcs = [
+            CCHAT_MGR_GET_RGBA,
+            CCHAT_MGR_INIT_CONTEXT_MENU,
+            CCHAT_MGR_FREE_CHAT_WINDOW,
+            CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
+            CCHAT_MGR_CREATE_CHAT_WINDOW,
+            INV_SLOT_MGR_FIND_SLOT,
+            INV_SLOT_MGR_MOVE_ITEM,
+            INV_SLOT_MGR_SELECT_SLOT,
+            SPELL_BOOK_WND_MEMORIZE_SET,
+        ];
+        for addr in &funcs {
+            let result = rebase(*addr, actual_base);
+            assert!(result.is_some(), "rebase failed for func 0x{:X}", addr);
+        }
     }
 }
