@@ -6,7 +6,7 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, reopened, labeled]
+    types: [labeled]
 
 concurrency:
   group: claude-agent-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -21,9 +21,9 @@ permissions:
 jobs:
   claude:
     if: |
-      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'worker:claude')) ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'worker:claude') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
