@@ -93,6 +93,44 @@ pub enum ActivePanel {
     DebugSpawns,
     /// Memory hex dump panel (debug).
     DebugHexDump,
+    /// Ghidra offset explorer panel (debug).
+    DebugExplorer,
+}
+
+/// Layout preset for panel arrangement within a screen.
+///
+/// Each screen supports 2-3 layout variants. `Ctrl+E` cycles through them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LayoutPreset {
+    /// Default arrangement (typically top/bottom or balanced).
+    #[default]
+    Default,
+    /// Alternate arrangement (e.g., left/right split or single-dominant).
+    Alternate,
+    /// Third option — screen-specific meaning (e.g., focused/minimized).
+    Compact,
+}
+
+impl LayoutPreset {
+    /// Cycle to the next preset.
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::Default => Self::Alternate,
+            Self::Alternate => Self::Compact,
+            Self::Compact => Self::Default,
+        }
+    }
+
+    /// Human-readable label for the status bar.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Default",
+            Self::Alternate => "Wide",
+            Self::Compact => "Compact",
+        }
+    }
 }
 
 /// Spawn type filter for the spawn list.
@@ -265,6 +303,8 @@ pub struct App {
     pub active_screen: ActiveScreen,
     /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
+    /// Per-screen layout presets (cycled with Ctrl+E).
+    pub layout_presets: [LayoutPreset; 4],
 
     /// Connected EQ client states.
     pub clients: Vec<ClientState>,
@@ -309,6 +349,10 @@ pub struct App {
     pub spawns_state: SpawnsScreenState,
     /// Hex dump panel state (address, cursor).
     pub hex_state: HexDumpState,
+    /// Ghidra offset explorer state.
+    pub explorer_state: super::state::ExplorerScreenState,
+    /// Ghidra database handle (loaded from data/ghidra.db if present).
+    pub ghidra_db: Option<dmft_common::ghidra_db::GhidraDatabase>,
 
     /// TUI refresh interval in milliseconds.
     pub refresh_rate_ms: u64,
@@ -530,6 +574,7 @@ impl App {
             running: true,
             active_screen: ActiveScreen::Overview,
             active_panel: ActivePanel::OverviewRoster,
+            layout_presets: [LayoutPreset::Default; 4],
 
             clients: Vec::new(),
             selected_client: 0,
@@ -551,6 +596,8 @@ impl App {
             overview_state: OverviewScreenState::new(),
             spawns_state: SpawnsScreenState::new(),
             hex_state: HexDumpState::new(),
+            explorer_state: super::state::ExplorerScreenState::new(),
+            ghidra_db: None,
 
             refresh_rate_ms: 250,
 
@@ -790,7 +837,11 @@ impl App {
             }
             ActiveScreen::Navigation => vec![ActivePanel::TacticalNavigation],
             ActiveScreen::Debug => {
-                vec![ActivePanel::DebugSpawns, ActivePanel::DebugHexDump]
+                vec![
+                    ActivePanel::DebugSpawns,
+                    ActivePanel::DebugHexDump,
+                    ActivePanel::DebugExplorer,
+                ]
             }
         }
     }
@@ -829,6 +880,28 @@ impl App {
             .position(|panel| *panel == self.active_panel)
             .unwrap_or(0);
         self.active_panel = visible[(current + 1) % visible.len()];
+    }
+
+    /// Returns the current layout preset for the active screen.
+    #[must_use]
+    pub fn current_layout(&self) -> LayoutPreset {
+        let idx = self.screen_index(self.active_screen);
+        self.layout_presets[idx]
+    }
+
+    /// Cycle the layout preset for the active screen (Ctrl+E).
+    pub fn cycle_layout(&mut self) {
+        let idx = self.screen_index(self.active_screen);
+        self.layout_presets[idx] = self.layout_presets[idx].next();
+    }
+
+    fn screen_index(&self, screen: ActiveScreen) -> usize {
+        match screen {
+            ActiveScreen::Overview => 0,
+            ActiveScreen::Tactical => 1,
+            ActiveScreen::Navigation => 2,
+            ActiveScreen::Debug => 3,
+        }
     }
 
     /// Toggles the group section visibility on the overview screen.
@@ -5259,5 +5332,40 @@ mod tests {
         app.automation_paused = true;
         app.automation_paused = true;
         assert!(app.automation_paused);
+    }
+
+    // ── Layout presets ──────────────────────────────────────────────────────
+
+    #[test]
+    fn layout_preset_cycles_through_all() {
+        let p = LayoutPreset::Default;
+        assert_eq!(p.next(), LayoutPreset::Alternate);
+        assert_eq!(p.next().next(), LayoutPreset::Compact);
+        assert_eq!(p.next().next().next(), LayoutPreset::Default);
+    }
+
+    #[test]
+    fn layout_preset_labels() {
+        assert_eq!(LayoutPreset::Default.label(), "Default");
+        assert_eq!(LayoutPreset::Alternate.label(), "Wide");
+        assert_eq!(LayoutPreset::Compact.label(), "Compact");
+    }
+
+    #[test]
+    fn cycle_layout_per_screen() {
+        let mut app = App::new();
+        assert_eq!(app.current_layout(), LayoutPreset::Default);
+        app.cycle_layout();
+        assert_eq!(app.current_layout(), LayoutPreset::Alternate);
+
+        // Switch screen — separate preset
+        app.set_active_screen(ActiveScreen::Tactical);
+        assert_eq!(app.current_layout(), LayoutPreset::Default);
+        app.cycle_layout();
+        assert_eq!(app.current_layout(), LayoutPreset::Alternate);
+
+        // Go back to overview — preserved
+        app.set_active_screen(ActiveScreen::Overview);
+        assert_eq!(app.current_layout(), LayoutPreset::Alternate);
     }
 }

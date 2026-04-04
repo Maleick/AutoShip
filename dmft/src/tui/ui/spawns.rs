@@ -282,8 +282,24 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 
 // ─── Debug screen layout ─────────────────────────────────────────────────────
 
-/// Draw the debug screen layout (spawn list + target + hex dump).
+/// Draw the debug screen layout (spawn list + target + hex dump + explorer).
+///
+/// Layout varies by `LayoutPreset`:
+/// - **Default**: original 2-column (spawns + detail/hex)
+/// - **Alternate**: 3-column with explorer on the right
+/// - **Compact**: explorer-focused (explorer + hex, minimal spawns)
 pub fn draw_debug_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    use crate::tui::app::LayoutPreset;
+
+    match app.current_layout() {
+        LayoutPreset::Default => draw_debug_default(frame, area, app),
+        LayoutPreset::Alternate => draw_debug_with_explorer(frame, area, app),
+        LayoutPreset::Compact => draw_debug_explorer_focused(frame, area, app),
+    }
+}
+
+/// Original debug layout: spawns + player/target/hex.
+fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     if area.width < 110 {
         let rows = Layout::default()
             .direction(Direction::Vertical)
@@ -324,6 +340,55 @@ pub fn draw_debug_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
     draw_target_panel(frame, left[1], app);
     draw_hex_panel(frame, left[2], app);
     draw_spawn_list(frame, cols[1], app);
+}
+
+/// 3-column layout: detail | spawns | explorer.
+fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    use super::explorer::draw_explorer_panel;
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(35),
+            Constraint::Percentage(40),
+        ])
+        .split(area);
+
+    let left = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(10),
+            Constraint::Length(8),
+            Constraint::Min(10),
+        ])
+        .split(cols[0]);
+
+    draw_player_detail(frame, left[0], app);
+    draw_target_panel(frame, left[1], app);
+    draw_hex_panel(frame, left[2], app);
+    draw_spawn_list(frame, cols[1], app);
+    draw_explorer_panel(frame, cols[2], app);
+}
+
+/// Explorer-focused layout: explorer on top, hex below.
+fn draw_debug_explorer_focused(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    use super::explorer::draw_explorer_panel;
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(area);
+
+    draw_explorer_panel(frame, rows[0], app);
+
+    let bottom = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(rows[1]);
+
+    draw_hex_panel(frame, bottom[0], app);
+    draw_spawn_list(frame, bottom[1], app);
 }
 
 fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

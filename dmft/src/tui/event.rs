@@ -428,6 +428,11 @@ pub fn handle_events(
                 app.running = false;
                 return Ok(true);
             }
+            (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+                app.cycle_layout();
+                app.status_message = format!("Layout: {}", app.current_layout().label());
+                return Ok(true);
+            }
             (KeyCode::Char('!'), _) => {
                 app.set_active_group(Some(0));
                 return Ok(true);

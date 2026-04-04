@@ -45,26 +45,22 @@ pub fn draw_explorer_panel(frame: &mut Frame, area: Rect, app: &mut App) {
         t.border_dim
     };
 
-    let state = &app.explorer_state;
-    let cat_label = state.category_filter.label();
-    let filtered = state.filtered_functions.len();
-    let total = state.total_count;
+    // Extract state values before building widgets to avoid borrow conflicts.
+    let cat_label = app.explorer_state.category_filter.label();
+    let filtered = app.explorer_state.filtered_functions.len();
+    let total = app.explorer_state.total_count;
+    let search_mode = app.explorer_state.search_mode;
+    let search_filter = app.explorer_state.search_filter.clone();
+    let has_db = app.ghidra_db.is_some();
 
-    let title = if state.search_mode {
-        format!(
-            " Explorer ({filtered}/{total}) [{cat_label}] search: \"{}\" [Esc] ",
-            state.search_filter,
-        )
-    } else if !state.search_filter.is_empty() {
-        format!(
-            " Explorer ({filtered}/{total}) [{cat_label}] filter: \"{}\" ",
-            state.search_filter,
-        )
+    let title = if search_mode {
+        format!(" Explorer ({filtered}/{total}) [{cat_label}] search: \"{search_filter}\" [Esc] ",)
+    } else if !search_filter.is_empty() {
+        format!(" Explorer ({filtered}/{total}) [{cat_label}] filter: \"{search_filter}\" ",)
     } else {
         format!(" Explorer ({filtered}/{total}) [{cat_label}] ")
     };
 
-    // Split into table + stats footer
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(5), Constraint::Length(1)])
@@ -72,11 +68,14 @@ pub fn draw_explorer_panel(frame: &mut Frame, area: Rect, app: &mut App) {
 
     let header = themed_header_row(&["Address", "Name", "Category", "Usability", "Size"], t);
 
-    let highlight_style = Style::default()
-        .bg(t.row_selected_bg)
-        .add_modifier(Modifier::BOLD);
+    let text_accent = t.text_accent;
+    let text_bright = t.text_bright;
+    let text_secondary = t.text_secondary;
+    let text_muted = t.text_muted;
+    let row_selected_bg = t.row_selected_bg;
 
-    let rows: Vec<Row> = state
+    let rows: Vec<Row> = app
+        .explorer_state
         .filtered_functions
         .iter()
         .map(|f| {
@@ -84,70 +83,53 @@ pub fn draw_explorer_panel(frame: &mut Frame, area: Rect, app: &mut App) {
             let name = f.name.as_str();
             let cat = f.category.as_deref().unwrap_or("-");
             let usab = f.usability.as_deref();
-            let size = f
-                .size
-                .map_or_else(|| "-".to_string(), |s| format!("{s}"));
+            let size = f.size.map_or_else(|| "-".to_string(), |s| format!("{s}"));
             let color = usability_color(usab);
 
             Row::new(vec![
-                Cell::from(Span::styled(
-                    addr,
-                    Style::default().fg(t.text_accent),
-                )),
-                Cell::from(Span::styled(name, Style::default().fg(t.text_bright))),
-                Cell::from(Span::styled(
-                    cat,
-                    Style::default().fg(t.text_secondary),
-                )),
+                Cell::from(Span::styled(addr, Style::default().fg(text_accent))),
+                Cell::from(Span::styled(name, Style::default().fg(text_bright))),
+                Cell::from(Span::styled(cat, Style::default().fg(text_secondary))),
                 Cell::from(Span::styled(
                     usability_label(usab),
                     Style::default().fg(color),
                 )),
-                Cell::from(Span::styled(
-                    size,
-                    Style::default().fg(t.text_muted),
-                )),
+                Cell::from(Span::styled(size, Style::default().fg(text_muted))),
             ])
         })
         .collect();
 
     let widths = [
-        Constraint::Length(18),  // Address
-        Constraint::Min(20),     // Name (flex)
-        Constraint::Length(14),  // Category
-        Constraint::Length(10),  // Usability
-        Constraint::Length(8),   // Size
+        Constraint::Length(18),
+        Constraint::Min(20),
+        Constraint::Length(14),
+        Constraint::Length(10),
+        Constraint::Length(8),
     ];
 
+    let block = panel(title.as_str(), border_style, &app.theme);
     let table = Table::new(rows, widths)
         .header(header)
-        .block(panel(title.as_str(), border_style, t))
-        .row_highlight_style(highlight_style);
+        .block(block)
+        .row_highlight_style(
+            Style::default()
+                .bg(row_selected_bg)
+                .add_modifier(Modifier::BOLD),
+        );
 
     frame.render_stateful_widget(table, chunks[0], &mut app.explorer_state.table_state);
 
-    // Stats footer
-    let db_status = if app.ghidra_db.is_some() {
-        "DB loaded"
-    } else {
-        "No DB"
-    };
+    let db_status = if has_db { "DB loaded" } else { "No DB" };
     let footer = Line::from(vec![
-        Span::styled(
-            format!(" {db_status} | "),
-            Style::default().fg(t.text_muted),
-        ),
+        Span::styled(format!(" {db_status} | "), Style::default().fg(text_muted)),
         Span::styled(
             format!("{filtered} shown / {total} total"),
-            Style::default().fg(t.text_secondary),
+            Style::default().fg(text_secondary),
         ),
         Span::styled(
             " | / search  c cycle category  j/k scroll",
-            Style::default().fg(t.text_muted),
+            Style::default().fg(text_muted),
         ),
     ]);
-    frame.render_widget(
-        Paragraph::new(footer).wrap(Wrap { trim: true }),
-        chunks[1],
-    );
+    frame.render_widget(Paragraph::new(footer).wrap(Wrap { trim: true }), chunks[1]);
 }

@@ -866,6 +866,107 @@ impl CommandBarState {
     }
 }
 
+// ─── Explorer state ─────────────────────────────────────────────────────────
+
+/// Category filter for the offset explorer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExplorerCategory {
+    #[default]
+    All,
+    Functions,
+    AaAbilities,
+    Opcodes,
+    UiWidgets,
+}
+
+impl ExplorerCategory {
+    /// Human-readable label.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Functions => "Functions",
+            Self::AaAbilities => "AA",
+            Self::Opcodes => "Opcodes",
+            Self::UiWidgets => "UI",
+        }
+    }
+
+    /// Cycle to the next category.
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::All => Self::Functions,
+            Self::Functions => Self::AaAbilities,
+            Self::AaAbilities => Self::Opcodes,
+            Self::Opcodes => Self::UiWidgets,
+            Self::UiWidgets => Self::All,
+        }
+    }
+}
+
+/// A single explorer entry (function/offset from the Ghidra DB).
+#[derive(Debug, Clone)]
+pub struct ExplorerEntry {
+    pub address: u64,
+    pub name: String,
+    pub category: Option<String>,
+    pub usability: Option<String>,
+    pub size: Option<u64>,
+}
+
+/// State for the Ghidra offset explorer panel.
+pub struct ExplorerScreenState {
+    /// Ratatui table state for scroll/selection.
+    pub table_state: TableState,
+    /// Text search filter.
+    pub search_filter: String,
+    /// Whether in search input mode.
+    pub search_mode: bool,
+    /// Active category filter.
+    pub category_filter: ExplorerCategory,
+    /// Filtered function list (rebuilt on filter change).
+    pub filtered_functions: Vec<ExplorerEntry>,
+    /// Total count before filtering (for display).
+    pub total_count: usize,
+}
+
+impl ExplorerScreenState {
+    #[must_use]
+    pub fn new() -> Self {
+        let mut table_state = TableState::default();
+        table_state.select(Some(0));
+        Self {
+            table_state,
+            search_filter: String::new(),
+            search_mode: false,
+            category_filter: ExplorerCategory::All,
+            filtered_functions: Vec::new(),
+            total_count: 0,
+        }
+    }
+
+    /// Move selection up.
+    pub fn select_prev(&mut self) {
+        let i = self.table_state.selected().unwrap_or(0).saturating_sub(1);
+        self.table_state.select(Some(i));
+    }
+
+    /// Move selection down.
+    pub fn select_next(&mut self) {
+        let max = self.filtered_functions.len().saturating_sub(1);
+        let i = self.table_state.selected().unwrap_or(0);
+        self.table_state.select(Some((i + 1).min(max)));
+    }
+
+    /// Get the currently selected entry's address (for hex view linking).
+    #[must_use]
+    pub fn selected_address(&self) -> Option<u64> {
+        let idx = self.table_state.selected()?;
+        self.filtered_functions.get(idx).map(|e| e.address)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
