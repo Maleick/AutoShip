@@ -10,7 +10,9 @@
 
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
-use dmft_common::nav::{CampSpot, FollowConfig, NavStatus, PauseReason, StickConfig, Waypoint};
+use dmft_common::nav::{
+    CampSpot, FollowConfig, NavCampConfig, NavStatus, PauseReason, StickConfig, Waypoint,
+};
 use dmft_common::types::SpawnData;
 
 use super::humanize::MovementPersonality;
@@ -44,6 +46,7 @@ pub struct Navigator {
     controller: MovementController,
     /// Camp spot to hold after arrival (optional).
     camp: Option<CampSpot>,
+    camp_config: Option<NavCampConfig>,
     /// Stuck detection and recovery.
     stuck: StuckDetector,
     /// Per-character movement personality for humanization.
@@ -66,6 +69,7 @@ impl Navigator {
             queue: WaypointQueue::new(),
             controller: MovementController::new(player_base),
             camp: None,
+            camp_config: None,
             stuck: StuckDetector::new(),
             personality: MovementPersonality::from_client_id(client_id),
             cached_distance: 0.0,
@@ -86,6 +90,7 @@ impl Navigator {
         tracing::info!(count = waypoints.len(), "Starting navigation");
         self.queue.set_path(waypoints);
         self.camp = None;
+        self.camp_config = None;
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
@@ -103,11 +108,25 @@ impl Navigator {
         self.state = State::Moving;
     }
 
+    /// Set a full camp config with scatter positioning.
+    pub fn set_camp_config(&mut self, config: NavCampConfig) {
+        tracing::info!(role = %config.role, radius = config.radius, scatter = config.scatter.is_some(), "Setting camp config");
+        let spot = config.to_camp_spot();
+        self.queue.set_path(vec![spot.position]);
+        self.camp = Some(spot);
+        self.camp_config = Some(config);
+        self.stuck.reset();
+        self.stick.stop();
+        self.warp.reset();
+        self.state = State::Moving;
+    }
+
     /// Stop navigation immediately.
     pub fn stop(&mut self) {
         self.controller.stop_forward();
         self.queue.clear();
         self.camp = None;
+        self.camp_config = None;
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
@@ -126,6 +145,7 @@ impl Navigator {
         self.controller.stop_forward();
         self.queue.clear();
         self.camp = None;
+        self.camp_config = None;
         self.stuck.reset();
         self.state = State::Following {
             config,
@@ -157,6 +177,7 @@ impl Navigator {
         self.controller.stop_forward();
         self.queue.clear();
         self.camp = None;
+        self.camp_config = None;
         self.stuck.reset();
         self.stick.start(config, current_target_id);
         self.state = State::Sticking;

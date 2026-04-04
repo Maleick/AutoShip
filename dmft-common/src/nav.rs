@@ -468,6 +468,91 @@ pub struct CampDefinition {
     pub spots: Vec<CampSpot>,
 }
 
+/// Per-character scatter offset within a camp — MQ2MoveUtils `/makecamp` scatter parity.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ScatterConfig {
+    /// Compass bearing from camp center (degrees, 0=N, 90=E, 180=S, 270=W).
+    pub bearing: f32,
+    /// Base distance from camp center along the bearing.
+    pub scatdist: f32,
+    /// Randomization radius (uniform disk sampling).
+    pub scatsize: f32,
+}
+
+impl ScatterConfig {
+    #[must_use]
+    pub fn new(bearing: f32, scatdist: f32, scatsize: f32) -> Self {
+        Self {
+            bearing,
+            scatdist,
+            scatsize,
+        }
+    }
+
+    #[must_use]
+    pub fn offset(&self, center: &Waypoint) -> Waypoint {
+        let bearing_rad = self.bearing.to_radians();
+        let math_rad = std::f32::consts::FRAC_PI_2 - bearing_rad;
+        Waypoint::new(
+            center.x + math_rad.cos() * self.scatdist,
+            center.y + math_rad.sin() * self.scatdist,
+            center.z,
+        )
+    }
+
+    #[must_use]
+    pub fn resolve(&self, center: &Waypoint, angle_seed: f32, dist_seed: f32) -> Waypoint {
+        let base = self.offset(center);
+        if self.scatsize <= 0.0 {
+            return base;
+        }
+        let r = self.scatsize * dist_seed.sqrt();
+        let theta = angle_seed * std::f32::consts::TAU;
+        Waypoint::new(base.x + r * theta.cos(), base.y + r * theta.sin(), base.z)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NavCampConfig {
+    pub center: Waypoint,
+    pub heading: f32,
+    pub radius: f32,
+    pub scatter: Option<ScatterConfig>,
+    pub role: String,
+}
+
+impl NavCampConfig {
+    #[must_use]
+    pub fn return_position(&self) -> Waypoint {
+        match self.scatter {
+            Some(ref scatter) => scatter.offset(&self.center),
+            None => self.center,
+        }
+    }
+
+    #[must_use]
+    pub fn return_position_randomized(&self, angle_seed: f32, dist_seed: f32) -> Waypoint {
+        match self.scatter {
+            Some(ref scatter) => scatter.resolve(&self.center, angle_seed, dist_seed),
+            None => self.center,
+        }
+    }
+
+    #[must_use]
+    pub fn is_outside_radius(&self, pos: &Waypoint) -> bool {
+        self.center.distance_2d(pos) > self.radius
+    }
+
+    #[must_use]
+    pub fn to_camp_spot(&self) -> CampSpot {
+        CampSpot {
+            position: self.return_position(),
+            heading: self.heading,
+            role: self.role.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1108,5 +1193,145 @@ mod tests {
         } else {
             panic!("expected Sticking variant");
         }
+    }
+
+    #[test]
+    fn scatter_offset_north() {
+        let center = Waypoint::new(100.0, 100.0, 0.0);
+        let scatter = ScatterConfig::new(0.0, 20.0, 0.0);
+        let pos = scatter.offset(&center);
+        assert!((pos.x - 100.0).abs() < 0.1);
+        assert!((pos.y - 120.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn scatter_offset_east() {
+        let center = Waypoint::new(100.0, 100.0, 0.0);
+        let scatter = ScatterConfig::new(90.0, 20.0, 0.0);
+        let pos = scatter.offset(&center);
+        assert!((pos.x - 120.0).abs() < 0.1);
+        assert!((pos.y - 100.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn scatter_offset_south() {
+        let center = Waypoint::new(100.0, 100.0, 0.0);
+        let scatter = ScatterConfig::new(180.0, 20.0, 0.0);
+        let pos = scatter.offset(&center);
+        assert!((pos.x - 100.0).abs() < 0.1);
+        assert!((pos.y - 80.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn scatter_offset_west() {
+        let center = Waypoint::new(100.0, 100.0, 0.0);
+        let scatter = ScatterConfig::new(270.0, 20.0, 0.0);
+        let pos = scatter.offset(&center);
+        assert!((pos.x - 80.0).abs() < 0.1);
+        assert!((pos.y - 100.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn scatter_resolve_no_size_equals_offset() {
+        let center = Waypoint::new(50.0, 50.0, 0.0);
+        let scatter = ScatterConfig::new(45.0, 10.0, 0.0);
+        let offset = scatter.offset(&center);
+        let resolved = scatter.resolve(&center, 0.5, 0.5);
+        assert!((offset.x - resolved.x).abs() < f32::EPSILON);
+        assert!((offset.y - resolved.y).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn scatter_resolve_within_scatsize() {
+        let center = Waypoint::new(0.0, 0.0, 0.0);
+        let scatter = ScatterConfig::new(0.0, 20.0, 5.0);
+        let base = scatter.offset(&center);
+        for i in 0..10 {
+            let a = (i as f32) / 10.0;
+            let d = (i as f32) / 10.0;
+            let pos = scatter.resolve(&center, a, d);
+            let dist = ((pos.x - base.x).powi(2) + (pos.y - base.y).powi(2)).sqrt();
+            assert!(dist <= 5.0 + 0.01, "dist={dist} exceeded scatsize");
+        }
+    }
+
+    #[test]
+    fn scatter_uniform_disk_avoids_center_bias() {
+        let center = Waypoint::new(0.0, 0.0, 0.0);
+        let scatter = ScatterConfig::new(90.0, 10.0, 5.0);
+        let base = scatter.offset(&center);
+        let pos = scatter.resolve(&center, 0.0, 0.25);
+        let dist = ((pos.x - base.x).powi(2) + (pos.y - base.y).powi(2)).sqrt();
+        assert!((dist - 2.5).abs() < 0.1);
+    }
+
+    #[test]
+    fn camp_config_return_position_without_scatter() {
+        let config = NavCampConfig {
+            center: Waypoint::new(100.0, 200.0, 0.0),
+            heading: 128.0,
+            radius: 50.0,
+            scatter: None,
+            role: "tank".to_string(),
+        };
+        let pos = config.return_position();
+        assert!((pos.x - 100.0).abs() < f32::EPSILON);
+        assert!((pos.y - 200.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn camp_config_return_position_with_scatter() {
+        let config = NavCampConfig {
+            center: Waypoint::new(100.0, 200.0, 0.0),
+            heading: 128.0,
+            radius: 50.0,
+            scatter: Some(ScatterConfig::new(90.0, 15.0, 0.0)),
+            role: "dps".to_string(),
+        };
+        let pos = config.return_position();
+        assert!((pos.x - 115.0).abs() < 0.1);
+        assert!((pos.y - 200.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn camp_config_is_outside_radius() {
+        let config = NavCampConfig {
+            center: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            radius: 50.0,
+            scatter: None,
+            role: "healer".to_string(),
+        };
+        assert!(!config.is_outside_radius(&Waypoint::new(30.0, 30.0, 0.0)));
+        assert!(config.is_outside_radius(&Waypoint::new(40.0, 40.0, 0.0)));
+    }
+
+    #[test]
+    fn camp_config_to_camp_spot_uses_scatter() {
+        let config = NavCampConfig {
+            center: Waypoint::new(100.0, 100.0, 0.0),
+            heading: 256.0,
+            radius: 60.0,
+            scatter: Some(ScatterConfig::new(0.0, 10.0, 0.0)),
+            role: "bard".to_string(),
+        };
+        let spot = config.to_camp_spot();
+        assert_eq!(spot.role, "bard");
+        assert!((spot.heading - 256.0).abs() < f32::EPSILON);
+        assert!((spot.position.y - 110.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn camp_config_serde_roundtrip() {
+        let config = NavCampConfig {
+            center: Waypoint::new(50.0, 75.0, 10.0),
+            heading: 384.0,
+            radius: 80.0,
+            scatter: Some(ScatterConfig::new(45.0, 12.0, 3.0)),
+            role: "monk".to_string(),
+        };
+        let json = serde_json::to_string(&config).expect("serialize");
+        let restored: NavCampConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(config, restored);
     }
 }

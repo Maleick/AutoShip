@@ -13,7 +13,7 @@ use warp::TargetSample;
 
 use std::sync::Mutex;
 
-use dmft_common::nav::{CampSpot, FollowConfig, NavStatus, StickConfig, Waypoint};
+use dmft_common::nav::{CampSpot, FollowConfig, NavCampConfig, NavStatus, StickConfig, Waypoint};
 use dmft_common::types::SpawnData;
 
 /// Global navigator instance, persists across game ticks.
@@ -77,6 +77,7 @@ pub fn handle_command(cmd: NavCommand) {
             }
             NavCommand::StickOff => nav.stick_off(),
             NavCommand::StickMod(delta) => nav.stick_mod(delta),
+            NavCommand::SetCampConfig(config) => nav.set_camp_config(config),
         }
     }
 }
@@ -85,6 +86,7 @@ pub fn handle_command(cmd: NavCommand) {
 pub enum NavCommand {
     Navigate(Vec<Waypoint>),
     SetCamp(CampSpot),
+    SetCampConfig(NavCampConfig),
     Stop,
     /// Start MQ2MoveUtils-style player follow mode.
     FollowPlayer {

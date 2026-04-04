@@ -15,8 +15,8 @@ const MELEE_RANGE: f32 = 15.0;
 /// Distance threshold for "close enough" — don't micro-adjust within this range.
 const CLOSE_ENOUGH: f32 = 5.0;
 
-/// Maximum distance a character can drift from camp before being pulled back.
-const MAX_CAMP_DRIFT: f32 = 100.0;
+/// Default maximum distance a character can drift from camp before being pulled back.
+pub const DEFAULT_CAMP_DRIFT: f32 = 100.0;
 
 /// Result of a positioning check — tells the caller what movement is needed.
 #[derive(Debug, Clone, PartialEq)]
@@ -64,14 +64,16 @@ pub fn check_melee_position(
     target: &SpawnData,
     is_rogue: bool,
     camp_pos: Option<&Waypoint>,
+    camp_radius: Option<f32>,
 ) -> PositionAction {
     let dist =
         Waypoint::new(player.x, player.y, 0.0).distance_2d(&Waypoint::new(target.x, target.y, 0.0));
 
     // Priority 1: If too far from camp, return to camp (after combat)
     if let Some(camp) = camp_pos {
+        let max_drift = camp_radius.unwrap_or(DEFAULT_CAMP_DRIFT);
         let camp_dist = Waypoint::new(player.x, player.y, 0.0).distance_2d(camp);
-        if camp_dist > MAX_CAMP_DRIFT {
+        if camp_dist > max_drift {
             return PositionAction::ReturnToCamp(*camp);
         }
     }
@@ -167,7 +169,7 @@ mod tests {
     fn check_position_move_toward_when_far() {
         let player = make_player(0.0, 0.0);
         let target = make_target(50.0, 0.0, 0.0);
-        let action = check_melee_position(&player, &target, false, None);
+        let action = check_melee_position(&player, &target, false, None, None);
         assert!(matches!(action, PositionAction::MoveToward(_)));
     }
 
@@ -175,7 +177,7 @@ mod tests {
     fn check_position_none_when_close() {
         let player = make_player(0.0, 0.0);
         let target = make_target(10.0, 0.0, 0.0);
-        let action = check_melee_position(&player, &target, false, None);
+        let action = check_melee_position(&player, &target, false, None, None);
         assert_eq!(action, PositionAction::None);
     }
 
@@ -184,7 +186,7 @@ mod tests {
         let player = make_player(0.0, 0.0);
         // Target at (10, 0) facing north (heading 0) — "behind" is south
         let target = make_target(10.0, 0.0, 0.0);
-        let action = check_melee_position(&player, &target, true, None);
+        let action = check_melee_position(&player, &target, true, None, None);
         // Rogue should want to move behind
         assert!(matches!(action, PositionAction::MoveBehind(_)));
     }
@@ -194,7 +196,7 @@ mod tests {
         let player = make_player(200.0, 0.0);
         let target = make_target(210.0, 0.0, 0.0);
         let camp = Waypoint::new(0.0, 0.0, 0.0);
-        let action = check_melee_position(&player, &target, false, Some(&camp));
+        let action = check_melee_position(&player, &target, false, Some(&camp), None);
         assert!(matches!(action, PositionAction::ReturnToCamp(_)));
     }
 
@@ -279,7 +281,7 @@ mod tests {
     fn non_rogue_in_melee_range_is_none() {
         let player = make_player(10.0, 0.0);
         let target = make_target(10.0, 5.0, 0.0);
-        let action = check_melee_position(&player, &target, false, None);
+        let action = check_melee_position(&player, &target, false, None, None);
         assert_eq!(action, PositionAction::None);
     }
 
@@ -288,8 +290,8 @@ mod tests {
         let player = make_player(50.0, 0.0);
         let target = make_target(55.0, 0.0, 0.0);
         let camp = Waypoint::new(0.0, 0.0, 0.0);
-        // 50 < MAX_CAMP_DRIFT (100), should check melee not camp
-        let action = check_melee_position(&player, &target, false, Some(&camp));
+        // 50 < DEFAULT_CAMP_DRIFT (100), should check melee not camp
+        let action = check_melee_position(&player, &target, false, Some(&camp), None);
         assert_eq!(action, PositionAction::None);
     }
 
@@ -328,5 +330,23 @@ mod tests {
         };
         let dist = Waypoint::new(a.x, a.y, 0.0).distance_2d(&Waypoint::new(b.x, b.y, 0.0));
         assert!((dist - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn custom_camp_radius_triggers_return() {
+        let player = make_player(40.0, 0.0);
+        let target = make_target(45.0, 0.0, 0.0);
+        let camp = Waypoint::new(0.0, 0.0, 0.0);
+        let action = check_melee_position(&player, &target, false, Some(&camp), Some(30.0));
+        assert!(matches!(action, PositionAction::ReturnToCamp(_)));
+    }
+
+    #[test]
+    fn custom_camp_radius_within_limit() {
+        let player = make_player(40.0, 0.0);
+        let target = make_target(45.0, 0.0, 0.0);
+        let camp = Waypoint::new(0.0, 0.0, 0.0);
+        let action = check_melee_position(&player, &target, false, Some(&camp), Some(50.0));
+        assert_eq!(action, PositionAction::None);
     }
 }
