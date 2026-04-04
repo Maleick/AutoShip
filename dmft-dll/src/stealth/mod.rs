@@ -10,6 +10,7 @@
 //! Functions in wake/sleep transitions use `#[link_section = ".dmft"]` to stay
 //! executable when `.text` is encrypted.
 
+pub mod alloc;
 pub mod etw_blind;
 pub mod page_guard;
 pub mod stack_spoof;
