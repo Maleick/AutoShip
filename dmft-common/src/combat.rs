@@ -284,6 +284,130 @@ impl std::fmt::Display for CastTelemetry {
     }
 }
 
+/// Priority level for buff maintenance — determines rebuff urgency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum BuffPriority {
+    /// Must never drop — e.g., cleric Aegolism, enchanter haste.
+    Critical,
+    /// Important but brief gaps are tolerable — e.g., stat buffs.
+    High,
+    /// Standard maintenance buffs — e.g., Symbol, skin line.
+    Normal,
+    /// Nice-to-have — e.g., see invis, levitate.
+    Low,
+}
+
+/// Tracks a single active buff's timing for proactive rebuffing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuffTimer {
+    /// EQ spell ID of the buff.
+    pub spell_id: i32,
+    /// Human-readable spell name for logging/config.
+    pub spell_name: String,
+    /// Spawn ID of the character who cast the buff.
+    pub caster_id: u32,
+    /// Spawn ID of the buff recipient.
+    pub target_id: u32,
+    /// Game tick when the buff was applied.
+    pub applied_at: u64,
+    /// Buff duration in game ticks.
+    pub duration_ticks: u64,
+    /// Rebuff priority — higher priority buffs are refreshed first.
+    pub priority: BuffPriority,
+}
+
+impl BuffTimer {
+    /// Returns the game tick when this buff expires.
+    pub fn expires_at(&self) -> u64 {
+        self.applied_at.saturating_add(self.duration_ticks)
+    }
+
+    /// Returns the remaining ticks before expiry, or 0 if already expired.
+    pub fn time_remaining(&self, current_tick: u64) -> u64 {
+        self.expires_at().saturating_sub(current_tick)
+    }
+
+    /// Returns true if the buff has expired at the given tick.
+    pub fn is_expired(&self, current_tick: u64) -> bool {
+        current_tick >= self.expires_at()
+    }
+
+    /// Returns true if the buff will expire within `threshold_ticks` from now.
+    pub fn is_expiring_soon(&self, current_tick: u64, threshold_ticks: u64) -> bool {
+        self.time_remaining(current_tick) <= threshold_ticks
+    }
+}
+
+/// Collection of active buff timers with expiry management.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BuffTimerSet {
+    /// Active buff timers.
+    pub timers: Vec<BuffTimer>,
+}
+
+impl BuffTimerSet {
+    /// Creates an empty buff timer set.
+    pub fn new() -> Self {
+        Self { timers: Vec::new() }
+    }
+
+    /// Adds a buff timer. If a buff with the same spell_id and target_id
+    /// already exists, it is replaced (rebuff resets the timer).
+    pub fn add_buff(&mut self, timer: BuffTimer) {
+        self.timers
+            .retain(|t| !(t.spell_id == timer.spell_id && t.target_id == timer.target_id));
+        self.timers.push(timer);
+    }
+
+    /// Removes all buff timers matching the given spell_id and target_id.
+    pub fn remove_buff(&mut self, spell_id: i32, target_id: u32) {
+        self.timers
+            .retain(|t| !(t.spell_id == spell_id && t.target_id == target_id));
+    }
+
+    /// Returns all buffs that have expired at the given tick.
+    pub fn get_expired(&self, current_tick: u64) -> Vec<&BuffTimer> {
+        self.timers
+            .iter()
+            .filter(|t| t.is_expired(current_tick))
+            .collect()
+    }
+
+    /// Returns buffs expiring within `threshold_ticks`, sorted by priority
+    /// (Critical first) then by time remaining (soonest first).
+    pub fn get_expiring_soon(&self, current_tick: u64, threshold_ticks: u64) -> Vec<&BuffTimer> {
+        let mut expiring: Vec<&BuffTimer> = self
+            .timers
+            .iter()
+            .filter(|t| {
+                !t.is_expired(current_tick) && t.is_expiring_soon(current_tick, threshold_ticks)
+            })
+            .collect();
+        expiring.sort_by(|a, b| {
+            a.priority.cmp(&b.priority).then_with(|| {
+                a.time_remaining(current_tick)
+                    .cmp(&b.time_remaining(current_tick))
+            })
+        });
+        expiring
+    }
+
+    /// Removes all expired buffs and returns how many were purged.
+    pub fn purge_expired(&mut self, current_tick: u64) -> usize {
+        let before = self.timers.len();
+        self.timers.retain(|t| !t.is_expired(current_tick));
+        before - self.timers.len()
+    }
+
+    /// Returns the number of active (non-expired) buffs at the given tick.
+    pub fn active_count(&self, current_tick: u64) -> usize {
+        self.timers
+            .iter()
+            .filter(|t| !t.is_expired(current_tick))
+            .count()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -643,5 +767,192 @@ mod tests {
         set.insert(CastResult::Success);
         set.insert(CastResult::Fizzled);
         assert_eq!(set.len(), 2);
+    }
+
+    // ── Buff timer tests ──────────────────────────────────────────────
+
+    fn make_timer(
+        spell_id: i32,
+        target_id: u32,
+        applied_at: u64,
+        duration: u64,
+        priority: BuffPriority,
+    ) -> BuffTimer {
+        BuffTimer {
+            spell_id,
+            spell_name: format!("Spell{spell_id}"),
+            caster_id: 1,
+            target_id,
+            applied_at,
+            duration_ticks: duration,
+            priority,
+        }
+    }
+
+    #[test]
+    fn buff_timer_expires_at() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert_eq!(t.expires_at(), 1500);
+    }
+
+    #[test]
+    fn buff_timer_time_remaining() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert_eq!(t.time_remaining(1200), 300);
+        assert_eq!(t.time_remaining(1500), 0);
+        assert_eq!(t.time_remaining(1600), 0);
+    }
+
+    #[test]
+    fn buff_timer_is_expired() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert!(!t.is_expired(1499));
+        assert!(t.is_expired(1500));
+        assert!(t.is_expired(2000));
+    }
+
+    #[test]
+    fn buff_timer_expiring_soon() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert!(t.is_expiring_soon(1300, 300));
+        assert!(!t.is_expiring_soon(1100, 300));
+        assert!(t.is_expiring_soon(1600, 300));
+    }
+
+    #[test]
+    fn buff_timer_saturating_math() {
+        let t = make_timer(100, 1, u64::MAX - 10, 20, BuffPriority::Normal);
+        assert_eq!(t.expires_at(), u64::MAX);
+    }
+
+    #[test]
+    fn buff_timer_set_add_and_count() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        assert_eq!(set.active_count(0), 2);
+    }
+
+    #[test]
+    fn buff_timer_set_add_replaces_duplicate() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(100, 1, 400, 500, BuffPriority::Normal));
+        assert_eq!(set.timers.len(), 1);
+        assert_eq!(set.timers[0].applied_at, 400);
+    }
+
+    #[test]
+    fn buff_timer_set_add_same_spell_different_targets() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(100, 2, 0, 500, BuffPriority::Normal));
+        assert_eq!(set.timers.len(), 2);
+    }
+
+    #[test]
+    fn buff_timer_set_remove() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        set.remove_buff(100, 1);
+        assert_eq!(set.timers.len(), 1);
+        assert_eq!(set.timers[0].spell_id, 200);
+    }
+
+    #[test]
+    fn buff_timer_set_remove_nonexistent_is_noop() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.remove_buff(999, 1);
+        assert_eq!(set.timers.len(), 1);
+    }
+
+    #[test]
+    fn buff_timer_set_get_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        let expired = set.get_expired(600);
+        assert_eq!(expired.len(), 1);
+        assert_eq!(expired[0].spell_id, 100);
+    }
+
+    #[test]
+    fn buff_timer_set_expiring_soon_sorted() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Low));
+        set.add_buff(make_timer(200, 1, 0, 1200, BuffPriority::Critical));
+        set.add_buff(make_timer(300, 1, 0, 900, BuffPriority::Normal));
+        let expiring = set.get_expiring_soon(700, 600);
+        assert_eq!(expiring.len(), 3);
+        assert_eq!(expiring[0].priority, BuffPriority::Critical);
+        assert_eq!(expiring[1].priority, BuffPriority::Normal);
+        assert_eq!(expiring[2].priority, BuffPriority::Low);
+    }
+
+    #[test]
+    fn buff_timer_set_expiring_soon_excludes_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        let expiring = set.get_expiring_soon(600, 500);
+        assert_eq!(expiring.len(), 1);
+        assert_eq!(expiring[0].spell_id, 200);
+    }
+
+    #[test]
+    fn buff_timer_set_purge_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        set.add_buff(make_timer(300, 1, 0, 300, BuffPriority::Low));
+        let purged = set.purge_expired(600);
+        assert_eq!(purged, 2);
+        assert_eq!(set.timers.len(), 1);
+        assert_eq!(set.timers[0].spell_id, 200);
+    }
+
+    #[test]
+    fn buff_timer_set_active_count_excludes_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        assert_eq!(set.active_count(600), 1);
+    }
+
+    #[test]
+    fn buff_priority_ordering() {
+        assert!(BuffPriority::Critical < BuffPriority::High);
+        assert!(BuffPriority::High < BuffPriority::Normal);
+        assert!(BuffPriority::Normal < BuffPriority::Low);
+    }
+
+    #[test]
+    fn buff_timer_serialization_roundtrip() {
+        let timer = make_timer(100, 42, 5000, 18000, BuffPriority::Critical);
+        let json = serde_json::to_string(&timer).expect("serialize");
+        let restored: BuffTimer = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.spell_id, 100);
+        assert_eq!(restored.target_id, 42);
+        assert_eq!(restored.applied_at, 5000);
+        assert_eq!(restored.duration_ticks, 18000);
+        assert!(matches!(restored.priority, BuffPriority::Critical));
+    }
+
+    #[test]
+    fn buff_timer_set_serialization_roundtrip() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 2, 100, 2000, BuffPriority::Critical));
+        let json = serde_json::to_string(&set).expect("serialize");
+        let restored: BuffTimerSet = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.timers.len(), 2);
+    }
+
+    #[test]
+    fn buff_timer_set_default_is_empty() {
+        let set = BuffTimerSet::default();
+        assert!(set.timers.is_empty());
     }
 }
