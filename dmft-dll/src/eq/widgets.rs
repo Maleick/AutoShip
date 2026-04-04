@@ -816,7 +816,10 @@ mod tests {
             },
         );
 
-        assert!(visited.contains(&5), "expected to reach great-grandchild node");
+        assert!(
+            visited.contains(&5),
+            "expected to reach great-grandchild node"
+        );
     }
 
     #[test]

@@ -34,10 +34,7 @@ pub enum StickTickResult {
     /// caller should treat this as a reason to stop.
     TargetLost,
     /// Within stick range — stop movement.
-    InRange {
-        target_id: u32,
-        distance: f32,
-    },
+    InRange { target_id: u32, distance: f32 },
     /// Outside stick range — move toward `desired_pos`.
     OutOfRange {
         target_id: u32,
@@ -209,7 +206,12 @@ impl StickEngine {
 
 /// Compute the position that is `desired_dist` EQ units from `target` along
 /// the line from `target` toward `player`.  Used to find the "stand here" point.
-fn lerp_toward(player: &Waypoint, target: &Waypoint, current_dist: f32, desired_dist: f32) -> Waypoint {
+fn lerp_toward(
+    player: &Waypoint,
+    target: &Waypoint,
+    current_dist: f32,
+    desired_dist: f32,
+) -> Waypoint {
     if current_dist < 0.001 {
         // Player is on top of target — just return player position.
         return *player;
@@ -382,10 +384,7 @@ mod tests {
     fn tick_inactive_before_start() {
         let engine = StickEngine::new();
         let player = player_at(0.0, 0.0);
-        assert_eq!(
-            engine.tick(&player, None, &[]),
-            StickTickResult::Inactive
-        );
+        assert_eq!(engine.tick(&player, None, &[]), StickTickResult::Inactive);
     }
 
     #[test]
@@ -393,10 +392,7 @@ mod tests {
         let mut engine = StickEngine::new();
         engine.start(StickConfig::default(), None);
         let player = player_at(0.0, 0.0);
-        assert_eq!(
-            engine.tick(&player, None, &[]),
-            StickTickResult::TargetLost
-        );
+        assert_eq!(engine.tick(&player, None, &[]), StickTickResult::TargetLost);
     }
 
     #[test]
@@ -407,7 +403,10 @@ mod tests {
         // Target is at distance 10, effective distance is ~15 → should be InRange.
         let target = make_spawn(1, 10.0, 0.0);
         match engine.tick(&player, Some(&target), &[]) {
-            StickTickResult::InRange { target_id, distance } => {
+            StickTickResult::InRange {
+                target_id,
+                distance,
+            } => {
                 assert_eq!(target_id, 1);
                 assert!((distance - 10.0).abs() < 0.1);
             }
@@ -451,10 +450,7 @@ mod tests {
         engine.start(config, None);
         let player = player_at(0.0, 0.0);
         // With always=true and no target, we should get TargetLost (not Inactive).
-        assert_eq!(
-            engine.tick(&player, None, &[]),
-            StickTickResult::TargetLost
-        );
+        assert_eq!(engine.tick(&player, None, &[]), StickTickResult::TargetLost);
         // Engine stays active.
         assert!(engine.is_active());
     }

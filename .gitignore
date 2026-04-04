@@ -22,22 +22,10 @@ target/
 *.sqlite3
 credentials.db*
 
-# Markdown files (except README) — handoff docs may contain credentials
-*.md
-!README.md
-!AGENTS.md
-!CLAUDE.md
-!AGENTS.md
-!docs/
-!docs/**/*.md
-!docs/wiki/
-!docs/wiki/*.md
-
 # Playwright MCP
 .playwright-mcp/
 
-# Local Codex/Claude workspace artifacts
-.claude/hooks/
+# Local Claude workspace artifacts (runtime, not config)
 .claude/worktrees/
 logs/
 autoresearch-launch.json
@@ -47,6 +35,13 @@ research-results.tsv
 autoresearch-project-sync.json
 __pycache__/
 *.pyc
+
+# OpenWolf runtime state (large/transient)
+.wolf/token-ledger.json
+.wolf/daemon.log
+.wolf/cron-state.json
+.wolf/designqc-captures/
+.wolf/backups/
 
 # Local reference repos
 mq2-definitions/

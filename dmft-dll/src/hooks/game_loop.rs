@@ -580,7 +580,11 @@ fn on_game_tick() {
     // plus a target sample for the warp monitor.
     {
         let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-        let nav_target = if eq_base != 0 { read_target_state(eq_base) } else { None };
+        let nav_target = if eq_base != 0 {
+            read_target_state(eq_base)
+        } else {
+            None
+        };
         let target_sample = nav_target.as_ref().map(|t| crate::nav::warp::TargetSample {
             id: t.spawn_id,
             position: dmft_common::nav::Waypoint::new(t.x, t.y, t.z),

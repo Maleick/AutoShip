@@ -809,10 +809,7 @@ mod tests {
         fsm.transition(State::WaitForLoginScreen);
         let transitioned = fsm.handle_yesno_dialog(0, "Character is in offline trader mode.");
         assert!(transitioned);
-        assert!(matches!(
-            fsm.state,
-            State::Error(LoginError::OfflineTrader)
-        ));
+        assert!(matches!(fsm.state, State::Error(LoginError::OfflineTrader)));
     }
 
     #[test]

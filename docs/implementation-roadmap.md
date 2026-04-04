@@ -14,7 +14,11 @@ The repository already contains substantial implemented surface area before this
 - `M3`: navigation and route handling
 - `M4`: combat automation
 
-These milestones stay part of the project history. The canonical active roadmap now resumes at `M5`.
+These milestones stay part of the project history.
+
+Packet Engine research (send/receive pipeline inventory, ability packet coverage, opcode scrambler requirements) was conducted as a research track and its findings are archived in `docs/external-research/`. Packet-related constraints feed into anti-cheat, zoning, and orchestrator milestones as needed rather than standing as a separate implementation milestone.
+
+The canonical active roadmap now resumes at `M5`.
 
 ## Current Validated State vs Provisional Findings
 
@@ -36,63 +40,7 @@ These milestones stay part of the project history. The canonical active roadmap 
 
 ## Canonical Milestone Order
 
-### `M5` Packet Engine
-
-Objective:
-
-- formalize packet-first capability research and implementation boundaries without letting speculative packet work outrun validation
-
-Initial slices:
-
-- send/receive pipeline inventory and command-path selection rules
-- ability packet coverage and targetability rules
-- packet-driven validation tasks for combat, utility, and chat paths
-- evidence-backed packet vs in-process control matrix
-
-Current curated intake:
-
-- `docs/external-research/packet-engine-send-receive-pipeline.md`
-- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
-- `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
-
-Entry gate:
-
-- imported packet and network research archived and indexed
-- send and receive pipeline inventory completed with evidence states
-
-Exit gate:
-
-- packet control paths have explicit acceptance criteria
-- send and receive pipeline layers are inventoried with `In-process`, `Packet candidate`, or `Blocked` labels
-- anti-cheat counter and opcode scrambler requirements are documented
-- critical packet unknowns are either live-validated, blocked, or explicitly provisional
-
-### `M6` Zoning/Movement
-
-Objective:
-
-- turn zoning and movement internals into a reliable, operator-visible travel and recovery surface
-
-Initial slices:
-
-- zone transition state and failure-code mapping
-- movement validation rules and queue flushing
-- safe-coord, zone-line, and teleport category handling
-- TUI visibility for route state, stuck state, and zoning blockers
-
-Current curated intake:
-
-- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
-
-Entry gate:
-
-- packet-engine validation tasks define which travel actions stay packet-driven vs in-process
-
-Exit gate:
-
-- zoning workflows have live validation tasks and operator-facing failure states
-
-### `M7` Anti-Cheat
+### `M5` Anti-Cheat
 
 Objective:
 
@@ -100,7 +48,7 @@ Objective:
 
 Full research: [`docs/anti-detection.md`](anti-detection.md)
 
-#### Implementation slices (GitHub issues #344–#354)
+#### Implementation slices (GitHub issues #344–#355)
 
 **P1 — Critical path (implement in order)**
 
@@ -110,6 +58,7 @@ Full research: [`docs/anti-detection.md`](anti-detection.md)
 | #345  | Hardware breakpoint hooking      | Replace detour (inline patch) hooks with DR0–DR3 hardware breakpoint hooks; zero modified bytes in `.text`           |
 | #346  | Per-frame sleep obfuscation      | Gargoyle-style timer-based sleep with XOR encryption of DLL pages while idle; wake via APC                           |
 | #347  | Indirect syscalls (RecycledGate) | Replace all `ntdll.dll` imports with indirect syscalls resolved at runtime; no direct `ntdll` calls in IAT           |
+| #355  | Launchpad token handshake        | Launch via legitimate patcher path; acquire session token through official launchpad flow                            |
 
 **P2 — Hardening**
 
@@ -144,7 +93,7 @@ Full research: [`docs/anti-detection.md`](anti-detection.md)
 
 #### Implementation order
 
-1. **P1 in sequence**: injection (#344) → hooking (#345) → sleep obfuscation (#346) → syscalls (#347). Each layer depends on the previous — reflective injection must land before hooks can be installed without detection.
+1. **P1 in sequence**: injection (#344) → hooking (#345) → sleep obfuscation (#346) → syscalls (#347) → launchpad token (#355). Each layer depends on the previous — reflective injection must land before hooks can be installed without detection.
 2. **P2 in parallel**: once P1 is stable, P2 slices (#348–#352) are largely independent and can be worked concurrently.
 3. **P3 after P2**: call stack spoofing (#353) and page encryption (#354) are polish layers that build on the full P1+P2 stack.
 
@@ -160,6 +109,90 @@ Exit gate:
 - unsupported high-risk inputs are labeled as low-confidence or blocked
 - all P1 slices pass per-frame overhead benchmark (≤2 ms)
 - DLL has zero static detection signatures (no `PEB.Ldr` entry, no IAT imports to `ntdll`, no `RWX` pages, no detour patches)
+
+### `M6` Web Dashboard
+
+Objective:
+
+- replace TUI-based configuration with a browser UI for managing clients, credentials, groups, camp config, and session monitoring — the TUI stays as the gameplay/monitoring surface, the dashboard owns all configuration and setup
+
+Tech stack:
+
+- **Backend**: `axum` + `tokio-tungstenite` HTTP + WebSocket server embedded in the orchestrator binary
+- **Frontend**: Vite + React + Tailwind SPA, built to `dist/` and embedded via `rust-embed` or `include_dir`
+- **State**: SQLite (credentials already use it) + in-memory state broadcast via WebSocket
+- **Reactivity**: Watch internal DMFT state changes, broadcast over WebSocket to connected dashboards
+
+#### Implementation slices
+
+**P1 — Critical path (implement in order)**
+
+| Slice                        | Summary                                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Axum server scaffold         | Embedded HTTP + WS server in orchestrator, serves SPA from `rust-embed`, WebSocket upgrade for live state |
+| Client/credential management | CRUD for Daybreak accounts, character mapping, login sequencing — replaces TOML/CLI credential workflows  |
+| Group and camp configuration | Class roles, camp assignments, combat settings, HolyShit thresholds — visual editor replaces TOML editing |
+| Session monitoring dashboard | Live view of all clients: logged-in state, health, zone, stuck detection, camp loop phase                 |
+
+**P2 — Extended configuration**
+
+| Slice                      | Summary                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| Navigation/combat tuning   | Waypoint route editor, spell priority drag-and-drop, combat parameter sliders |
+| Launch sequencing UI       | Visual launch order, stagger timing, post-login sequence configuration        |
+| Log viewer and diagnostics | Streamed logs per client, error highlighting, IPC message inspector           |
+
+**P3 — Polish**
+
+| Slice                    | Summary                                                                    |
+| ------------------------ | -------------------------------------------------------------------------- |
+| Multi-group overview     | Aggregate view across all groups: DPS meters, heal coverage, camp progress |
+| Mobile-responsive layout | Responsive design for monitoring from phone/tablet while AFK               |
+| Theme and accessibility  | Dark/light mode, keyboard navigation, WCAG compliance                      |
+
+#### Implementation order
+
+1. **P1 in sequence**: server scaffold → credentials UI → group/camp config → session monitor. Each layer builds on the server and state infrastructure.
+2. **P2 in parallel**: once P1 is stable, nav/combat tuning, launch UI, and log viewer are independent panels.
+3. **P3 after P2**: overview, mobile, and theme are polish layers.
+
+Entry gate:
+
+- M5 anti-cheat work is stable enough that the orchestrator binary architecture is settled
+- SQLite credential store exists and is tested (M2.5)
+- axum and tokio are already in the dependency tree
+
+Exit gate:
+
+- all TOML-based configuration can be managed through the dashboard
+- credential CRUD works end-to-end with encrypted storage
+- live session state updates via WebSocket with <1s latency
+- TUI continues to function for gameplay monitoring (dashboard does not replace TUI runtime views)
+
+### `M7` Zoning/Movement
+
+Objective:
+
+- turn zoning and movement internals into a reliable, operator-visible travel and recovery surface
+
+Initial slices:
+
+- zone transition state and failure-code mapping
+- movement validation rules and queue flushing
+- safe-coord, zone-line, and teleport category handling
+- TUI visibility for route state, stuck state, and zoning blockers
+
+Current curated intake:
+
+- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
+
+Entry gate:
+
+- packet-engine validation tasks define which travel actions stay packet-driven vs in-process
+
+Exit gate:
+
+- zoning workflows have live validation tasks and operator-facing failure states
 
 ### `M8` Orchestrator
 
@@ -194,29 +227,30 @@ Initial slices:
 - measurable tuning loops
 - guardrails that prevent regressions from training-driven changes
 
-### `M10` Soul Engine + LLM
+### `M10` Economy
 
 Objective:
 
-- connect personality, operator-safe chat behavior, and provider-backed AI only after the control stack is stable
-
-Initial slices:
-
-- Soul Engine workflow review against current code
-- provider-backed AI credential and quota workflow
-- TUI and operator controls for safe AI usage
-
-### `M11` Economy
-
-Objective:
-
-- convert stable control and orchestration into loot, vendor, banking, and economy execution loops
+- convert stable control and orchestration into loot, vendor, banking, and economy execution loops — the self-sustaining Krono farm that funds hardware and accounts
 
 Initial slices:
 
 - loot and distribution workflow
 - vendor and banking cycles
 - economy-facing TUI summaries and operator overrides
+
+### `M11` Soul Engine + LLM
+
+Objective:
+
+- connect personality, operator-safe chat behavior, and locally-hosted AI (Gemma 4 or equivalent) only after the full control and economy stack is stable — no external API dependencies
+
+Initial slices:
+
+- Soul Engine workflow review against current code
+- local model hosting and inference pipeline (Gemma 4, ollama, or similar)
+- TUI and operator controls for safe AI usage
+- personality and idle behavior driven by local inference
 
 ## Domain Tracks
 

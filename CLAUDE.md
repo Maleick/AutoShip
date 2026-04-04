@@ -1,3 +1,9 @@
+# OpenWolf
+
+@.wolf/OPENWOLF.md
+
+This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -98,10 +104,13 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **M2.5** (complete): Login automation — credential store, process spawner, login FSM, launch coordinator
 - **M3** (complete): Navigation — waypoint pathfinding, Navigator FSM, humanization, stuck detection, zone router
 - **M4** (complete): Combat automation — ClassStrategy trait, 17 classes, HolyShit system, puller FSM, combat coordinator
-- **M5** (complete): Soul Engine — LLM personalities, persistent memory, idle behavior, social dynamics
-- **M6** (next): LLM Character AI — API integration (Gemini/Claude), in-game chat responses
-- **M7**: Learning/RL — behavioral cloning, RL fine-tuning
-- **M8**: Economy — vendor automation, EC tunnel trading, Bazaar
+- **M5** (active): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding
+- **M6**: Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring (TUI stays for gameplay)
+- **M7**: Zoning/Movement — zone transitions, movement validation, travel recovery
+- **M8**: Orchestrator — multibox coordination, group/session control, relay surfaces
+- **M9**: Learning/RL — behavioral cloning, RL fine-tuning
+- **M10**: Economy — Krono farm, vendor automation, loot distribution, banking
+- **M11**: Soul Engine + LLM — local AI (Gemma 4/ollama), personalities, in-game chat (no external API)
 
 ## Patterns & Conventions
 

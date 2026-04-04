@@ -1,0 +1,453 @@
+{
+  "version": 1,
+  "bugs": [
+    {
+      "id": "bug-001",
+      "timestamp": "2026-04-03T20:08:25.296Z",
+      "error_message": "Significant refactor of ",
+      "file": ".github/workflows/auto-merge.yml",
+      "root_cause": "8 lines replaced/restructured",
+      "fix": "Rewrote 9→14 lines (8 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "yml"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T20:08:25.296Z"
+    },
+    {
+      "id": "bug-002",
+      "timestamp": "2026-04-03T20:08:25.705Z",
+      "error_message": "Significant refactor of ",
+      "file": "docs/implementation-roadmap.md",
+      "root_cause": "6 lines replaced/restructured",
+      "fix": "Rewrote 21→68 lines (6 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T20:08:25.705Z"
+    },
+    {
+      "id": "bug-003",
+      "timestamp": "2026-04-03T20:50:34.736Z",
+      "error_message": "Wrong reference: 354 should be 355",
+      "file": "docs/implementation-roadmap.md",
+      "root_cause": "Used \"354\" instead of \"355\"",
+      "fix": "Changed 354 → 355",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T20:50:34.736Z"
+    },
+    {
+      "id": "bug-004",
+      "timestamp": "2026-04-03T21:11:14.233Z",
+      "error_message": "Wrong reference: health_monitor should be dll_allocated_name",
+      "file": "../DMFT-m7-staging/dmft/src/client/session.rs",
+      "root_cause": "Used \"health_monitor\" instead of \"dll_allocated_name\"",
+      "fix": "Changed health_monitor → dll_allocated_name",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:11:14.233Z"
+    },
+    {
+      "id": "bug-005",
+      "timestamp": "2026-04-03T21:12:47.520Z",
+      "error_message": "Significant refactor of ",
+      "file": "../DMFT-m7-evasion/dmft-dll/src/ipc/mod.rs",
+      "root_cause": "6 lines replaced/restructured",
+      "fix": "Rewrote 11→11 lines (6 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:12:47.520Z"
+    },
+    {
+      "id": "bug-006",
+      "timestamp": "2026-04-03T21:12:59.280Z",
+      "error_message": "Incorrect value in code",
+      "file": "../DMFT-m7-hooking/dmft-dll/Cargo.toml",
+      "root_cause": "Had \"Win32_UI_Input_KeyboardAndMouse\"",
+      "fix": "Changed to \"Win32_System_Diagnostics_Debug\"",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "toml"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-04-03T21:14:35.066Z"
+    },
+    {
+      "id": "bug-007",
+      "timestamp": "2026-04-03T21:13:14.395Z",
+      "error_message": "Wrong reference: SyscallGate should be SyscallTable",
+      "file": "../DMFT-m7-syscalls/dmft-common/src/syscall/api.rs",
+      "root_cause": "Used \"SyscallGate\" instead of \"SyscallTable\"",
+      "fix": "Changed SyscallGate → SyscallTable",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-04-03T21:14:00.249Z"
+    },
+    {
+      "id": "bug-008",
+      "timestamp": "2026-04-03T21:13:31.068Z",
+      "error_message": "Significant refactor of ",
+      "file": "../DMFT-m7-staging/dmft/src/cli.rs",
+      "root_cause": "2 lines replaced/restructured",
+      "fix": "Rewrote 4→5 lines (2 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:13:31.068Z"
+    },
+    {
+      "id": "bug-009",
+      "timestamp": "2026-04-03T21:14:48.455Z",
+      "error_message": "Wrong reference: move should be f",
+      "file": "../DMFT-m7-evasion/dmft-dll/src/evasion/pool.rs",
+      "root_cause": "Used \"move\" instead of \"f\"",
+      "fix": "Changed move → f",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:14:48.455Z"
+    },
+    {
+      "id": "bug-010",
+      "timestamp": "2026-04-03T21:16:34.751Z",
+      "error_message": "Significant refactor of ",
+      "file": "../DMFT-m7-staging/dmft/src/inject/alloc.rs",
+      "root_cause": "22 lines replaced/restructured",
+      "fix": "Rewrote 34→13 lines (22 removed) | Also: use windows::Wdk::System::Threading::{; NtQueryInformationProcess, ProcessBasicInformation",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-04-03T21:16:46.729Z"
+    },
+    {
+      "id": "bug-011",
+      "timestamp": "2026-04-03T21:17:33.535Z",
+      "error_message": "Wrong reference: 0xDEAD_VEH0 should be 0xDEAD_0E40",
+      "file": "../DMFT-m7-advanced/dmft-dll/src/stealth/page_encrypt.rs",
+      "root_cause": "Used \"0xDEAD_VEH0\" instead of \"0xDEAD_0E40\"",
+      "fix": "Changed 0xDEAD_VEH0 → 0xDEAD_0E40",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-04-03T21:18:51.376Z"
+    },
+    {
+      "id": "bug-012",
+      "timestamp": "2026-04-03T21:19:04.827Z",
+      "error_message": "Significant refactor of ",
+      "file": "../DMFT-m7-hooking/dmft-dll/src/hooks/game_loop.rs",
+      "root_cause": "41 lines replaced/restructured",
+      "fix": "Rewrote 83→60 lines (41 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:19:04.827Z"
+    },
+    {
+      "id": "bug-013",
+      "timestamp": "2026-04-03T21:20:14.962Z",
+      "error_message": "Significant refactor of ",
+      "file": "../DMFT-m7-hooking/dmft-dll/src/hooks/mod.rs",
+      "root_cause": "3 lines replaced/restructured",
+      "fix": "Rewrote 36→48 lines (3 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:20:14.962Z"
+    },
+    {
+      "id": "bug-014",
+      "timestamp": "2026-04-03T21:20:46.863Z",
+      "error_message": "Incorrect value in code",
+      "file": "../DMFT-m7-hooking/dmft-dll/Cargo.toml",
+      "root_cause": "Had \"0.3\"",
+      "fix": "Changed to \"0.54\"",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "toml"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:20:46.863Z"
+    },
+    {
+      "id": "bug-015",
+      "timestamp": "2026-04-03T21:29:33.905Z",
+      "error_message": "Significant refactor of ",
+      "file": "../DMFT-m7-syscalls/dmft-common/src/syscall/bootstrap.rs",
+      "root_cause": "2 lines replaced/restructured",
+      "fix": "Rewrote 7→15 lines (2 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T21:29:33.905Z"
+    },
+    {
+      "id": "bug-016",
+      "timestamp": "2026-04-03T22:12:48.957Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/implementation-roadmap.md",
+      "root_cause": "Had `M9`",
+      "fix": "Changed to `M10`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 3,
+      "last_seen": "2026-04-03T22:14:46.902Z"
+    },
+    {
+      "id": "bug-017",
+      "timestamp": "2026-04-03T22:13:44.145Z",
+      "error_message": "Significant refactor of ",
+      "file": "CLAUDE.md",
+      "root_cause": "3 lines replaced/restructured",
+      "fix": "Rewrote 4→7 lines (3 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T22:13:44.145Z"
+    },
+    {
+      "id": "bug-018",
+      "timestamp": "2026-04-03T22:14:33.469Z",
+      "error_message": "Significant refactor of ",
+      "file": "docs/implementation-roadmap.md",
+      "root_cause": "21 lines replaced/restructured",
+      "fix": "Rewrote 34→3 lines (21 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T22:14:33.469Z"
+    },
+    {
+      "id": "bug-019",
+      "timestamp": "2026-04-03T22:18:15.245Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/wiki/Roadmap-and-Known-Gaps.md",
+      "root_cause": "Had `M8`",
+      "fix": "Changed to `M7`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T22:18:15.245Z"
+    },
+    {
+      "id": "bug-020",
+      "timestamp": "2026-04-03T22:19:04.065Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/anti-detection.md",
+      "root_cause": "Had `M7`",
+      "fix": "Changed to `M5`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T22:19:04.065Z"
+    },
+    {
+      "id": "bug-021",
+      "timestamp": "2026-04-03T22:37:55.290Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/implementation-roadmap.md",
+      "root_cause": "Had `M7`",
+      "fix": "Changed to `M8`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 4,
+      "last_seen": "2026-04-03T22:38:06.755Z"
+    },
+    {
+      "id": "bug-022",
+      "timestamp": "2026-04-03T22:38:38.489Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/wiki/Roadmap-and-Known-Gaps.md",
+      "root_cause": "Had `M7`",
+      "fix": "Changed to `M8`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T22:38:38.489Z"
+    },
+    {
+      "id": "bug-023",
+      "timestamp": "2026-04-03T22:44:47.201Z",
+      "error_message": "Significant refactor of ",
+      "file": "docs/anti-detection.md",
+      "root_cause": "7 lines replaced/restructured",
+      "fix": "Rewrote 11→46 lines (7 removed) | Also: 1. Do memcheck 1-4 also cover functions called BY ; 3. What specific opcodes do the 6 memshift checks  | Also: **No packet counter evidence:**; - No client-side A/B counter strings found. SOE `U",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 3,
+      "last_seen": "2026-04-03T22:46:47.789Z"
+    },
+    {
+      "id": "bug-024",
+      "timestamp": "2026-04-03T22:45:57.456Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/anti-detection.md",
+      "root_cause": "Had `M8`",
+      "fix": "Changed to `M7`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-04-03T22:46:00.589Z"
+    },
+    {
+      "id": "bug-025",
+      "timestamp": "2026-04-03T22:46:01.456Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/wiki/Home.md",
+      "root_cause": "Had `M10`",
+      "fix": "Changed to `M11`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T22:46:01.456Z"
+    },
+    {
+      "id": "bug-026",
+      "timestamp": "2026-04-03T22:46:02.364Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/wiki/Roadmap-and-Known-Gaps.md",
+      "root_cause": "Had `M7`",
+      "fix": "Changed to `M8`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T22:46:02.364Z"
+    },
+    {
+      "id": "bug-027",
+      "timestamp": "2026-04-03T22:46:03.337Z",
+      "error_message": "Incorrect value in code",
+      "file": "docs/wiki/Security-and-Anti-Detection-Notes.md",
+      "root_cause": "Had `M8`",
+      "fix": "Changed to `M7`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 3,
+      "last_seen": "2026-04-03T22:46:07.290Z"
+    },
+    {
+      "id": "bug-028",
+      "timestamp": "2026-04-03T23:06:16.676Z",
+      "error_message": "Wrong reference: true should be false",
+      "file": "../../.claude/settings.json",
+      "root_cause": "Used \"true\" instead of \"false\"",
+      "fix": "Changed true → false",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "json"
+      ],
+      "related_bugs": [],
+      "occurrences": 3,
+      "last_seen": "2026-04-03T23:06:24.138Z"
+    }
+  ]
+}

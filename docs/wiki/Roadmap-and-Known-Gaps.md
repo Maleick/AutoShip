@@ -18,13 +18,13 @@ These milestones remain part of project history:
 
 The active roadmap now resumes at `M5`:
 
-- `M5`: Packet Engine
-- `M6`: Zoning/Movement
-- `M7`: Anti-Cheat
+- `M5`: Anti-Cheat (**active**)
+- `M6`: Web Dashboard (config + monitoring)
+- `M7`: Zoning/Movement
 - `M8`: Orchestrator
 - `M9`: Learning/RL
-- `M10`: Soul Engine + LLM
-- `M11`: Economy
+- `M10`: Economy
+- `M11`: Soul Engine + LLM (local AI only)
 
 External research may add slices and validation tasks, but it may not reorder milestones on its own.
 

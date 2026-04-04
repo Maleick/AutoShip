@@ -809,8 +809,10 @@ dependencies = [
  "anyhow",
  "bincode",
  "rand",
+ "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -69,7 +69,10 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::FollowPlayer { config, anchor } => nav.follow_player(config, anchor),
             NavCommand::UpdateFollowAnchor(anchor) => nav.update_follow_anchor(anchor),
             NavCommand::StopFollow => nav.stop_follow(),
-            NavCommand::StickTo { config, current_target_id } => {
+            NavCommand::StickTo {
+                config,
+                current_target_id,
+            } => {
                 nav.stick_to(config, current_target_id);
             }
             NavCommand::StickOff => nav.stick_off(),

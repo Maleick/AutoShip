@@ -1096,7 +1096,12 @@ mod tests {
         };
         let json = serde_json::to_string(&s).expect("serialize");
         let restored: NavStatus = serde_json::from_str(&json).expect("deserialize");
-        if let NavStatus::Sticking { target_id, distance, in_range } = restored {
+        if let NavStatus::Sticking {
+            target_id,
+            distance,
+            in_range,
+        } = restored
+        {
             assert_eq!(target_id, 42);
             assert!((distance - 8.5).abs() < f32::EPSILON);
             assert!(!in_range);
@@ -1105,4 +1110,3 @@ mod tests {
         }
     }
 }
-

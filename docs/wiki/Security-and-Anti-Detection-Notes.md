@@ -45,15 +45,15 @@ Current practical measures include:
 
 Use these categories when anti-cheat work needs a bounded review instead of vague “stealth” language:
 
-| Category | Current repo surface | Confidence | Why it matters |
-| --- | --- | --- | --- |
-| Module presence | `dmft/src/inject/loader.rs` injects `dmft-dll` with `CreateRemoteThread` + `LoadLibraryW`, and `dmft-dll` then remains loaded in `eqgame.exe` | High | A loaded third-party module is a concrete exposure surface even before any gameplay behavior is considered. |
-| Detour hooks | `dmft-dll/src/lib.rs` installs the game-loop and render hooks | High | Hooked code paths create an exposure surface that should be reviewed separately from operator behavior. |
-| In-process function calls | `dmft-common/src/ipc.rs`, `dmft-dll/src/hooks/game_loop.rs`, and the login/widget helpers execute `InterpretCmd`, UI clicks, and related internal calls inside the client process | High | Internal control paths can look different from external input simulation and need their own risk labeling. |
-| IPC naming and authentication | `dmft-common/src/ipc.rs`, `dmft-dll/src/ipc/pipe.rs`, and `dmft-dll/src/ipc/shared.rs` implement session-derived names, per-session raw token authentication, and current-user DACLs | High | These reduce casual local exposure, but they do not remove host-level forensic or anti-cheat risk. |
-| Timing variation | `dmft-dll/src/hooks/game_loop.rs`, `dmft-dll/src/nav/humanize.rs`, and `dmft-dll/src/combat/humanize.rs` apply command jitter, movement humanization, and behavior timing variation | Medium | These are practical hardening measures, not evidence of safety against any specific Daybreak detection path. |
-| Operator environment | Live machine cleanliness, runner hygiene, artifact handling, and avoiding unrelated cheat tooling | High | Official Daybreak policy applies account-wide and is not limited to a single game session. |
-| Community detection claims | Forum and community reporting | Low | Good for validation hypotheses only, not safety guarantees. |
+| Category                      | Current repo surface                                                                                                                                                                 | Confidence | Why it matters                                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Module presence               | `dmft/src/inject/loader.rs` injects `dmft-dll` with `CreateRemoteThread` + `LoadLibraryW`, and `dmft-dll` then remains loaded in `eqgame.exe`                                        | High       | A loaded third-party module is a concrete exposure surface even before any gameplay behavior is considered.  |
+| Detour hooks                  | `dmft-dll/src/lib.rs` installs the game-loop and render hooks                                                                                                                        | High       | Hooked code paths create an exposure surface that should be reviewed separately from operator behavior.      |
+| In-process function calls     | `dmft-common/src/ipc.rs`, `dmft-dll/src/hooks/game_loop.rs`, and the login/widget helpers execute `InterpretCmd`, UI clicks, and related internal calls inside the client process    | High       | Internal control paths can look different from external input simulation and need their own risk labeling.   |
+| IPC naming and authentication | `dmft-common/src/ipc.rs`, `dmft-dll/src/ipc/pipe.rs`, and `dmft-dll/src/ipc/shared.rs` implement session-derived names, per-session raw token authentication, and current-user DACLs | High       | These reduce casual local exposure, but they do not remove host-level forensic or anti-cheat risk.           |
+| Timing variation              | `dmft-dll/src/hooks/game_loop.rs`, `dmft-dll/src/nav/humanize.rs`, and `dmft-dll/src/combat/humanize.rs` apply command jitter, movement humanization, and behavior timing variation  | Medium     | These are practical hardening measures, not evidence of safety against any specific Daybreak detection path. |
+| Operator environment          | Live machine cleanliness, runner hygiene, artifact handling, and avoiding unrelated cheat tooling                                                                                    | High       | Official Daybreak policy applies account-wide and is not limited to a single game session.                   |
+| Community detection claims    | Forum and community reporting                                                                                                                                                        | Low        | Good for validation hypotheses only, not safety guarantees.                                                  |
 
 ### Confidence rules
 
@@ -61,20 +61,19 @@ Use these categories when anti-cheat work needs a bounded review instead of vagu
 - `Medium`: grounded in current DMFT code, but the actual anti-detection value is inferred rather than proven.
 - `Low`: community reporting, speculative interpretation, or exploit-oriented claims without stronger corroboration.
 
-## `M5` Through `M8` Validation Gates
+## `M5` / `M7` / `M8` Validation Gates
 
 Use these gates before documenting a risky path as supported or before expanding operator-facing behavior.
 
-| Milestone | Change type | Gate before keep or promotion | Default handling |
-| --- | --- | --- | --- |
-| `M5` Packet Engine | packet send path, packet fallback, or ability-target claim | document the exact path, explain why in-process control is not enough, and create a validation task with live-proof steps | keep exploit-adjacent or unclear packet paths `Provisional` or `Needs Live Proof` |
-| `M6` Zoning/Movement | zone transition logic, queue flushing, safe-coord recovery, or teleport-style routing | name the risky transition, record the failure or recovery checkpoint, and define the live validation path before calling it normal workflow | keep risky travel claims out of normal operator docs until validated |
-| `M7` Anti-Cheat | new hook, module footprint change, string or artifact exposure change, or anti-detection hardening claim | map the change to exposure categories, cite repo or official evidence, and record a confidence level | official-policy-backed rules may tighten gates immediately; community-only claims stay provisional |
-| `M8` Orchestrator | broader relay scope, launch/session routing change, or more visible automation behavior | prefer the lowest-exposure control path, keep routing scope visible to the operator, and cross-link any unresolved `M5`-`M7` validation dependency | block or defer behavior that silently widens packet, movement, or hook exposure |
+| Milestone            | Change type                                                                                              | Gate before keep or promotion                                                                                                                      | Default handling                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `M5` Anti-Cheat      | new hook, module footprint change, string or artifact exposure change, or anti-detection hardening claim | map the change to exposure categories, cite repo or official evidence, and record a confidence level                                               | official-policy-backed rules may tighten gates immediately; community-only claims stay provisional |
+| `M7` Zoning/Movement | zone transition logic, queue flushing, safe-coord recovery, or teleport-style routing                    | name the risky transition, record the failure or recovery checkpoint, and define the live validation path before calling it normal workflow        | keep risky travel claims out of normal operator docs until validated                               |
+| `M8` Orchestrator    | broader relay scope, launch/session routing change, or more visible automation behavior                  | prefer the lowest-exposure control path, keep routing scope visible to the operator, and cross-link any unresolved `M5`-`M7` validation dependency | block or defer behavior that silently widens packet, movement, or hook exposure                    |
 
 ### Required anti-cheat metadata
 
-When a new `M7` task, issue, or doc slice is created, include:
+When a new `M5` task, issue, or doc slice is created, include:
 
 - touched exposure categories
 - confidence per claim

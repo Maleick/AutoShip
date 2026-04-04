@@ -69,7 +69,7 @@ Repository rules that matter for documentation:
 
 ### Roadmap and validation notes
 
-- The canonical active roadmap now resumes at `M5` Packet Engine and places provider-backed Soul/LLM work at `M10`.
+- The canonical active roadmap now resumes at `M5` Anti-Cheat (active) and places locally-hosted Soul/LLM work at `M11`.
 - The current code keeps the queue/provider abstraction for Soul behavior, but routine live provider use is not yet the claimed default operating mode.
 - Some live-client behavior still needs regular Windows validation after EQ patches, especially login selectors, offsets, and nav/combat edge cases.
 - Old research docs may still say "Frostreaver"; treat the current product name as DMFT and prefer code plus current top-level docs if anything conflicts.

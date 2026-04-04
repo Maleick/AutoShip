@@ -6,6 +6,8 @@
 
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
+/// SQLite-backed database for Ghidra binary analysis data.
+pub mod ghidra_db;
 /// IPC command and response enums for orchestrator-to-DLL communication.
 pub mod ipc;
 /// Login automation shared types (credentials, server selection, login phases).

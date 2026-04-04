@@ -841,8 +841,13 @@ mod tests {
         let cmd = Command::StickTo { config };
         let encoded = encode(&cmd).expect("encode StickTo");
         let (decoded, _): (Command, _) = decode(&encoded).expect("decode StickTo");
-        if let Command::StickTo { config: decoded_config } = decoded {
-            assert!(matches!(decoded_config.distance, StickDistance::Absolute(d) if (d - 20.0).abs() < f32::EPSILON));
+        if let Command::StickTo {
+            config: decoded_config,
+        } = decoded
+        {
+            assert!(
+                matches!(decoded_config.distance, StickDistance::Absolute(d) if (d - 20.0).abs() < f32::EPSILON)
+            );
             assert!((decoded_config.distance_mod - 3.5).abs() < f32::EPSILON);
             assert!(decoded_config.hold);
             assert!(!decoded_config.always);
@@ -888,7 +893,12 @@ mod tests {
         let encoded = encode(&resp).expect("encode");
         let (decoded, _): (Response, usize) = decode(&encoded).expect("decode");
         if let Response::NavUpdate {
-            status: NavStatus::Sticking { target_id, distance, in_range },
+            status:
+                NavStatus::Sticking {
+                    target_id,
+                    distance,
+                    in_range,
+                },
         } = decoded
         {
             assert_eq!(target_id, 99);

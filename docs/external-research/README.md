@@ -5,8 +5,8 @@ This directory holds curated external research that can feed milestone slices, v
 Use these files in order:
 
 1. `automation-source-ledger.md`
-2. `packet-engine-send-receive-pipeline.md`
-3. `packet-zoning-send-path-and-state-ledger.md`
+2. `packet-zoning-send-path-and-state-ledger.md`
+3. `packet-engine-send-receive-pipeline.md`
 4. `ability-packet-coverage-and-targetability-validation.md`
 5. `kissassist-gap-and-tui-translation.md`
 6. `jmb-session-and-relay-comparison.md`

@@ -257,8 +257,7 @@ pub fn click_yesno_no(dialog_wnd: usize) -> bool {
         } else {
             // Fallback: try finding by WindowText
             unsafe {
-                if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "No")
-                {
+                if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "No") {
                     crate::eq::widgets::click_button_via_vtable(btn);
                     return true;
                 }
