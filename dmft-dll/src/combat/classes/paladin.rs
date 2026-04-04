@@ -247,6 +247,7 @@ mod tests {
             ],
             holyshit_rules: vec![],
             disciplines: vec![],
+            target_scan: dmft_common::combat::TargetScanConfig::default(),
         }
     }
 
