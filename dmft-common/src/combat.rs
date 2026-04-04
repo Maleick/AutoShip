@@ -160,6 +160,63 @@ pub struct DisciplineEntry {
     pub min_endurance_pct: f32,
 }
 
+/// Preference for which mob type to prioritize during target scanning.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum NamedPreference {
+    /// Prioritize named mobs over trash.
+    NamedFirst,
+    /// Prioritize trash mobs (e.g., to clear a camp before engaging named).
+    TrashFirst,
+    /// No preference — pick by distance/HP.
+    #[default]
+    NoPreference,
+}
+
+/// Preference for how to sort candidate targets by HP.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum HpPreference {
+    /// Target the lowest HP mob (finish off wounded targets).
+    #[default]
+    LowestHp,
+    /// Target the highest HP mob (fresh targets).
+    HighestHp,
+    /// No HP preference — use distance.
+    Nearest,
+}
+
+/// Configuration for the MA (Main Assist) target scan system.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TargetScanConfig {
+    /// Maximum distance to scan for targets (2D).
+    pub scan_radius: f32,
+    /// Maximum Z-axis distance to consider (vertical filter).
+    pub scan_z_radius: f32,
+    /// Named mob priority preference.
+    pub named_preference: NamedPreference,
+    /// HP-based target sorting preference.
+    pub hp_preference: HpPreference,
+    /// HP % threshold — only assist when MA target is below this HP.
+    pub assist_hp_threshold: f32,
+    /// Skip mezzed mobs (stand_state animation check).
+    pub skip_mezzed: bool,
+    /// Skip mobs whose target is not in our group (safe targeting).
+    pub safe_targeting: bool,
+}
+
+impl Default for TargetScanConfig {
+    fn default() -> Self {
+        Self {
+            scan_radius: 200.0,
+            scan_z_radius: 50.0,
+            named_preference: NamedPreference::default(),
+            hp_preference: HpPreference::default(),
+            assist_hp_threshold: 98.0,
+            skip_mezzed: true,
+            safe_targeting: true,
+        }
+    }
+}
+
 /// Per-character combat configuration (role, spells, rules).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CombatConfig {
@@ -179,6 +236,9 @@ pub struct CombatConfig {
     pub mana_floor: f32,
     /// Minimum mob count to trigger AoE spells.
     pub aoe_threshold: u8,
+    /// MA target scan settings for smart target selection.
+    #[serde(default)]
+    pub target_scan: TargetScanConfig,
 }
 
 impl Default for CombatConfig {
@@ -192,6 +252,7 @@ impl Default for CombatConfig {
             holyshit_rules: Vec::new(),
             mana_floor: 20.0,
             aoe_threshold: 3,
+            target_scan: TargetScanConfig::default(),
         }
     }
 }
@@ -600,6 +661,7 @@ mod tests {
             }],
             mana_floor: 15.0,
             aoe_threshold: 5,
+            target_scan: TargetScanConfig::default(),
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let restored: CombatConfig = serde_json::from_str(&json).expect("deserialize");
