@@ -82,12 +82,9 @@ mod tests {
 
     #[test]
     fn target_hashes_are_unique() {
-        for i in 0..TARGET_HASHES.len() {
-            for j in (i + 1)..TARGET_HASHES.len() {
-                assert_ne!(
-                    TARGET_HASHES[i], TARGET_HASHES[j],
-                    "Duplicate target hash detected"
-                );
+        for (i, &hash_i) in TARGET_HASHES.iter().enumerate() {
+            for &hash_j in &TARGET_HASHES[i + 1..] {
+                assert_ne!(hash_i, hash_j, "Duplicate target hash detected");
             }
         }
     }

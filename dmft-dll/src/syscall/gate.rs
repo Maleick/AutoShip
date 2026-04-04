@@ -31,16 +31,18 @@ pub unsafe fn nt_allocate_virtual_memory(
         .get(hash::NT_ALLOCATE_VIRTUAL_MEMORY)
         .expect("NtAllocateVirtualMemory not in syscall table");
 
-    indirect_syscall_6(
-        entry.ssn,
-        entry.gadget,
-        process_handle as usize,
-        base_address as usize,
-        zero_bits,
-        region_size as usize,
-        allocation_type as usize,
-        protect as usize,
-    )
+    unsafe {
+        indirect_syscall_6(
+            entry.ssn,
+            entry.gadget,
+            process_handle as usize,
+            base_address as usize,
+            zero_bits,
+            region_size as usize,
+            allocation_type as usize,
+            protect as usize,
+        )
+    }
 }
 
 /// Invoke NtProtectVirtualMemory via indirect syscall.
@@ -60,15 +62,17 @@ pub unsafe fn nt_protect_virtual_memory(
         .get(hash::NT_PROTECT_VIRTUAL_MEMORY)
         .expect("NtProtectVirtualMemory not in syscall table");
 
-    indirect_syscall_5(
-        entry.ssn,
-        entry.gadget,
-        process_handle as usize,
-        base_address as usize,
-        region_size as usize,
-        new_protect as usize,
-        old_protect as usize,
-    )
+    unsafe {
+        indirect_syscall_5(
+            entry.ssn,
+            entry.gadget,
+            process_handle as usize,
+            base_address as usize,
+            region_size as usize,
+            new_protect as usize,
+            old_protect as usize,
+        )
+    }
 }
 
 /// Invoke NtSetContextThread via indirect syscall.
@@ -85,12 +89,14 @@ pub unsafe fn nt_set_context_thread(
         .get(hash::NT_SET_CONTEXT_THREAD)
         .expect("NtSetContextThread not in syscall table");
 
-    indirect_syscall_2(
-        entry.ssn,
-        entry.gadget,
-        thread_handle as usize,
-        context as usize,
-    )
+    unsafe {
+        indirect_syscall_2(
+            entry.ssn,
+            entry.gadget,
+            thread_handle as usize,
+            context as usize,
+        )
+    }
 }
 
 /// Invoke NtGetContextThread via indirect syscall.
@@ -107,12 +113,14 @@ pub unsafe fn nt_get_context_thread(
         .get(hash::NT_GET_CONTEXT_THREAD)
         .expect("NtGetContextThread not in syscall table");
 
-    indirect_syscall_2(
-        entry.ssn,
-        entry.gadget,
-        thread_handle as usize,
-        context as usize,
-    )
+    unsafe {
+        indirect_syscall_2(
+            entry.ssn,
+            entry.gadget,
+            thread_handle as usize,
+            context as usize,
+        )
+    }
 }
 
 // ── Inline assembly stubs ───────────────────────────────────────────────
@@ -130,19 +138,21 @@ pub unsafe fn nt_get_context_thread(
 #[inline(never)]
 unsafe fn indirect_syscall_2(ssn: u16, gadget: usize, arg1: usize, arg2: usize) -> i32 {
     let result: i32;
-    std::arch::asm!(
-        "mov r10, rcx",
-        "mov eax, {ssn:e}",
-        "jmp {gadget}",
-        ssn = in(reg) ssn as u64,
-        gadget = in(reg) gadget,
-        in("rcx") arg1,
-        in("rdx") arg2,
-        lateout("rax") result,
-        out("r10") _,
-        out("r11") _,
-        options(nostack),
-    );
+    unsafe {
+        std::arch::asm!(
+            "mov r10, rcx",
+            "mov eax, {ssn:e}",
+            "jmp {gadget}",
+            ssn = in(reg) ssn as u64,
+            gadget = in(reg) gadget,
+            in("rcx") arg1,
+            in("rdx") arg2,
+            lateout("rax") result,
+            out("r10") _,
+            out("r11") _,
+            options(nostack),
+        );
+    }
     result
 }
 
@@ -159,31 +169,34 @@ unsafe fn indirect_syscall_5(
     arg5: usize,
 ) -> i32 {
     let result: i32;
-    std::arch::asm!(
-        "sub rsp, 0x38",
-        "mov [rsp+0x28], {a5}",
-        "mov r10, rcx",
-        "mov eax, {ssn:e}",
-        "call {gadget}",
-        "add rsp, 0x38",
-        ssn = in(reg) ssn as u64,
-        gadget = in(reg) gadget,
-        a5 = in(reg) arg5,
-        in("rcx") arg1,
-        in("rdx") arg2,
-        in("r8") arg3,
-        in("r9") arg4,
-        lateout("rax") result,
-        out("r10") _,
-        out("r11") _,
-        options(nostack),
-    );
+    unsafe {
+        std::arch::asm!(
+            "sub rsp, 0x38",
+            "mov [rsp+0x28], {a5}",
+            "mov r10, rcx",
+            "mov eax, {ssn:e}",
+            "call {gadget}",
+            "add rsp, 0x38",
+            ssn = in(reg) ssn as u64,
+            gadget = in(reg) gadget,
+            a5 = in(reg) arg5,
+            in("rcx") arg1,
+            in("rdx") arg2,
+            in("r8") arg3,
+            in("r9") arg4,
+            lateout("rax") result,
+            out("r10") _,
+            out("r11") _,
+            options(nostack),
+        );
+    }
     result
 }
 
 /// 6-argument indirect syscall (e.g., NtAllocateVirtualMemory).
 #[cfg(windows)]
 #[inline(never)]
+#[allow(clippy::too_many_arguments)]
 unsafe fn indirect_syscall_6(
     ssn: u16,
     gadget: usize,
@@ -195,27 +208,29 @@ unsafe fn indirect_syscall_6(
     arg6: usize,
 ) -> i32 {
     let result: i32;
-    std::arch::asm!(
-        "sub rsp, 0x40",
-        "mov [rsp+0x28], {a5}",
-        "mov [rsp+0x30], {a6}",
-        "mov r10, rcx",
-        "mov eax, {ssn:e}",
-        "call {gadget}",
-        "add rsp, 0x40",
-        ssn = in(reg) ssn as u64,
-        gadget = in(reg) gadget,
-        a5 = in(reg) arg5,
-        a6 = in(reg) arg6,
-        in("rcx") arg1,
-        in("rdx") arg2,
-        in("r8") arg3,
-        in("r9") arg4,
-        lateout("rax") result,
-        out("r10") _,
-        out("r11") _,
-        options(nostack),
-    );
+    unsafe {
+        std::arch::asm!(
+            "sub rsp, 0x40",
+            "mov [rsp+0x28], {a5}",
+            "mov [rsp+0x30], {a6}",
+            "mov r10, rcx",
+            "mov eax, {ssn:e}",
+            "call {gadget}",
+            "add rsp, 0x40",
+            ssn = in(reg) ssn as u64,
+            gadget = in(reg) gadget,
+            a5 = in(reg) arg5,
+            a6 = in(reg) arg6,
+            in("rcx") arg1,
+            in("rdx") arg2,
+            in("r8") arg3,
+            in("r9") arg4,
+            lateout("rax") result,
+            out("r10") _,
+            out("r11") _,
+            options(nostack),
+        );
+    }
     result
 }
 
@@ -266,7 +281,10 @@ pub unsafe fn nt_get_context_thread(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        SyscallTable, nt_allocate_virtual_memory, nt_get_context_thread, nt_protect_virtual_memory,
+        nt_set_context_thread,
+    };
 
     #[cfg(not(windows))]
     #[test]
