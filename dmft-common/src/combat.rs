@@ -196,6 +196,218 @@ impl Default for CombatConfig {
     }
 }
 
+/// Whether a character is ready to cast a spell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CastReadiness {
+    /// Ready to cast — no cooldowns or active casts.
+    Ready,
+    /// Currently casting a spell.
+    Casting,
+    /// Waiting for the global cooldown to expire.
+    GlobalCooldown,
+    /// Post-cast recovery window.
+    Recovering,
+    /// Spell is not memorized in any gem slot.
+    NotMemorized,
+}
+
+impl std::fmt::Display for CastReadiness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ready => write!(f, "Ready"),
+            Self::Casting => write!(f, "Casting"),
+            Self::GlobalCooldown => write!(f, "GCD"),
+            Self::Recovering => write!(f, "Recovering"),
+            Self::NotMemorized => write!(f, "Not Memorized"),
+        }
+    }
+}
+
+/// Outcome of a cast attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CastResult {
+    /// Spell landed successfully.
+    Success,
+    /// Cast was interrupted (took damage, moved, etc.).
+    Interrupted,
+    /// Spell fizzled (failed skill check).
+    Fizzled,
+    /// Target was out of range.
+    OutOfRange,
+    /// Not enough mana to cast.
+    OutOfMana,
+    /// Target is immune to this spell.
+    Immune,
+    /// Target resisted the spell.
+    Resisted,
+    /// Caster was not ready (GCD, already casting, etc.).
+    NotReady,
+}
+
+impl std::fmt::Display for CastResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Success => write!(f, "Success"),
+            Self::Interrupted => write!(f, "Interrupted"),
+            Self::Fizzled => write!(f, "Fizzled"),
+            Self::OutOfRange => write!(f, "Out of Range"),
+            Self::OutOfMana => write!(f, "Out of Mana"),
+            Self::Immune => write!(f, "Immune"),
+            Self::Resisted => write!(f, "Resisted"),
+            Self::NotReady => write!(f, "Not Ready"),
+        }
+    }
+}
+
+/// Telemetry snapshot for a single cast attempt.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CastTelemetry {
+    /// Outcome of the cast.
+    pub result: CastResult,
+    /// Wall-clock duration of the cast in milliseconds.
+    pub cast_duration_ms: u64,
+    /// EQ spell ID that was cast.
+    pub spell_id: i32,
+    /// Spawn ID of the cast target (0 = self/none).
+    pub target_id: u32,
+    /// Unix timestamp (milliseconds) when the cast completed.
+    pub timestamp_ms: u64,
+}
+
+impl std::fmt::Display for CastTelemetry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "spell={} target={} result={} duration={}ms",
+            self.spell_id, self.target_id, self.result, self.cast_duration_ms
+        )
+    }
+}
+
+/// Priority level for buff maintenance — determines rebuff urgency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum BuffPriority {
+    /// Must never drop — e.g., cleric Aegolism, enchanter haste.
+    Critical,
+    /// Important but brief gaps are tolerable — e.g., stat buffs.
+    High,
+    /// Standard maintenance buffs — e.g., Symbol, skin line.
+    Normal,
+    /// Nice-to-have — e.g., see invis, levitate.
+    Low,
+}
+
+/// Tracks a single active buff's timing for proactive rebuffing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuffTimer {
+    /// EQ spell ID of the buff.
+    pub spell_id: i32,
+    /// Human-readable spell name for logging/config.
+    pub spell_name: String,
+    /// Spawn ID of the character who cast the buff.
+    pub caster_id: u32,
+    /// Spawn ID of the buff recipient.
+    pub target_id: u32,
+    /// Game tick when the buff was applied.
+    pub applied_at: u64,
+    /// Buff duration in game ticks.
+    pub duration_ticks: u64,
+    /// Rebuff priority — higher priority buffs are refreshed first.
+    pub priority: BuffPriority,
+}
+
+impl BuffTimer {
+    /// Returns the game tick when this buff expires.
+    pub fn expires_at(&self) -> u64 {
+        self.applied_at.saturating_add(self.duration_ticks)
+    }
+
+    /// Returns the remaining ticks before expiry, or 0 if already expired.
+    pub fn time_remaining(&self, current_tick: u64) -> u64 {
+        self.expires_at().saturating_sub(current_tick)
+    }
+
+    /// Returns true if the buff has expired at the given tick.
+    pub fn is_expired(&self, current_tick: u64) -> bool {
+        current_tick >= self.expires_at()
+    }
+
+    /// Returns true if the buff will expire within `threshold_ticks` from now.
+    pub fn is_expiring_soon(&self, current_tick: u64, threshold_ticks: u64) -> bool {
+        self.time_remaining(current_tick) <= threshold_ticks
+    }
+}
+
+/// Collection of active buff timers with expiry management.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BuffTimerSet {
+    /// Active buff timers.
+    pub timers: Vec<BuffTimer>,
+}
+
+impl BuffTimerSet {
+    /// Creates an empty buff timer set.
+    pub fn new() -> Self {
+        Self { timers: Vec::new() }
+    }
+
+    /// Adds a buff timer. If a buff with the same spell_id and target_id
+    /// already exists, it is replaced (rebuff resets the timer).
+    pub fn add_buff(&mut self, timer: BuffTimer) {
+        self.timers
+            .retain(|t| !(t.spell_id == timer.spell_id && t.target_id == timer.target_id));
+        self.timers.push(timer);
+    }
+
+    /// Removes all buff timers matching the given spell_id and target_id.
+    pub fn remove_buff(&mut self, spell_id: i32, target_id: u32) {
+        self.timers
+            .retain(|t| !(t.spell_id == spell_id && t.target_id == target_id));
+    }
+
+    /// Returns all buffs that have expired at the given tick.
+    pub fn get_expired(&self, current_tick: u64) -> Vec<&BuffTimer> {
+        self.timers
+            .iter()
+            .filter(|t| t.is_expired(current_tick))
+            .collect()
+    }
+
+    /// Returns buffs expiring within `threshold_ticks`, sorted by priority
+    /// (Critical first) then by time remaining (soonest first).
+    pub fn get_expiring_soon(&self, current_tick: u64, threshold_ticks: u64) -> Vec<&BuffTimer> {
+        let mut expiring: Vec<&BuffTimer> = self
+            .timers
+            .iter()
+            .filter(|t| {
+                !t.is_expired(current_tick) && t.is_expiring_soon(current_tick, threshold_ticks)
+            })
+            .collect();
+        expiring.sort_by(|a, b| {
+            a.priority.cmp(&b.priority).then_with(|| {
+                a.time_remaining(current_tick)
+                    .cmp(&b.time_remaining(current_tick))
+            })
+        });
+        expiring
+    }
+
+    /// Removes all expired buffs and returns how many were purged.
+    pub fn purge_expired(&mut self, current_tick: u64) -> usize {
+        let before = self.timers.len();
+        self.timers.retain(|t| !t.is_expired(current_tick));
+        before - self.timers.len()
+    }
+
+    /// Returns the number of active (non-expired) buffs at the given tick.
+    pub fn active_count(&self, current_tick: u64) -> usize {
+        self.timers
+            .iter()
+            .filter(|t| !t.is_expired(current_tick))
+            .count()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,5 +630,329 @@ mod tests {
             let restored: CombatStatus = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(*status, restored);
         }
+    }
+
+    #[test]
+    fn cast_readiness_all_variants_constructible() {
+        let variants = [
+            CastReadiness::Ready,
+            CastReadiness::Casting,
+            CastReadiness::GlobalCooldown,
+            CastReadiness::Recovering,
+            CastReadiness::NotMemorized,
+        ];
+        assert_eq!(variants.len(), 5);
+    }
+
+    #[test]
+    fn cast_readiness_display() {
+        assert_eq!(CastReadiness::Ready.to_string(), "Ready");
+        assert_eq!(CastReadiness::Casting.to_string(), "Casting");
+        assert_eq!(CastReadiness::GlobalCooldown.to_string(), "GCD");
+        assert_eq!(CastReadiness::Recovering.to_string(), "Recovering");
+        assert_eq!(CastReadiness::NotMemorized.to_string(), "Not Memorized");
+    }
+
+    #[test]
+    fn cast_readiness_serialization_roundtrip() {
+        let variants = [
+            CastReadiness::Ready,
+            CastReadiness::Casting,
+            CastReadiness::GlobalCooldown,
+            CastReadiness::Recovering,
+            CastReadiness::NotMemorized,
+        ];
+        for variant in &variants {
+            let json = serde_json::to_string(variant).expect("serialize");
+            let restored: CastReadiness = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(*variant, restored);
+        }
+    }
+
+    #[test]
+    fn cast_result_all_variants_constructible() {
+        let variants = [
+            CastResult::Success,
+            CastResult::Interrupted,
+            CastResult::Fizzled,
+            CastResult::OutOfRange,
+            CastResult::OutOfMana,
+            CastResult::Immune,
+            CastResult::Resisted,
+            CastResult::NotReady,
+        ];
+        assert_eq!(variants.len(), 8);
+    }
+
+    #[test]
+    fn cast_result_display() {
+        assert_eq!(CastResult::Success.to_string(), "Success");
+        assert_eq!(CastResult::Interrupted.to_string(), "Interrupted");
+        assert_eq!(CastResult::Fizzled.to_string(), "Fizzled");
+        assert_eq!(CastResult::OutOfRange.to_string(), "Out of Range");
+        assert_eq!(CastResult::OutOfMana.to_string(), "Out of Mana");
+        assert_eq!(CastResult::Immune.to_string(), "Immune");
+        assert_eq!(CastResult::Resisted.to_string(), "Resisted");
+        assert_eq!(CastResult::NotReady.to_string(), "Not Ready");
+    }
+
+    #[test]
+    fn cast_result_serialization_roundtrip() {
+        let variants = [
+            CastResult::Success,
+            CastResult::Interrupted,
+            CastResult::Fizzled,
+            CastResult::OutOfRange,
+            CastResult::OutOfMana,
+            CastResult::Immune,
+            CastResult::Resisted,
+            CastResult::NotReady,
+        ];
+        for variant in &variants {
+            let json = serde_json::to_string(variant).expect("serialize");
+            let restored: CastResult = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(*variant, restored);
+        }
+    }
+
+    #[test]
+    fn cast_telemetry_construction_and_display() {
+        let telemetry = CastTelemetry {
+            result: CastResult::Success,
+            cast_duration_ms: 2500,
+            spell_id: 12345,
+            target_id: 42,
+            timestamp_ms: 1700000000000,
+        };
+        assert_eq!(telemetry.result, CastResult::Success);
+        assert_eq!(telemetry.cast_duration_ms, 2500);
+        assert_eq!(telemetry.spell_id, 12345);
+        assert_eq!(telemetry.target_id, 42);
+        let display = telemetry.to_string();
+        assert!(display.contains("spell=12345"));
+        assert!(display.contains("target=42"));
+        assert!(display.contains("result=Success"));
+        assert!(display.contains("duration=2500ms"));
+    }
+
+    #[test]
+    fn cast_telemetry_serialization_roundtrip() {
+        let telemetry = CastTelemetry {
+            result: CastResult::Interrupted,
+            cast_duration_ms: 1200,
+            spell_id: 9999,
+            target_id: 100,
+            timestamp_ms: 1700000001000,
+        };
+        let json = serde_json::to_string(&telemetry).expect("serialize");
+        let restored: CastTelemetry = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(telemetry, restored);
+    }
+
+    #[test]
+    fn cast_readiness_equality_and_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CastReadiness::Ready);
+        set.insert(CastReadiness::Ready);
+        set.insert(CastReadiness::Casting);
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn cast_result_equality_and_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CastResult::Success);
+        set.insert(CastResult::Success);
+        set.insert(CastResult::Fizzled);
+        assert_eq!(set.len(), 2);
+    }
+
+    // ── Buff timer tests ──────────────────────────────────────────────
+
+    fn make_timer(
+        spell_id: i32,
+        target_id: u32,
+        applied_at: u64,
+        duration: u64,
+        priority: BuffPriority,
+    ) -> BuffTimer {
+        BuffTimer {
+            spell_id,
+            spell_name: format!("Spell{spell_id}"),
+            caster_id: 1,
+            target_id,
+            applied_at,
+            duration_ticks: duration,
+            priority,
+        }
+    }
+
+    #[test]
+    fn buff_timer_expires_at() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert_eq!(t.expires_at(), 1500);
+    }
+
+    #[test]
+    fn buff_timer_time_remaining() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert_eq!(t.time_remaining(1200), 300);
+        assert_eq!(t.time_remaining(1500), 0);
+        assert_eq!(t.time_remaining(1600), 0);
+    }
+
+    #[test]
+    fn buff_timer_is_expired() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert!(!t.is_expired(1499));
+        assert!(t.is_expired(1500));
+        assert!(t.is_expired(2000));
+    }
+
+    #[test]
+    fn buff_timer_expiring_soon() {
+        let t = make_timer(100, 1, 1000, 500, BuffPriority::Normal);
+        assert!(t.is_expiring_soon(1300, 300));
+        assert!(!t.is_expiring_soon(1100, 300));
+        assert!(t.is_expiring_soon(1600, 300));
+    }
+
+    #[test]
+    fn buff_timer_saturating_math() {
+        let t = make_timer(100, 1, u64::MAX - 10, 20, BuffPriority::Normal);
+        assert_eq!(t.expires_at(), u64::MAX);
+    }
+
+    #[test]
+    fn buff_timer_set_add_and_count() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        assert_eq!(set.active_count(0), 2);
+    }
+
+    #[test]
+    fn buff_timer_set_add_replaces_duplicate() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(100, 1, 400, 500, BuffPriority::Normal));
+        assert_eq!(set.timers.len(), 1);
+        assert_eq!(set.timers[0].applied_at, 400);
+    }
+
+    #[test]
+    fn buff_timer_set_add_same_spell_different_targets() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(100, 2, 0, 500, BuffPriority::Normal));
+        assert_eq!(set.timers.len(), 2);
+    }
+
+    #[test]
+    fn buff_timer_set_remove() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        set.remove_buff(100, 1);
+        assert_eq!(set.timers.len(), 1);
+        assert_eq!(set.timers[0].spell_id, 200);
+    }
+
+    #[test]
+    fn buff_timer_set_remove_nonexistent_is_noop() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.remove_buff(999, 1);
+        assert_eq!(set.timers.len(), 1);
+    }
+
+    #[test]
+    fn buff_timer_set_get_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        let expired = set.get_expired(600);
+        assert_eq!(expired.len(), 1);
+        assert_eq!(expired[0].spell_id, 100);
+    }
+
+    #[test]
+    fn buff_timer_set_expiring_soon_sorted() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Low));
+        set.add_buff(make_timer(200, 1, 0, 1200, BuffPriority::Critical));
+        set.add_buff(make_timer(300, 1, 0, 900, BuffPriority::Normal));
+        let expiring = set.get_expiring_soon(700, 600);
+        assert_eq!(expiring.len(), 3);
+        assert_eq!(expiring[0].priority, BuffPriority::Critical);
+        assert_eq!(expiring[1].priority, BuffPriority::Normal);
+        assert_eq!(expiring[2].priority, BuffPriority::Low);
+    }
+
+    #[test]
+    fn buff_timer_set_expiring_soon_excludes_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        let expiring = set.get_expiring_soon(600, 500);
+        assert_eq!(expiring.len(), 1);
+        assert_eq!(expiring[0].spell_id, 200);
+    }
+
+    #[test]
+    fn buff_timer_set_purge_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        set.add_buff(make_timer(300, 1, 0, 300, BuffPriority::Low));
+        let purged = set.purge_expired(600);
+        assert_eq!(purged, 2);
+        assert_eq!(set.timers.len(), 1);
+        assert_eq!(set.timers[0].spell_id, 200);
+    }
+
+    #[test]
+    fn buff_timer_set_active_count_excludes_expired() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 500, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 1, 0, 1000, BuffPriority::High));
+        assert_eq!(set.active_count(600), 1);
+    }
+
+    #[test]
+    fn buff_priority_ordering() {
+        assert!(BuffPriority::Critical < BuffPriority::High);
+        assert!(BuffPriority::High < BuffPriority::Normal);
+        assert!(BuffPriority::Normal < BuffPriority::Low);
+    }
+
+    #[test]
+    fn buff_timer_serialization_roundtrip() {
+        let timer = make_timer(100, 42, 5000, 18000, BuffPriority::Critical);
+        let json = serde_json::to_string(&timer).expect("serialize");
+        let restored: BuffTimer = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.spell_id, 100);
+        assert_eq!(restored.target_id, 42);
+        assert_eq!(restored.applied_at, 5000);
+        assert_eq!(restored.duration_ticks, 18000);
+        assert!(matches!(restored.priority, BuffPriority::Critical));
+    }
+
+    #[test]
+    fn buff_timer_set_serialization_roundtrip() {
+        let mut set = BuffTimerSet::new();
+        set.add_buff(make_timer(100, 1, 0, 1000, BuffPriority::Normal));
+        set.add_buff(make_timer(200, 2, 100, 2000, BuffPriority::Critical));
+        let json = serde_json::to_string(&set).expect("serialize");
+        let restored: BuffTimerSet = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.timers.len(), 2);
+    }
+
+    #[test]
+    fn buff_timer_set_default_is_empty() {
+        let set = BuffTimerSet::default();
+        assert!(set.timers.is_empty());
     }
 }

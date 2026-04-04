@@ -448,6 +448,22 @@
       "related_bugs": [],
       "occurrences": 3,
       "last_seen": "2026-04-03T23:06:24.138Z"
+    },
+    {
+      "id": "bug-029",
+      "timestamp": "2026-04-03T23:19:14.313Z",
+      "error_message": "Significant refactor of ",
+      "file": "dmft-common/src/offset_db.rs",
+      "root_cause": "3 lines replaced/restructured",
+      "fix": "Rewrote 5→14 lines (3 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "rs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-03T23:19:14.313Z"
     }
   ]
 }

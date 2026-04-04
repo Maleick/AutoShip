@@ -580,6 +580,22 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
             max_width,
         );
     }
+    if app.automation_paused {
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::raw(" "),
+                Span::styled(
+                    " \u{23f8} PAUSED ",
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ],
+            max_width,
+        );
+    }
     if app.privacy_mode {
         let _ = push_segment_if_fits(
             &mut spans,

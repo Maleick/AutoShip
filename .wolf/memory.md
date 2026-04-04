@@ -634,3 +634,52 @@
 
 | Time | Action | File(s) | Outcome | ~Tokens |
 |------|--------|---------|---------|--------|
+| 18:11 | Edited dmft-common/src/offsets.rs | modified pub() | ~289 |
+| 18:11 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:11 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:11 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:11 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:11 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:12 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:12 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:12 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:12 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:12 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:15 | Session end: 1 writes across 1 files (offsets.rs) | 1 reads | ~11188 tok |
+| 18:16 | Session end: 1 writes across 1 files (offsets.rs) | 3 reads | ~11188 tok |
+
+## Session: 2026-04-03 18:18
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-03 18:18
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-03 18:18
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 18:18 | Edited dmft-common/src/offset_db.rs | modified addresses() | ~56 |
+| 18:18 | Session end: 1 writes across 1 files (offset_db.rs) | 3 reads | ~11205 tok |
+| 18:19 | Edited dmft-common/src/offset_db.rs | modified get_player_zone_offset() | ~108 |
+| 18:19 | Edited dmft-common/src/offset_db.rs | expanded (+9 lines) | ~300 |
+| 18:19 | Edited dmft-common/src/offset_db.rs | expanded (+43 lines) | ~793 |
+| 18:19 | Session end: 4 writes across 1 files (offset_db.rs) | 4 reads | ~15835 tok |
+| 18:19 | Session end: 4 writes across 1 files (offset_db.rs) | 4 reads | ~15835 tok |
+| 18:19 | Edited dmft-common/src/offset_db.rs | modified addresses() | ~36 |
+| 18:19 | Session end: 5 writes across 1 files (offset_db.rs) | 4 reads | ~16849 tok |
+| 18:19 | Session end: 5 writes across 1 files (offset_db.rs) | 5 reads | ~16849 tok |
+| 18:19 | Session end: 5 writes across 1 files (offset_db.rs) | 5 reads | ~16849 tok |
+| 18:19 | Edited dmft-common/src/offset_db.rs | modified field_offset_lookups() | ~80 |
+| 18:20 | Session end: 6 writes across 1 files (offset_db.rs) | 5 reads | ~16935 tok |
+| 18:20 | Edited dmft-common/src/offset_db.rs | modified from_compiled_offsets_has_all_expected_functions() | ~627 |
+| 18:20 | Session end: 7 writes across 1 files (offset_db.rs) | 5 reads | ~17607 tok |
+| 18:20 | Session end: 7 writes across 1 files (offset_db.rs) | 5 reads | ~17607 tok |
+| 18:21 | Session end: 7 writes across 1 files (offset_db.rs) | 5 reads | ~17607 tok |
+| 18:21 | Session end: 7 writes across 1 files (offset_db.rs) | 5 reads | ~17607 tok |
+| 18:22 | Session end: 7 writes across 1 files (offset_db.rs) | 5 reads | ~17607 tok |
+| 18:22 | Session end: 7 writes across 1 files (offset_db.rs) | 5 reads | ~17607 tok |
+| 18:22 | Session end: 7 writes across 1 files (offset_db.rs) | 5 reads | ~17607 tok |
