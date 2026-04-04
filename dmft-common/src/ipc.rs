@@ -159,6 +159,10 @@ pub enum Command {
         /// Camp position and facing direction.
         spot: crate::nav::CampSpot,
     },
+    /// Set a full camp config with scatter positioning.
+    SetCampConfig {
+        config: crate::nav::NavCampConfig,
+    },
     /// Stop navigating, stay where you are.
     StopNavigation,
     /// Start MQ2MoveUtils-style `/makecamp player` follow mode.

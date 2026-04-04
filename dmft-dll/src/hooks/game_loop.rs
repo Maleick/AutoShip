@@ -1322,6 +1322,9 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         Command::SetCamp { spot } => {
             crate::nav::handle_command(crate::nav::NavCommand::SetCamp(spot));
         }
+        Command::SetCampConfig { config } => {
+            crate::nav::handle_command(crate::nav::NavCommand::SetCampConfig(config));
+        }
         Command::StopNavigation => {
             crate::nav::handle_command(crate::nav::NavCommand::Stop);
         }
