@@ -162,6 +162,10 @@ impl Combatant {
                 in_combat: false,
                 ch_chain_slot: None,
             };
+            // If we were mid-cast, notify the strategy this was an interrupt (not completion)
+            if let CombatState::Casting { spell_slot, .. } = &self.state {
+                self.strategy.on_cast_interrupted(&cleanup_ctx, *spell_slot);
+            }
             self.strategy.on_action_complete(&cleanup_ctx);
             crate::eq::toggle_auto_attack(false);
             // Clear DoT tracking — target is gone (zone/despawn/disconnect).
@@ -205,7 +209,8 @@ impl Combatant {
             // If HolyShit fires while we're mid-cast, notify the strategy that
             // the current cast was interrupted so class-specific state gets cleaned
             // up (e.g., bard melody index, cleric rez_pending).
-            if matches!(self.state, CombatState::Casting { .. }) {
+            if let CombatState::Casting { spell_slot, .. } = &self.state {
+                self.strategy.on_cast_interrupted(&ctx, *spell_slot);
                 self.strategy.on_action_complete(&ctx);
             }
 
