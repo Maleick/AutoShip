@@ -944,6 +944,11 @@ mod tests {
             hold: true,
             always: false,
             id: Some(42),
+            mode: crate::nav::StickMode::Behind,
+            behind_arc: 45.0,
+            not_front_arc: 90.0,
+            moveback: true,
+            backup_dist: 5.0,
         };
         let cmd = Command::StickTo { config };
         let encoded = encode(&cmd).expect("encode StickTo");

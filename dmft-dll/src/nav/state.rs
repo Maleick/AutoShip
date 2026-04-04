@@ -354,6 +354,7 @@ impl Navigator {
             StickTickResult::TargetLost => {
                 // `always` mode: stay armed, stop movement.
                 self.controller.stop_forward();
+                self.controller.stop_back();
                 // Keep cached values from last known contact.
                 if !self.stick.is_active() {
                     self.state = State::Idle;
@@ -366,6 +367,7 @@ impl Navigator {
                 self.cached_stick_target_id = target_id;
                 self.cached_stick_distance = distance;
                 self.controller.stop_forward();
+                self.controller.stop_back();
             }
             StickTickResult::OutOfRange {
                 target_id,
@@ -374,12 +376,31 @@ impl Navigator {
             } => {
                 self.cached_stick_target_id = target_id;
                 self.cached_stick_distance = distance;
+                // Ensure backward key is released before moving forward.
+                self.controller.stop_back();
                 // Face and move toward the desired stick position.
                 let heading = movement::calc_heading(&player_pos, &desired_pos);
                 let wobbled = self.personality.wobble_heading(heading);
                 self.controller.write_heading(wobbled);
                 self.controller.write_speed_heading(wobbled);
                 self.controller.press_forward();
+            }
+            StickTickResult::TooClose {
+                target_id,
+                distance,
+                retreat_pos,
+            } => {
+                self.cached_stick_target_id = target_id;
+                self.cached_stick_distance = distance;
+                // Face the retreat point and walk backward (away from target).
+                // We set heading toward the retreat pos so the character faces
+                // away from the mob, then press backward to move in that direction.
+                self.controller.stop_forward();
+                let heading = movement::calc_heading(&player_pos, &retreat_pos);
+                let wobbled = self.personality.wobble_heading(heading);
+                self.controller.write_heading(wobbled);
+                self.controller.write_speed_heading(wobbled);
+                self.controller.press_back();
             }
         }
     }

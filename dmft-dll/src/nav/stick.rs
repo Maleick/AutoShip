@@ -11,8 +11,9 @@
 //! | `/stick hold`      | Lock onto the target that was active when stick was started |
 //! | `/stick always`    | Keep the engine active; auto-resume on the next valid NPC  |
 //! | `/stick id #`      | Stick to a specific spawn ID regardless of current target  |
+//! | `/stick moveback`  | Back up when target walks closer than stick distance       |
 
-use dmft_common::nav::{NavStatus, StickConfig, StickDistance, Waypoint};
+use dmft_common::nav::{NavStatus, StickConfig, StickDistance, StickMode, Waypoint};
 use dmft_common::types::SpawnData;
 
 /// Default stick distance in EQ units when no explicit distance is configured.
@@ -40,6 +41,15 @@ pub enum StickTickResult {
         target_id: u32,
         distance: f32,
         desired_pos: Waypoint,
+    },
+    /// Too close to target — back up away from `target_pos`.
+    /// Only returned when `moveback` is enabled and current distance drops
+    /// below `effective_distance - backup_dist`.
+    TooClose {
+        target_id: u32,
+        distance: f32,
+        /// The position to retreat toward (away from target, at stick distance).
+        retreat_pos: Waypoint,
     },
 }
 
@@ -141,14 +151,43 @@ impl StickEngine {
         let distance = player_pos.distance_2d(&target_pos);
         let effective_dist = self.effective_distance();
 
-        if distance <= effective_dist + STICK_ARRIVAL_THRESHOLD {
+        // Compute arc-aware desired position.
+        let desired_pos = arc_position(
+            player_pos,
+            &target_pos,
+            target.heading,
+            effective_dist,
+            self.config.mode,
+            self.config.behind_arc,
+            self.config.not_front_arc,
+        );
+
+        let distance_to_desired = player_pos.distance_2d(&desired_pos);
+
+        // Moveback check: if target walked into the player, back up.
+        // Triggers when distance to target is below (effective_dist - backup_dist).
+        if self.config.moveback && distance < (effective_dist - self.config.backup_dist).max(MIN_STICK_DISTANCE) {
+            // Retreat position: a point at `effective_dist` from the target,
+            // in the direction away from the target (toward the player).
+            let retreat_pos = lerp_toward(player_pos, &target_pos, distance, effective_dist);
+            return StickTickResult::TooClose {
+                target_id: target.spawn_id,
+                distance,
+                retreat_pos,
+            };
+        }
+
+        // In-range check: distance to the desired stick point is within threshold,
+        // AND we're within effective stick distance of the target (with tolerance).
+        if distance_to_desired <= STICK_ARRIVAL_THRESHOLD
+            || (self.config.mode == StickMode::Any
+                && distance <= effective_dist + STICK_ARRIVAL_THRESHOLD)
+        {
             StickTickResult::InRange {
                 target_id: target.spawn_id,
                 distance,
             }
         } else {
-            // Compute desired position: `effective_dist` units from target toward player.
-            let desired_pos = lerp_toward(player_pos, &target_pos, distance, effective_dist);
             StickTickResult::OutOfRange {
                 target_id: target.spawn_id,
                 distance,
@@ -224,6 +263,130 @@ fn lerp_toward(
         target.y + dy * desired_dist,
         target.z,
     )
+}
+
+// ─── Arc positioning ────────────────────────────────────────────────────────
+
+/// Convert EQ heading (512-unit circle: 0=N, 128=W, 256=S, 384=E) to radians.
+/// Returns a standard math angle (0=East, CCW positive).
+fn eq_heading_to_rad(heading: f32) -> f32 {
+    // EQ: 0=N(+Y), 128=W(-X), 256=S(-Y), 384=E(+X)
+    // Math: 0=E(+X), pi/2=N(+Y), pi=W(-X), 3pi/2=S(-Y)
+    // Conversion: math_angle = pi/2 - heading * 2pi/512
+    std::f32::consts::FRAC_PI_2 - heading * std::f32::consts::TAU / 512.0
+}
+
+/// Normalize an angle to [-pi, pi].
+fn normalize_angle(mut a: f32) -> f32 {
+    while a > std::f32::consts::PI {
+        a -= std::f32::consts::TAU;
+    }
+    while a < -std::f32::consts::PI {
+        a += std::f32::consts::TAU;
+    }
+    a
+}
+
+/// Compute the angle from `target` toward `player` in standard math radians.
+fn angle_from_target(player: &Waypoint, target: &Waypoint) -> f32 {
+    (player.y - target.y).atan2(player.x - target.x)
+}
+
+/// Compute a position at `dist` units from `target` at a given angle (radians).
+fn position_at_angle(target: &Waypoint, angle: f32, dist: f32) -> Waypoint {
+    Waypoint::new(
+        target.x + angle.cos() * dist,
+        target.y + angle.sin() * dist,
+        target.z,
+    )
+}
+
+/// Compute the desired stick position with arc mode awareness.
+///
+/// For `StickMode::Any`, this is equivalent to `lerp_toward` (approach from current direction).
+/// For arc modes, the character is steered into the target arc defined by the target's heading.
+fn arc_position(
+    player: &Waypoint,
+    target: &Waypoint,
+    target_heading: f32,
+    desired_dist: f32,
+    mode: StickMode,
+    behind_arc_deg: f32,
+    not_front_arc_deg: f32,
+) -> Waypoint {
+    if mode == StickMode::Any {
+        let current_dist = player.distance_2d(target);
+        return lerp_toward(player, target, current_dist, desired_dist);
+    }
+
+    // Target's facing direction in standard radians.
+    let face_rad = eq_heading_to_rad(target_heading);
+    // Angle from target toward player.
+    let player_angle = angle_from_target(player, target);
+    // Behind direction is opposite of facing.
+    let behind_rad = normalize_angle(face_rad + std::f32::consts::PI);
+
+    let desired_angle = match mode {
+        StickMode::Any => unreachable!(),
+
+        StickMode::Behind => {
+            // Clamp player's angle to within half-arc of the behind direction.
+            let half_arc = (behind_arc_deg.clamp(5.1, 259.9) / 2.0).to_radians();
+            clamp_to_arc(player_angle, behind_rad, half_arc)
+        }
+
+        StickMode::NotFront => {
+            // Exclude the frontal cone. If player is in the front arc, steer to nearest edge.
+            let half_front = (not_front_arc_deg.clamp(5.1, 259.9) / 2.0).to_radians();
+            let diff = normalize_angle(player_angle - face_rad);
+            if diff.abs() < half_front {
+                // Player is in the forbidden frontal arc — snap to nearest edge.
+                if diff >= 0.0 {
+                    normalize_angle(face_rad + half_front)
+                } else {
+                    normalize_angle(face_rad - half_front)
+                }
+            } else {
+                // Already outside frontal arc — keep current angle.
+                player_angle
+            }
+        }
+
+        StickMode::Pin => {
+            // Pick the closer flank (left or right, 90 degrees from facing).
+            let left_flank = normalize_angle(face_rad + std::f32::consts::FRAC_PI_2);
+            let right_flank = normalize_angle(face_rad - std::f32::consts::FRAC_PI_2);
+            let diff_left = normalize_angle(player_angle - left_flank).abs();
+            let diff_right = normalize_angle(player_angle - right_flank).abs();
+            if diff_left <= diff_right {
+                left_flank
+            } else {
+                right_flank
+            }
+        }
+
+        StickMode::Front => {
+            // Clamp player's angle to within half-arc of the facing direction.
+            // Use behind_arc as the arc width for symmetry with Behind mode.
+            let half_arc = (behind_arc_deg.clamp(5.1, 259.9) / 2.0).to_radians();
+            clamp_to_arc(player_angle, face_rad, half_arc)
+        }
+    };
+
+    position_at_angle(target, desired_angle, desired_dist)
+}
+
+/// Clamp `angle` to be within `half_arc` radians of `center`.
+/// Returns the clamped angle.
+fn clamp_to_arc(angle: f32, center: f32, half_arc: f32) -> f32 {
+    let diff = normalize_angle(angle - center);
+    if diff.abs() <= half_arc {
+        angle // already in arc
+    } else if diff > 0.0 {
+        normalize_angle(center + half_arc)
+    } else {
+        normalize_angle(center - half_arc)
+    }
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -476,5 +639,282 @@ mod tests {
         // Should be at x=90 (10 units from target toward player)
         assert!((result.x - 90.0).abs() < 0.1);
         assert!(result.y.abs() < 0.1);
+    }
+
+    // ── moveback ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn moveback_disabled_returns_in_range_when_close() {
+        let mut engine = StickEngine::new();
+        let mut config = StickConfig::default();
+        config.distance = StickDistance::Absolute(15.0);
+        config.moveback = false; // moveback disabled
+        engine.start(config, None);
+        // Player at (0,0), target at (5,0) → distance 5 (much closer than 15)
+        let player = player_at(0.0, 0.0);
+        let target = make_spawn(1, 5.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::InRange { .. } => {} // expected
+            other => panic!("expected InRange with moveback disabled, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn moveback_enabled_returns_too_close() {
+        let mut engine = StickEngine::new();
+        let mut config = StickConfig::default();
+        config.distance = StickDistance::Absolute(15.0);
+        config.moveback = true;
+        config.backup_dist = 5.0;
+        engine.start(config, None);
+        // Player at (0,0), target at (5,0) → distance 5
+        // Moveback threshold = 15.0 - 5.0 = 10.0, and 5 < 10 → TooClose
+        let player = player_at(0.0, 0.0);
+        let target = make_spawn(1, 5.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::TooClose {
+                target_id,
+                distance,
+                retreat_pos,
+            } => {
+                assert_eq!(target_id, 1);
+                assert!((distance - 5.0).abs() < 0.1);
+                // Retreat pos should be 15 units from target toward player (x-axis).
+                // Target at x=5, player at x=0 → direction is -x.
+                // retreat = target + (-1) * 15 = 5 - 15 = -10
+                assert!((retreat_pos.x - (-10.0)).abs() < 0.2);
+            }
+            other => panic!("expected TooClose, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn moveback_does_not_trigger_when_within_acceptable_range() {
+        let mut engine = StickEngine::new();
+        let mut config = StickConfig::default();
+        config.distance = StickDistance::Absolute(15.0);
+        config.moveback = true;
+        config.backup_dist = 5.0;
+        engine.start(config, None);
+        // Player at (0,0), target at (12,0) → distance 12
+        // Moveback threshold = 15.0 - 5.0 = 10.0, and 12 > 10 → NOT TooClose
+        let player = player_at(0.0, 0.0);
+        let target = make_spawn(1, 12.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::TooClose { .. } => {
+                panic!("should not trigger moveback when above threshold")
+            }
+            _ => {} // InRange or OutOfRange both acceptable
+        }
+    }
+
+    #[test]
+    fn moveback_threshold_clamped_to_min_stick_distance() {
+        let mut engine = StickEngine::new();
+        let mut config = StickConfig::default();
+        config.distance = StickDistance::Absolute(5.0);
+        config.moveback = true;
+        config.backup_dist = 10.0; // larger than stick distance
+        engine.start(config, None);
+        // Threshold would be 5.0 - 10.0 = -5.0, clamped to MIN_STICK_DISTANCE (3.0).
+        // Player at (0,0), target at (2,0) → distance 2 < 3.0 → TooClose
+        let player = player_at(0.0, 0.0);
+        let target = make_spawn(1, 2.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::TooClose { .. } => {} // expected
+            other => panic!("expected TooClose when below clamped threshold, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn moveback_threshold_clamped_does_not_trigger_above_min() {
+        let mut engine = StickEngine::new();
+        let mut config = StickConfig::default();
+        config.distance = StickDistance::Absolute(5.0);
+        config.moveback = true;
+        config.backup_dist = 10.0; // larger than stick distance
+        engine.start(config, None);
+        // Threshold clamped to MIN_STICK_DISTANCE (3.0).
+        // Player at (0,0), target at (4,0) → distance 4 > 3.0 → NOT TooClose
+        let player = player_at(0.0, 0.0);
+        let target = make_spawn(1, 4.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::TooClose { .. } => {
+                panic!("should not trigger when above clamped threshold")
+            }
+            _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod arc_tests {
+    use super::*;
+    use dmft_common::nav::{StickConfig, StickDistance, StickMode};
+
+    fn spawn_at(id: u32, x: f32, y: f32, heading: f32) -> SpawnData {
+        let mut s = SpawnData::default();
+        s.spawn_id = id;
+        s.x = x;
+        s.y = y;
+        s.heading = heading;
+        s
+    }
+
+    #[test]
+    fn eq_heading_north_to_rad() {
+        let rad = eq_heading_to_rad(0.0);
+        assert!((rad - std::f32::consts::FRAC_PI_2).abs() < 0.01);
+    }
+
+    #[test]
+    fn eq_heading_south_to_rad() {
+        let rad = eq_heading_to_rad(256.0);
+        assert!((rad - (-std::f32::consts::FRAC_PI_2)).abs() < 0.01);
+    }
+
+    #[test]
+    fn normalize_angle_wraps() {
+        assert!(normalize_angle(4.0).abs() <= std::f32::consts::PI);
+        assert!(normalize_angle(-4.0).abs() <= std::f32::consts::PI);
+        assert!((normalize_angle(1.0) - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn clamp_to_arc_inside_unchanged() {
+        assert!((clamp_to_arc(0.1, 0.0, 0.5) - 0.1).abs() < 0.001);
+    }
+
+    #[test]
+    fn clamp_to_arc_outside_snaps() {
+        assert!((clamp_to_arc(1.0, 0.0, 0.3) - 0.3).abs() < 0.01);
+        assert!((clamp_to_arc(-1.0, 0.0, 0.3) - (-0.3)).abs() < 0.01);
+    }
+
+    #[test]
+    fn arc_any_same_as_lerp() {
+        let p = Waypoint::new(0.0, 0.0, 0.0);
+        let t = Waypoint::new(50.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Any, 45.0, 90.0);
+        assert!((r.x - 40.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn arc_behind_north_facing() {
+        let p = Waypoint::new(0.0, -20.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Behind, 45.0, 90.0);
+        assert!(r.y < -5.0, "Expected south, got y={}", r.y);
+        assert!((t.distance_2d(&r) - 10.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn arc_behind_redirects_from_front() {
+        let p = Waypoint::new(0.0, 20.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Behind, 45.0, 90.0);
+        assert!(r.y < 0.0, "Expected redirect behind, got y={}", r.y);
+    }
+
+    #[test]
+    fn arc_not_front_allows_side() {
+        let p = Waypoint::new(20.0, 0.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::NotFront, 45.0, 90.0);
+        assert!(r.x > 5.0, "Should stay east, got x={}", r.x);
+    }
+
+    #[test]
+    fn arc_not_front_redirects_from_front() {
+        let p = Waypoint::new(0.0, 20.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::NotFront, 45.0, 90.0);
+        let angle = angle_from_target(&r, &t);
+        let diff = normalize_angle(angle - eq_heading_to_rad(0.0)).abs();
+        assert!(diff >= (45.0_f32).to_radians() - 0.1, "Should be outside front arc");
+    }
+
+    #[test]
+    fn arc_pin_picks_closer_flank() {
+        let p = Waypoint::new(20.0, 0.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Pin, 45.0, 90.0);
+        assert!(r.x.abs() > 5.0, "Should be on flank, x={}", r.x);
+    }
+
+    #[test]
+    fn arc_pin_left_when_closer() {
+        let p = Waypoint::new(-20.0, 0.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Pin, 45.0, 90.0);
+        assert!(r.x < -5.0, "Should be west flank, x={}", r.x);
+    }
+
+    #[test]
+    fn arc_front_places_in_front() {
+        let p = Waypoint::new(0.0, 20.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Front, 45.0, 90.0);
+        assert!(r.y > 5.0, "Expected front (north), got y={}", r.y);
+    }
+
+    #[test]
+    fn arc_front_redirects_from_behind() {
+        let p = Waypoint::new(0.0, -20.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Front, 45.0, 90.0);
+        assert!((t.distance_2d(&r) - 10.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn arc_all_modes_correct_distance() {
+        let p = Waypoint::new(15.0, -15.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        for mode in [StickMode::Behind, StickMode::NotFront, StickMode::Pin, StickMode::Front] {
+            let r = arc_position(&p, &t, 0.0, 12.0, mode, 45.0, 90.0);
+            assert!((t.distance_2d(&r) - 12.0).abs() < 0.5, "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn arc_behind_wide_arc_allows_side() {
+        let p = Waypoint::new(20.0, 0.0, 0.0);
+        let t = Waypoint::new(0.0, 0.0, 0.0);
+        let r = arc_position(&p, &t, 0.0, 10.0, StickMode::Behind, 180.0, 90.0);
+        assert!(r.x > 0.0, "Wide arc should allow east");
+    }
+
+    #[test]
+    fn tick_behind_mode_to_rear() {
+        let mut engine = StickEngine::new();
+        let mut cfg = StickConfig::default();
+        cfg.distance = StickDistance::Absolute(10.0);
+        cfg.mode = StickMode::Behind;
+        engine.start(cfg, None);
+        let player = Waypoint::new(0.0, 30.0, 0.0);
+        let target = spawn_at(1, 0.0, 0.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::OutOfRange { desired_pos, .. } => {
+                assert!(desired_pos.y < 0.0, "Expected behind, y={}", desired_pos.y);
+            }
+            other => panic!("expected OutOfRange, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tick_front_mode_for_tank() {
+        let mut engine = StickEngine::new();
+        let mut cfg = StickConfig::default();
+        cfg.distance = StickDistance::Absolute(10.0);
+        cfg.mode = StickMode::Front;
+        engine.start(cfg, None);
+        let player = Waypoint::new(0.0, -30.0, 0.0);
+        let target = spawn_at(1, 0.0, 0.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::OutOfRange { desired_pos, .. } => {
+                assert!(desired_pos.y > 0.0, "Expected front, y={}", desired_pos.y);
+            }
+            other => panic!("expected OutOfRange, got {other:?}"),
+        }
     }
 }
