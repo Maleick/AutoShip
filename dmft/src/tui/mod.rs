@@ -1,5 +1,7 @@
 //! Terminal UI — ratatui-based dashboard with spawn list, player panels, map, navigation.
 
+/// Achievement system — milestones, raid firsts, and progression unlocks.
+pub mod achievements;
 /// Application state — tracks active screen, selections, and all runtime data.
 pub mod app;
 /// Shared cast presentation helpers for TUI surfaces.
@@ -31,6 +33,8 @@ pub mod sprites;
 pub mod state;
 /// Color theme system — multiple themes with per-element color definitions.
 pub mod theme;
+/// Toast notification system — ephemeral messages for achievements, warnings, and status.
+pub mod toast;
 /// UI renderers — per-panel drawing functions for each dashboard section.
 pub mod ui;
 /// Onboarding wizard for first-run setup.
