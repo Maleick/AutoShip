@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Current state of a character in the combat FSM.
@@ -408,6 +410,94 @@ pub enum CombatStateReq {
     Downtime,
     /// Run in any state.
     Any,
+}
+
+// ── Ability Resolution (AbilitySets) ────────────────────────────────────────
+
+/// A single candidate in an ability set — one rank of a spell line.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AbilityCandidate {
+    /// Human-readable spell/disc/AA name (e.g., "Ice Comet").
+    pub name: String,
+    /// Minimum character level required to use this candidate.
+    pub min_level: u8,
+    /// EQ spell ID. -1 means "look up at runtime from the spell book."
+    pub spell_id: i32,
+}
+
+/// An ordered set of candidates for one spell line (e.g., "Nuke", "Heal").
+/// Candidates are ordered strongest-first; the resolver picks the first one
+/// the character knows and meets the level requirement for.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AbilitySet {
+    /// Spell line name (used as the key in rotation entries via ActionType).
+    pub name: String,
+    /// Candidates, ordered strongest → weakest.
+    pub candidates: Vec<AbilityCandidate>,
+}
+
+/// The result of resolving an AbilitySet for a specific character.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ResolvedAbility {
+    /// Which AbilitySet this was resolved from.
+    pub set_name: String,
+    /// The chosen candidate's name.
+    pub ability_name: String,
+    /// The chosen candidate's spell ID.
+    pub spell_id: i32,
+    /// The chosen candidate's minimum level.
+    pub min_level: u8,
+}
+
+/// A spell/disc/AA that the character actually knows (from spell book scan).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KnownAbility {
+    /// Spell name as it appears in the spell book.
+    pub name: String,
+    /// EQ spell ID.
+    pub spell_id: i32,
+    /// Level at which the character learned it.
+    pub level: u8,
+}
+
+/// Resolve each AbilitySet to the best candidate the character knows.
+///
+/// For each set, iterates candidates strongest-first and picks the first one
+/// where: (a) the character's level >= candidate's min_level, and (b) the
+/// candidate appears in the `known` list (matched case-insensitively by name,
+/// or by spell_id if the candidate has a non-negative spell_id).
+pub fn resolve_abilities(
+    sets: &[AbilitySet],
+    known: &[KnownAbility],
+    character_level: u8,
+) -> HashMap<String, ResolvedAbility> {
+    let mut resolved = HashMap::new();
+    for set in sets {
+        for candidate in &set.candidates {
+            if character_level < candidate.min_level {
+                continue;
+            }
+            let is_known = known.iter().any(|k| {
+                if candidate.spell_id >= 0 && k.spell_id == candidate.spell_id {
+                    return true;
+                }
+                k.name.eq_ignore_ascii_case(&candidate.name)
+            });
+            if is_known {
+                resolved.insert(
+                    set.name.clone(),
+                    ResolvedAbility {
+                        set_name: set.name.clone(),
+                        ability_name: candidate.name.clone(),
+                        spell_id: candidate.spell_id,
+                        min_level: candidate.min_level,
+                    },
+                );
+                break;
+            }
+        }
+    }
+    resolved
 }
 
 /// Priority level for buff maintenance — determines rebuff urgency.
@@ -1081,5 +1171,112 @@ mod tests {
     fn buff_timer_set_default_is_empty() {
         let set = BuffTimerSet::default();
         assert!(set.timers.is_empty());
+    }
+
+    // ── AbilitySet / resolve_abilities tests ────────────────────────────
+
+    fn nuke_set() -> AbilitySet {
+        AbilitySet {
+            name: "Nuke".into(),
+            candidates: vec![
+                AbilityCandidate { name: "Ice Comet".into(), min_level: 60, spell_id: 1500 },
+                AbilityCandidate { name: "Frost".into(), min_level: 52, spell_id: 1200 },
+                AbilityCandidate { name: "Chill Sight".into(), min_level: 44, spell_id: 900 },
+            ],
+        }
+    }
+
+    fn known_spells() -> Vec<KnownAbility> {
+        vec![
+            KnownAbility { name: "Ice Comet".into(), spell_id: 1500, level: 60 },
+            KnownAbility { name: "Frost".into(), spell_id: 1200, level: 52 },
+            KnownAbility { name: "Chill Sight".into(), spell_id: 900, level: 44 },
+        ]
+    }
+
+    #[test]
+    fn resolve_picks_highest_known() {
+        let sets = vec![nuke_set()];
+        let result = resolve_abilities(&sets, &known_spells(), 65);
+        let nuke = result.get("Nuke").expect("should resolve Nuke");
+        assert_eq!(nuke.ability_name, "Ice Comet");
+        assert_eq!(nuke.spell_id, 1500);
+    }
+
+    #[test]
+    fn resolve_skips_too_high_level() {
+        let sets = vec![nuke_set()];
+        let result = resolve_abilities(&sets, &known_spells(), 55);
+        let nuke = result.get("Nuke").expect("should resolve Nuke");
+        assert_eq!(nuke.ability_name, "Frost");
+    }
+
+    #[test]
+    fn resolve_empty_when_nothing_known() {
+        let sets = vec![nuke_set()];
+        let result = resolve_abilities(&sets, &[], 65);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn resolve_empty_when_under_all_levels() {
+        let sets = vec![nuke_set()];
+        let result = resolve_abilities(&sets, &known_spells(), 30);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn resolve_multiple_sets() {
+        let heal_set = AbilitySet {
+            name: "Heal".into(),
+            candidates: vec![
+                AbilityCandidate { name: "Complete Heal".into(), min_level: 39, spell_id: 13 },
+            ],
+        };
+        let known = vec![
+            KnownAbility { name: "Ice Comet".into(), spell_id: 1500, level: 60 },
+            KnownAbility { name: "Complete Heal".into(), spell_id: 13, level: 39 },
+        ];
+        let result = resolve_abilities(&[nuke_set(), heal_set], &known, 65);
+        assert_eq!(result.len(), 2);
+        assert!(result.contains_key("Nuke"));
+        assert!(result.contains_key("Heal"));
+    }
+
+    #[test]
+    fn resolve_case_insensitive_name_match() {
+        let sets = vec![nuke_set()];
+        let known = vec![KnownAbility {
+            name: "ice comet".into(),
+            spell_id: -1,
+            level: 60,
+        }];
+        let result = resolve_abilities(&sets, &known, 65);
+        assert!(result.contains_key("Nuke"));
+    }
+
+    #[test]
+    fn resolve_matches_by_spell_id() {
+        let sets = vec![nuke_set()];
+        let known = vec![KnownAbility {
+            name: "Renamed Spell".into(),
+            spell_id: 1500,
+            level: 60,
+        }];
+        let result = resolve_abilities(&sets, &known, 65);
+        let nuke = result.get("Nuke").expect("should match by spell_id");
+        assert_eq!(nuke.ability_name, "Ice Comet");
+    }
+
+    #[test]
+    fn resolve_first_known_candidate_wins() {
+        let sets = vec![nuke_set()];
+        let known = vec![
+            KnownAbility { name: "Frost".into(), spell_id: 1200, level: 52 },
+            KnownAbility { name: "Chill Sight".into(), spell_id: 900, level: 44 },
+        ];
+        let result = resolve_abilities(&sets, &known, 55);
+        let nuke = result.get("Nuke").expect("should resolve Nuke");
+        assert_eq!(nuke.ability_name, "Frost");
     }
 }

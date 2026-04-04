@@ -1,5 +1,6 @@
 use dmft_common::combat::{
-    CombatConfig, CombatRole, HpPreference, NamedPreference, SpellEntry, TargetScanConfig,
+    AbilitySet, CombatConfig, CombatRole, HpPreference, NamedPreference, SpellEntry,
+    TargetScanConfig,
 };
 use dmft_common::types::SpawnData;
 
@@ -105,6 +106,15 @@ pub trait ClassStrategy: Send {
     /// backward compatibility with existing class strategies.
     fn rotation_groups(&self) -> Option<Vec<RotationGroup>> {
         None
+    }
+
+    /// Return ability sets for spell auto-resolution.
+    ///
+    /// Each set maps a spell line name to an ordered list of candidates,
+    /// strongest first. The combat FSM resolves these at startup using the
+    /// character's known spells and level.
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Vec::new()
     }
 }
 

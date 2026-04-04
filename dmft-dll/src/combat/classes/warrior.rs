@@ -1,5 +1,6 @@
 use dmft_common::combat::{
-    ActionType, CombatRole, CombatStateReq, ConditionExpr, SpellEntry, TargetSelector,
+    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    SpellEntry, TargetSelector,
 };
 
 use crate::combat::rotation::{self, RotationGroup};
@@ -21,6 +22,63 @@ pub struct WarriorStrategy {
 impl WarriorStrategy {
     pub fn new(class_id: u8) -> Self {
         Self { class_id }
+    }
+
+    /// Build warrior ability sets — maps disc/ability line names to
+    /// level-tiered candidates, strongest first.
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![
+            AbilitySet {
+                name: "Deflection".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Deflection Discipline".into(), min_level: 62, spell_id: 4694 },
+                    AbilityCandidate { name: "Evasive Discipline".into(), min_level: 52, spell_id: 4670 },
+                ],
+            },
+            AbilitySet {
+                name: "LeechCurse".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Leechbane Discipline".into(), min_level: 63, spell_id: 4695 },
+                ],
+            },
+            AbilitySet {
+                name: "Carapace".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Stonewall Discipline".into(), min_level: 65, spell_id: 8001 },
+                    AbilityCandidate { name: "Defensive Discipline".into(), min_level: 55, spell_id: 4685 },
+                ],
+            },
+            AbilitySet {
+                name: "Mantle".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Furious Discipline".into(), min_level: 56, spell_id: 4674 },
+                ],
+            },
+            AbilitySet {
+                name: "MeleeMit".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Precision Discipline".into(), min_level: 57, spell_id: 4676 },
+                ],
+            },
+            AbilitySet {
+                name: "Blade".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Mighty Strike Discipline".into(), min_level: 54, spell_id: 4672 },
+                ],
+            },
+            AbilitySet {
+                name: "CombatEndRegen".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Second Wind Discipline".into(), min_level: 57, spell_id: 4675 },
+                ],
+            },
+            AbilitySet {
+                name: "EndRegen".into(),
+                candidates: vec![
+                    AbilityCandidate { name: "Breather".into(), min_level: 1, spell_id: -1 },
+                ],
+            },
+        ]
     }
 
     /// Build the warrior's rotation groups.
@@ -150,6 +208,10 @@ impl ClassStrategy for WarriorStrategy {
 
     fn rotation_groups(&self) -> Option<Vec<RotationGroup>> {
         Some(Self::build_rotations())
+    }
+
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Self::build_ability_sets()
     }
 }
 
@@ -457,5 +519,62 @@ mod tests {
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx);
         assert!(action.is_some(), "Should produce an action during combat");
         assert_eq!(action.unwrap().entry_name, "Taunt");
+    }
+
+    // --- AbilitySet tests ---
+
+    #[test]
+    fn warrior_has_ability_sets() {
+        let w = WarriorStrategy::new(1);
+        let sets = w.ability_sets();
+        assert!(!sets.is_empty(), "Warrior should define ability sets");
+        let names: Vec<&str> = sets.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"Deflection"));
+        assert!(names.contains(&"Carapace"));
+        assert!(names.contains(&"Blade"));
+    }
+
+    #[test]
+    fn warrior_ability_resolution_at_65() {
+        let w = WarriorStrategy::new(1);
+        let sets = w.ability_sets();
+        let known: Vec<dmft_common::combat::KnownAbility> = sets
+            .iter()
+            .flat_map(|s| &s.candidates)
+            .map(|c| dmft_common::combat::KnownAbility {
+                name: c.name.clone(),
+                spell_id: c.spell_id,
+                level: c.min_level,
+            })
+            .collect();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &known, 65);
+        let deflection = resolved.get("Deflection").expect("should resolve Deflection");
+        assert_eq!(deflection.ability_name, "Deflection Discipline");
+        let carapace = resolved.get("Carapace").expect("should resolve Carapace");
+        assert_eq!(carapace.ability_name, "Stonewall Discipline");
+    }
+
+    #[test]
+    fn warrior_ability_resolution_at_55() {
+        let w = WarriorStrategy::new(1);
+        let sets = w.ability_sets();
+        let known: Vec<dmft_common::combat::KnownAbility> = sets
+            .iter()
+            .flat_map(|s| &s.candidates)
+            .map(|c| dmft_common::combat::KnownAbility {
+                name: c.name.clone(),
+                spell_id: c.spell_id,
+                level: c.min_level,
+            })
+            .collect();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &known, 55);
+        // At level 55, Deflection (62) is too high — should pick Evasive (52)
+        let deflection = resolved.get("Deflection").expect("should resolve Deflection");
+        assert_eq!(deflection.ability_name, "Evasive Discipline");
+        // Carapace: Stonewall (65) too high, picks Defensive (55)
+        let carapace = resolved.get("Carapace").expect("should resolve Carapace");
+        assert_eq!(carapace.ability_name, "Defensive Discipline");
+        // Blade: Mighty Strike (54) should resolve
+        assert!(resolved.contains_key("Blade"));
     }
 }

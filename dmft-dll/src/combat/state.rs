@@ -4,7 +4,11 @@
 //! through the Idle → Engaging → Casting → `OnGcd` → Engaging loop, with
 //! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
 
-use dmft_common::combat::{CombatConfig, CombatRole, CombatStatus, HolyShitAction};
+use std::collections::HashMap;
+
+use dmft_common::combat::{
+    CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
+};
 use dmft_common::nav::Waypoint;
 use dmft_common::types::SpawnData;
 
@@ -83,6 +87,9 @@ pub struct Combatant {
     /// Data-driven rotation groups from the class strategy.
     /// When `Some`, the rotation engine is used instead of `select_spell()`.
     rotation_groups: Option<Vec<RotationGroup>>,
+    /// Resolved ability sets — maps spell line names to the best available
+    /// spell for this character's level.
+    resolved_abilities: HashMap<String, ResolvedAbility>,
     tick_count: u32,
     client_id: u32,
     config: CombatConfig,
@@ -129,9 +136,41 @@ impl Combatant {
             ability_cooldowns: AbilityCooldownTracker::new(),
             dot_tracker: DotTracker::new(),
             rotation_groups,
+            resolved_abilities: HashMap::new(),
             tick_count: 0,
             client_id,
             config,
+        }
+    }
+
+    /// Resolve ability sets for this character's known spells and level.
+    ///
+    /// Called by the orchestrator when the spell book scan completes (post-login
+    /// or on level-up).
+    pub fn resolve_abilities(
+        &mut self,
+        known: &[dmft_common::combat::KnownAbility],
+        character_level: u8,
+    ) {
+        let sets = self.strategy.ability_sets();
+        if sets.is_empty() {
+            return;
+        }
+        self.resolved_abilities =
+            dmft_common::combat::resolve_abilities(&sets, known, character_level);
+        tracing::info!(
+            resolved = self.resolved_abilities.len(),
+            total_sets = sets.len(),
+            level = character_level,
+            "Ability sets resolved"
+        );
+        for (name, resolved) in &self.resolved_abilities {
+            tracing::debug!(
+                set = %name,
+                ability = %resolved.ability_name,
+                spell_id = resolved.spell_id,
+                "Resolved ability"
+            );
         }
     }
 
@@ -355,14 +394,25 @@ impl Combatant {
                 // rotation engine instead of the legacy `select_spell()` path.
                 if let Some(ref mut groups) = self.rotation_groups {
                     if let Some(action) = rotation::execute_rotations(groups, &ctx) {
+                        // Resolve the action's spell line name to a concrete spell ID
+                        // via the pre-resolved ability map. If no resolution exists,
+                        // the action name is treated as a literal and spell_id=0.
+                        let (spell_id, resolved_name) =
+                            if let Some(resolved) = self.resolved_abilities.get(&action.entry_name)
+                            {
+                                (resolved.spell_id, resolved.ability_name.as_str())
+                            } else {
+                                (0, action.entry_name.as_str())
+                            };
+
                         tracing::debug!(
                             entry = %action.entry_name,
+                            resolved = %resolved_name,
+                            spell_id,
                             target = action.target_id,
                             "Rotation engine selected action"
                         );
-                        // For now, rotation actions map to spell-slot 0 (use whatever
-                        // is memorized). Full ability resolution comes in issue #454.
-                        crate::eq::cast_spell(0, 0);
+                        crate::eq::cast_spell(0, spell_id);
                         let cast_delay = u32::from(self.personality.next_cast_delay());
                         self.gcd.consume();
                         self.state = CombatState::Casting {
