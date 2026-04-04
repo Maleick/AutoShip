@@ -6,5 +6,7 @@ pub mod camp_loop;
 pub mod ch_chain;
 /// Combat coordinator — manages assist targets and broadcasts commands.
 pub mod coordinator;
+/// Structured combat event tracking — DPS meters, kill counts, damage aggregation.
+pub mod events;
 /// Spell database — spell IDs, casting times, resist types, levels.
 pub mod spell_db;
