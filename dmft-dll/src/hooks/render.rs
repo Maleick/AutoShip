@@ -84,6 +84,7 @@ mod inner {
     }
 }
 
+#[allow(unused_imports)]
 pub use inner::{install, remove};
 
 /// Determine whether to render this frame.

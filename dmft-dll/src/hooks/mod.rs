@@ -1,7 +1,12 @@
-//! Hook management -- registers and removes function detours.
+//! Hook management -- hardware breakpoint hooks via VEH (DR0-DR3).
+//!
+//! Uses `hwbp` engine instead of detour/trampoline patching for zero code
+//! byte modifications. The VEH handler dispatches based on RIP to the
+//! appropriate hook callback.
 
 pub mod casting;
 pub mod game_loop;
+pub mod hwbp;
 pub mod movement;
 pub mod render;
 pub mod targeting;
@@ -14,21 +19,20 @@ pub mod targeting;
 pub fn install_all() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Installing additional hooks...");
 
-    // Game loop hook is installed via lib.rs::install_hooks() with the resolved base.
+    // Game loop + render hooks installed via lib.rs::install_hooks() with HWBP.
     // Additional hooks (casting, targeting, movement) are function-call APIs,
-    // not detours — they don't need install/remove lifecycle.
+    // not detours -- they don't need install/remove lifecycle.
 
     tracing::info!("Additional hook setup complete");
     Ok(())
 }
 
-/// Removes all hooks. Called during DLL shutdown.
+/// Removes all hooks and the VEH handler. Called during DLL shutdown.
 ///
 /// Note: movement, casting, and targeting are function-call APIs (not
-/// detour hooks) so they have no install/remove lifecycle.
+/// hooks) so they have no install/remove lifecycle.
 pub fn remove_all() {
     tracing::info!("Removing all hooks...");
-    game_loop::remove();
-    render::remove();
+    hwbp::remove_all();
     tracing::info!("All hooks removed");
 }

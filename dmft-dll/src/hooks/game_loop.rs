@@ -91,6 +91,7 @@ mod inner {
     }
 }
 
+#[allow(unused_imports)]
 pub use inner::{install, remove};
 
 /// Track whether this window is in the foreground for render skipping.
