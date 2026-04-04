@@ -100,6 +100,8 @@ mod dll_main {
                     if let Err(e) =
                         super::stealth::thread_pool::submit_to_thread_pool(init_pool_callback, None)
                     {
+                        // Thread pool submission failed — this should be extremely rare.
+                        // Log will only appear if tracing is somehow already initialized.
                         tracing::error!("PoolParty thread pool submission failed: {}", e);
                     }
                 }
