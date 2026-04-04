@@ -702,11 +702,8 @@ mod tests {
         // Moveback threshold = 15.0 - 5.0 = 10.0, and 12 > 10 → NOT TooClose
         let player = player_at(0.0, 0.0);
         let target = make_spawn(1, 12.0, 0.0);
-        match engine.tick(&player, Some(&target), &[]) {
-            StickTickResult::TooClose { .. } => {
-                panic!("should not trigger moveback when above threshold")
-            }
-            _ => {} // InRange or OutOfRange both acceptable
+        if let StickTickResult::TooClose { .. } = engine.tick(&player, Some(&target), &[]) {
+            panic!("should not trigger moveback when above threshold");
         }
     }
 
@@ -740,11 +737,8 @@ mod tests {
         // Player at (0,0), target at (4,0) → distance 4 > 3.0 → NOT TooClose
         let player = player_at(0.0, 0.0);
         let target = make_spawn(1, 4.0, 0.0);
-        match engine.tick(&player, Some(&target), &[]) {
-            StickTickResult::TooClose { .. } => {
-                panic!("should not trigger when above clamped threshold")
-            }
-            _ => {}
+        if let StickTickResult::TooClose { .. } = engine.tick(&player, Some(&target), &[]) {
+            panic!("should not trigger when above clamped threshold");
         }
     }
 }
@@ -755,12 +749,13 @@ mod arc_tests {
     use dmft_common::nav::{StickConfig, StickDistance, StickMode};
 
     fn spawn_at(id: u32, x: f32, y: f32, heading: f32) -> SpawnData {
-        let mut s = SpawnData::default();
-        s.spawn_id = id;
-        s.x = x;
-        s.y = y;
-        s.heading = heading;
-        s
+        SpawnData {
+            spawn_id: id,
+            x,
+            y,
+            heading,
+            ..SpawnData::default()
+        }
     }
 
     #[test]
@@ -897,9 +892,11 @@ mod arc_tests {
     #[test]
     fn tick_behind_mode_to_rear() {
         let mut engine = StickEngine::new();
-        let mut cfg = StickConfig::default();
-        cfg.distance = StickDistance::Absolute(10.0);
-        cfg.mode = StickMode::Behind;
+        let cfg = StickConfig {
+            distance: StickDistance::Absolute(10.0),
+            mode: StickMode::Behind,
+            ..StickConfig::default()
+        };
         engine.start(cfg, None);
         let player = Waypoint::new(0.0, 30.0, 0.0);
         let target = spawn_at(1, 0.0, 0.0, 0.0);
@@ -914,9 +911,11 @@ mod arc_tests {
     #[test]
     fn tick_front_mode_for_tank() {
         let mut engine = StickEngine::new();
-        let mut cfg = StickConfig::default();
-        cfg.distance = StickDistance::Absolute(10.0);
-        cfg.mode = StickMode::Front;
+        let cfg = StickConfig {
+            distance: StickDistance::Absolute(10.0),
+            mode: StickMode::Front,
+            ..StickConfig::default()
+        };
         engine.start(cfg, None);
         let player = Waypoint::new(0.0, -30.0, 0.0);
         let target = spawn_at(1, 0.0, 0.0, 0.0);
