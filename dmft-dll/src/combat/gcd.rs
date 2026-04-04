@@ -18,20 +18,24 @@ impl GcdTracker {
         Self::new(30)
     }
 
+    #[inline]
     pub fn is_ready(&self) -> bool {
         self.remaining_ticks == 0
     }
 
+    #[inline]
     pub fn consume(&mut self) {
         self.remaining_ticks = self.global_gcd_ticks;
     }
 
+    #[inline]
     pub fn tick(&mut self) {
         if self.remaining_ticks > 0 {
             self.remaining_ticks -= 1;
         }
     }
 
+    #[inline]
     pub fn remaining(&self) -> u32 {
         self.remaining_ticks
     }

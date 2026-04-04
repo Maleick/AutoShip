@@ -36,6 +36,7 @@ impl DotTracker {
     /// Check if a `DoT` is still active on a target.
     ///
     /// Always returns `false` for non-positive `spell_id` values.
+    #[inline]
     pub fn is_dot_active(&self, target_id: u32, spell_id: i32, current_tick: u32) -> bool {
         if spell_id <= 0 {
             return false;
