@@ -260,8 +260,7 @@ impl CharacterCache {
         }
         let data = std::fs::read_to_string(path)
             .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
-        serde_json::from_str(&data)
-            .map_err(|e| format!("failed to parse {}: {e}", path.display()))
+        serde_json::from_str(&data).map_err(|e| format!("failed to parse {}: {e}", path.display()))
     }
 
     /// Save the cache to a JSON file, creating parent directories if needed.
@@ -272,8 +271,117 @@ impl CharacterCache {
         }
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("failed to serialize cache: {e}"))?;
-        std::fs::write(path, json)
-            .map_err(|e| format!("failed to write {}: {e}", path.display()))
+        std::fs::write(path, json).map_err(|e| format!("failed to write {}: {e}", path.display()))
+    }
+}
+
+/// Maps human-readable EQ server display names to internal JoinServer IDs
+/// and vice versa.
+///
+/// The resolver ships with a built-in table of known live and TLP servers.
+/// Config-based overrides can be added at runtime via [`Self::add`].
+/// All lookups are case-insensitive.
+#[derive(Debug, Clone)]
+pub struct ServerNameResolver {
+    /// display name (lowercase) -> internal ID
+    display_to_internal: HashMap<String, String>,
+    /// internal ID (lowercase) -> display name (canonical casing)
+    internal_to_display: HashMap<String, String>,
+}
+
+impl ServerNameResolver {
+    /// Creates a resolver pre-populated with known EQ servers.
+    #[must_use]
+    pub fn new() -> Self {
+        let mut resolver = Self {
+            display_to_internal: HashMap::new(),
+            internal_to_display: HashMap::new(),
+        };
+
+        let servers: &[(&str, &str)] = &[
+            // --- Active TLP servers ---
+            ("Teek", "teek"),
+            ("Oakwynd", "oakwynd"),
+            ("Mischief", "mischief"),
+            ("Thornblade", "thornblade"),
+            ("Aradune", "aradune"),
+            ("Mangler", "mangler"),
+            ("Selo", "selo"),
+            ("Coirnav", "coirnav"),
+            ("Agnarr", "agnarr"),
+            ("Phinigel", "phinigel"),
+            ("Ragefire", "ragefire"),
+            ("Lockjaw", "lockjaw"),
+            ("Yelinak", "yelinak"),
+            ("Vaniki", "vaniki"),
+            ("Tormax", "tormax"),
+            // --- Live servers ---
+            ("Firiona Vie", "firionavie"),
+            ("FV", "firionavie"),
+            ("Antonius Bayle", "antoniusbayle"),
+            ("Bertoxxulous", "bertoxxulous"),
+            ("Bristlebane", "bristlebane"),
+            ("Cazic-Thule", "cazicthule"),
+            ("Cazic Thule", "cazicthule"),
+            ("Drinal", "drinal"),
+            ("Erollisi Marr", "erollisimarr"),
+            ("Luclin", "luclin"),
+            ("Povar", "povar"),
+            ("The Rathe", "rathe"),
+            ("Rathe", "rathe"),
+            ("Tunare", "tunare"),
+            ("Xegony", "xegony"),
+            ("Zek", "zek"),
+            ("Vox", "vox"),
+            // --- Test/Beta ---
+            ("Test", "test"),
+            ("Beta", "beta"),
+        ];
+
+        for &(display, internal) in servers {
+            resolver.add(display, internal);
+        }
+
+        resolver
+    }
+
+    /// Adds or overwrites a display-name to internal-ID mapping.
+    pub fn add(&mut self, display_name: &str, internal_id: &str) {
+        self.display_to_internal
+            .insert(display_name.to_lowercase(), internal_id.to_string());
+        // Only set the canonical display name if this internal ID hasn't been
+        // mapped yet (preserves the first/primary name for aliases like "FV").
+        self.internal_to_display
+            .entry(internal_id.to_lowercase())
+            .or_insert_with(|| display_name.to_string());
+    }
+
+    /// Resolves a human-readable display name to its internal server ID.
+    #[must_use]
+    pub fn resolve(&self, display_name: &str) -> Option<&str> {
+        self.display_to_internal
+            .get(&display_name.to_lowercase())
+            .map(String::as_str)
+    }
+
+    /// Reverse-resolves an internal server ID to its canonical display name.
+    #[must_use]
+    pub fn display_name(&self, internal_id: &str) -> Option<&str> {
+        self.internal_to_display
+            .get(&internal_id.to_lowercase())
+            .map(String::as_str)
+    }
+
+    /// Returns the number of unique internal server IDs in the resolver.
+    #[must_use]
+    pub fn server_count(&self) -> usize {
+        self.internal_to_display.len()
+    }
+}
+
+impl Default for ServerNameResolver {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -821,10 +929,7 @@ mod tests {
         let json = serde_json::to_string(&cache).expect("serialize");
         let restored: CharacterCache = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.len(), 2);
-        assert_eq!(
-            restored.lookup("Teek", "Legolas").unwrap().name,
-            "Legolas"
-        );
+        assert_eq!(restored.lookup("Teek", "Legolas").unwrap().name, "Legolas");
         assert_eq!(restored.lookup("FV", "Gimli").unwrap().name, "Gimli");
     }
 
@@ -863,5 +968,143 @@ mod tests {
         let result = CharacterCache::load_from_file(&path);
         assert!(result.is_err());
         let _ = std::fs::remove_file(&path);
+    }
+
+    // --- ServerNameResolver tests ---
+
+    #[test]
+    fn resolver_new_has_known_servers() {
+        let r = ServerNameResolver::new();
+        assert!(
+            r.server_count() > 20,
+            "expected 20+ servers, got {}",
+            r.server_count()
+        );
+    }
+
+    #[test]
+    fn resolver_default_same_as_new() {
+        let a = ServerNameResolver::new();
+        let b = ServerNameResolver::default();
+        assert_eq!(a.server_count(), b.server_count());
+    }
+
+    #[test]
+    fn resolver_resolve_known_tlp() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("Teek"), Some("teek"));
+        assert_eq!(r.resolve("Oakwynd"), Some("oakwynd"));
+        assert_eq!(r.resolve("Mischief"), Some("mischief"));
+        assert_eq!(r.resolve("Aradune"), Some("aradune"));
+    }
+
+    #[test]
+    fn resolver_resolve_known_live() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("Firiona Vie"), Some("firionavie"));
+        assert_eq!(r.resolve("Bristlebane"), Some("bristlebane"));
+        assert_eq!(r.resolve("Xegony"), Some("xegony"));
+    }
+
+    #[test]
+    fn resolver_case_insensitive() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("teek"), Some("teek"));
+        assert_eq!(r.resolve("TEEK"), Some("teek"));
+        assert_eq!(r.resolve("TeEk"), Some("teek"));
+        assert_eq!(r.resolve("firiona vie"), Some("firionavie"));
+        assert_eq!(r.resolve("FIRIONA VIE"), Some("firionavie"));
+    }
+
+    #[test]
+    fn resolver_unknown_returns_none() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("NonexistentServer"), None);
+        assert_eq!(r.resolve(""), None);
+    }
+
+    #[test]
+    fn resolver_fv_alias() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("FV"), Some("firionavie"));
+        assert_eq!(r.resolve("Firiona Vie"), Some("firionavie"));
+    }
+
+    #[test]
+    fn resolver_cazic_thule_alias() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("Cazic-Thule"), Some("cazicthule"));
+        assert_eq!(r.resolve("Cazic Thule"), Some("cazicthule"));
+    }
+
+    #[test]
+    fn resolver_reverse_lookup() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.display_name("teek"), Some("Teek"));
+        assert_eq!(r.display_name("firionavie"), Some("Firiona Vie"));
+        assert_eq!(r.display_name("bristlebane"), Some("Bristlebane"));
+    }
+
+    #[test]
+    fn resolver_reverse_case_insensitive() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.display_name("TEEK"), Some("Teek"));
+        assert_eq!(r.display_name("Teek"), Some("Teek"));
+    }
+
+    #[test]
+    fn resolver_reverse_unknown_returns_none() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.display_name("unknown_id"), None);
+        assert_eq!(r.display_name(""), None);
+    }
+
+    #[test]
+    fn resolver_add_custom_server() {
+        let mut r = ServerNameResolver::new();
+        let before = r.server_count();
+        r.add("My Custom Server", "customid");
+        assert_eq!(r.resolve("My Custom Server"), Some("customid"));
+        assert_eq!(r.resolve("my custom server"), Some("customid"));
+        assert_eq!(r.display_name("customid"), Some("My Custom Server"));
+        assert_eq!(r.server_count(), before + 1);
+    }
+
+    #[test]
+    fn resolver_add_overwrites_display_mapping() {
+        let mut r = ServerNameResolver::new();
+        r.add("CustomName", "teek");
+        assert_eq!(r.resolve("CustomName"), Some("teek"));
+        assert_eq!(r.display_name("teek"), Some("Teek"));
+    }
+
+    #[test]
+    fn resolver_debug_format() {
+        let r = ServerNameResolver::new();
+        let debug = format!("{:?}", r);
+        assert!(debug.contains("ServerNameResolver"));
+    }
+
+    #[test]
+    fn resolver_clone() {
+        let r = ServerNameResolver::new();
+        let cloned = r.clone();
+        assert_eq!(cloned.server_count(), r.server_count());
+        assert_eq!(cloned.resolve("Teek"), r.resolve("Teek"));
+    }
+
+    #[test]
+    fn resolver_test_and_beta_servers() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("Test"), Some("test"));
+        assert_eq!(r.resolve("Beta"), Some("beta"));
+    }
+
+    #[test]
+    fn resolver_the_rathe_alias() {
+        let r = ServerNameResolver::new();
+        assert_eq!(r.resolve("The Rathe"), Some("rathe"));
+        assert_eq!(r.resolve("Rathe"), Some("rathe"));
+        assert_eq!(r.display_name("rathe"), Some("The Rathe"));
     }
 }
