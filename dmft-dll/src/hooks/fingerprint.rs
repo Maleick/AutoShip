@@ -196,7 +196,7 @@ mod inner {
     unsafe fn write_cxstr(base: *mut core::ffi::c_void, offset: usize, value: &str) {
         use dmft_common::offsets::eqmain::{CSTRREP_ALLOC, CSTRREP_DATA, CSTRREP_LENGTH};
 
-        let field_ptr = (base as *mut u8).add(offset);
+        let field_ptr = unsafe { (base as *mut u8).add(offset) };
         // CXStr is a pointer to CStrRep
         let rep_ptr = unsafe { *(field_ptr as *const *mut u8) };
 
