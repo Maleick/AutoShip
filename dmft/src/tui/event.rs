@@ -459,6 +459,16 @@ pub fn handle_events(
                 app.active_panel = ActivePanel::TacticalMap;
                 return Ok(true);
             }
+            (KeyCode::Char('6'), mods)
+                if app.active_screen == ActiveScreen::Tactical
+                    && mods.contains(KeyModifiers::ALT) =>
+            {
+                let status = app.map_state.toggle_layer(6);
+                app.status_message = status.to_string();
+                app.active_screen = ActiveScreen::Tactical;
+                app.active_panel = ActivePanel::TacticalMap;
+                return Ok(true);
+            }
             (KeyCode::Char('@'), _) => {
                 app.set_active_group(Some(1));
                 return Ok(true);
