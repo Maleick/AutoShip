@@ -1,0 +1,7 @@
+P -1093, 296, 1, 240, 0, 0, 3, to_Hills_of_Shade (click rubble)
+P -760, 277, -70, 0, 0, 240, 1, GS:_Crystal
+P -637, 313, -78, 0, 0, 240, 1, GS:_Crystal
+P -623, 196, -81, 0, 0, 240, 1, GS:_Crystal
+P -493, 276, -111, 0, 0, 0, 2, Bimbalicus_the_Soulbleeder
+
+

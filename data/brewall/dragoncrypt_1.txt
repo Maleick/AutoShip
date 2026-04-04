@@ -1,0 +1,2 @@
+P 10.0000, 3.0000, 0.0000, 240, 0, 0, 3, to_The_Plane_of_Knowledge
+P -530.8312, -14.4264, -0.7624, 0, 0, 0, 2, Skaramatra_the_Risen

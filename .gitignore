@@ -16,10 +16,7 @@ target/
 
 /target
 
-# Credential databases (runtime data, not source code)
-*.db
-*.sqlite
-*.sqlite3
+# Credential databases (sensitive — never commit)
 credentials.db*
 
 # Playwright MCP
@@ -52,7 +49,6 @@ mq2-reference/
 accounts.csv
 config/accounts.toml
 
-# Downloaded data files (maps, navmeshes — too large for git)
-data/
+# Large map text files (200MB+ each, use config/maps/*.zip instead)
 config/maps/*.txt
 config/accounts.csv
