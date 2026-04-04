@@ -1968,6 +1968,21 @@ impl App {
         }
     }
 
+    /// Toggle the struct field annotation overlay on the hex dump.
+    pub fn toggle_hex_annotations(&mut self) {
+        self.hex_state.show_annotations = !self.hex_state.show_annotations;
+        if self.hex_state.show_annotations && self.hex_state.annotations.is_empty() {
+            // Default to PlayerBase annotations when viewing spawn memory.
+            self.hex_state.load_player_base_annotations();
+        }
+        let state = if self.hex_state.show_annotations {
+            "ON"
+        } else {
+            "OFF"
+        };
+        self.status_message = format!("Annotations {state}");
+    }
+
     /// Scrolls the hex dump view down by 256 bytes.
     pub fn hex_scroll_down(&mut self) {
         self.hex_state.hex_address = self.hex_state.hex_address.wrapping_add(0x100);
@@ -2001,6 +2016,9 @@ impl App {
                 self.hex_state.hex_data = generate_demo_hex_data(&name, id);
                 self.hex_state.hex_address = 0x1000;
             }
+
+            // Pre-load PlayerBase annotations for spawn memory context.
+            self.hex_state.load_player_base_annotations();
 
             self.set_active_screen(ActiveScreen::Debug);
             self.active_panel = ActivePanel::DebugHexDump;

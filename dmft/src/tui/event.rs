@@ -766,6 +766,7 @@ pub fn handle_events(
             ActivePanel::DebugHexDump => match key.code {
                 KeyCode::Down => app.hex_scroll_down(),
                 KeyCode::Up => app.hex_scroll_up(),
+                KeyCode::Char('a') => app.toggle_hex_annotations(),
                 _ => {}
             },
             ActivePanel::DebugInternals => {

@@ -3,7 +3,7 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Table, Wrap},
 };
@@ -219,7 +219,20 @@ pub fn draw_spawn_panel(
 
 // ─── Hex dump panel ──────────────────────────────────────────────────────────
 
+/// Annotation color palette — 6 distinct colors cycled across fields.
+const ANNOTATION_COLORS: [Color; 6] = [
+    Color::Cyan,
+    Color::Yellow,
+    Color::Green,
+    Color::Magenta,
+    Color::Blue,
+    Color::Red,
+];
+
 /// Draw the hex dump panel for raw memory inspection.
+///
+/// When `show_annotations` is true, bytes within known struct fields are
+/// color-coded and a field name label is shown at the right margin.
 pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let is_active = app.active_panel == ActivePanel::DebugHexDump;
@@ -228,8 +241,14 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     } else {
         t.border_dim
     };
+
+    let ann_indicator = if app.hex_state.show_annotations {
+        " [a:annotations ON]"
+    } else {
+        ""
+    };
     let blk = panel(
-        format!(" Hex — {} ", app.hex_state.hex_label),
+        format!(" Hex — {} {ann_indicator}", app.hex_state.hex_label),
         border_style,
         t,
     );
@@ -244,36 +263,84 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         return;
     }
 
+    let annotating = app.hex_state.show_annotations && !app.hex_state.annotations.is_empty();
+
     let inner_height = area.height.saturating_sub(2) as usize;
     let lines: Vec<Line<'_>> = (0..inner_height)
         .filter_map(|row| {
-            let offset = row * 16;
-            if offset >= app.hex_state.hex_data.len() {
+            let row_offset = row * 16;
+            if row_offset >= app.hex_state.hex_data.len() {
                 return None;
             }
-            let addr = app.hex_state.hex_address + offset;
-            let end = (offset + 16).min(app.hex_state.hex_data.len());
-            let chunk = &app.hex_state.hex_data[offset..end];
+            let addr = app.hex_state.hex_address + row_offset;
+            let end = (row_offset + 16).min(app.hex_state.hex_data.len());
+            let chunk = &app.hex_state.hex_data[row_offset..end];
 
-            let hex_str: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
+            let mut spans = Vec::with_capacity(8);
+            spans.push(Span::styled(
+                format!("{addr:08x}"),
+                Style::default().fg(t.text_muted),
+            ));
+            spans.push(Span::raw("  "));
+
+            if annotating {
+                // Build per-byte colored hex spans.
+                for (i, b) in chunk.iter().enumerate() {
+                    let byte_offset = row_offset + i;
+                    let style = if let Some(ann) = app.hex_state.annotation_at(byte_offset) {
+                        Style::default().fg(ANNOTATION_COLORS[ann.color_idx as usize % 6])
+                    } else {
+                        Style::default().fg(t.text_normal)
+                    };
+                    spans.push(Span::styled(format!("{b:02x} "), style));
+                }
+                // Pad if row is short.
+                let pad = 16usize.saturating_sub(chunk.len());
+                if pad > 0 {
+                    spans.push(Span::raw(" ".repeat(pad * 3)));
+                }
+            } else {
+                let hex_str: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
+                spans.push(Span::styled(
+                    format!("{hex_str:<48}"),
+                    Style::default().fg(t.text_normal),
+                ));
+            }
+
+            spans.push(Span::raw(" "));
+
+            // ASCII column.
             let ascii_str: String = chunk
                 .iter()
-                .map(|&b| {
-                    if b.is_ascii_graphic() || b == b' ' {
-                        b as char
+                .map(|b| {
+                    if b.is_ascii_graphic() || *b == b' ' {
+                        *b as char
                     } else {
                         '·'
                     }
                 })
                 .collect();
+            spans.push(Span::styled(
+                ascii_str,
+                Style::default().fg(t.text_highlight),
+            ));
 
-            Some(Line::from(vec![
-                Span::styled(format!("{addr:08x}"), Style::default().fg(t.text_muted)),
-                Span::raw("  "),
-                Span::styled(format!("{hex_str:<48}"), Style::default().fg(t.text_normal)),
-                Span::raw(" "),
-                Span::styled(ascii_str, Style::default().fg(t.text_highlight)),
-            ]))
+            // Annotation label: show field name if this row starts at or contains a field boundary.
+            if annotating
+                && let Some(ann) = app.hex_state.annotation_at(row_offset)
+            {
+                let color = ANNOTATION_COLORS[ann.color_idx as usize % 6];
+                // Only show label on the first row of the field.
+                if row_offset <= ann.offset + 15 {
+                    spans.push(Span::raw(" "));
+                    spans.push(Span::styled(
+                        format!("◀ {}", ann.name),
+                        Style::default().fg(color),
+                    ));
+                }
+            }
+
+            Some(Line::from(spans))
         })
         .collect();
 

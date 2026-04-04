@@ -100,6 +100,19 @@ impl MapSpawnPresentationCache {
     }
 }
 
+/// A single struct field annotation for the hex dump overlay.
+#[derive(Debug, Clone)]
+pub struct FieldAnnotation {
+    /// Byte offset from the start of the hex data.
+    pub offset: usize,
+    /// Size of the field in bytes.
+    pub size: usize,
+    /// Human-readable field name.
+    pub name: String,
+    /// Color index (cycled for visual distinction between adjacent fields).
+    pub color_idx: u8,
+}
+
 /// State for the hex dump viewer panel.
 pub struct HexDumpState {
     /// Base address for the hex dump display.
@@ -108,6 +121,10 @@ pub struct HexDumpState {
     pub hex_data: Vec<u8>,
     /// Label shown above the hex dump (e.g., spawn name).
     pub hex_label: String,
+    /// Whether struct field annotations are shown.
+    pub show_annotations: bool,
+    /// Known field annotations for the current hex data context.
+    pub annotations: Vec<FieldAnnotation>,
 }
 
 impl HexDumpState {
@@ -118,7 +135,56 @@ impl HexDumpState {
             hex_address: 0,
             hex_data: Vec::new(),
             hex_label: String::from("No address selected"),
+            show_annotations: false,
+            annotations: Vec::new(),
         }
+    }
+
+    /// Look up the annotation covering a given byte offset, if any.
+    #[must_use]
+    pub fn annotation_at(&self, offset: usize) -> Option<&FieldAnnotation> {
+        self.annotations
+            .iter()
+            .find(|a| offset >= a.offset && offset < a.offset + a.size)
+    }
+
+    /// Build annotations from PlayerBase struct field offsets.
+    ///
+    /// These annotations apply when viewing raw spawn memory (base at struct start).
+    pub fn load_player_base_annotations(&mut self) {
+        use dmft_common::offsets::player_base;
+
+        let fields: Vec<(&str, usize, usize)> = vec![
+            ("prev", player_base::PREV, 8),
+            ("next", player_base::NEXT, 8),
+            ("lastName", player_base::LASTNAME, 64),
+            ("y", player_base::Y, 4),
+            ("x", player_base::X, 4),
+            ("z", player_base::Z, 4),
+            ("speedCurrent", player_base::SPEED_CURRENT, 4),
+            ("speedZ", player_base::SPEED_Z, 4),
+            ("speedRun", player_base::SPEED_RUN, 4),
+            ("heading", player_base::HEADING, 4),
+            ("speedHeading", player_base::SPEED_HEADING, 4),
+            ("name", player_base::NAME, 64),
+            ("displayedName", player_base::DISPLAYED_NAME, 64),
+            ("type", player_base::TYPE, 1),
+            ("spawnId", player_base::SPAWN_ID, 4),
+        ];
+
+        self.annotations = fields
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, offset, size))| FieldAnnotation {
+                offset,
+                size,
+                name: name.to_string(),
+                color_idx: (i % 6) as u8,
+            })
+            .collect();
+
+        // Sort by offset for consistent display.
+        self.annotations.sort_by_key(|a| a.offset);
     }
 }
 
