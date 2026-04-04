@@ -185,6 +185,10 @@ impl LlmProvider for TraitDrivenResponder {
                 character_name,
                 message,
             } => self.respond_to_bot(character_name, message, &request.traits, request.mood),
+
+            Situation::FleetCommentary { event_summary } => {
+                self.react_to_event(event_summary, &request.traits, request.mood)
+            }
         };
 
         let text = self.apply_speech_style(&raw_text, &request.speech_style);

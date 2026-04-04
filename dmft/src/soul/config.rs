@@ -57,6 +57,127 @@ pub struct CharacterSoulConfig {
     pub quirks: Vec<String>,
 }
 
+
+/// LLM API provider selection.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmProviderKind {
+    /// Anthropic Claude API
+    Anthropic,
+    /// OpenAI ChatGPT API
+    Openai,
+    /// Local ollama instance
+    Ollama,
+    /// No LLM — use template quip fallback only
+    #[default]
+    None,
+}
+
+/// Per-operator LLM API configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct LlmConfig {
+    /// Which LLM provider to use
+    pub provider: LlmProviderKind,
+    /// API key (Anthropic or OpenAI). Not needed for ollama or none.
+    #[serde(default)]
+    pub api_key: String,
+    /// Model name
+    #[serde(default = "default_model")]
+    pub model: String,
+    /// Base URL override (for ollama or proxied endpoints)
+    #[serde(default)]
+    pub base_url: String,
+    /// Max tokens per response (controls cost)
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+    /// Temperature (0.0 = deterministic, 1.0 = creative)
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+}
+
+fn default_model() -> String {
+    "claude-haiku-4-5-20251001".into()
+}
+fn default_max_tokens() -> u32 {
+    100
+}
+fn default_temperature() -> f32 {
+    0.8
+}
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        Self {
+            provider: LlmProviderKind::None,
+            api_key: String::new(),
+            model: default_model(),
+            base_url: String::new(),
+            max_tokens: default_max_tokens(),
+            temperature: default_temperature(),
+        }
+    }
+}
+
+/// Bot personality preset for Discord fleet commentary.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BotPersonalityPreset {
+    /// Fippy Darkpaw — eternally optimistic gnoll who keeps charging Qeynos
+    #[default]
+    FippyDarkpaw,
+    /// Druzzil Ro — aloof goddess of magic, speaks in riddles
+    DruzzilRo,
+    /// Bristlebane — trickster god, loves puns and pranks
+    Bristlebane,
+    /// Custom personality defined by system_prompt
+    Custom,
+}
+
+/// Discord bot personality configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct BotPersonalityConfig {
+    /// Which preset personality to use
+    pub preset: BotPersonalityPreset,
+    /// Custom system prompt (used when preset = custom, or to augment a preset)
+    #[serde(default)]
+    pub system_prompt: String,
+    /// Bot display name in Discord embeds
+    #[serde(default = "default_bot_name")]
+    pub name: String,
+    /// Whether the bot comments on fleet events in Discord
+    pub commentary_enabled: bool,
+}
+
+fn default_bot_name() -> String {
+    "Fippy Darkpaw".into()
+}
+
+impl Default for BotPersonalityConfig {
+    fn default() -> Self {
+        Self {
+            preset: BotPersonalityPreset::default(),
+            system_prompt: String::new(),
+            name: default_bot_name(),
+            commentary_enabled: true,
+        }
+    }
+}
+
+impl BotPersonalityPreset {
+    /// Returns the system prompt for this preset personality.
+    #[must_use]
+    pub fn system_prompt(&self) -> &'static str {
+        match self {
+            Self::FippyDarkpaw => "You are Fippy Darkpaw, the legendary gnoll from EverQuest who endlessly charges the gates of Qeynos despite being slain every time. You are eternally optimistic, scrappy, and never learn from your mistakes. You speak in short, excitable sentences. You refer to the multibox fleet as 'the pack' and the operator as 'alpha gnoll'. Comment on fleet events with gnoll-flavored enthusiasm. Keep responses under 2 sentences. Never break character.",
+            Self::DruzzilRo => "You are Druzzil Ro, Goddess of Magic in EverQuest. You speak in cryptic, poetic riddles about the nature of power and the weave of magic. You view the multibox fleet as mortal pawns in a grand arcane tapestry. Comment on fleet events with mysterious detachment and veiled prophecy. Keep responses under 2 sentences. Never break character.",
+            Self::Bristlebane => "You are Bristlebane, the Trickster God of EverQuest. Everything is a joke to you. You make terrible puns, play pranks with words, and find humor in every situation — especially deaths and failures. Comment on fleet events with mischievous glee and bad wordplay. Keep responses under 2 sentences. Never break character.",
+            Self::Custom => "You are a helpful EverQuest bot. Comment on fleet events concisely.",
+        }
+    }
+}
+
 /// Top-level Soul Engine configuration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -79,6 +200,12 @@ pub struct SoulConfig {
     pub character: Vec<CharacterSoulConfig>,
     /// Pre-defined relationships between characters
     pub relationship: Vec<RelationshipSeed>,
+    /// LLM provider configuration (per-operator API key)
+    #[serde(default)]
+    pub llm: LlmConfig,
+    /// Discord bot personality for fleet commentary
+    #[serde(default)]
+    pub bot_personality: BotPersonalityConfig,
 }
 
 impl Default for SoulConfig {
@@ -93,6 +220,8 @@ impl Default for SoulConfig {
             player_chat_enabled: true,
             character: Vec::new(),
             relationship: Vec::new(),
+            llm: LlmConfig::default(),
+            bot_personality: BotPersonalityConfig::default(),
         }
     }
 }

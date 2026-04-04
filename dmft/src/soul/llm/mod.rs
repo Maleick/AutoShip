@@ -1,3 +1,5 @@
+/// HTTP-based LLM provider — Anthropic, OpenAI, ollama API clients.
+pub mod api_client;
 /// Trait-based fallback responder — generates text without an LLM API.
 pub mod fallback;
 /// Priority queue for LLM requests — ensures high-priority requests are processed first.
@@ -47,6 +49,11 @@ pub enum Situation {
     CombatReaction {
         /// Description of the combat event (kill, death, loot).
         description: String,
+    },
+    /// Fleet-wide event commentary for Discord (kills, wipes, milestones)
+    FleetCommentary {
+        /// Summary of the fleet event.
+        event_summary: String,
     },
 }
 
