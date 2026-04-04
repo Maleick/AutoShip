@@ -967,6 +967,101 @@ impl ExplorerScreenState {
     }
 }
 
+// ─── Packet Monitor state ───────────────────────────────────────────────────
+
+/// A single captured network packet record for the TUI packet monitor.
+#[derive(Clone)]
+pub struct PacketRecord {
+    /// PID of the client that captured the packet.
+    pub client_id: u32,
+    /// EQ protocol opcode identifier.
+    pub opcode: u16,
+    /// Whether the packet was inbound or outbound.
+    pub direction: dmft_common::ipc::PacketDirection,
+    /// Timestamp in milliseconds (from DLL).
+    pub timestamp_ms: u64,
+    /// Size of the packet payload in bytes.
+    pub payload_size: u32,
+}
+
+/// State for the packet/opcode monitor panel.
+pub struct PacketMonitorState {
+    /// Ring buffer of captured packets (newest at the end).
+    pub packets: Vec<PacketRecord>,
+    /// Maximum number of packets to retain.
+    pub capacity: usize,
+    /// Whether the view auto-scrolls to follow new packets.
+    pub auto_scroll: bool,
+    /// Scroll offset from the bottom (0 = latest).
+    pub scroll_offset: usize,
+    /// Optional opcode filter — when set, only show packets matching this opcode.
+    pub filter_opcode: Option<u16>,
+    /// Optional direction filter.
+    pub filter_direction: Option<dmft_common::ipc::PacketDirection>,
+    /// Whether the panel is paused (stops consuming new packets into view).
+    pub paused: bool,
+}
+
+impl PacketMonitorState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            packets: Vec::with_capacity(1024),
+            capacity: 10_000,
+            auto_scroll: true,
+            scroll_offset: 0,
+            filter_opcode: None,
+            filter_direction: None,
+            paused: false,
+        }
+    }
+
+    /// Push a new packet record, evicting the oldest if at capacity.
+    pub fn push(&mut self, record: PacketRecord) {
+        if self.packets.len() >= self.capacity {
+            self.packets.remove(0);
+        }
+        self.packets.push(record);
+    }
+
+    /// Returns packets matching the current filters.
+    pub fn filtered_packets(&self) -> Vec<&PacketRecord> {
+        self.packets
+            .iter()
+            .filter(|p| {
+                self.filter_opcode.is_none_or(|op| p.opcode == op)
+                    && self.filter_direction.is_none_or(|d| p.direction == d)
+            })
+            .collect()
+    }
+
+    /// Scroll up by one line.
+    pub fn scroll_up(&mut self) {
+        self.auto_scroll = false;
+        self.scroll_offset = self.scroll_offset.saturating_add(1);
+    }
+
+    /// Scroll down by one line.
+    pub fn scroll_down(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+        if self.scroll_offset == 0 {
+            self.auto_scroll = true;
+        }
+    }
+
+    /// Toggle pause state.
+    pub fn toggle_pause(&mut self) {
+        self.paused = !self.paused;
+    }
+
+    /// Clear all captured packets.
+    pub fn clear(&mut self) {
+        self.packets.clear();
+        self.scroll_offset = 0;
+        self.auto_scroll = true;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
