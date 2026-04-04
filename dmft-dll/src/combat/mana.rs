@@ -14,6 +14,7 @@ impl ManaGovernor {
 
     /// Can we afford to cast a spell at current mana level?
     /// Healers ignore the floor during combat (they must always heal).
+    #[inline]
     pub fn can_cast(&self, current_mana_pct: f32) -> bool {
         if self.is_healer {
             return true;
@@ -22,6 +23,7 @@ impl ManaGovernor {
     }
 
     /// Should we sit and meditate?
+    #[inline]
     pub fn should_med(&self, current_mana_pct: f32, in_combat: bool) -> bool {
         if in_combat && self.is_healer {
             return false;
