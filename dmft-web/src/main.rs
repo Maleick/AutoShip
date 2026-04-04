@@ -8,8 +8,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::routing::get;
 use axum::Router;
+use axum::routing::get;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 
