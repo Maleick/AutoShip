@@ -1,15 +1,57 @@
 //! Bard TwistEngine — custom song rotation with priority and hold support.
 
+/// Song category for bard rotation decisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SongCategory {
+    /// Melee haste / ATK / STR (War March, etc.)
+    Haste,
+    /// Spell damage focus / Haste v3 (Aria, etc.)
+    SpellFocus,
+    /// Melee proc / aggro reduction (Suffering, etc.)
+    MeleeProc,
+    /// AC / Aggro increase (Spiteful, etc.)
+    Tank,
+    /// Group HP/Mana increase (Crescendo, etc.)
+    Crescendo,
+    /// Group melee + spell proc (Arcane, etc.)
+    Arcane,
+    /// Single-target DD during weave gaps (Insult, etc.)
+    Insult,
+    /// DoT songs (fire, disease, poison, ice)
+    Dot,
+    /// Slow songs (ST and AE)
+    Slow,
+    /// HP/Mana/End recovery
+    Regen,
+    /// Reduce cast time / aggro reduction
+    Accelerando,
+    /// Run speed buff
+    RunSpeed,
+    /// Mez / CC song
+    Mez,
+    /// Generic / uncategorized
+    Other,
+}
+
 #[derive(Debug, Clone)]
 pub struct SongSlot {
     pub gem: u8,
     pub priority: u8,
     pub min_recast_ticks: u32,
+    /// Song buff duration in ticks. When set, the song won't be re-cast
+    /// until this duration has nearly elapsed (refresh window).
+    pub buff_duration_ticks: Option<u32>,
+    /// Song category for rotation selection logic.
+    pub category: SongCategory,
 }
 
 const TICKS_PER_SECOND: u32 = 20;
 pub const DEFAULT_TWIST_DELAY_TICKS: u32 = 66;
 pub const MIN_GEM_REFRESH_TICKS: u32 = 60;
+/// Default song buff duration (~12 seconds at 20 ticks/sec).
+pub const DEFAULT_SONG_DURATION_TICKS: u32 = 240;
+/// Refresh songs when this many ticks remain before expiry.
+pub const SONG_REFRESH_BUFFER_TICKS: u32 = 40;
 const MAX_GEMS: usize = 13;
 const MAX_CONSECUTIVE_FAILURES: u8 = 3;
 
@@ -48,6 +90,9 @@ pub struct TwistEngine {
     active: bool,
     /// Consecutive failures per gem — skip after MAX_CONSECUTIVE_FAILURES.
     consecutive_failures: [u8; MAX_GEMS],
+    /// When true, rotation restarts from index 0 every frame (bard full-rotation mode).
+    /// Songs are evaluated in priority order and only cast when their buff needs refreshing.
+    full_rotation: bool,
 }
 
 impl TwistEngine {
@@ -64,6 +109,7 @@ impl TwistEngine {
             cast_duration: MIN_GEM_REFRESH_TICKS,
             active: false,
             consecutive_failures: [0; MAX_GEMS],
+            full_rotation: false,
         }
     }
 
@@ -80,7 +126,40 @@ impl TwistEngine {
             cast_duration,
             active: false,
             consecutive_failures: [0; MAX_GEMS],
+            full_rotation: false,
         }
+    }
+
+    /// Create a full-rotation engine (bard song weaving mode).
+    ///
+    /// In full-rotation mode, the engine restarts from index 0 every frame,
+    /// evaluating all songs in priority order. Songs are only cast when their
+    /// buff duration is about to expire (refresh window).
+    pub fn with_full_rotation(songs: Vec<SongSlot>, twist_delay: u32, cast_duration: u32) -> Self {
+        Self {
+            songs,
+            rotation_index: 0,
+            state: TwistState::Idle,
+            last_cast_tick: [0; MAX_GEMS],
+            current_tick: 0,
+            held_gem: None,
+            interrupted_gem: None,
+            twist_delay,
+            cast_duration,
+            active: false,
+            consecutive_failures: [0; MAX_GEMS],
+            full_rotation: true,
+        }
+    }
+
+    /// Enable or disable full-rotation mode.
+    pub fn set_full_rotation(&mut self, enabled: bool) {
+        self.full_rotation = enabled;
+    }
+
+    /// Returns whether full-rotation mode is active.
+    pub fn is_full_rotation(&self) -> bool {
+        self.full_rotation
     }
 
     pub fn start(&mut self) {
@@ -126,7 +205,26 @@ impl TwistEngine {
             return false;
         }
         let last = self.last_cast_tick[i];
-        last == 0 || self.current_tick.saturating_sub(last) >= MIN_GEM_REFRESH_TICKS
+        if last == 0 {
+            return true;
+        }
+        let elapsed = self.current_tick.saturating_sub(last);
+        if elapsed < MIN_GEM_REFRESH_TICKS {
+            return false;
+        }
+        // In full-rotation mode, also check song buff duration.
+        // Only re-cast if the buff is about to expire.
+        if self.full_rotation {
+            if let Some(song) = self.songs.iter().find(|s| s.gem == gem) {
+                if let Some(duration) = song.buff_duration_ticks {
+                    // Song is still active — don't re-cast yet.
+                    if elapsed < duration.saturating_sub(SONG_REFRESH_BUFFER_TICKS) {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
 
     fn record_cast(&mut self, gem: u8) {
@@ -150,6 +248,19 @@ impl TwistEngine {
                 return Some(g);
             }
         }
+
+        if self.full_rotation {
+            // Full-rotation mode (bard song weaving):
+            // Always evaluate from index 0 in priority order.
+            // Songs are ordered by priority in the list — first ready song wins.
+            for s in &self.songs {
+                if self.gem_ready(s.gem) {
+                    return Some(s.gem);
+                }
+            }
+            return None;
+        }
+
         // Priority preemption: check if any song has higher priority than current rotation slot
         let current_priority = self
             .songs
@@ -355,6 +466,18 @@ mod tests {
             gem: g,
             priority: p,
             min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+            buff_duration_ticks: None,
+            category: SongCategory::Other,
+        }
+    }
+
+    fn song_with_duration(g: u8, p: u8, dur: u32) -> SongSlot {
+        SongSlot {
+            gem: g,
+            priority: p,
+            min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+            buff_duration_ticks: Some(dur),
+            category: SongCategory::Haste,
         }
     }
 
@@ -657,5 +780,98 @@ mod tests {
         assert_eq!(e.failure_count(0), 2);
         e.start();
         assert_eq!(e.failure_count(0), 0);
+    }
+
+    // --- Full-rotation (bard weaving) tests ---
+
+    #[test]
+    fn full_rotation_always_starts_from_zero() {
+        let mut e = TwistEngine::with_full_rotation(vec![s(0, 1), s(1, 2), s(2, 3)], 10, 3);
+        e.start();
+        assert!(e.is_full_rotation());
+        // First tick: should cast gem 0 (highest priority = index 0)
+        assert_eq!(e.tick(1), TwistAction::Cast { gem: 0 });
+        // Advance through singing + waiting
+        for t in 2..=10 {
+            e.tick(t);
+        }
+        // In full-rotation mode, even though gem 0 was just cast,
+        // it won't be ready yet (MIN_GEM_REFRESH_TICKS not elapsed).
+        // So it should try gem 1 next.
+        assert_eq!(e.tick(11), TwistAction::Cast { gem: 1 });
+    }
+
+    #[test]
+    fn full_rotation_with_duration_skips_active_songs() {
+        // Song 0 has a 200-tick duration. Song 1 has no duration (always ready).
+        let mut e =
+            TwistEngine::with_full_rotation(vec![song_with_duration(0, 1, 200), s(1, 2)], 10, 3);
+        e.start();
+        // Cast song 0 first (highest priority).
+        assert_eq!(e.tick(1), TwistAction::Cast { gem: 0 });
+        // Advance past MIN_GEM_REFRESH but within buff duration.
+        for t in 2..=70 {
+            e.tick(t);
+        }
+        // Song 0 has 200-tick duration, we're at tick 71.
+        // Duration remaining = 200 - 70 = 130 > SONG_REFRESH_BUFFER (40).
+        // So song 0 is NOT ready. Song 1 should be picked.
+        assert_eq!(e.tick(71), TwistAction::Cast { gem: 1 });
+    }
+
+    #[test]
+    fn full_rotation_refreshes_expiring_songs() {
+        // Song with 200-tick duration.
+        let mut e =
+            TwistEngine::with_full_rotation(vec![song_with_duration(0, 1, 200), s(1, 2)], 10, 3);
+        e.start();
+        assert_eq!(e.tick(1), TwistAction::Cast { gem: 0 });
+        // Advance to tick 161 — elapsed=160, duration=200, remaining=40
+        // 160 >= 200-40=160 → song IS in refresh window → should be re-cast.
+        for t in 2..=160 {
+            e.tick(t);
+        }
+        assert_eq!(e.tick(161), TwistAction::Cast { gem: 0 });
+    }
+
+    #[test]
+    fn full_rotation_constructor() {
+        let e = TwistEngine::with_full_rotation(vec![s(0, 1)], 10, 3);
+        assert!(e.is_full_rotation());
+        assert!(!e.is_active());
+    }
+
+    #[test]
+    fn set_full_rotation_toggle() {
+        let mut e = te(vec![s(0, 1)]);
+        assert!(!e.is_full_rotation());
+        e.set_full_rotation(true);
+        assert!(e.is_full_rotation());
+        e.set_full_rotation(false);
+        assert!(!e.is_full_rotation());
+    }
+
+    #[test]
+    fn full_rotation_priority_order() {
+        // Songs ordered by priority in the list: gem 2 first, gem 0 second.
+        let mut e = TwistEngine::with_full_rotation(vec![s(2, 1), s(0, 2)], 10, 3);
+        e.start();
+        // Should always pick gem 2 first (it's at index 0 in the list).
+        assert_eq!(e.tick(1), TwistAction::Cast { gem: 2 });
+    }
+
+    #[test]
+    fn song_category_default() {
+        let slot = s(0, 1);
+        assert_eq!(slot.category, SongCategory::Other);
+    }
+
+    #[test]
+    fn song_with_duration_fields() {
+        let slot = song_with_duration(3, 2, 300);
+        assert_eq!(slot.gem, 3);
+        assert_eq!(slot.priority, 2);
+        assert_eq!(slot.buff_duration_ticks, Some(300));
+        assert_eq!(slot.category, SongCategory::Haste);
     }
 }

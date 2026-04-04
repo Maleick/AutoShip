@@ -2,10 +2,16 @@ use dmft_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::mez_queue::MezQueue;
 use crate::combat::strategy::{ClassStrategy, CombatContext};
-use crate::combat::twist::{SongSlot, TwistAction, TwistEngine};
+use crate::combat::twist::{
+    DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, SongCategory, SongSlot, TwistAction,
+    TwistEngine,
+};
 
 /// Mez song duration in ticks (~18 seconds at 20 ticks/sec = 360 ticks).
 const MEZ_DURATION_TICKS: u32 = 360;
+
+/// Default twist timing: cast takes 6 ticks to establish.
+const WEAVE_CAST_DURATION: u32 = 6;
 
 pub struct BardStrategy {
     class_id: u8,
@@ -16,6 +22,9 @@ pub struct BardStrategy {
     mez_queue: MezQueue,
     /// Spell gem containing the mez song (None = no mez configured).
     mez_gem: Option<u8>,
+    /// Whether to use full-rotation (song weaving) mode.
+    /// When enabled, the twist engine restarts from song 0 every frame.
+    full_rotation_enabled: bool,
 }
 
 impl BardStrategy {
@@ -27,6 +36,7 @@ impl BardStrategy {
             tick: 0,
             mez_queue: MezQueue::new(4),
             mez_gem: None,
+            full_rotation_enabled: false,
         }
     }
 
@@ -38,7 +48,104 @@ impl BardStrategy {
             tick: 0,
             mez_queue: MezQueue::new(4),
             mez_gem: None,
+            full_rotation_enabled: false,
         }
+    }
+
+    /// Create a bard with full-rotation song weaving enabled.
+    ///
+    /// Songs are provided in priority order. The twist engine will restart
+    /// from index 0 every frame and only re-cast songs whose buffs are
+    /// about to expire.
+    pub fn with_weaving(class_id: u8, songs: Vec<SongSlot>) -> Self {
+        Self {
+            class_id,
+            twist: TwistEngine::with_full_rotation(
+                songs,
+                DEFAULT_TWIST_DELAY_TICKS,
+                WEAVE_CAST_DURATION,
+            ),
+            melody_fallback_active: false,
+            tick: 0,
+            mez_queue: MezQueue::new(4),
+            mez_gem: None,
+            full_rotation_enabled: true,
+        }
+    }
+
+    /// Enable or disable full-rotation (song weaving) mode.
+    pub fn set_weaving(&mut self, enabled: bool) {
+        self.full_rotation_enabled = enabled;
+        self.twist.set_full_rotation(enabled);
+    }
+
+    /// Returns whether song weaving mode is active.
+    pub fn is_weaving(&self) -> bool {
+        self.full_rotation_enabled
+    }
+
+    /// Build a default combat song list with buff durations and categories.
+    ///
+    /// Songs are ordered by priority (highest first). The full-rotation engine
+    /// evaluates them top-to-bottom each frame.
+    pub fn default_combat_songs() -> Vec<SongSlot> {
+        vec![
+            SongSlot {
+                gem: 1,
+                priority: 1,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+                category: SongCategory::Haste,
+            },
+            SongSlot {
+                gem: 2,
+                priority: 2,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+                category: SongCategory::SpellFocus,
+            },
+            SongSlot {
+                gem: 3,
+                priority: 3,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+                category: SongCategory::MeleeProc,
+            },
+            SongSlot {
+                gem: 4,
+                priority: 4,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+                category: SongCategory::Crescendo,
+            },
+            SongSlot {
+                gem: 5,
+                priority: 10,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: None, // DD — always castable
+                category: SongCategory::Insult,
+            },
+        ]
+    }
+
+    /// Build a downtime song list (regen + run speed).
+    pub fn default_downtime_songs() -> Vec<SongSlot> {
+        vec![
+            SongSlot {
+                gem: 6,
+                priority: 1,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+                category: SongCategory::Regen,
+            },
+            SongSlot {
+                gem: 7,
+                priority: 2,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+                category: SongCategory::RunSpeed,
+            },
+        ]
     }
 
     /// Configure the mez spell gem for CC duties.
@@ -95,7 +202,9 @@ impl BardStrategy {
             .map(|s| SongSlot {
                 gem: s.slot,
                 priority: s.priority,
-                min_recast_ticks: crate::combat::twist::DEFAULT_TWIST_DELAY_TICKS,
+                min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+                buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+                category: SongCategory::Other,
             })
             .collect()
     }
@@ -140,6 +249,7 @@ impl ClassStrategy for BardStrategy {
             let songs = Self::spells_to_songs(&ctx.config.spells);
             if songs.len() >= 2 {
                 self.twist.set_songs(songs);
+                self.twist.set_full_rotation(self.full_rotation_enabled);
                 self.twist.start();
                 if let TwistAction::Cast { gem } = self.twist.tick(ctx.tick) {
                     crate::eq::slash_command(&format!("/cast {gem}"));
@@ -376,12 +486,16 @@ mod tests {
                     SongSlot {
                         gem: 0,
                         priority: 1,
-                        min_recast_ticks: 66
+                        min_recast_ticks: 66,
+                        buff_duration_ticks: None,
+                        category: SongCategory::Other,
                     },
                     SongSlot {
                         gem: 1,
                         priority: 2,
-                        min_recast_ticks: 66
+                        min_recast_ticks: 66,
+                        buff_duration_ticks: None,
+                        category: SongCategory::Other,
                     }
                 ]
             )
@@ -551,5 +665,95 @@ mod tests {
         // (we can't test the actual slash_command side effects, but we can
         // verify the queue was checked)
         assert_eq!(b.mez_queue_len(), 1);
+    }
+
+    // --- Weaving mode tests ---
+
+    #[test]
+    fn with_weaving_constructor_enables_full_rotation() {
+        let songs = BardStrategy::default_combat_songs();
+        let b = BardStrategy::with_weaving(8, songs);
+        assert!(b.is_weaving());
+    }
+
+    #[test]
+    fn set_weaving_toggles_mode() {
+        let mut b = BardStrategy::new(8);
+        assert!(!b.is_weaving());
+        b.set_weaving(true);
+        assert!(b.is_weaving());
+        b.set_weaving(false);
+        assert!(!b.is_weaving());
+    }
+
+    #[test]
+    fn default_combat_songs_count_and_categories() {
+        let songs = BardStrategy::default_combat_songs();
+        assert_eq!(songs.len(), 5);
+        assert_eq!(songs[0].category, SongCategory::Haste);
+        assert_eq!(songs[1].category, SongCategory::SpellFocus);
+        assert_eq!(songs[2].category, SongCategory::MeleeProc);
+        assert_eq!(songs[3].category, SongCategory::Crescendo);
+        assert_eq!(songs[4].category, SongCategory::Insult);
+        // Insult (DD) has no buff duration
+        assert!(songs[4].buff_duration_ticks.is_none());
+        // All others have durations
+        for s in &songs[..4] {
+            assert!(s.buff_duration_ticks.is_some());
+        }
+    }
+
+    #[test]
+    fn default_downtime_songs_count_and_categories() {
+        let songs = BardStrategy::default_downtime_songs();
+        assert_eq!(songs.len(), 2);
+        assert_eq!(songs[0].category, SongCategory::Regen);
+        assert_eq!(songs[1].category, SongCategory::RunSpeed);
+    }
+
+    #[test]
+    fn engage_with_weaving_sets_full_rotation() {
+        let mut b = BardStrategy::new(8);
+        b.set_weaving(true);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "Haste", 1), sp(2, "Focus", 2), sp(3, "Proc", 3)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(b.is_twisting());
+        assert!(b.twist.is_full_rotation());
+    }
+
+    #[test]
+    fn engage_without_weaving_no_full_rotation() {
+        let mut b = BardStrategy::new(8);
+        assert!(!b.is_weaving());
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "Haste", 1), sp(2, "Focus", 2), sp(3, "Proc", 3)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(b.is_twisting());
+        assert!(!b.twist.is_full_rotation());
+    }
+
+    #[test]
+    fn weaving_songs_have_correct_gems() {
+        let songs = BardStrategy::default_combat_songs();
+        let gems: Vec<u8> = songs.iter().map(|s| s.gem).collect();
+        assert_eq!(gems, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn weaving_songs_priority_ascending() {
+        let songs = BardStrategy::default_combat_songs();
+        for window in songs.windows(2) {
+            assert!(
+                window[0].priority <= window[1].priority,
+                "Songs should be in priority order"
+            );
+        }
     }
 }
