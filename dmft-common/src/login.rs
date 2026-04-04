@@ -1,4 +1,114 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
+
+/// Configurable retry policy with exponential backoff for login failures.
+///
+/// Delays escalate as: `initial_delay * backoff_multiplier^attempt`, capped at `max_delay`.
+/// Optional jitter adds up to ±25% randomization to prevent thundering-herd retries
+/// across multiple clients.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RetryPolicy {
+    /// Maximum number of retry attempts before giving up.
+    pub max_retries: u32,
+    /// Delay before the first retry.
+    #[serde(with = "serde_duration_secs")]
+    pub initial_delay: Duration,
+    /// Upper bound on any single retry delay.
+    #[serde(with = "serde_duration_secs")]
+    pub max_delay: Duration,
+    /// Multiplier applied to the delay after each attempt.
+    pub backoff_multiplier: f64,
+    /// Whether to add ±25% random jitter to each delay.
+    pub jitter: bool,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 5,
+            initial_delay: Duration::from_secs(2),
+            max_delay: Duration::from_secs(60),
+            backoff_multiplier: 2.0,
+            jitter: true,
+        }
+    }
+}
+
+impl RetryPolicy {
+    /// Returns the next retry delay if retries remain, or `None` if exhausted.
+    ///
+    /// The returned duration includes jitter (if enabled) and is clamped to `max_delay`.
+    pub fn next_delay(&self, state: &RetryState) -> Option<Duration> {
+        if state.attempt_count >= self.max_retries {
+            return None;
+        }
+
+        let base_secs = self.initial_delay.as_secs_f64()
+            * self.backoff_multiplier.powi(state.attempt_count as i32);
+        let clamped_secs = base_secs.min(self.max_delay.as_secs_f64());
+
+        let final_secs = if self.jitter {
+            apply_jitter(clamped_secs)
+        } else {
+            clamped_secs
+        };
+
+        Some(Duration::from_secs_f64(final_secs.max(0.0)))
+    }
+}
+
+/// Tracks retry progress for a single login attempt sequence.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct RetryState {
+    /// Number of retry attempts made so far.
+    pub attempt_count: u32,
+    /// The last error that triggered a retry.
+    pub last_error: Option<LoginError>,
+}
+
+impl RetryState {
+    /// Record a failed attempt.
+    pub fn record_failure(&mut self, error: LoginError) {
+        self.attempt_count += 1;
+        self.last_error = Some(error);
+    }
+
+    /// Reset state for a fresh retry sequence.
+    pub fn reset(&mut self) {
+        self.attempt_count = 0;
+        self.last_error = None;
+    }
+}
+
+/// Apply ±25% jitter to a delay value.
+fn apply_jitter(secs: f64) -> f64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .subsec_nanos();
+    let jitter_factor = (nanos as f64 / u32::MAX as f64) * 0.5 - 0.25;
+    secs * (1.0 + jitter_factor)
+}
+
+/// Serde helper to serialize `Duration` as fractional seconds (f64) for TOML/JSON.
+mod serde_duration_secs {
+    use std::time::Duration;
+
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(dur: &Duration, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_f64(dur.as_secs_f64())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
+        let secs = f64::deserialize(d)?;
+        if secs < 0.0 {
+            return Err(serde::de::Error::custom("duration cannot be negative"));
+        }
+        Ok(Duration::from_secs_f64(secs))
+    }
+}
 
 /// Current phase of the automated login state machine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -303,5 +413,208 @@ mod tests {
         };
         let cloned = info.clone();
         assert_eq!(cloned, info);
+    }
+
+    // ── RetryPolicy / RetryState tests ──────────────────────────────────
+
+    #[test]
+    fn retry_policy_default_values() {
+        let policy = RetryPolicy::default();
+        assert_eq!(policy.max_retries, 5);
+        assert_eq!(policy.initial_delay, Duration::from_secs(2));
+        assert_eq!(policy.max_delay, Duration::from_secs(60));
+        assert!((policy.backoff_multiplier - 2.0).abs() < f64::EPSILON);
+        assert!(policy.jitter);
+    }
+
+    #[test]
+    fn retry_state_default_values() {
+        let state = RetryState::default();
+        assert_eq!(state.attempt_count, 0);
+        assert_eq!(state.last_error, None);
+    }
+
+    #[test]
+    fn retry_state_record_failure() {
+        let mut state = RetryState::default();
+        state.record_failure(LoginError::ServerDown);
+        assert_eq!(state.attempt_count, 1);
+        assert_eq!(state.last_error, Some(LoginError::ServerDown));
+
+        state.record_failure(LoginError::Timeout {
+            phase: "test".into(),
+        });
+        assert_eq!(state.attempt_count, 2);
+        assert_eq!(
+            state.last_error,
+            Some(LoginError::Timeout {
+                phase: "test".into()
+            })
+        );
+    }
+
+    #[test]
+    fn retry_state_reset() {
+        let mut state = RetryState::default();
+        state.record_failure(LoginError::ServerDown);
+        state.record_failure(LoginError::ServerFull);
+        state.reset();
+        assert_eq!(state.attempt_count, 0);
+        assert_eq!(state.last_error, None);
+    }
+
+    #[test]
+    fn retry_policy_exponential_backoff_without_jitter() {
+        let policy = RetryPolicy {
+            max_retries: 5,
+            initial_delay: Duration::from_secs(2),
+            max_delay: Duration::from_secs(60),
+            backoff_multiplier: 2.0,
+            jitter: false,
+        };
+
+        let expected = [2.0, 4.0, 8.0, 16.0, 32.0];
+        for (i, &exp) in expected.iter().enumerate() {
+            let state = RetryState {
+                attempt_count: i as u32,
+                last_error: None,
+            };
+            let delay = policy.next_delay(&state).unwrap();
+            assert!(
+                (delay.as_secs_f64() - exp).abs() < 0.001,
+                "attempt {i}: expected {exp}, got {}",
+                delay.as_secs_f64()
+            );
+        }
+    }
+
+    #[test]
+    fn retry_policy_respects_max_delay() {
+        let policy = RetryPolicy {
+            max_retries: 10,
+            initial_delay: Duration::from_secs(2),
+            max_delay: Duration::from_secs(10),
+            backoff_multiplier: 3.0,
+            jitter: false,
+        };
+
+        let state = RetryState {
+            attempt_count: 3,
+            last_error: None,
+        };
+        let delay = policy.next_delay(&state).unwrap();
+        assert!((delay.as_secs_f64() - 10.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn retry_policy_exhausted_returns_none() {
+        let policy = RetryPolicy {
+            max_retries: 3,
+            initial_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(60),
+            backoff_multiplier: 2.0,
+            jitter: false,
+        };
+
+        let state = RetryState {
+            attempt_count: 3,
+            last_error: Some(LoginError::ServerDown),
+        };
+        assert!(policy.next_delay(&state).is_none());
+
+        let state = RetryState {
+            attempt_count: 10,
+            last_error: None,
+        };
+        assert!(policy.next_delay(&state).is_none());
+    }
+
+    #[test]
+    fn retry_policy_zero_retries_always_exhausted() {
+        let policy = RetryPolicy {
+            max_retries: 0,
+            initial_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(60),
+            backoff_multiplier: 2.0,
+            jitter: false,
+        };
+        let state = RetryState::default();
+        assert!(policy.next_delay(&state).is_none());
+    }
+
+    #[test]
+    fn retry_policy_jitter_stays_within_bounds() {
+        let policy = RetryPolicy {
+            max_retries: 5,
+            initial_delay: Duration::from_secs(10),
+            max_delay: Duration::from_secs(60),
+            backoff_multiplier: 1.0,
+            jitter: true,
+        };
+        let state = RetryState::default();
+
+        for _ in 0..20 {
+            let delay = policy.next_delay(&state).unwrap();
+            let secs = delay.as_secs_f64();
+            assert!(secs >= 7.4 && secs <= 12.6, "jitter out of bounds: {secs}");
+        }
+    }
+
+    #[test]
+    fn retry_policy_serialization_roundtrip() {
+        let policy = RetryPolicy::default();
+        let json = serde_json::to_string(&policy).expect("serialize");
+        let restored: RetryPolicy = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.max_retries, policy.max_retries);
+        assert_eq!(restored.initial_delay, policy.initial_delay);
+        assert_eq!(restored.max_delay, policy.max_delay);
+        assert!((restored.backoff_multiplier - policy.backoff_multiplier).abs() < f64::EPSILON);
+        assert_eq!(restored.jitter, policy.jitter);
+    }
+
+    #[test]
+    fn retry_state_serialization_roundtrip() {
+        let mut state = RetryState::default();
+        state.record_failure(LoginError::ServerFull);
+
+        let json = serde_json::to_string(&state).expect("serialize");
+        let restored: RetryState = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.attempt_count, 1);
+        assert_eq!(restored.last_error, Some(LoginError::ServerFull));
+    }
+
+    #[test]
+    fn retry_policy_custom_multiplier() {
+        let policy = RetryPolicy {
+            max_retries: 3,
+            initial_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(100),
+            backoff_multiplier: 3.0,
+            jitter: false,
+        };
+
+        let expected = [1.0, 3.0, 9.0];
+        let delays: Vec<f64> = (0..3)
+            .map(|i| {
+                let state = RetryState {
+                    attempt_count: i,
+                    last_error: None,
+                };
+                policy.next_delay(&state).unwrap().as_secs_f64()
+            })
+            .collect();
+        for (i, (&got, &exp)) in delays.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - exp).abs() < 0.001,
+                "attempt {i}: expected {exp}, got {got}"
+            );
+        }
+    }
+
+    #[test]
+    fn serde_duration_rejects_negative() {
+        let json = r#"{"max_retries":5,"initial_delay":-1.0,"max_delay":60.0,"backoff_multiplier":2.0,"jitter":false}"#;
+        let result: Result<RetryPolicy, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }
