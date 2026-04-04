@@ -101,6 +101,8 @@ pub enum ActivePanel {
     DebugExplorer,
     /// Packet monitor scrolling log.
     PacketMonitorLog,
+    /// EQ Internals offset browser panel (debug).
+    DebugInternals,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -357,6 +359,8 @@ pub struct App {
     pub hex_state: HexDumpState,
     /// Ghidra offset explorer state.
     pub explorer_state: super::state::ExplorerScreenState,
+    /// EQ Internals offset browser state.
+    pub eq_internals_state: super::state::EqInternalsState,
     /// Ghidra database handle (loaded from data/ghidra.db if present).
     pub ghidra_db: Option<dmft_common::ghidra_db::GhidraDatabase>,
 
@@ -605,6 +609,7 @@ impl App {
             spawns_state: SpawnsScreenState::new(),
             hex_state: HexDumpState::new(),
             explorer_state: super::state::ExplorerScreenState::new(),
+            eq_internals_state: super::state::EqInternalsState::new(),
             ghidra_db: None,
 
             refresh_rate_ms: 250,
@@ -851,6 +856,7 @@ impl App {
                     ActivePanel::DebugSpawns,
                     ActivePanel::DebugHexDump,
                     ActivePanel::DebugExplorer,
+                    ActivePanel::DebugInternals,
                 ]
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
@@ -1911,6 +1917,55 @@ impl App {
     /// Convenience accessor for the current spawn selection index.
     pub fn spawn_selected(&self) -> usize {
         self.spawns_state.table_state.selected().unwrap_or(0)
+    }
+
+    /// Select an EQ internals offset and auto-scroll the hex dump to its address.
+    ///
+    /// For globals/functions (absolute preferred-base addresses), sets the hex dump
+    /// address directly. For struct field offsets (PlayerBase, PlayerZone, SpawnManager),
+    /// shows the offset value. On macOS, generates demo data at the address.
+    pub fn internals_select_offset(&mut self) {
+        let entry = self.eq_internals_state.selected_entry().cloned();
+        if let Some(entry) = entry {
+            let is_absolute = matches!(
+                entry.category,
+                super::state::OffsetCategory::Globals | super::state::OffsetCategory::Functions
+            );
+
+            if is_absolute {
+                // Preferred-base address — show hex at that address.
+                self.hex_state.hex_label = format!("{} @ 0x{:X}", entry.name, entry.value);
+                #[cfg(windows)]
+                {
+                    // On Windows with a live process, rebase and read real memory.
+                    // For now, set address to the preferred-base value.
+                    self.hex_state.hex_address = entry.value as usize;
+                    self.hex_state.hex_data = vec![0u8; 0x200];
+                }
+                #[cfg(not(windows))]
+                {
+                    self.hex_state.hex_address = entry.value as usize;
+                    self.hex_state.hex_data =
+                        generate_demo_hex_data_for_offset(&entry.name, entry.value);
+                }
+            } else {
+                // Struct field offset — display it as a relative offset.
+                self.hex_state.hex_label = format!("{} (offset +0x{:X})", entry.name, entry.value);
+                #[cfg(windows)]
+                {
+                    self.hex_state.hex_address = entry.value as usize;
+                    self.hex_state.hex_data = vec![0u8; 0x200];
+                }
+                #[cfg(not(windows))]
+                {
+                    self.hex_state.hex_address = entry.value as usize;
+                    self.hex_state.hex_data =
+                        generate_demo_hex_data_for_offset(&entry.name, entry.value);
+                }
+            }
+
+            self.status_message = format!("EQ Internals: {}", entry.name);
+        }
     }
 
     /// Scrolls the hex dump view down by 256 bytes.
@@ -4719,6 +4774,28 @@ fn generate_demo_hex_data(name: &str, spawn_id: u32) -> Vec<u8> {
     // Add some non-zero bytes to make it look realistic
     for i in (0xA0..0x200).step_by(7) {
         data[i] = ((i * 13 + spawn_id as usize) & 0xFF) as u8;
+    }
+
+    data
+}
+
+/// Generate demo hex data for an EQ Internals offset entry (macOS demo mode).
+#[cfg(not(windows))]
+fn generate_demo_hex_data_for_offset(name: &str, addr: u64) -> Vec<u8> {
+    let mut data = vec![0u8; 0x200];
+
+    // Write the address itself at the start as a pointer-like value.
+    let addr_bytes = addr.to_le_bytes();
+    data[0x00..0x08].copy_from_slice(&addr_bytes);
+
+    // Write the offset name as ASCII.
+    let name_bytes = name.as_bytes();
+    let len = name_bytes.len().min(63);
+    data[0x10..0x10 + len].copy_from_slice(&name_bytes[..len]);
+
+    // Fill with deterministic non-zero bytes based on address.
+    for i in (0x80..0x200).step_by(5) {
+        data[i] = ((i.wrapping_mul(17).wrapping_add(addr as usize)) & 0xFF) as u8;
     }
 
     data

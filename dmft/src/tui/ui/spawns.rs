@@ -342,8 +342,9 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
     draw_spawn_list(frame, cols[1], app);
 }
 
-/// 3-column layout: detail | spawns | explorer.
+/// 3-column layout: detail/hex | spawns | EQ Internals + explorer stacked.
 fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    use super::eq_internals::draw_eq_internals_panel;
     use super::explorer::draw_explorer_panel;
 
     let cols = Layout::default()
@@ -368,19 +369,27 @@ fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     draw_target_panel(frame, left[1], app);
     draw_hex_panel(frame, left[2], app);
     draw_spawn_list(frame, cols[1], app);
-    draw_explorer_panel(frame, cols[2], app);
+
+    // Right column: EQ Internals on top, Ghidra explorer below.
+    let right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(cols[2]);
+
+    draw_eq_internals_panel(frame, right[0], app);
+    draw_explorer_panel(frame, right[1], app);
 }
 
-/// Explorer-focused layout: explorer on top, hex below.
+/// EQ Internals-focused layout: internals + hex, minimal spawns.
 fn draw_debug_explorer_focused(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
-    use super::explorer::draw_explorer_panel;
+    use super::eq_internals::draw_eq_internals_panel;
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(area);
 
-    draw_explorer_panel(frame, rows[0], app);
+    draw_eq_internals_panel(frame, rows[0], app);
 
     let bottom = Layout::default()
         .direction(Direction::Horizontal)

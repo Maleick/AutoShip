@@ -768,6 +768,49 @@ pub fn handle_events(
                 KeyCode::Up => app.hex_scroll_up(),
                 _ => {}
             },
+            ActivePanel::DebugInternals => {
+                if app.eq_internals_state.search_mode {
+                    match key.code {
+                        KeyCode::Esc => {
+                            app.eq_internals_state.search_mode = false;
+                        }
+                        KeyCode::Enter => {
+                            app.eq_internals_state.search_mode = false;
+                            app.eq_internals_state.apply_filter();
+                        }
+                        KeyCode::Backspace => {
+                            app.eq_internals_state.search_filter.pop();
+                            app.eq_internals_state.apply_filter();
+                        }
+                        KeyCode::Char(ch) => {
+                            app.eq_internals_state.search_filter.push(ch);
+                            app.eq_internals_state.apply_filter();
+                        }
+                        _ => {}
+                    }
+                } else {
+                    match key.code {
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            app.eq_internals_state.select_next();
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            app.eq_internals_state.select_prev();
+                        }
+                        KeyCode::Enter => {
+                            app.internals_select_offset();
+                        }
+                        KeyCode::Char('c') => {
+                            app.eq_internals_state.category_filter =
+                                app.eq_internals_state.category_filter.next();
+                            app.eq_internals_state.apply_filter();
+                        }
+                        KeyCode::Char('/') => {
+                            app.eq_internals_state.search_mode = true;
+                        }
+                        _ => {}
+                    }
+                }
+            }
             _ => match key.code {
                 KeyCode::Home if !app.automation_paused => {
                     app.automation_paused = true;

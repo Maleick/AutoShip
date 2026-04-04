@@ -1062,6 +1062,193 @@ impl PacketMonitorState {
     }
 }
 
+
+// ─── EQ Internals panel state ───────────────────────────────────────────────
+
+/// Category filter for the EQ Internals offset browser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OffsetCategory {
+    #[default]
+    All,
+    Globals,
+    PlayerBase,
+    PlayerZone,
+    SpawnManager,
+    Functions,
+}
+
+impl OffsetCategory {
+    /// Human-readable label.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Globals => "Globals",
+            Self::PlayerBase => "PlayerBase",
+            Self::PlayerZone => "PlayerZone",
+            Self::SpawnManager => "SpawnMgr",
+            Self::Functions => "Functions",
+        }
+    }
+
+    /// Cycle to next category.
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::All => Self::Globals,
+            Self::Globals => Self::PlayerBase,
+            Self::PlayerBase => Self::PlayerZone,
+            Self::PlayerZone => Self::SpawnManager,
+            Self::SpawnManager => Self::Functions,
+            Self::Functions => Self::All,
+        }
+    }
+}
+
+/// A single entry in the EQ Internals offset list.
+#[derive(Debug, Clone)]
+pub struct OffsetEntry {
+    /// Human-readable name (e.g. "pinstLocalPlayer", "player_base::x").
+    pub name: String,
+    /// Preferred-base address or struct field offset value.
+    pub value: u64,
+    /// Which category this offset belongs to.
+    pub category: OffsetCategory,
+}
+
+/// State for the EQ Internals offset browser panel.
+pub struct EqInternalsState {
+    /// Ratatui table state for scroll/selection.
+    pub table_state: TableState,
+    /// All offset entries (built once from `OffsetDatabase`).
+    pub all_entries: Vec<OffsetEntry>,
+    /// Filtered entries after applying category + search.
+    pub filtered_entries: Vec<OffsetEntry>,
+    /// Active category filter.
+    pub category_filter: OffsetCategory,
+    /// Text search filter.
+    pub search_filter: String,
+    /// Whether in search input mode.
+    pub search_mode: bool,
+}
+
+impl EqInternalsState {
+    /// Build state from the compiled offset database.
+    #[must_use]
+    pub fn new() -> Self {
+        let db = dmft_common::offset_db::OffsetDatabase::from_compiled_offsets();
+        let mut entries = Vec::new();
+
+        // Globals (pointer addresses).
+        let mut globals: Vec<_> = db.globals.iter().collect();
+        globals.sort_by_key(|(_, v)| *v);
+        for (name, addr) in &globals {
+            entries.push(OffsetEntry {
+                name: name.to_string(),
+                value: **addr,
+                category: OffsetCategory::Globals,
+            });
+        }
+
+        // PlayerBase field offsets.
+        let mut pb: Vec<_> = db.player_base.iter().collect();
+        pb.sort_by_key(|(_, v)| *v);
+        for (name, off) in &pb {
+            entries.push(OffsetEntry {
+                name: format!("player_base::{name}"),
+                value: **off as u64,
+                category: OffsetCategory::PlayerBase,
+            });
+        }
+
+        // PlayerZoneClient field offsets.
+        let mut pz: Vec<_> = db.player_zone.iter().collect();
+        pz.sort_by_key(|(_, v)| *v);
+        for (name, off) in &pz {
+            entries.push(OffsetEntry {
+                name: format!("player_zone::{name}"),
+                value: **off as u64,
+                category: OffsetCategory::PlayerZone,
+            });
+        }
+
+        // SpawnManager field offsets.
+        let mut sm: Vec<_> = db.spawn_manager.iter().collect();
+        sm.sort_by_key(|(_, v)| *v);
+        for (name, off) in &sm {
+            entries.push(OffsetEntry {
+                name: format!("spawn_manager::{name}"),
+                value: **off as u64,
+                category: OffsetCategory::SpawnManager,
+            });
+        }
+
+        // Function addresses.
+        let mut funcs: Vec<_> = db.functions.iter().collect();
+        funcs.sort_by_key(|(_, v)| *v);
+        for (name, addr) in &funcs {
+            entries.push(OffsetEntry {
+                name: name.to_string(),
+                value: **addr,
+                category: OffsetCategory::Functions,
+            });
+        }
+
+        let filtered = entries.clone();
+        let mut table_state = TableState::default();
+        table_state.select(Some(0));
+
+        Self {
+            table_state,
+            all_entries: entries,
+            filtered_entries: filtered,
+            category_filter: OffsetCategory::All,
+            search_filter: String::new(),
+            search_mode: false,
+        }
+    }
+
+    /// Rebuild the filtered list from current category + search filter.
+    pub fn apply_filter(&mut self) {
+        let cat = self.category_filter;
+        let query = self.search_filter.to_lowercase();
+        self.filtered_entries = self
+            .all_entries
+            .iter()
+            .filter(|e| cat == OffsetCategory::All || e.category == cat)
+            .filter(|e| query.is_empty() || e.name.to_lowercase().contains(&query))
+            .cloned()
+            .collect();
+        // Reset selection to stay in bounds.
+        let sel = self
+            .table_state
+            .selected()
+            .unwrap_or(0)
+            .min(self.filtered_entries.len().saturating_sub(1));
+        self.table_state.select(Some(sel));
+    }
+
+    /// Move selection up.
+    pub fn select_prev(&mut self) {
+        let i = self.table_state.selected().unwrap_or(0).saturating_sub(1);
+        self.table_state.select(Some(i));
+    }
+
+    /// Move selection down.
+    pub fn select_next(&mut self) {
+        let max = self.filtered_entries.len().saturating_sub(1);
+        let i = self.table_state.selected().unwrap_or(0);
+        self.table_state.select(Some((i + 1).min(max)));
+    }
+
+    /// Get the currently selected entry.
+    #[must_use]
+    pub fn selected_entry(&self) -> Option<&OffsetEntry> {
+        let idx = self.table_state.selected()?;
+        self.filtered_entries.get(idx)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
