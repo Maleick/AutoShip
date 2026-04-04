@@ -166,7 +166,9 @@ impl StickEngine {
 
         // Moveback check: if target walked into the player, back up.
         // Triggers when distance to target is below (effective_dist - backup_dist).
-        if self.config.moveback && distance < (effective_dist - self.config.backup_dist).max(MIN_STICK_DISTANCE) {
+        if self.config.moveback
+            && distance < (effective_dist - self.config.backup_dist).max(MIN_STICK_DISTANCE)
+        {
             // Retreat position: a point at `effective_dist` from the target,
             // in the direction away from the target (toward the player).
             let retreat_pos = lerp_toward(player_pos, &target_pos, distance, effective_dist);
@@ -831,7 +833,10 @@ mod arc_tests {
         let r = arc_position(&p, &t, 0.0, 10.0, StickMode::NotFront, 45.0, 90.0);
         let angle = angle_from_target(&r, &t);
         let diff = normalize_angle(angle - eq_heading_to_rad(0.0)).abs();
-        assert!(diff >= (45.0_f32).to_radians() - 0.1, "Should be outside front arc");
+        assert!(
+            diff >= (45.0_f32).to_radians() - 0.1,
+            "Should be outside front arc"
+        );
     }
 
     #[test]
@@ -870,7 +875,12 @@ mod arc_tests {
     fn arc_all_modes_correct_distance() {
         let p = Waypoint::new(15.0, -15.0, 0.0);
         let t = Waypoint::new(0.0, 0.0, 0.0);
-        for mode in [StickMode::Behind, StickMode::NotFront, StickMode::Pin, StickMode::Front] {
+        for mode in [
+            StickMode::Behind,
+            StickMode::NotFront,
+            StickMode::Pin,
+            StickMode::Front,
+        ] {
             let r = arc_position(&p, &t, 0.0, 12.0, mode, 45.0, 90.0);
             assert!((t.distance_2d(&r) - 12.0).abs() < 0.5, "{mode:?}");
         }
