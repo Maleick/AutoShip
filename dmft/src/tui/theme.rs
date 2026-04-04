@@ -580,6 +580,7 @@ pub fn neriak() -> Theme {
         map_corpse: shadow,
         map_lines: deep,
         map_geometry: Color::Rgb(70, 55, 95),
+        map_group: cyan,
 
         header_title: Style::default().fg(magenta).add_modifier(Modifier::BOLD),
         header_client_count: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
