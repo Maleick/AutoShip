@@ -1460,6 +1460,25 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();
         }
+        Command::CastSpell {
+            spell_slot,
+            target_id,
+        } => {
+            tracing::info!(spell_slot, ?target_id, "CastSpell received");
+            if let Some(tid) = target_id {
+                // Save → switch → cast → restore pattern (MQ2Cast style).
+                // Queue the target switch, cast, and restore as slash commands
+                // so they execute in order on successive game frames.
+                queue_slash_command(format!("/target id {tid}"));
+                queue_slash_command(format!("/cast {spell_slot}"));
+                // Note: target restore after cast completion is the orchestrator's
+                // responsibility — it knows who the original target was and can
+                // send a follow-up /target command when the cast finishes.
+            } else {
+                // Cast on current target, no swap needed.
+                queue_slash_command(format!("/cast {spell_slot}"));
+            }
+        }
         other => {
             tracing::debug!(?other, "Unhandled command");
         }
