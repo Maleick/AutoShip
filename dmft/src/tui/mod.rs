@@ -20,6 +20,8 @@ pub mod demo_data;
 pub mod dps;
 /// Event handling — keyboard input mapping and command dispatch.
 pub mod event;
+/// Group builder — dynamic templates, slot assignment, and auto-fill.
+pub mod group_builder;
 /// Env-gated live cast capture helpers for validating real EQ clients.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) mod live_cast_capture;
