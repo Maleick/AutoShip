@@ -1,0 +1,155 @@
+import type {
+  Assault,
+  DpsEntry,
+  Player,
+  CombatLogEntry,
+  Alert,
+  NavItem,
+} from "../types";
+
+export const assaults: Assault[] = [
+  {
+    id: "assault-1",
+    zone: "Plane of Hate",
+    target_name: "Maestro of Rancor",
+    target_hp_pct: 14.2,
+    engagement_time: "00:12:34",
+    forces_active: 28,
+    forces_total: 36,
+    avg_mana_pct: 34,
+    casualties: 8,
+    variant: "magenta",
+  },
+  {
+    id: "assault-2",
+    zone: "Temple of Veeshan",
+    target_name: "Lendiniara the Keeper",
+    target_hp_pct: 88.5,
+    engagement_time: "00:01:12",
+    forces_active: 36,
+    forces_total: 36,
+    avg_mana_pct: 91,
+    casualties: 0,
+    variant: "cyan",
+  },
+];
+
+export const dpsRankings: DpsEntry[] = [
+  { name: "XxShadowAssassin", dps: 14233, color: "#facc15" },
+  { name: "Bloodfury", dps: 12105, color: "#dc2626" },
+  { name: "Frostweaver", dps: 8944, color: "#60a5fa" },
+];
+
+export const players: Player[] = [
+  { name: "Noxus", hp_pct: 100, zone: "Neriak Commons", status: "online" },
+  { name: "Aelrindel", hp_pct: 0, zone: "Plane of Hate", status: "dead" },
+  { name: "Grok", hp_pct: 42, zone: "Lower Guk", status: "online" },
+  { name: "Valerius", hp_pct: 88, zone: "Oasis of Marr", status: "online" },
+];
+
+export const combatLog: CombatLogEntry[] = [
+  {
+    timestamp: "23:14:01",
+    message: "Maestro of Rancor hits Noxus for 1,247 points of damage.",
+    highlights: [
+      { text: "Maestro of Rancor", color: "text-red-400", bold: true },
+      { text: "Noxus", color: "text-cyan-400" },
+      { text: "1,247", color: "text-yellow-300", bold: true },
+    ],
+  },
+  {
+    timestamp: "23:14:02",
+    message:
+      "XxShadowAssassin backstabs Maestro of Rancor for 3,891 points of damage.",
+    highlights: [
+      { text: "XxShadowAssassin", color: "text-yellow-400", bold: true },
+      { text: "Maestro of Rancor", color: "text-red-400" },
+      { text: "3,891", color: "text-yellow-300", bold: true },
+    ],
+  },
+  {
+    timestamp: "23:14:03",
+    message: "Frostweaver begins casting Complete Heal on Noxus.",
+    highlights: [
+      { text: "Frostweaver", color: "text-blue-400", bold: true },
+      { text: "Complete Heal", color: "text-green-400" },
+      { text: "Noxus", color: "text-cyan-400" },
+    ],
+  },
+  {
+    timestamp: "23:14:05",
+    message: "Bloodfury slashes Maestro of Rancor for 2,104 points of damage.",
+    highlights: [
+      { text: "Bloodfury", color: "text-red-500", bold: true },
+      { text: "Maestro of Rancor", color: "text-red-400" },
+      { text: "2,104", color: "text-yellow-300", bold: true },
+    ],
+  },
+  {
+    timestamp: "23:14:06",
+    message: "Aelrindel has been slain by Maestro of Rancor!",
+    highlights: [
+      { text: "Aelrindel", color: "text-gray-500", bold: true },
+      { text: "slain", color: "text-red-600", bold: true },
+      { text: "Maestro of Rancor", color: "text-red-400" },
+    ],
+  },
+  {
+    timestamp: "23:14:08",
+    message: "Frostweaver's Complete Heal heals Noxus for 7,500 hit points.",
+    highlights: [
+      { text: "Frostweaver", color: "text-blue-400" },
+      { text: "Complete Heal", color: "text-green-400" },
+      { text: "Noxus", color: "text-cyan-400" },
+      { text: "7,500", color: "text-green-300", bold: true },
+    ],
+  },
+  {
+    timestamp: "23:14:10",
+    message: "Grok crushes Maestro of Rancor for 1,566 points of damage.",
+    highlights: [
+      { text: "Grok", color: "text-orange-400", bold: true },
+      { text: "Maestro of Rancor", color: "text-red-400" },
+      { text: "1,566", color: "text-yellow-300", bold: true },
+    ],
+  },
+];
+
+export const alerts: Alert[] = [
+  {
+    type: "warning",
+    message: "Aggro warning: HolyLight has exceeded threat threshold",
+    detail: "Reduce healing output or activate fade ability",
+    highlight: "HolyLight",
+  },
+  {
+    type: "info",
+    message: "Cazic Thule respawn window opens in 12 minutes",
+    detail: "Pre-position forces at Plane of Fear zone-in",
+  },
+];
+
+export const navItems: NavItem[] = [
+  {
+    id: "engagements",
+    label: "Active Engagements",
+    icon: "Sword",
+    active: true,
+    pulse: true,
+  },
+  {
+    id: "formations",
+    label: "Fleet Formations",
+    icon: "UsersThree",
+  },
+  {
+    id: "map",
+    label: "Realm Map",
+    icon: "MapTrifold",
+  },
+  {
+    id: "security",
+    label: "Security Wards",
+    icon: "ShieldCheck",
+  },
+];
