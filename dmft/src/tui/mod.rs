@@ -23,6 +23,8 @@ pub(crate) mod live_cast_capture;
 pub mod menu;
 /// TUI run loop — terminal setup, tick/render cycle, graceful shutdown.
 pub mod run;
+/// Session monitor — fleet overview and per-client drill-down tracking.
+pub mod session_monitor;
 /// ASCII sprite definitions for the map overlay.
 pub mod sprites;
 /// Per-screen UI state — scroll positions, selections, input buffers.
