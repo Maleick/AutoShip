@@ -116,6 +116,16 @@ pub const FIX_HEADING: u64 = 0x0001_4066_1520;
 /// __get_bearing — calculate bearing between two points
 pub const GET_BEARING: u64 = 0x0001_4025_8850;
 
+// ─── Anti-Cheat / MemCheck addresses ───
+// EQ's internal anti-cheat functions that scan for known cheat tools.
+// These enumerate running processes, check memory regions, and validate
+// module integrity. Critical to hook/bypass for M5 stealth.
+
+/// `memcheck4` — Enumerates running processes looking for known cheat tools
+/// (MQ2, WinEQ, etc.). Part of EQ's anti-cheat process scanner.
+/// Source: blownt (2026-04-04)
+pub const MEMCHECK4_PROCESS_ENUM: u64 = 0x0001_4029_9120;
+
 /// `FreeTargetTracker::CastSpell` — ground-targeted spell casting
 pub const FREE_TARGET_CAST_SPELL: u64 = 0x0001_402B_5740;
 
