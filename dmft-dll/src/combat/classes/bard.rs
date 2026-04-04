@@ -1,33 +1,62 @@
+use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::twist::{SongSlot, TwistAction, TwistEngine};
 use dmft_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
-
-/// Bard strategy: delegates song rotation to EQ's built-in `/melody` command.
-///
-/// Instead of a custom twist engine, we issue `/melody <slot1> <slot2> ...`
-/// on engage and `/melody` (no args) to stop. The EQ client handles all
-/// song cycling automatically.
 pub struct BardStrategy {
     class_id: u8,
-    /// True while melody is running (between engage and disengage).
-    melody_active: bool,
+    twist: TwistEngine,
+    melody_fallback_active: bool,
+    tick: u32,
 }
 
 impl BardStrategy {
     pub fn new(class_id: u8) -> Self {
         Self {
             class_id,
-            melody_active: false,
+            twist: TwistEngine::new(vec![]),
+            melody_fallback_active: false,
+            tick: 0,
         }
     }
-
-    /// Build the `/melody <slot> <slot> ...` command string from configured spells.
-    fn melody_command(config_spells: &[SpellEntry]) -> String {
-        if config_spells.is_empty() {
-            return "/melody".to_string();
+    pub fn with_twist(class_id: u8, songs: Vec<SongSlot>) -> Self {
+        Self {
+            class_id,
+            twist: TwistEngine::new(songs),
+            melody_fallback_active: false,
+            tick: 0,
         }
-        let slots: Vec<String> = config_spells.iter().map(|s| s.slot.to_string()).collect();
-        format!("/melody {}", slots.join(" "))
+    }
+    fn melody_command(spells: &[SpellEntry]) -> String {
+        if spells.is_empty() {
+            return "/melody".into();
+        }
+        format!(
+            "/melody {}",
+            spells
+                .iter()
+                .map(|s| s.slot.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    }
+    fn spells_to_songs(spells: &[SpellEntry]) -> Vec<SongSlot> {
+        spells
+            .iter()
+            .map(|s| SongSlot {
+                gem: s.slot,
+                priority: s.priority,
+                min_recast_ticks: crate::combat::twist::DEFAULT_TWIST_DELAY_TICKS,
+            })
+            .collect()
+    }
+    pub fn is_twisting(&self) -> bool {
+        self.twist.is_active()
+    }
+    pub fn hold_song(&mut self, gem: u8) {
+        self.twist.hold(gem);
+    }
+    pub fn release_hold(&mut self) {
+        self.twist.release_hold();
     }
 }
 
@@ -35,56 +64,59 @@ impl ClassStrategy for BardStrategy {
     fn class_id(&self) -> u8 {
         self.class_id
     }
-
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        // Bards assist the MA when in combat.
         if ctx.in_combat {
             ctx.target.map(|t| t.spawn_id)
         } else {
             None
         }
     }
-
     fn select_spell(&self, _ctx: &CombatContext) -> Option<SpellEntry> {
-        // Melody handles song rotation automatically — nothing to cast.
         None
     }
-
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
         true
     }
-
     fn on_engage(&mut self, ctx: &CombatContext) {
-        // Guard: don't issue bare `/melody` when no songs are configured —
-        // EQ treats `/melody` (no args) as a stop/toggle command.
+        self.tick = ctx.tick;
+        if !ctx.config.spells.is_empty() {
+            let songs = Self::spells_to_songs(&ctx.config.spells);
+            if songs.len() >= 2 {
+                self.twist.set_songs(songs);
+                self.twist.start();
+                if let TwistAction::Cast { gem } = self.twist.tick(ctx.tick) {
+                    crate::eq::slash_command(&format!("/cast {gem}"));
+                }
+                return;
+            }
+        }
         if ctx.config.spells.is_empty() {
-            tracing::warn!("Bard on_engage: no spells configured, skipping /melody");
             return;
         }
-
-        let cmd = Self::melody_command(&ctx.config.spells);
-        tracing::info!(
-            command = %cmd,
-            songs = ctx.config.spells.len(),
-            "Bard engaging — starting /melody"
-        );
-        crate::eq::slash_command(&cmd);
-        self.melody_active = true;
+        crate::eq::slash_command(&Self::melody_command(&ctx.config.spells));
+        self.melody_fallback_active = true;
     }
-
     fn on_action_complete(&mut self, ctx: &CombatContext) {
-        // If combat ended, stop melody.
-        if !ctx.in_combat && self.melody_active {
-            tracing::info!("Bard disengaging — stopping /melody");
-            crate::eq::slash_command("/melody");
-            self.melody_active = false;
+        self.tick = ctx.tick;
+        if !ctx.in_combat {
+            if self.twist.is_active() {
+                self.twist.stop();
+            }
+            if self.melody_fallback_active {
+                crate::eq::slash_command("/melody");
+                self.melody_fallback_active = false;
+            }
+            return;
+        }
+        if self.twist.is_active() {
+            if let TwistAction::Cast { gem } = self.twist.tick(ctx.tick) {
+                crate::eq::slash_command(&format!("/cast {gem}"));
+            }
         }
     }
-
     fn aoe_threshold(&self) -> u8 {
         3
     }
-
     fn role(&self) -> CombatRole {
         CombatRole::Support
     }
@@ -94,216 +126,190 @@ impl ClassStrategy for BardStrategy {
 mod tests {
     use super::*;
     use dmft_common::types::SpawnData;
-
-    fn make_spell(id: i32, name: &str, slot: u8) -> SpellEntry {
+    fn sp(id: i32, n: &str, sl: u8) -> SpellEntry {
         SpellEntry {
-            slot,
+            slot: sl,
             spell_id: id,
-            name: name.to_string(),
+            name: n.into(),
             min_mana_pct: 0.0,
             priority: 1,
             is_aoe: false,
         }
     }
-
-    #[test]
-    fn melody_command_with_songs() {
-        let spells = vec![
-            make_spell(100, "Selo's", 1),
-            make_spell(101, "Chant", 2),
-            make_spell(102, "Anthem", 5),
-        ];
-        let cmd = BardStrategy::melody_command(&spells);
-        assert_eq!(cmd, "/melody 1 2 5");
-    }
-
-    #[test]
-    fn melody_command_empty() {
-        let cmd = BardStrategy::melody_command(&[]);
-        assert_eq!(cmd, "/melody");
-    }
-
-    #[test]
-    fn select_spell_returns_none() {
-        let bard = BardStrategy::new(8);
-        let player = SpawnData::default();
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![make_spell(100, "Selo's", 1)],
-            ..Default::default()
-        };
-        let ctx = CombatContext {
-            player: &player,
+    fn cx<'a>(
+        p: &'a SpawnData,
+        c: &'a dmft_common::combat::CombatConfig,
+        ic: bool,
+        t: u32,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player: p,
             target: None,
             nearby_enemies: &[],
             group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: true,
+            config: c,
+            tick: t,
+            in_combat: ic,
             ch_chain_slot: None,
-        };
-        assert!(bard.select_spell(&ctx).is_none());
+        }
     }
-
     #[test]
-    fn bard_role_is_support() {
-        let bard = BardStrategy::new(8);
-        assert!(matches!(bard.role(), CombatRole::Support));
-    }
-
-    #[test]
-    fn on_engage_activates_melody() {
-        let mut bard = BardStrategy::new(8);
-        assert!(!bard.melody_active);
-
-        let player = SpawnData::default();
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![make_spell(100, "Selo's", 1), make_spell(101, "Chant", 2)],
-            ..Default::default()
-        };
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: true,
-            ch_chain_slot: None,
-        };
-        bard.on_engage(&ctx);
-        assert!(bard.melody_active);
-    }
-
-    #[test]
-    fn on_action_complete_stops_melody_when_combat_ends() {
-        let mut bard = BardStrategy::new(8);
-        bard.melody_active = true;
-
-        let player = SpawnData::default();
-        let config = dmft_common::combat::CombatConfig::default();
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 100,
-            in_combat: false, // Combat ended
-            ch_chain_slot: None,
-        };
-        bard.on_action_complete(&ctx);
-        assert!(!bard.melody_active);
-    }
-
-    #[test]
-    fn on_action_complete_keeps_melody_during_combat() {
-        let mut bard = BardStrategy::new(8);
-        bard.melody_active = true;
-
-        let player = SpawnData::default();
-        let config = dmft_common::combat::CombatConfig::default();
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 100,
-            in_combat: true,
-            ch_chain_slot: None,
-        };
-        bard.on_action_complete(&ctx);
-        assert!(bard.melody_active); // Still active during combat
-    }
-
-    #[test]
-    fn on_engage_empty_spells_does_not_activate_melody() {
-        let mut bard = BardStrategy::new(8);
-        assert!(!bard.melody_active);
-
-        let player = SpawnData::default();
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![], // No spells configured
-            ..Default::default()
-        };
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: true,
-            ch_chain_slot: None,
-        };
-        bard.on_engage(&ctx);
-        // melody_active should remain false — no /melody command issued
-        assert!(!bard.melody_active);
-    }
-
-    #[test]
-    fn class_id_is_8() {
-        let bard = BardStrategy::new(8);
-        assert_eq!(bard.class_id(), 8);
-    }
-
-    #[test]
-    fn bard_class_id_custom() {
-        let bard = BardStrategy::new(42);
-        assert_eq!(bard.class_id(), 42);
-    }
-
-    #[test]
-    fn melody_cleanup_on_flee_full_cycle() {
-        // Verify the full engage → disengage cycle cleans up melody state.
-        let mut bard = BardStrategy::new(8);
-        assert!(!bard.melody_active);
-
-        let player = SpawnData::default();
-        let config = dmft_common::combat::CombatConfig {
-            spells: vec![make_spell(100, "Selo's", 1), make_spell(101, "Chant", 2)],
-            ..Default::default()
-        };
-
-        // Engage — melody starts
-        let engage_ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: true,
-            ch_chain_slot: None,
-        };
-        bard.on_engage(&engage_ctx);
-        assert!(
-            bard.melody_active,
-            "melody should be active after on_engage"
-        );
-
-        // Combat ends — melody should stop
-        let disengage_ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 50,
-            in_combat: false,
-            ch_chain_slot: None,
-        };
-        bard.on_action_complete(&disengage_ctx);
-        assert!(
-            !bard.melody_active,
-            "melody should be inactive after combat ends"
+    fn melody_cmd() {
+        assert_eq!(
+            BardStrategy::melody_command(&[sp(1, "A", 1), sp(2, "B", 3)]),
+            "/melody 1 3"
         );
     }
-
     #[test]
-    fn melody_command_empty_edge_case_returns_bare_command() {
-        // Edge case: empty spell list should produce bare /melody with no slots.
-        let cmd = BardStrategy::melody_command(&[]);
-        assert_eq!(cmd, "/melody");
+    fn melody_empty() {
+        assert_eq!(BardStrategy::melody_command(&[]), "/melody");
+    }
+    #[test]
+    fn spell_none() {
+        assert!(
+            BardStrategy::new(8)
+                .select_spell(&cx(
+                    &SpawnData::default(),
+                    &dmft_common::combat::CombatConfig::default(),
+                    true,
+                    0
+                ))
+                .is_none()
+        );
+    }
+    #[test]
+    fn role() {
+        assert_eq!(BardStrategy::new(8).role(), CombatRole::Support);
+    }
+    #[test]
+    fn id() {
+        assert_eq!(BardStrategy::new(8).class_id(), 8);
+    }
+    #[test]
+    fn engage_twist() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(b.is_twisting());
+        assert!(!b.melody_fallback_active);
+    }
+    #[test]
+    fn engage_melody() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(!b.is_twisting());
+        assert!(b.melody_fallback_active);
+    }
+    #[test]
+    fn engage_empty() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig::default();
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(!b.is_twisting());
+        assert!(!b.melody_fallback_active);
+    }
+    #[test]
+    fn disengage_twist() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        b.on_action_complete(&cx(&p, &c, false, 50));
+        assert!(!b.is_twisting());
+    }
+    #[test]
+    fn disengage_melody() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        b.on_action_complete(&cx(&p, &c, false, 50));
+        assert!(!b.melody_fallback_active);
+    }
+    #[test]
+    fn combat_keeps() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        b.on_action_complete(&cx(&p, &c, true, 50));
+        assert!(b.is_twisting());
+    }
+    #[test]
+    fn full_cycle() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(b.is_twisting());
+        b.on_action_complete(&cx(&p, &c, false, 100));
+        assert!(!b.is_twisting());
+        b.on_engage(&cx(&p, &c, true, 200));
+        assert!(b.is_twisting());
+    }
+    #[test]
+    fn preconfigured() {
+        assert_eq!(
+            BardStrategy::with_twist(
+                8,
+                vec![
+                    SongSlot {
+                        gem: 0,
+                        priority: 1,
+                        min_recast_ticks: 66
+                    },
+                    SongSlot {
+                        gem: 1,
+                        priority: 2,
+                        min_recast_ticks: 66
+                    }
+                ]
+            )
+            .twist
+            .song_count(),
+            2
+        );
+    }
+    #[test]
+    fn hold_rel() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        b.hold_song(5);
+        b.release_hold();
+        assert!(b.is_twisting());
+    }
+    #[test]
+    fn conv() {
+        let s = BardStrategy::spells_to_songs(&[sp(1, "A", 1), sp(2, "B", 3)]);
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].gem, 1);
+        assert_eq!(s[1].gem, 3);
     }
 }
