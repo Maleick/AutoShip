@@ -115,6 +115,8 @@ pub struct Theme {
     pub map_you: Color,
     /// Color for other PCs on the map.
     pub map_pc: Color,
+    /// Color for group members on the map.
+    pub map_group: Color,
     /// Color for NPCs on the map.
     pub map_npc: Color,
     /// Color for named mobs on the map.
@@ -247,6 +249,7 @@ pub fn dark_modern() -> Theme {
 
         map_you: accent,
         map_pc: green,
+        map_group: Color::Cyan,
         map_npc: white,
         map_named: gold,
         map_dead_named: red,
@@ -341,6 +344,7 @@ pub fn classic() -> Theme {
 
         map_you: Color::LightCyan,
         map_pc: Color::Green,
+        map_group: Color::Cyan,
         map_npc: Color::White,
         map_named: Color::Yellow,
         map_dead_named: Color::Red,
@@ -458,6 +462,7 @@ pub fn dracula() -> Theme {
 
         map_you: pink,
         map_pc: green,
+        map_group: Color::Cyan,
         map_npc: fg,
         map_named: yellow,
         map_dead_named: red,

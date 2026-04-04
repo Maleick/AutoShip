@@ -227,6 +227,13 @@ where
         selected_spawn.map(|spawn| (-spawn.y, -spawn.x, spawn.spawn_id));
 
     if key.show_spawns {
+        // Build set of connected client character names for group member detection.
+        let group_names: std::collections::HashSet<&str> = app
+            .clients
+            .iter()
+            .filter_map(|c| c.local_player.as_ref().map(|p| p.displayed_name.as_str()))
+            .collect();
+
         for spawn in &app.spawns {
             if !filters.allows_spawn(spawn) {
                 continue;
@@ -245,19 +252,35 @@ where
             let entry = pending.entry((row as usize, col as usize)).or_default();
             entry.count = entry.count.saturating_add(1);
 
+            // Determine spawn glyph with visual hierarchy:
+            // selected (◍) > group (⊕) > named (!) > PC (@) > NPC (·) > corpse (.)
             let glyph = if Some(spawn.spawn_id) == selected_spawn_id {
                 ('◍', app.theme.text_highlight)
             } else {
                 match spawn.spawn_type {
-                    SpawnType::Player => ('@', app.theme.map_pc),
-                    SpawnType::Npc => {
-                        if !spawn.displayed_name.starts_with("a ")
-                            && !spawn.displayed_name.starts_with("an ")
-                        {
-                            ('!', app.theme.map_named)
+                    SpawnType::Player => {
+                        if group_names.contains(spawn.displayed_name.as_str()) {
+                            ('⊕', app.theme.map_group)
                         } else {
-                            ('·', app.theme.map_npc)
+                            ('@', app.theme.map_pc)
                         }
+                    }
+                    SpawnType::Npc => {
+                        let is_named = !spawn.displayed_name.starts_with("a ")
+                            && !spawn.displayed_name.starts_with("an ");
+                        let base_color = if is_named {
+                            app.theme.map_named
+                        } else {
+                            app.theme.map_npc
+                        };
+                        let marker = if is_named { '!' } else { '·' };
+                        // HP-based status: dim color if damaged.
+                        let color = if spawn.hp_max > 0 && spawn.hp_current < spawn.hp_max / 2 {
+                            Color::DarkGray
+                        } else {
+                            base_color
+                        };
+                        (marker, color)
                     }
                     SpawnType::Corpse => ('.', app.theme.map_corpse),
                     SpawnType::Unknown(_) => ('?', app.theme.spawn_unknown),
@@ -763,6 +786,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 let mut spans = vec![
                     Span::styled("◆ ", Style::default().fg(t.map_you)),
                     Span::styled("You", Style::default().fg(t.text_muted)),
+                    Span::raw(" │ "),
+                    Span::styled("⊕ ", Style::default().fg(t.map_group)),
+                    Span::styled("Grp", Style::default().fg(t.text_muted)),
                     Span::raw(" │ "),
                     Span::styled("@ ", Style::default().fg(t.map_pc)),
                     Span::styled("PC", Style::default().fg(t.text_muted)),
