@@ -36,6 +36,10 @@ pub struct CampConfig {
     /// Mob names to burn down immediately when spotted (named/rare spawns).
     #[serde(default)]
     pub burn_mob_names: Vec<String>,
+    /// Suppress return-to-camp movement while the character has aggro.
+    /// MQ2MoveUtils equivalent: `/makecamp returnnoaggro`.
+    #[serde(default)]
+    pub return_no_aggro: bool,
     /// Camp file name to progress to when the group outlevels this camp.
     #[serde(default)]
     pub next_camp: Option<String>,
@@ -105,6 +109,7 @@ mod tests {
             pull_mob_names: vec!["an orc pawn".into(), "an orc centurion".into()],
             ignore_mob_names: vec!["Ambassador DVinn".into()],
             burn_mob_names: vec!["Emperor Crush".into()],
+            return_no_aggro: false,
             next_camp: Some("crushbone_throne".into()),
             prev_camp: None,
         }

@@ -215,6 +215,7 @@ mod tests {
             pull_mob_names: Vec::new(),
             ignore_mob_names: Vec::new(),
             burn_mob_names: Vec::new(),
+            return_no_aggro: false,
             next_camp: next.map(String::from),
             prev_camp: prev.map(String::from),
         }

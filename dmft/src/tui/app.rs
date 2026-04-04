@@ -3712,6 +3712,7 @@ impl App {
                     pull_mob_names: Vec::new(),
                     ignore_mob_names: Vec::new(),
                     burn_mob_names: Vec::new(),
+                    return_no_aggro: false,
                     next_camp: None,
                     prev_camp: None,
                 };

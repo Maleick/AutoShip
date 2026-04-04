@@ -192,6 +192,23 @@ impl Orchestrator {
             })
             .collect();
 
+        // Build per-member combat state from game state.
+        // A character is considered "in combat" if their Combatant FSM is not idle/recovering.
+        let member_in_combat: Vec<(u32, bool)> = camp
+            .members
+            .iter()
+            .filter_map(|m| {
+                self.game_states.get(&m.pid).map(|gs| {
+                    let in_combat = !matches!(
+                        gs.combat_status,
+                        dmft_common::combat::CombatStatus::Idle
+                            | dmft_common::combat::CombatStatus::Recovering
+                    );
+                    (m.pid, in_combat)
+                })
+            })
+            .collect();
+
         Some(CampSnapshot {
             healer_mana_pct,
             tank_hp_pct,
@@ -199,6 +216,7 @@ impl Orchestrator {
             target_is_dead,
             target_spawn_id,
             member_hp,
+            member_in_combat,
         })
     }
 
@@ -782,6 +800,7 @@ mod tests {
             pull_mob_names: vec!["a_mob".into()],
             ignore_mob_names: Vec::new(),
             burn_mob_names: Vec::new(),
+            return_no_aggro: false,
             next_camp: None,
             prev_camp: None,
         }

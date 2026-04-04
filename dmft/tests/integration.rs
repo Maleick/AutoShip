@@ -63,6 +63,7 @@ fn test_camp_config() -> CampConfig {
         pull_mob_names: vec!["an orc pawn".into()],
         ignore_mob_names: vec![],
         burn_mob_names: vec![],
+        return_no_aggro: false,
         next_camp: None,
         prev_camp: None,
     }
@@ -532,6 +533,7 @@ fn camp_loop_full_cycle_with_snapshot() {
         target_is_dead: true,
         target_spawn_id: Some(9999),
         member_hp: vec![],
+        member_in_combat: vec![],
     };
     let cmds = camp.tick(Some(&dead_snapshot));
     assert!(matches!(camp.state, CampState::Looting { .. }));
@@ -572,6 +574,7 @@ fn camp_loop_full_cycle_with_snapshot() {
         target_is_dead: false,
         target_spawn_id: None,
         member_hp: vec![],
+        member_in_combat: vec![],
     };
     let cmds = camp.tick(Some(&mana_ready_snapshot));
     assert!(matches!(camp.state, CampState::Idle));
@@ -599,6 +602,7 @@ fn camp_loop_emergency_heal_on_low_tank_hp() {
         target_is_dead: false,
         target_spawn_id: Some(9999),
         member_hp: vec![],
+        member_in_combat: vec![],
     };
     let cmds = camp.tick(Some(&low_tank_snapshot));
     // Healer (pid 101) should get emergency /cast 1
@@ -621,6 +625,7 @@ fn camp_idle_respects_healer_mana_threshold() {
         target_is_dead: false,
         target_spawn_id: None,
         member_hp: vec![],
+        member_in_combat: vec![],
     };
     let cmds = camp.tick(Some(&low_mana));
     // Should stay Idle since healer mana is below pull_mana_pct (30)
@@ -810,6 +815,7 @@ fn camp_snapshot_driven_fight_to_loot_on_target_death() {
         target_is_dead: false,
         target_spawn_id: Some(9999),
         member_hp: vec![],
+        member_in_combat: vec![],
     };
     camp.tick(Some(&alive_snapshot));
     assert!(matches!(camp.state, CampState::Fighting { .. }));
@@ -822,6 +828,7 @@ fn camp_snapshot_driven_fight_to_loot_on_target_death() {
         target_is_dead: true,
         target_spawn_id: Some(9999),
         member_hp: vec![],
+        member_in_combat: vec![],
     };
     camp.tick(Some(&dead_snapshot));
     assert!(matches!(camp.state, CampState::Looting { .. }));

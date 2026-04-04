@@ -70,6 +70,10 @@ pub struct CampSnapshot {
     /// Per-member HP values: `(pid, current_hp)`. Used to detect deaths
     /// and trigger recovery (rez commands). Empty when HP data is unavailable.
     pub member_hp: Vec<(u32, i32)>,
+    /// Per-member combat state: `(pid, in_combat)`. Used by `return_no_aggro`
+    /// to suppress return-to-camp movement for characters that have aggro.
+    /// Empty when combat state data is unavailable (treated as "not in combat").
+    pub member_in_combat: Vec<(u32, bool)>,
 }
 
 /// An action the camp loop wants executed on a specific client.
@@ -492,7 +496,7 @@ impl CampLoop {
 
                 if cycle_done {
                     self.loot_cycle = None;
-                    self.transition_to_medding(&mut commands);
+                    self.transition_to_medding(&mut commands, snapshot);
                 }
             }
             CampState::Medding { started_tick } => {
@@ -517,7 +521,7 @@ impl CampLoop {
                         &CampState::Idle, // Check as if idle (both Idle and Medding are valid)
                     );
                     if buff_cmds.is_empty() {
-                        self.transition_to_idle(&mut commands);
+                        self.transition_to_idle(&mut commands, snapshot);
                     } else {
                         // Stand up before buffing (members are seated from medding)
                         for member in &self.members {
@@ -533,7 +537,7 @@ impl CampLoop {
             }
             CampState::Buffing { started_tick } => {
                 if self.tick - started_tick >= BUFF_DURATION {
-                    self.transition_to_idle(&mut commands);
+                    self.transition_to_idle(&mut commands, snapshot);
                 }
             }
         }
@@ -676,9 +680,16 @@ impl CampLoop {
         };
     }
 
-    fn transition_to_medding(&mut self, commands: &mut Vec<(u32, CampAction)>) {
-        // Casters sit to med
+    fn transition_to_medding(
+        &mut self,
+        commands: &mut Vec<(u32, CampAction)>,
+        snapshot: Option<&CampSnapshot>,
+    ) {
+        // Casters sit to med — skip members with aggro when return_no_aggro is set
         for member in &self.members {
+            if self.config.return_no_aggro && Self::member_has_aggro(member.pid, snapshot) {
+                continue;
+            }
             match member.role {
                 Role::Healer | Role::CC | Role::Dps => {
                     commands.push((member.pid, CampAction::Slash("/sit".into())));
@@ -692,13 +703,29 @@ impl CampLoop {
         };
     }
 
-    fn transition_to_idle(&mut self, commands: &mut Vec<(u32, CampAction)>) {
-        // Everyone stand up
+    fn transition_to_idle(
+        &mut self,
+        commands: &mut Vec<(u32, CampAction)>,
+        snapshot: Option<&CampSnapshot>,
+    ) {
+        // Everyone stand up — skip members with aggro when return_no_aggro is set
         for member in &self.members {
+            if self.config.return_no_aggro && Self::member_has_aggro(member.pid, snapshot) {
+                continue;
+            }
             commands.push((member.pid, CampAction::Slash("/stand".into())));
         }
 
         self.state = CampState::Idle;
+    }
+
+    /// Check if a member is currently in combat according to the snapshot.
+    fn member_has_aggro(pid: u32, snapshot: Option<&CampSnapshot>) -> bool {
+        snapshot.is_some_and(|snap| {
+            snap.member_in_combat
+                .iter()
+                .any(|(id, in_combat)| *id == pid && *in_combat)
+        })
     }
 }
 
@@ -721,6 +748,7 @@ mod tests {
             pull_mob_names: vec!["an orc pawn".into()],
             ignore_mob_names: Vec::new(),
             burn_mob_names: Vec::new(),
+            return_no_aggro: false,
             next_camp: None,
             prev_camp: None,
         }
@@ -1002,6 +1030,7 @@ mod tests {
             target_is_dead: true,
             target_spawn_id: None,
             member_hp: vec![],
+            member_in_combat: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         assert!(matches!(camp.state, CampState::Looting { .. }));
@@ -1023,6 +1052,7 @@ mod tests {
             target_is_dead: false,
             target_spawn_id: None,
             member_hp: vec![],
+            member_in_combat: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         assert_eq!(camp.state, CampState::Idle);
@@ -1042,6 +1072,7 @@ mod tests {
             target_is_dead: false,
             target_spawn_id: None,
             member_hp: vec![],
+            member_in_combat: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         assert_eq!(camp.state, CampState::Idle);
@@ -1061,6 +1092,7 @@ mod tests {
             target_is_dead: false,
             target_spawn_id: None,
             member_hp: vec![],
+            member_in_combat: vec![],
         };
         let cmds = camp.tick(Some(&snap));
         // Healer (pid 101) should get emergency /cast 1
@@ -1134,6 +1166,7 @@ mod tests {
             target_is_dead: false,
             target_spawn_id: None,
             member_hp: vec![],
+            member_in_combat: vec![],
         };
         let cmds = camp.tick(Some(&snap));
 
@@ -1267,5 +1300,156 @@ mod tests {
         assert_eq!(camp.state, CampState::Idle);
         // Should have /stand commands
         assert!(cmds.iter().any(|(_, cmd)| cmd == "/stand"));
+    }
+
+    // -- returnnoaggro tests --
+
+    fn test_config_with_return_no_aggro() -> CampConfig {
+        let mut cfg = test_config();
+        cfg.return_no_aggro = true;
+        cfg
+    }
+
+    #[test]
+    fn returnnoaggro_medding_skips_sit_for_combat_member() {
+        let mut camp = CampLoop::new(test_config_with_return_no_aggro(), test_members());
+        // Fast-forward to Looting so it transitions to Medding
+        camp.state = CampState::Looting { started_tick: 0 };
+        camp.loot_cycle = None; // cycle done => transition to medding
+        camp.tick = 0;
+
+        // CC (pid 102, Enchanter) has aggro; healer (101) does not
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 90.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![],
+            member_in_combat: vec![
+                (100, false),
+                (101, false),
+                (102, true),
+                (103, false),
+                (104, false),
+                (105, false),
+            ],
+        };
+        let cmds = camp.tick(Some(&snap));
+        assert!(matches!(camp.state, CampState::Medding { .. }));
+
+        // Healer (101) should get /sit, CC (102) should NOT (has aggro)
+        let healer_sit = cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd == "/sit");
+        let cc_sit = cmds.iter().any(|(pid, cmd)| *pid == 102 && cmd == "/sit");
+        assert!(healer_sit, "healer should sit when not in combat");
+        assert!(!cc_sit, "CC with aggro should NOT sit");
+    }
+
+    #[test]
+    fn returnnoaggro_idle_skips_stand_for_combat_member() {
+        let mut camp = CampLoop::new(test_config_with_return_no_aggro(), test_members());
+        camp.state = CampState::Medding { started_tick: 0 };
+        camp.tick = 0;
+
+        // DPS (pid 104) has aggro, others do not
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 100.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![],
+            member_in_combat: vec![
+                (100, false),
+                (101, false),
+                (102, false),
+                (103, false),
+                (104, true),
+                (105, false),
+            ],
+        };
+        let cmds = camp.tick(Some(&snap));
+        assert_eq!(camp.state, CampState::Idle);
+
+        // Tank and healer should get /stand, DPS (104) should NOT
+        let tank_stand = cmds.iter().any(|(pid, cmd)| *pid == 100 && cmd == "/stand");
+        let dps_stand = cmds.iter().any(|(pid, cmd)| *pid == 104 && cmd == "/stand");
+        assert!(tank_stand, "tank should stand when not in combat");
+        assert!(!dps_stand, "dps with aggro should NOT get /stand");
+    }
+
+    #[test]
+    fn returnnoaggro_disabled_sends_all_commands_normally() {
+        // return_no_aggro = false (default) — all members get commands even in combat
+        let mut camp = CampLoop::new(test_config(), test_members());
+        let member_count = camp.members.len();
+        camp.state = CampState::Medding { started_tick: 0 };
+        camp.tick = 0;
+
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 100.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![],
+            member_in_combat: vec![
+                (100, true),
+                (101, true),
+                (102, true),
+                (103, true),
+                (104, true),
+                (105, true),
+            ],
+        };
+        let cmds = camp.tick(Some(&snap));
+        assert_eq!(camp.state, CampState::Idle);
+
+        // All members should get /stand even though in combat (flag is off)
+        let stand_cmds: Vec<_> = cmds.iter().filter(|(_, cmd)| cmd == "/stand").collect();
+        assert_eq!(
+            stand_cmds.len(),
+            member_count,
+            "all members should get /stand"
+        );
+    }
+
+    #[test]
+    fn returnnoaggro_no_snapshot_sends_all_commands() {
+        // When snapshot is None, can't determine combat state — send all commands
+        let mut camp = CampLoop::new(test_config_with_return_no_aggro(), test_members());
+        let member_count = camp.members.len();
+        camp.state = CampState::Medding { started_tick: 0 };
+        camp.tick = MED_DURATION;
+
+        let cmds = camp.tick(None);
+        assert_eq!(camp.state, CampState::Idle);
+
+        let stand_cmds: Vec<_> = cmds.iter().filter(|(_, cmd)| cmd == "/stand").collect();
+        assert_eq!(
+            stand_cmds.len(),
+            member_count,
+            "all members should get /stand when no snapshot"
+        );
+    }
+
+    #[test]
+    fn member_has_aggro_returns_false_for_missing_member() {
+        let snap = CampSnapshot {
+            healer_mana_pct: 0.0,
+            tank_hp_pct: 0.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![],
+            member_in_combat: vec![(100, true)],
+        };
+        // pid 999 is not in the snapshot — should return false (safe to send commands)
+        assert!(!CampLoop::member_has_aggro(999, Some(&snap)));
+    }
+
+    #[test]
+    fn member_has_aggro_returns_false_for_none_snapshot() {
+        assert!(!CampLoop::member_has_aggro(100, None));
     }
 }
