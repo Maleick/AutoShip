@@ -1,6 +1,7 @@
+use dmft_common::combat::{CombatRole, SpellEntry};
+
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 use crate::combat::twist::{SongSlot, TwistAction, TwistEngine};
-use dmft_common::combat::{CombatRole, SpellEntry};
 
 pub struct BardStrategy {
     class_id: u8,
@@ -18,6 +19,7 @@ impl BardStrategy {
             tick: 0,
         }
     }
+
     pub fn with_twist(class_id: u8, songs: Vec<SongSlot>) -> Self {
         Self {
             class_id,
@@ -26,6 +28,7 @@ impl BardStrategy {
             tick: 0,
         }
     }
+
     fn melody_command(spells: &[SpellEntry]) -> String {
         if spells.is_empty() {
             return "/melody".into();
@@ -39,6 +42,7 @@ impl BardStrategy {
                 .join(" ")
         )
     }
+
     fn spells_to_songs(spells: &[SpellEntry]) -> Vec<SongSlot> {
         spells
             .iter()
@@ -49,12 +53,15 @@ impl BardStrategy {
             })
             .collect()
     }
+
     pub fn is_twisting(&self) -> bool {
         self.twist.is_active()
     }
+
     pub fn hold_song(&mut self, gem: u8) {
         self.twist.hold(gem);
     }
+
     pub fn release_hold(&mut self) {
         self.twist.release_hold();
     }
@@ -64,6 +71,7 @@ impl ClassStrategy for BardStrategy {
     fn class_id(&self) -> u8 {
         self.class_id
     }
+
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         if ctx.in_combat {
             ctx.target.map(|t| t.spawn_id)
@@ -71,12 +79,15 @@ impl ClassStrategy for BardStrategy {
             None
         }
     }
+
     fn select_spell(&self, _ctx: &CombatContext) -> Option<SpellEntry> {
         None
     }
+
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
         true
     }
+
     fn on_engage(&mut self, ctx: &CombatContext) {
         self.tick = ctx.tick;
         if !ctx.config.spells.is_empty() {
@@ -96,6 +107,7 @@ impl ClassStrategy for BardStrategy {
         crate::eq::slash_command(&Self::melody_command(&ctx.config.spells));
         self.melody_fallback_active = true;
     }
+
     fn on_action_complete(&mut self, ctx: &CombatContext) {
         self.tick = ctx.tick;
         if !ctx.in_combat {
@@ -114,9 +126,21 @@ impl ClassStrategy for BardStrategy {
             }
         }
     }
+
+    fn on_cast_interrupted(&mut self, ctx: &CombatContext, gem: u8) {
+        self.tick = ctx.tick;
+        if self.twist.is_active() {
+            self.twist.on_interrupt(gem);
+            tracing::info!(gem, "Bard: song interrupted, re-queuing via TwistEngine");
+        }
+        // Melody fallback doesn't need special interrupt handling —
+        // EQ's /melody auto-resumes the rotation.
+    }
+
     fn aoe_threshold(&self) -> u8 {
         3
     }
+
     fn role(&self) -> CombatRole {
         CombatRole::Support
     }
@@ -126,6 +150,7 @@ impl ClassStrategy for BardStrategy {
 mod tests {
     use super::*;
     use dmft_common::types::SpawnData;
+
     fn sp(id: i32, n: &str, sl: u8) -> SpellEntry {
         SpellEntry {
             slot: sl,
@@ -136,6 +161,7 @@ mod tests {
             is_aoe: false,
         }
     }
+
     fn cx<'a>(
         p: &'a SpawnData,
         c: &'a dmft_common::combat::CombatConfig,
@@ -153,6 +179,7 @@ mod tests {
             ch_chain_slot: None,
         }
     }
+
     #[test]
     fn melody_cmd() {
         assert_eq!(
@@ -311,5 +338,57 @@ mod tests {
         assert_eq!(s.len(), 2);
         assert_eq!(s[0].gem, 1);
         assert_eq!(s[1].gem, 3);
+    }
+
+    // --- Interrupt recovery tests ---
+
+    #[test]
+    fn interrupt_requeues_in_twist() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(b.is_twisting());
+        // Simulate an interrupt on gem 1
+        b.on_cast_interrupted(&cx(&p, &c, true, 5), 1);
+        assert!(b.is_twisting()); // Still active
+        assert_eq!(b.twist.interrupted(), Some(1));
+    }
+
+    #[test]
+    fn interrupt_when_not_twisting_is_noop() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1)], // Only 1 spell → melody fallback
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(!b.is_twisting());
+        // Interrupt shouldn't do anything special for melody mode
+        b.on_cast_interrupted(&cx(&p, &c, true, 5), 1);
+        assert_eq!(b.twist.interrupted(), None);
+    }
+
+    #[test]
+    fn interrupt_then_action_complete_recasts() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = dmft_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        // Interrupt gem 1
+        b.on_cast_interrupted(&cx(&p, &c, true, 5), 1);
+        // on_action_complete should advance the twist engine which will
+        // pick up the interrupted gem
+        b.on_action_complete(&cx(&p, &c, true, 6));
+        // After the action complete ticks the engine, the interrupted gem
+        // should have been cleared (it was re-cast)
+        assert_eq!(b.twist.interrupted(), None);
     }
 }

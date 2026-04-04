@@ -74,6 +74,12 @@ pub trait ClassStrategy: Send {
     /// Override to advance internal state (e.g., bard twist index, auto-attack toggle).
     fn on_action_complete(&mut self, _ctx: &CombatContext) {}
 
+    /// Called when a cast is interrupted before completion (HolyShit preempt,
+    /// target lost mid-cast, or external interrupt like "You miss a note").
+    /// `gem` is the spell slot that was being cast when the interrupt occurred.
+    /// Default is a no-op; bards override this to re-queue the interrupted song.
+    fn on_cast_interrupted(&mut self, _ctx: &CombatContext, _gem: u8) {}
+
     /// Minimum enemy count before switching to `AoE` rotation.
     fn aoe_threshold(&self) -> u8;
 
