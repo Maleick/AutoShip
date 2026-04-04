@@ -10,6 +10,7 @@
 
 pub mod ch_chain;
 pub mod dashboard;
+pub mod dps_bars;
 pub mod groups;
 pub mod map;
 pub mod navigation;

@@ -5,7 +5,8 @@
 //! "unknown" timers so we can throttle retries instead of spamming the EQ
 //! client every tick.
 
-use std::collections::HashMap;
+/// Maximum number of concurrent ability cooldowns tracked.
+const MAX_TRACKED_ABILITIES: usize = 16;
 
 /// Public view of an ability's availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +21,7 @@ pub enum AbilityAvailability {
 
 impl AbilityAvailability {
     /// Whether the ability can be attempted at the given tick.
+    #[inline]
     pub fn is_ready_at(&self, now: u32) -> bool {
         match self {
             AbilityAvailability::Ready => true,
@@ -30,8 +32,10 @@ impl AbilityAvailability {
 }
 
 /// Tracks cooldown state for abilities with optional metadata.
+/// Uses a fixed-capacity array instead of HashMap for zero-allocation per-tick operation.
 pub struct AbilityCooldownTracker {
-    states: HashMap<i32, AbilityAvailability>,
+    entries: [(i32, AbilityAvailability); MAX_TRACKED_ABILITIES],
+    len: usize,
     fallback_retry_ticks: u32,
 }
 
@@ -40,7 +44,8 @@ impl AbilityCooldownTracker {
 
     pub fn new() -> Self {
         Self {
-            states: HashMap::new(),
+            entries: [(0, AbilityAvailability::Ready); MAX_TRACKED_ABILITIES],
+            len: 0,
             fallback_retry_ticks: Self::DEFAULT_RETRY_TICKS,
         }
     }
@@ -48,47 +53,65 @@ impl AbilityCooldownTracker {
     #[cfg(test)]
     pub fn with_retry_ticks(fallback_retry_ticks: u32) -> Self {
         Self {
-            states: HashMap::new(),
+            entries: [(0, AbilityAvailability::Ready); MAX_TRACKED_ABILITIES],
+            len: 0,
             fallback_retry_ticks,
         }
     }
 
     /// Advance cooldowns by one tick and drop entries that have expired.
+    #[inline]
     pub fn tick(&mut self, now: u32) {
-        self.states.retain(|_, state| match state {
-            AbilityAvailability::CoolingDown(remaining) => {
-                *remaining = remaining.saturating_sub(1);
-                *remaining > 0
-            }
-            AbilityAvailability::WaitingForRetry { retry_at } => now < *retry_at,
-            AbilityAvailability::Ready => false,
-        });
-    }
-
-    /// View the current availability state for an ability at the given tick.
-    pub fn availability(&self, ability_id: i32, now: u32) -> AbilityAvailability {
-        match self.states.get(&ability_id) {
-            Some(AbilityAvailability::CoolingDown(remaining)) => {
-                if *remaining == 0 {
-                    AbilityAvailability::Ready
-                } else {
-                    AbilityAvailability::CoolingDown(*remaining)
+        let mut i = 0;
+        while i < self.len {
+            let keep = match &mut self.entries[i].1 {
+                AbilityAvailability::CoolingDown(remaining) => {
+                    *remaining = remaining.saturating_sub(1);
+                    *remaining > 0
+                }
+                AbilityAvailability::WaitingForRetry { retry_at } => now < *retry_at,
+                AbilityAvailability::Ready => false,
+            };
+            if keep {
+                i += 1;
+            } else {
+                self.len -= 1;
+                if i < self.len {
+                    self.entries[i] = self.entries[self.len];
                 }
             }
-            Some(AbilityAvailability::WaitingForRetry { retry_at }) => {
-                if now >= *retry_at {
-                    AbilityAvailability::Ready
-                } else {
-                    AbilityAvailability::WaitingForRetry {
-                        retry_at: *retry_at,
-                    }
-                }
-            }
-            _ => AbilityAvailability::Ready,
         }
     }
 
+    /// View the current availability state for an ability at the given tick.
+    #[inline]
+    pub fn availability(&self, ability_id: i32, now: u32) -> AbilityAvailability {
+        for i in 0..self.len {
+            if self.entries[i].0 == ability_id {
+                return match self.entries[i].1 {
+                    AbilityAvailability::CoolingDown(remaining) => {
+                        if remaining == 0 {
+                            AbilityAvailability::Ready
+                        } else {
+                            AbilityAvailability::CoolingDown(remaining)
+                        }
+                    }
+                    AbilityAvailability::WaitingForRetry { retry_at } => {
+                        if now >= retry_at {
+                            AbilityAvailability::Ready
+                        } else {
+                            AbilityAvailability::WaitingForRetry { retry_at }
+                        }
+                    }
+                    other => other,
+                };
+            }
+        }
+        AbilityAvailability::Ready
+    }
+
     /// Whether an ability can be attempted at the given tick.
+    #[inline]
     pub fn can_use(&self, ability_id: i32, now: u32) -> bool {
         self.availability(ability_id, now).is_ready_at(now)
     }
@@ -102,7 +125,16 @@ impl AbilityCooldownTracker {
                 retry_at: now.saturating_add(self.fallback_retry_ticks),
             },
         };
-        self.states.insert(ability_id, state);
+        for i in 0..self.len {
+            if self.entries[i].0 == ability_id {
+                self.entries[i].1 = state;
+                return;
+            }
+        }
+        if self.len < MAX_TRACKED_ABILITIES {
+            self.entries[self.len] = (ability_id, state);
+            self.len += 1;
+        }
     }
 }
 

@@ -16,6 +16,7 @@ impl HolyShitEvaluator {
     }
 
     /// Evaluate all rules against current context. Returns the first matching action.
+    #[inline]
     pub fn evaluate(&self, ctx: &CombatContext) -> Option<&HolyShitAction> {
         for rule in &self.rules {
             if Self::eval_condition(&rule.condition, ctx) {
@@ -26,6 +27,7 @@ impl HolyShitEvaluator {
         None
     }
 
+    #[inline]
     fn eval_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         match expr {
             ConditionExpr::Always => true,

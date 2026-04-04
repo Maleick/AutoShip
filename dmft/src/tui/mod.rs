@@ -12,6 +12,8 @@ pub mod command;
 pub mod config_panel;
 /// Demo data generator — synthetic spawns and player data for macOS development.
 pub mod demo_data;
+/// DPS tracker — rolling-window damage-per-second calculation for group members.
+pub mod dps;
 /// Event handling — keyboard input mapping and command dispatch.
 pub mod event;
 /// Env-gated live cast capture helpers for validating real EQ clients.

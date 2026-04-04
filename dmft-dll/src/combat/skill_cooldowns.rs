@@ -4,7 +4,8 @@
 //! This tracker replaces the old shared 60-tick timer with per-skill timers so
 //! skills fire as soon as they come off cooldown rather than all at once.
 
-use std::collections::HashMap;
+/// Maximum number of concurrent skill cooldowns tracked.
+const MAX_TRACKED_SKILLS: usize = 16;
 
 /// Known EQ skill IDs and their cooldowns in game ticks (~20 ticks/sec).
 pub mod skill_timers {
@@ -18,36 +19,64 @@ pub mod skill_timers {
     pub const EAGLE_STRIKE: (u32, u32) = (23, 120); // ~6s
 }
 
-/// Tracks per-skill cooldown timers. Each skill has its own independent timer
-/// that counts down every tick, allowing skills to fire as soon as they're ready.
+/// Tracks per-skill cooldown timers using a fixed-capacity array.
+/// Each skill has its own independent timer that counts down every tick.
+/// Uses linear scan over a small array instead of HashMap for zero-allocation
+/// per-tick operation (~8 skills tracked, linear scan faster than hashing).
 pub struct SkillCooldownTracker {
-    cooldowns: HashMap<u32, u32>, // skill_id → ticks_remaining
+    entries: [(u32, u32); MAX_TRACKED_SKILLS],
+    len: usize,
 }
 
 impl SkillCooldownTracker {
     pub fn new() -> Self {
         Self {
-            cooldowns: HashMap::new(),
+            entries: [(0, 0); MAX_TRACKED_SKILLS],
+            len: 0,
         }
     }
 
     /// Returns true if the skill has no active cooldown (ready to fire).
+    #[inline]
     pub fn is_ready(&self, skill_id: u32) -> bool {
-        match self.cooldowns.get(&skill_id) {
-            Some(&ticks) => ticks == 0,
-            None => true,
+        for i in 0..self.len {
+            if self.entries[i].0 == skill_id {
+                return self.entries[i].1 == 0;
+            }
         }
+        true
     }
 
     /// Put a skill on cooldown for the given number of ticks.
+    #[inline]
     pub fn consume(&mut self, skill_id: u32, cooldown_ticks: u32) {
-        self.cooldowns.insert(skill_id, cooldown_ticks);
+        for i in 0..self.len {
+            if self.entries[i].0 == skill_id {
+                self.entries[i].1 = cooldown_ticks;
+                return;
+            }
+        }
+        if self.len < MAX_TRACKED_SKILLS {
+            self.entries[self.len] = (skill_id, cooldown_ticks);
+            self.len += 1;
+        }
     }
 
     /// Decrement all active cooldown timers by one tick.
+    /// Removes entries that have reached zero to keep the array compact.
+    #[inline]
     pub fn tick(&mut self) {
-        for ticks in self.cooldowns.values_mut() {
-            *ticks = ticks.saturating_sub(1);
+        let mut i = 0;
+        while i < self.len {
+            self.entries[i].1 = self.entries[i].1.saturating_sub(1);
+            if self.entries[i].1 == 0 {
+                self.len -= 1;
+                if i < self.len {
+                    self.entries[i] = self.entries[self.len];
+                }
+            } else {
+                i += 1;
+            }
         }
     }
 }

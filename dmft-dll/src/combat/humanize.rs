@@ -21,14 +21,17 @@ impl CombatPersonality {
         }
     }
 
+    #[inline]
     pub fn next_assist_delay(&mut self) -> u8 {
         (self.rng.next_u32() % (u32::from(self.assist_jitter_ticks) + 1)) as u8
     }
 
+    #[inline]
     pub fn next_cast_delay(&mut self) -> u8 {
         (self.rng.next_u32() % (u32::from(self.cast_start_delay_ticks) + 1)) as u8
     }
 
+    #[inline]
     pub fn jitter_threshold(&mut self, base: f32, variance: f32) -> f32 {
         let noise = self.rng.next_f32() * variance * 2.0 - variance;
         base + noise

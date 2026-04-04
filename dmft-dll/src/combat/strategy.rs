@@ -94,20 +94,22 @@ pub trait ClassStrategy: Send {
 
 /// Find the nearest NPC from the nearby enemies list based on 2D distance to player.
 /// Used by tank/pull-capable classes (warrior, berserker, beastlord) for target selection.
+#[inline]
 pub fn nearest_enemy<'a>(player: &SpawnData, enemies: &'a [SpawnData]) -> Option<&'a SpawnData> {
-    use dmft_common::nav::Waypoint;
-    let player_pos = Waypoint::new(player.x, player.y, player.z);
+    let px = player.x;
+    let py = player.y;
     enemies.iter().min_by(|a, b| {
-        let dist_a = player_pos.distance_2d(&Waypoint::new(a.x, a.y, a.z));
-        let dist_b = player_pos.distance_2d(&Waypoint::new(b.x, b.y, b.z));
-        dist_a
-            .partial_cmp(&dist_b)
+        let dist_sq_a = (a.x - px).powi(2) + (a.y - py).powi(2);
+        let dist_sq_b = (b.x - px).powi(2) + (b.y - py).powi(2);
+        dist_sq_a
+            .partial_cmp(&dist_sq_b)
             .unwrap_or(std::cmp::Ordering::Equal)
     })
 }
 
 /// Common assist-target selection: return the current target's spawn ID.
 /// Used by DPS melee classes that follow the main assist.
+#[inline]
 pub fn assist_target(ctx: &CombatContext) -> Option<u32> {
     ctx.target.map(|t| t.spawn_id)
 }
@@ -132,6 +134,7 @@ pub fn melee_on_disengage() {
 
 /// Find the group member with the lowest HP percentage (alive only).
 /// Used by healer and hybrid classes (cleric, druid, paladin, shaman) for heal targeting.
+#[inline]
 pub fn lowest_hp_member(ctx: &CombatContext) -> Option<(u32, f32)> {
     ctx.group_members
         .iter()
@@ -145,6 +148,7 @@ pub fn lowest_hp_member(ctx: &CombatContext) -> Option<(u32, f32)> {
 }
 
 /// Select the highest-priority spell from config, filtered by current mana.
+#[inline]
 pub fn best_spell_by_mana(ctx: &CombatContext) -> Option<SpellEntry> {
     let mana_pct = ctx.player.mana_pct();
     ctx.config
