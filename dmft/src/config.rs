@@ -189,8 +189,14 @@ pub struct AppConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct DiscordConfig {
-    /// Discord webhook URL for outbound alerts. Empty = disabled.
+    /// Default webhook URL for alerts not routed to a specific channel.
+    /// Empty = disabled.
     pub webhook_url: String,
+    /// Per-category webhook channel routing.
+    /// Keys: "kills", "loot", "timers", "feats", "status".
+    /// Each maps to a Discord webhook URL for that category's channel.
+    #[serde(default)]
+    pub channels: std::collections::HashMap<String, String>,
     /// Whether to send alerts for HVT (high-value target) detections.
     pub alert_hvt: bool,
     /// Whether to send alerts for client crashes/disconnects.
@@ -209,6 +215,7 @@ impl Default for DiscordConfig {
     fn default() -> Self {
         Self {
             webhook_url: String::new(),
+            channels: std::collections::HashMap::new(),
             alert_hvt: true,
             alert_crashes: true,
             alert_mass_failures: true,
@@ -530,6 +537,7 @@ character = "Foo"
     fn discord_config_defaults() {
         let cfg = DiscordConfig::default();
         assert!(cfg.webhook_url.is_empty());
+        assert!(cfg.channels.is_empty());
         assert!(cfg.alert_hvt);
         assert!(cfg.alert_crashes);
         assert!(cfg.alert_mass_failures);
@@ -596,6 +604,12 @@ character = "Foo"
             alert_mass_failures = false
             alert_status = true
             command_allowed_senders = ["RaidLead", "OfficerBot"]
+
+            [discord.channels]
+            kills = "https://example.com/kills"
+            loot = "https://example.com/loot"
+            timers = "https://example.com/timers"
+            feats = "https://example.com/feats"
         "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.process_name, "custom.exe");
@@ -614,6 +628,11 @@ character = "Foo"
         assert!(cfg.discord.alert_status);
         assert_eq!(cfg.discord.command_allowed_senders.len(), 2);
         assert_eq!(cfg.discord.command_allowed_senders[0], "RaidLead");
+        assert_eq!(cfg.discord.channels.len(), 4);
+        assert_eq!(
+            cfg.discord.channels.get("kills").unwrap(),
+            "https://example.com/kills"
+        );
     }
 
     #[test]

@@ -722,10 +722,11 @@ impl App {
             .map(|sender| sender.trim().to_ascii_lowercase())
             .filter(|sender| !sender.is_empty())
             .collect();
-        if !config.webhook_url.is_empty() {
+        if !config.webhook_url.is_empty() || !config.channels.is_empty() {
             tracing::info!("Discord webhook enabled");
-            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::new(
+            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::with_channels(
                 config.webhook_url.clone(),
+                config.channels.clone(),
             ));
         }
     }
@@ -739,11 +740,12 @@ impl App {
         level: crate::discord::webhook::AlertLevel,
     ) {
         if let Some(ref webhook) = self.discord_webhook {
-            webhook.send(crate::discord::webhook::DiscordAlert {
-                title: title.to_string(),
-                message: message.to_string(),
+            webhook.send(crate::discord::webhook::DiscordAlert::simple(
+                title,
+                message,
                 level,
-            });
+                crate::discord::webhook::EventCategory::Status,
+            ));
         }
     }
 
