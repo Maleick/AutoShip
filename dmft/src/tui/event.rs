@@ -754,19 +754,15 @@ pub fn handle_events(
                 _ => {}
             },
             _ => match key.code {
-                KeyCode::Home => {
-                    if !app.automation_paused {
-                        app.automation_paused = true;
-                        app.status_message = String::from("Automation PAUSED");
-                        tracing::info!("operator paused automation via HOME key");
-                    }
+                KeyCode::Home if !app.automation_paused => {
+                    app.automation_paused = true;
+                    app.status_message = String::from("Automation PAUSED");
+                    tracing::info!("operator paused automation via HOME key");
                 }
-                KeyCode::End => {
-                    if app.automation_paused {
-                        app.automation_paused = false;
-                        app.status_message = String::from("Automation RESUMED");
-                        tracing::info!("operator resumed automation via END key");
-                    }
+                KeyCode::End if app.automation_paused => {
+                    app.automation_paused = false;
+                    app.status_message = String::from("Automation RESUMED");
+                    tracing::info!("operator resumed automation via END key");
                 }
                 _ => {}
             },
