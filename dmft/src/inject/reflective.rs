@@ -525,7 +525,7 @@ mod platform {
                     None,
                     0,
                     Some(entry_fn),
-                    Some(1usize as *const _),
+                    Some(std::ptr::dangling()),
                     0,
                     None,
                 )
