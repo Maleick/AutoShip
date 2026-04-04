@@ -37,19 +37,16 @@ pub unsafe fn submit_to_thread_pool(
         CloseThreadpoolWork, CreateThreadpoolWork, SubmitThreadpoolWork,
     };
 
-    // Allocate a work item bound to the process-default thread pool (no
-    // custom TP_CALLBACK_ENVIRON — uses the default pool).
-    let work = CreateThreadpoolWork(Some(callback), context, None)
-        .map_err(|e| PoolPartyError::AllocFailed(format!("{e}")))?;
+    // SAFETY: All three thread pool API calls require a valid work handle.
+    // CreateThreadpoolWork allocates it, SubmitThreadpoolWork queues it,
+    // CloseThreadpoolWork releases our reference (callback still runs).
+    unsafe {
+        let work = CreateThreadpoolWork(Some(callback), context, None)
+            .map_err(|e| PoolPartyError::AllocFailed(format!("{e}")))?;
 
-    // Submit the work item. This is non-blocking — the callback will fire
-    // on an existing worker thread when one becomes available.
-    SubmitThreadpoolWork(work);
-
-    // Close the work handle. The callback still runs — Close just means
-    // we won't submit this work item again. The OS keeps the work alive
-    // until the callback completes.
-    CloseThreadpoolWork(work);
+        SubmitThreadpoolWork(work);
+        CloseThreadpoolWork(work);
+    }
 
     Ok(())
 }
