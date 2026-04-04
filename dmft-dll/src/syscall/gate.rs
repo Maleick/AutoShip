@@ -281,6 +281,7 @@ pub unsafe fn nt_get_context_thread(
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::{
         SyscallTable, nt_allocate_virtual_memory, nt_get_context_thread, nt_protect_virtual_memory,
         nt_set_context_thread,
