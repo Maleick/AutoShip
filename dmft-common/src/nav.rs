@@ -117,6 +117,30 @@ pub enum StickDistance {
     Percent(f32),
 }
 
+/// Positional arc mode for `/stick` — controls where the character stands
+/// relative to the target's facing direction.
+///
+/// MQ2MoveUtils equivalents: `behind`, `!front`, `pin`, `front`.
+/// Default arc widths match MQ2 defaults; overridable via `behind_arc` / `not_front_arc`.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum StickMode {
+    /// No arc constraint — stick from any direction (default MQ2 behaviour).
+    #[default]
+    Any,
+    /// Position behind the target (`/stick behind`).
+    /// Default arc = 45 degrees (22.5 each side of target's rear).
+    Behind,
+    /// Stay anywhere except the frontal arc (`/stick !front`).
+    /// Default arc = 90 degrees (the excluded frontal cone).
+    NotFront,
+    /// Strafe to the target's side (`/stick pin`).
+    /// Picks left or right flank, whichever is closer.
+    Pin,
+    /// Position in the frontal arc (`/stick front`).
+    /// For tanks who need to face the mob head-on.
+    Front,
+}
+
 /// Configuration for a `/stick` session (MQ2MoveUtils compatible).
 ///
 /// Maps the MQ2MoveUtils command surface:
@@ -126,6 +150,10 @@ pub enum StickDistance {
 /// - `/stick hold`   → `hold = true`
 /// - `/stick always` → `always = true`
 /// - `/stick id #`   → `id = Some(#)`
+/// - `/stick behind` → `mode = StickMode::Behind`
+/// - `/stick !front` → `mode = StickMode::NotFront`
+/// - `/stick pin`    → `mode = StickMode::Pin`
+/// - `/stick front`  → `mode = StickMode::Front`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StickConfig {
     /// Base distance to maintain from the target.
@@ -139,6 +167,22 @@ pub struct StickConfig {
     pub always: bool,
     /// Stick to a specific spawn ID regardless of current target (`id #`).
     pub id: Option<u32>,
+    /// Positional arc mode — controls where to stand relative to target's facing.
+    pub mode: StickMode,
+    /// Custom arc width for `Behind` mode in degrees (MQ2 default: 45.0).
+    /// Valid range: 5.1 to 259.9.
+    pub behind_arc: f32,
+    /// Custom arc width for `NotFront` mode in degrees (MQ2 default: 90.0).
+    /// Defines the frontal cone to exclude. Valid range: 5.1 to 259.9.
+    pub not_front_arc: f32,
+    /// Back up when the target moves closer than the desired stick distance.
+    /// MQ2MoveUtils equivalent: `/stick moveback`.
+    pub moveback: bool,
+    /// Distance below `effective_distance` at which moveback engages (EQ units).
+    /// For example, if `backup_dist` is 5.0 and effective stick distance is 15.0,
+    /// moveback triggers when the player is closer than 10.0 units.
+    /// MQ2MoveUtils equivalent: `backupdist #`. Default: 5.0.
+    pub backup_dist: f32,
 }
 
 impl Default for StickConfig {
@@ -149,6 +193,11 @@ impl Default for StickConfig {
             hold: false,
             always: false,
             id: None,
+            mode: StickMode::Any,
+            behind_arc: 45.0,
+            not_front_arc: 90.0,
+            moveback: false,
+            backup_dist: 5.0,
         }
     }
 }
@@ -1156,6 +1205,8 @@ mod tests {
         assert!(!cfg.hold);
         assert!(!cfg.always);
         assert!(cfg.id.is_none());
+        assert!(!cfg.moveback);
+        assert!((cfg.backup_dist - 5.0).abs() < f32::EPSILON);
     }
 
     #[test]

@@ -122,6 +122,16 @@ impl MovementController {
         self.execute_cmd(CMD_FORWARD, false);
     }
 
+    /// Press backward key (start backing up).
+    pub fn press_back(&self) {
+        self.execute_cmd(CMD_BACK, true);
+    }
+
+    /// Release backward key (stop backing up).
+    pub fn stop_back(&self) {
+        self.execute_cmd(CMD_BACK, false);
+    }
+
     /// Call EQ's __ExecuteCmd to simulate key presses.
     /// Signature: void __ExecuteCmd(uint32_t command, bool keyDown, void* data, void* pTarget)
     pub fn execute_cmd(&self, command: u32, key_down: bool) {
