@@ -110,7 +110,7 @@ impl CombatCoordinator {
                     cleric_pid,
                     Command::CastSpell {
                         spell_slot,
-                        target_id,
+                        target_id: Some(target_id),
                     },
                 ));
             }
@@ -499,7 +499,7 @@ mod tests {
                 target_id,
             } => {
                 assert_eq!(*spell_slot, 8);
-                assert_eq!(*target_id, 99);
+                assert_eq!(*target_id, Some(99));
             }
             _ => panic!("Expected CastSpell, got {:?}", cmds[1].1),
         }

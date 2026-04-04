@@ -121,12 +121,18 @@ pub enum Command {
     /// Stop all movement immediately.
     StopMovement,
     // Combat
-    /// Cast a memorized spell on a target.
+    /// Cast a memorized spell, optionally on a specific target.
+    ///
+    /// When `target_id` is `Some`, the DLL saves the current target, switches
+    /// to the specified spawn, casts, then restores the original target. This
+    /// is the MQ2Cast `/cast` with a target override for heal-on-specific.
+    /// When `None`, casts on the current target without switching.
     CastSpell {
-        /// Memorized spell slot (0-indexed gem number).
+        /// Memorized spell slot (1-indexed gem number, 1-13).
         spell_slot: u8,
-        /// Spawn ID of the cast target.
-        target_id: u32,
+        /// Optional spawn ID to temporarily target for this cast.
+        /// `None` = cast on current target (no swap).
+        target_id: Option<u32>,
     },
     /// Begin auto-attack on a target.
     Attack {
@@ -160,7 +166,10 @@ pub enum Command {
         spot: crate::nav::CampSpot,
     },
     /// Set a full camp config with scatter positioning.
-    SetCampConfig { config: crate::nav::NavCampConfig },
+    SetCampConfig {
+        /// Nav-level camp config with center, radius, and optional scatter.
+        config: crate::nav::NavCampConfig,
+    },
     /// Stop navigating, stay where you are.
     StopNavigation,
     /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
@@ -902,7 +911,7 @@ mod tests {
         use crate::protocol::{decode, encode};
         let cmd = Command::CastSpell {
             spell_slot: 5,
-            target_id: 12345,
+            target_id: Some(12345),
         };
         let encoded = encode(&cmd).expect("encode");
         let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
@@ -912,7 +921,28 @@ mod tests {
         } = decoded
         {
             assert_eq!(spell_slot, 5);
-            assert_eq!(target_id, 12345);
+            assert_eq!(target_id, Some(12345));
+        } else {
+            panic!("expected CastSpell");
+        }
+    }
+
+    #[test]
+    fn command_cast_spell_no_target_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::CastSpell {
+            spell_slot: 2,
+            target_id: None,
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::CastSpell {
+            spell_slot,
+            target_id,
+        } = decoded
+        {
+            assert_eq!(spell_slot, 2);
+            assert_eq!(target_id, None);
         } else {
             panic!("expected CastSpell");
         }
@@ -1121,7 +1151,7 @@ mod tests {
         let ipc_cmd = IpcCommand::with_correlation(
             Command::CastSpell {
                 spell_slot: 3,
-                target_id: 9999,
+                target_id: Some(9999),
             },
             cid,
         );
@@ -1134,7 +1164,7 @@ mod tests {
         } = decoded.command
         {
             assert_eq!(spell_slot, 3);
-            assert_eq!(target_id, 9999);
+            assert_eq!(target_id, Some(9999));
         } else {
             panic!("expected CastSpell");
         }

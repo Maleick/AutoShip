@@ -83,7 +83,7 @@ mod tests {
     fn command_roundtrip_cast_spell() {
         let cmd = Command::CastSpell {
             spell_slot: 3,
-            target_id: 12345,
+            target_id: Some(12345),
         };
         let encoded = encode(&cmd).expect("encode failed");
         let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
@@ -93,7 +93,7 @@ mod tests {
         } = decoded
         {
             assert_eq!(spell_slot, 3);
-            assert_eq!(target_id, 12345);
+            assert_eq!(target_id, Some(12345));
         } else {
             panic!("expected CastSpell, got {decoded:?}");
         }
