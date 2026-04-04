@@ -482,7 +482,11 @@ pub struct ScatterConfig {
 impl ScatterConfig {
     #[must_use]
     pub fn new(bearing: f32, scatdist: f32, scatsize: f32) -> Self {
-        Self { bearing, scatdist, scatsize }
+        Self {
+            bearing,
+            scatdist,
+            scatsize,
+        }
     }
 
     #[must_use]
@@ -1265,7 +1269,9 @@ mod tests {
     fn camp_config_return_position_without_scatter() {
         let config = NavCampConfig {
             center: Waypoint::new(100.0, 200.0, 0.0),
-            heading: 128.0, radius: 50.0, scatter: None,
+            heading: 128.0,
+            radius: 50.0,
+            scatter: None,
             role: "tank".to_string(),
         };
         let pos = config.return_position();
@@ -1277,7 +1283,8 @@ mod tests {
     fn camp_config_return_position_with_scatter() {
         let config = NavCampConfig {
             center: Waypoint::new(100.0, 200.0, 0.0),
-            heading: 128.0, radius: 50.0,
+            heading: 128.0,
+            radius: 50.0,
             scatter: Some(ScatterConfig::new(90.0, 15.0, 0.0)),
             role: "dps".to_string(),
         };
@@ -1290,7 +1297,9 @@ mod tests {
     fn camp_config_is_outside_radius() {
         let config = NavCampConfig {
             center: Waypoint::new(0.0, 0.0, 0.0),
-            heading: 0.0, radius: 50.0, scatter: None,
+            heading: 0.0,
+            radius: 50.0,
+            scatter: None,
             role: "healer".to_string(),
         };
         assert!(!config.is_outside_radius(&Waypoint::new(30.0, 30.0, 0.0)));
@@ -1301,7 +1310,8 @@ mod tests {
     fn camp_config_to_camp_spot_uses_scatter() {
         let config = NavCampConfig {
             center: Waypoint::new(100.0, 100.0, 0.0),
-            heading: 256.0, radius: 60.0,
+            heading: 256.0,
+            radius: 60.0,
             scatter: Some(ScatterConfig::new(0.0, 10.0, 0.0)),
             role: "bard".to_string(),
         };
@@ -1315,7 +1325,8 @@ mod tests {
     fn camp_config_serde_roundtrip() {
         let config = NavCampConfig {
             center: Waypoint::new(50.0, 75.0, 10.0),
-            heading: 384.0, radius: 80.0,
+            heading: 384.0,
+            radius: 80.0,
             scatter: Some(ScatterConfig::new(45.0, 12.0, 3.0)),
             role: "monk".to_string(),
         };
@@ -1323,5 +1334,4 @@ mod tests {
         let restored: NavCampConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(config, restored);
     }
-
 }

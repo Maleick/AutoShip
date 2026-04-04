@@ -349,5 +349,4 @@ mod tests {
         let action = check_melee_position(&player, &target, false, Some(&camp), Some(50.0));
         assert_eq!(action, PositionAction::None);
     }
-
 }
