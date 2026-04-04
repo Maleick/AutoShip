@@ -1,98 +1,33 @@
 //! Game loop hook -- intercepts `CEverQuest::MainLoop`.
 //!
-//! **Timing terminology:**
-//! - **Frame**: one `CEverQuest::MainLoop` iteration (~20/sec, ~50ms each).
-//!   This is what `TICK_COUNT` counts and what all timing constants in the
-//!   combat/nav/login FSMs refer to as "ticks".
-//! - **Game tick**: EQ's internal 6-second pulse used for mana/HP regen,
-//!   `DoT` damage, buff duration, and poison counters. One game tick ≈ 120 frames.
-//!
-//! Runs our logic every frame after the original function completes.
+//! Uses hardware breakpoint hooking (DR0) instead of detour/trampoline.
 
-#[cfg(windows)]
-mod inner {
-    use retour::static_detour;
+use super::hwbp::{self, HwbpSlot};
 
-    // CEverQuest::MainLoop function signature (void, no params, thiscall).
-    // On x86_64 Windows thiscall is the default convention, so we use
-    // "system" which resolves to stdcall on x86 and the MS x64 ABI on
-    // x86_64 -- both compatible with thiscall for single-pointer-arg
-    // member functions.
-    type MainLoopFn = unsafe extern "system" fn(*mut core::ffi::c_void);
+const GAME_LOOP_SLOT: HwbpSlot = HwbpSlot::Dr0;
 
-    static_detour! {
-        static MainLoopHook: unsafe extern "system" fn(*mut core::ffi::c_void);
-    }
-
-    /// The detour function -- called instead of the original `MainLoop`.
-    fn main_loop_detour(this: *mut core::ffi::c_void) {
-        // Call original first -- let EQ process normally.
-        // SAFETY: `this` is the CEverQuest* pointer passed by EQ's dispatch mechanism.
-        // The original function is saved by retour during hook installation and is
-        // guaranteed to be the real CEverQuest::MainLoop. We forward the same `this`
-        // pointer unchanged. If `this` were invalid, EQ itself would have already crashed.
-        unsafe {
-            MainLoopHook.call(this);
-        }
-
-        // Now run our per-tick logic.
-        super::on_game_tick();
-    }
-
-    /// Install the game loop hook.
-    pub fn install(main_loop_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
-        // SAFETY: `main_loop_addr` was resolved by rebasing the known
-        // PROCESS_GAME_EVENTS offset against the live eqgame.exe base address.
-        // The transmute converts this address into a function pointer matching
-        // CEverQuest::MainLoop's calling convention (x64 thiscall = "system").
-        // If the offset is wrong, EQ will crash on the next game tick when the
-        // detour calls the original — there is no way to validate this statically.
-        // retour's initialize + enable overwrites the function prologue with a
-        // trampoline and is only safe when the target is a valid function entry point.
-        unsafe {
-            let target: MainLoopFn = std::mem::transmute(main_loop_addr);
-            MainLoopHook.initialize(target, main_loop_detour)?;
-            MainLoopHook.enable()?;
-        }
-        tracing::info!(
-            addr = format!("{:#x}", main_loop_addr),
-            "Game loop hook installed"
-        );
-        Ok(())
-    }
-
-    /// Remove the game loop hook.
-    pub fn remove() {
-        // SAFETY: Disabling a retour hook restores the original function bytes.
-        // This is safe as long as no thread is currently executing the trampoline
-        // prologue. In practice, this is called during graceful_shutdown() which
-        // runs outside the loader lock. A concurrent game tick executing the
-        // detour is acceptable — retour handles the race internally.
-        unsafe {
-            if MainLoopHook.is_enabled() {
-                let _ = MainLoopHook.disable();
-            }
-        }
-        tracing::info!("Game loop hook removed");
-    }
+fn game_loop_callback(_exception_info: *mut ()) -> bool {
+    on_game_tick();
+    true
 }
 
-#[cfg(not(windows))]
-mod inner {
-    /// Stub -- hooks are only functional on Windows.
-    pub fn install(_main_loop_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
-        tracing::warn!("Game loop hook not available on this platform (stub)");
-        Ok(())
-    }
-
-    /// Stub -- nothing to remove on non-Windows platforms.
-    pub fn remove() {
-        tracing::warn!("Game loop hook removal not available (stub)");
-    }
+pub fn install(main_loop_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
+    hwbp::register(GAME_LOOP_SLOT, main_loop_addr, game_loop_callback)?;
+    tracing::info!(
+        addr = format!("{:#x}", main_loop_addr),
+        "Game loop HWBP hook installed (DR0)"
+    );
+    Ok(())
 }
 
-#[allow(unused_imports)]
-pub use inner::{install, remove};
+pub fn remove() {
+    if hwbp::is_active(GAME_LOOP_SLOT) {
+        if let Err(e) = hwbp::unregister(GAME_LOOP_SLOT) {
+            tracing::warn!("Failed to remove game loop HWBP: {}", e);
+        }
+    }
+    tracing::info!("Game loop hook removed");
+}
 
 /// Track whether this window is in the foreground for render skipping.
 /// When false, we can tell EQ to skip 3D rendering (near-zero GPU for
