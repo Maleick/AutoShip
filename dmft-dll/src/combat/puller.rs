@@ -131,6 +131,8 @@ mod tests {
             tick,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         }
     }
 

@@ -252,6 +252,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(druid.should_assist(&ctx));
     }
@@ -273,6 +275,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();

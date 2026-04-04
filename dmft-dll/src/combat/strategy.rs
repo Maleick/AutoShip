@@ -3,6 +3,8 @@ use dmft_common::combat::{
 };
 use dmft_common::types::SpawnData;
 
+use super::rotation::RotationGroup;
+
 use super::classes::bard::BardStrategy;
 use super::classes::beastlord::BeastlordStrategy;
 use super::classes::berserker::BerserkerStrategy;
@@ -34,6 +36,10 @@ pub struct CombatContext<'a> {
     /// The cleric strategy defers its normal priority cascade and casts CH instead
     /// when this is `Some`. Set by the orchestrator when it's this cleric's turn.
     pub ch_chain_slot: Option<u8>,
+    /// Active buff spell IDs on the player (populated from buff window scan).
+    pub active_buffs: &'a [i32],
+    /// Whether the current target is mezzed (has a mesmerize debuff active).
+    pub target_is_mezzed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +93,19 @@ pub trait ClassStrategy: Send {
 
     /// Combat role for this strategy.
     fn role(&self) -> CombatRole;
+
+    /// Return data-driven rotation groups for this class.
+    ///
+    /// When this returns `Some`, the combat FSM uses the rotation engine
+    /// instead of `select_spell()`. This enables multi-rotation behavior
+    /// with named groups (Downtime, Combat, Emergency, Burn, etc.),
+    /// per-entry conditions, and step limits.
+    ///
+    /// Default returns `None` — falling back to `select_spell()` for
+    /// backward compatibility with existing class strategies.
+    fn rotation_groups(&self) -> Option<Vec<RotationGroup>> {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -421,6 +440,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert_eq!(assist_target(&ctx), Some(42));
     }
@@ -438,6 +459,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(assist_target(&ctx).is_none());
     }
@@ -486,6 +509,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = best_spell_by_mana(&ctx).unwrap();
         assert_eq!(spell.name, "High"); // highest priority that we can afford
@@ -504,6 +529,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
     }
@@ -533,6 +560,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
     }
@@ -650,6 +679,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let result = lowest_hp_member(&ctx);
         assert_eq!(result, Some((2, 50.0)));

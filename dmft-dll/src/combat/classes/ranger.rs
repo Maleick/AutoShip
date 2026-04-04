@@ -132,6 +132,8 @@ mod tests {
             tick: 0,
             in_combat,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         }
     }
 
@@ -167,6 +169,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(ranger.should_assist(&ctx));
     }

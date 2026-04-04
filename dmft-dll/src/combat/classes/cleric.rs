@@ -299,6 +299,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(!cleric.should_assist(&ctx));
     }
@@ -323,6 +325,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -349,6 +353,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -375,6 +381,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         assert!(cleric.select_spell(&ctx).is_none());
@@ -395,6 +403,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(cleric.should_cancel_heal(&ctx));
     }
@@ -414,6 +424,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(!cleric.should_cancel_heal(&ctx));
     }
@@ -451,6 +463,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -491,6 +505,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -529,6 +545,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -565,6 +583,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         // In combat with everyone healthy — should return None (med)
@@ -592,6 +612,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
@@ -631,6 +653,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -670,6 +694,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         // Emergency heal fires before cure — keeping the member alive is
@@ -709,6 +735,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: Some(8), // Chain says: cast gem 8
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -745,6 +773,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();

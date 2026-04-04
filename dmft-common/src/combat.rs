@@ -111,8 +111,28 @@ pub enum ConditionExpr {
     TargetHpAbove(f32),
     /// Current target HP is below the given percentage.
     TargetHpBelow(f32),
+    /// Character mana is above the given percentage.
+    ManaAbove(f32),
     /// The character has aggro from a mob.
     AggroOnMe,
+    /// Character is in combat.
+    InCombat,
+    /// Character is out of combat (downtime).
+    OutOfCombat,
+    /// A specific buff/spell ID is active on the player.
+    BuffActive(i32),
+    /// A specific buff/spell ID is NOT active on the player.
+    BuffMissing(i32),
+    /// Target distance is below the given range (melee check).
+    TargetDistanceBelow(f32),
+    /// Number of nearby enemies is at or above the given count (AE threshold).
+    EnemyCountAbove(u32),
+    /// Target is currently mezzed (prevent mez break).
+    TargetMezzed,
+    /// Target is NOT mezzed.
+    TargetNotMezzed,
+    /// Negation of a sub-condition.
+    Not(Box<ConditionExpr>),
     /// Always true — unconditional trigger.
     Always,
 }
@@ -343,6 +363,51 @@ impl std::fmt::Display for CastTelemetry {
             self.spell_id, self.target_id, self.result, self.cast_duration_ms
         )
     }
+}
+
+// ---------------------------------------------------------------------------
+// Rotation system — data-driven combat action tables (rgmercs-inspired)
+// ---------------------------------------------------------------------------
+
+/// The type of action a rotation entry performs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ActionType {
+    /// Cast a spell (references an ability set name or direct spell name).
+    Spell(String),
+    /// Activate a discipline.
+    Disc(String),
+    /// Fire an alternate advancement ability.
+    AA(String),
+    /// Use a combat ability (kick, bash, taunt, etc.).
+    Ability(String),
+    /// Use an item (clicky, epic, etc.).
+    Item(String),
+    /// Sing a bard song.
+    Song(String),
+}
+
+/// How to select targets for a rotation group.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TargetSelector {
+    /// Target self (for self-buffs, downtime actions).
+    SelfOnly,
+    /// Target the current auto-target (main assist target).
+    AutoTarget,
+    /// Target the mob with lowest aggro on the tank (aggro scan).
+    AggroTarget,
+    /// Target the group member with the lowest HP (for heals).
+    LowestHpGroupMember,
+}
+
+/// What combat state is required for a rotation group to run.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CombatStateReq {
+    /// Only run during active combat.
+    Combat,
+    /// Only run during downtime (no enemies on hatelist).
+    Downtime,
+    /// Run in any state.
+    Any,
 }
 
 /// Priority level for buff maintenance — determines rebuff urgency.

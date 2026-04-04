@@ -358,6 +358,8 @@ mod tests {
             tick: t,
             in_combat: ic,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         }
     }
 

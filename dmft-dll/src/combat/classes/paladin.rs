@@ -185,6 +185,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(!pal.should_assist(&ctx));
     }
@@ -286,6 +288,8 @@ mod tests {
             tick: 0,
             in_combat: false, // out of combat, no stun
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
@@ -311,6 +315,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
@@ -336,6 +342,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
@@ -361,6 +369,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());

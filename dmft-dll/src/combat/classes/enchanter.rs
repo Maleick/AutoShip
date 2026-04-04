@@ -101,6 +101,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         }
     }
 

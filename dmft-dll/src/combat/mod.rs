@@ -9,6 +9,7 @@ pub mod loot;
 pub mod mana;
 pub mod mez_queue;
 pub mod positioning;
+pub mod rotation;
 pub mod skill_cooldowns;
 pub mod state;
 pub mod strategy;

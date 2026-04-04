@@ -29,28 +29,9 @@ impl HolyShitEvaluator {
 
     #[inline]
     fn eval_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
-        match expr {
-            ConditionExpr::Always => true,
-            ConditionExpr::HpBelow(threshold) => ctx.player.hp_pct() < *threshold,
-            ConditionExpr::ManaBelow(threshold) => ctx.player.mana_pct() < *threshold,
-            ConditionExpr::TargetHpAbove(threshold) => {
-                ctx.target.is_some_and(|t| t.hp_pct() > *threshold)
-            }
-            ConditionExpr::TargetHpBelow(threshold) => {
-                ctx.target.is_some_and(|t| t.hp_pct() < *threshold)
-            }
-            ConditionExpr::AggroOnMe => {
-                // Simplified: check if target is facing us (uses aggro module)
-                // For now, approximate as "target exists and is NPC"
-                ctx.target.is_some_and(|t| t.spawn_type == 1) // NPC type
-            }
-            ConditionExpr::And(conditions) => {
-                conditions.iter().all(|c| Self::eval_condition(c, ctx))
-            }
-            ConditionExpr::Or(conditions) => {
-                conditions.iter().any(|c| Self::eval_condition(c, ctx))
-            }
-        }
+        // Delegate to the rotation engine's evaluate_condition for consistency.
+        // HolyShit uses the same condition language as rotation entries.
+        super::rotation::evaluate_condition(expr, ctx)
     }
 
     pub fn rule_count(&self) -> usize {
@@ -123,6 +104,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         }
     }
 

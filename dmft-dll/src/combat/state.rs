@@ -14,6 +14,7 @@ use super::gcd::GcdTracker;
 use super::holyshit::HolyShitEvaluator;
 use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
+use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
 use super::strategy::{ClassStrategy, CombatContext, GroupMemberState, build_strategy};
 
@@ -79,6 +80,9 @@ pub struct Combatant {
     /// Cooldown state for disciplines and AA-like activations.
     ability_cooldowns: AbilityCooldownTracker,
     dot_tracker: DotTracker,
+    /// Data-driven rotation groups from the class strategy.
+    /// When `Some`, the rotation engine is used instead of `select_spell()`.
+    rotation_groups: Option<Vec<RotationGroup>>,
     tick_count: u32,
     client_id: u32,
     config: CombatConfig,
@@ -104,6 +108,12 @@ impl Combatant {
         // without cloning or sorting every frame.
         config.disciplines.sort_by_key(|d| d.priority);
 
+        // Initialize data-driven rotation groups from the class strategy.
+        let rotation_groups = strategy.rotation_groups();
+        if rotation_groups.is_some() {
+            tracing::info!(class_id, "Using data-driven rotation engine");
+        }
+
         Self {
             state: CombatState::Idle,
             strategy,
@@ -118,6 +128,7 @@ impl Combatant {
             skill_cooldowns: SkillCooldownTracker::new(),
             ability_cooldowns: AbilityCooldownTracker::new(),
             dot_tracker: DotTracker::new(),
+            rotation_groups,
             tick_count: 0,
             client_id,
             config,
@@ -161,6 +172,8 @@ impl Combatant {
                 tick: self.tick_count,
                 in_combat: false,
                 ch_chain_slot: None,
+                active_buffs: &[],
+                target_is_mezzed: false,
             };
             // If we were mid-cast, notify the strategy this was an interrupt (not completion)
             if let CombatState::Casting { spell_slot, .. } = &self.state {
@@ -196,6 +209,8 @@ impl Combatant {
             tick: self.tick_count,
             in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
 
         // --- Call on_engage when first entering Engaging state ---
@@ -269,6 +284,8 @@ impl Combatant {
                         tick: self.tick_count,
                         in_combat: false,
                         ch_chain_slot: None,
+                        active_buffs: &[],
+                        target_is_mezzed: false,
                     };
                     self.strategy.on_action_complete(&flee_ctx);
                     self.assist_target = None;
@@ -333,6 +350,30 @@ impl Combatant {
                     return;
                 }
 
+                // --- Rotation engine path ---
+                // When the class defines data-driven rotation groups, use the
+                // rotation engine instead of the legacy `select_spell()` path.
+                if let Some(ref mut groups) = self.rotation_groups {
+                    if let Some(action) = rotation::execute_rotations(groups, &ctx) {
+                        tracing::debug!(
+                            entry = %action.entry_name,
+                            target = action.target_id,
+                            "Rotation engine selected action"
+                        );
+                        // For now, rotation actions map to spell-slot 0 (use whatever
+                        // is memorized). Full ability resolution comes in issue #454.
+                        crate::eq::cast_spell(0, 0);
+                        let cast_delay = u32::from(self.personality.next_cast_delay());
+                        self.gcd.consume();
+                        self.state = CombatState::Casting {
+                            spell_slot: 0,
+                            ticks_remaining: 20 + cast_delay,
+                        };
+                    }
+                    return;
+                }
+
+                // --- Legacy select_spell() path ---
                 // Ask strategy for next spell
                 if let Some(spell) = self.strategy.select_spell(&ctx) {
                     tracing::debug!(
@@ -393,6 +434,8 @@ impl Combatant {
                         tick: self.tick_count,
                         in_combat: true,
                         ch_chain_slot: None,
+                        active_buffs: &[],
+                        target_is_mezzed: false,
                     };
                     self.strategy.on_action_complete(&ctx);
                     self.state = CombatState::OnGcd;
@@ -509,6 +552,8 @@ impl Combatant {
             tick: self.tick_count,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         self.strategy.on_action_complete(&ctx);
 

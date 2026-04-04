@@ -123,6 +123,8 @@ mod tests {
             tick: 0,
             in_combat: false,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(!sk.should_assist(&ctx));
     }
@@ -173,6 +175,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Lifetap"); // lifetap priority at low HP
@@ -231,6 +235,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Darkness Snare"); // snare on fleeing mob
@@ -266,6 +272,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Nuke");
@@ -285,6 +293,8 @@ mod tests {
             tick: 0,
             in_combat: true,
             ch_chain_slot: None,
+            active_buffs: &[],
+            target_is_mezzed: false,
         };
         assert!(sk.select_spell(&ctx).is_none());
     }
