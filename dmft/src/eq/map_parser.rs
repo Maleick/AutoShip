@@ -206,7 +206,12 @@ fn sanitize_zone_name(zone_name: &str) -> Result<String> {
     Ok(normalized)
 }
 
-fn parse_map_file(path: &Path, layer: u8, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoint>) -> Result<()> {
+fn parse_map_file(
+    path: &Path,
+    layer: u8,
+    lines: &mut Vec<MapLine>,
+    points: &mut Vec<MapPoint>,
+) -> Result<()> {
     let file = File::open(path)?;
     let mut bad_lines = 0usize;
 
