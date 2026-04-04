@@ -5,8 +5,6 @@
 //! walks by anti-cheat see a plausible call chain rather than addresses inside
 //! our injected DLL.
 
-use std::sync::OnceLock;
-
 // ---------------------------------------------------------------------------
 // Windows implementation
 // ---------------------------------------------------------------------------
@@ -149,12 +147,12 @@ mod inner {
             Self { saved }
         }
 
-        /// Restore original return addresses.
-        ///
-        /// # Safety
-        /// The saved slot addresses must still be valid (i.e., the frames have
-        /// not been unwound yet).
-        pub unsafe fn restore(self) {
+    }
+
+    /// Panic-safe restoration: Drop restores original return addresses
+    /// even if `f` panics inside `with_spoofed_stack`.
+    impl Drop for SpoofedCallContext {
+        fn drop(&mut self) {
             for (slot, original) in self.saved.iter().rev() {
                 unsafe {
                     std::ptr::write(*slot as *mut usize, *original);
@@ -163,17 +161,19 @@ mod inner {
         }
     }
 
+    /// Return cached gadgets, initialising on first call.
+    pub fn cached_gadgets() -> &'static [usize] {
+        init();
+        GADGETS.get().map(|v| v.as_slice()).unwrap_or(&[])
+    }
+
     /// Execute `f` with the top stack frames spoofed to point into ntdll/kernel32.
     ///
-    /// The return addresses are restored immediately after `f` completes.
+    /// The return addresses are restored via RAII (Drop) even if `f` panics.
     pub fn with_spoofed_stack<F: FnOnce() -> R, R>(f: F) -> R {
         const SPOOF_DEPTH: usize = 4;
-        let ctx = unsafe { SpoofedCallContext::spoof(SPOOF_DEPTH) };
-        let result = f();
-        unsafe {
-            ctx.restore();
-        }
-        result
+        let _ctx = unsafe { SpoofedCallContext::spoof(SPOOF_DEPTH) };
+        f()
     }
 }
 
@@ -194,6 +194,11 @@ mod inner {
     /// Returns an empty vec on non-Windows.
     pub fn find_gadgets(_module_name: &str) -> Vec<usize> {
         Vec::new()
+    }
+
+    /// Returns an empty slice on non-Windows.
+    pub fn cached_gadgets() -> &'static [usize] {
+        &[]
     }
 }
 
@@ -220,18 +225,9 @@ pub fn find_gadgets(module_name: &str) -> Vec<usize> {
     inner::find_gadgets(module_name)
 }
 
-/// Cached gadgets from ntdll + kernel32 (re-exported for external use).
-static GADGET_CACHE: OnceLock<Vec<usize>> = OnceLock::new();
-
-/// Get or initialise the shared gadget cache.
+/// Get or initialise the shared gadget cache (ntdll + kernel32).
 pub fn cached_gadgets() -> &'static [usize] {
-    GADGET_CACHE
-        .get_or_init(|| {
-            let mut g = find_gadgets("ntdll.dll");
-            g.extend(find_gadgets("kernel32.dll"));
-            g
-        })
-        .as_slice()
+    inner::cached_gadgets()
 }
 
 // ---------------------------------------------------------------------------
