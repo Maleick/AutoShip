@@ -1,5 +1,6 @@
 //! DMFT injected DLL payload.
-//! This cdylib is loaded into eqgame.exe via `CreateRemoteThread` + `LoadLibrary`.
+//! This cdylib is loaded into eqgame.exe via reflective injection. Initialization
+//! runs on the OS thread pool (PoolParty) — no `CreateThread` / `CreateRemoteThread`.
 //! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
 
 // Deeply nested unsafe FFI code with many conditional pointer checks — collapsing
@@ -50,26 +51,32 @@ mod dll_main {
     use windows::Win32::Foundation::{BOOL, HMODULE, TRUE};
     use windows::Win32::System::LibraryLoader::DisableThreadLibraryCalls;
     use windows::Win32::System::SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
-    use windows::Win32::System::Threading::CreateThread;
+    use windows::Win32::System::Threading::{PTP_CALLBACK_INSTANCE, PTP_WORK};
 
-    /// Thread procedure for `CreateThread`. Must match the `LPTHREAD_START_ROUTINE`
-    /// signature: `extern "system" fn(*mut c_void) -> u32`.
-    unsafe extern "system" fn init_thread(_param: *mut core::ffi::c_void) -> u32 {
+    /// Thread pool callback for PoolParty-style execution. Matches the
+    /// `PTP_WORK_CALLBACK` signature used by `CreateThreadpoolWork`.
+    ///
+    /// Runs on a pre-existing OS worker thread — no `CreateThread` or
+    /// `CreateRemoteThread` events are generated. Indistinguishable from
+    /// normal application thread pool activity across 36 clients.
+    unsafe extern "system" fn init_pool_callback(
+        _instance: PTP_CALLBACK_INSTANCE,
+        _context: *mut core::ffi::c_void,
+        _work: PTP_WORK,
+    ) {
         // Prevent double initialization if injected twice into the same process.
         if super::ALREADY_INITIALIZED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-            return 0;
+            return;
         }
         if let Err(e) = super::initialize() {
             tracing::error!("DMFT DLL initialization failed: {}", e);
         }
-        0
     }
 
     /// DLL entry point. Called by Windows when the DLL is loaded/unloaded.
     /// IMPORTANT: `DllMain` runs under the loader lock — keep work minimal.
-    /// We use `CreateThread` (not `thread::spawn`) because `std::thread::spawn`
-    /// internally calls `CreateThread` *and* may acquire internal locks that
-    /// can deadlock under the loader lock.
+    /// We submit init to the OS thread pool (PoolParty) instead of calling
+    /// `CreateThread`, which generates suspicious thread creation events.
     #[unsafe(no_mangle)]
     pub extern "system" fn DllMain(
         module: HMODULE,
@@ -80,16 +87,21 @@ mod dll_main {
             DLL_PROCESS_ATTACH => {
                 // SAFETY: Called from DllMain under the loader lock with a valid HMODULE.
                 // DisableThreadLibraryCalls requires a valid module handle (guaranteed by
-                // the OS calling DllMain). CreateThread with a static extern "system" fn
-                // is safe; we use raw CreateThread instead of std::thread::spawn to avoid
-                // potential deadlocks from acquiring std runtime locks under the loader lock.
+                // the OS calling DllMain). Thread pool submission via CreateThreadpoolWork
+                // + SubmitThreadpoolWork is safe under the loader lock — it only queues
+                // a work item to existing threads without creating new ones.
                 unsafe {
                     // Suppress DLL_THREAD_ATTACH/DETACH notifications for perf.
                     let _ = DisableThreadLibraryCalls(module);
 
-                    // Use raw CreateThread to avoid std runtime under loader lock.
-                    let _ =
-                        CreateThread(None, 0, Some(init_thread), None, Default::default(), None);
+                    // PoolParty: submit init to the process-default thread pool.
+                    // Our callback runs on an existing OS worker thread — no
+                    // CreateThread/CreateRemoteThread events across 36 clients.
+                    if let Err(e) =
+                        super::stealth::thread_pool::submit_to_thread_pool(init_pool_callback, None)
+                    {
+                        tracing::error!("PoolParty thread pool submission failed: {}", e);
+                    }
                 }
                 TRUE
             }

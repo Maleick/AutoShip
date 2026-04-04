@@ -16,6 +16,7 @@ pub mod page_encrypt;
 pub mod page_guard;
 pub mod stack_spoof;
 pub mod text_encrypt;
+pub mod thread_pool;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
