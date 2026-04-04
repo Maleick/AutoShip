@@ -6,7 +6,14 @@ use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt};
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(
+    author,
+    version,
+    about = "DMFT — EverQuest multibox controller",
+    long_about = "DMFT is an EverQuest multibox controller with TUI dashboard, DLL injection,\n\
+                   navigation, combat automation, and web dashboard support.\n\n\
+                   Run without arguments to launch the TUI dashboard."
+)]
 #[command(propagate_version = true)]
 struct Args {
     #[command(subcommand)]
@@ -23,8 +30,35 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
+    // ── Daemon lifecycle ──────────────────────────────────────────────
+    /// Start the DMFT daemon (TUI + background services)
+    Start {
+        /// Run in foreground instead of daemonizing
+        #[arg(long)]
+        foreground: bool,
+    },
+    /// Stop a running DMFT daemon gracefully
+    Stop,
+    /// Show the running daemon's status
+    #[command(name = "status")]
+    DaemonStatus,
+
+    // ── Dashboard ─────────────────────────────────────────────────────
+    /// Launch the web dashboard (Axum + React)
+    Dashboard {
+        /// Port for the web server
+        #[arg(long, default_value = "3001")]
+        port: u16,
+        /// Open browser automatically
+        #[arg(long)]
+        open: bool,
+    },
+
+    // ── TUI ───────────────────────────────────────────────────────────
     /// Launch the TUI dashboard (default)
     Tui,
+
+    // ── Injection & login ─────────────────────────────────────────────
     /// Inject into eqgame.exe processes
     Inject {
         /// Optional PID to inject into a specific process only
@@ -45,6 +79,8 @@ enum Commands {
         #[arg(long)]
         pid: Option<u32>,
     },
+
+    // ── Client commands ───────────────────────────────────────────────
     /// Send a slash command to a PID
     Cmd {
         /// Target PID
@@ -52,6 +88,8 @@ enum Commands {
         /// Slash command (e.g., "/sit")
         command: String,
     },
+
+    // ── Navigation ────────────────────────────────────────────────────
     /// Navigate to coordinates
     Nav {
         /// Target PID
@@ -72,13 +110,17 @@ enum Commands {
         y2: f32,
         z2: f32,
     },
+
+    // ── Status & diagnostics ──────────────────────────────────────────
     /// Query player status for a PID
-    Status {
+    #[command(name = "client-status")]
+    ClientStatus {
         /// Target PID
         pid: u32,
     },
     /// Summary table for all EQ clients
-    StatusAll,
+    #[command(name = "client-status-all")]
+    ClientStatusAll,
     /// Query the zone adjacency graph from an injected client
     Zones {
         /// Target PID
@@ -86,6 +128,25 @@ enum Commands {
     },
     /// Calibrate login addresses for all processes
     Calibrate,
+
+    // ── Configuration ─────────────────────────────────────────────────
+    /// Configuration management
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Validate the TOML configuration file
+    Check {
+        /// Path to config file (default: config/frostreaver.toml)
+        #[arg(long)]
+        path: Option<String>,
+    },
+    /// Print the resolved configuration
+    Show,
 }
 
 fn main() -> Result<()> {
@@ -113,7 +174,18 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.command {
+        // Daemon lifecycle
+        Some(Commands::Start { foreground }) => cli::run_start_mode(foreground),
+        Some(Commands::Stop) => cli::run_stop_mode(),
+        Some(Commands::DaemonStatus) => cli::run_daemon_status_mode(),
+
+        // Dashboard
+        Some(Commands::Dashboard { port, open }) => cli::run_dashboard_mode(port, open),
+
+        // TUI
         Some(Commands::Tui) => cli::run_tui_mode(),
+
+        // Injection & login
         Some(Commands::Inject { pid: Some(pid) }) => cli::run_inject_pid_mode(pid),
         Some(Commands::Inject { pid: None }) => cli::run_inject_mode(),
         Some(Commands::Login {
@@ -131,7 +203,11 @@ fn main() -> Result<()> {
                 cli::run_login_mode(&account, password, &server, &character)
             }
         }
+
+        // Client commands
         Some(Commands::Cmd { pid, command }) => cli::run_cmd_mode(pid, &command),
+
+        // Navigation
         Some(Commands::Nav { pid, x, y, z }) => cli::run_nav_mode(pid, x, y, z),
         Some(Commands::NavAll { x, y, z }) => cli::run_navall_mode(x, y, z),
         Some(Commands::NavPath {
@@ -143,10 +219,19 @@ fn main() -> Result<()> {
             y2,
             z2,
         }) => cli::run_navpath_mode(&zone, (x1, y1, z1), (x2, y2, z2)),
-        Some(Commands::Status { pid }) => cli::run_status_mode(pid),
-        Some(Commands::StatusAll) => cli::run_statusall_mode(),
+
+        // Status & diagnostics
+        Some(Commands::ClientStatus { pid }) => cli::run_status_mode(pid),
+        Some(Commands::ClientStatusAll) => cli::run_statusall_mode(),
         Some(Commands::Zones { pid }) => cli::run_zones_mode(pid),
         Some(Commands::Calibrate) => cli::run_calibrate_mode(),
+
+        // Configuration
+        Some(Commands::Config { action }) => match action {
+            ConfigAction::Check { path } => cli::run_config_check_mode(path.as_deref()),
+            ConfigAction::Show => cli::run_config_show_mode(),
+        },
+
         None => {
             // Check top-level flags for backward compatibility
             if args.dump {

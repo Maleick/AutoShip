@@ -905,6 +905,230 @@ pub fn run_dump_mode() -> Result<()> {
     Ok(())
 }
 
+// ─── Daemon lifecycle ───────────────────────────────────────────────────────
+
+const PIDFILE_PATH: &str = "dmft.pid";
+
+/// Start the DMFT daemon — launches TUI + background services.
+///
+/// In foreground mode, runs the TUI directly. When daemonized (future),
+/// writes a PID file and runs headless.
+pub fn run_start_mode(foreground: bool) -> Result<()> {
+    if let Ok(contents) = std::fs::read_to_string(PIDFILE_PATH)
+        && let Ok(pid) = contents.trim().parse::<u32>()
+        && process_is_alive(pid)
+    {
+        eprintln!("DMFT daemon is already running (PID {pid}).");
+        eprintln!("Use `dmft stop` to shut it down first.");
+        return Ok(());
+    }
+    // Clean up any stale PID file
+    let _ = std::fs::remove_file(PIDFILE_PATH);
+
+    // Write our PID file
+    let pid = std::process::id();
+    std::fs::write(PIDFILE_PATH, pid.to_string()).context("Failed to write PID file")?;
+    info!(pid, foreground, "DMFT daemon starting");
+
+    if foreground {
+        eprintln!("DMFT daemon starting in foreground (PID {pid})...");
+        let result = run_tui_mode();
+        let _ = std::fs::remove_file(PIDFILE_PATH);
+        result
+    } else {
+        // For now, foreground is the only mode — true daemonization requires
+        // platform-specific fork/setsid on Unix or service registration on Windows.
+        eprintln!("DMFT daemon starting (PID {pid})...");
+        eprintln!("(Background mode not yet implemented — running in foreground)");
+        let result = run_tui_mode();
+        let _ = std::fs::remove_file(PIDFILE_PATH);
+        result
+    }
+}
+
+/// Stop a running DMFT daemon by sending it a termination signal.
+pub fn run_stop_mode() -> Result<()> {
+    let pidfile = Path::new(PIDFILE_PATH);
+    if !pidfile.exists() {
+        eprintln!("No DMFT daemon is running (no PID file found).");
+        return Ok(());
+    }
+
+    let contents = std::fs::read_to_string(pidfile).context("Failed to read PID file")?;
+    let pid: u32 = contents.trim().parse().context("Invalid PID in PID file")?;
+
+    if !process_is_alive(pid) {
+        eprintln!("DMFT daemon (PID {pid}) is not running. Cleaning up stale PID file.");
+        let _ = std::fs::remove_file(pidfile);
+        return Ok(());
+    }
+
+    eprintln!("Stopping DMFT daemon (PID {pid})...");
+    send_terminate(pid)?;
+
+    // Wait up to 5 seconds for graceful shutdown
+    for _ in 0..50 {
+        if !process_is_alive(pid) {
+            let _ = std::fs::remove_file(pidfile);
+            eprintln!("DMFT daemon stopped.");
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    eprintln!("Daemon did not stop within 5 seconds. PID file retained.");
+    Ok(())
+}
+
+/// Show the running daemon's status.
+pub fn run_daemon_status_mode() -> Result<()> {
+    let pidfile = Path::new(PIDFILE_PATH);
+    if !pidfile.exists() {
+        eprintln!("DMFT is not running (no PID file).");
+        return Ok(());
+    }
+
+    let contents = std::fs::read_to_string(pidfile).context("Failed to read PID file")?;
+    let pid: u32 = contents.trim().parse().context("Invalid PID in PID file")?;
+
+    if process_is_alive(pid) {
+        eprintln!("DMFT daemon is running (PID {pid}).");
+    } else {
+        eprintln!("DMFT daemon is NOT running (stale PID file for PID {pid}).");
+        let _ = std::fs::remove_file(pidfile);
+    }
+
+    // Also show connected EQ clients
+    let config = load_config()?;
+    match process::memory::find_processes_by_name(&config.process_name) {
+        Ok(pids) if !pids.is_empty() => {
+            eprintln!("Connected EQ clients: {} ({:?})", pids.len(), pids);
+        }
+        _ => {
+            eprintln!("No EQ clients detected.");
+        }
+    }
+
+    Ok(())
+}
+
+// ─── Dashboard ──────────────────────────────────────────────────────────────
+
+/// Launch the web dashboard.
+pub fn run_dashboard_mode(port: u16, open: bool) -> Result<()> {
+    eprintln!("Starting DMFT web dashboard on http://127.0.0.1:{port}");
+    info!(port, "Web dashboard starting");
+
+    if open {
+        // Best-effort browser open
+        #[cfg(target_os = "macos")]
+        let _ = std::process::Command::new("open")
+            .arg(format!("http://127.0.0.1:{port}"))
+            .spawn();
+        #[cfg(target_os = "windows")]
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", &format!("http://127.0.0.1:{port}")])
+            .spawn();
+        #[cfg(target_os = "linux")]
+        let _ = std::process::Command::new("xdg-open")
+            .arg(format!("http://127.0.0.1:{port}"))
+            .spawn();
+    }
+
+    // The actual Axum server lives in dmft-web. For now we just exec it.
+    // Once integrated, this will spawn the server as a tokio task.
+    eprintln!("Dashboard server not yet integrated — run `cargo run -p dmft-web` separately.");
+    eprintln!("Integration planned for M6 milestone.");
+    Ok(())
+}
+
+// ─── Configuration ─────────────────────────────────���────────────────────────
+
+/// Validate the configuration file.
+pub fn run_config_check_mode(path: Option<&str>) -> Result<()> {
+    let config_path = path.unwrap_or("config/dmft.toml");
+    let p = Path::new(config_path);
+
+    if !p.exists() {
+        // Try the legacy path
+        let legacy = Path::new("config/frostreaver.toml");
+        if legacy.exists() {
+            eprintln!(
+                "Config file not found at {config_path}, using legacy path: config/frostreaver.toml"
+            );
+            let cfg = config::AppConfig::load(legacy).context("Failed to parse configuration")?;
+            eprintln!("Configuration is valid.");
+            eprintln!("  Process name: {}", cfg.process_name);
+            eprintln!("  Max spawns: {}", cfg.max_spawns);
+            return Ok(());
+        }
+        eprintln!("No configuration file found at {config_path}.");
+        eprintln!("Using built-in defaults.");
+        let cfg = config::AppConfig::default_config();
+        eprintln!("  Process name: {}", cfg.process_name);
+        eprintln!("  Max spawns: {}", cfg.max_spawns);
+        return Ok(());
+    }
+
+    let cfg = config::AppConfig::load(p).context("Configuration validation failed")?;
+    eprintln!("Configuration is valid: {config_path}");
+    eprintln!("  Process name: {}", cfg.process_name);
+    eprintln!("  Max spawns: {}", cfg.max_spawns);
+    Ok(())
+}
+
+/// Print the resolved configuration.
+pub fn run_config_show_mode() -> Result<()> {
+    let cfg = load_config()?;
+    eprintln!("Resolved configuration:");
+    eprintln!("  Process name: {}", cfg.process_name);
+    eprintln!("  Max spawns: {}", cfg.max_spawns);
+    // Additional fields can be printed as the config struct grows
+    Ok(())
+}
+
+// ─── Platform helpers ───────────────────────────────────────────────────────
+
+/// Check if a process with the given PID is still alive.
+fn process_is_alive(_pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+        unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, _pid).is_ok() }
+    }
+    #[cfg(not(windows))]
+    {
+        // Use `kill -0` to check process existence without sending a signal
+        std::process::Command::new("kill")
+            .args(["-0", &_pid.to_string()])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+}
+
+/// Send a terminate signal to a process.
+fn send_terminate(_pid: u32) -> Result<()> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
+        unsafe {
+            let handle = OpenProcess(PROCESS_TERMINATE, false, _pid)
+                .context("Failed to open process for termination")?;
+            TerminateProcess(handle, 0).context("Failed to terminate process")?;
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        // Send SIGTERM via kill command
+        std::process::Command::new("kill")
+            .args(["-TERM", &_pid.to_string()])
+            .output()
+            .context("Failed to send SIGTERM")?;
+        Ok(())
+    }
+}
+
 // ─── Utility functions ──────────────────────────────────────────────────────
 
 /// Format a byte buffer as a hex dump with offset labels.
