@@ -24,6 +24,8 @@ mod ipc;
 mod login;
 #[allow(dead_code)]
 mod nav;
+#[allow(dead_code)]
+mod syscall;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -110,6 +112,16 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     let eq_base = resolve_eq_base();
     EQ_BASE.store(eq_base, Ordering::Release);
     tracing::info!(base = format!("{:#x}", eq_base), "EQ base address resolved");
+
+    // 2.5. Initialize indirect syscall layer (RecycledGate).
+    // Must happen early — other stealth modules (HWBP hooks, sleep obfuscation)
+    // will use these syscalls for NtSetContextThread, NtProtectVirtualMemory, etc.
+    if let Err(e) = syscall::init() {
+        tracing::warn!(
+            "Indirect syscall init failed (falling back to direct calls): {}",
+            e
+        );
+    }
 
     // 3. Install function hooks (non-fatal if they fail).
     if let Err(e) = install_hooks(eq_base) {
