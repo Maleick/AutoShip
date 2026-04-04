@@ -1,13 +1,26 @@
 //! Game loop hook -- intercepts `CEverQuest::MainLoop`.
 //!
 //! Uses hardware breakpoint hooking (DR0) instead of detour/trampoline.
+//! The VEH handler fires when EQ hits the breakpoint, runs our logic, then
+//! resumes the original function with RF set so the BP doesn't re-trigger.
 
 use super::hwbp::{self, HwbpSlot};
 
 const GAME_LOOP_SLOT: HwbpSlot = HwbpSlot::Dr0;
 
+/// HWBP callback for the game loop hook.
+///
+/// Lives in `.dmft` section so it remains executable when stealth::sleep()
+/// encrypts `.text` between frames.
+#[cfg_attr(windows, unsafe(link_section = ".dmft"))]
 fn game_loop_callback(_exception_info: *mut ()) -> bool {
+    // Wake: decrypt .text + set RX (no-op if stealth disabled).
+    crate::stealth::wake();
+
     on_game_tick();
+
+    // Sleep: set RW + encrypt .text (no-op if stealth disabled).
+    crate::stealth::sleep();
     true
 }
 

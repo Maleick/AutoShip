@@ -235,6 +235,24 @@ pub fn cached_gadgets() -> &'static [usize] {
 }
 
 // ---------------------------------------------------------------------------
+// Sleep-cycle frame spoofing stubs (Layer 3)
+// ---------------------------------------------------------------------------
+
+/// Prepare spoofed stack frame after encryption.
+/// Called by stealth::sleep() during the sleep transition.
+#[cfg_attr(windows, unsafe(link_section = ".dmft"))]
+pub fn prepare_spoofed_frame() {
+    // Stub — wired up after #345 HWBP hooking lands.
+}
+
+/// Restore real stack frame before decryption.
+/// Called by stealth::wake() during the wake transition.
+#[cfg_attr(windows, unsafe(link_section = ".dmft"))]
+pub fn restore_real_frame() {
+    // Stub — wired up after #345 HWBP hooking lands.
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -299,5 +317,11 @@ mod tests {
         let g = cached_gadgets();
         // Just verify it doesn't panic and returns a valid slice.
         let _ = g.len();
+    }
+
+    #[test]
+    fn sleep_stubs_do_not_panic() {
+        prepare_spoofed_frame();
+        restore_real_frame();
     }
 }

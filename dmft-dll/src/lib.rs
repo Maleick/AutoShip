@@ -25,6 +25,8 @@ mod login;
 #[allow(dead_code)]
 mod nav;
 #[allow(dead_code)]
+mod stealth;
+#[allow(dead_code)]
 mod syscall;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -139,6 +141,11 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     let session_token = generate_session_token(client_id);
     if let Err(e) = ipc::start(client_id, session_token) {
         tracing::warn!("IPC startup failed (continuing without IPC): {}", e);
+    }
+
+    // 6. Initialize per-frame sleep obfuscation (Gargoyle-style).
+    if let Err(e) = stealth::init() {
+        tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
     }
 
     tracing::info!("DMFT DLL initialized successfully");
@@ -313,6 +320,7 @@ fn shutdown() {
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn graceful_shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
+    stealth::disable();
     hooks::remove_all();
     ipc::stop();
     tracing::info!("DMFT DLL graceful shutdown complete");
