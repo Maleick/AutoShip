@@ -753,7 +753,7 @@ mod tests {
         for _ in 0..20 {
             let delay = policy.next_delay(&state).unwrap();
             let secs = delay.as_secs_f64();
-            assert!(secs >= 7.4 && secs <= 12.6, "jitter out of bounds: {secs}");
+            assert!((7.4..=12.6).contains(&secs), "jitter out of bounds: {secs}");
         }
     }
 
