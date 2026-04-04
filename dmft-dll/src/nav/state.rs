@@ -228,7 +228,8 @@ impl Navigator {
         }
 
         match self.state {
-            State::Idle | State::Arrived => {}
+            State::Idle => {}
+            State::Arrived => self.tick_arrived(),
             State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
             State::Following { .. } => self.tick_following(),
@@ -416,6 +417,21 @@ impl Navigator {
         self.stuck.reset();
         self.warp.reset();
         self.state = State::Arrived;
+    }
+
+    /// One tick while at camp — checks if character has drifted beyond the
+    /// leash boundary and triggers a return if so.
+    fn tick_arrived(&mut self) {
+        if let Some(ref config) = self.camp_config {
+            let current_pos = self.controller.read_position();
+            if config.is_beyond_leash(&current_pos) {
+                let return_pos = config.return_position();
+                tracing::debug!(role = %config.role, "Drifted beyond camp leash — returning");
+                self.queue.set_path(vec![return_pos]);
+                self.stuck.reset();
+                self.state = State::Moving;
+            }
+        }
     }
 
     /// One tick for player follow mode.

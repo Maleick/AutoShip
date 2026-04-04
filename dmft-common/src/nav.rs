@@ -568,6 +568,9 @@ pub struct NavCampConfig {
     pub radius: f32,
     pub scatter: Option<ScatterConfig>,
     pub role: String,
+    /// How far beyond the camp radius a character can drift before being
+    /// returned.  A value of 1.2 means the leash triggers at 120% of `radius`.
+    pub leash_factor: f32,
 }
 
 impl NavCampConfig {
@@ -590,6 +593,13 @@ impl NavCampConfig {
     #[must_use]
     pub fn is_outside_radius(&self, pos: &Waypoint) -> bool {
         self.center.distance_2d(pos) > self.radius
+    }
+
+    /// Returns `true` when the position exceeds the leash boundary
+    /// (`radius * leash_factor`).
+    #[must_use]
+    pub fn is_beyond_leash(&self, pos: &Waypoint) -> bool {
+        self.center.distance_2d(pos) > self.radius * self.leash_factor
     }
 
     #[must_use]
@@ -1324,6 +1334,7 @@ mod tests {
             radius: 50.0,
             scatter: None,
             role: "tank".to_string(),
+            leash_factor: 1.2,
         };
         let pos = config.return_position();
         assert!((pos.x - 100.0).abs() < f32::EPSILON);
@@ -1338,6 +1349,7 @@ mod tests {
             radius: 50.0,
             scatter: Some(ScatterConfig::new(90.0, 15.0, 0.0)),
             role: "dps".to_string(),
+            leash_factor: 1.2,
         };
         let pos = config.return_position();
         assert!((pos.x - 115.0).abs() < 0.1);
@@ -1352,6 +1364,7 @@ mod tests {
             radius: 50.0,
             scatter: None,
             role: "healer".to_string(),
+            leash_factor: 1.2,
         };
         assert!(!config.is_outside_radius(&Waypoint::new(30.0, 30.0, 0.0)));
         assert!(config.is_outside_radius(&Waypoint::new(40.0, 40.0, 0.0)));
@@ -1365,6 +1378,7 @@ mod tests {
             radius: 60.0,
             scatter: Some(ScatterConfig::new(0.0, 10.0, 0.0)),
             role: "bard".to_string(),
+            leash_factor: 1.2,
         };
         let spot = config.to_camp_spot();
         assert_eq!(spot.role, "bard");
@@ -1380,9 +1394,65 @@ mod tests {
             radius: 80.0,
             scatter: Some(ScatterConfig::new(45.0, 12.0, 3.0)),
             role: "monk".to_string(),
+            leash_factor: 1.2,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let restored: NavCampConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(config, restored);
+    }
+
+    // ─── Leash boundary tests ───
+
+    #[test]
+    fn leash_within_boundary_returns_false() {
+        let config = NavCampConfig {
+            center: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            radius: 50.0,
+            scatter: None,
+            role: "tank".to_string(),
+            leash_factor: 1.2,
+        };
+        assert!(!config.is_beyond_leash(&Waypoint::new(55.0, 0.0, 0.0)));
+    }
+
+    #[test]
+    fn leash_beyond_boundary_returns_true() {
+        let config = NavCampConfig {
+            center: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            radius: 50.0,
+            scatter: None,
+            role: "tank".to_string(),
+            leash_factor: 1.2,
+        };
+        assert!(config.is_beyond_leash(&Waypoint::new(61.0, 0.0, 0.0)));
+    }
+
+    #[test]
+    fn leash_at_exact_boundary_returns_false() {
+        let config = NavCampConfig {
+            center: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            radius: 50.0,
+            scatter: None,
+            role: "healer".to_string(),
+            leash_factor: 1.2,
+        };
+        assert!(!config.is_beyond_leash(&Waypoint::new(60.0, 0.0, 0.0)));
+    }
+
+    #[test]
+    fn leash_factor_one_equals_radius() {
+        let config = NavCampConfig {
+            center: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            radius: 50.0,
+            scatter: None,
+            role: "dps".to_string(),
+            leash_factor: 1.0,
+        };
+        assert!(config.is_beyond_leash(&Waypoint::new(50.1, 0.0, 0.0)));
+        assert!(!config.is_beyond_leash(&Waypoint::new(49.9, 0.0, 0.0)));
     }
 }
