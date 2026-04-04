@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::path::Path;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -186,6 +188,93 @@ pub struct AccountInfo {
     pub group_id: u32,
     /// Target server name (e.g. "Teek", "FV").
     pub server_name: String,
+}
+
+/// A character discovered during login, with class/level/server metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SeenCharacter {
+    /// Character name.
+    pub name: String,
+    /// EQ class name (e.g. "Warrior", "Cleric").
+    pub class_name: String,
+    /// Character level at time of observation.
+    pub level: u8,
+    /// Server the character was seen on.
+    pub server: String,
+    /// ISO-8601 timestamp of when the character was last seen.
+    pub last_seen: String,
+}
+
+/// Persistent cache of characters discovered during login.
+///
+/// Characters are keyed by `(server, name)` so re-observing a character on the
+/// same server updates the existing entry rather than creating a duplicate.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CharacterCache {
+    /// Map from `"server:name"` to the seen character data.
+    characters: HashMap<String, SeenCharacter>,
+}
+
+impl CharacterCache {
+    /// Create an empty cache.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Composite key for the internal map.
+    fn key(server: &str, name: &str) -> String {
+        format!("{server}:{name}")
+    }
+
+    /// Insert or update a character in the cache.
+    pub fn insert(&mut self, character: SeenCharacter) {
+        let k = Self::key(&character.server, &character.name);
+        self.characters.insert(k, character);
+    }
+
+    /// Look up a character by server and name.
+    pub fn lookup(&self, server: &str, name: &str) -> Option<&SeenCharacter> {
+        self.characters.get(&Self::key(server, name))
+    }
+
+    /// Return the number of cached characters.
+    pub fn len(&self) -> usize {
+        self.characters.len()
+    }
+
+    /// Return true if the cache is empty.
+    pub fn is_empty(&self) -> bool {
+        self.characters.is_empty()
+    }
+
+    /// All cached characters as a slice-friendly iterator.
+    pub fn iter(&self) -> impl Iterator<Item = &SeenCharacter> {
+        self.characters.values()
+    }
+
+    /// Load a cache from a JSON file. Returns an empty cache if the file does
+    /// not exist.
+    pub fn load_from_file(path: &Path) -> Result<Self, String> {
+        if !path.exists() {
+            return Ok(Self::new());
+        }
+        let data = std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+        serde_json::from_str(&data)
+            .map_err(|e| format!("failed to parse {}: {e}", path.display()))
+    }
+
+    /// Save the cache to a JSON file, creating parent directories if needed.
+    pub fn save_to_file(&self, path: &Path) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create dir {}: {e}", parent.display()))?;
+        }
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("failed to serialize cache: {e}"))?;
+        std::fs::write(path, json)
+            .map_err(|e| format!("failed to write {}: {e}", path.display()))
+    }
 }
 
 #[cfg(test)]
@@ -616,5 +705,163 @@ mod tests {
         let json = r#"{"max_retries":5,"initial_delay":-1.0,"max_delay":60.0,"backoff_multiplier":2.0,"jitter":false}"#;
         let result: Result<RetryPolicy, _> = serde_json::from_str(json);
         assert!(result.is_err());
+    }
+
+    // ---- SeenCharacter tests ----
+
+    fn make_seen(name: &str, server: &str) -> SeenCharacter {
+        SeenCharacter {
+            name: name.into(),
+            class_name: "Warrior".into(),
+            level: 60,
+            server: server.into(),
+            last_seen: "2026-04-03T12:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn seen_character_construction_and_fields() {
+        let sc = make_seen("Legolas", "Teek");
+        assert_eq!(sc.name, "Legolas");
+        assert_eq!(sc.class_name, "Warrior");
+        assert_eq!(sc.level, 60);
+        assert_eq!(sc.server, "Teek");
+        assert_eq!(sc.last_seen, "2026-04-03T12:00:00Z");
+    }
+
+    #[test]
+    fn seen_character_serialization_roundtrip() {
+        let sc = make_seen("Gimli", "FV");
+        let json = serde_json::to_string(&sc).expect("serialize");
+        let restored: SeenCharacter = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(sc, restored);
+    }
+
+    #[test]
+    fn seen_character_clone() {
+        let sc = make_seen("Aragorn", "Teek");
+        let cloned = sc.clone();
+        assert_eq!(sc, cloned);
+    }
+
+    // ---- CharacterCache tests ----
+
+    #[test]
+    fn cache_new_is_empty() {
+        let cache = CharacterCache::new();
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn cache_insert_and_lookup() {
+        let mut cache = CharacterCache::new();
+        cache.insert(make_seen("Legolas", "Teek"));
+        assert_eq!(cache.len(), 1);
+        let found = cache.lookup("Teek", "Legolas").expect("should find");
+        assert_eq!(found.name, "Legolas");
+        assert_eq!(found.server, "Teek");
+    }
+
+    #[test]
+    fn cache_lookup_miss() {
+        let cache = CharacterCache::new();
+        assert!(cache.lookup("Teek", "Nobody").is_none());
+    }
+
+    #[test]
+    fn cache_dedup_by_server_name() {
+        let mut cache = CharacterCache::new();
+        cache.insert(SeenCharacter {
+            name: "Legolas".into(),
+            class_name: "Ranger".into(),
+            level: 50,
+            server: "Teek".into(),
+            last_seen: "2026-04-01T00:00:00Z".into(),
+        });
+        cache.insert(SeenCharacter {
+            name: "Legolas".into(),
+            class_name: "Ranger".into(),
+            level: 60,
+            server: "Teek".into(),
+            last_seen: "2026-04-03T00:00:00Z".into(),
+        });
+        assert_eq!(cache.len(), 1);
+        let found = cache.lookup("Teek", "Legolas").unwrap();
+        assert_eq!(found.level, 60);
+        assert_eq!(found.last_seen, "2026-04-03T00:00:00Z");
+    }
+
+    #[test]
+    fn cache_same_name_different_servers() {
+        let mut cache = CharacterCache::new();
+        cache.insert(make_seen("Legolas", "Teek"));
+        cache.insert(make_seen("Legolas", "FV"));
+        assert_eq!(cache.len(), 2);
+        assert!(cache.lookup("Teek", "Legolas").is_some());
+        assert!(cache.lookup("FV", "Legolas").is_some());
+    }
+
+    #[test]
+    fn cache_iter() {
+        let mut cache = CharacterCache::new();
+        cache.insert(make_seen("A", "S1"));
+        cache.insert(make_seen("B", "S1"));
+        cache.insert(make_seen("C", "S2"));
+        let mut names: Vec<&str> = cache.iter().map(|c| c.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn cache_serialization_roundtrip() {
+        let mut cache = CharacterCache::new();
+        cache.insert(make_seen("Legolas", "Teek"));
+        cache.insert(make_seen("Gimli", "FV"));
+        let json = serde_json::to_string(&cache).expect("serialize");
+        let restored: CharacterCache = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.len(), 2);
+        assert_eq!(
+            restored.lookup("Teek", "Legolas").unwrap().name,
+            "Legolas"
+        );
+        assert_eq!(restored.lookup("FV", "Gimli").unwrap().name, "Gimli");
+    }
+
+    #[test]
+    fn cache_file_persistence_roundtrip() {
+        let dir = std::env::temp_dir().join("dmft_test_char_cache");
+        let path = dir.join("cache.json");
+        let _ = std::fs::remove_file(&path);
+
+        let mut cache = CharacterCache::new();
+        cache.insert(make_seen("Frodo", "Teek"));
+        cache.insert(make_seen("Sam", "Teek"));
+        cache.save_to_file(&path).expect("save");
+
+        let loaded = CharacterCache::load_from_file(&path).expect("load");
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded.lookup("Teek", "Frodo").unwrap().level, 60);
+        assert_eq!(loaded.lookup("Teek", "Sam").unwrap().level, 60);
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn cache_load_missing_file_returns_empty() {
+        let path = std::env::temp_dir().join("dmft_test_nonexistent_cache.json");
+        let _ = std::fs::remove_file(&path);
+        let cache = CharacterCache::load_from_file(&path).expect("should return empty");
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn cache_load_invalid_json_returns_error() {
+        let path = std::env::temp_dir().join("dmft_test_bad_cache.json");
+        std::fs::write(&path, "not json").expect("write");
+        let result = CharacterCache::load_from_file(&path);
+        assert!(result.is_err());
+        let _ = std::fs::remove_file(&path);
     }
 }
