@@ -104,8 +104,8 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **M2.5** (complete): Login automation — credential store, process spawner, login FSM, launch coordinator
 - **M3** (complete): Navigation — waypoint pathfinding, Navigator FSM, humanization, stuck detection, zone router
 - **M4** (complete): Combat automation — ClassStrategy trait, 17 classes, HolyShit system, puller FSM, combat coordinator
-- **M5** (active): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding
-- **M6**: Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring (TUI stays for gameplay)
+- **M5** (~70% — 4 closed, 9 open, 5 PRs in review): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
+- **M6** (~55% — 11 closed, 9 open): Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements (EQ Internals, packet sniffer, map rework, Neriak theme)
 - **M7**: Zoning/Movement — zone transitions, movement validation, travel recovery
 - **M8**: Orchestrator — multibox coordination, group/session control, relay surfaces
 - **M9**: Learning/RL — behavioral cloning, RL fine-tuning
