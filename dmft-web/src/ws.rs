@@ -33,10 +33,10 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
             Some(msg) = receive_message(&mut socket) => {
                 match msg {
                     Message::Close(_) => break,
-                    Message::Ping(data) => {
-                        if socket.send(Message::Pong(data)).await.is_err() {
-                            break;
-                        }
+                    Message::Ping(data)
+                        if socket.send(Message::Pong(data.clone())).await.is_err() =>
+                    {
+                        break;
                     }
                     _ => {}
                 }
