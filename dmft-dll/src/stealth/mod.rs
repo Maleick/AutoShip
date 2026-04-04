@@ -12,6 +12,7 @@
 
 pub mod alloc;
 pub mod etw_blind;
+pub mod page_encrypt;
 pub mod page_guard;
 pub mod stack_spoof;
 pub mod text_encrypt;
