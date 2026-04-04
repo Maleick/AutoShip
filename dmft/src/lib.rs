@@ -35,6 +35,8 @@ pub mod inject;
 /// Named pipe server and shared memory IPC.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod ipc;
+/// Fleet metrics — SQLite-backed storage for events, DPS, loot, lockouts, plat.
+pub mod metrics;
 /// Navigation — waypoint recording, zone routing, navmesh integration.
 #[allow(dead_code)]
 pub mod nav;
