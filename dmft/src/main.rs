@@ -135,6 +135,13 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+
+    // ── Credentials ──────────────────────────────────────────────────
+    /// Manage encrypted Daybreak credentials
+    Credential {
+        #[command(subcommand)]
+        action: CredentialAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -147,6 +154,22 @@ enum ConfigAction {
     },
     /// Print the resolved configuration
     Show,
+}
+
+#[derive(Subcommand)]
+enum CredentialAction {
+    /// Add or update an account credential
+    Add {
+        /// Account name (e.g., "Frostreaver01")
+        account: String,
+    },
+    /// List all stored account names
+    List,
+    /// Remove an account credential
+    Remove {
+        /// Account name to remove
+        account: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -231,6 +254,21 @@ fn main() -> Result<()> {
             ConfigAction::Check { path } => cli::run_config_check_mode(path.as_deref()),
             ConfigAction::Show => cli::run_config_show_mode(),
         },
+
+        // Credentials
+        Some(Commands::Credential { action }) => {
+            let password = dmft::credentials::prompt::prompt_password("Master password: ")
+                .context("Failed to read master password")?;
+            match action {
+                CredentialAction::Add { account } => {
+                    cli::run_credential_add_mode(&account, password)
+                }
+                CredentialAction::List => cli::run_credential_list_mode(password),
+                CredentialAction::Remove { account } => {
+                    cli::run_credential_remove_mode(&account, password)
+                }
+            }
+        }
 
         None => {
             // Check top-level flags for backward compatibility
