@@ -18,6 +18,8 @@ pub mod nav;
 pub mod offset_db;
 /// EQ memory addresses and struct field offsets (preferred-base, rebased at runtime).
 pub mod offsets;
+/// Packet capture types — opcode filtering, capture sessions, and disk persistence.
+pub mod packet;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
