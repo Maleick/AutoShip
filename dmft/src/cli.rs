@@ -1087,6 +1087,64 @@ pub fn run_config_show_mode() -> Result<()> {
     Ok(())
 }
 
+// ─── Credential management ──────────────────────────────────────────────────
+
+const CREDENTIAL_DB_PATH: &str = "data/credentials.db";
+
+/// Add or update an account credential.
+pub fn run_credential_add_mode(
+    account: &str,
+    master_password: zeroize::Zeroizing<String>,
+) -> Result<()> {
+    let store = open_credential_store(&master_password)?;
+
+    let account_password = crate::credentials::prompt::prompt_password("Account password: ")
+        .context("Failed to read account password")?;
+
+    store.add_account(account, account_password.as_str())?;
+    eprintln!("Account '{account}' added/updated.");
+    Ok(())
+}
+
+/// List all stored account names.
+pub fn run_credential_list_mode(master_password: zeroize::Zeroizing<String>) -> Result<()> {
+    let store = open_credential_store(&master_password)?;
+    let accounts = store.list_accounts()?;
+
+    if accounts.is_empty() {
+        eprintln!("No accounts stored.");
+    } else {
+        eprintln!("{} account(s):", accounts.len());
+        for name in &accounts {
+            eprintln!("  - {name}");
+        }
+    }
+    Ok(())
+}
+
+/// Remove an account credential.
+pub fn run_credential_remove_mode(
+    account: &str,
+    master_password: zeroize::Zeroizing<String>,
+) -> Result<()> {
+    let store = open_credential_store(&master_password)?;
+    store.remove_account(account)?;
+    eprintln!("Account '{account}' removed.");
+    Ok(())
+}
+
+fn open_credential_store(
+    master_password: &str,
+) -> Result<crate::credentials::store::CredentialStore> {
+    let db_path = std::path::PathBuf::from(CREDENTIAL_DB_PATH);
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let salt = crate::credentials::crypto::generate_salt();
+    let master_key = crate::credentials::crypto::derive_key(master_password, &salt)?;
+    crate::credentials::store::CredentialStore::open(&db_path, master_key)
+}
+
 // ─── Platform helpers ───────────────────────────────────────────────────────
 
 /// Check if a process with the given PID is still alive.
