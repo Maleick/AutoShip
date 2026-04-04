@@ -1,0 +1,4 @@
+P 0.7300, 19.6580, -11.8400, 255, 0, 0, 3, to_The_Ruined_City_of_Dranik
+P 1238.3666, -2508.7957, -0.2796, 0, 0, 0, 2, Insidious_Dragorn
+P 2229.0833, -2154.5872, 9.7244, 127, 64, 0, 2, Dragorn_Marshal_Greshkla_(Hunter)
+P 2227.0930, -2158.7339, 11.1303, 127, 64, 0, 2, High_Enchantress_Zy`chia_(Hunter)
