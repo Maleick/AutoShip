@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use super::camp_loop::{CampEvent, CampLoop, CampState};
 use super::ch_chain::ChChain;
+use super::heal_coordinator::{CureCoordinator, HealCoordinator};
 
 /// Coordinates group combat — assist targeting, CC assignments, and camp loop FSM.
 pub struct CombatCoordinator {
@@ -18,6 +19,10 @@ pub struct CombatCoordinator {
     prev_dead: HashMap<ClientId, bool>,
     /// Complete Heal chain coordinator — rotates CH casts across clerics.
     pub ch_chain: Option<ChChain>,
+    /// Cross-group heal arbitration — prevents double-healing across groups.
+    pub heal_coordinator: HealCoordinator,
+    /// Cross-group cure coordination — prevents duplicate curing.
+    pub cure_coordinator: CureCoordinator,
 }
 
 impl CombatCoordinator {
@@ -32,6 +37,8 @@ impl CombatCoordinator {
             prev_in_combat: false,
             prev_dead: HashMap::new(),
             ch_chain: None,
+            heal_coordinator: HealCoordinator::new(),
+            cure_coordinator: CureCoordinator::new(),
         }
     }
 

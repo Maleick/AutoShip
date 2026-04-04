@@ -8,5 +8,7 @@ pub mod ch_chain;
 pub mod coordinator;
 /// Structured combat event tracking — DPS meters, kill counts, damage aggregation.
 pub mod events;
+/// Cross-group heal arbitration — prevents double-healing, priority ordering.
+pub mod heal_coordinator;
 /// Spell database — spell IDs, casting times, resist types, levels.
 pub mod spell_db;

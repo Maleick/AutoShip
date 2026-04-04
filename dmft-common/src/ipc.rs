@@ -253,6 +253,23 @@ pub enum Command {
         /// Spawn ID of the character to heal.
         target_id: u32,
     },
+    /// Claim a heal target — tells other healers this target is covered.
+    /// Used by the orchestrator's heal coordinator to prevent double-healing.
+    HealClaimTarget {
+        /// Client ID of the healer making the claim.
+        healer_id: u32,
+        /// Spawn ID of the target being healed.
+        target_id: u32,
+        /// Estimated cast time in milliseconds.
+        cast_time_ms: u32,
+    },
+    /// Release a heal claim (cast complete, interrupted, or target recovered).
+    HealReleaseClaim {
+        /// Client ID of the healer releasing.
+        healer_id: u32,
+        /// Spawn ID of the target.
+        target_id: u32,
+    },
     /// Loot the nearest corpse.
     LootCorpse,
     /// Loot all items from the currently open loot window.
