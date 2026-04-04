@@ -23,7 +23,14 @@ enum TwistState {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TwistAction {
     None,
-    Cast { gem: u8 },
+    Cast {
+        gem: u8,
+    },
+    /// Switch target, cast mez, then restore original target.
+    MezCast {
+        target_id: u32,
+        gem: u8,
+    },
     Interrupt,
 }
 
