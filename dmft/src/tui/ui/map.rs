@@ -347,22 +347,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             )
         })
         .unwrap_or_else(|| String::from(" | Sel none"));
-    let mesh_cache_label = app
-        .current_zone_has_cached_mesh()
-        .map(|cached| if cached { "cached" } else { "on-demand" })
-        .unwrap_or("n/a");
-    let overlay_label = if app.map_state.show_navmesh {
-        app.map_state
-            .navmesh_overlay
-            .as_ref()
-            .map(|overlay| format!("{} segs", overlay.segment_count()))
-            .unwrap_or_else(|| String::from("unavailable"))
-    } else {
-        String::from("off")
-    };
     let filter_label = app.map_state.filters.inline_flags();
     let layer_label = format!(
-        " layers[{}{}{}{}{}]",
+        " [{}{}{}{}{}{}]",
         if app.map_state.show_geometry {
             "G"
         } else {
@@ -376,6 +363,11 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         },
         if app.map_state.show_navmesh { "M" } else { "-" },
         if app.map_state.show_labels { "L" } else { "-" },
+        if app.map_state.show_annotations {
+            "A"
+        } else {
+            "-"
+        },
     );
 
     let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
@@ -412,20 +404,13 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         .map_or_else(
             || {
                 format!(
-                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{provisional_view_center} | {layer_label} | {filter_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
+                    " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | {filter_label} | Z:{z_range:.0} "
                 )
             },
-            |m| {
+            |_| {
                 format!(
-                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {provisional_view_center} | {layer_label} | {filter_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
-                    zone_label,
-                    m.lines.len(),
-                    m.points.len(),
-                    player_pos_label,
-                    selected_spawn_label,
-                    provisional_view_label,
+                    " {zone_label}{player_pos_label}{selected_spawn_label} | {provisional_view_label} {:.2}x{provisional_view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
                     app.map_state.zoom,
-                    z_range,
                 )
             },
         );
@@ -458,20 +443,13 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         .map_or_else(
             || {
                 format!(
-                    " Map: {zone_label} (no map data){player_pos_label}{selected_spawn_label}{view_center} | {layer_label} | {filter_label} | Z filter: {z_range:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize "
+                    " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | {filter_label} | Z:{z_range:.0} "
                 )
             },
-            |m| {
+            |_| {
                 format!(
-                    " Map: {} ({} lines, {} labels){}{} | View: {} {:.2}x | {view_center} | {layer_label} | {filter_label} | Z: {:.0} [+/-] | Mesh: {mesh_cache_label} {overlay_label} | m maximize ",
-                    zone_label,
-                    m.lines.len(),
-                    m.points.len(),
-                    player_pos_label,
-                    selected_spawn_label,
-                    view_label,
+                    " {zone_label}{player_pos_label}{selected_spawn_label} | {view_label} {:.2}x{view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
                     app.map_state.zoom,
-                    z_range,
                 )
             },
         );
@@ -499,7 +477,11 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     if app.map_state.show_geometry
         && let Some(map) = &app.map_state.zone_map
     {
+        let hide_annotations = !app.map_state.show_annotations;
         for ml in &map.lines {
+            if hide_annotations && ml.layer == 2 {
+                continue;
+            }
             if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
                 continue;
             }
@@ -523,8 +505,12 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     if app.map_state.show_labels
         && let Some(map) = &app.map_state.zone_map
     {
+        let hide_annotations = !app.map_state.show_annotations;
         let show_labels = app.map_state.zoom >= 0.8;
         for mp in &map.points {
+            if hide_annotations && mp.layer == 2 {
+                continue;
+            }
             if !visible_region.contains_point(mp.x, mp.y) {
                 continue;
             }
@@ -1166,7 +1152,11 @@ fn draw_minimap_widget(
     if app.map_state.show_geometry
         && let Some(map) = &app.map_state.zone_map
     {
+        let hide_annotations = !app.map_state.show_annotations;
         for segment in &map.lines {
+            if hide_annotations && segment.layer == 2 {
+                continue;
+            }
             if let Some((x1, y1)) = to_mini(segment.x1, segment.y1)
                 && let Some((x2, y2)) = to_mini(segment.x2, segment.y2)
             {
@@ -1189,7 +1179,11 @@ fn draw_minimap_widget(
     if app.map_state.show_labels
         && let Some(map) = &app.map_state.zone_map
     {
+        let hide_annotations = !app.map_state.show_annotations;
         for point in &map.points {
+            if hide_annotations && point.layer == 2 {
+                continue;
+            }
             if let Some((col, row)) = to_mini(point.x, point.y) {
                 let marker = point.label.chars().next().unwrap_or('*');
                 let point_color = map_rgb_to_color(point.r, point.g, point.b, t);
@@ -1285,7 +1279,7 @@ fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {
 
 fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {
     if r == 0 && g == 0 && b == 0 {
-        t.map_lines
+        t.map_geometry
     } else {
         ratatui::style::Color::Rgb(r, g, b)
     }

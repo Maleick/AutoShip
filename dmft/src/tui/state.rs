@@ -394,6 +394,8 @@ pub struct MapScreenState {
     pub show_spawns: bool,
     pub show_nav_paths: bool,
     pub show_labels: bool,
+    /// Show layer-2 annotations (compass roses, grid overlays).
+    pub show_annotations: bool,
     /// MQ2Map-style visibility toggles for map overlay entities.
     pub filters: MapFilters,
 }
@@ -418,6 +420,7 @@ impl MapScreenState {
             show_spawns: true,
             show_nav_paths: true,
             show_labels: true,
+            show_annotations: false,
             filters: MapFilters::default(),
         }
     }
@@ -504,6 +507,14 @@ impl MapScreenState {
                     "Labels ON"
                 } else {
                     "Labels OFF"
+                }
+            }
+            6 => {
+                self.show_annotations = !self.show_annotations;
+                if self.show_annotations {
+                    "Annotations ON"
+                } else {
+                    "Annotations OFF"
                 }
             }
             _ => "Unknown layer",

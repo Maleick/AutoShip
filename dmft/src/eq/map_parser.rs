@@ -25,6 +25,8 @@ pub struct MapLine {
     pub g: u8,
     /// Blue color component (0-255).
     pub b: u8,
+    /// Source layer (0 = base, 1 = labels, 2 = annotations, 3 = extended).
+    pub layer: u8,
 }
 
 /// A labeled point from an EQ map file (P line).
@@ -46,6 +48,8 @@ pub struct MapPoint {
     pub size: u8,
     /// Text label for the point (e.g., zone connection name).
     pub label: String,
+    /// Source layer (0 = base, 1 = labels, 2 = annotations, 3 = extended).
+    pub layer: u8,
 }
 
 /// All data for a single zone map.
@@ -138,11 +142,11 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
 
     // Load layers 0-3
     let suffixes = ["", "_1", "_2", "_3"];
-    for suffix in &suffixes {
+    for (layer, suffix) in suffixes.iter().enumerate() {
         let filename = format!("{zone_lower}{suffix}.txt");
         let path = map_dir.join(&filename);
         if path.exists() {
-            parse_map_file(&path, &mut lines, &mut points)
+            parse_map_file(&path, layer as u8, &mut lines, &mut points)
                 .with_context(|| format!("parsing {filename}"))?;
         }
     }
@@ -202,7 +206,7 @@ fn sanitize_zone_name(zone_name: &str) -> Result<String> {
     Ok(normalized)
 }
 
-fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoint>) -> Result<()> {
+fn parse_map_file(path: &Path, layer: u8, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoint>) -> Result<()> {
     let file = File::open(path)?;
     let mut bad_lines = 0usize;
 
@@ -214,14 +218,16 @@ fn parse_map_file(path: &Path, lines: &mut Vec<MapLine>, points: &mut Vec<MapPoi
         }
 
         let parsed = if trimmed.starts_with('L') {
-            if let Some(ml) = parse_l_line(trimmed) {
+            if let Some(mut ml) = parse_l_line(trimmed) {
+                ml.layer = layer;
                 lines.push(ml);
                 true
             } else {
                 false
             }
         } else if trimmed.starts_with('P') {
-            if let Some(mp) = parse_p_line(trimmed) {
+            if let Some(mut mp) = parse_p_line(trimmed) {
+                mp.layer = layer;
                 points.push(mp);
                 true
             } else {
@@ -287,6 +293,7 @@ fn parse_l_line(line: &str) -> Option<MapLine> {
         r: parse_u8_channel(parts[6])?,
         g: parse_u8_channel(parts[7])?,
         b: parse_u8_channel(parts[8])?,
+        layer: 0,
     })
 }
 
@@ -309,6 +316,7 @@ fn parse_p_line(line: &str) -> Option<MapPoint> {
         b: parse_u8_channel(parts[5])?,
         size: parts[6].parse().ok()?,
         label,
+        layer: 0,
     })
 }
 
@@ -568,6 +576,7 @@ mod tests {
             r: 255,
             g: 128,
             b: 0,
+            layer: 0,
         };
         assert!((line.z2 - 6.0).abs() < f32::EPSILON);
         assert_eq!(line.g, 128);
@@ -584,6 +593,7 @@ mod tests {
             b: 128,
             size: 3,
             label: "Test Point".into(),
+            layer: 0,
         };
         assert_eq!(point.label, "Test Point");
         assert_eq!(point.size, 3);

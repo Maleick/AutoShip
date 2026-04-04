@@ -125,6 +125,8 @@ pub struct Theme {
     pub map_corpse: Color,
     /// Color for zone geometry lines on the map.
     pub map_lines: Color,
+    /// Brighter color for (0,0,0) map geometry (walls/terrain).
+    pub map_geometry: Color,
 
     // ── Header ───────────────────────────────────────────────────────
     /// Style for the main title in the header bar.
@@ -250,6 +252,7 @@ pub fn dark_modern() -> Theme {
         map_dead_named: red,
         map_corpse: dim,
         map_lines: muted,
+        map_geometry: Color::Rgb(90, 100, 115),
 
         header_title: Style::default().fg(accent).add_modifier(Modifier::BOLD),
         header_client_count: Style::default().fg(gold).add_modifier(Modifier::BOLD),
@@ -343,6 +346,7 @@ pub fn classic() -> Theme {
         map_dead_named: Color::Red,
         map_corpse: Color::DarkGray,
         map_lines: Color::DarkGray,
+        map_geometry: Color::Gray,
 
         header_title: Style::default()
             .fg(Color::Cyan)
@@ -459,6 +463,7 @@ pub fn dracula() -> Theme {
         map_dead_named: red,
         map_corpse: comment,
         map_lines: selection,
+        map_geometry: comment,
 
         header_title: Style::default().fg(purple).add_modifier(Modifier::BOLD),
         header_client_count: Style::default().fg(pink).add_modifier(Modifier::BOLD),
