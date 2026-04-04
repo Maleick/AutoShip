@@ -189,6 +189,13 @@ pub struct AppConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct DiscordConfig {
+    /// Bot token for the embedded Discord bot. Empty = bot disabled.
+    /// Configure via `[discord] bot_token = "..."` in TOML config.
+    #[serde(default)]
+    pub bot_token: String,
+    /// Guild (server) ID for registering slash commands.
+    #[serde(default)]
+    pub guild_id: u64,
     /// Default webhook URL for alerts not routed to a specific channel.
     /// Empty = disabled.
     pub webhook_url: String,
@@ -214,6 +221,8 @@ pub struct DiscordConfig {
 impl Default for DiscordConfig {
     fn default() -> Self {
         Self {
+            bot_token: String::new(),
+            guild_id: 0,
             webhook_url: String::new(),
             channels: std::collections::HashMap::new(),
             alert_hvt: true,

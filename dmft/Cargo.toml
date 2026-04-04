@@ -34,6 +34,9 @@ tui-widget-list = "0.15"
 tui-scrollview = "0.6"
 tui-big-text = "0.8"
 tui-popup = "0.7"
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "model", "cache", "rustls_backend"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [build-dependencies]
 cc = "1"
