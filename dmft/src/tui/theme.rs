@@ -488,6 +488,117 @@ pub fn dracula() -> Theme {
     }
 }
 
+// ─── Neriak ────────────────────────────────────────────────────────────────
+
+/// Neriak Third Gate theme — cyber-arcanepunk dark fantasy.
+///
+/// Adapted from the Variant G web palette: deep void blacks, magenta/purple
+/// accents, spectral cyan highlights, lavender text.
+#[must_use]
+pub fn neriak() -> Theme {
+    let void = Color::Rgb(13, 6, 24); // #0d0618  deep void background
+    let violet = Color::Rgb(26, 10, 46); // #1a0a2e  panel background
+    let magenta = Color::Rgb(204, 68, 255); // #cc44ff  primary accent
+    let magenta_bright = Color::Rgb(255, 0, 255); // #ff00ff  hot magenta glow
+    let cyan = Color::Rgb(0, 229, 255); // #00e5ff  spectral cyan
+    let lavender = Color::Rgb(226, 215, 244); // #e2d7f4  body text
+    let lavender_dim = Color::Rgb(160, 150, 180); // muted lavender
+    let shadow = Color::Rgb(80, 60, 110); // dim purple-gray
+    let deep = Color::Rgb(45, 30, 65); // very dim violet
+    let green = Color::Rgb(52, 211, 153); // #34d399  emerald
+    let red = Color::Rgb(239, 68, 68); // #ef4444  danger red
+    let amber = Color::Rgb(251, 191, 36); // #fbbf24  warning amber
+    let blue = Color::Rgb(96, 165, 250); // #60a5fa  mana blue
+
+    Theme {
+        border_type: BorderType::Rounded,
+
+        border_dim: Style::default().fg(shadow),
+        border_primary: Style::default().fg(magenta),
+        border_active: Style::default().fg(cyan),
+        border_warn: Style::default().fg(amber),
+        border_danger: Style::default().fg(red),
+        border_server: Style::default().fg(magenta_bright),
+
+        tab_active: Style::default()
+            .fg(void)
+            .bg(magenta)
+            .add_modifier(Modifier::BOLD),
+        tab_inactive: Style::default().fg(shadow),
+
+        text_bright: lavender,
+        text_normal: lavender,
+        text_secondary: lavender_dim,
+        text_muted: shadow,
+        text_accent: cyan,
+        text_highlight: magenta,
+        text_server: magenta_bright,
+
+        hp_high: green,
+        hp_mid: amber,
+        hp_low: red,
+        mana_color: blue,
+        bar_empty: deep,
+
+        spawn_pc: green,
+        spawn_npc: lavender,
+        spawn_named: magenta,
+        spawn_corpse: shadow,
+        spawn_unknown: red,
+
+        table_header: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+        row_selected_bg: violet,
+
+        state_dead: red,
+        state_sitting: amber,
+        state_feigned: magenta,
+        state_frozen: blue,
+        state_normal: green,
+
+        mode_camp: cyan,
+        mode_hunt: magenta,
+
+        statusbar_message: Style::default().fg(magenta).add_modifier(Modifier::BOLD),
+        statusbar_key: Style::default().fg(cyan),
+        statusbar_dim: Style::default().fg(shadow),
+        statusbar_cmd: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+        statusbar_badge: Style::default()
+            .fg(void)
+            .bg(magenta)
+            .add_modifier(Modifier::BOLD),
+
+        map_you: cyan,
+        map_pc: green,
+        map_npc: lavender,
+        map_named: magenta,
+        map_dead_named: red,
+        map_corpse: shadow,
+        map_lines: deep,
+        map_geometry: Color::Rgb(70, 55, 95),
+
+        header_title: Style::default().fg(magenta).add_modifier(Modifier::BOLD),
+        header_client_count: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+        header_selected: Style::default().fg(green).add_modifier(Modifier::BOLD),
+        header_zone: Style::default().fg(lavender),
+        header_group: Style::default().fg(shadow),
+        header_group_active: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+
+        help_key: Style::default().fg(cyan),
+        help_desc: Style::default().fg(lavender_dim),
+        help_heading: Style::default().fg(magenta).add_modifier(Modifier::BOLD),
+        help_dim: Style::default().fg(shadow),
+        help_bg: void,
+        help_border: Style::default().fg(magenta),
+
+        con_red: red,
+        con_yellow: amber,
+        con_white: lavender,
+        con_light_blue: cyan,
+        con_blue: blue,
+        con_green: green,
+    }
+}
+
 // ─── ThemeKind ───────────────────────────────────────────────────────────────
 
 /// Enum so the app can store which theme is active and cycle through them.
@@ -500,6 +611,8 @@ pub enum ThemeKind {
     Classic,
     /// Dracula color scheme with dark purples and vivid accents.
     Dracula,
+    /// Neriak Third Gate — cyber-arcanepunk dark fantasy.
+    Neriak,
 }
 
 impl ThemeKind {
@@ -507,7 +620,8 @@ impl ThemeKind {
     #[must_use]
     pub fn next(self) -> Self {
         match self {
-            Self::DarkModern => Self::Dracula,
+            Self::DarkModern => Self::Neriak,
+            Self::Neriak => Self::Dracula,
             Self::Dracula => Self::Classic,
             Self::Classic => Self::DarkModern,
         }
@@ -520,6 +634,7 @@ impl ThemeKind {
             Self::DarkModern => "Dark",
             Self::Classic => "Classic",
             Self::Dracula => "Dracula",
+            Self::Neriak => "Neriak",
         }
     }
 
@@ -530,6 +645,7 @@ impl ThemeKind {
             Self::DarkModern => dark_modern(),
             Self::Classic => classic(),
             Self::Dracula => dracula(),
+            Self::Neriak => neriak(),
         }
     }
 }
@@ -539,13 +655,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn theme_kind_next_cycles_all_three() {
+    fn theme_kind_next_cycles_all_four() {
         let start = ThemeKind::DarkModern;
         let second = start.next();
-        assert_eq!(second, ThemeKind::Dracula);
+        assert_eq!(second, ThemeKind::Neriak);
         let third = second.next();
-        assert_eq!(third, ThemeKind::Classic);
-        let back = third.next();
+        assert_eq!(third, ThemeKind::Dracula);
+        let fourth = third.next();
+        assert_eq!(fourth, ThemeKind::Classic);
+        let back = fourth.next();
         assert_eq!(back, ThemeKind::DarkModern);
     }
 
@@ -554,6 +672,7 @@ mod tests {
         assert_eq!(ThemeKind::DarkModern.label(), "Dark");
         assert_eq!(ThemeKind::Classic.label(), "Classic");
         assert_eq!(ThemeKind::Dracula.label(), "Dracula");
+        assert_eq!(ThemeKind::Neriak.label(), "Neriak");
     }
 
     #[test]
@@ -580,6 +699,28 @@ mod tests {
     }
 
     #[test]
+    fn neriak_theme_has_rounded_borders() {
+        let theme = neriak();
+        assert_eq!(theme.border_type, BorderType::Rounded);
+    }
+
+    #[test]
+    fn neriak_uses_rgb_colors() {
+        let theme = neriak();
+        assert!(matches!(theme.hp_high, Color::Rgb(_, _, _)));
+        assert!(matches!(theme.hp_mid, Color::Rgb(_, _, _)));
+        assert!(matches!(theme.hp_low, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn neriak_text_accent_is_cyan_family() {
+        let theme = neriak();
+        if let Color::Rgb(r, _g, b) = theme.text_accent {
+            assert!(b > r, "Neriak accent should be cyan-dominant");
+        }
+    }
+
+    #[test]
     fn build_returns_correct_theme_variant() {
         let dm = ThemeKind::DarkModern.build();
         assert_eq!(dm.border_type, BorderType::Rounded);
@@ -589,6 +730,9 @@ mod tests {
 
         let dr = ThemeKind::Dracula.build();
         assert_eq!(dr.border_type, BorderType::Rounded);
+
+        let nr = ThemeKind::Neriak.build();
+        assert_eq!(nr.border_type, BorderType::Rounded);
     }
 
     #[test]
@@ -622,6 +766,7 @@ mod tests {
             ThemeKind::DarkModern,
             ThemeKind::Classic,
             ThemeKind::Dracula,
+            ThemeKind::Neriak,
         ] {
             let theme = kind.build();
             // PC and corpse should always be visually distinct
@@ -667,6 +812,7 @@ mod tests {
             ThemeKind::DarkModern,
             ThemeKind::Classic,
             ThemeKind::Dracula,
+            ThemeKind::Neriak,
         ] {
             let theme = kind.build();
             assert_ne!(
@@ -693,6 +839,7 @@ mod tests {
             ThemeKind::DarkModern,
             ThemeKind::Classic,
             ThemeKind::Dracula,
+            ThemeKind::Neriak,
         ] {
             let theme = kind.build();
             assert_ne!(
@@ -714,6 +861,7 @@ mod tests {
             ThemeKind::DarkModern,
             ThemeKind::Classic,
             ThemeKind::Dracula,
+            ThemeKind::Neriak,
         ] {
             let theme = kind.build();
             assert_ne!(
@@ -730,6 +878,7 @@ mod tests {
             ThemeKind::DarkModern,
             ThemeKind::Classic,
             ThemeKind::Dracula,
+            ThemeKind::Neriak,
         ] {
             let theme = kind.build();
             assert_ne!(theme.hp_high, theme.hp_mid, "{:?} hp_high == hp_mid", kind);
@@ -744,6 +893,7 @@ mod tests {
             ThemeKind::DarkModern,
             ThemeKind::Classic,
             ThemeKind::Dracula,
+            ThemeKind::Neriak,
         ] {
             let theme = kind.build();
             let cons = [
@@ -808,6 +958,7 @@ mod tests {
             ThemeKind::DarkModern,
             ThemeKind::Classic,
             ThemeKind::Dracula,
+            ThemeKind::Neriak,
         ] {
             let theme = kind.build();
             assert_ne!(
