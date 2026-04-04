@@ -31,7 +31,7 @@ pub unsafe fn submit_to_thread_pool(
         *mut core::ffi::c_void,
         windows::Win32::System::Threading::PTP_WORK,
     ),
-    context: Option<*const core::ffi::c_void>,
+    context: Option<*mut core::ffi::c_void>,
 ) -> Result<(), PoolPartyError> {
     use windows::Win32::System::Threading::{
         CloseThreadpoolWork, CreateThreadpoolWork, SubmitThreadpoolWork,

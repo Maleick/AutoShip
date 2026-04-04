@@ -13,9 +13,8 @@ mod inner {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use windows::Win32::Foundation::EXCEPTION_POINTERS;
     use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, RemoveVectoredExceptionHandler,
+        AddVectoredExceptionHandler, EXCEPTION_POINTERS, RemoveVectoredExceptionHandler,
     };
     use windows::Win32::System::Memory::{
         PAGE_EXECUTE_READ, PAGE_NOACCESS, PAGE_PROTECTION_FLAGS, PAGE_READWRITE, VirtualProtect,
