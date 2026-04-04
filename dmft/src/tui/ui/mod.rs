@@ -15,6 +15,7 @@ pub mod explorer;
 pub mod groups;
 pub mod map;
 pub mod navigation;
+pub mod packets;
 pub mod spawns;
 pub mod widgets;
 
@@ -58,6 +59,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Tactical => map::draw_map_screen(frame, outer[1], app),
         ActiveScreen::Navigation => navigation::draw_navigation_screen(frame, outer[1], app),
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
+        ActiveScreen::PacketMonitor => packets::draw_packet_monitor(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -191,12 +193,14 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::Tactical => "Map",
             ActiveScreen::Navigation => "Nav",
             ActiveScreen::Debug => "Dbg",
+            ActiveScreen::PacketMonitor => "Pkt",
         },
         WidthClass::Narrow => match screen {
             ActiveScreen::Overview => "1",
             ActiveScreen::Tactical => "2",
             ActiveScreen::Navigation => "3",
             ActiveScreen::Debug => "4",
+            ActiveScreen::PacketMonitor => "5",
         },
     }
 }
@@ -804,6 +808,11 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
                 "/ and f",
                 "Search and filter the spawn list",
             );
+        }
+        ActiveScreen::PacketMonitor => {
+            push_kv(&mut rows, None, "Space", "Pause / resume packet capture");
+            push_kv(&mut rows, None, "↑/↓", "Scroll packet log");
+            push_kv(&mut rows, None, "c", "Clear captured packets");
         }
     }
     rows.push(help_row(None, HelpCell::Text(String::new())));

@@ -349,6 +349,15 @@ impl std::fmt::Debug for Command {
     }
 }
 
+/// Direction of a captured network packet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum PacketDirection {
+    /// Client → server (outbound).
+    Outbound,
+    /// Server → client (inbound).
+    Inbound,
+}
+
 /// Responses sent from the DLL back to the manager
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Response {
@@ -394,6 +403,19 @@ pub enum Response {
     CombatUpdate {
         /// Current combat FSM state.
         status: crate::combat::CombatStatus,
+    },
+    /// A captured network packet event from the DLL's send/recv hooks.
+    PacketEvent {
+        /// PID of the client that captured the packet.
+        client_id: ClientId,
+        /// EQ protocol opcode identifier.
+        opcode: u16,
+        /// Whether the packet was inbound or outbound.
+        direction: PacketDirection,
+        /// Timestamp in milliseconds when the packet was captured.
+        timestamp_ms: u64,
+        /// Size of the packet payload in bytes.
+        payload_size: u32,
     },
     /// Zone adjacency graph from `ZoneGuideManagerClient`.
     /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).

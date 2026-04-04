@@ -26,7 +26,7 @@ use anyhow::Context;
 pub use super::client::ClientState;
 pub use super::state::{
     CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
-    OverviewScreenState, SpawnsScreenState, TacticalScreenState,
+    OverviewScreenState, PacketMonitorState, SpawnsScreenState, TacticalScreenState,
 };
 use super::state::{
     FilteredSpawnCache, FilteredSpawnCacheKey, MapFilterKind, MapSpawnPresentationCache,
@@ -43,6 +43,8 @@ pub enum ActiveScreen {
     Navigation,
     /// Debug panels (raw spawns, hex dump).
     Debug,
+    /// Packet/opcode monitor — live network sniffer.
+    PacketMonitor,
 }
 
 impl ActiveScreen {
@@ -54,15 +56,17 @@ impl ActiveScreen {
             Self::Tactical => "Map",
             Self::Navigation => "Navigation",
             Self::Debug => "Debug",
+            Self::PacketMonitor => "Packets",
         }
     }
 
     /// All screen variants for iteration.
-    pub const ALL: [ActiveScreen; 4] = [
+    pub const ALL: [ActiveScreen; 5] = [
         Self::Overview,
         Self::Tactical,
         Self::Navigation,
         Self::Debug,
+        Self::PacketMonitor,
     ];
 }
 
@@ -95,6 +99,8 @@ pub enum ActivePanel {
     DebugHexDump,
     /// Ghidra offset explorer panel (debug).
     DebugExplorer,
+    /// Packet monitor scrolling log.
+    PacketMonitorLog,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -304,7 +310,7 @@ pub struct App {
     /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
     /// Per-screen layout presets (cycled with Ctrl+E).
-    pub layout_presets: [LayoutPreset; 4],
+    pub layout_presets: [LayoutPreset; 5],
 
     /// Connected EQ client states.
     pub clients: Vec<ClientState>,
@@ -418,6 +424,8 @@ pub struct App {
 
     /// Navigation screen state (waypoint list, route display).
     pub nav_state: NavigationScreenState,
+    /// Packet/opcode monitor state.
+    pub packet_monitor_state: PacketMonitorState,
 
     /// EQ install path for launch operations (from config or default).
     pub launch_eq_path: String,
@@ -574,7 +582,7 @@ impl App {
             running: true,
             active_screen: ActiveScreen::Overview,
             active_panel: ActivePanel::OverviewRoster,
-            layout_presets: [LayoutPreset::Default; 4],
+            layout_presets: [LayoutPreset::Default; 5],
 
             clients: Vec::new(),
             selected_client: 0,
@@ -643,6 +651,7 @@ impl App {
             chat_events: VecDeque::with_capacity(200),
 
             nav_state: NavigationScreenState::new(),
+            packet_monitor_state: PacketMonitorState::new(),
 
             launch_eq_path: String::from(r"C:\EverQuest"),
 
@@ -808,6 +817,7 @@ impl App {
             ActiveScreen::Tactical => ActivePanel::TacticalMap,
             ActiveScreen::Navigation => ActivePanel::TacticalNavigation,
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
+            ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
         }
     }
 
@@ -843,6 +853,7 @@ impl App {
                     ActivePanel::DebugExplorer,
                 ]
             }
+            ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
         }
     }
 
@@ -901,6 +912,7 @@ impl App {
             ActiveScreen::Tactical => 1,
             ActiveScreen::Navigation => 2,
             ActiveScreen::Debug => 3,
+            ActiveScreen::PacketMonitor => 4,
         }
     }
 
