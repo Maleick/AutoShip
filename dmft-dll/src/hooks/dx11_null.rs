@@ -266,6 +266,7 @@ mod inner {
     fn hook_present_via_dummy_device(
         hwnd: windows::Win32::Foundation::HWND,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        use windows::core::Interface;
         use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
         use windows::Win32::Graphics::Direct3D11::D3D11CreateDeviceAndSwapChain;
         use windows::Win32::Graphics::Dxgi::Common::{
