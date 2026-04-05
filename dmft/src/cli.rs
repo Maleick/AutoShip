@@ -1210,7 +1210,7 @@ pub fn run_credential_remove_mode(
     Ok(())
 }
 
-fn open_credential_store(
+pub fn open_credential_store(
     master_password: &str,
 ) -> Result<crate::credentials::store::CredentialStore> {
     let db_path = std::path::PathBuf::from(CREDENTIAL_DB_PATH);

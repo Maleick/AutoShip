@@ -177,6 +177,12 @@ enum CredentialAction {
     Add {
         /// Account name (e.g., "Frostreaver01")
         account: String,
+        /// Account password (non-interactive mode; omit to be prompted)
+        #[arg(long)]
+        password: Option<String>,
+        /// Master password (non-interactive mode; omit to be prompted)
+        #[arg(long)]
+        master_password: Option<String>,
     },
     /// List all stored account names
     List,
@@ -275,17 +281,36 @@ fn main() -> Result<()> {
         },
 
         // Credentials
-        Some(Commands::Credential { action }) => {
-            let password = dmft::credentials::prompt::prompt_password("Master password: ")
-                .context("Failed to read master password")?;
-            match action {
-                CredentialAction::Add { account } => {
-                    cli::run_credential_add_mode(&account, password)
+        Some(Commands::Credential { action }) => match action {
+            CredentialAction::Add {
+                account,
+                password: acct_pw,
+                master_password: master_pw,
+            } => {
+                let master = match master_pw {
+                    Some(pw) => zeroize::Zeroizing::new(pw),
+                    None => dmft::credentials::prompt::prompt_password("Master password: ")
+                        .context("Failed to read master password")?,
+                };
+                match acct_pw {
+                    Some(pw) => {
+                        let store = cli::open_credential_store(&master)?;
+                        store.add_account(&account, &pw)?;
+                        eprintln!("Account '{account}' added/updated.");
+                        Ok(())
+                    }
+                    None => cli::run_credential_add_mode(&account, master),
                 }
-                CredentialAction::List => cli::run_credential_list_mode(password),
-                CredentialAction::Remove { account } => {
-                    cli::run_credential_remove_mode(&account, password)
-                }
+            }
+            CredentialAction::List => {
+                let password = dmft::credentials::prompt::prompt_password("Master password: ")
+                    .context("Failed to read master password")?;
+                cli::run_credential_list_mode(password)
+            }
+            CredentialAction::Remove { account } => {
+                let password = dmft::credentials::prompt::prompt_password("Master password: ")
+                    .context("Failed to read master password")?;
+                cli::run_credential_remove_mode(&account, password)
             }
         }
 
