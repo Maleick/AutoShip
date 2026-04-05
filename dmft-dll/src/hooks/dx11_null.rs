@@ -245,7 +245,7 @@ mod inner {
         index: usize,
         original_fn: *mut core::ffi::c_void,
     ) {
-        let _ = vtable_hook(object, index, original_fn);
+        let _ = unsafe { vtable_hook(object, index, original_fn) };
     }
 
     /// Find EQ's main window handle. Looks for the "EverQuest" window class.
@@ -254,7 +254,7 @@ mod inner {
         use windows::core::s;
 
         let hwnd = unsafe { FindWindowA(s!("EverQuest"), None) };
-        if hwnd.is_invalid() || hwnd.0.is_null() {
+        if hwnd.0 == 0 {
             None
         } else {
             Some(hwnd)
