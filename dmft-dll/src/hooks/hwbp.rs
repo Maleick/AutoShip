@@ -69,9 +69,10 @@ static VEH_HANDLE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(windows)]
 mod platform {
     use super::*;
+    use std::sync::atomic::AtomicU32;
     use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS, GetThreadContext,
-        RemoveVectoredExceptionHandler, SetThreadContext,
+        AddVectoredExceptionHandler, GetThreadContext, RemoveVectoredExceptionHandler,
+        SetThreadContext, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS,
     };
     use windows::Win32::System::Threading::GetCurrentThread;
 
@@ -81,6 +82,34 @@ mod platform {
     const EXCEPTION_CONTINUE_EXECUTION: i32 = -1;
     const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
+    /// Thread ID of EQ's main thread (the window message pump).
+    /// Set once by `find_main_thread_id`, read by `set_breakpoint_on_main_thread`.
+    static MAIN_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+
+    /// Find EQ's main thread by locating the thread that owns the "EverQuest" window.
+    pub fn find_main_thread_id() -> Result<u32, String> {
+        use windows::core::s;
+        use windows::Win32::UI::WindowsAndMessaging::{FindWindowA, GetWindowThreadProcessId};
+
+        let cached = MAIN_THREAD_ID.load(Ordering::Acquire);
+        if cached != 0 {
+            return Ok(cached);
+        }
+
+        let hwnd = unsafe { FindWindowA(s!("EverQuest"), None) };
+        if hwnd.0 == 0 {
+            return Err("EverQuest window not found — character may not be in-world".into());
+        }
+        let tid = unsafe { GetWindowThreadProcessId(hwnd, None) };
+        if tid == 0 {
+            return Err("GetWindowThreadProcessId returned 0".into());
+        }
+        MAIN_THREAD_ID.store(tid, Ordering::Release);
+        tracing::info!(tid, "Resolved EQ main thread ID from window handle");
+        Ok(tid)
+    }
+
+    /// Set a hardware breakpoint on the current thread (caller's context).
     pub fn set_breakpoint(slot: HwbpSlot, address: usize) -> Result<(), String> {
         let idx = slot as usize;
         unsafe {
@@ -100,6 +129,77 @@ mod platform {
             ctx.Dr7 |= DR7_LOCAL_ENABLE[idx];
             SetThreadContext(thread, &ctx).map_err(|e| format!("SetThreadContext failed: {e}"))?;
         }
+        Ok(())
+    }
+
+    /// Schedule `set_breakpoint` to run on EQ's main thread via `QueueUserAPC`.
+    ///
+    /// The APC callback executes when the main thread enters an alertable wait
+    /// (e.g., `SleepEx`, `WaitForSingleObjectEx`, or the window message loop's
+    /// `MsgWaitForMultipleObjectsEx`). EQ's main loop enters alertable waits
+    /// regularly, so the APC fires within a few frames.
+    pub fn set_breakpoint_on_main_thread(slot: HwbpSlot, address: usize) -> Result<(), String> {
+        use windows::Win32::System::Threading::{OpenThread, QueueUserAPC, THREAD_SET_CONTEXT};
+
+        let tid = find_main_thread_id()?;
+
+        // Pack slot + address into a static so the APC callback can read them.
+        // We use a single AtomicU64: high 32 = slot index, low 32 = unused (address in separate static).
+        static APC_SLOT: AtomicU32 = AtomicU32::new(0);
+        static APC_ADDR: AtomicUsize = AtomicUsize::new(0);
+        static APC_RESULT: AtomicBool = AtomicBool::new(false);
+        static APC_DONE: AtomicBool = AtomicBool::new(false);
+
+        APC_SLOT.store(slot as u32, Ordering::Release);
+        APC_ADDR.store(address, Ordering::Release);
+        APC_DONE.store(false, Ordering::Release);
+        APC_RESULT.store(false, Ordering::Release);
+
+        unsafe extern "system" fn apc_callback(_parameter: usize) {
+            let slot_idx = APC_SLOT.load(Ordering::Acquire);
+            let addr = APC_ADDR.load(Ordering::Acquire);
+            let slot = match HwbpSlot::from_index(slot_idx as usize) {
+                Some(s) => s,
+                None => {
+                    APC_DONE.store(true, Ordering::Release);
+                    return;
+                }
+            };
+            let ok = set_breakpoint(slot, addr).is_ok();
+            APC_RESULT.store(ok, Ordering::Release);
+            APC_DONE.store(true, Ordering::Release);
+            tracing::info!(
+                slot = slot_idx,
+                addr = format!("{:#x}", addr),
+                success = ok,
+                "HWBP set via APC on main thread"
+            );
+        }
+
+        let thread_handle = unsafe {
+            OpenThread(THREAD_SET_CONTEXT, false, tid)
+                .map_err(|e| format!("OpenThread({tid}) failed: {e}"))?
+        };
+
+        let queued = unsafe { QueueUserAPC(Some(apc_callback), thread_handle, 0) };
+
+        // Handle is Copy in this windows crate version — no explicit close needed.
+        let _ = thread_handle;
+
+        if queued == 0 {
+            return Err(format!("QueueUserAPC failed for TID {tid}"));
+        }
+
+        tracing::info!(
+            tid,
+            slot = slot as u32,
+            addr = format!("{:#x}", address),
+            "HWBP APC queued on main thread — will fire on next alertable wait"
+        );
+
+        // Don't block waiting — the APC fires asynchronously on the main thread.
+        // The VEH handler + slot state are already set up, so once the APC fires
+        // and sets the debug register, the hook will start working.
         Ok(())
     }
 
@@ -214,13 +314,19 @@ pub fn register(
     platform::install_veh().map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
     CALLBACKS[idx].store(callback as usize, Ordering::Release);
     SLOTS[idx].address.store(address, Ordering::Release);
-    platform::set_breakpoint(slot, address)
+
+    // Use QueueUserAPC to set the HWBP on EQ's main thread. The DLL init
+    // runs on a thread pool worker (PoolParty), so GetCurrentThread() would
+    // target the wrong thread. The APC fires on the main thread's next
+    // alertable wait, setting the debug register in the correct context.
+    platform::set_breakpoint_on_main_thread(slot, address)
         .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+
     SLOTS[idx].active.store(true, Ordering::Release);
     tracing::info!(
         slot = idx,
         addr = format!("{:#x}", address),
-        "HWBP registered"
+        "HWBP registered (APC queued on main thread)"
     );
     Ok(())
 }
