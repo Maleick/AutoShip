@@ -177,37 +177,40 @@ mod inner {
             eq_base,
         )?;
 
+        // SAFETY: All pointer dereferences in this chain follow the MQ2 eqlib
+        // struct layout. Each step is null-checked before advancing.
+
         // pinstSGraphicsEngine → SGraphicsEngine*
         let gfx_engine: *const u64 = gfx_engine_ptr as *const u64;
-        let sgraphics = *gfx_engine as *const u8;
+        let sgraphics = unsafe { *gfx_engine } as *const u8;
         if sgraphics.is_null() {
             tracing::warn!("SGraphicsEngine pointer is null");
             return None;
         }
 
         // SGraphicsEngine+0x18 → CRender*
-        let crender = *(sgraphics.add(0x18) as *const *const u8);
+        let crender = unsafe { *(sgraphics.add(0x18) as *const *const u8) };
         if crender.is_null() {
             tracing::warn!("CRender pointer is null");
             return None;
         }
 
         // CRender+0x0F00 → DeviceImpl* (DX9 wrapper)
-        let device_impl = *(crender.add(0x0F00) as *const *const u8);
+        let device_impl = unsafe { *(crender.add(0x0F00) as *const *const u8) };
         if device_impl.is_null() {
             tracing::warn!("DeviceImpl pointer is null");
             return None;
         }
 
         // DeviceImpl+0x28 → Device*
-        let device = *(device_impl.add(0x28) as *const *const u8);
+        let device = unsafe { *(device_impl.add(0x28) as *const *const u8) };
         if device.is_null() {
             tracing::warn!("Device pointer is null");
             return None;
         }
 
         // Device+0x18 → SwapChain (inline). SwapChain+0x00 → ID3D11Device*
-        let d3d11_device = *(device.add(0x18) as *const *mut core::ffi::c_void);
+        let d3d11_device = unsafe { *(device.add(0x18) as *const *mut core::ffi::c_void) };
         if d3d11_device.is_null() {
             tracing::warn!("ID3D11Device pointer is null");
             return None;
@@ -233,31 +236,34 @@ mod inner {
             VirtualProtect, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
         };
 
-        // COM object layout: first pointer-sized field is vtable pointer.
-        let vtable_ptr = *(object as *const *mut *mut core::ffi::c_void);
-        let entry = vtable_ptr.add(index);
-        let original = *entry;
+        // SAFETY: COM object layout guarantees first field is vtable pointer.
+        // VirtualProtect is needed because vtable memory is read-only.
+        let vtable_ptr = unsafe { *(object as *const *mut *mut core::ffi::c_void) };
+        let entry = unsafe { vtable_ptr.add(index) };
+        let original = unsafe { *entry };
 
         let mut old_protect = PAGE_PROTECTION_FLAGS(0);
         let entry_size = core::mem::size_of::<*mut core::ffi::c_void>();
 
-        VirtualProtect(
-            entry as *const core::ffi::c_void,
-            entry_size,
-            PAGE_READWRITE,
-            &mut old_protect,
-        )
-        .ok()?;
+        unsafe {
+            VirtualProtect(
+                entry as *const core::ffi::c_void,
+                entry_size,
+                PAGE_READWRITE,
+                &mut old_protect,
+            )
+            .ok()?;
 
-        *entry = hook_fn as *mut core::ffi::c_void;
+            *entry = hook_fn as *mut core::ffi::c_void;
 
-        VirtualProtect(
-            entry as *const core::ffi::c_void,
-            entry_size,
-            old_protect,
-            &mut old_protect,
-        )
-        .ok()?;
+            VirtualProtect(
+                entry as *const core::ffi::c_void,
+                entry_size,
+                old_protect,
+                &mut old_protect,
+            )
+            .ok()?;
+        }
 
         Some(original)
     }
