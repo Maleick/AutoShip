@@ -331,17 +331,27 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     continue;
                 }
 
-                // Queue for game loop processing.
-                if let Some(pending) = PENDING_COMMANDS.get()
+                // Queue for game loop processing (bounded to prevent OOM
+                // if the game loop stalls during loading screens).
+                const MAX_PENDING: usize = 256;
+                let queued = if let Some(pending) = PENDING_COMMANDS.get()
                     && let Ok(mut queue) = pending.lock()
                 {
-                    queue.push(cmd);
-                }
+                    if queue.len() < MAX_PENDING {
+                        queue.push(cmd);
+                        true
+                    } else {
+                        tracing::warn!(client_id, "Command queue full ({MAX_PENDING}), dropping command");
+                        false
+                    }
+                } else {
+                    false
+                };
 
                 // Send Ack so the orchestrator isn't left waiting.
                 let _ = listener.respond(&Response::CommandResult {
-                    success: true,
-                    message: "queued".into(),
+                    success: queued,
+                    message: if queued { "queued" } else { "queue full" }.into(),
                 });
 
                 // Reset pipe for next connection. The orchestrator uses

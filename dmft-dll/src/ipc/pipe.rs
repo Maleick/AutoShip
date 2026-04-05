@@ -153,7 +153,7 @@ impl CommandListener {
             }
 
             // Read the next command from the connected pipe.
-            let mut buf = vec![0u8; 4096];
+            let mut buf = vec![0u8; dmft_common::protocol::MAX_MESSAGE_SIZE as usize + 4];
             let mut bytes_read: u32 = 0;
             // SAFETY: self.handle is a connected pipe. buf is a heap-allocated
             // 4096-byte buffer. ReadFile writes at most buf.len() bytes.

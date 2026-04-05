@@ -53,8 +53,9 @@ pub struct Orchestrator {
     session_tokens: HashMap<u32, SessionToken>,
     /// Tick number when each client's game state was last updated.
     state_timestamps: HashMap<u32, u64>,
-    /// Persistent pipe connections per client PID (one long-lived pipe per client).
-    pipe_pool: HashMap<u32, CommandPipe>,
+    // Pipe connections are created per-command (connect → token → command → drop).
+    // The DLL's pipe server disconnects after each command, so persistent
+    // connections would fail on the second write.
 
     // --- Integration fields ---
     /// Current operating mode: Camp (stationary) or Hunt (roaming).
@@ -88,7 +89,6 @@ impl Orchestrator {
             state_readers: HashMap::new(),
             session_tokens: HashMap::new(),
             state_timestamps: HashMap::new(),
-            pipe_pool: HashMap::new(),
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
@@ -667,9 +667,11 @@ impl Orchestrator {
         }
     }
 
-    /// Get or create a persistent pipe connection for a client.
-    /// Authenticates once on first connect; reuses the connection thereafter.
-    fn get_pipe(&mut self, pid: u32) -> Option<&CommandPipe> {
+    /// Create a fresh pipe connection for a single command.
+    /// Each call connects, authenticates, and returns an owned pipe that is
+    /// dropped after the caller sends one command (matching the DLL's
+    /// per-command disconnect model).
+    fn get_pipe(&mut self, pid: u32) -> Option<CommandPipe> {
         let name = self
             .client_names
             .get(&pid)
@@ -682,30 +684,27 @@ impl Orchestrator {
             return None;
         };
 
-        // Reuse existing connection or create a new one.
-        use std::collections::hash_map::Entry;
-        if let Entry::Vacant(entry) = self.pipe_pool.entry(pid) {
-            let session_id = dmft_common::ipc::session_id_from_token(&token);
-            match CommandPipe::connect(pid, session_id) {
-                Ok(pipe) => {
-                    if let Err(e) = pipe.send_raw_token(&token) {
-                        tracing::warn!(pid, name, error = %e, "Failed to send token");
-                        return None;
-                    }
-                    entry.insert(pipe);
-                }
-                Err(e) => {
-                    tracing::warn!(pid, name, error = %e, "Failed to connect pipe");
+        // Connect fresh for each command. The DLL's pipe server disconnects
+        // after each command (connect → token → command → response → disconnect),
+        // so persistent connections would fail on the second write.
+        let session_id = dmft_common::ipc::session_id_from_token(&token);
+        match CommandPipe::connect(pid, session_id) {
+            Ok(pipe) => {
+                if let Err(e) = pipe.send_raw_token(&token) {
+                    tracing::warn!(pid, name, error = %e, "Failed to send token");
                     return None;
                 }
+                Some(pipe)
+            }
+            Err(e) => {
+                tracing::warn!(pid, name, error = %e, "Failed to connect pipe");
+                None
             }
         }
-
-        self.pipe_pool.get(&pid)
     }
 
     /// Send a structured IPC command to a client via named pipe.
-    /// Uses persistent connections — one pipe per client, reused across ticks.
+    /// Creates a fresh connection per command (connect → token → command → drop).
     fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
         let name = self
             .client_names
@@ -721,10 +720,10 @@ impl Orchestrator {
                 tracing::debug!(pid, name = %name, ?cmd, "Dispatched IPC command");
             }
             Err(e) => {
-                tracing::warn!(pid, name = %name, ?cmd, error = %e, "Failed to send — dropping pipe");
-                self.pipe_pool.remove(&pid);
+                tracing::warn!(pid, name = %name, ?cmd, error = %e, "Failed to send command");
             }
         }
+        // pipe is dropped here — DLL will disconnect its end too
     }
 
     /// Eject the DLL from a client and clean up its tracked state.
@@ -750,7 +749,6 @@ impl Orchestrator {
         self.state_readers.remove(&pid);
         self.session_tokens.remove(&pid);
         self.state_timestamps.remove(&pid);
-        self.pipe_pool.remove(&pid);
         tracing::info!(pid, "Client removed from orchestrator");
     }
 
@@ -773,10 +771,10 @@ impl Orchestrator {
                 tracing::debug!(pid, name = %name, %command, "Dispatched command");
             }
             Err(e) => {
-                tracing::warn!(pid, name = %name, %command, error = %e, "Failed to send — dropping pipe");
-                self.pipe_pool.remove(&pid);
+                tracing::warn!(pid, name = %name, %command, error = %e, "Failed to send command");
             }
         }
+        // pipe is dropped here
     }
 }
 
