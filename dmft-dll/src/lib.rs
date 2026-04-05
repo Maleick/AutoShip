@@ -139,9 +139,32 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // 3. Install function hooks (non-fatal if they fail).
+    // 3. Install function hooks. If the EQ window isn't available yet (e.g.,
+    //    injected at login screen), spawn a background thread that retries
+    //    until the window appears and the HWBP can be set on the main thread.
     if let Err(e) = install_hooks(eq_base) {
-        tracing::warn!("Hook installation failed (continuing without hooks): {}", e);
+        tracing::warn!("Hook installation deferred (window not ready): {}", e);
+        let eq_base_copy = eq_base;
+        std::thread::spawn(move || {
+            for attempt in 1..=60 {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                if crate::SHUTTING_DOWN.load(std::sync::atomic::Ordering::SeqCst) {
+                    return;
+                }
+                match install_hooks(eq_base_copy) {
+                    Ok(()) => {
+                        tracing::info!(attempt, "Deferred hook installation succeeded");
+                        return;
+                    }
+                    Err(e) => {
+                        if attempt % 10 == 0 {
+                            tracing::debug!(attempt, error = %e, "Deferred hook install retry");
+                        }
+                    }
+                }
+            }
+            tracing::error!("Deferred hook installation gave up after 60 attempts (2 minutes)");
+        });
     }
 
     // 4. Initialize command jitter RNG for anti-detection.

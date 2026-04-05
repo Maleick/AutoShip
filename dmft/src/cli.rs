@@ -178,13 +178,11 @@ pub fn run_inject_mode() -> Result<()> {
 
     println!("Using DLL: {}", source_dll.display());
 
-    // Read DLL bytes for reflective injection (no disk staging needed).
-    let dll_bytes = std::fs::read(&source_dll)
-        .with_context(|| format!("Failed to read DLL: {}", source_dll.display()))?;
-    println!(
-        "Loaded DLL into memory ({} bytes) — reflective injection",
-        dll_bytes.len()
-    );
+    // Stage the DLL (copies with randomized name).
+    // TODO: Switch to reflective loader once d3d11.dll cross-process import
+    // resolution is fixed (addresses differ per-process due to ASLR).
+    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
+    println!("Staged DLL: {}", staged_dll.display());
 
     let mut success = 0u32;
     let mut failed = 0u32;
@@ -198,15 +196,15 @@ pub fn run_inject_mode() -> Result<()> {
             failed += 1;
             continue;
         }
-        match inject::reflective::inject_reflective(pid, &dll_bytes) {
-            Ok(base) => {
-                println!("OK (base: {base:#x})");
-                info!(pid, base = format!("{base:#x}"), "Reflective injection succeeded");
+        match inject::loader::inject_dll(pid, &staged_dll) {
+            Ok(()) => {
+                println!("OK");
+                info!(pid, "Injection succeeded");
                 success += 1;
             }
             Err(e) => {
-                println!("FAILED: {e}");
-                error!(pid, error = %e, "Reflective injection failed");
+                println!("FAILED: {e:#}");
+                error!(pid, error = %e, "Injection failed");
                 failed += 1;
             }
         }
@@ -646,17 +644,12 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     // Write session token file BEFORE injection so DLL can read it during init.
     ipc::write_session_token_file(pid)?;
 
-    // Read DLL bytes for reflective injection (no disk staging needed).
-    let dll_bytes = std::fs::read(&source_dll)
-        .with_context(|| format!("Failed to read DLL: {}", source_dll.display()))?;
-    println!(
-        "Injecting into PID {pid} (reflective, {} bytes)...",
-        dll_bytes.len()
-    );
+    // TODO: Switch to reflective loader once cross-process import resolution is fixed.
+    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
+    println!("Injecting into PID {pid}...");
 
-    let base = inject::reflective::inject_reflective(pid, &dll_bytes)
-        .map_err(|e| anyhow::anyhow!("Reflective injection failed: {e}"))?;
-    println!("OK — DLL injected into PID {pid} (base: {base:#x})");
+    inject::loader::inject_dll(pid, &staged_dll)?;
+    println!("OK — DLL injected into PID {pid}");
     Ok(())
 }
 
