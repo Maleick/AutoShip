@@ -36,16 +36,16 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **InterpretCmd** — Calls EQ's internal `CEverQuest::InterpretCmd` to execute any slash command invisibly
 - **Game State Publishing** — DLL reads HP/mana/target/nearby spawns every tick, publishes via shared memory
 - **IPC Pipeline** — Named pipes (commands) + shared memory (game state) with current-user DACL security
-- **Render Strobing** — Hooks `CDisplay::RealRender_World`, skips 3D rendering for background clients (~97% GPU savings)
+- **Render Mode System** — Three modes: Normal (full render), Strobe (1 frame per 5 sec, ~97% GPU savings), NullRender (zero rendering). DX11 null device hooks intercept `ID3D11Device` vtable to replace textures with 1×1 and buffers with 256 bytes, saving ~500 MB per background client
 
 ### TUI Dashboard (4 screens, 3 themes)
 
-| Screen     | Key | Description                                                                                         |
-| ---------- | --- | --------------------------------------------------------------------------------------------------- |
-| Characters | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels |
-| Map        | `2` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers, Z-slice control |
+| Screen     | Key | Description                                                                                          |
+| ---------- | --- | ---------------------------------------------------------------------------------------------------- |
+| Characters | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels  |
+| Map        | `2` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers, Z-slice control  |
 | Navigation | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue |
-| Debug      | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), hex dump, target detail           |
+| Debug      | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), hex dump, target detail            |
 
 **Themes:** Dark Modern (default), Dracula, Classic — cycle with `T`
 
@@ -151,7 +151,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **Human-like command jitter** (triangle distribution + hesitation spikes)
 - **Per-character personality profiles** (reaction speed, aggression, discipline variation)
 - **GM flag detection** (alerts on GM spawns)
-- **Render strobing** (background clients at ~5fps, not zero)
+- **Render mode system** (Normal / Strobe / NullRender with DX11 null device hooks)
 
 ### Named Spawn Tracker
 
@@ -337,12 +337,12 @@ target\release\dmft.exe
 
 Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
-| Trigger                  | Jobs                                                                  |
-| ------------------------ | --------------------------------------------------------------------- |
-| Same-repo pull request   | self-hosted `PR gate (fmt + clippy + test + python)`                  |
-| Fork pull request        | GitHub-hosted `PR gate (fmt + clippy + test + python)` on Windows     |
-| Push to master           | self-hosted `PR gate (fmt + clippy + test + python)`                  |
-| Manual `CI` dispatch     | required PR gate, with optional `Windows release build (manual)` input |
+| Trigger                | Jobs                                                                   |
+| ---------------------- | ---------------------------------------------------------------------- |
+| Same-repo pull request | self-hosted `PR gate (fmt + clippy + test + python)`                   |
+| Fork pull request      | GitHub-hosted `PR gate (fmt + clippy + test + python)` on Windows      |
+| Push to master         | self-hosted `PR gate (fmt + clippy + test + python)`                   |
+| Manual `CI` dispatch   | required PR gate, with optional `Windows release build (manual)` input |
 
 Tag-triggered releases (`v*`) build Windows binaries and create GitHub Releases automatically.
 
@@ -381,6 +381,7 @@ pull_mana_pct = 60
 ### Class Ability Configs (`config/classes/*.toml`)
 
 16 classes: WAR, CLR, PAL, RNG, SK, DRU, MNK, BRD, ROG, SHM, NEC, WIZ, MAG, ENC, BST, BER
+
 - Optional `[[level_overrides]]` blocks gate alternate combat/buff/emergency/cc/debuff ability lists by level range; categories omitted inside an override fall back to the base class lists, and the base profile is used when no override matches.
 
 ### HVT Watchlist (`config/hvt_watchlist.toml`)
@@ -416,9 +417,9 @@ Historical milestones already implemented in the repository:
 
 Canonical active roadmap order:
 
-- [ ] **M5** — Packet Engine
-- [ ] **M6** — Zoning/Movement
-- [ ] **M7** — Anti-Cheat
+- [ ] **M5** (~70%) — Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, DX11 null device hooks, render mode system
+- [ ] **M6** (~55%) — Web Dashboard — Axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements
+- [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
 - [ ] **M9** — Learning/RL
 - [ ] **M10** — Soul Engine + LLM

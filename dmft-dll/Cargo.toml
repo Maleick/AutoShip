@@ -33,10 +33,9 @@ windows = { version = "0.54", features = [
     "Win32_Storage_FileSystem",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
-    "Win32_System_Diagnostics_Debug",
-    "Win32_System_Kernel",
     "Win32_System_ProcessStatus",
-    "Win32_System_Diagnostics_Debug",
-    "Win32_System_Kernel",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
 ] }
 retour = { version = "0.3", features = ["static-detour"] }

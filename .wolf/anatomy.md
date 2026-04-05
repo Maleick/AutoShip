@@ -1,166 +1,66 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-04-03T23:20:08.235Z
-> Files: 580 tracked | Anatomy hits: 0 | Misses: 0
-
-## ../../.claude/
-
-- `settings.json` (~656 tok)
-
-## ../../.claude/channels/discord/
-
-- `access.json` (~232 tok)
-
-## ../../.claude/hooks/
-
-- `auto-format.sh` — PostToolUse hook: Auto-format JS/TS/JSON/CSS files after Write|Edit (~207 tok)
-
-## ../../.claude/projects/-Users-maleick-Projects-DMFT/memory/
-
-- `feedback_auto_sync_docs.md` (~236 tok)
-- `feedback_cleanup_worktrees.md` (~123 tok)
-- `feedback_discord_identity.md` (~113 tok)
-- `feedback_serena_auto_init.md` (~203 tok)
-- `feedback_teamcreate_scale.md` (~272 tok)
-- `feedback_tui_control_plane.md` — Declares roles (~226 tok)
-- `MEMORY.md` — User Profile (~1238 tok)
-- `project_ci_runners.md` (~173 tok)
-- `project_m7_research_complete.md` (~479 tok)
-
-## ../../.ssh/
-
-- `config` — Added by OrbStack: 'orb' SSH host for Linux machines (~182 tok)
-
-## ../../Downloads/
-
-- `dmft-handoff-2026-04-03.md` — Handoff: DMFT Session 2026-04-03 → Next Session (~1584 tok)
-- `handoff-m11-dashboard.md` — ## Context (~660 tok)
-- `handoff-m7-advanced.md` — Instance 6: Call Stack Spoofing + Page Encryption + Launchpad Token (~749 tok)
-- `handoff-m7-evasion.md` — Instance 5: ETW Blinding + Thread Pool Execution (~501 tok)
-- `handoff-m7-hooking.md` — Instance 3: Hardware Breakpoint Hooking + Sleep Obfuscation (~562 tok)
-- `handoff-m7-injection.md` — Instance 2: Reflective DLL Injection + PEB Unlinking (~490 tok)
-- `handoff-m7-staging.md` — Instance 4: DLL Staging + Memory Allocation (~531 tok)
-- `handoff-m7-syscalls.md` — Instance 1: RecycledGate Indirect Syscalls (~452 tok)
-- `handoff-session-resume.md` — Session Handoff — 2026-04-03 Evening (~1456 tok)
-
-## ../DMFT-m7-advanced/dmft-common/src/
-
-- `login.rs` — Current phase of the automated login state machine. (~3243 tok)
-
-## ../DMFT-m7-advanced/dmft-dll/
-
-- `Cargo.toml` — Rust package manifest (~240 tok)
-
-## ../DMFT-m7-advanced/dmft-dll/src/
-
-- `lib.rs` — DMFT injected DLL payload. (~3294 tok)
-
-## ../DMFT-m7-advanced/dmft-dll/src/stealth/
-
-- `mod.rs` — Stealth module — anti-detection primitives for the injected DLL. (~142 tok)
-- `page_encrypt.rs` — Page-granularity code encryption (Nighthawk-style). (~5440 tok)
-- `stack_spoof.rs` — Per-API call stack spoofing. (~6774 tok)
-
-## ../DMFT-m7-advanced/dmft/src/launcher/
-
-- `mod.rs` — Login automation — per-client FSM, staggered launch, process spawner. (~151 tok)
-- `token.rs` — Launchpad token acquisition and injection. (~2278 tok)
-
-## ../DMFT-m7-advanced/docs/
-
-- `launchpad-token-research.md` — Launchpad Token Handshake Research (~2441 tok)
-
-## ../DMFT-m7-evasion/dmft-dll/
-
-- `Cargo.toml` — Rust package manifest (~240 tok)
-
-## ../DMFT-m7-evasion/dmft-dll/src/
-
-- `lib.rs` — DMFT injected DLL payload. (~3477 tok)
-
-## ../DMFT-m7-evasion/dmft-dll/src/evasion/
-
-- `etw.rs` — ETW (Event Tracing for Windows) blinding via hardware breakpoints. (~2604 tok)
-- `hwbp.rs` — Hardware breakpoint manager — allocates x86_64 debug registers (DR0–DR3) (~2624 tok)
-- `mod.rs` — Evasion layer — prevents telemetry and security tools from observing DMFT activity. (~251 tok)
-- `pool.rs` — Thread pool execution wrapper (PoolParty technique). (~1687 tok)
-
-## ../DMFT-m7-evasion/dmft-dll/src/ipc/
-
-- `mod.rs` — IPC between the injected DLL and the DMFT orchestrator. (~3813 tok)
-
-## ../DMFT-m7-hooking/dmft-dll/
-
-- `Cargo.toml` — Rust package manifest (~224 tok)
-
-## ../DMFT-m7-hooking/dmft-dll/src/
-
-- `lib.rs` — DMFT injected DLL payload. (~3432 tok)
-
-## ../DMFT-m7-hooking/dmft-dll/src/hooks/
-
-- `game_loop.rs` — Game loop hook -- intercepts `CEverQuest::MainLoop`. (~17387 tok)
-- `hwbp.rs` — Hardware breakpoint hooking engine. (~5443 tok)
-- `mod.rs` — Hook management -- hardware breakpoint hooks via VEH (DR0-DR3). (~480 tok)
-- `render.rs` — Render strobe hook -- intercepts `CDisplay::RealRender_World`. (~1094 tok)
-- `sleep_obfuscation.rs` — Sleep obfuscation engine -- Gargoyle pattern. (~5244 tok)
-
-## ../DMFT-m7-injection/dmft/
-
-- `Cargo.toml` — Rust package manifest (~404 tok)
-
-## ../DMFT-m7-injection/dmft/src/inject/
-
-- `loader.rs` — Inject a DLL into a target process by PID using reflective injection. (~2019 tok)
-- `mod.rs` — DLL injection and staging — prepares and loads the DMFT DLL into EQ clients. (~202 tok)
-- `reflective.rs` — Reflective DLL injection — manual PE mapping without `LoadLibraryW`. (~6547 tok)
-- `stealth.rs` — Post-injection stealth — PEB module unlinking and PE header erasure. (~3661 tok)
-
-## ../DMFT-m7-staging/dmft/src/
-
-- `cli.rs` — run_tui_mode, run_inject_mode, run_zones_mode, run_status_mode (~12245 tok)
-
-## ../DMFT-m7-staging/dmft/src/client/
-
-- `manager.rs` — `ClientManager` — discovers, tracks, and manages all EQ client sessions. (~1465 tok)
-- `session.rs` — `EqSession` — represents a single managed EQ client. (~3390 tok)
-
-## ../DMFT-m7-staging/dmft/src/inject/
-
-- `alloc.rs` — Remote memory allocation strategies for DLL injection. (~9667 tok)
-- `dll_prep.rs` — Pool of legitimate Microsoft DLL names that would plausibly exist on a (~4083 tok)
-- `loader.rs` — Inject a DLL into a target process by PID. (~2909 tok)
-- `mod.rs` — DLL injection and staging — prepares and loads the DMFT DLL into EQ clients. (~105 tok)
-
-## ../DMFT-m7-syscalls/dmft-common/src/
-
-- `lib.rs` — Shared types and utilities for the DMFT workspace. (~321 tok)
-
-## ../DMFT-m7-syscalls/dmft-common/src/syscall/
-
-- `api.rs` — Typed wrappers for target NT syscalls. (~3588 tok)
-- `bootstrap.rs` — Bootstrap: map a fresh ntdll from `\KnownDlls\`, extract SSNs, unmap. (~2444 tok)
-- `gate.rs` — RecycledGate indirect syscall implementation. (~4735 tok)
-- `hash.rs` — DJB2 hashing for NT function name resolution. (~751 tok)
-- `mod.rs` — RecycledGate indirect syscall framework. (~482 tok)
-- `pe.rs` — Minimal PE header structures for parsing ntdll's Export Address Table. (~916 tok)
+> Auto-maintained by OpenWolf. Last scanned: 2026-04-05T03:27:19.457Z
+> Files: 533 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
-- `.gitignore` — Git ignore rules (~230 tok)
+- `.DS_Store` (~3278 tok)
+- `.gitattributes` — Git attributes (~26 tok)
+- `.gitignore` — Git ignore rules (~222 tok)
 - `.gitmodules` (~67 tok)
 - `accounts.csv` (~606 tok)
 - `AGENTS.md` — AGENTS.md (~1278 tok)
 - `autoresearch-results.tsv` — This file previously contained generated doc-coverage automation results. (~44 tok)
 - `autoresearch-state.json` (~54 tok)
-- `Cargo.toml` — Rust package manifest (~240 tok)
-- `CLAUDE.md` — OpenWolf (~3382 tok)
+- `Cargo.toml` — Rust package manifest (~243 tok)
+- `CLAUDE.md` — OpenWolf (~3424 tok)
 - `feature-list.json` — Declares shape (~2773 tok)
 - `HANDOFF.md` — Session Handoff — 2026-04-01 20:45 UTC (~1458 tok)
-- `README.md` — Project documentation (~6350 tok)
+- `README.md` — Project documentation (~6459 tok)
 - `REVIEW.md` — Code Review Guidelines (~261 tok)
 - `test_autologin.bat` — Declares the (~353 tok)
 - `TODO.txt` (~51 tok)
+
+## .aidesigner/
+
+- `.DS_Store` (~2186 tok)
+- `latest.json` (~292 tok)
+- `mcp-latest.html` — DMFT - Distributed Multibox Fleet Terminal (~3159 tok)
+- `variant-a-stone-parchment.html` (~68 tok)
+- `variant-b-gold-manuscript.html` (~50 tok)
+
+## .aidesigner/preview/
+
+- `index.html` — DMFT Dashboard Design Gallery (~4600 tok)
+- `variant-0-tactical.html` — DMFT - Distributed Multibox Fleet Terminal (~3159 tok)
+- `variant-a-stone.html` — TextQuest - Fleet Command Console (~5511 tok)
+- `variant-b-manuscript.html` — TextQuest - Fleet Command Dashboard (~6372 tok)
+- `variant-c-kaladim.html` — TextQuest || Kaladim Fleet Command (~6443 tok)
+- `variant-g-neriak-third-gate.html` — TextQuest - Third Gate Command (~6968 tok)
+- `variant-h-neriak-neon.html` — TEXTQUEST // Neriak Command // Fleet HUD (~5477 tok)
+- `variant-i-neriak-commons.html` — TextQuest: Neriak Commons Interface (~10231 tok)
+- `variant-j-neriak-foreign-quarter.html` — TextQuest | Neriak Foreign Quarter CLI (~7974 tok)
+
+## .aidesigner/runs/
+
+- `.DS_Store` (~1640 tok)
+
+## .aidesigner/runs/2026-04-04T10-38-10-945Z-dark-tactical-fleet-dashboard-for-ev/
+
+- `design.html` — DMFT - Distributed Multibox Fleet Terminal (~3159 tok)
+- `preview-error.txt` (~25 tok)
+- `repo-context.json` (~195 tok)
+- `request.json` (~30 tok)
+- `summary.json` (~314 tok)
+
+## .aidesigner/runs/2026-04-04T10-46-16-227Z-variant-a-stone-parchment-eq-skeuomo/
+
+- `design.html` (~12 tok)
+- `preview-error.txt` (~25 tok)
+- `repo-context.json` (~195 tok)
+- `request.json` (~30 tok)
+- `summary.json` (~292 tok)
 
 ## .cargo/
 
@@ -175,110 +75,83 @@
 
 - `openwolf.md` (~313 tok)
 
-## .codex/automation_state/pr-reconcile/
+## .claude/worktrees/fix-448/
+
+- `.gitattributes` — Git attributes (~26 tok)
+- `.gitignore` — Git ignore rules (~222 tok)
+- `.gitmodules` (~67 tok)
+- `AGENTS.md` — AGENTS.md (~1278 tok)
+- `autoresearch-results.tsv` — This file previously contained generated doc-coverage automation results. (~44 tok)
+- `autoresearch-state.json` (~54 tok)
+- `CLAUDE.md` — OpenWolf (~3382 tok)
+- `HANDOFF.md` — Session Handoff — 2026-04-01 20:45 UTC (~1458 tok)
+- `README.md` — Project documentation (~6350 tok)
+- `REVIEW.md` — Code Review Guidelines (~261 tok)
+- `test_autologin.bat` — Declares the (~353 tok)
+
+## .claude/worktrees/fix-448/.cargo/
+
+- `config.toml` (~13 tok)
+
+## .claude/worktrees/fix-448/.claude/
+
+- `settings.json` (~441 tok)
+- `settings.local.json` (~180 tok)
+
+## .claude/worktrees/fix-448/.claude/rules/
+
+- `openwolf.md` (~313 tok)
+
+## .claude/worktrees/fix-448/.codex/automation_state/pr-reconcile/
 
 - `state.json` (~1936 tok)
 
-## .codex/automations/dmft-night-research/
+## .claude/worktrees/fix-448/.codex/automations/dmft-night-research/
 
 - `automation.toml` — Nightly external-research digest and project-checkpoint sync (~2561 tok)
 
-## .codex/environments/
+## .claude/worktrees/fix-448/.codex/environments/
 
 - `environment.toml` (~187 tok)
 
-## .github/ISSUE_TEMPLATE/
+## .claude/worktrees/fix-448/.github/ISSUE_TEMPLATE/
 
 - `agent-ready.md` — Summary (~70 tok)
 - `agent-task.yml` (~676 tok)
 - `config.yml` (~8 tok)
 - `epic.md` — Roadmap Scope (~98 tok)
 
-## .github/workflows/
+## .claude/worktrees/fix-448/.github/actions/ensure-cmake/
+
+- `action.yml` (~1223 tok)
+
+## .claude/worktrees/fix-448/.github/workflows/
 
 - `agent-close-pr.yml` — CI: Auto-close agent PRs (~992 tok)
-- `agent-ready.yml` — CI: Auto-label agent-ready (~2085 tok)
+- `agent-ready.yml` — CI: Auto-label agent-ready (~2090 tok)
 - `auto-merge.yml` — CI: Auto-merge labeled PRs (~466 tok)
-- `ci.yml` — CI: CI (~4707 tok)
+- `ci.yml` — CI: CI (~3668 tok)
 - `claude-agent.yml` — CI: Claude agent (~585 tok)
 - `copilot-ci-dispatch.yml` — CI: Copilot CI dispatch (~1310 tok)
-- `nightly-release.yml` — CI: Nightly Release (~2300 tok)
+- `nightly-release.yml` — CI: Nightly Release (~1780 tok)
 - `post-merge-sync.yml` — CI: Post-merge project sync (~614 tok)
 - `readme-metrics.yml` — CI: README Metrics (~1436 tok)
-- `release.yml` — CI: Release (~1642 tok)
+- `release.yml` — CI: Release (~1123 tok)
 - `wiki-nightly.yml` — CI: Wiki Nightly (~894 tok)
 
-## .playwright-mcp/
-
-- `console-2026-03-28T19-06-42-808Z.log` (~88 tok)
-- `console-2026-03-28T19-13-34-280Z.log` (~444 tok)
-- `console-2026-03-28T19-16-37-530Z.log` (~141 tok)
-- `console-2026-03-28T19-17-04-483Z.log` (~2482 tok)
-- `console-2026-03-28T19-19-20-198Z.log` (~156 tok)
-- `console-2026-03-28T19-19-27-940Z.log` (~232 tok)
-- `console-2026-03-28T19-57-54-150Z.log` (~44 tok)
-- `console-2026-03-28T20-02-43-345Z.log` (~42 tok)
-- `console-2026-03-28T20-03-10-049Z.log` (~124 tok)
-- `console-2026-03-28T20-19-05-282Z.log` (~405 tok)
-- `console-2026-03-28T20-24-20-073Z.log` (~14861 tok)
-- `console-2026-03-28T20-33-36-340Z.log` (~42 tok)
-- `console-2026-03-28T20-35-03-047Z.log` (~61 tok)
-
-## .serena/
+## .claude/worktrees/fix-448/.serena/
 
 - `.gitignore` — Git ignore rules (~7 tok)
-- `project.local.yml` — This file allows you to locally override settings in project.yml for development purposes. (~115 tok)
 - `project.yml` — the name by which the project can be referenced within Serena (~2694 tok)
 
-## .serena/memories/
+## .claude/worktrees/fix-448/.serena/memories/
 
 - `project_overview.md` — DMFT (Frostreaver) — Project Overview (~349 tok)
 - `style_and_conventions.md` — Code Style & Conventions (~321 tok)
 - `suggested_commands.md` — Suggested Commands (~184 tok)
 - `task_completion_checklist.md` — Task Completion Checklist (~77 tok)
 
-## config/
-
-- `accounts.toml` — Account Configuration for DMFT (~680 tok)
-- `eqclient_multibox.ini` (~6374 tok)
-- `frostreaver.toml` — DMFT Configuration (~1192 tok)
-- `hvt_watchlist.toml` — High-Value Target Watchlist (~386 tok)
-- `offsets.json` (~266 tok)
-
-## config/camps/
-
-- `crescent_reach_newbie.toml` (~108 tok)
-- `crescent_reach_undead.toml` (~121 tok)
-- `crushbone_entrance.toml` (~134 tok)
-- `crushbone_throne.toml` (~137 tok)
-- `lguk_dead_side.toml` (~129 tok)
-- `lguk_live_side.toml` (~131 tok)
-- `mistmoore_castle.toml` (~128 tok)
-- `mistmoore_entrance.toml` (~119 tok)
-- `sebilis_disco.toml` (~118 tok)
-- `unrest_basement.toml` (~121 tok)
-- `unrest_yard.toml` (~126 tok)
-
-## config/classes/
-
-- `bard.toml` (~114 tok)
-- `beastlord.toml` (~148 tok)
-- `berserker.toml` (~122 tok)
-- `cleric.toml` (~165 tok)
-- `druid.toml` (~196 tok)
-- `enchanter.toml` (~264 tok)
-- `magician.toml` (~133 tok)
-- `monk.toml` (~156 tok)
-- `necromancer.toml` (~195 tok)
-- `paladin.toml` (~166 tok)
-- `ranger.toml` (~128 tok)
-- `rogue.toml` (~162 tok)
-- `shadowknight.toml` (~136 tok)
-- `shaman.toml` (~206 tok)
-- `warrior.toml` (~119 tok)
-- `wizard.toml` (~131 tok)
-
-## config/maps/
+## .claude/worktrees/fix-448/data/brewall/
 
 - `aalishai_1.txt` (~1150 tok)
 - `aalishai_2.txt` (~7171 tok)
@@ -680,7 +553,7 @@
 - `eastsepulcher.txt` (~84714 tok)
 - `eastwastes_1.txt` (~1175 tok)
 - `eastwastes_2.txt` (~6731 tok)
-- `eastwastes.txt` (~2572 tok)
+- `eastwastes.txt` (~34828 tok)
 - `eastwastesshard_1.txt` (~897 tok)
 - `eastwastesshard_2.txt` (~7370 tok)
 - `eastwastesshard.txt` (~44169 tok)
@@ -699,24 +572,53 @@
 - `elddara_1.txt` (~41 tok)
 - `elddara_2.txt` (~6839 tok)
 - `elddara.txt` (~1273 tok)
+- `emeraldjungle_1.txt` (~380 tok)
+- `emeraldjungle_2.txt` (~6347 tok)
+- `emeraldjungle.txt` (~87404 tok)
+- `empyr_1.txt` (~1042 tok)
+- `empyr_2.txt` (~7076 tok)
+- `empyr.txt` (~110371 tok)
+- `endlesscaverns_1.txt` (~517 tok)
+- `endlesscaverns_2.txt` (~7101 tok)
+- `endlesscaverns.txt` (~38936 tok)
+- `erudnext_1.txt` (~1785 tok)
+- `erudnext_2.txt` (~7356 tok)
+- `erudnext.txt` (~29563 tok)
+- `erudnint_1.txt` (~1434 tok)
+- `erudnint_2.txt` (~6607 tok)
+- `erudnint.txt` (~23938 tok)
+- `erudsxing_1.txt` (~369 tok)
 
 ## dmft-common/src/
 
-- `offset_db.rs` — Hot-updatable offset database backed by JSON. (~4959 tok)
-- `offsets.rs` — Preferred base address of eqgame.exe (64-bit) (~11145 tok)
+- `ipc.rs` — Generates monotonically increasing correlation IDs for IPC request-response matching. (~11283 tok)
+- `offsets.rs` — Preferred base address of eqgame.exe (64-bit) (~11369 tok)
 
-## docs/
+## dmft-dll/
 
-- `anti-detection.md` — Anti-Detection and Operator Risk (~5440 tok)
-- `implementation-roadmap.md` — DMFT Implementation Roadmap (~4800 tok)
+- `Cargo.toml` — Rust package manifest (~280 tok)
+
+## dmft-dll/src/
+
+- `lib.rs` — DMFT injected DLL payload. (~3770 tok)
+
+## dmft-dll/src/hooks/
+
+- `dx11_null.rs` — DX11 null device hook — intercepts texture/buffer creation to minimize GPU memory. (~5183 tok)
+- `game_loop.rs` — Game loop hook -- intercepts `CEverQuest::MainLoop`. (~17410 tok)
+- `mod.rs` — Hook management -- hardware breakpoint hooks via VEH (DR0-DR3). (~150 tok)
+- `render.rs` — Render mode hook — intercepts `CDisplay::RealRender_World`. (~1942 tok)
+
+## dmft-web/src/
+
+- `main.rs` — DMFT Web Dashboard — Axum backend for the M6 configuration & monitoring UI. (~481 tok)
+
+## dmft/src/
+
+- `cli.rs` — run_tui_mode, run_inject_mode, run_zones_mode, run_status_mode, run_statusall_mode (~15463 tok)
+- `main.rs` — [derive(Parser)] (~2488 tok)
 
 ## docs/external-research/
 
-- `syscall-evasion-and-ntdll-unhooking.md` — Syscall Evasion and NTDLL Unhooking Research (~6856 tok)
-- `syscall-evasion-hellsgate-halosgate.md` — Syscall Evasion: HellsGate, HalosGate, and TartarusGate (~5254 tok)
-
-## docs/wiki/
-
-- `Home.md` — DMFT Wiki (~987 tok)
-- `Roadmap-and-Known-Gaps.md` — Roadmap and Known Gaps (~1230 tok)
-- `Security-and-Anti-Detection-Notes.md` — Security and Anti-Detection Notes (~2737 tok)
+- `eq-protocol-public-research.md` — EverQuest Network Protocol — Public Research Summary (~4879 tok)
+- `runeq-headless-eq-analysis.md` — RunEQ Headless EverQuest Client -- Binary Analysis (~8313 tok)

@@ -12,6 +12,7 @@ use axum::Router;
 use axum::routing::get;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
 
 mod api;
 mod ws;
@@ -32,10 +33,18 @@ async fn main() {
 
     let state = Arc::new(AppState { event_tx });
 
+    // Serve the pre-built React SPA from web/dist/.
+    // The fallback sends index.html for any unmatched path (SPA client-side routing).
+    let spa_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../web/dist");
+    let serve_spa = ServeDir::new(&spa_dir)
+        .not_found_service(ServeFile::new(spa_dir.join("index.html")));
+
     let app = Router::new()
         .route("/api/health", get(api::health))
         .route("/api/sessions", get(api::list_sessions))
         .route("/ws", get(ws::ws_handler))
+        .fallback_service(serve_spa)
         .layer(CorsLayer::permissive())
         .with_state(state);
 
