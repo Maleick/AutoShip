@@ -1,7 +1,7 @@
 //! `ClientManager` — discovers, tracks, and manages all EQ client sessions.
 
 use super::session::EqSession;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dmft_common::types::ClientId;
 use std::collections::HashMap;
 use std::path::Path;
@@ -62,10 +62,13 @@ impl ClientManager {
             .get_mut(&client_id)
             .ok_or_else(|| anyhow::anyhow!("Client {client_id} not found"))?;
 
-        let prepared = crate::inject::dll_prep::prepare_dll(dll_source)?;
-        crate::inject::loader::inject_dll(session.pid, &prepared)?;
+        let dll_bytes = std::fs::read(dll_source)
+            .with_context(|| format!("Failed to read DLL: {}", dll_source.display()))?;
+        let base = crate::inject::reflective::inject_reflective(session.pid, &dll_bytes)
+            .map_err(|e| anyhow::anyhow!("Reflective injection failed: {e}"))?;
 
-        session.dll_path = Some(prepared);
+        tracing::info!(base = format!("{base:#x}"), "Reflective loader mapped DLL");
+        session.dll_path = Some(dll_source.to_path_buf());
         session.hook_status = dmft_common::types::HookStatus::Injected;
 
         tracing::info!(client_id, pid = session.pid, "DLL injected");
