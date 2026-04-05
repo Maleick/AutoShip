@@ -96,7 +96,7 @@ mod platform {
             return Ok(cached);
         }
 
-        let hwnd = unsafe { FindWindowA(s!("EverQuest"), None) };
+        let hwnd = unsafe { FindWindowA(s!("_EverQuestwndclass"), None) };
         if hwnd.0 == 0 {
             return Err("EverQuest window not found — character may not be in-world".into());
         }
