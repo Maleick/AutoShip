@@ -1405,6 +1405,10 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
             tracing::info!(enabled, "SetAutoAccept received");
             crate::dialog::set_enabled(enabled);
         }
+        Command::SetRenderMode { mode } => {
+            tracing::info!(%mode, "SetRenderMode received");
+            crate::hooks::render::set_mode(mode);
+        }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();

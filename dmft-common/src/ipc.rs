@@ -105,6 +105,31 @@ impl From<Response> for IpcResponse {
     }
 }
 
+/// Rendering mode for an injected client.
+///
+/// Controls how much GPU work eqgame.exe does. Game logic, network,
+/// and all DMFT hooks run at full speed in every mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RenderMode {
+    /// Full rendering — the "eyes" client. Uses GPU normally.
+    Normal,
+    /// Render 1 frame every ~5 seconds for monitoring/screenshots.
+    Strobe,
+    /// Zero rendering — game loop runs, GPU completely idle.
+    /// Enables scaling to 36+ clients on a single machine.
+    NullRender,
+}
+
+impl std::fmt::Display for RenderMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Normal => write!(f, "normal"),
+            Self::Strobe => write!(f, "strobe"),
+            Self::NullRender => write!(f, "null"),
+        }
+    }
+}
+
 /// Commands sent from the manager to an injected DLL
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
@@ -339,6 +364,15 @@ pub enum Command {
     SetAutoAccept {
         /// Whether auto-accept is enabled.
         enabled: bool,
+    },
+    /// Set the rendering mode for this client.
+    ///
+    /// `Normal` = full rendering (the "eyes" client).
+    /// `Strobe` = render 1 frame per ~5 seconds (monitoring/screenshots).
+    /// `NullRender` = zero rendering, game loop only (GPU idle).
+    SetRenderMode {
+        /// Rendering mode to apply.
+        mode: RenderMode,
     },
 }
 

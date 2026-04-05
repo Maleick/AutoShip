@@ -796,6 +796,83 @@ pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     Ok(())
 }
 
+/// Parse a render mode string ("normal", "strobe", "null") into a `RenderMode`.
+fn parse_render_mode(s: &str) -> Result<dmft_common::ipc::RenderMode> {
+    match s.to_lowercase().as_str() {
+        "normal" | "n" => Ok(dmft_common::ipc::RenderMode::Normal),
+        "strobe" | "s" => Ok(dmft_common::ipc::RenderMode::Strobe),
+        "null" | "off" | "none" => Ok(dmft_common::ipc::RenderMode::NullRender),
+        _ => anyhow::bail!("Unknown render mode '{s}'. Expected: normal, strobe, or null"),
+    }
+}
+
+/// Set render mode for a single client.
+///
+/// # Errors
+///
+/// Returns an error if the pipe connection or command send fails.
+pub fn run_render_mode(pid: u32, mode_str: &str) -> Result<()> {
+    use dmft_common::ipc::Command;
+
+    let mode = parse_render_mode(mode_str)?;
+    println!("Setting render mode for PID {pid}: {mode}");
+
+    let pipe = connect_authenticated_pipe(pid)?;
+    let cmd = Command::SetRenderMode { mode };
+    pipe.send_async(&cmd).context("Failed to send command")?;
+
+    println!("Render mode set to '{mode}' for PID {pid}.");
+    Ok(())
+}
+
+/// Set render mode for ALL injected EQ clients.
+///
+/// # Errors
+///
+/// Returns an error if no processes are found or config loading fails.
+pub fn run_renderall_mode(mode_str: &str) -> Result<()> {
+    use dmft_common::ipc::Command;
+
+    let mode = parse_render_mode(mode_str)?;
+    let config = load_config()?;
+    let pids = process::memory::find_processes_by_name(&config.process_name)?;
+
+    if pids.is_empty() {
+        println!("No {} processes found.", config.process_name);
+        return Ok(());
+    }
+
+    println!(
+        "Setting render mode to '{mode}' for {} client(s)...",
+        pids.len()
+    );
+
+    let mut ok = 0u32;
+    let mut fail = 0u32;
+
+    for &pid in &pids {
+        match connect_authenticated_pipe(pid) {
+            Ok(pipe) => {
+                let cmd = Command::SetRenderMode { mode };
+                if pipe.send_async(&cmd).is_ok() {
+                    println!("  PID {pid}: {mode}");
+                    ok += 1;
+                } else {
+                    println!("  PID {pid}: send failed");
+                    fail += 1;
+                }
+            }
+            Err(_) => {
+                println!("  PID {pid}: not connected (not injected?)");
+                fail += 1;
+            }
+        }
+    }
+
+    println!("Done: {ok} set, {fail} failed.");
+    Ok(())
+}
+
 /// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
 ///
 /// # Errors

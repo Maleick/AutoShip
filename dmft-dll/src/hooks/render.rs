@@ -1,15 +1,46 @@
-//! Render strobe hook -- intercepts `CDisplay::RealRender_World`.
-//! Background clients skip most render calls to save GPU. Foreground clients
-//! always render normally. Background clients render once every `STROBE_INTERVAL`
-//! ticks (~5 seconds at 30fps) so the orchestrator can still grab screenshots.
+//! Render mode hook — intercepts `CDisplay::RealRender_World`.
+//!
+//! Three modes controlled via IPC `SetRenderMode`:
+//! - **Normal**: full rendering (the "eyes" client).
+//! - **Strobe**: render 1 frame every ~5 seconds for monitoring.
+//! - **NullRender**: zero rendering — game loop runs, GPU idle.
+//!
+//! Defaults to Normal. Background detection (`is_foreground()`) only applies
+//! when the mode is Normal — in that case, a non-foreground window falls back
+//! to Strobe automatically.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+
+use dmft_common::ipc::RenderMode;
 
 /// Background clients render once every 150 ticks (~5 seconds at 30fps).
 const STROBE_INTERVAL: u64 = 150;
 
 /// Monotonic tick counter for strobe timing.
 static RENDER_TICK: AtomicU64 = AtomicU64::new(0);
+
+/// Current render mode. Encoded as u8: 0=Normal, 1=Strobe, 2=NullRender.
+static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
+
+/// Set the render mode. Called from the IPC command handler.
+pub fn set_mode(mode: RenderMode) {
+    let encoded = match mode {
+        RenderMode::Normal => 0,
+        RenderMode::Strobe => 1,
+        RenderMode::NullRender => 2,
+    };
+    RENDER_MODE.store(encoded, Ordering::Release);
+    tracing::info!(%mode, "Render mode changed");
+}
+
+/// Get the current render mode.
+pub fn mode() -> RenderMode {
+    match RENDER_MODE.load(Ordering::Acquire) {
+        1 => RenderMode::Strobe,
+        2 => RenderMode::NullRender,
+        _ => RenderMode::Normal,
+    }
+}
 
 #[cfg(windows)]
 mod inner {
@@ -87,15 +118,28 @@ mod inner {
 #[allow(unused_imports)]
 pub use inner::{install, remove};
 
-/// Determine whether to render this frame.
-/// Foreground clients always render. Background clients render once
-/// every `STROBE_INTERVAL` ticks for screenshot/monitoring support.
+/// Determine whether to render this frame based on the current render mode.
+///
+/// - `Normal` + foreground → always render.
+/// - `Normal` + background → strobe (automatic fallback).
+/// - `Strobe` → render every `STROBE_INTERVAL` ticks.
+/// - `NullRender` → never render.
 fn should_render() -> bool {
-    if super::game_loop::is_foreground() {
-        return true;
+    match mode() {
+        RenderMode::NullRender => false,
+        RenderMode::Strobe => {
+            let tick = RENDER_TICK.fetch_add(1, Ordering::Relaxed);
+            tick.is_multiple_of(STROBE_INTERVAL)
+        }
+        RenderMode::Normal => {
+            if super::game_loop::is_foreground() {
+                return true;
+            }
+            // Background windows in Normal mode fall back to strobe.
+            let tick = RENDER_TICK.fetch_add(1, Ordering::Relaxed);
+            tick.is_multiple_of(STROBE_INTERVAL)
+        }
     }
-    let tick = RENDER_TICK.fetch_add(1, Ordering::Relaxed);
-    tick.is_multiple_of(STROBE_INTERVAL)
 }
 
 #[cfg(test)]
@@ -110,11 +154,10 @@ mod tests {
 
     #[test]
     fn should_render_strobes_when_background() {
-        // Reset tick counter for deterministic test.
+        // Reset state for deterministic test.
         RENDER_TICK.store(0, Ordering::Relaxed);
+        RENDER_MODE.store(1, Ordering::Relaxed); // Strobe mode
 
-        // Foreground status is true by default (AtomicBool::new(true) in game_loop),
-        // so should_render always returns true. We test the strobe math directly.
         let mut rendered = 0u64;
         let total = STROBE_INTERVAL * 3;
         for _ in 0..total {
@@ -125,6 +168,31 @@ mod tests {
         }
         // Over 3 full intervals we expect exactly 3 render frames.
         assert_eq!(rendered, 3);
+    }
+
+    #[test]
+    fn null_render_never_renders() {
+        // Test the mode encoding/decoding directly to avoid races
+        // with other tests that share the global RENDER_MODE atomic.
+        RENDER_MODE.store(2, Ordering::Relaxed); // NullRender
+        assert_eq!(mode(), RenderMode::NullRender);
+        // In NullRender mode, should_render always returns false.
+        // We test a small number of iterations to avoid tick counter races.
+        for _ in 0..5 {
+            assert!(!should_render());
+        }
+    }
+
+    #[test]
+    fn mode_round_trip() {
+        set_mode(RenderMode::Normal);
+        assert_eq!(mode(), RenderMode::Normal);
+
+        set_mode(RenderMode::Strobe);
+        assert_eq!(mode(), RenderMode::Strobe);
+
+        set_mode(RenderMode::NullRender);
+        assert_eq!(mode(), RenderMode::NullRender);
     }
 
     #[test]

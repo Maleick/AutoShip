@@ -111,6 +111,21 @@ enum Commands {
         z2: f32,
     },
 
+    // ── Rendering ─────────────────────────────────────────────────────
+    /// Set render mode for a client (normal, strobe, null)
+    Render {
+        /// Target PID
+        pid: u32,
+        /// Render mode: normal, strobe, or null
+        mode: String,
+    },
+    /// Set render mode for ALL injected clients
+    #[command(name = "render-all")]
+    RenderAll {
+        /// Render mode: normal, strobe, or null
+        mode: String,
+    },
+
     // ── Status & diagnostics ──────────────────────────────────────────
     /// Query player status for a PID
     #[command(name = "client-status")]
@@ -229,6 +244,10 @@ fn main() -> Result<()> {
 
         // Client commands
         Some(Commands::Cmd { pid, command }) => cli::run_cmd_mode(pid, &command),
+
+        // Rendering
+        Some(Commands::Render { pid, mode }) => cli::run_render_mode(pid, &mode),
+        Some(Commands::RenderAll { mode }) => cli::run_renderall_mode(&mode),
 
         // Navigation
         Some(Commands::Nav { pid, x, y, z }) => cli::run_nav_mode(pid, x, y, z),
