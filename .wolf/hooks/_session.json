@@ -1,11 +1,1042 @@
 {
-  "session_id": "session-2026-04-03-1810",
-  "started": "2026-04-03T23:10:25.434Z",
-  "files_read": {},
-  "files_written": [],
-  "edit_counts": {},
+  "session_id": "session-2026-04-05-0104",
+  "started": "2026-04-05T06:04:50.108Z",
+  "files_read": {
+    "C:/Users/xmale/.claude/settings.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T06:54:41.531Z"
+    },
+    "C:/Users/xmale/.claude/settings.local.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T06:54:45.953Z"
+    },
+    "C:/Users/xmale/.claude/channels/discord/access.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:32:33.860Z"
+    },
+    "C:/Users/xmale/.claude/projects/C--Users-xmale-Projects-DMFT/memory/MEMORY.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:40:47.746Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/lib.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:06.009Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/combat.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:06.966Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/ipc.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:07.454Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/offsets.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:08.350Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/nav.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:08.809Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/protocol.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:09.902Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/types.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:10.164Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/login.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:10.478Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/ghidra_db.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:13.611Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/offset_db.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:14.619Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/packet.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:15.036Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/routing.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:15.885Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-common/src/soul.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:16.096Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/lib.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:19.496Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/dialog.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:19.959Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/eq/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:20.923Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/eq/widgets.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:21.313Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/game_loop.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:22.191Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/casting.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:22.635Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/movement.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:23.510Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/targeting.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:23.680Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/render.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:27.444Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/dx11_null.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:28.351Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/hwbp.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:29.662Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/fingerprint.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:29.820Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/hooks/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:30.193Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/ipc/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:30.636Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/ipc/pipe.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:31.142Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/ipc/shared.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:31.682Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/login/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:35.516Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/login/eqmain.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:36.097Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/login/widgets.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:36.559Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:37.453Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/state.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:37.875Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/stick.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:38.349Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/stuck.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:38.793Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/humanize.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:39.431Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/warp.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:45.123Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/waypoint.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:46.028Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/nav/zone_graph.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:46.488Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:46.997Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/state.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:47.818Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/strategy.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:49.077Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/rotation.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:49.151Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/holyshit.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:49.335Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/aggro.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:56.540Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/ability_cooldowns.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:57.260Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/dot_tracker.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:58.156Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/gcd.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:58.584Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/humanize.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:59.048Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/loot.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:41:59.923Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/mana.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:00.369Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/mez_queue.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:00.885Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/positioning.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:03.983Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/puller.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:04.868Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/skill_cooldowns.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:05.524Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/twist.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:05.783Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:06.730Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/bard.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:07.169Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/cleric.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:07.628Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/warrior.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:08.133Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/generic_dps.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:11.683Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/enchanter.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:12.527Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/necromancer.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:12.994Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/shaman.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:13.468Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/paladin.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:14.121Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/shadow_knight.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:14.562Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/ranger.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:15.451Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/druid.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:15.605Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/monk.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:18.737Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/rogue.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:19.194Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/wizard.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:20.083Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/magician.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:20.545Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/beastlord.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:21.420Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/combat/classes/berserker.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:21.866Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:22.314Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/alloc.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:22.972Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/etw_blind.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:27.047Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/page_encrypt.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:27.966Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/page_guard.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:28.430Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/pe_erase.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:29.364Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/peb_unlink.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:29.772Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/section_remap.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:30.649Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/stack_spoof.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:31.092Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/text_encrypt.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:31.367Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/stealth/thread_pool.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:35.079Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/syscall/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:35.560Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/syscall/gate.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:36.446Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/syscall/hash.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:36.922Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-dll/src/syscall/table.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:37.257Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/main.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:41.471Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/lib.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:41.949Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/cli.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:42.390Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/config.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:42.826Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/orchestrator.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:43.706Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/bin/import_ghidra.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:44.043Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/spawn.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:49.273Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/structs.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:49.687Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/log_parser.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:49.910Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/log_watcher.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:50.441Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/map_parser.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:50.728Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/hvt.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:52.161Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/named_db.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:53.121Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/eq/named_tracker.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:53.829Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/process/memory.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:42:59.134Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/process/window.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:00.051Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/inject/dll_prep.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:00.489Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/inject/loader.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:01.391Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/inject/reflective.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:01.855Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/ipc/pipe.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:02.724Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/ipc/shared.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:02.883Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/client/session.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:06.238Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/client/manager.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:07.192Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/client/affinity.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:07.608Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/client/healing.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:08.446Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/launcher/coordinator.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:08.945Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/launcher/login_sm.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:09.510Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/launcher/post_login.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:09.832Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/launcher/spawner.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:10.311Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/credentials/crypto.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:13.514Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/credentials/store.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:14.419Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/credentials/prompt.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:14.900Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/nav/camp.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:15.335Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/nav/mesh.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:16.222Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/nav/recorder.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:16.658Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/nav/router.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:17.121Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/discord/bot.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:17.514Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/discord/bridge.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:21.672Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/discord/webhook.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:22.120Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/combat/coordinator.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:23.008Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/combat/heal_coordinator.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:23.474Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/combat/ch_chain.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:24.359Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/combat/spell_db.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:24.813Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/combat/events.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:25.260Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/combat/camp_loop.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:25.789Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/state.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:28.904Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/buffs.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:29.792Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/cc.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:30.273Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/class_config.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:31.143Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/config.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:31.593Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/hunt.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:32.057Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/loot.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:32.507Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/positioning.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:33.005Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/progression.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:36.573Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/puller.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:37.472Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/recovery.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:37.931Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/vendor.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:38.376Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/camp/personality.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:38.842Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/loot/store.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:39.710Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/metrics/events.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:40.172Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/metrics/store.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:40.491Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/config.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:44.467Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/coordinator.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:45.349Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/idle.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:45.807Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/memory.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:46.241Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/personality.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:46.687Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/social.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:47.566Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/llm/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:48.025Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/llm/api_client.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:48.524Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/llm/fallback.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:52.379Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/soul/llm/priority_queue.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:53.267Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/app.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:53.734Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/run.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:54.176Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/state.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:55.070Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/theme.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:55.519Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/event.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:58.925Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/command.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:43:58.973Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/demo_data.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:02.198Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/sprites.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:03.115Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/menu.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:03.792Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/toast.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:04.031Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/wizard.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:04.919Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/cast.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:05.399Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/client.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:06.418Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/companion.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:06.450Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/config_panel.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:09.842Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/dps.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:10.759Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/group_builder.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:11.209Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/live_cast_capture.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:12.092Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/session_monitor.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:12.610Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/achievements.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:12.994Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/mod.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:13.864Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/dashboard.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:14.167Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/spawns.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:17.815Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/map.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:18.281Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/groups.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:19.005Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/navigation.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:19.173Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/widgets.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:20.055Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/ch_chain.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:20.521Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/dps_bars.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:20.979Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/eq_internals.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:21.550Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/explorer.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:25.869Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft/src/tui/ui/packets.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:26.409Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-web/src/main.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:26.858Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-web/src/api.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:27.749Z"
+    },
+    "C:/Users/xmale/Projects/DMFT/dmft-web/src/ws.rs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-04-05T07:44:27.957Z"
+    }
+  },
+  "files_written": [
+    {
+      "file": "C:/Users/xmale/.mcp.json",
+      "action": "create",
+      "tokens": 37,
+      "at": "2026-04-05T06:56:11.367Z"
+    },
+    {
+      "file": "C:/Users/xmale/.claude/channels/discord/access.json",
+      "action": "edit",
+      "tokens": 137,
+      "at": "2026-04-05T07:32:40.459Z"
+    },
+    {
+      "file": "C:/Users/xmale/.claude/projects/C--Users-xmale-Projects-DMFT/memory/project_role_split.md",
+      "action": "create",
+      "tokens": 218,
+      "at": "2026-04-05T07:40:45.276Z"
+    },
+    {
+      "file": "C:/Users/xmale/.claude/projects/C--Users-xmale-Projects-DMFT/memory/MEMORY.md",
+      "action": "edit",
+      "tokens": 69,
+      "at": "2026-04-05T07:40:52.339Z"
+    }
+  ],
+  "edit_counts": {
+    "../../.mcp.json": 1,
+    "../../.claude/channels/discord/access.json": 1,
+    "../../.claude/projects/C--Users-xmale-Projects-DMFT/memory/project_role_split.md": 1,
+    "../../.claude/projects/C--Users-xmale-Projects-DMFT/memory/MEMORY.md": 1
+  },
   "anatomy_hits": 0,
-  "anatomy_misses": 0,
+  "anatomy_misses": 200,
   "repeated_reads_warned": 0,
   "cerebrum_warnings": 0,
   "stop_count": 3

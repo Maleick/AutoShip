@@ -688,6 +688,70 @@
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-04-05T03:23:51.969Z"
+    },
+    {
+      "id": "bug-044",
+      "timestamp": "2026-04-05T05:13:27.967Z",
+      "error_message": "Incorrect value in code",
+      "file": "../../.claude/rules/core-invariants.md",
+      "root_cause": "Had ` tilde in hook commands; always expand to `",
+      "fix": "Changed to ` tilde in hook commands; always expand to the ful",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-05T05:13:27.967Z"
+    },
+    {
+      "id": "bug-045",
+      "timestamp": "2026-04-05T05:13:36.310Z",
+      "error_message": "Wrong reference: globs should be paths",
+      "file": ".claude/rules/openwolf.md",
+      "root_cause": "Used \"globs\" instead of \"paths\"",
+      "fix": "Changed globs → paths",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-05T05:13:36.310Z"
+    },
+    {
+      "id": "bug-046",
+      "timestamp": "2026-04-05T05:15:24.333Z",
+      "error_message": "Significant refactor of ",
+      "file": "../../.claude/plugins/installed_plugins.json",
+      "root_cause": "4 lines replaced/restructured",
+      "fix": "Rewrote 18→10 lines (4 removed) | Also: },; \"installedAt\": \"2026-04-01T01:56:58.442Z\",",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "json"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-04-05T05:15:30.943Z"
+    },
+    {
+      "id": "bug-047",
+      "timestamp": "2026-04-05T05:32:51.031Z",
+      "error_message": "Incorrect value in code",
+      "file": "../../.claude/channels/discord/access.json",
+      "root_cause": "Had \"pairing\"",
+      "fix": "Changed to \"allowlist\"",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "json"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-04-05T05:32:51.031Z"
     }
   ]
 }

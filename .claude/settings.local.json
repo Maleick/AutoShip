@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(cargo:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(chmod 600:*)",
+      "mcp__plugin_discord_discord__reply"
     ]
   },
   "hooks": {
@@ -18,8 +20,8 @@
           {
             "type": "command",
             "command": "bash C:/Users/xmale/Projects/DMFT/.claude/hooks/rust-clippy.sh",
-            "statusMessage": "Running clippy...",
-            "timeout": 120
+            "timeout": 120,
+            "statusMessage": "Running clippy..."
           }
         ]
       }

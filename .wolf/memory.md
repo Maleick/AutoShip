@@ -854,3 +854,61 @@
 | 22:28 | Session end: 5 writes across 3 files (README.md, Cargo.toml, dx11_null.rs) | 4 reads | ~18031 tok |
 | 22:29 | Session end: 5 writes across 3 files (README.md, Cargo.toml, dx11_null.rs) | 6 reads | ~23364 tok |
 | 22:29 | Session end: 5 writes across 3 files (README.md, Cargo.toml, dx11_null.rs) | 6 reads | ~23364 tok |
+
+## Session: 2026-04-05 23:29
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-05 23:48
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 23:52 | Created ../../.claude/projects/C--Users-xmale-Projects-DMFT/memory/project_status.md | — | ~820 |
+| 23:52 | Created ../../.claude/projects/C--Users-xmale-Projects-DMFT/memory/MEMORY.md | — | ~384 |
+
+## Session: 2026-04-05 23:58
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-05 00:03
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-05 00:03
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-05 00:09
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 00:11 | Edited ../../.claude/hooks/auto-format.sh | 5→5 lines | ~37 |
+| 00:13 | Created .claude/hooks/rust-fmt.sh | — | ~134 |
+| 00:13 | Created .claude/hooks/rust-clippy.sh | — | ~161 |
+| 00:13 | Edited ../../.claude/rules/core-invariants.md | 2→2 lines | ~63 |
+| 00:13 | Edited .claude/rules/openwolf.md | inline fix | ~4 |
+| 00:15 | Edited ../../.claude/plugins/installed_plugins.json | reduced (-8 lines) | ~115 |
+| 00:15 | Edited ../../.claude/plugins/installed_plugins.json | reduced (-7 lines) | ~99 |
+| 00:15 | Edited ../../.claude/settings.json | 17→22 lines | ~427 |
+
+## Session: 2026-04-05 00:27
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 00:30 | Created ../../.claude/channels/discord/access.json | — | ~32 |
+| 00:32 | Created ../../.claude/channels/discord/access.json | — | ~57 |
+| 00:32 | Edited ../../.claude/channels/discord/access.json | inline fix | ~7 |
+
+## Session: 2026-04-05 01:04
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 01:56 | Created ../../.mcp.json | — | ~37 |
+| 02:32 | Edited ../../.claude/channels/discord/access.json | expanded (+13 lines) | ~137 |
+| 02:40 | Created ../../.claude/projects/C--Users-xmale-Projects-DMFT/memory/project_role_split.md | — | ~204 |
+| 02:40 | Edited ../../.claude/projects/C--Users-xmale-Projects-DMFT/memory/MEMORY.md | 1→2 lines | ~64 |
+| 07:45 | Rebuilt anatomy.md from 10 files to 363 files via full project scan | .wolf/anatomy.md | complete | ~25000 |
