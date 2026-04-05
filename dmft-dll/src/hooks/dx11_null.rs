@@ -220,11 +220,25 @@ mod inner {
             return None;
         }
 
-        // Device+0x18 → SwapChain (inline). SwapChain+0x00 → ID3D11Device*
+        // Scan Device struct for the ID3D11Device pointer.
+        // MQ2 says Device+0x18 → SwapChain → ID3D11Device*, but the offset
+        // may differ on the live build. Dump first 0x80 bytes to find it.
+        for offset in (0..0x80).step_by(8) {
+            let val = unsafe { *(device.add(offset) as *const u64) };
+            if val != 0 {
+                tracing::info!(
+                    offset = format!("{:#x}", offset),
+                    val = format!("{:#x}", val),
+                    "Device struct scan"
+                );
+            }
+        }
+
+        // Try Device+0x18 first (MQ2 layout)
         let d3d11_device = unsafe { *(device.add(0x18) as *const *mut core::ffi::c_void) };
-        tracing::info!(ptr = format!("{:#x}", d3d11_device as usize), "ID3D11Device*");
+        tracing::info!(ptr = format!("{:#x}", d3d11_device as usize), "ID3D11Device* (offset 0x18)");
         if d3d11_device.is_null() {
-            tracing::warn!("ID3D11Device pointer is null");
+            tracing::warn!("ID3D11Device pointer is null at expected offset — check scan above for correct offset");
             return None;
         }
 
