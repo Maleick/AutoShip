@@ -188,7 +188,9 @@ mod inner {
 
         // pinstSGraphicsEngine → SGraphicsEngine*
         let gfx_engine: *const u64 = gfx_engine_ptr as *const u64;
+        tracing::info!(addr = format!("{:#x}", gfx_engine as usize), "pinstSGraphicsEngine address");
         let sgraphics = unsafe { *gfx_engine } as *const u8;
+        tracing::info!(ptr = format!("{:#x}", sgraphics as usize), "SGraphicsEngine*");
         if sgraphics.is_null() {
             tracing::warn!("SGraphicsEngine pointer is null");
             return None;
@@ -196,6 +198,7 @@ mod inner {
 
         // SGraphicsEngine+0x18 → CRender*
         let crender = unsafe { *(sgraphics.add(0x18) as *const *const u8) };
+        tracing::info!(ptr = format!("{:#x}", crender as usize), "CRender*");
         if crender.is_null() {
             tracing::warn!("CRender pointer is null");
             return None;
@@ -203,6 +206,7 @@ mod inner {
 
         // CRender+0x0F00 → DeviceImpl* (DX9 wrapper)
         let device_impl = unsafe { *(crender.add(0x0F00) as *const *const u8) };
+        tracing::info!(ptr = format!("{:#x}", device_impl as usize), "DeviceImpl*");
         if device_impl.is_null() {
             tracing::warn!("DeviceImpl pointer is null");
             return None;
@@ -210,6 +214,7 @@ mod inner {
 
         // DeviceImpl+0x28 → Device*
         let device = unsafe { *(device_impl.add(0x28) as *const *const u8) };
+        tracing::info!(ptr = format!("{:#x}", device as usize), "Device*");
         if device.is_null() {
             tracing::warn!("Device pointer is null");
             return None;
@@ -217,6 +222,7 @@ mod inner {
 
         // Device+0x18 → SwapChain (inline). SwapChain+0x00 → ID3D11Device*
         let d3d11_device = unsafe { *(device.add(0x18) as *const *mut core::ffi::c_void) };
+        tracing::info!(ptr = format!("{:#x}", d3d11_device as usize), "ID3D11Device*");
         if d3d11_device.is_null() {
             tracing::warn!("ID3D11Device pointer is null");
             return None;
