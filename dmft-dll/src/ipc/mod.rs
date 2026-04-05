@@ -315,6 +315,7 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                         success: true,
                         message: "handled".into(),
                     });
+                    listener.disconnect();
                     continue;
                 }
 
@@ -326,6 +327,7 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                             .duration_since(std::time::UNIX_EPOCH)
                             .map_or(0, |d| d.as_millis() as u64),
                     });
+                    listener.disconnect();
                     continue;
                 }
 
@@ -341,6 +343,12 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     success: true,
                     message: "queued".into(),
                 });
+
+                // Reset pipe for next connection. The orchestrator uses
+                // fire-and-forget (connect → token → command → close), so the
+                // server must DisconnectNamedPipe after each command to accept
+                // the next client via ConnectNamedPipe.
+                listener.disconnect();
             }
             Err(e) => {
                 if IPC_RUNNING.load(Ordering::SeqCst) {
