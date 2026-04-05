@@ -12,13 +12,13 @@
 mod inner {
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
+    use windows::core::s;
     use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, GetThreadContext,
-        RemoveVectoredExceptionHandler, SetThreadContext,
+        AddVectoredExceptionHandler, GetThreadContext, RemoveVectoredExceptionHandler,
+        SetThreadContext, CONTEXT, CONTEXT_FLAGS,
     };
     use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
     use windows::Win32::System::Threading::GetCurrentThread;
-    use windows::core::{PCSTR, s};
 
     /// Address of `NtTraceEvent` — set once during init, read by the VEH.
     static NT_TRACE_EVENT_ADDR: AtomicU64 = AtomicU64::new(0);
@@ -51,9 +51,8 @@ mod inner {
         // export table.
         unsafe {
             let ntdll = GetModuleHandleA(s!("ntdll.dll")).ok()?;
-            let proc_name = PCSTR::from_raw(b"NtTraceEvent\0".as_ptr());
-            let addr = GetProcAddress(ntdll, proc_name)?;
-            Some(addr as u64)
+            let addr = GetProcAddress(ntdll, s!("NtTraceEvent"))?;
+            Some(addr as usize as u64)
         }
     }
 

@@ -23,12 +23,10 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 static ORIG_PRESENT: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
 /// Original `ID3D11Device::CreateTexture2D` function pointer (vtable slot 5).
-static ORIG_CREATE_TEXTURE2D: AtomicPtr<core::ffi::c_void> =
-    AtomicPtr::new(core::ptr::null_mut());
+static ORIG_CREATE_TEXTURE2D: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
 /// Original `ID3D11Device::CreateBuffer` function pointer (vtable slot 3).
-static ORIG_CREATE_BUFFER: AtomicPtr<core::ffi::c_void> =
-    AtomicPtr::new(core::ptr::null_mut());
+static ORIG_CREATE_BUFFER: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
 /// Whether the Present hook has been installed.
 static PRESENT_HOOKED: AtomicBool = AtomicBool::new(false);
@@ -100,11 +98,8 @@ type CreateBufferFn = unsafe extern "system" fn(
     buffer: *mut *mut core::ffi::c_void,
 ) -> i32;
 
-type PresentFn = unsafe extern "system" fn(
-    this: *mut core::ffi::c_void,
-    sync_interval: u32,
-    flags: u32,
-) -> i32;
+type PresentFn =
+    unsafe extern "system" fn(this: *mut core::ffi::c_void, sync_interval: u32, flags: u32) -> i32;
 
 // ─── Hook implementations ───
 
@@ -125,8 +120,7 @@ unsafe extern "system" fn hooked_present(
         }
     }
 
-    let original: PresentFn =
-        unsafe { core::mem::transmute(ORIG_PRESENT.load(Ordering::Acquire)) };
+    let original: PresentFn = unsafe { core::mem::transmute(ORIG_PRESENT.load(Ordering::Acquire)) };
     unsafe { original(this, sync_interval, flags) }
 }
 
@@ -250,8 +244,8 @@ mod inner {
 
     /// Find EQ's main window handle. Looks for the "EverQuest" window class.
     fn find_eq_hwnd() -> Option<windows::Win32::Foundation::HWND> {
-        use windows::Win32::UI::WindowsAndMessaging::FindWindowA;
         use windows::core::s;
+        use windows::Win32::UI::WindowsAndMessaging::FindWindowA;
 
         let hwnd = unsafe { FindWindowA(s!("EverQuest"), None) };
         if hwnd.0 == 0 {
@@ -272,7 +266,9 @@ mod inner {
         use windows::Win32::Graphics::Dxgi::Common::{
             DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_SAMPLE_DESC,
         };
-        use windows::Win32::Graphics::Dxgi::{DXGI_SWAP_CHAIN_DESC, DXGI_USAGE_RENDER_TARGET_OUTPUT, DXGI_SWAP_EFFECT_DISCARD};
+        use windows::Win32::Graphics::Dxgi::{
+            DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        };
 
         let swap_chain_desc = DXGI_SWAP_CHAIN_DESC {
             BufferDesc: DXGI_MODE_DESC {
@@ -298,17 +294,17 @@ mod inner {
 
         unsafe {
             D3D11CreateDeviceAndSwapChain(
-                None,                    // adapter
+                None, // adapter
                 D3D_DRIVER_TYPE_HARDWARE,
-                None,                    // software module
-                Default::default(),      // flags
-                None,                    // feature levels (default)
-                7,                       // SDK version (D3D11_SDK_VERSION)
+                None,               // software module
+                Default::default(), // flags
+                None,               // feature levels (default)
+                7,                  // SDK version (D3D11_SDK_VERSION)
                 Some(&swap_chain_desc as *const _),
                 Some(&mut swap_chain as *mut _),
                 Some(&mut device as *mut _),
-                None,                    // feature level out
-                None,                    // immediate context out
+                None, // feature level out
+                None, // immediate context out
             )?;
         }
 
@@ -330,7 +326,7 @@ mod inner {
         // same vtable, hooking the dummy's vtable hooks ALL swap chains (including EQ's).
         let orig = unsafe {
             vtable_hook(
-                sc_ptr as *mut core::ffi::c_void,
+                sc_ptr,
                 VTABLE_PRESENT,
                 hooked_present as *const core::ffi::c_void,
             )
@@ -383,8 +379,7 @@ mod inner {
         let vtable_ptr = unsafe { *(swap_chain as *const *const *const core::ffi::c_void) };
         // IDXGIObject::GetParent is index 6, GetDevice is on IDXGIDeviceSubObject
         // which adds it at index 7 (after IUnknown[0-2] + IDXGIObject[3-6]).
-        let get_device_fn: GetDeviceFn =
-            unsafe { core::mem::transmute(*vtable_ptr.add(7)) };
+        let get_device_fn: GetDeviceFn = unsafe { core::mem::transmute(*vtable_ptr.add(7)) };
 
         let mut device_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
         let hr = unsafe { get_device_fn(swap_chain, &iid_device, &mut device_ptr) };
@@ -426,8 +421,11 @@ mod inner {
         tracing::info!("ID3D11Device hooks installed (CreateTexture2D + CreateBuffer)");
 
         // Release the device ref we got from GetDevice.
-        let release: ReleaseFn =
-            unsafe { core::mem::transmute(*(*(device_ptr as *const *const *const core::ffi::c_void)).add(VTABLE_RELEASE)) };
+        let release: ReleaseFn = unsafe {
+            core::mem::transmute(
+                *(*(device_ptr as *const *const *const core::ffi::c_void)).add(VTABLE_RELEASE),
+            )
+        };
         unsafe { release(device_ptr) };
 
         Ok(())

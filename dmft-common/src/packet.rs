@@ -234,7 +234,7 @@ impl CaptureSession {
             *counts.entry(p.opcode).or_default() += 1;
         }
         let mut sorted: Vec<_> = counts.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
         sorted
     }
 }
@@ -273,7 +273,7 @@ pub fn diff_sessions(a: &CaptureSession, b: &CaptureSession) -> SessionDiff {
         .intersection(&keys_b)
         .map(|&op| (op, hist_a[&op], hist_b[&op]))
         .collect();
-    shared.sort_by(|a, b| a.0.cmp(&b.0));
+    shared.sort_by_key(|&(op, _, _)| op);
 
     SessionDiff {
         only_in_a,

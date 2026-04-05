@@ -10,14 +10,14 @@
 
 #[cfg(windows)]
 mod inner {
-    use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, EXCEPTION_POINTERS, RemoveVectoredExceptionHandler,
+        AddVectoredExceptionHandler, RemoveVectoredExceptionHandler, EXCEPTION_POINTERS,
     };
     use windows::Win32::System::Memory::{
-        PAGE_EXECUTE_READ, PAGE_NOACCESS, PAGE_PROTECTION_FLAGS, PAGE_READWRITE, VirtualProtect,
+        VirtualProtect, PAGE_EXECUTE_READ, PAGE_NOACCESS, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
     };
 
     const PAGE_SIZE: usize = 4096;
@@ -108,7 +108,7 @@ mod inner {
             }
             let mgr = &mut *(mgr_ptr as *mut PageEncryptionManager);
 
-            let fault_addr = record.ExceptionInformation[1] as usize;
+            let fault_addr = record.ExceptionInformation[1];
             if fault_addr < mgr.code_start || fault_addr >= mgr.code_end {
                 return EXCEPTION_CONTINUE_SEARCH;
             }
