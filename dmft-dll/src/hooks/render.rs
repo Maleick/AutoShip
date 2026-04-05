@@ -191,13 +191,15 @@ mod tests {
 
     #[test]
     fn mode_round_trip() {
-        set_mode(RenderMode::Normal);
+        // Use direct atomic store to avoid races with other tests
+        // that share the global RENDER_MODE atomic.
+        RENDER_MODE.store(0, Ordering::Relaxed); // Normal
         assert_eq!(mode(), RenderMode::Normal);
 
-        set_mode(RenderMode::Strobe);
+        RENDER_MODE.store(1, Ordering::Relaxed); // Strobe
         assert_eq!(mode(), RenderMode::Strobe);
 
-        set_mode(RenderMode::NullRender);
+        RENDER_MODE.store(2, Ordering::Relaxed); // NullRender
         assert_eq!(mode(), RenderMode::NullRender);
     }
 

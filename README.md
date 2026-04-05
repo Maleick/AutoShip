@@ -3,8 +3,8 @@
 [![CI](https://github.com/Maleick/DMFT/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/DMFT/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-77%2C891-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-1%2C815%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-106%2C490-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-2%2C506%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -36,18 +36,19 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **InterpretCmd** — Calls EQ's internal `CEverQuest::InterpretCmd` to execute any slash command invisibly
 - **Game State Publishing** — DLL reads HP/mana/target/nearby spawns every tick, publishes via shared memory
 - **IPC Pipeline** — Named pipes (commands) + shared memory (game state) with current-user DACL security
-- **Render Mode System** — Three modes: Normal (full render), Strobe (1 frame per 5 sec, ~97% GPU savings), NullRender (zero rendering). DX11 null device hooks intercept `ID3D11Device` vtable to replace textures with 1×1 and buffers with 256 bytes, saving ~500 MB per background client
+- **Render Mode System** — Three modes: Normal (full render), Strobe (1 frame per 5 sec, ~97% GPU savings), NullRender (zero rendering). DX11 hooks use DXGI Present vtable approach to intercept `ID3D11Device`, replacing textures with 1×1 and buffers with 256 bytes, saving ~500 MB per background client
 
-### TUI Dashboard (4 screens, 3 themes)
+### TUI Dashboard (5 screens, 4 themes)
 
-| Screen     | Key | Description                                                                                          |
-| ---------- | --- | ---------------------------------------------------------------------------------------------------- |
-| Characters | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels  |
-| Map        | `2` | Zone geometry (Brewall maps), spawn overlay, named mob tracker with respawn timers, Z-slice control  |
-| Navigation | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue |
-| Debug      | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), hex dump, target detail            |
+| Screen         | Key | Description                                                                                                                           |
+| -------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Characters     | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels                                   |
+| Map            | `2` | Zone geometry (Brewall maps), group markers, HP status overlay, spawn overlay, named mob tracker with respawn timers, Z-slice control |
+| Navigation     | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue                                  |
+| Debug          | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), EQ Internals, hex dump with annotations, target detail              |
+| Packet Monitor | `5` | Opcode sniffer with live filtering, protocol decode, send/recv separation                                                             |
 
-**Themes:** Dark Modern (default), Dracula, Classic — cycle with `T`
+**Themes:** Dark Modern (default), Dracula, Classic, Neriak Third Gate — cycle with `T`
 
 **Widget library:** Sparklines, gauge bars, scrollable lists, tooltips, badges, notification area, inline hints, multi-option selectors, and scrollbar indicators. Context-sensitive help overlay with per-screen keybinding hints, did-you-mean suggestions for commands, and a comprehensive scrollable reference.
 
@@ -55,7 +56,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 | Key         | Action                                                |
 | ----------- | ----------------------------------------------------- |
-| `1-4`       | Switch screens                                        |
+| `1-5`       | Switch screens                                        |
 | `Shift+1-6` | Focus group G1-G6                                     |
 | `Shift+0`   | All groups (clear group focus)                        |
 | `Tab`       | Cycle focused pane                                    |
@@ -119,10 +120,11 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 ### Login Automation
 
-- **Credential store** — Argon2id + AES-256-GCM encrypted credentials in SQLite
-- **Login FSM** — Automated login state machine: credential entry, server select, character select, Enter World
+- **Credential store** — Argon2id + AES-256-GCM encrypted credentials in SQLite, with CLI management (`--add`, `--list`, `--password`/`--master-password` flags)
+- **Login FSM** — Full end-to-end chain: credential entry → server select → character select → Enter World
 - **Launch coordinator** — Staggered multi-client launch with post-login sequencing
 - **Process spawner** — Spawns and manages EQ client processes
+- **Daemon CLI** — Headless orchestrator mode for scripted/remote operation
 
 ### Navigation
 
@@ -169,7 +171,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 ## Architecture
 
 ```text
-DMFT Workspace (3 crates, ~57K lines of Rust)
+DMFT Workspace (3 crates, ~106K lines of Rust)
 ├── dmft/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
 ├── dmft-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
 └── dmft-common/    — Shared types: IPC, offsets, combat/nav/soul types
@@ -335,7 +337,7 @@ target\release\dmft.exe
 
 ## Testing
 
-Current workspace totals: 77,891 Rust lines and 1,815 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
+Current workspace totals: 106,490 Rust lines and 2,506 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -417,8 +419,8 @@ Historical milestones already implemented in the repository:
 
 Canonical active roadmap order:
 
-- [ ] **M5** (~70%) — Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, DX11 null device hooks, render mode system
-- [ ] **M6** (~55%) — Web Dashboard — Axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements
+- [ ] **M5** (~95%) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator). 1 open issue (#355 launchpad token RE)
+- [x] **M6** — Dashboard + TUI — all 22 issues shipped: EQ Internals, packet monitor, map rework, DPS bars, Neriak theme, web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
 - [ ] **M9** — Learning/RL

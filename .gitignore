@@ -33,11 +33,12 @@ autoresearch-project-sync.json
 __pycache__/
 *.pyc
 
-# OpenWolf (all state, config, hooks, logs)
+# AI/tooling runtime state (keep out of repo)
 .wolf/
-
-# Claude Code (all local config, hooks, rules, settings)
 .claude/
+.aidesigner/
+.serena/
+.codex/
 
 # Local reference repos
 mq2-definitions/
