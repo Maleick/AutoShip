@@ -110,6 +110,12 @@ pub const PROCESS_GAME_EVENTS: u64 = 0x0001_4028_E0F0;
 /// `CDisplay::RealRender_World` — render loop (alternative hook point)
 pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
 
+/// `pinstSGraphicsEngine` — pointer to SGraphicsEngine struct.
+/// SGraphicsEngine+0x18 = CRender*. CRender+0x0F00 = DeviceImpl* (DX9 wrapper over DX11).
+/// DeviceImpl+0x28 = Device*. Device+0x18 = SwapChain (inline). SwapChain+0x00 = ID3D11Device*.
+/// Source: eqgame.h `pinstSGraphicsEngine_x`
+pub const PINST_SGRAPHICSENGINE: u64 = 0x0001_40F3_6B68;
+
 /// __FixHeading — normalize heading value
 pub const FIX_HEADING: u64 = 0x0001_4066_1520;
 

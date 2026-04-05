@@ -1,6 +1,7 @@
 //! Hook management -- hardware breakpoint hooks via VEH (DR0-DR3).
 
 pub mod casting;
+pub mod dx11_null;
 pub mod fingerprint;
 pub mod game_loop;
 pub mod hwbp;
