@@ -292,8 +292,8 @@ mod inner {
             ..Default::default()
         };
 
-        let mut swap_chain = None;
-        let mut device = None;
+        let mut swap_chain: Option<windows::Win32::Graphics::Dxgi::IDXGISwapChain> = None;
+        let mut device: Option<windows::Win32::Graphics::Direct3D11::ID3D11Device> = None;
 
         unsafe {
             D3D11CreateDeviceAndSwapChain(
@@ -303,9 +303,9 @@ mod inner {
                 Default::default(),      // flags
                 None,                    // feature levels (default)
                 7,                       // SDK version (D3D11_SDK_VERSION)
-                &swap_chain_desc,
-                &mut swap_chain,
-                &mut device,
+                Some(&swap_chain_desc as *const _),
+                Some(&mut swap_chain as *mut _),
+                Some(&mut device as *mut _),
                 None,                    // feature level out
                 None,                    // immediate context out
             )?;
