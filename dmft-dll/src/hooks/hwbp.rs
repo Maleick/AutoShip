@@ -132,74 +132,70 @@ mod platform {
         Ok(())
     }
 
-    /// Schedule `set_breakpoint` to run on EQ's main thread via `QueueUserAPC`.
+    /// Set a hardware breakpoint on EQ's main thread via cross-thread
+    /// `SetThreadContext`.
     ///
-    /// The APC callback executes when the main thread enters an alertable wait
-    /// (e.g., `SleepEx`, `WaitForSingleObjectEx`, or the window message loop's
-    /// `MsgWaitForMultipleObjectsEx`). EQ's main loop enters alertable waits
-    /// regularly, so the APC fires within a few frames.
+    /// EQ's main loop uses `PeekMessage`/`GetMessage` — not alertable waits —
+    /// so `QueueUserAPC` never fires. We fall back to opening the main thread
+    /// handle and writing debug registers directly. This is a one-time call
+    /// during init, not continuous.
     pub fn set_breakpoint_on_main_thread(slot: HwbpSlot, address: usize) -> Result<(), String> {
-        use windows::Win32::System::Threading::{OpenThread, QueueUserAPC, THREAD_SET_CONTEXT};
-
-        let tid = find_main_thread_id()?;
-
-        // Pack slot + address into a static so the APC callback can read them.
-        // We use a single AtomicU64: high 32 = slot index, low 32 = unused (address in separate static).
-        static APC_SLOT: AtomicU32 = AtomicU32::new(0);
-        static APC_ADDR: AtomicUsize = AtomicUsize::new(0);
-        static APC_RESULT: AtomicBool = AtomicBool::new(false);
-        static APC_DONE: AtomicBool = AtomicBool::new(false);
-
-        APC_SLOT.store(slot as u32, Ordering::Release);
-        APC_ADDR.store(address, Ordering::Release);
-        APC_DONE.store(false, Ordering::Release);
-        APC_RESULT.store(false, Ordering::Release);
-
-        unsafe extern "system" fn apc_callback(_parameter: usize) {
-            let slot_idx = APC_SLOT.load(Ordering::Acquire);
-            let addr = APC_ADDR.load(Ordering::Acquire);
-            let slot = match HwbpSlot::from_index(slot_idx as usize) {
-                Some(s) => s,
-                None => {
-                    APC_DONE.store(true, Ordering::Release);
-                    return;
-                }
-            };
-            let ok = set_breakpoint(slot, addr).is_ok();
-            APC_RESULT.store(ok, Ordering::Release);
-            APC_DONE.store(true, Ordering::Release);
-            tracing::info!(
-                slot = slot_idx,
-                addr = format!("{:#x}", addr),
-                success = ok,
-                "HWBP set via APC on main thread"
-            );
-        }
-
-        let thread_handle = unsafe {
-            OpenThread(THREAD_SET_CONTEXT, false, tid)
-                .map_err(|e| format!("OpenThread({tid}) failed: {e}"))?
+        use windows::Win32::System::Threading::{
+            OpenThread, ResumeThread, SuspendThread, THREAD_GET_CONTEXT, THREAD_SET_CONTEXT,
+            THREAD_SUSPEND_RESUME,
         };
 
-        let queued = unsafe { QueueUserAPC(Some(apc_callback), thread_handle, 0) };
+        let tid = find_main_thread_id()?;
+        let idx = slot as usize;
 
-        // Handle is Copy in this windows crate version — no explicit close needed.
-        let _ = thread_handle;
+        let thread = unsafe {
+            OpenThread(
+                THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME,
+                false,
+                tid,
+            )
+            .map_err(|e| format!("OpenThread({tid}) failed: {e}"))?
+        };
 
-        if queued == 0 {
-            return Err(format!("QueueUserAPC failed for TID {tid}"));
+        // Suspend → modify context → resume for a consistent snapshot.
+        unsafe {
+            SuspendThread(thread);
         }
+
+        let result = unsafe {
+            let mut ctx: CONTEXT = std::mem::zeroed();
+            ctx.ContextFlags = CONTEXT_FLAGS(0x00100010); // CONTEXT_DEBUG_REGISTERS
+            GetThreadContext(thread, &mut ctx)
+                .map_err(|e| format!("GetThreadContext(TID {tid}) failed: {e}"))?;
+
+            match idx {
+                0 => ctx.Dr0 = address as u64,
+                1 => ctx.Dr1 = address as u64,
+                2 => ctx.Dr2 = address as u64,
+                3 => ctx.Dr3 = address as u64,
+                _ => unreachable!(),
+            }
+            ctx.Dr7 &= !DR7_COND_LEN_CLEAR[idx];
+            ctx.Dr7 |= DR7_LOCAL_ENABLE[idx];
+
+            SetThreadContext(thread, &ctx)
+                .map_err(|e| format!("SetThreadContext(TID {tid}) failed: {e}"))
+        };
+
+        unsafe {
+            ResumeThread(thread);
+        }
+
+        let _ = thread; // HANDLE is Copy in this crate version
+
+        result?;
 
         tracing::info!(
             tid,
-            slot = slot as u32,
+            slot = idx,
             addr = format!("{:#x}", address),
-            "HWBP APC queued on main thread — will fire on next alertable wait"
+            "HWBP set on main thread via cross-thread SetThreadContext"
         );
-
-        // Don't block waiting — the APC fires asynchronously on the main thread.
-        // The VEH handler + slot state are already set up, so once the APC fires
-        // and sets the debug register, the hook will start working.
         Ok(())
     }
 
