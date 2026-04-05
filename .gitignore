@@ -33,12 +33,11 @@ autoresearch-project-sync.json
 __pycache__/
 *.pyc
 
-# OpenWolf runtime state (large/transient)
-.wolf/token-ledger.json
-.wolf/daemon.log
-.wolf/cron-state.json
-.wolf/designqc-captures/
-.wolf/backups/
+# OpenWolf (all state, config, hooks, logs)
+.wolf/
+
+# Claude Code (all local config, hooks, rules, settings)
+.claude/
 
 # Local reference repos
 mq2-definitions/
@@ -52,3 +51,6 @@ config/accounts.toml
 # Large map text files (200MB+ each, use config/maps/*.zip instead)
 config/maps/*.txt
 config/accounts.csv
+
+# Ghidra exports
+data/ghidra-export/
