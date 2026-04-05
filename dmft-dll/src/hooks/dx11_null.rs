@@ -20,7 +20,7 @@
 //! The actual rendering goes through `EQGraphics.DLL` which holds the real
 //! DX11 device and context.
 
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
 /// Original `ID3D11Device::CreateTexture2D` function pointer (vtable slot 5).
 static ORIG_CREATE_TEXTURE2D: AtomicPtr<core::ffi::c_void> =
@@ -29,6 +29,12 @@ static ORIG_CREATE_TEXTURE2D: AtomicPtr<core::ffi::c_void> =
 /// Original `ID3D11Device::CreateBuffer` function pointer (vtable slot 3).
 static ORIG_CREATE_BUFFER: AtomicPtr<core::ffi::c_void> =
     AtomicPtr::new(core::ptr::null_mut());
+
+/// Whether the DX11 hooks have been successfully installed.
+static HOOKS_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Cached EQ base address for deferred installation.
+static CACHED_EQ_BASE: AtomicU64 = AtomicU64::new(0);
 
 // ─── DX11 struct definitions (subset needed for hooking) ───
 
@@ -268,12 +274,19 @@ mod inner {
         Some(original)
     }
 
-    /// Install DX11 vtable hooks on the device's `CreateTexture2D` and `CreateBuffer`.
-    pub fn install(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
-        unsafe {
-            let device = resolve_d3d11_device(eq_base)
-                .ok_or("Failed to resolve ID3D11Device pointer chain")?;
+    /// Try to install DX11 vtable hooks. Returns Ok(true) if installed,
+    /// Ok(false) if the device isn't available yet (deferred).
+    fn try_install_hooks(eq_base: u64) -> Result<bool, Box<dyn std::error::Error>> {
+        if HOOKS_INSTALLED.load(Ordering::Acquire) {
+            return Ok(true);
+        }
 
+        let device = match unsafe { resolve_d3d11_device(eq_base) } {
+            Some(d) => d,
+            None => return Ok(false), // Device not ready yet — will retry later
+        };
+
+        unsafe {
             // Hook CreateTexture2D (vtable index 5)
             let orig_tex = vtable_hook(
                 device,
@@ -291,10 +304,41 @@ mod inner {
             )
             .ok_or("Failed to vtable-hook CreateBuffer")?;
             ORIG_CREATE_BUFFER.store(orig_buf, Ordering::Release);
-
-            tracing::info!("DX11 null device hooks installed (CreateTexture2D + CreateBuffer)");
         }
-        Ok(())
+
+        HOOKS_INSTALLED.store(true, Ordering::Release);
+        tracing::info!("DX11 null device hooks installed (CreateTexture2D + CreateBuffer)");
+        Ok(true)
+    }
+
+    /// Install DX11 vtable hooks. If the device isn't ready yet (e.g. at login
+    /// screen), caches the EQ base for deferred installation via `ensure_installed()`.
+    pub fn install(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
+        CACHED_EQ_BASE.store(eq_base, Ordering::Release);
+        match try_install_hooks(eq_base)? {
+            true => Ok(()),
+            false => {
+                tracing::info!("DX11 device not ready — hooks will install on first SetRenderMode");
+                Ok(())
+            }
+        }
+    }
+
+    /// Attempt deferred installation. Called from `set_mode()` when hooks
+    /// weren't installed at DLL init (device was null at login screen).
+    pub fn ensure_installed() {
+        if HOOKS_INSTALLED.load(Ordering::Acquire) {
+            return;
+        }
+        let eq_base = CACHED_EQ_BASE.load(Ordering::Acquire);
+        if eq_base == 0 {
+            return;
+        }
+        match try_install_hooks(eq_base) {
+            Ok(true) => tracing::info!("DX11 hooks installed (deferred)"),
+            Ok(false) => tracing::warn!("DX11 device still not available"),
+            Err(e) => tracing::warn!("Deferred DX11 hook install failed: {}", e),
+        }
     }
 
     /// Remove DX11 vtable hooks by restoring original function pointers.
@@ -330,6 +374,9 @@ mod inner {
         Ok(())
     }
 
+    /// Stub — deferred install is a no-op on non-Windows.
+    pub fn ensure_installed() {}
+
     /// Stub — nothing to remove on non-Windows.
     pub fn remove(_eq_base: u64) {
         tracing::warn!("DX11 null device hook removal not available (stub)");
@@ -337,4 +384,4 @@ mod inner {
 }
 
 #[allow(unused_imports)]
-pub use inner::{install, remove};
+pub use inner::{ensure_installed, install, remove};

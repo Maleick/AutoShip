@@ -23,7 +23,13 @@ static RENDER_TICK: AtomicU64 = AtomicU64::new(0);
 static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
 
 /// Set the render mode. Called from the IPC command handler.
+///
+/// On the first call, this also triggers deferred DX11 hook installation
+/// (the device may not have been ready at DLL init time).
 pub fn set_mode(mode: RenderMode) {
+    // Ensure DX11 vtable hooks are installed (deferred from init if device was null).
+    super::dx11_null::ensure_installed();
+
     let encoded = match mode {
         RenderMode::Normal => 0,
         RenderMode::Strobe => 1,
