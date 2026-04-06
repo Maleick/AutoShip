@@ -753,8 +753,9 @@ pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
             return false;
         };
 
+        // Server select is eqmain territory — use phase-aware click
         unsafe {
-            crate::eq::widgets::click_button_via_vtable(button_wnd);
+            crate::eq::widgets::click_button_for_phase(button_wnd, true);
         }
 
         tracing::debug!(window = window_name, "Clicked button");
