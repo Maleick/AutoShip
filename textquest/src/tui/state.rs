@@ -500,6 +500,8 @@ impl MapNameStyle {
 pub struct MapHighlight {
     /// Spawn name pattern (case-insensitive substring match).
     pub pattern: String,
+    /// Pre-lowercased pattern for O(1) comparison in render loop.
+    pub pattern_lower: String,
     /// Override color for the highlighted spawn marker.
     pub color: Option<Color>,
     /// Marker size: 1=small dot, 2=medium, 3=large.
@@ -532,6 +534,7 @@ pub struct MapFilterPreset {
     pub show_geometry: bool,
     pub show_spawns: bool,
     pub show_nav_paths: bool,
+    pub show_navmesh: bool,
     pub show_labels: bool,
     pub show_annotations: bool,
 }
@@ -791,6 +794,7 @@ impl MapScreenState {
             show_geometry: self.show_geometry,
             show_spawns: self.show_spawns,
             show_nav_paths: self.show_nav_paths,
+            show_navmesh: self.show_navmesh,
             show_labels: self.show_labels,
             show_annotations: self.show_annotations,
         };
@@ -808,6 +812,7 @@ impl MapScreenState {
             self.show_geometry = preset.show_geometry;
             self.show_spawns = preset.show_spawns;
             self.show_nav_paths = preset.show_nav_paths;
+            self.show_navmesh = preset.show_navmesh;
             self.show_labels = preset.show_labels;
             self.show_annotations = preset.show_annotations;
             true
@@ -1726,12 +1731,14 @@ mod tests {
         let mut s = MapScreenState::new();
         s.add_highlight(MapHighlight {
             pattern: "Fippy".into(),
+            pattern_lower: "fippy".into(),
             color: Some(Color::Red),
             size: 2,
             pulse: false,
         });
         s.add_highlight(MapHighlight {
             pattern: "Guard".into(),
+            pattern_lower: "guard".into(),
             color: None,
             size: 1,
             pulse: true,

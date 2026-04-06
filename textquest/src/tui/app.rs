@@ -2215,6 +2215,7 @@ impl App {
                     self.execute_waypoint_navigation(&name, waypoint, None);
                 }
                 NavScope::All => {
+                    // Temporarily clear group filter so visible_clients() returns all.
                     let saved_group = self.active_group;
                     self.active_group = None;
                     self.execute_waypoint_navigation(&name, waypoint, None);
@@ -3763,7 +3764,7 @@ impl App {
                 self.running = false;
                 self.set_feedback(
                     ToastLevel::Info,
-                    String::from("Shutting down DMFT TUI..."),
+                    String::from("Shutting down TextQuest TUI..."),
                     false,
                 );
             }
@@ -4910,7 +4911,7 @@ impl App {
                     launched += 1;
                     // Post-launch automation (M2.5 roadmap):
                     // 1. Wire into LaunchCoordinator for staggered launch + state tracking
-                    // 2. After window title shows "[DMFT] EQ - <CharName>", auto-inject DLL
+                    // 2. After window title shows "[TQ] EQ - <CharName>", auto-inject DLL
                     // 3. After DLL injection, auto-form groups + set camp
                 }
                 Err(e) => {
@@ -4974,11 +4975,10 @@ impl App {
                 self.handle_mapfilter_radius(parts, false);
             }
             Some(arg) if arg.eq_ignore_ascii_case("targetpath") => {
-                let v = match parts.get(2).map(|s| s.to_ascii_lowercase()).as_deref() {
-                    Some("on" | "1" | "true") => true,
-                    Some("off" | "0" | "false") => false,
-                    _ => !self.map_state.show_target_path,
-                };
+                let v = parts
+                    .get(2)
+                    .and_then(|s| parse_bool_flag(s))
+                    .unwrap_or(!self.map_state.show_target_path);
                 self.map_state.show_target_path = v;
                 self.set_feedback(
                     ToastLevel::Info,
@@ -4987,11 +4987,10 @@ impl App {
                 );
             }
             Some(arg) if arg.eq_ignore_ascii_case("targetline") => {
-                let v = match parts.get(2).map(|s| s.to_ascii_lowercase()).as_deref() {
-                    Some("on" | "1" | "true") => true,
-                    Some("off" | "0" | "false") => false,
-                    _ => !self.map_state.show_target_line,
-                };
+                let v = parts
+                    .get(2)
+                    .and_then(|s| parse_bool_flag(s))
+                    .unwrap_or(!self.map_state.show_target_line);
                 self.map_state.show_target_line = v;
                 self.set_feedback(
                     ToastLevel::Info,
@@ -5073,20 +5072,12 @@ impl App {
                     return;
                 };
                 let ns = if let Some(st) = parts.get(2) {
-                    match st.to_ascii_lowercase().as_str() {
-                        "on" | "1" | "true" => {
-                            self.map_state.filters.set(kind, true);
-                            true
-                        }
-                        "off" | "0" | "false" => {
-                            self.map_state.filters.set(kind, false);
-                            false
-                        }
-                        _ => {
-                            self.usage_feedback("mapfilter", "Usage: mapfilter <type> [on|off]");
-                            return;
-                        }
-                    }
+                    let Some(on) = parse_bool_flag(st) else {
+                        self.usage_feedback("mapfilter", "Usage: mapfilter <type> [on|off]");
+                        return;
+                    };
+                    self.map_state.filters.set(kind, on);
+                    on
                 } else {
                     self.map_state.filters.toggle(kind)
                 };
@@ -5128,7 +5119,7 @@ impl App {
                 };
                 let color = parts
                     .get(3)
-                    .and_then(|c| parse_highlight_color(c))
+                    .and_then(|c| super::theme::parse_color_name(c))
                     .unwrap_or(if is_cast { Color::Cyan } else { Color::Yellow });
                 *field = Some(MapRadiusOverlay {
                     radius: r,
@@ -5343,13 +5334,9 @@ impl App {
             }
         };
         if let Some(st) = parts.get(2) {
-            let on = match st.to_ascii_lowercase().as_str() {
-                "on" | "1" | "true" => true,
-                "off" | "0" | "false" => false,
-                _ => {
-                    self.usage_feedback("map", "Usage: map <layer> [on|off]");
-                    return;
-                }
+            let Some(on) = parse_bool_flag(st) else {
+                self.usage_feedback("map", "Usage: map <layer> [on|off]");
+                return;
             };
             match num {
                 1 => self.map_state.show_geometry = on,
@@ -5394,15 +5381,18 @@ impl App {
                 let (mut color, mut size, mut pulse) = (None, 1u8, false);
                 for &a in parts.iter().skip(3) {
                     if let Some(c) = a.strip_prefix("color=") {
-                        color = parse_highlight_color(c);
+                        color = super::theme::parse_color_name(c);
                     } else if let Some(s) = a.strip_prefix("size=") {
                         size = s.parse().unwrap_or(1_u8).clamp(1, 3);
                     } else if a.eq_ignore_ascii_case("pulse") {
                         pulse = true;
                     }
                 }
+                let pat_str = (*pat).to_string();
+                let pat_lower = pat_str.to_ascii_lowercase();
                 self.map_state.add_highlight(MapHighlight {
-                    pattern: (*pat).to_string(),
+                    pattern: pat_str,
+                    pattern_lower: pat_lower,
                     color,
                     size,
                     pulse,
@@ -5481,17 +5471,11 @@ impl App {
     }
 }
 
-/// Parse a color name into a ratatui Color.
-fn parse_highlight_color(s: &str) -> Option<Color> {
+/// Parse "on"/"1"/"true" → true, "off"/"0"/"false" → false.
+fn parse_bool_flag(s: &str) -> Option<bool> {
     match s.to_ascii_lowercase().as_str() {
-        "red" => Some(Color::Red),
-        "green" => Some(Color::Green),
-        "blue" => Some(Color::Blue),
-        "yellow" => Some(Color::Yellow),
-        "cyan" => Some(Color::Cyan),
-        "magenta" | "purple" => Some(Color::Magenta),
-        "white" => Some(Color::White),
-        "orange" => Some(Color::Rgb(255, 165, 0)),
+        "on" | "1" | "true" => Some(true),
+        "off" | "0" | "false" => Some(false),
         _ => None,
     }
 }

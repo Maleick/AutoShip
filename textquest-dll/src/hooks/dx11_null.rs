@@ -548,14 +548,10 @@ mod inner {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_millis() as u64);
-        let path = format!(
-            "{}\\textquest_screenshot_{}_{}.bmp",
-            std::env::temp_dir()
-                .to_string_lossy()
-                .trim_end_matches('\\'),
-            pid,
-            timestamp
-        );
+        let path = std::env::temp_dir()
+            .join("textquest")
+            .join(format!("screenshot_{}_{}.bmp", pid, timestamp));
+        let path = path.to_string_lossy().into_owned();
 
         let write_result = unsafe {
             write_bmp(
@@ -588,7 +584,9 @@ mod inner {
         let pixel_data_size = padded_row * height;
         let file_size = 54 + pixel_data_size;
 
-        let mut file = std::fs::File::create(path).map_err(|e| format!("create file: {e}"))?;
+        let mut file = std::io::BufWriter::new(
+            std::fs::File::create(path).map_err(|e| format!("create file: {e}"))?,
+        );
 
         // BMP file header (14 bytes).
         file.write_all(b"BM").map_err(|e| format!("write: {e}"))?;

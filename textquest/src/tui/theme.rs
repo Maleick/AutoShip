@@ -1,4 +1,4 @@
-//! Theme system for the DMFT TUI.
+//! Theme system for the TextQuest TUI.
 //!
 //! A `Theme` carries every semantic color and style used by the renderer.
 //! All `draw_*` functions read colors from `app.theme` instead of using
@@ -602,6 +602,21 @@ pub fn neriak() -> Theme {
         con_light_blue: cyan,
         con_blue: blue,
         con_green: green,
+    }
+}
+
+/// Parse a user-provided color name into a ratatui `Color`.
+pub fn parse_color_name(s: &str) -> Option<Color> {
+    match s.to_ascii_lowercase().as_str() {
+        "red" => Some(Color::Red),
+        "green" => Some(Color::Green),
+        "blue" => Some(Color::Blue),
+        "yellow" => Some(Color::Yellow),
+        "cyan" => Some(Color::Cyan),
+        "magenta" | "purple" => Some(Color::Magenta),
+        "white" => Some(Color::White),
+        "orange" => Some(Color::Rgb(255, 165, 0)),
+        _ => None,
     }
 }
 

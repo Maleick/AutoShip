@@ -829,7 +829,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         for spawn in &app.spawns {
             let lower_name = spawn.name.to_ascii_lowercase();
             for hl in &app.map_state.highlights {
-                if lower_name.contains(&hl.pattern.to_ascii_lowercase()) {
+                if lower_name.contains(&hl.pattern_lower) {
                     let (sc, sr) = to_grid(-spawn.y, -spawn.x);
                     if sc >= 0 && sc < w as i32 && sr >= 0 && sr < h as i32 {
                         let color = hl.color.unwrap_or(Color::Magenta);
