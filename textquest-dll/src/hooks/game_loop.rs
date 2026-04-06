@@ -1456,13 +1456,7 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 character = %character_name,
                 "Relog command received (password redacted)"
             );
-            crate::login::start_relog(
-                account_name,
-                password,
-                server_name,
-                character_name,
-                config,
-            );
+            crate::login::start_relog(account_name, password, server_name, character_name, config);
         }
         Command::CancelRelog => {
             tracing::info!("CancelRelog received");

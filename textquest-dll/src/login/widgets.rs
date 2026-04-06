@@ -1025,10 +1025,7 @@ fn strip_stml_tags(text: &str) -> String {
     }
 
     // Collapse multiple whitespace sequences into single spaces
-    let collapsed: String = result
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let collapsed: String = result.split_whitespace().collect::<Vec<_>>().join(" ");
     collapsed
 }
 
@@ -1053,15 +1050,16 @@ pub fn read_ok_dialog_text(eqmain_base: u64) -> Option<String> {
             while child != 0 && count < 200 {
                 count += 1;
 
-                if let Some(text) =
-                    crate::eq::widgets::read_cxstr(child + off::CXWND_WINDOW_TEXT)
-                {
+                if let Some(text) = crate::eq::widgets::read_cxstr(child + off::CXWND_WINDOW_TEXT) {
                     // The display child has the actual message — it's typically the
                     // longest text among children (button labels are short like "OK").
                     if text.len() > 3 {
                         let stripped = strip_stml_tags(&text);
                         if !stripped.is_empty() {
-                            if best_text.as_ref().is_none_or(|prev| stripped.len() > prev.len()) {
+                            if best_text
+                                .as_ref()
+                                .is_none_or(|prev| stripped.len() > prev.len())
+                            {
                                 best_text = Some(stripped);
                             }
                         }
@@ -1076,8 +1074,7 @@ pub fn read_ok_dialog_text(eqmain_base: u64) -> Option<String> {
             }
 
             // Fallback: try the dialog window's own WindowText
-            if let Some(text) =
-                crate::eq::widgets::read_cxstr(dialog_wnd + off::CXWND_WINDOW_TEXT)
+            if let Some(text) = crate::eq::widgets::read_cxstr(dialog_wnd + off::CXWND_WINDOW_TEXT)
             {
                 let stripped = strip_stml_tags(&text);
                 if !stripped.is_empty() {
@@ -1136,12 +1133,12 @@ pub fn classify_dialog_error(text: &str) -> LoginError {
             phase: "login_dialog".into(),
         }
     } else {
-        tracing::warn!(text = text, "Unrecognized error dialog text — treating as timeout");
+        tracing::warn!(
+            text = text,
+            "Unrecognized error dialog text — treating as timeout"
+        );
         LoginError::Timeout {
-            phase: format!(
-                "unknown_dialog: {}",
-                &text[..text.len().min(80)]
-            ),
+            phase: format!("unknown_dialog: {}", &text[..text.len().min(80)]),
         }
     }
 }
@@ -1643,10 +1640,7 @@ mod tests {
     #[test]
     fn strip_stml_tags_handles_br_tags() {
         // <BR> tags become empty (no implicit space insertion) — adjacent text merges
-        assert_eq!(
-            strip_stml_tags("Line one<BR>Line two"),
-            "Line oneLine two"
-        );
+        assert_eq!(strip_stml_tags("Line one<BR>Line two"), "Line oneLine two");
         // BR with surrounding whitespace gets collapsed
         assert_eq!(
             strip_stml_tags("Line one <BR> Line two"),
@@ -1664,10 +1658,7 @@ mod tests {
 
     #[test]
     fn strip_stml_tags_plain_text_unchanged() {
-        assert_eq!(
-            strip_stml_tags("No tags here"),
-            "No tags here"
-        );
+        assert_eq!(strip_stml_tags("No tags here"), "No tags here");
     }
 
     #[test]
@@ -1770,9 +1761,18 @@ mod tests {
 
     #[test]
     fn recovery_action_abort_for_permanent_errors() {
-        assert_eq!(recovery_action(&LoginError::WrongPassword), RecoveryAction::Abort);
-        assert_eq!(recovery_action(&LoginError::AccountLocked), RecoveryAction::Abort);
-        assert_eq!(recovery_action(&LoginError::OfflineTrader), RecoveryAction::Abort);
+        assert_eq!(
+            recovery_action(&LoginError::WrongPassword),
+            RecoveryAction::Abort
+        );
+        assert_eq!(
+            recovery_action(&LoginError::AccountLocked),
+            RecoveryAction::Abort
+        );
+        assert_eq!(
+            recovery_action(&LoginError::OfflineTrader),
+            RecoveryAction::Abort
+        );
         assert_eq!(
             recovery_action(&LoginError::CharacterNotFound {
                 expected: "Foo".into(),
@@ -1788,9 +1788,18 @@ mod tests {
             recovery_action(&LoginError::CharacterAlreadyLoggedIn),
             RecoveryAction::WaitAndRetry
         );
-        assert_eq!(recovery_action(&LoginError::ServerDown), RecoveryAction::WaitAndRetry);
-        assert_eq!(recovery_action(&LoginError::ServerFull), RecoveryAction::WaitAndRetry);
-        assert_eq!(recovery_action(&LoginError::MassFailure), RecoveryAction::WaitAndRetry);
+        assert_eq!(
+            recovery_action(&LoginError::ServerDown),
+            RecoveryAction::WaitAndRetry
+        );
+        assert_eq!(
+            recovery_action(&LoginError::ServerFull),
+            RecoveryAction::WaitAndRetry
+        );
+        assert_eq!(
+            recovery_action(&LoginError::MassFailure),
+            RecoveryAction::WaitAndRetry
+        );
     }
 
     #[test]
