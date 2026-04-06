@@ -372,6 +372,16 @@ pub enum Command {
     /// - `/stick hold`   → `config.hold = true`
     /// - `/stick always` → `config.always = true`
     /// - `/stick id #`   → `config.id = Some(#)`
+    /// Advanced moveto — MQ2MoveUtils `/moveto` with full option support (#184).
+    MoveToAdvanced {
+        /// Full moveto configuration including target tracking, break conditions.
+        config: crate::nav::MoveToConfig,
+    },
+    /// Enable or disable autopause globally (#164).
+    SetAutopause {
+        /// Whether autopause should be active.
+        enabled: bool,
+    },
     StickTo {
         /// Stick configuration including distance, hold, always, and id options.
         config: crate::nav::StickConfig,
@@ -652,6 +662,19 @@ pub enum Response {
     NavDiagnosticsResult {
         /// Diagnostics snapshot.
         diagnostics: crate::nav::NavDiagnostics,
+    },
+    /// Spawn alert notification — a watched or named spawn appeared/disappeared.
+    SpawnAlert {
+        /// PID of the client that detected the event.
+        client_id: ClientId,
+        /// Zone where the event occurred.
+        zone: String,
+        /// Name of the spawn.
+        spawn_name: String,
+        /// `true` = spawn appeared, `false` = spawn disappeared.
+        is_up: bool,
+        /// Timestamp in milliseconds when the alert was generated.
+        timestamp_ms: u64,
     },
 }
 
@@ -1249,6 +1272,8 @@ mod tests {
             not_front_arc: 90.0,
             moveback: true,
             backup_dist: 5.0,
+            healer: false,
+            autopause: false,
         };
         let cmd = Command::StickTo { config };
         let encoded = encode(&cmd).expect("encode StickTo");

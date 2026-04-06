@@ -1330,6 +1330,14 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!("StopFollow received");
             crate::nav::handle_command(crate::nav::NavCommand::StopFollow);
         }
+        Command::MoveToAdvanced { config } => {
+            tracing::info!(target_id = config.target_id, "MoveToAdvanced received");
+            crate::nav::handle_command(crate::nav::NavCommand::MoveToAdvanced(config));
+        }
+        Command::SetAutopause { enabled } => {
+            tracing::info!(enabled, "SetAutopause received");
+            crate::nav::handle_command(crate::nav::NavCommand::SetAutopause(enabled));
+        }
         Command::StickTo { config } => {
             tracing::info!(
                 hold = config.hold,

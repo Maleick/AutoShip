@@ -35,12 +35,19 @@ pub enum StickTickResult {
     /// caller should treat this as a reason to stop.
     TargetLost,
     /// Within stick range — stop movement.
-    InRange { target_id: u32, distance: f32 },
+    InRange {
+        target_id: u32,
+        distance: f32,
+        /// When healer mode is active, the position to face (target location).
+        face_target: Option<Waypoint>,
+    },
     /// Outside stick range — move toward `desired_pos`.
     OutOfRange {
         target_id: u32,
         distance: f32,
         desired_pos: Waypoint,
+        /// When healer mode is active, the position to face (target location).
+        face_target: Option<Waypoint>,
     },
     /// Too close to target — back up away from `target_pos`.
     /// Only returned when `moveback` is enabled and current distance drops
@@ -181,6 +188,13 @@ impl StickEngine {
 
         // In-range check: distance to the desired stick point is within threshold,
         // AND we're within effective stick distance of the target (with tolerance).
+        // Healer mode: provide face_target so navigator can turn toward the target.
+        let face_target = if self.config.healer {
+            Some(target_pos)
+        } else {
+            None
+        };
+
         if distance_to_desired <= STICK_ARRIVAL_THRESHOLD
             || (self.config.mode == StickMode::Any
                 && distance <= effective_dist + STICK_ARRIVAL_THRESHOLD)
@@ -188,12 +202,14 @@ impl StickEngine {
             StickTickResult::InRange {
                 target_id: target.spawn_id,
                 distance,
+                face_target,
             }
         } else {
             StickTickResult::OutOfRange {
                 target_id: target.spawn_id,
                 distance,
                 desired_pos,
+                face_target,
             }
         }
     }
@@ -372,6 +388,11 @@ fn arc_position(
             // Use behind_arc as the arc width for symmetry with Behind mode.
             let half_arc = (behind_arc_deg.clamp(5.1, 259.9) / 2.0).to_radians();
             clamp_to_arc(player_angle, face_rad, half_arc)
+        }
+
+        StickMode::SnapRoll => {
+            // Opposite side of the target from the player's current position.
+            normalize_angle(player_angle + std::f32::consts::PI)
         }
     };
 
@@ -571,6 +592,7 @@ mod tests {
             StickTickResult::InRange {
                 target_id,
                 distance,
+                ..
             } => {
                 assert_eq!(target_id, 1);
                 assert!((distance - 10.0).abs() < 0.1);
@@ -593,6 +615,7 @@ mod tests {
                 target_id,
                 distance,
                 desired_pos,
+                ..
             } => {
                 assert_eq!(target_id, 5);
                 assert!((distance - 50.0).abs() < 0.1);
@@ -739,6 +762,44 @@ mod tests {
         let target = make_spawn(1, 4.0, 0.0);
         if let StickTickResult::TooClose { .. } = engine.tick(&player, Some(&target), &[]) {
             panic!("should not trigger when above clamped threshold");
+        }
+    }
+
+    // ── healer mode (#163) ──────────────────────────────────────────────────
+
+    #[test]
+    fn healer_mode_sets_face_target() {
+        let mut engine = StickEngine::new();
+        let mut config = StickConfig::default();
+        config.healer = true;
+        engine.start(config, None);
+        let player = player_at(0.0, 0.0);
+        let target = make_spawn(1, 10.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::InRange { face_target, .. } => {
+                assert!(face_target.is_some(), "healer mode should set face_target");
+                let ft = face_target.unwrap();
+                assert!((ft.x - 10.0).abs() < 0.1);
+            }
+            other => panic!("expected InRange, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn non_healer_mode_no_face_target() {
+        let mut engine = StickEngine::new();
+        let config = StickConfig::default();
+        engine.start(config, None);
+        let player = player_at(0.0, 0.0);
+        let target = make_spawn(1, 10.0, 0.0);
+        match engine.tick(&player, Some(&target), &[]) {
+            StickTickResult::InRange { face_target, .. } => {
+                assert!(
+                    face_target.is_none(),
+                    "non-healer should not set face_target"
+                );
+            }
+            other => panic!("expected InRange, got {other:?}"),
         }
     }
 }
@@ -925,5 +986,20 @@ mod arc_tests {
             }
             other => panic!("expected OutOfRange, got {other:?}"),
         }
+    }
+
+    // ── snaproll (#183) ──
+
+    #[test]
+    fn snaproll_positions_opposite_side() {
+        let player = Waypoint::new(0.0, 0.0, 0.0);
+        let target = Waypoint::new(10.0, 0.0, 0.0);
+        let result = arc_position(&player, &target, 0.0, 15.0, StickMode::SnapRoll, 45.0, 90.0);
+        assert!(
+            result.x > target.x,
+            "snaproll should place player on opposite side: result.x={}, target.x={}",
+            result.x,
+            target.x
+        );
     }
 }
