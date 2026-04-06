@@ -252,22 +252,17 @@ impl LoginFsm {
         {
             let dialog_text = widgets::read_yesno_dialog_text(dialog_wnd).unwrap_or_default();
             tracing::info!(text = %dialog_text, "YesNo dialog detected");
-
-            if self.handle_yesno_dialog(dialog_wnd, &dialog_text) {
-                return true;
-            }
-            return false;
+            return self.handle_yesno_dialog(dialog_wnd, &dialog_text);
         }
 
         // OK dialog — error messages, server full, etc.
+        // Don't transition to error — let the FSM detect the actual state
+        // on the next tick (e.g., back to login screen means wrong password).
         if let Some(dialog_wnd) =
             widgets::find_visible_sidl_window(self.eqmain_base, widgets::SIDL_OK_DIALOG)
         {
             tracing::warn!("OK dialog detected — dismissing");
             widgets::click_ok_dialog(dialog_wnd);
-            // Don't transition to error — let the FSM detect the actual state
-            // on the next tick (e.g., back to login screen means wrong password).
-            return false;
         }
 
         false

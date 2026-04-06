@@ -174,29 +174,18 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 "StartLogin received — delegating to FSM (password redacted)"
             );
 
-            // Write credentials inline FIRST (before mem::take).
-            // Two-phase approach:
-            // 1. Write username/password to CXStr memory (for EQ's internal state)
-            // 2. Type password via WM_CHAR + Enter (for actual form submission)
-            // Phase 2 is critical: CXStr memory writes alone don't trigger EQ's
-            // login form handler. WM_CHAR simulates real keyboard input.
+            // Two-phase credential entry:
+            // 1. Write username/password to CXStr memory (EQ's internal state)
+            // 2. Type password via WM_CHAR + Enter (actual form submission)
+            // CXStr writes alone don't trigger EQ's login handler — WM_CHAR is required.
             let eqmain_base = crate::login::eqmain::find_eqmain();
             if eqmain_base != 0 {
-                let wrote = crate::login::widgets::type_credentials_to_window(
+                crate::login::widgets::type_credentials_to_window(
                     eqmain_base,
                     &account_name,
                     &password,
                 );
-                tracing::info!(wrote, "Inline: type_credentials_to_window (memory write)");
-
-                // Now type the password via WM_CHAR and press Enter to actually
-                // submit the form. The /login: flag filled the username, so we
-                // only need to tab to password, type it, and hit Enter.
-                let typed = crate::login::widgets::type_password_wm_char(
-                    eqmain_base,
-                    &password,
-                );
-                tracing::info!(typed, "Inline: type_password_wm_char (keyboard submit)");
+                crate::login::widgets::type_password_wm_char(eqmain_base, &password);
             }
 
             // Store credentials in the FSM for character select phase.
@@ -212,9 +201,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             // Game loop tick handles Phase 4 (character select → enter world).
             std::thread::Builder::new()
                 .name("textquest-login-phase2".into())
-                .spawn(move || {
-                    login_chain_phase2();
-                })
+                .spawn(login_chain_phase2)
                 .ok();
 
             true
@@ -235,9 +222,8 @@ fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
 /// won't work because ProcessGameEvents is NOT hooked during eqmain.
 /// Polls for eqmain.dll unload. Game loop tick handles character select.
 fn login_chain_phase2() {
-    // Phase 2: Wait for authentication to complete by detecting the server select
-    // SIDL window ("serverselect"). Don't scan for "PLAY EVERQUEST!" text — that
-    // element exists on the login screen as a branding label and causes false positives.
+    use crate::login::widgets;
+
     tracing::info!("Phase 2: Waiting for server select screen...");
 
     let mut found = false;
@@ -249,128 +235,104 @@ fn login_chain_phase2() {
             return;
         }
 
-        // Check for the actual server select SIDL window.
-        // Don't scan for "PLAY EVERQUEST!" text alone — it exists on the login
-        // screen as a branding label and causes false positives.
-        if crate::login::widgets::is_sidl_window_visible(
-            eqmain_base,
-            crate::login::widgets::SIDL_SERVER_SELECT,
-        ) {
+        // Detect server select by SIDL name — not "PLAY EVERQUEST!" text which
+        // also exists on the login screen as a branding label.
+        if widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_SERVER_SELECT) {
             tracing::info!(attempt, "Phase 2: Server select screen detected (SIDL)");
 
-            // Click via phase-aware helper (eqmain = true → direct vtable click).
+            // Direct vtable click (eqmain context — game loop hook not active).
             if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
-                tracing::info!(
-                    ptr = format!("{:#x}", play_btn),
-                    "Phase 2: Clicking PLAY EVERQUEST (eqmain context)"
-                );
+                tracing::info!(ptr = format!("{:#x}", play_btn), "Phase 2: Clicking PLAY EVERQUEST");
                 std::thread::sleep(std::time::Duration::from_millis(150));
-                crate::login::widgets::click_button_for_phase(play_btn, true); // eqmain = true
+                widgets::click_button_for_phase(play_btn, true);
                 std::thread::sleep(std::time::Duration::from_millis(200));
-                crate::login::widgets::simulate_enter_key(eqmain_base);
-                tracing::info!("Phase 2: PLAY EVERQUEST clicked + Enter");
+                widgets::simulate_enter_key(eqmain_base);
             } else {
-                // Fallback: just press Enter
                 tracing::info!("Phase 2: PLAY EVERQUEST button not found, sending Enter");
-                crate::login::widgets::simulate_enter_key(eqmain_base);
+                widgets::simulate_enter_key(eqmain_base);
             }
             found = true;
             break;
         }
 
-        // Check for "already logged in" dialog during authentication
+        // Dismiss "already logged in" dialog during authentication
         if attempt % 2 == 0 {
-            if crate::login::widgets::click_yesno_yes(eqmain_base as usize) {
-                tracing::info!(attempt, "Phase 2: Clicked Yes on dialog during auth");
+            if let Some(dlg) = widgets::find_visible_sidl_window(
+                eqmain_base,
+                widgets::SIDL_YES_NO_DIALOG,
+            ) {
+                if widgets::click_yesno_yes(dlg) {
+                    tracing::info!(attempt, "Phase 2: Clicked Yes on dialog during auth");
+                }
             }
         }
 
         // Screen-state trace every 5s for diagnostics
         if attempt % 10 == 0 {
-            let connect = crate::login::widgets::is_sidl_window_visible(
-                eqmain_base,
-                crate::login::widgets::SIDL_CONNECT,
-            );
-            let server = crate::login::widgets::is_sidl_window_visible(
-                eqmain_base,
-                crate::login::widgets::SIDL_SERVER_SELECT,
-            );
-            let yesno = crate::login::widgets::is_sidl_window_visible(
-                eqmain_base,
-                crate::login::widgets::SIDL_YES_NO_DIALOG,
-            );
-            let ok_dlg = crate::login::widgets::is_sidl_window_visible(
-                eqmain_base,
-                crate::login::widgets::SIDL_OK_DIALOG,
-            );
-            tracing::info!(
-                attempt,
-                connect,
-                server,
-                yesno,
-                ok_dlg,
-                eqmain = format!("{:#x}", eqmain_base),
-                "Phase 2: screen state"
-            );
+            log_screen_state(eqmain_base, "Phase 2", attempt);
         }
 
         // Press Enter every 5s to dismiss blocking dialogs (EULA, notices)
         if attempt % 10 == 5 {
-            crate::login::widgets::simulate_enter_key(eqmain_base);
-            tracing::info!(attempt, "Phase 2: Enter sent to dismiss potential dialog");
+            widgets::simulate_enter_key(eqmain_base);
         }
     }
     if !found {
         tracing::warn!("Phase 2: Server select not detected after 30s");
     }
 
-    // Phase 3: Poll for eqmain.dll unload (character select)
+    // Phase 3: Poll for eqmain.dll unload (character select).
     // Also handle "already logged in" Yes/No dialog during this phase.
     tracing::info!("Phase 3: Polling for character select...");
     for attempt in 0..120 {
         std::thread::sleep(std::time::Duration::from_millis(500));
         let eqmain_base = crate::login::eqmain::find_eqmain();
         if eqmain_base == 0 {
-            tracing::info!(
-                attempt,
-                "Phase 3: eqmain.dll unloaded — at character select"
-            );
+            tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
             return;
         }
-        // Check for "already logged in" dialog and click Yes
-        if attempt % 2 == 0
-            && eqmain_base != 0
-            && crate::login::widgets::click_yesno_yes(eqmain_base as usize)
-        {
-            tracing::info!(
-                attempt,
-                "Phase 3: Clicked Yes on 'already logged in' dialog"
-            );
+
+        if attempt % 2 == 0 {
+            if let Some(dlg) = widgets::find_visible_sidl_window(
+                eqmain_base,
+                widgets::SIDL_YES_NO_DIALOG,
+            ) {
+                if widgets::click_yesno_yes(dlg) {
+                    tracing::info!(attempt, "Phase 3: Clicked Yes on 'already logged in' dialog");
+                }
+            }
         }
+
         // Press Enter every 3s to dismiss other dialogs
-        if attempt % 6 == 3 && eqmain_base != 0 {
-            crate::login::widgets::simulate_enter_key(eqmain_base);
+        if attempt % 6 == 3 {
+            widgets::simulate_enter_key(eqmain_base);
         }
+
         // Screen-state trace every 10s for diagnostics
-        if attempt % 20 == 0 && eqmain_base != 0 {
-            let server = crate::login::widgets::is_sidl_window_visible(
-                eqmain_base,
-                crate::login::widgets::SIDL_SERVER_SELECT,
-            );
-            let yesno = crate::login::widgets::is_sidl_window_visible(
-                eqmain_base,
-                crate::login::widgets::SIDL_YES_NO_DIALOG,
-            );
-            tracing::info!(
-                attempt,
-                server,
-                yesno,
-                eqmain = format!("{:#x}", eqmain_base),
-                "Phase 3: screen state (eqmain still loaded)"
-            );
+        if attempt % 20 == 0 {
+            log_screen_state(eqmain_base, "Phase 3", attempt);
         }
     }
     tracing::warn!("Phase 3: Timed out after 60s");
+}
+
+/// Log which SIDL windows are visible — shared by Phase 2 and Phase 3 polling.
+fn log_screen_state(eqmain_base: u64, phase: &str, attempt: u32) {
+    use crate::login::widgets;
+
+    let connect = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_CONNECT);
+    let server = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_SERVER_SELECT);
+    let yesno = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_YES_NO_DIALOG);
+    let ok_dlg = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_OK_DIALOG);
+    tracing::info!(
+        attempt,
+        connect,
+        server,
+        yesno,
+        ok_dlg,
+        eqmain = format!("{:#x}", eqmain_base),
+        "{phase}: screen state"
+    );
 }
 
 /// Background thread: creates a `CommandListener` and loops receiving commands

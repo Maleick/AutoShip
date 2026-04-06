@@ -708,7 +708,7 @@ pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
     }
 }
 
-/// Uses `SendInput` for hardware-level key simulation.
+/// Simulate pressing Enter via `PostMessageW` — works even when EQ is not foreground.
 pub fn simulate_enter_key(eqmain_base: u64) -> bool {
     #[cfg(windows)]
     {

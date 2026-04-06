@@ -796,10 +796,7 @@ pub fn run_autologin_mode(
         return Ok(());
     }
 
-    println!(
-        "Autologin: {} account(s) to process",
-        targets.len()
-    );
+    println!("Autologin: {} account(s) to process", targets.len());
 
     // 2. Load per-account passwords from config/.credentials (TSV)
     let credentials_map = load_credentials_file();
@@ -948,11 +945,11 @@ pub fn run_autologin_mode(
             std::thread::sleep(Duration::from_secs(inject_delay_secs));
         }
 
-        // 5d. Resolve password for this account
-        let acct_password = credentials_map
+        // 5d. Resolve password for this account (stays Zeroizing until consumed)
+        let acct_password: Option<Zeroizing<String>> = credentials_map
             .get(&account.name)
             .cloned()
-            .or_else(|| shared_password.as_ref().map(|p| p.to_string()));
+            .or_else(|| shared_password.clone());
 
         let Some(acct_pw) = acct_password else {
             println!(
@@ -968,7 +965,7 @@ pub fn run_autologin_mode(
             Ok(pipe) => {
                 let cmd = Command::StartLogin {
                     account_name: account.name.clone(),
-                    password: acct_pw,
+                    password: (*acct_pw).clone(),
                     server_name: account.server.clone(),
                     character_name: account.character.clone(),
                 };
@@ -993,9 +990,7 @@ pub fn run_autologin_mode(
     println!("\n═══ Autologin Summary ═══");
     println!("  Success: {success_count}");
     println!("  Failed:  {fail_count}");
-    println!(
-        "\nThe DLL login FSM handles all UI steps autonomously."
-    );
+    println!("\nThe DLL login FSM handles all UI steps autonomously.");
     println!("Check DLL logs for progress: %TEMP%\\dmft\\dmft-dll.log");
 
     Ok(())
@@ -1437,7 +1432,8 @@ const CREDENTIAL_DB_PATH: &str = "data/credentials.db";
 
 /// Load per-account passwords from `config/.credentials` (TSV: account\tpassword).
 /// Returns an empty map if the file doesn't exist or can't be read.
-fn load_credentials_file() -> std::collections::HashMap<String, String> {
+/// Passwords are wrapped in `Zeroizing` to scrub from heap on drop.
+fn load_credentials_file() -> std::collections::HashMap<String, Zeroizing<String>> {
     let path = Path::new(CREDENTIALS_FILE_PATH);
     let mut map = std::collections::HashMap::new();
 
@@ -1452,7 +1448,10 @@ fn load_credentials_file() -> std::collections::HashMap<String, String> {
             continue;
         }
         if let Some((account, password)) = line.split_once('\t') {
-            map.insert(account.trim().to_string(), password.trim().to_string());
+            map.insert(
+                account.trim().to_string(),
+                Zeroizing::new(password.trim().to_string()),
+            );
         }
     }
 
