@@ -45,7 +45,7 @@ function Get-EqStatus {
     }
 
     # DLL log check
-    $logFiles = Get-ChildItem "$env:TEMP\dmft\textquest-dll.log*" -ErrorAction SilentlyContinue |
+    $logFiles = Get-ChildItem "$env:TEMP\textquest\textquest-dll.log*" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending
     if ($logFiles) {
         $latest = $logFiles[0]
@@ -65,7 +65,7 @@ function Get-EqStatus {
 
 function Get-DllLogTail {
     param([int]$Lines = 50)
-    $logFiles = Get-ChildItem "$env:TEMP\dmft\textquest-dll.log*" -ErrorAction SilentlyContinue |
+    $logFiles = Get-ChildItem "$env:TEMP\textquest\textquest-dll.log*" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending
     if ($logFiles) {
         $content = Get-Content $logFiles[0].FullName -Tail $Lines -ErrorAction SilentlyContinue
@@ -158,7 +158,7 @@ function Invoke-RemoteCommand {
 
 function Get-Screenshot {
     # Use built-in Windows screenshot tool to avoid AV triggers
-    $outFile = Join-Path $env:TEMP "dmft_screenshot.png"
+    $outFile = Join-Path $env:TEMP "textquest_screenshot.png"
     $snippingArgs = "/clip"
     try {
         # Use nircmd if available, otherwise fall back to info message

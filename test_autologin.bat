@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo  DMFT - Auto-Login Calibration Test
+echo  TextQuest - Auto-Login Calibration Test
 echo ============================================
 echo.
 echo Step 1: Launching EQ (frostreaver01)...
@@ -13,20 +13,20 @@ echo          Press any key here when you see the password field...
 pause >nul
 echo.
 echo Step 3: Injecting DLL...
-cd /d C:\Users\xmale\Projects\DMFT
-target\release\dmft.exe --inject
+cd /d C:\Users\xmale\Projects\TextQuest
+target\release\textquest.exe --inject
 echo.
 echo Step 4: Waiting 5 seconds for DLL hooks...
 timeout /t 5 /nobreak >nul
 echo.
 echo Step 5: Running calibration...
-target\release\dmft.exe --calibrate
+target\release\textquest.exe --calibrate
 echo.
 echo Step 6: Checking DLL log...
 timeout /t 2 /nobreak >nul
 echo.
 echo ====== CALIBRATION RESULTS ======
-for /f "delims=" %%f in ('dir /b /od "%TEMP%\dmft\dmft-dll.log.*" 2^>nul') do set LOGFILE=%TEMP%\dmft\%%f
+for /f "delims=" %%f in ('dir /b /od "%TEMP%\textquest\textquest-dll.log.*" 2^>nul') do set LOGFILE=%TEMP%\textquest\%%f
 if defined LOGFILE (
     echo Log file: %LOGFILE%
     findstr /i "calibrat login eqmain LoginClient EQLogin HWND CalibrateLogin" "%LOGFILE%"

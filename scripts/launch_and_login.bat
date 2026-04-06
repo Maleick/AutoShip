@@ -28,7 +28,7 @@ taskkill /f /im eqgame.exe >nul 2>&1
 timeout /t 3 /nobreak >nul
 
 REM Clear DLL log
-del /q "%TEMP%\dmft\textquest-dll.log.*" 2>nul
+del /q "%TEMP%\textquest\textquest-dll.log.*" 2>nul
 
 REM Launch EQ
 echo [2/4] Launching EQ (%ACCOUNT%)...
@@ -53,13 +53,13 @@ echo   - PLAY EVERQUEST click
 echo   - Character select detection
 echo   - Enter World (automatic via Enter key)
 echo.
-echo Check DLL log: %TEMP%\dmft\textquest-dll.log.*
+echo Check DLL log: %TEMP%\textquest\textquest-dll.log.*
 echo.
 echo Monitoring for 60s...
 timeout /t 60 /nobreak >nul
 echo.
 echo ====== RESULTS ======
-for /f "delims=" %%f in ('dir /b /od "%TEMP%\dmft\textquest-dll.log.*" 2^>nul') do set LOGFILE=%TEMP%\dmft\%%f
+for /f "delims=" %%f in ('dir /b /od "%TEMP%\textquest\textquest-dll.log.*" 2^>nul') do set LOGFILE=%TEMP%\textquest\%%f
 if defined LOGFILE (
     findstr /i "PLAY.*clicked unloaded Sent.Enter Phase" "%LOGFILE%"
 ) else (

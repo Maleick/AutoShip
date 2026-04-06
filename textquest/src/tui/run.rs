@@ -583,12 +583,12 @@ fn demo_spawn_by_name(spawns: &[SpawnInfo], target_name: &str) -> Option<SpawnIn
 }
 
 /// Parse character name and zone name from the DLL-renamed window title.
-/// Format: "[DMFT] EQ - `CharName` (`ZoneName`)" or "[DMFT] EQ - `CharName`"
+/// Format: "[TQ] EQ - `CharName` (`ZoneName`)" or "[TQ] EQ - `CharName`"
 /// Falls back to the old EQ format: "`EverQuest` - Character - Zone"
 #[cfg(windows)]
 fn parse_title_fields(title: &str) -> (String, String) {
-    // Strip optional "[DMFT] " prefix before parsing.
-    let title = title.strip_prefix("[DMFT] ").unwrap_or(title);
+    // Strip optional "[TQ] " prefix before parsing.
+    let title = title.strip_prefix("[TQ] ").unwrap_or(title);
 
     // New DLL format: "EQ - CharName (ZoneName)"
     if let Some(rest) = title.strip_prefix("EQ - ") {

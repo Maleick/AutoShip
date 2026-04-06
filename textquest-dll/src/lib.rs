@@ -1,7 +1,7 @@
-//! DMFT injected DLL payload.
+//! TextQuest injected DLL payload.
 //! This cdylib is loaded into eqgame.exe via reflective injection. Initialization
 //! runs on the OS thread pool (PoolParty) — no `CreateThread` / `CreateRemoteThread`.
-//! It hooks internal EQ functions and communicates with the DMFT orchestrator via IPC.
+//! It hooks internal EQ functions and communicates with the TextQuest orchestrator via IPC.
 
 // Deeply nested unsafe FFI code with many conditional pointer checks — collapsing
 // these ifs reduces readability in practice. Also suppress needless_return for
@@ -69,7 +69,7 @@ mod dll_main {
             return;
         }
         if let Err(e) = super::initialize() {
-            tracing::error!("DMFT DLL initialization failed: {}", e);
+            tracing::error!("TextQuest DLL initialization failed: {}", e);
         }
     }
 
@@ -116,13 +116,13 @@ mod dll_main {
     }
 }
 
-/// Initialize the DMFT DLL after injection.
+/// Initialize the TextQuest DLL after injection.
 /// Called from a spawned thread (NOT under loader lock).
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Set up tracing — write logs to a file since we have no console.
     init_tracing();
-    tracing::info!("DMFT DLL initializing (pid={})", std::process::id());
+    tracing::info!("TextQuest DLL initializing (pid={})", std::process::id());
 
     // 2. Resolve EQ base address.
     let eq_base = resolve_eq_base();
@@ -202,7 +202,7 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
     }
 
-    tracing::info!("DMFT DLL initialized successfully");
+    tracing::info!("TextQuest DLL initialized successfully");
     Ok(())
 }
 
@@ -236,7 +236,7 @@ fn init_tracing() {
         .with_ansi(false)
         .init();
 
-    tracing::info!("DMFT DLL tracing initialized");
+    tracing::info!("TextQuest DLL tracing initialized");
 }
 
 /// Resolve the base address of eqgame.exe in the current process.
@@ -386,5 +386,5 @@ fn graceful_shutdown() {
     stealth::disable();
     hooks::remove_all();
     ipc::stop();
-    tracing::info!("DMFT DLL graceful shutdown complete");
+    tracing::info!("TextQuest DLL graceful shutdown complete");
 }

@@ -243,7 +243,7 @@ impl Widget for WizardWidget<'_> {
 
         let block = Block::default()
             .title(format!(
-                " DMFT Setup Wizard — Step {} of {} ",
+                " TextQuest Setup Wizard — Step {} of {}",
                 self.state.step.number(),
                 WizardStep::ALL.len()
             ))
@@ -300,7 +300,7 @@ impl WizardWidget<'_> {
                 Style::default().fg(self.accent_color),
             )),
             Line::from(Span::styled(
-                "║         DMFT — Dave Mike Fun Times        ║",
+                "║            TextQuest                      ║",
                 Style::default()
                     .fg(self.accent_color)
                     .add_modifier(Modifier::BOLD),
@@ -315,7 +315,7 @@ impl WizardWidget<'_> {
             )),
             Line::from(""),
             Line::from(Span::styled(
-                "Welcome to the DMFT Setup Wizard!",
+                "Welcome to the TextQuest Setup Wizard!",
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),

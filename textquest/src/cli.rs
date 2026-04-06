@@ -158,7 +158,7 @@ pub fn run_tui_mode() -> Result<()> {
 ///
 /// Returns an error if the operation fails.
 pub fn run_inject_mode() -> Result<()> {
-    info!("DMFT inject mode — finding EQ processes...");
+    info!("TextQuest inject mode — finding EQ processes...");
 
     let config = load_config()?;
     let pids = process::memory::find_processes_by_name(&config.process_name)?;
@@ -648,7 +648,7 @@ pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
 ///
 /// Returns an error if the operation fails.
 pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
-    info!(pid, "DMFT inject-pid mode — targeting single process");
+    info!(pid, "TextQuest inject-pid mode — targeting single process");
 
     let source_dll = resolve_built_dll_path()?;
 
@@ -1219,7 +1219,7 @@ pub fn run_navpath_mode(zone: &str, from: (f32, f32, f32), to: (f32, f32, f32)) 
 /// Returns an error if the operation fails.
 pub fn run_dump_mode() -> Result<()> {
     info!(
-        "DMFT v{} — EQ Memory Reader (dump mode)",
+        "TextQuest v{} — EQ Memory Reader (dump mode)",
         env!("CARGO_PKG_VERSION")
     );
 
@@ -1322,7 +1322,7 @@ pub fn run_orchestrate_mode() -> Result<()> {
 
 const PIDFILE_PATH: &str = "textquest.pid";
 
-/// Start the DMFT daemon — launches TUI + background services.
+/// Start the TextQuest daemon — launches TUI + background services.
 ///
 /// In foreground mode, runs the TUI directly. When daemonized (future),
 /// writes a PID file and runs headless.
@@ -1331,7 +1331,7 @@ pub fn run_start_mode(foreground: bool) -> Result<()> {
         && let Ok(pid) = contents.trim().parse::<u32>()
         && process_is_alive(pid)
     {
-        eprintln!("DMFT daemon is already running (PID {pid}).");
+        eprintln!("TextQuest daemon is already running (PID {pid}).");
         eprintln!("Use `textquest stop` to shut it down first.");
         return Ok(());
     }
@@ -1341,17 +1341,17 @@ pub fn run_start_mode(foreground: bool) -> Result<()> {
     // Write our PID file
     let pid = std::process::id();
     std::fs::write(PIDFILE_PATH, pid.to_string()).context("Failed to write PID file")?;
-    info!(pid, foreground, "DMFT daemon starting");
+    info!(pid, foreground, "TextQuest daemon starting");
 
     if foreground {
-        eprintln!("DMFT daemon starting in foreground (PID {pid})...");
+        eprintln!("TextQuest daemon starting in foreground (PID {pid})...");
         let result = run_tui_mode();
         let _ = std::fs::remove_file(PIDFILE_PATH);
         result
     } else {
         // For now, foreground is the only mode — true daemonization requires
         // platform-specific fork/setsid on Unix or service registration on Windows.
-        eprintln!("DMFT daemon starting (PID {pid})...");
+        eprintln!("TextQuest daemon starting (PID {pid})...");
         eprintln!("(Background mode not yet implemented — running in foreground)");
         let result = run_tui_mode();
         let _ = std::fs::remove_file(PIDFILE_PATH);
@@ -1359,11 +1359,11 @@ pub fn run_start_mode(foreground: bool) -> Result<()> {
     }
 }
 
-/// Stop a running DMFT daemon by sending it a termination signal.
+/// Stop a running TextQuest daemon by sending it a termination signal.
 pub fn run_stop_mode() -> Result<()> {
     let pidfile = Path::new(PIDFILE_PATH);
     if !pidfile.exists() {
-        eprintln!("No DMFT daemon is running (no PID file found).");
+        eprintln!("No TextQuest daemon is running (no PID file found).");
         return Ok(());
     }
 
@@ -1371,19 +1371,19 @@ pub fn run_stop_mode() -> Result<()> {
     let pid: u32 = contents.trim().parse().context("Invalid PID in PID file")?;
 
     if !process_is_alive(pid) {
-        eprintln!("DMFT daemon (PID {pid}) is not running. Cleaning up stale PID file.");
+        eprintln!("TextQuest daemon (PID {pid}) is not running. Cleaning up stale PID file.");
         let _ = std::fs::remove_file(pidfile);
         return Ok(());
     }
 
-    eprintln!("Stopping DMFT daemon (PID {pid})...");
+    eprintln!("Stopping TextQuest daemon (PID {pid})...");
     send_terminate(pid)?;
 
     // Wait up to 5 seconds for graceful shutdown
     for _ in 0..50 {
         if !process_is_alive(pid) {
             let _ = std::fs::remove_file(pidfile);
-            eprintln!("DMFT daemon stopped.");
+            eprintln!("TextQuest daemon stopped.");
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -1397,7 +1397,7 @@ pub fn run_stop_mode() -> Result<()> {
 pub fn run_daemon_status_mode() -> Result<()> {
     let pidfile = Path::new(PIDFILE_PATH);
     if !pidfile.exists() {
-        eprintln!("DMFT is not running (no PID file).");
+        eprintln!("TextQuest is not running (no PID file).");
         return Ok(());
     }
 
@@ -1405,9 +1405,9 @@ pub fn run_daemon_status_mode() -> Result<()> {
     let pid: u32 = contents.trim().parse().context("Invalid PID in PID file")?;
 
     if process_is_alive(pid) {
-        eprintln!("DMFT daemon is running (PID {pid}).");
+        eprintln!("TextQuest daemon is running (PID {pid}).");
     } else {
-        eprintln!("DMFT daemon is NOT running (stale PID file for PID {pid}).");
+        eprintln!("TextQuest daemon is NOT running (stale PID file for PID {pid}).");
         let _ = std::fs::remove_file(pidfile);
     }
 
@@ -1429,7 +1429,7 @@ pub fn run_daemon_status_mode() -> Result<()> {
 
 /// Launch the web dashboard.
 pub fn run_dashboard_mode(port: u16, open: bool) -> Result<()> {
-    eprintln!("Starting DMFT web dashboard on http://127.0.0.1:{port}");
+    eprintln!("Starting TextQuest web dashboard on http://127.0.0.1:{port}");
     info!(port, "Web dashboard starting");
 
     if open {

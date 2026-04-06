@@ -586,7 +586,7 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         aliases: &["q"],
         section: HelpSection::Lifecycle,
         usage: "quit",
-        summary: "Exit the DMFT TUI immediately.",
+        summary: "Exit the TextQuest TUI immediately.",
         example: "quit",
     },
 ];

@@ -33,7 +33,7 @@ taskkill /f /im eqgame.exe >nul 2>&1
 timeout /t 3 /nobreak >nul
 
 REM Clear DLL logs
-del /q "%TEMP%\dmft\textquest-dll.log.*" 2>nul
+del /q "%TEMP%\textquest\textquest-dll.log.*" 2>nul
 
 REM Snapshot existing PIDs before first launch
 for /f "tokens=2" %%a in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
@@ -107,7 +107,7 @@ echo  Each will auto-login and enter world.
 echo ============================================
 echo.
 echo Monitoring DLL logs for 120s...
-echo Log dir: %TEMP%\dmft\
+echo Log dir: %TEMP%\textquest\
 timeout /t 120 /nobreak >nul
 echo.
 echo Done. Press any key to exit.

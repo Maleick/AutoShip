@@ -32,7 +32,7 @@ pub struct ClientState {
     pub client_status: String,
     /// Whether this client was created from demo data (not a real process).
     pub is_demo: bool,
-    /// Last logged live cast snapshot when `DMFT_CAST_CAPTURE=1`.
+    /// Last logged live cast snapshot when `TEXTQUEST_CAST_CAPTURE=1`.
     pub last_live_cast_capture: Option<LiveCastCaptureSnapshot>,
     /// Operator-visible lifecycle state for this slot.
     pub slot_lifecycle: SlotLifecycle,

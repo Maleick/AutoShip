@@ -28,7 +28,7 @@ Stop-Process -Name eqgame -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 3
 
 # Clear DLL logs
-Remove-Item "$env:TEMP\dmft\textquest-dll.log.*" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\textquest\textquest-dll.log.*" -Force -ErrorAction SilentlyContinue
 
 $Results = @()
 
@@ -82,7 +82,7 @@ Write-Host "Account PIDs:"
 $Results | Format-Table -AutoSize
 
 # Monitor
-Write-Host "Monitoring for 120s... (check $env:TEMP\dmft\ for logs)"
+Write-Host "Monitoring for 120s... (check $env:TEMP\textquest\ for logs)"
 Start-Sleep -Seconds 30
 
 Write-Host ""

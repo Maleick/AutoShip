@@ -2,7 +2,7 @@
 # TextQuest — Self-hosted GitHub Actions runner bootstrap
 # =============================================================================
 # This script installs/updates the runner in C:\actions-runner and configures it for
-# this repository with labels [self-hosted, Windows, X64, dmft].
+# this repository with labels [self-hosted, Windows, X64, textquest].
 #
 # USAGE:
 #   .\scripts\setup-self-hosted-runner.ps1 -Token "<YOUR_REGISTRATION_TOKEN>"
@@ -27,7 +27,7 @@ param(
     [string]$Version = "latest",
     [string]$RunnerRoot = "C:\actions-runner",
     [string]$RunnerName = "",
-    [string[]]$Labels = @("dmft", "Windows", "X64"),
+    [string[]]$Labels = @("textquest", "Windows", "X64"),
     [switch]$InstallService,
     [string]$ServiceName = "",
     [switch]$Force
@@ -96,12 +96,12 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
 }
 
 if (-not $RunnerName) {
-    $RunnerName = "dmft-$(hostname)"
+    $RunnerName = "textquest-$(hostname)"
 }
 
 if ($Version -eq "latest") {
     try {
-        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/actions/runner/releases/latest" -Headers @{ "User-Agent" = "dmft-self-hosted-runner-setup" }
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/actions/runner/releases/latest" -Headers @{ "User-Agent" = "textquest-self-hosted-runner-setup" }
         $Version = ($release.tag_name -replace "^v", "")
     } catch {
         throw "Could not resolve latest runner release. Re-run with -Version set explicitly."

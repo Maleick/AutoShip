@@ -1,4 +1,4 @@
-//! IPC between the injected DLL and the DMFT orchestrator.
+//! IPC between the injected DLL and the TextQuest orchestrator.
 //!
 //! Provides two channels:
 //! - **Shared memory** (`SharedStateWriter`): DLL publishes `GameState` each tick

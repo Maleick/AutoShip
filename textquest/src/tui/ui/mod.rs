@@ -333,7 +333,7 @@ fn build_header_meta(app: &App, width_class: WidthClass, max_width: usize) -> Ve
 
 fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    let block = widgets::panel(" DMFT ", t.border_dim, t);
+    let block = widgets::panel(" TextQuest ", t.border_dim, t);
     let inner = block.inner(area);
     frame.render_widget(block, area);
     if inner.width == 0 || inner.height == 0 {

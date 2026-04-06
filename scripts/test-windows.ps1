@@ -91,9 +91,9 @@ Test-Check "cargo build: textquest-dll" {
     $LASTEXITCODE -eq 0
 }
 
-# T1.5: Debug build — dmft
-Test-Check "cargo build: dmft" {
-    $null = cargo build -p dmft 2>&1
+# T1.5: Debug build — textquest
+Test-Check "cargo build: textquest" {
+    $null = cargo build -p textquest 2>&1
     $LASTEXITCODE -eq 0
 }
 
@@ -170,7 +170,7 @@ if ($Tier -ge 2) {
         Write-Host ""
 
         # T2.1: Process detection
-        Test-Check "EQ process detected by dmft" {
+        Test-Check "EQ process detected by textquest" {
             $output = & "target\release\textquest.exe" --dump 2>&1 | Out-String
             $output -match "(?i)found|player|spawn"
         }

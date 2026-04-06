@@ -108,7 +108,7 @@ impl From<Response> for IpcResponse {
 /// Rendering mode for an injected client.
 ///
 /// Controls how much GPU work eqgame.exe does. Game logic, network,
-/// and all DMFT hooks run at full speed in every mode.
+/// and all TextQuest hooks run at full speed in every mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RenderMode {
     /// Full rendering — the "eyes" client. Uses GPU normally.
@@ -611,7 +611,7 @@ pub type SessionToken = [u8; 32];
 pub const SHARED_MEMORY_SIZE: usize = 64 * 1024;
 
 /// Environment variable that enables opt-in performance trace logging.
-pub const PERF_TRACE_ENV: &str = "DMFT_PERF_TRACE";
+pub const PERF_TRACE_ENV: &str = "TEXTQUEST_PERF_TRACE";
 
 /// Legacy named pipe prefix — prefer `pipe_name()` with a session ID.
 pub const PIPE_NAME_PREFIX: &str = r"\\.\pipe\textquest_";

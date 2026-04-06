@@ -247,7 +247,7 @@ def create_github_issue(item: CheckpointItem, dry_run: bool, verbose: bool) -> t
         item.citation,
         "",
         "---",
-        "_Promoted from checkpoint draft by dmft-night-research automation._",
+        "_Promoted from checkpoint draft by textquest-night-research automation._",
     ]
     body = "\n".join(body_lines)
 

@@ -9,7 +9,7 @@ Write-Host "=== TextQuest Frostreaver Sync ===" -ForegroundColor Cyan
 Write-Host "`n[1/4] Pulling master and rebuilding..." -ForegroundColor Yellow
 Set-Location "C:\Users\xmale\Projects\TextQuest"
 git pull origin master
-cargo build --release -p dmft -p textquest-dll
+cargo build --release -p textquest -p textquest-dll
 
 # 2. Update Claude Code settings.json
 Write-Host "`n[2/4] Updating Claude Code settings..." -ForegroundColor Yellow

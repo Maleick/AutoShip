@@ -1,6 +1,6 @@
 //! Embedded Discord bot — DZ lockout tracker + open world target announcer.
 //!
-//! Runs as a tokio task within the DMFT orchestrator (not a separate process).
+//! Runs as a tokio task within the TextQuest orchestrator (not a separate process).
 //! Uses the `serenity` crate for Discord gateway and slash commands.
 //!
 //! # Features
@@ -172,7 +172,7 @@ fn register_lockouts_command() -> CreateCommand {
 }
 
 fn register_status_command() -> CreateCommand {
-    CreateCommand::new("status").description("Show DMFT fleet status summary")
+    CreateCommand::new("status").description("Show TextQuest fleet status summary")
 }
 
 fn register_spawns_command() -> CreateCommand {
@@ -271,7 +271,7 @@ async fn handle_lockouts(state: &BotState, cmd: &CommandInteraction) -> String {
 async fn handle_status() -> String {
     // Basic fleet status — will be enriched when wired to the orchestrator.
     format!(
-        "**DMFT Fleet Status**\n- PID: {}\n- Uptime: running\n- Use `/lockouts` for DZ timers, `/spawns` for contested mobs",
+        "**TextQuest Fleet Status**\n- PID: {}\n- Uptime: running\n- Use `/lockouts` for DZ timers, `/spawns` for contested mobs",
         std::process::id()
     )
 }

@@ -1,4 +1,4 @@
-//! Shared types and utilities for the DMFT workspace.
+//! Shared types and utilities for the TextQuest workspace.
 //!
 //! This crate contains domain types, IPC protocol definitions, EQ memory offsets,
 //! and common structures used by both the external orchestrator (`textquest`) and the

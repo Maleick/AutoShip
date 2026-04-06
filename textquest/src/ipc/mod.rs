@@ -1,4 +1,4 @@
-//! IPC between the DMFT orchestrator and injected DLLs.
+//! IPC between the TextQuest orchestrator and injected DLLs.
 //!
 //! - `shared`: reads game state from shared memory (published by DLL)
 //! - `pipe`: sends commands to DLL via named pipes, receives responses

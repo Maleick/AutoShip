@@ -307,7 +307,7 @@ impl WebhookSender {
                     "color": alert.level.color(),
                     "fields": fields_json,
                     "footer": {
-                        "text": format!("DMFT • {}", alert.category.as_str())
+                        "text": format!("TextQuest • {}", alert.category.as_str())
                     },
                     "timestamp": chrono_now_iso()
                 }]

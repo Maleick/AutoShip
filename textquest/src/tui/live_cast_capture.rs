@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use textquest_common::offsets::launch_spell_data;
 
 /// Environment variable that enables live cast capture logs in `logs/textquest.log`.
-pub const LIVE_CAST_CAPTURE_ENV: &str = "DMFT_CAST_CAPTURE";
+pub const LIVE_CAST_CAPTURE_ENV: &str = "TEXTQUEST_CAST_CAPTURE";
 
 /// Quantize remaining cast time to reduce log spam while still showing progress updates.
 const LIVE_CAST_CAPTURE_BUCKET_MS: u32 = 250;

@@ -1,4 +1,4 @@
-//! DLL injection and staging — prepares and loads the DMFT DLL into EQ clients.
+//! DLL injection and staging — prepares and loads the TextQuest DLL into EQ clients.
 
 /// DLL preparation — copies, renames, and stages the DLL for injection.
 pub mod dll_prep;

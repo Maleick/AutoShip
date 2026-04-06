@@ -135,7 +135,7 @@ Write-Host "[4/6] Setting up repository..." -ForegroundColor Yellow
 # If we're already in the TextQuest repo, just pull
 if (Test-Path "Cargo.toml") {
     $cargoContent = Get-Content "Cargo.toml" -Raw
-    if ($cargoContent -match 'members.*=.*\[.*"dmft"') {
+    if ($cargoContent -match 'members.*=.*\[.*"textquest"') {
         Write-Host "  Already in TextQuest repo. Pulling latest..." -ForegroundColor Green
         git pull
     }

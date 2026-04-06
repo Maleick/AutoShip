@@ -1,5 +1,5 @@
 // Thin C shim around dtNavMeshQuery methods that bindgen can't wrap.
-// Compiled by build.rs via the cc crate and linked into dmft.
+// Compiled by build.rs via the cc crate and linked into textquest.
 
 #include "DetourNavMesh.h"
 #include "DetourNavMeshQuery.h"

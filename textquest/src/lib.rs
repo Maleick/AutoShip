@@ -1,4 +1,4 @@
-//! DMFT orchestrator crate — external process for EQ multibox control.
+//! TextQuest orchestrator crate — external process for EQ multibox control.
 //!
 //! This crate provides the TUI dashboard, process reading, IPC, client management,
 //! navigation, combat orchestration, camp loop, launcher, and Soul Engine modules.

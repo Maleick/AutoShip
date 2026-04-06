@@ -6,7 +6,7 @@
 # ============================================================
 param(
     [int]$Lines = 30,
-    [string]$LogDir = "$env:TEMP\dmft"
+    [string]$LogDir = "$env:TEMP\textquest"
 )
 
 $ErrorActionPreference = "Continue"
