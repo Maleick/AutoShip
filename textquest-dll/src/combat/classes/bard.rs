@@ -359,6 +359,7 @@ mod tests {
             in_combat: ic,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         }
     }

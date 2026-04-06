@@ -130,6 +130,10 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::OutOfCombat => !ctx.in_combat,
         ConditionExpr::BuffActive(spell_id) => ctx.active_buffs.contains(spell_id),
         ConditionExpr::BuffMissing(spell_id) => !ctx.active_buffs.contains(spell_id),
+        ConditionExpr::BuffExpiringSoon(spell_id, threshold_secs) => ctx
+            .buff_info
+            .iter()
+            .any(|b| b.spell_id == *spell_id && b.expires_within(*threshold_secs)),
         ConditionExpr::TargetDistanceBelow(range) => ctx.target.is_some_and(|t| {
             let dx = t.x - ctx.player.x;
             let dy = t.y - ctx.player.y;
@@ -432,6 +436,7 @@ mod tests {
             in_combat,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         }
     }
@@ -736,6 +741,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let mut g = group(

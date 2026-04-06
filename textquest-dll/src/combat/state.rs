@@ -212,6 +212,7 @@ impl Combatant {
                 in_combat: false,
                 ch_chain_slot: None,
                 active_buffs: &[],
+                buff_info: &[],
                 target_is_mezzed: false,
             };
             // If we were mid-cast, notify the strategy this was an interrupt (not completion)
@@ -249,6 +250,7 @@ impl Combatant {
             in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -324,6 +326,7 @@ impl Combatant {
                         in_combat: false,
                         ch_chain_slot: None,
                         active_buffs: &[],
+                        buff_info: &[],
                         target_is_mezzed: false,
                     };
                     self.strategy.on_action_complete(&flee_ctx);
@@ -485,6 +488,7 @@ impl Combatant {
                         in_combat: true,
                         ch_chain_slot: None,
                         active_buffs: &[],
+                        buff_info: &[],
                         target_is_mezzed: false,
                     };
                     self.strategy.on_action_complete(&ctx);
@@ -603,6 +607,7 @@ impl Combatant {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         self.strategy.on_action_complete(&ctx);

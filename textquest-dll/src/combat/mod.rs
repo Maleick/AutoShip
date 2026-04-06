@@ -1,5 +1,6 @@
 pub mod ability_cooldowns;
 pub mod aggro;
+pub mod buffs;
 pub mod classes;
 pub mod dot_tracker;
 pub mod gcd;

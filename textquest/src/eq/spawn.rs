@@ -172,7 +172,7 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     }
     #[cfg(windows)]
     {
-        use textquest_common::offsets::buff_slots as bs;
+        use textquest_common::offsets::{buff_slots as bs, profile};
         let Some(pc_ptr_addr) = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base) else {
             return Vec::new();
         };
@@ -180,14 +180,38 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
             Ok(a) if a != 0 => a,
             _ => return Vec::new(),
         };
+
+        // Follow profile pointer chain: PcClient → ProfileManager → ProfileList → PcProfile
+        let profile_mgr = pc_addr + profile::PROFILE_MANAGER;
+        let profile_list_ptr = match proc.read_ptr(profile_mgr + profile::PROFILE_LIST_PTR) {
+            Ok(p) if p != 0 => p,
+            _ => return Vec::new(),
+        };
+        let profile_ptr = match proc.read_ptr(profile_list_ptr + profile::PROFILE_FIRST) {
+            Ok(p) if p != 0 => p,
+            _ => return Vec::new(),
+        };
+
+        // BaseProfile → Buffs (SoeUtil::Array<EQ_Affect>)
+        let buffs_array_base = profile_ptr + profile::BUFFS_ARRAY;
+        let data_ptr = match proc.read_ptr(buffs_array_base + profile::ARRAY_DATA_PTR) {
+            Ok(p) if p != 0 => p,
+            _ => return Vec::new(),
+        };
+        let count = proc
+            .read::<i32>(buffs_array_base + profile::ARRAY_SIZE)
+            .unwrap_or(0);
+        let count = (count as usize).min(bs::MAX_TOTAL_BUFFS);
+
         let mut slots = Vec::new();
-        for i in 0..bs::MAX_BUFF_SLOTS {
-            let slot_addr = pc_addr + bs::BUFF_ARRAY_OFFSET + i * bs::BUFF_ENTRY_SIZE;
-            let spell_id = proc.read::<u32>(slot_addr + bs::SPELL_ID).unwrap_or(0xFFFF);
-            let duration_ticks = proc
-                .read::<i32>(slot_addr + bs::DURATION_TICKS)
-                .unwrap_or(0);
-            let caster_level = proc.read::<u8>(slot_addr + bs::CASTER_LEVEL).unwrap_or(0);
+        for i in 0..count {
+            let entry = data_ptr + i * bs::EQ_AFFECT_SIZE;
+            let spell_id = proc.read::<u32>(entry + bs::SPELL_ID).unwrap_or(0xFFFF);
+            if spell_id == 0 || spell_id == 0xFFFF {
+                continue;
+            }
+            let duration_ticks = proc.read::<i32>(entry + bs::DURATION).unwrap_or(0);
+            let caster_level = proc.read::<u8>(entry + bs::CASTER_LEVEL).unwrap_or(0);
             slots.push(BuffSlot {
                 spell_id,
                 duration_ticks,

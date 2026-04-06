@@ -268,6 +268,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         }
     }
@@ -365,6 +366,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = w.select_spell(&ctx).unwrap();
@@ -421,6 +423,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         // Only the Downtime group should produce actions out of combat
@@ -460,6 +463,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let result = crate::combat::rotation::execute_group(emergency, &ctx);
@@ -480,6 +484,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let result = crate::combat::rotation::execute_group(emergency, &ctx);
@@ -505,6 +510,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -540,6 +546,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 

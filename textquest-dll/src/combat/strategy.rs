@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilitySet, CombatConfig, CombatRole, HpPreference, NamedPreference, SpellEntry,
+    AbilitySet, BuffInfo, CombatConfig, CombatRole, HpPreference, NamedPreference, SpellEntry,
     TargetScanConfig,
 };
 use textquest_common::types::SpawnData;
@@ -39,6 +39,8 @@ pub struct CombatContext<'a> {
     pub ch_chain_slot: Option<u8>,
     /// Active buff spell IDs on the player (populated from buff window scan).
     pub active_buffs: &'a [i32],
+    /// Full buff info with duration/category (populated from `EQ_Affect` array).
+    pub buff_info: &'a [BuffInfo],
     /// Whether the current target is mezzed (has a mesmerize debuff active).
     pub target_is_mezzed: bool,
 }
@@ -451,6 +453,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert_eq!(assist_target(&ctx), Some(42));
@@ -470,6 +473,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(assist_target(&ctx).is_none());
@@ -520,6 +524,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = best_spell_by_mana(&ctx).unwrap();
@@ -540,6 +545,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
@@ -571,6 +577,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
@@ -690,6 +697,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let result = lowest_hp_member(&ctx);

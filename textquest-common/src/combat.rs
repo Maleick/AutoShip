@@ -2,6 +2,49 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+/// Whether a buff occupies a long-duration or short-duration slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BuffCategory {
+    LongBuff,
+    ShortBuff,
+}
+
+/// Snapshot of a single active buff read from the player's `EQ_Affect` array.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuffInfo {
+    pub spell_id: i32,
+    pub duration_ticks: i32,
+    pub initial_duration: i32,
+    pub hit_count: i32,
+    pub category: BuffCategory,
+    pub caster_level: u8,
+    pub slot_index: usize,
+}
+
+impl BuffInfo {
+    /// Remaining buff duration in seconds (ticks × 6).
+    #[must_use]
+    pub fn remaining_seconds(&self) -> f32 {
+        self.duration_ticks as f32 * 6.0
+    }
+
+    /// Total (original) buff duration in seconds.
+    #[must_use]
+    pub fn total_seconds(&self) -> f32 {
+        self.initial_duration as f32 * 6.0
+    }
+
+    /// Returns `true` if this buff will expire within `threshold_secs`.
+    /// Permanent buffs (duration 0, initial 0) never expire.
+    #[must_use]
+    pub fn expires_within(&self, threshold_secs: f32) -> bool {
+        if self.duration_ticks == 0 && self.initial_duration == 0 {
+            return false; // permanent
+        }
+        self.remaining_seconds() <= threshold_secs
+    }
+}
+
 /// Current state of a character in the combat FSM.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum CombatStatus {
@@ -125,6 +168,8 @@ pub enum ConditionExpr {
     BuffActive(i32),
     /// A specific buff/spell ID is NOT active on the player.
     BuffMissing(i32),
+    /// Buff is active but will expire within `threshold_secs` seconds.
+    BuffExpiringSoon(i32, f32),
     /// Target distance is below the given range (melee check).
     TargetDistanceBelow(f32),
     /// Number of nearby enemies is at or above the given count (AE threshold).
