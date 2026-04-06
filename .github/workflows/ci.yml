@@ -69,7 +69,7 @@ jobs:
           )
           echo %CARGO_HOME%\bin>>%GITHUB_PATH%
           rustup --version
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
           rustup default %NIGHTLY_TOOLCHAIN%
           rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
           rustup run %NIGHTLY_TOOLCHAIN% rustc -V
@@ -176,7 +176,7 @@ jobs:
           )
           echo %CARGO_HOME%\bin>>%GITHUB_PATH%
           rustup --version
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
           rustup default %NIGHTLY_TOOLCHAIN%
           rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
           rustup run %NIGHTLY_TOOLCHAIN% rustc -V
@@ -250,7 +250,7 @@ jobs:
           echo [info] rustup version:
           rustup --version
           rustup show
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
           rustup default %NIGHTLY_TOOLCHAIN%
           rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
           rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
