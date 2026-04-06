@@ -11,8 +11,8 @@
 //! The IPC thread queues commands via atomics; this hook consumes them.
 
 use super::hwbp::{self, HwbpSlot};
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 const EQMAIN_HOOK_SLOT: HwbpSlot = HwbpSlot::Dr1;
 
@@ -154,7 +154,8 @@ fn on_eqmain_tick() {
     }
 
     // Consume pending action from IPC thread.
-    let action = LoginAction::from_u8(PENDING_ACTION.swap(LoginAction::None as u8, Ordering::AcqRel));
+    let action =
+        LoginAction::from_u8(PENDING_ACTION.swap(LoginAction::None as u8, Ordering::AcqRel));
     match action {
         LoginAction::SubmitCredentials => execute_submit_credentials(eqmain_base),
         LoginAction::JoinServer => execute_join_server(eqmain_base),
@@ -274,8 +275,7 @@ fn handle_eqmain_dialogs(eqmain_base: u64) {
     use crate::login::widgets;
 
     // YesNo dialog — "already logged in, kick?" → click Yes
-    if let Some(dlg) = widgets::find_visible_sidl_window(eqmain_base, widgets::SIDL_YES_NO_DIALOG)
-    {
+    if let Some(dlg) = widgets::find_visible_sidl_window(eqmain_base, widgets::SIDL_YES_NO_DIALOG) {
         if widgets::click_yesno_yes(dlg) {
             tracing::info!("Main thread: clicked Yes on YesNo dialog");
         }

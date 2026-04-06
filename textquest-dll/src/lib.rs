@@ -172,10 +172,15 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     let eqmain_base = login::eqmain::find_eqmain();
     if eqmain_base != 0 {
         if let Err(e) = hooks::eqmain_hook::install(eqmain_base) {
-            tracing::warn!("eqmain GiveTime hook failed (login will use fallback): {}", e);
+            tracing::warn!(
+                "eqmain GiveTime hook failed (login will use fallback): {}",
+                e
+            );
         }
     } else {
-        tracing::info!("eqmain.dll not loaded at init — GiveTime hook skipped (game may already be at char select)");
+        tracing::info!(
+            "eqmain.dll not loaded at init — GiveTime hook skipped (game may already be at char select)"
+        );
     }
 
     // 4. Initialize command jitter RNG for anti-detection.

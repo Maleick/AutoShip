@@ -941,10 +941,7 @@ pub fn run_autologin_mode(
             }
 
             // 5c. Wait for DLL to initialize IPC
-            println!(
-                "  Waiting {}s for DLL initialization...",
-                inject_delay_secs
-            );
+            println!("  Waiting {}s for DLL initialization...", inject_delay_secs);
             std::thread::sleep(Duration::from_secs(inject_delay_secs));
         }
 

@@ -517,11 +517,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             let donor_rep = {
                 let it = *(un_input_addr as *const usize);
                 let wt = *(un_wt_addr as *const usize);
-                if it != 0 {
-                    it
-                } else {
-                    wt
-                }
+                if it != 0 { it } else { wt }
             };
 
             // If username InputText is null, allocate a CStrRep for it

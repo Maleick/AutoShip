@@ -71,8 +71,8 @@ mod platform {
     use super::*;
     use std::sync::atomic::AtomicU32;
     use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, GetThreadContext, RemoveVectoredExceptionHandler,
-        SetThreadContext, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS,
+        AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS, GetThreadContext,
+        RemoveVectoredExceptionHandler, SetThreadContext,
     };
     use windows::Win32::System::Threading::GetCurrentThread;
 
@@ -88,8 +88,8 @@ mod platform {
 
     /// Find EQ's main thread by locating the thread that owns the "EverQuest" window.
     pub fn find_main_thread_id() -> Result<u32, String> {
-        use windows::core::s;
         use windows::Win32::UI::WindowsAndMessaging::{FindWindowA, GetWindowThreadProcessId};
+        use windows::core::s;
 
         let cached = MAIN_THREAD_ID.load(Ordering::Acquire);
         if cached != 0 {

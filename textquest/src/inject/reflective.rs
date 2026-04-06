@@ -323,12 +323,12 @@ mod platform {
     use windows::Win32::Foundation::{CloseHandle, WAIT_EVENT};
     use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
     use windows::Win32::System::Memory::{
-        VirtualAllocEx, VirtualFreeEx, VirtualProtectEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
-        PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
+        MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
+        VirtualAllocEx, VirtualFreeEx, VirtualProtectEx,
     };
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, WaitForSingleObject, PROCESS_CREATE_THREAD,
-        PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+        CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
+        PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
     };
 
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
@@ -457,10 +457,10 @@ mod platform {
         /// kernel32/ntdll are at the same address in all processes on x64 Windows,
         /// so resolving locally gives correct addresses for the target.
         fn resolve_imports(image: &mut [u8], imports: &[ImportEntry]) -> Result<(), InjectError> {
-            use windows::core::PCSTR;
             use windows::Win32::System::LibraryLoader::{
                 GetModuleHandleA, GetProcAddress, LoadLibraryA,
             };
+            use windows::core::PCSTR;
 
             for imp in imports {
                 let dll_cstr = std::ffi::CString::new(imp.dll_name.as_str()).map_err(|_| {
@@ -659,7 +659,7 @@ mod platform {
     }
 }
 
-pub use platform::{inject_reflective, ReflectiveLoader};
+pub use platform::{ReflectiveLoader, inject_reflective};
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
