@@ -43,6 +43,9 @@ mq2-definitions/
 mq2-eqlib/
 mq2-reference/
 
+# TUI runtime preferences (user-specific)
+config/tui-prefs.toml
+
 # Account credentials
 accounts.csv
 config/accounts.toml

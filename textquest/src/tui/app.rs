@@ -660,8 +660,8 @@ impl App {
 
             launch_eq_path: String::from(r"C:\EverQuest"),
 
-            theme_kind: ThemeKind::DarkModern,
-            theme: ThemeKind::DarkModern.build(),
+            theme_kind: ThemeKind::load_saved(),
+            theme: ThemeKind::load_saved().build(),
 
             discord_webhook: None,
             discord_bridge: None,
@@ -814,6 +814,7 @@ impl App {
     pub fn cycle_theme(&mut self) {
         self.theme_kind = self.theme_kind.next();
         self.theme = self.theme_kind.build();
+        self.theme_kind.save();
     }
 
     fn default_panel_for_screen(screen: ActiveScreen) -> ActivePanel {
