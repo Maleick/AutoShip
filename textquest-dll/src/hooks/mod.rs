@@ -1,6 +1,7 @@
 //! Hook management -- hardware breakpoint hooks via VEH (DR0-DR3).
 
 pub mod casting;
+pub mod chat;
 pub mod dx11_null;
 pub mod eqmain_hook;
 pub mod fingerprint;
@@ -21,5 +22,6 @@ pub fn remove_all() {
     tracing::info!("Removing all hooks...");
     hwbp::remove_all();
     fingerprint::remove();
+    chat::remove();
     tracing::info!("All hooks removed");
 }

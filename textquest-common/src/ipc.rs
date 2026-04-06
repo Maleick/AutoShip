@@ -677,6 +677,15 @@ pub enum Response {
         /// Timestamp in milliseconds when the alert was generated.
         timestamp_ms: u64,
     },
+    /// An intercepted chat message from the game's `dsp_chat` function.
+    ChatMessage {
+        /// The chat text content.
+        text: String,
+        /// EQ chat color code (e.g., 273 = default, 269 = system).
+        color: i32,
+        /// Timestamp in milliseconds when the message was captured.
+        timestamp_ms: u64,
+    },
 }
 
 /// Wire-format for a single zone entry: (`zone_id`, name, `min_level`, `max_level`, connections).
@@ -1146,6 +1155,11 @@ mod tests {
             },
             Response::ScreenshotFailed {
                 reason: "not in NullRender mode".into(),
+            },
+            Response::ChatMessage {
+                text: "You say, 'Hello'".into(),
+                color: 273,
+                timestamp_ms: 1234567890,
             },
         ];
         for resp in &responses {

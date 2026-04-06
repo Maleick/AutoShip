@@ -303,6 +303,17 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Could not rebase REAL_RENDER_WORLD -- render strobe disabled");
     }
 
+    // Install chat message hook — intercepts dsp_chat to capture all in-game text.
+    if let Some(chat_addr) =
+        textquest_common::offsets::rebase(textquest_common::offsets::DSP_CHAT, eq_base)
+    {
+        if let Err(e) = hooks::chat::install(chat_addr) {
+            tracing::warn!("Chat hook failed (continuing without chat capture): {}", e);
+        }
+    } else {
+        tracing::warn!("Could not rebase DSP_CHAT -- chat capture disabled");
+    }
+
     // Install DX11 null device hooks — vtable-hook CreateTexture2D + CreateBuffer
     // so NullRender mode can create 1×1 textures instead of full-size, saving ~500 MB.
     if let Err(e) = hooks::dx11_null::install(eq_base) {
