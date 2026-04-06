@@ -43,6 +43,8 @@ impl Xorshift32 {
 pub enum PauseReason {
     /// Target or anchor warped unexpectedly — wait for stability.
     Warp,
+    /// User-initiated pause via `/nav pause`.
+    UserPause,
 }
 
 /// A single point in 3D space with optional metadata.
@@ -610,6 +612,66 @@ impl NavCampConfig {
             role: self.role.clone(),
         }
     }
+}
+
+/// A named waypoint that can be saved and recalled via `/nav waypoint`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NamedWaypoint {
+    /// User-assigned name (e.g. "camp1", "puller_spot").
+    pub name: String,
+    /// World position.
+    pub position: Waypoint,
+    /// Zone short name where this waypoint was recorded.
+    pub zone: String,
+}
+
+impl NamedWaypoint {
+    #[must_use]
+    pub fn new(name: impl Into<String>, position: Waypoint, zone: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            position,
+            zone: zone.into(),
+        }
+    }
+}
+
+/// Navigation diagnostics snapshot — returned by `/nav ui` for debug overlay.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct NavDiagnostics {
+    /// Current navigation state label (e.g. "Moving", "Idle").
+    pub state: String,
+    /// Whether a navmesh is loaded for the current zone.
+    pub mesh_loaded: bool,
+    /// Whether a valid path exists to the current destination.
+    pub path_exists: bool,
+    /// Total path length in world units, if computed.
+    pub path_length: Option<f32>,
+    /// Current velocity in world units per second.
+    pub velocity: f32,
+    /// Current waypoint index / total.
+    pub waypoint_index: usize,
+    /// Total waypoints in the current path.
+    pub waypoint_count: usize,
+    /// Distance remaining to the current waypoint.
+    pub distance_remaining: f32,
+}
+
+/// Navigation state signals — a compact boolean/metric summary for TLO-style queries.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct NavStateSignals {
+    /// True if the navigator is actively processing (Moving, Following, Sticking).
+    pub active: bool,
+    /// True if a navmesh is loaded for the current zone.
+    pub mesh_loaded: bool,
+    /// True if a valid path exists to the current destination.
+    pub path_exists: bool,
+    /// Total path length in world units, if computed.
+    pub path_length: Option<f32>,
+    /// Current velocity in world units per second.
+    pub velocity: f32,
+    /// True if navigation is paused (user or warp).
+    pub paused: bool,
 }
 
 #[cfg(test)]
@@ -1454,5 +1516,73 @@ mod tests {
         };
         assert!(config.is_beyond_leash(&Waypoint::new(50.1, 0.0, 0.0)));
         assert!(!config.is_beyond_leash(&Waypoint::new(49.9, 0.0, 0.0)));
+    }
+
+    // ─── PauseReason tests (#168) ───
+
+    #[test]
+    fn pause_reason_user_pause_serialization_roundtrip() {
+        let reason = PauseReason::UserPause;
+        let json = serde_json::to_string(&reason).expect("serialize");
+        let restored: PauseReason = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, PauseReason::UserPause);
+    }
+
+    // ─── NamedWaypoint tests (#175) ───
+
+    #[test]
+    fn named_waypoint_new() {
+        let wp = NamedWaypoint::new("camp1", Waypoint::new(1.0, 2.0, 3.0), "qey2hh1");
+        assert_eq!(wp.name, "camp1");
+        assert_eq!(wp.zone, "qey2hh1");
+        assert!((wp.position.x - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn named_waypoint_serde_roundtrip() {
+        let wp = NamedWaypoint::new("puller", Waypoint::new(10.0, 20.0, 30.0), "gukbottom");
+        let json = serde_json::to_string(&wp).expect("serialize");
+        let restored: NamedWaypoint = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(wp, restored);
+    }
+
+    // ─── NavDiagnostics tests (#177) ───
+
+    #[test]
+    fn nav_diagnostics_default() {
+        let diag = NavDiagnostics::default();
+        assert_eq!(diag.state, "");
+        assert!(!diag.mesh_loaded);
+        assert!(!diag.path_exists);
+        assert!(diag.path_length.is_none());
+        assert!(diag.velocity.abs() < f32::EPSILON);
+    }
+
+    // ─── NavStateSignals tests (#176) ───
+
+    #[test]
+    fn nav_state_signals_default() {
+        let signals = NavStateSignals::default();
+        assert!(!signals.active);
+        assert!(!signals.mesh_loaded);
+        assert!(!signals.path_exists);
+        assert!(signals.path_length.is_none());
+        assert!(signals.velocity.abs() < f32::EPSILON);
+        assert!(!signals.paused);
+    }
+
+    #[test]
+    fn nav_state_signals_serde_roundtrip() {
+        let signals = NavStateSignals {
+            active: true,
+            mesh_loaded: true,
+            path_exists: true,
+            path_length: Some(150.0),
+            velocity: 12.5,
+            paused: false,
+        };
+        let json = serde_json::to_string(&signals).expect("serialize");
+        let restored: NavStateSignals = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(signals, restored);
     }
 }

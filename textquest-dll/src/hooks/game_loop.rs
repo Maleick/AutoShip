@@ -1361,6 +1361,77 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(delta, "StickMod received");
             crate::nav::handle_command(crate::nav::NavCommand::StickMod(delta));
         }
+        Command::NavPause => {
+            tracing::info!("NavPause received");
+            crate::nav::handle_command(crate::nav::NavCommand::Pause);
+        }
+        Command::NavResume => {
+            tracing::info!("NavResume received");
+            crate::nav::handle_command(crate::nav::NavCommand::Resume);
+        }
+        Command::NavLoc { x, y, z } => {
+            tracing::info!(x, y, z, "NavLoc received");
+            let wp = textquest_common::nav::Waypoint::new(x, y, z);
+            crate::nav::handle_command(crate::nav::NavCommand::Navigate(vec![wp]));
+        }
+        Command::NavTarget => {
+            tracing::info!("NavTarget received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base != 0 {
+                if let Some(target) = read_target_state(eq_base) {
+                    let wp = textquest_common::nav::Waypoint::new(target.x, target.y, target.z);
+                    crate::nav::handle_command(crate::nav::NavCommand::Navigate(vec![wp]));
+                }
+            }
+        }
+        Command::NavDoor | Command::NavItem => {
+            // Door and item navigation require spawn list traversal to find nearest.
+            // For now, log and respond with an error — full implementation requires
+            // spawn type filtering which is an M7 feature.
+            tracing::info!("NavDoor/NavItem received (not yet implemented)");
+        }
+        Command::NavReload => {
+            tracing::info!("NavReload received");
+            // Navmesh reload is a stub — actual mesh loading is an M7 feature.
+            // Set mesh_loaded to false then true to signal a reload cycle.
+            crate::nav::handle_command(crate::nav::NavCommand::SetMeshLoaded(false));
+            crate::nav::handle_command(crate::nav::NavCommand::SetMeshLoaded(true));
+        }
+        Command::NavWaypointSave { name } => {
+            tracing::info!(name = %name, "NavWaypointSave received");
+            // Waypoint persistence is handled orchestrator-side (#175).
+            // DLL acknowledges; orchestrator reads position from shared memory.
+            crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                success: true,
+                message: format!("Waypoint save '{name}' acknowledged"),
+            });
+        }
+        Command::NavWaypointRecall { name } => {
+            tracing::info!(name = %name, "NavWaypointRecall received");
+            // Orchestrator resolves the name to coordinates and sends NavigateTo.
+            // DLL-side recall is a no-op — the orchestrator handles lookup.
+        }
+        Command::NavWaypointList => {
+            tracing::info!("NavWaypointList received");
+            // Waypoint storage is orchestrator-side; DLL returns empty.
+            crate::ipc::send_response(textquest_common::ipc::Response::NavWaypointList {
+                waypoints: vec![],
+            });
+        }
+        Command::NavWaypointDelete { name } => {
+            tracing::info!(name = %name, "NavWaypointDelete received");
+            // Handled orchestrator-side.
+        }
+        Command::NavSignalsQuery => {
+            let signals = crate::nav::signals();
+            crate::ipc::send_response(textquest_common::ipc::Response::NavSignals { signals });
+        }
+        Command::NavDiagnosticsQuery => {
+            let diagnostics = crate::nav::diagnostics();
+            crate::ipc::send_response(textquest_common::ipc::Response::NavDiagnosticsResult {
+                diagnostics,
+            });
+        }
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);

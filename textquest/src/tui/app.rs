@@ -590,6 +590,7 @@ impl NavClientStatus {
             } => {
                 let reason_label = match reason {
                     textquest_common::nav::PauseReason::Warp => "warp",
+                    textquest_common::nav::PauseReason::UserPause => "paused",
                 };
                 format!(
                     "Paused ({reason_label}) • WP {}/{} • {:.0}u remaining",

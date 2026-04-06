@@ -238,6 +238,10 @@ pub fn validate_command(cmd: &Command) -> bool {
         Command::CastSpell { spell_slot, .. } => *spell_slot <= 13,
         Command::MoveTo { x, y, z } => x.is_finite() && y.is_finite() && z.is_finite(),
         Command::NavigateTo { waypoints } => waypoints.len() <= 1000,
+        Command::NavLoc { x, y, z } => x.is_finite() && y.is_finite() && z.is_finite(),
+        Command::NavWaypointSave { name }
+        | Command::NavWaypointRecall { name }
+        | Command::NavWaypointDelete { name } => !name.is_empty() && name.len() <= 64,
         Command::StartLogin {
             account_name,
             password,
