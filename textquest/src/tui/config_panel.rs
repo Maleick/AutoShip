@@ -694,12 +694,7 @@ impl Widget for ConfigPanelWidget<'_> {
             "Tab scope"
         };
         let hint_x = inner.x + inner.width.saturating_sub(hint.len() as u16);
-        buf.set_string(
-            hint_x,
-            scope_y,
-            hint,
-            Style::default().fg(Color::DarkGray),
-        );
+        buf.set_string(hint_x, scope_y, hint, Style::default().fg(Color::DarkGray));
 
         // ── Separator ──
         let sep_y = inner.y + 1;
@@ -707,7 +702,12 @@ impl Widget for ConfigPanelWidget<'_> {
             return;
         }
         let separator = "─".repeat(inner.width as usize);
-        buf.set_string(inner.x, sep_y, &separator, Style::default().fg(Color::DarkGray));
+        buf.set_string(
+            inner.x,
+            sep_y,
+            &separator,
+            Style::default().fg(Color::DarkGray),
+        );
 
         // ── Tree view (starts at row 2) ──
         let tree_start_y = inner.y + 2;
@@ -765,7 +765,9 @@ impl Widget for ConfigPanelWidget<'_> {
                         Style::default().fg(Color::Red)
                     }
                 } else if val.starts_with("(inherit") {
-                    Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC)
                 } else {
                     Style::default().fg(Color::DarkGray)
                 };
@@ -971,6 +973,9 @@ mod tests {
     fn scope_label_formatting() {
         assert_eq!(ConfigScope::Global.label(), "Global");
         assert_eq!(ConfigScope::Group("Alpha".into()).label(), "Group: Alpha");
-        assert_eq!(ConfigScope::Toon("Cleric01".into()).label(), "Toon: Cleric01");
+        assert_eq!(
+            ConfigScope::Toon("Cleric01".into()).label(),
+            "Toon: Cleric01"
+        );
     }
 }
