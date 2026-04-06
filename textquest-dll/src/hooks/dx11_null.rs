@@ -18,6 +18,28 @@
 //! 4. Clean up the temporary device/swap chain.
 
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
+
+/// Result of a screenshot capture attempt, stored after Present completes.
+static CAPTURE_RESULT: OnceLock<Mutex<Option<Result<String, String>>>> = OnceLock::new();
+
+/// Store a capture result for the IPC handler to retrieve.
+fn store_capture_result(result: Result<String, String>) {
+    let lock = CAPTURE_RESULT.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = lock.lock() {
+        *guard = Some(result);
+    }
+}
+
+/// Take the pending capture result, if any.
+pub fn take_capture_result() -> Option<Result<String, String>> {
+    let lock = CAPTURE_RESULT.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = lock.lock() {
+        guard.take()
+    } else {
+        None
+    }
+}
 
 /// Original `IDXGISwapChain::Present` function pointer (vtable slot 8).
 static ORIG_PRESENT: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
@@ -122,8 +144,23 @@ unsafe extern "system" fn hooked_present(
         }
     }
 
+    // Check if a screenshot capture is active before calling original Present.
+    let is_capture = super::render::take_capture_active();
+
     let original: PresentFn = unsafe { core::mem::transmute(ORIG_PRESENT.load(Ordering::Acquire)) };
-    unsafe { original(this, sync_interval, flags) }
+    let result = unsafe { original(this, sync_interval, flags) };
+
+    // Capture the backbuffer if this was a capture frame.
+    if is_capture {
+        let capture_result = unsafe { inner::capture_backbuffer(this) };
+        match &capture_result {
+            Ok(path) => tracing::info!(path, "Screenshot captured"),
+            Err(e) => tracing::warn!(error = %e, "Screenshot capture failed"),
+        }
+        store_capture_result(capture_result);
+    }
+
+    result
 }
 
 /// Hooked `CreateTexture2D` — returns 1×1 textures in NullRender mode.
@@ -425,6 +462,171 @@ mod inner {
             )
         };
         unsafe { release(device_ptr) };
+
+        Ok(())
+    }
+
+    /// Capture the swap chain's backbuffer to a BMP file.
+    ///
+    /// Called from `hooked_present` after the frame has been rendered.
+    /// Uses `GetBuffer(0)` -> staging texture -> `Map` -> write BMP.
+    ///
+    /// # Safety
+    /// `swap_chain` must be a valid `IDXGISwapChain` pointer from a live Present call.
+    pub(super) unsafe fn capture_backbuffer(
+        swap_chain: *mut core::ffi::c_void,
+    ) -> Result<String, String> {
+        use windows::Win32::Graphics::Direct3D11::{
+            D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE,
+            D3D11_TEXTURE2D_DESC as WinTexDesc, D3D11_USAGE_STAGING,
+        };
+        use windows::Win32::Graphics::Dxgi::IDXGISwapChain;
+        use windows::core::Interface;
+
+        let sc: IDXGISwapChain = unsafe {
+            IDXGISwapChain::from_raw_borrowed(&swap_chain)
+                .ok_or("Failed to borrow IDXGISwapChain")?
+                .clone()
+        };
+
+        let backbuffer: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D = unsafe {
+            sc.GetBuffer(0)
+                .map_err(|e| format!("GetBuffer(0) failed: {e}"))?
+        };
+
+        let mut desc = WinTexDesc::default();
+        unsafe { backbuffer.GetDesc(&mut desc) };
+        if desc.Format != windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM {
+            return Err(format!("Unsupported backbuffer format: {:?}", desc.Format));
+        }
+        let width = desc.Width;
+        let height = desc.Height;
+
+        let device: windows::Win32::Graphics::Direct3D11::ID3D11Device =
+            unsafe { backbuffer.GetDevice() }.map_err(|e| format!("GetDevice failed: {e}"))?;
+
+        let staging_desc = WinTexDesc {
+            Width: width,
+            Height: height,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: desc.Format,
+            SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_STAGING,
+            BindFlags: Default::default(),
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            MiscFlags: Default::default(),
+        };
+
+        let staging: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D = {
+            let mut tex: Option<windows::Win32::Graphics::Direct3D11::ID3D11Texture2D> = None;
+            unsafe {
+                device
+                    .CreateTexture2D(&staging_desc, None, Some(&mut tex))
+                    .map_err(|e| format!("CreateTexture2D (staging) failed: {e}"))?;
+            }
+            tex.ok_or("CreateTexture2D returned None")?
+        };
+
+        let context: windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext =
+            unsafe { device.GetImmediateContext() }
+                .map_err(|e| format!("GetImmediateContext failed: {e}"))?;
+
+        unsafe { context.CopyResource(&staging, &backbuffer) };
+
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        unsafe {
+            context
+                .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
+                .map_err(|e| format!("Map failed: {e}"))?;
+        }
+
+        let pid = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64);
+        let path = format!(
+            "{}\\textquest_screenshot_{}_{}.bmp",
+            std::env::temp_dir()
+                .to_string_lossy()
+                .trim_end_matches('\\'),
+            pid,
+            timestamp
+        );
+
+        let write_result = unsafe {
+            write_bmp(
+                &path,
+                width,
+                height,
+                mapped.RowPitch,
+                mapped.pData as *const u8,
+            )
+        };
+        unsafe { context.Unmap(&staging, 0) };
+        write_result.map(|()| path)
+    }
+
+    /// Write BGRA pixel data to a 24-bit BMP file.
+    ///
+    /// # Safety
+    /// `data` must point to a valid pixel buffer with at least `height * row_pitch` bytes.
+    unsafe fn write_bmp(
+        path: &str,
+        width: u32,
+        height: u32,
+        row_pitch: u32,
+        data: *const u8,
+    ) -> Result<(), String> {
+        use std::io::Write;
+
+        let row_size = width * 3;
+        let padded_row = (row_size + 3) & !3;
+        let pixel_data_size = padded_row * height;
+        let file_size = 54 + pixel_data_size;
+
+        let mut file = std::fs::File::create(path).map_err(|e| format!("create file: {e}"))?;
+
+        // BMP file header (14 bytes).
+        file.write_all(b"BM").map_err(|e| format!("write: {e}"))?;
+        file.write_all(&file_size.to_le_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        file.write_all(&[0u8; 4])
+            .map_err(|e| format!("write: {e}"))?;
+        file.write_all(&54u32.to_le_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+
+        // BMP info header (40 bytes).
+        file.write_all(&40u32.to_le_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        file.write_all(&width.to_le_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        file.write_all(&(-(height as i32)).to_le_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        file.write_all(&1u16.to_le_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        file.write_all(&24u16.to_le_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        file.write_all(&[0u8; 24])
+            .map_err(|e| format!("write: {e}"))?;
+
+        // Pixel data (BGRA -> BGR, top-down with negative height).
+        let mut row_buf = vec![0u8; padded_row as usize];
+        for y in 0..height {
+            let src_row = unsafe { data.add((y * row_pitch) as usize) };
+            for x in 0..width {
+                let px = unsafe { src_row.add((x * 4) as usize) };
+                let idx = (x * 3) as usize;
+                row_buf[idx] = unsafe { *px };
+                row_buf[idx + 1] = unsafe { *px.add(1) };
+                row_buf[idx + 2] = unsafe { *px.add(2) };
+            }
+            file.write_all(&row_buf)
+                .map_err(|e| format!("write: {e}"))?;
+        }
 
         Ok(())
     }

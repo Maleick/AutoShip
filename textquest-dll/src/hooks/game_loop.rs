@@ -1440,6 +1440,52 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             crate::hooks::render::set_mode(mode);
             crate::ipc::send_response(textquest_common::ipc::Response::RenderModeChanged { mode });
         }
+        Command::CaptureScreenshot => {
+            tracing::info!("CaptureScreenshot received");
+            // Guard against concurrent captures.
+            if crate::hooks::render::is_capture_active() {
+                crate::ipc::send_response(textquest_common::ipc::Response::ScreenshotFailed {
+                    reason: "A capture is already in progress".into(),
+                });
+                return;
+            }
+            crate::hooks::render::request_capture();
+            let spawn_result = std::thread::Builder::new()
+                .name("textquest-screenshot".into())
+                .spawn(|| {
+                    for _ in 0..200 {
+                        if let Some(result) = crate::hooks::dx11_null::take_capture_result() {
+                            match result {
+                                Ok(path) => {
+                                    crate::ipc::send_response(
+                                        textquest_common::ipc::Response::ScreenshotCaptured {
+                                            path,
+                                        },
+                                    );
+                                }
+                                Err(reason) => {
+                                    crate::ipc::send_response(
+                                        textquest_common::ipc::Response::ScreenshotFailed {
+                                            reason,
+                                        },
+                                    );
+                                }
+                            }
+                            return;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    crate::ipc::send_response(textquest_common::ipc::Response::ScreenshotFailed {
+                        reason: "Capture timed out after 2 seconds".into(),
+                    });
+                });
+            if let Err(e) = spawn_result {
+                tracing::error!(%e, "Failed to spawn screenshot polling thread");
+                crate::ipc::send_response(textquest_common::ipc::Response::ScreenshotFailed {
+                    reason: format!("Failed to spawn polling thread: {e}"),
+                });
+            }
+        }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();
