@@ -577,7 +577,7 @@ mod platform {
 
             for hmod in &modules_buf {
                 let len =
-                    unsafe { GetModuleFileNameExW(process_handle, Some(*hmod), &mut name_buf) }
+                    unsafe { GetModuleFileNameExW(process_handle, *hmod, &mut name_buf) }
                         as usize;
 
                 if len > 0 {
