@@ -171,38 +171,41 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 account = %account_name,
                 server = %server_name,
                 character = %character_name,
-                "StartLogin received — delegating to FSM (password redacted)"
+                "StartLogin received (password redacted)"
             );
 
-            // Two-phase credential entry:
-            // 1. Write username/password to CXStr memory (EQ's internal state)
-            // 2. Type password via WM_CHAR + Enter (actual form submission)
-            // CXStr writes alone don't trigger EQ's login handler — WM_CHAR is required.
-            let eqmain_base = crate::login::eqmain::find_eqmain();
-            if eqmain_base != 0 {
-                crate::login::widgets::type_credentials_to_window(
-                    eqmain_base,
-                    &account_name,
-                    &password,
+            // Queue credential submission for EQ's main thread.
+            // The eqmain GiveTime hook will execute on the next frame:
+            //   1. Write username/password to CXStr fields
+            //   2. Click LOGIN_ConnectButton via WndNotification(XWM_LCLICK)
+            // This matches MQ2's approach: all UI ops on the main thread.
+            if crate::hooks::eqmain_hook::is_active() {
+                tracing::info!("Routing StartLogin through main-thread GiveTime hook");
+                crate::hooks::eqmain_hook::queue_login(
+                    account_name,
+                    password,
+                    server_name.to_string(),
+                    character_name.to_string(),
                 );
-                crate::login::widgets::type_password_wm_char(eqmain_base, &password);
+            } else {
+                // Fallback: eqmain hook not installed (e.g., eqmain was already
+                // unloaded). Execute directly — we may be at char select already.
+                tracing::warn!("eqmain hook not active — executing credentials on IPC thread (fallback)");
+                let eqmain_base = crate::login::eqmain::find_eqmain();
+                if eqmain_base != 0 {
+                    crate::login::widgets::type_credentials_to_window(
+                        eqmain_base,
+                        &account_name,
+                        &password,
+                    );
+                }
+                crate::login::start_login(
+                    account_name,
+                    std::mem::take(&mut *password),
+                    server_name.to_string(),
+                    character_name.to_string(),
+                );
             }
-
-            // Store credentials in the FSM for character select phase.
-            crate::login::start_login(
-                account_name,
-                std::mem::take(&mut *password),
-                server_name.to_string(),
-                character_name.to_string(),
-            );
-
-            // Spawn background thread for Phase 2+3 (server select → char select).
-            // Polls every 500ms. Uses Enter key to dismiss dialogs.
-            // Game loop tick handles Phase 4 (character select → enter world).
-            std::thread::Builder::new()
-                .name("textquest-login-phase2".into())
-                .spawn(login_chain_phase2)
-                .ok();
 
             true
         }
@@ -210,130 +213,9 @@ fn handle_immediate_command(cmd: &Command) -> bool {
     }
 }
 
-/// Find a button by `WindowText` in eqmain's `CXWndManager`.
-fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
-    let cxwnd_mgr = crate::login::eqmain::resolve_cxwnd_manager(eqmain_base)?;
-    unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, target_text) }
-}
-
-/// Phase 2+3: server select → character select.
-/// Detects server select via SIDL window name (not "PLAY EVERQUEST!" text which
-/// exists on the login screen too). Uses direct vtable click — `queue_button_click()`
-/// won't work because ProcessGameEvents is NOT hooked during eqmain.
-/// Polls for eqmain.dll unload. Game loop tick handles character select.
-fn login_chain_phase2() {
-    use crate::login::widgets;
-
-    tracing::info!("Phase 2: Waiting for server select screen...");
-
-    let mut found = false;
-    for attempt in 0..60 {
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let eqmain_base = crate::login::eqmain::find_eqmain();
-        if eqmain_base == 0 {
-            tracing::info!(attempt, "Phase 2: eqmain.dll gone — already at char select");
-            return;
-        }
-
-        // Detect server select by SIDL name — not "PLAY EVERQUEST!" text which
-        // also exists on the login screen as a branding label.
-        if widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_SERVER_SELECT) {
-            tracing::info!(attempt, "Phase 2: Server select screen detected (SIDL)");
-
-            // Direct vtable click (eqmain context — game loop hook not active).
-            if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
-                tracing::info!(ptr = format!("{:#x}", play_btn), "Phase 2: Clicking PLAY EVERQUEST");
-                std::thread::sleep(std::time::Duration::from_millis(150));
-                widgets::click_button_for_phase(play_btn, true);
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                widgets::simulate_enter_key(eqmain_base);
-            } else {
-                tracing::info!("Phase 2: PLAY EVERQUEST button not found, sending Enter");
-                widgets::simulate_enter_key(eqmain_base);
-            }
-            found = true;
-            break;
-        }
-
-        // Dismiss "already logged in" dialog during authentication
-        if attempt % 2 == 0 {
-            if let Some(dlg) = widgets::find_visible_sidl_window(
-                eqmain_base,
-                widgets::SIDL_YES_NO_DIALOG,
-            ) {
-                if widgets::click_yesno_yes(dlg) {
-                    tracing::info!(attempt, "Phase 2: Clicked Yes on dialog during auth");
-                }
-            }
-        }
-
-        // Screen-state trace every 5s for diagnostics
-        if attempt % 10 == 0 {
-            log_screen_state(eqmain_base, "Phase 2", attempt);
-        }
-
-        // Press Enter every 5s to dismiss blocking dialogs (EULA, notices)
-        if attempt % 10 == 5 {
-            widgets::simulate_enter_key(eqmain_base);
-        }
-    }
-    if !found {
-        tracing::warn!("Phase 2: Server select not detected after 30s");
-    }
-
-    // Phase 3: Poll for eqmain.dll unload (character select).
-    // Also handle "already logged in" Yes/No dialog during this phase.
-    tracing::info!("Phase 3: Polling for character select...");
-    for attempt in 0..120 {
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let eqmain_base = crate::login::eqmain::find_eqmain();
-        if eqmain_base == 0 {
-            tracing::info!(attempt, "Phase 3: eqmain.dll unloaded — at character select");
-            return;
-        }
-
-        if attempt % 2 == 0 {
-            if let Some(dlg) = widgets::find_visible_sidl_window(
-                eqmain_base,
-                widgets::SIDL_YES_NO_DIALOG,
-            ) {
-                if widgets::click_yesno_yes(dlg) {
-                    tracing::info!(attempt, "Phase 3: Clicked Yes on 'already logged in' dialog");
-                }
-            }
-        }
-
-        // Press Enter every 3s to dismiss other dialogs
-        if attempt % 6 == 3 {
-            widgets::simulate_enter_key(eqmain_base);
-        }
-
-        // Screen-state trace every 10s for diagnostics
-        if attempt % 20 == 0 {
-            log_screen_state(eqmain_base, "Phase 3", attempt);
-        }
-    }
-    tracing::warn!("Phase 3: Timed out after 60s");
-}
-
-/// Log which SIDL windows are visible — shared by Phase 2 and Phase 3 polling.
-fn log_screen_state(eqmain_base: u64, phase: &str, attempt: u32) {
-    use crate::login::widgets;
-
-    let connect = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_CONNECT);
-    let server = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_SERVER_SELECT);
-    let yesno = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_YES_NO_DIALOG);
-    let ok_dlg = widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_OK_DIALOG);
-    tracing::info!(
-        attempt,
-        connect,
-        server,
-        yesno,
-        ok_dlg,
-        eqmain = format!("{:#x}", eqmain_base),
-        "{phase}: screen state"
-    );
-}
+// Background thread login_chain_phase2 has been removed.
+// All login UI operations now run on EQ's main thread via the
+// eqmain_hook::GiveTime HWBP hook, matching MQ2's approach.
 
 /// Background thread: creates a `CommandListener` and loops receiving commands
 /// until `IPC_RUNNING` is cleared or the DLL is shutting down.

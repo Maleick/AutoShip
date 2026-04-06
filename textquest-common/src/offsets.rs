@@ -258,6 +258,11 @@ pub mod eqmain {
     /// Source: eqmain.h `EQMain__pinstLoginController_x`
     pub const PINST_LOGIN_CONTROLLER: u64 = 0x0001_8017_F4F0;
 
+    /// `LoginController::GiveTime()` — called every frame during eqmain.
+    /// Hook target for main-thread execution during login/server select.
+    /// Source: eqmain.h `EQMain__LoginController__GiveTime_x`
+    pub const LOGIN_CONTROLLER_GIVE_TIME: u64 = 0x0001_8001_6640;
+
     // ─── LoginClient struct field offsets ───
 
     /// `LoginClient::pLoginData` (`EQLS::EQLogin`*) at offset 0x010

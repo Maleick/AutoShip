@@ -144,6 +144,17 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Hook installation failed (continuing without hooks): {}", e);
     }
 
+    // 3.5. Install eqmain GiveTime hook for main-thread login automation.
+    // This must be installed while eqmain.dll is loaded (before character select).
+    let eqmain_base = login::eqmain::find_eqmain();
+    if eqmain_base != 0 {
+        if let Err(e) = hooks::eqmain_hook::install(eqmain_base) {
+            tracing::warn!("eqmain GiveTime hook failed (login will use fallback): {}", e);
+        }
+    } else {
+        tracing::info!("eqmain.dll not loaded at init — GiveTime hook skipped (game may already be at char select)");
+    }
+
     // 4. Initialize command jitter RNG for anti-detection.
     hooks::game_loop::init_jitter_rng();
 
