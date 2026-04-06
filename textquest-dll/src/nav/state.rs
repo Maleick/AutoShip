@@ -11,8 +11,8 @@
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
-    CampSpot, FollowConfig, NavCampConfig, NavDiagnostics, NavStateSignals, NavStatus, PauseReason,
-    StickConfig, Waypoint,
+    CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals,
+    NavStatus, PauseReason, StickConfig, Waypoint,
 };
 use textquest_common::types::SpawnData;
 
@@ -38,6 +38,8 @@ enum State {
         returning: bool,
     },
     Sticking,
+    /// Advanced moveto — tracking a destination with break conditions (#184).
+    MovingTo,
 }
 
 /// The navigation engine, owned per-client in the DLL.
@@ -69,6 +71,10 @@ pub struct Navigator {
     cached_velocity: f32,
     /// Whether a navmesh is loaded (set externally via `set_mesh_loaded`).
     mesh_loaded: bool,
+    /// Active moveto configuration (#184).
+    moveto_config: Option<MoveToConfig>,
+    /// Global autopause flag (#164).
+    autopause: bool,
 }
 
 impl Navigator {
@@ -90,6 +96,8 @@ impl Navigator {
             prev_position: None,
             cached_velocity: 0.0,
             mesh_loaded: false,
+            moveto_config: None,
+            autopause: false,
         }
     }
 
@@ -284,6 +292,31 @@ impl Navigator {
     pub fn stick_mod(&mut self, delta: f32) {
         self.stick.apply_mod(delta);
     }
+    /// Start an advanced moveto session (#184).
+    pub fn move_to_advanced(&mut self, config: MoveToConfig) {
+        tracing::info!(
+            target_id = config.target_id,
+            use_walk = config.use_walk,
+            use_back = config.use_back,
+            break_on_aggro = config.break_on_aggro,
+            "Starting advanced moveto"
+        );
+        self.controller.stop_forward();
+        self.queue.clear();
+        self.camp = None;
+        self.camp_config = None;
+        self.stuck.reset();
+        self.stick.stop();
+        self.warp.reset();
+        self.moveto_config = Some(config);
+        self.state = State::MovingTo;
+    }
+
+    /// Enable or disable autopause globally (#164).
+    pub fn set_autopause(&mut self, enabled: bool) {
+        self.autopause = enabled;
+        tracing::info!(enabled, "Autopause set");
+    }
 
     /// Run one tick of the navigation state machine. Call from on_game_tick().
     ///
@@ -299,7 +332,7 @@ impl Navigator {
         self.update_velocity();
 
         let warp_action = match self.state {
-            State::Idle | State::Arrived => WarpAction::None,
+            State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
             _ => self.warp.update(target_sample),
         };
 
@@ -322,11 +355,12 @@ impl Navigator {
 
         match self.state {
             State::Idle => {}
-            State::Arrived => self.tick_arrived(),
+            State::Arrived => self.tick_arrived(nearby),
             State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
             State::Following { .. } => self.tick_following(),
             State::Sticking => self.tick_sticking(current_target, nearby),
+            State::MovingTo => self.tick_moveto(nearby),
         }
     }
 
@@ -366,6 +400,11 @@ impl Navigator {
                     returning: *returning,
                 }
             }
+            State::MovingTo => NavStatus::Moving {
+                waypoint_index: 0,
+                waypoint_count: 1,
+                distance_remaining: self.cached_distance,
+            },
             State::Sticking => {
                 let effective_dist = self.stick.effective_distance();
                 NavStatus::Sticking {
@@ -457,26 +496,37 @@ impl Navigator {
             StickTickResult::InRange {
                 target_id,
                 distance,
+                face_target,
             } => {
                 self.cached_stick_target_id = target_id;
                 self.cached_stick_distance = distance;
                 self.controller.stop_forward();
                 self.controller.stop_back();
+                // Healer mode: face target even when in range (for casting).
+                if let Some(ref ft) = face_target {
+                    let heading = movement::calc_heading(&player_pos, ft);
+                    self.controller.write_heading(heading);
+                }
             }
             StickTickResult::OutOfRange {
                 target_id,
                 distance,
                 desired_pos,
+                face_target,
             } => {
                 self.cached_stick_target_id = target_id;
                 self.cached_stick_distance = distance;
                 // Ensure backward key is released before moving forward.
                 self.controller.stop_back();
-                // Face and move toward the desired stick position.
-                let heading = movement::calc_heading(&player_pos, &desired_pos);
-                let wobbled = self.personality.wobble_heading(heading);
-                self.controller.write_heading(wobbled);
-                self.controller.write_speed_heading(wobbled);
+                // Healer mode: face target for casting, otherwise face movement direction.
+                let heading = if let Some(ref ft) = face_target {
+                    movement::calc_heading(&player_pos, ft)
+                } else {
+                    let h = movement::calc_heading(&player_pos, &desired_pos);
+                    self.personality.wobble_heading(h)
+                };
+                self.controller.write_heading(heading);
+                self.controller.write_speed_heading(heading);
                 self.controller.press_forward();
             }
             StickTickResult::TooClose {
@@ -514,10 +564,21 @@ impl Navigator {
 
     /// One tick while at camp — checks if character has drifted beyond the
     /// leash boundary and triggers a return if so.
-    fn tick_arrived(&mut self) {
+    fn tick_arrived(&mut self, nearby: &[SpawnData]) {
         if let Some(ref config) = self.camp_config {
             let current_pos = self.controller.read_position();
             if config.is_beyond_leash(&current_pos) {
+                // #182: return_no_aggro — don't return if hostile NPCs are nearby.
+                if config.return_no_aggro
+                    && nearby.iter().any(|s| {
+                        s.spawn_type == 1 && s.speed_run > 0.0 && {
+                            let sp = Waypoint::new(s.x, s.y, s.z);
+                            current_pos.distance_2d(&sp) < 50.0
+                        }
+                    })
+                {
+                    return;
+                }
                 let return_pos = config.return_position();
                 tracing::debug!(role = %config.role, "Drifted beyond camp leash — returning");
                 self.queue.set_path(vec![return_pos]);
@@ -525,6 +586,91 @@ impl Navigator {
                 self.state = State::Moving;
             }
         }
+    }
+
+    /// One tick for advanced moveto (#184).
+    fn tick_moveto(&mut self, nearby: &[SpawnData]) {
+        let config = match self.moveto_config {
+            Some(ref c) => c,
+            None => {
+                self.state = State::Idle;
+                return;
+            }
+        };
+
+        let current_pos = self.controller.read_position();
+
+        // Update destination from tracked spawn if target_id is set.
+        let destination = if let Some(tid) = config.target_id {
+            if let Some(s) = nearby.iter().find(|s| s.spawn_id == tid) {
+                Waypoint::new(s.x, s.y, s.z)
+            } else {
+                config.destination
+            }
+        } else {
+            config.destination
+        };
+
+        let dist = current_pos.distance_2d(&destination);
+        self.cached_distance = dist;
+
+        // Break-on-aggro: hostile NPC moving toward player within 50 units.
+        if config.break_on_aggro
+            && nearby.iter().any(|s| {
+                s.spawn_type == 1 && s.speed_run > 0.0 && {
+                    let sp = Waypoint::new(s.x, s.y, s.z);
+                    current_pos.distance_2d(&sp) < 50.0
+                }
+            })
+        {
+            tracing::info!("MoveToAdvanced: break_on_aggro triggered");
+            self.stop_moveto();
+            return;
+        }
+
+        // Arrival check.
+        if dist < ARRIVAL_DISTANCE {
+            tracing::info!("MoveToAdvanced: arrived at destination");
+            self.stop_moveto();
+            return;
+        }
+
+        // Stuck detection.
+        if self.stuck.check(&current_pos) {
+            if !self.stuck.recover(&self.controller) {
+                tracing::warn!("MoveToAdvanced: stuck recovery exhausted");
+                self.stop_moveto();
+                return;
+            }
+            return;
+        }
+
+        // Move toward destination.
+        let heading = movement::calc_heading(&current_pos, &destination);
+        let wobbled = self.personality.wobble_heading(heading);
+
+        if config.use_back {
+            // Move backward: face away from destination, press back.
+            let reverse = wobbled + std::f32::consts::PI;
+            self.controller.write_heading(reverse);
+            self.controller.write_speed_heading(reverse);
+            self.controller.stop_forward();
+            self.controller.press_back();
+        } else {
+            self.controller.write_heading(wobbled);
+            self.controller.write_speed_heading(wobbled);
+            self.controller.stop_back();
+            self.controller.press_forward();
+        }
+    }
+
+    /// Stop an active moveto and return to idle.
+    fn stop_moveto(&mut self) {
+        self.controller.stop_forward();
+        self.controller.stop_back();
+        self.moveto_config = None;
+        self.stuck.reset();
+        self.state = State::Idle;
     }
 
     /// One tick for player follow mode.

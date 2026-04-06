@@ -14,7 +14,7 @@ use warp::TargetSample;
 use std::sync::Mutex;
 
 use textquest_common::nav::{
-    CampSpot, FollowConfig, NavCampConfig, NavStatus, StickConfig, Waypoint,
+    CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavStatus, StickConfig, Waypoint,
 };
 use textquest_common::types::SpawnData;
 
@@ -83,6 +83,8 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::Pause => nav.pause(),
             NavCommand::Resume => nav.resume(),
             NavCommand::SetMeshLoaded(loaded) => nav.set_mesh_loaded(loaded),
+            NavCommand::MoveToAdvanced(config) => nav.move_to_advanced(config),
+            NavCommand::SetAutopause(enabled) => nav.set_autopause(enabled),
         }
     }
 }
@@ -138,4 +140,8 @@ pub enum NavCommand {
     Resume,
     /// Set mesh loaded status (#174).
     SetMeshLoaded(bool),
+    /// Advanced moveto with full MQ2MoveUtils options (#184).
+    MoveToAdvanced(MoveToConfig),
+    /// Enable or disable autopause globally (#164).
+    SetAutopause(bool),
 }

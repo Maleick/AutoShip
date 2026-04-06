@@ -45,6 +45,8 @@ pub enum PauseReason {
     Warp,
     /// User-initiated pause via `/nav pause`.
     UserPause,
+    /// Player keyboard input detected — autopause engaged (#164).
+    UserInput,
 }
 
 /// A single point in 3D space with optional metadata.
@@ -141,6 +143,9 @@ pub enum StickMode {
     /// Position in the frontal arc (`/stick front`).
     /// For tanks who need to face the mob head-on.
     Front,
+    /// Snap to the opposite side of the target from the current position (`/stick snaproll`).
+    /// Used for instant repositioning during combat (#183).
+    SnapRoll,
 }
 
 /// Configuration for a `/stick` session (MQ2MoveUtils compatible).
@@ -185,6 +190,10 @@ pub struct StickConfig {
     /// moveback triggers when the player is closer than 10.0 units.
     /// MQ2MoveUtils equivalent: `backupdist #`. Default: 5.0.
     pub backup_dist: f32,
+    /// Healer stick mode — maintain distance and face target for ranged casting (#163).
+    pub healer: bool,
+    /// Autopause — pause stick movement on player keyboard input (#164).
+    pub autopause: bool,
 }
 
 impl Default for StickConfig {
@@ -200,6 +209,8 @@ impl Default for StickConfig {
             not_front_arc: 90.0,
             moveback: false,
             backup_dist: 5.0,
+            healer: false,
+            autopause: false,
         }
     }
 }
@@ -573,6 +584,16 @@ pub struct NavCampConfig {
     /// How far beyond the camp radius a character can drift before being
     /// returned.  A value of 1.2 means the leash triggers at 120% of `radius`.
     pub leash_factor: f32,
+    /// Minimum delay (ms) before returning to camp after arrival (#182).
+    pub min_delay_ms: u32,
+    /// Maximum delay (ms) before returning to camp after arrival (#182).
+    pub max_delay_ms: u32,
+    /// Only return to camp when no aggro is detected (#182).
+    pub return_no_aggro: bool,
+    /// Only return to camp when not looting (#182).
+    pub return_not_looting: bool,
+    /// Autopause — pause camp return on player keyboard input (#164).
+    pub autopause: bool,
 }
 
 impl NavCampConfig {
@@ -636,6 +657,43 @@ impl NamedWaypoint {
     }
 }
 
+/// Configuration for advanced `/moveto` commands (#184).
+///
+/// Supports MQ2MoveUtils options: moveto by spawn ID, xloc/yloc,
+/// break-on-aggro, break-on-hit, use-walk, use-back.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MoveToConfig {
+    /// Destination waypoint (from xloc/yloc or spawn position).
+    pub destination: Waypoint,
+    /// Optional spawn ID to track (moveto id #). When set, destination updates
+    /// each tick to the target's current position.
+    pub target_id: Option<u32>,
+    /// Stop navigation if aggro is detected (nearby hostile NPC moving toward player).
+    pub break_on_aggro: bool,
+    /// Stop navigation if the player takes damage.
+    pub break_on_hit: bool,
+    /// Use walk speed instead of run.
+    pub use_walk: bool,
+    /// Move backward toward the destination instead of turning and running forward.
+    pub use_back: bool,
+    /// Autopause — pause movement on player keyboard input.
+    pub autopause: bool,
+}
+
+impl Default for MoveToConfig {
+    fn default() -> Self {
+        Self {
+            destination: Waypoint::new(0.0, 0.0, 0.0),
+            target_id: None,
+            break_on_aggro: false,
+            break_on_hit: false,
+            use_walk: false,
+            use_back: false,
+            autopause: false,
+        }
+    }
+}
+
 /// Navigation diagnostics snapshot — returned by `/nav ui` for debug overlay.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NavDiagnostics {
@@ -672,6 +730,27 @@ pub struct NavStateSignals {
     pub velocity: f32,
     /// True if navigation is paused (user or warp).
     pub paused: bool,
+}
+
+impl MoveToConfig {
+    /// Create a moveto config for a static position.
+    #[must_use]
+    pub fn to_position(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            destination: Waypoint::new(x, y, z),
+            ..Self::default()
+        }
+    }
+
+    /// Create a moveto config for a spawn ID.
+    #[must_use]
+    pub fn to_spawn(spawn_id: u32, current_pos: Waypoint) -> Self {
+        Self {
+            destination: current_pos,
+            target_id: Some(spawn_id),
+            ..Self::default()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1397,6 +1476,11 @@ mod tests {
             scatter: None,
             role: "tank".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         let pos = config.return_position();
         assert!((pos.x - 100.0).abs() < f32::EPSILON);
@@ -1412,6 +1496,11 @@ mod tests {
             scatter: Some(ScatterConfig::new(90.0, 15.0, 0.0)),
             role: "dps".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         let pos = config.return_position();
         assert!((pos.x - 115.0).abs() < 0.1);
@@ -1427,6 +1516,11 @@ mod tests {
             scatter: None,
             role: "healer".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         assert!(!config.is_outside_radius(&Waypoint::new(30.0, 30.0, 0.0)));
         assert!(config.is_outside_radius(&Waypoint::new(40.0, 40.0, 0.0)));
@@ -1441,6 +1535,11 @@ mod tests {
             scatter: Some(ScatterConfig::new(0.0, 10.0, 0.0)),
             role: "bard".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         let spot = config.to_camp_spot();
         assert_eq!(spot.role, "bard");
@@ -1457,6 +1556,11 @@ mod tests {
             scatter: Some(ScatterConfig::new(45.0, 12.0, 3.0)),
             role: "monk".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let restored: NavCampConfig = serde_json::from_str(&json).expect("deserialize");
@@ -1474,6 +1578,11 @@ mod tests {
             scatter: None,
             role: "tank".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         assert!(!config.is_beyond_leash(&Waypoint::new(55.0, 0.0, 0.0)));
     }
@@ -1487,6 +1596,11 @@ mod tests {
             scatter: None,
             role: "tank".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         assert!(config.is_beyond_leash(&Waypoint::new(61.0, 0.0, 0.0)));
     }
@@ -1500,6 +1614,11 @@ mod tests {
             scatter: None,
             role: "healer".to_string(),
             leash_factor: 1.2,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         assert!(!config.is_beyond_leash(&Waypoint::new(60.0, 0.0, 0.0)));
     }
@@ -1513,6 +1632,11 @@ mod tests {
             scatter: None,
             role: "dps".to_string(),
             leash_factor: 1.0,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
         };
         assert!(config.is_beyond_leash(&Waypoint::new(50.1, 0.0, 0.0)));
         assert!(!config.is_beyond_leash(&Waypoint::new(49.9, 0.0, 0.0)));
@@ -1584,5 +1708,95 @@ mod tests {
         let json = serde_json::to_string(&signals).expect("serialize");
         let restored: NavStateSignals = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(signals, restored);
+    }
+
+    // ─── MoveToConfig tests (#184) ───
+
+    #[test]
+    fn moveto_config_default() {
+        let config = MoveToConfig::default();
+        assert!(config.target_id.is_none());
+        assert!(!config.break_on_aggro);
+        assert!(!config.break_on_hit);
+        assert!(!config.use_walk);
+        assert!(!config.use_back);
+        assert!(!config.autopause);
+    }
+
+    #[test]
+    fn moveto_config_to_position() {
+        let config = MoveToConfig::to_position(100.0, 200.0, 0.0);
+        assert!((config.destination.x - 100.0).abs() < f32::EPSILON);
+        assert!((config.destination.y - 200.0).abs() < f32::EPSILON);
+        assert!(config.target_id.is_none());
+    }
+
+    #[test]
+    fn moveto_config_to_spawn() {
+        let config = MoveToConfig::to_spawn(42, Waypoint::new(10.0, 20.0, 0.0));
+        assert_eq!(config.target_id, Some(42));
+        assert!((config.destination.x - 10.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn moveto_config_serde_roundtrip() {
+        let config = MoveToConfig {
+            destination: Waypoint::new(50.0, 75.0, 10.0),
+            target_id: Some(99),
+            break_on_aggro: true,
+            break_on_hit: false,
+            use_walk: true,
+            use_back: false,
+            autopause: true,
+        };
+        let json = serde_json::to_string(&config).expect("serialize");
+        let restored: MoveToConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(config, restored);
+    }
+
+    // ─── New variant tests ───
+
+    #[test]
+    fn camp_config_with_return_conditions() {
+        let config = NavCampConfig {
+            center: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            radius: 50.0,
+            scatter: None,
+            role: "tank".to_string(),
+            leash_factor: 1.2,
+            min_delay_ms: 500,
+            max_delay_ms: 2000,
+            return_no_aggro: true,
+            return_not_looting: true,
+            autopause: false,
+        };
+        assert_eq!(config.min_delay_ms, 500);
+        assert_eq!(config.max_delay_ms, 2000);
+        assert!(config.return_no_aggro);
+        assert!(config.return_not_looting);
+    }
+
+    #[test]
+    fn stick_config_healer_default_false() {
+        let config = StickConfig::default();
+        assert!(!config.healer);
+        assert!(!config.autopause);
+    }
+
+    #[test]
+    fn stick_mode_snaproll_serde() {
+        let mode = StickMode::SnapRoll;
+        let json = serde_json::to_string(&mode).expect("serialize");
+        let restored: StickMode = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(mode, restored);
+    }
+
+    #[test]
+    fn pause_reason_user_input_serde() {
+        let reason = PauseReason::UserInput;
+        let json = serde_json::to_string(&reason).expect("serialize");
+        let restored: PauseReason = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(reason, restored);
     }
 }
