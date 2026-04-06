@@ -14,5 +14,7 @@ pub mod named_db;
 pub mod named_tracker;
 /// Spawn linked list traversal — reads all spawns from EQ memory.
 pub mod spawn;
+/// Spawn alert feed — pattern-matched spawn notifications and named alerts.
+pub mod spawn_alert;
 /// EQ data structures — `SpawnInfo`, `GroupInfo`, class/type enums.
 pub mod structs;

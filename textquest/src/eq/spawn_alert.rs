@@ -1,0 +1,258 @@
+//! Spawn alert feed — pattern-matched spawn notifications and named mob alerts.
+//!
+//! Provides a ring buffer of `SpawnAlertEvent`s generated from two sources:
+//! 1. **Named tracker** — automatic alerts for named NPCs (via `NamedTracker`)
+//! 2. **Watch patterns** — user-defined glob-style patterns (`:watch *moss*`)
+
+use std::collections::VecDeque;
+use std::time::SystemTime;
+
+/// How a spawn alert was triggered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MatchSource {
+    /// Matched because the spawn is a named NPC (no article prefix).
+    Named,
+    /// Matched a user-defined watch pattern.
+    WatchPattern(String),
+}
+
+/// A single spawn up/down alert event.
+#[derive(Debug, Clone)]
+pub struct SpawnAlertEvent {
+    /// Name of the spawn.
+    pub spawn_name: String,
+    /// Zone where the event occurred.
+    pub zone: String,
+    /// `true` = spawn appeared, `false` = spawn disappeared.
+    pub is_up: bool,
+    /// Wall-clock time of the event.
+    pub timestamp: SystemTime,
+    /// Tick counter when the event was generated.
+    pub tick: u64,
+    /// What triggered this alert.
+    pub match_source: MatchSource,
+}
+
+/// Pattern mode for spawn watch matching.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WatchMode {
+    /// Exact case-insensitive match.
+    Exact(String),
+    /// `*keyword*` — substring match.
+    Contains(String),
+    /// `prefix*` — starts-with match.
+    StartsWith(String),
+    /// `*suffix` — ends-with match.
+    EndsWith(String),
+}
+
+/// A user-defined spawn watch pattern.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnWatchPattern {
+    /// Original pattern string as typed by the user.
+    pub raw: String,
+    /// Parsed match mode.
+    pub mode: WatchMode,
+}
+
+impl SpawnWatchPattern {
+    /// Parse a pattern string into a `SpawnWatchPattern`.
+    ///
+    /// Glob-style syntax:
+    /// - `*foo*` → contains "foo"
+    /// - `foo*`  → starts with "foo"
+    /// - `*foo`  → ends with "foo"
+    /// - `foo`   → exact match
+    #[must_use]
+    pub fn parse(raw: &str) -> Self {
+        let trimmed = raw.trim();
+        let lower = trimmed.to_lowercase();
+        let mode = if lower.starts_with('*') && lower.ends_with('*') && lower.len() > 2 {
+            WatchMode::Contains(lower[1..lower.len() - 1].to_string())
+        } else if lower.ends_with('*') && lower.len() > 1 {
+            WatchMode::StartsWith(lower[..lower.len() - 1].to_string())
+        } else if lower.starts_with('*') && lower.len() > 1 {
+            WatchMode::EndsWith(lower[1..].to_string())
+        } else {
+            WatchMode::Exact(lower)
+        };
+        Self {
+            raw: trimmed.to_string(),
+            mode,
+        }
+    }
+
+    /// Test whether a spawn name matches this pattern (case-insensitive).
+    #[must_use]
+    pub fn matches(&self, name: &str) -> bool {
+        let lower = name.to_lowercase();
+        match &self.mode {
+            WatchMode::Exact(s) => lower == *s,
+            WatchMode::Contains(s) => lower.contains(s.as_str()),
+            WatchMode::StartsWith(s) => lower.starts_with(s.as_str()),
+            WatchMode::EndsWith(s) => lower.ends_with(s.as_str()),
+        }
+    }
+}
+
+/// Ring-buffered feed of spawn alert events with user-defined watch patterns.
+pub struct SpawnAlertFeed {
+    events: VecDeque<SpawnAlertEvent>,
+    capacity: usize,
+    watch_patterns: Vec<SpawnWatchPattern>,
+}
+
+impl SpawnAlertFeed {
+    /// Create a new feed with the given maximum capacity.
+    #[must_use]
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            events: VecDeque::with_capacity(capacity.min(1024)),
+            capacity,
+            watch_patterns: Vec::new(),
+        }
+    }
+
+    /// Push an alert event, evicting the oldest if at capacity.
+    pub fn push(&mut self, event: SpawnAlertEvent) {
+        if self.events.len() >= self.capacity {
+            self.events.pop_front();
+        }
+        self.events.push_back(event);
+    }
+
+    /// All events in chronological order (oldest first).
+    #[must_use]
+    pub fn events(&self) -> &VecDeque<SpawnAlertEvent> {
+        &self.events
+    }
+
+    /// Number of events currently in the feed.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.events.len()
+    }
+
+    /// Whether the feed is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
+
+    /// Clear all events from the feed.
+    pub fn clear(&mut self) {
+        self.events.clear();
+    }
+
+    /// Add a watch pattern (parsed from user input).
+    pub fn add_watch(&mut self, pattern: &str) -> &SpawnWatchPattern {
+        self.watch_patterns.push(SpawnWatchPattern::parse(pattern));
+        self.watch_patterns.last().unwrap()
+    }
+
+    /// Remove a watch pattern by its raw string. Returns `true` if found.
+    pub fn remove_watch(&mut self, pattern: &str) -> bool {
+        let lower = pattern.to_lowercase();
+        let before = self.watch_patterns.len();
+        self.watch_patterns
+            .retain(|p| p.raw.to_lowercase() != lower);
+        self.watch_patterns.len() < before
+    }
+
+    /// Current watch patterns.
+    #[must_use]
+    pub fn watch_patterns(&self) -> &[SpawnWatchPattern] {
+        &self.watch_patterns
+    }
+
+    /// Check a spawn name against all watch patterns.
+    /// Returns the first matching pattern's raw string, or `None`.
+    #[must_use]
+    pub fn matches_any_pattern(&self, name: &str) -> Option<&str> {
+        self.watch_patterns
+            .iter()
+            .find(|p| p.matches(name))
+            .map(|p| p.raw.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_exact_match() {
+        let p = SpawnWatchPattern::parse("Emperor Crush");
+        assert!(p.matches("Emperor Crush"));
+        assert!(p.matches("emperor crush"));
+        assert!(!p.matches("Emperor Crushbone"));
+    }
+
+    #[test]
+    fn test_contains_match() {
+        let p = SpawnWatchPattern::parse("*moss*");
+        assert!(p.matches("a moss snake"));
+        assert!(p.matches("Mossman"));
+        assert!(!p.matches("a bear"));
+    }
+
+    #[test]
+    fn test_starts_with_match() {
+        let p = SpawnWatchPattern::parse("Emperor*");
+        assert!(p.matches("Emperor Crush"));
+        assert!(p.matches("emperor ssra"));
+        assert!(!p.matches("The Emperor"));
+    }
+
+    #[test]
+    fn test_ends_with_match() {
+        let p = SpawnWatchPattern::parse("*Crush");
+        assert!(p.matches("Emperor Crush"));
+        assert!(p.matches("crush"));
+        assert!(!p.matches("Crushbone"));
+    }
+
+    #[test]
+    fn test_feed_capacity() {
+        let mut feed = SpawnAlertFeed::new(3);
+        for i in 0..5 {
+            feed.push(SpawnAlertEvent {
+                spawn_name: format!("Mob{i}"),
+                zone: "zone".into(),
+                is_up: true,
+                timestamp: SystemTime::now(),
+                tick: i,
+                match_source: MatchSource::Named,
+            });
+        }
+        assert_eq!(feed.len(), 3);
+        // Oldest two should have been evicted
+        assert_eq!(feed.events().front().unwrap().spawn_name, "Mob2");
+    }
+
+    #[test]
+    fn test_watch_add_remove() {
+        let mut feed = SpawnAlertFeed::new(100);
+        feed.add_watch("*moss*");
+        feed.add_watch("Emperor Crush");
+        assert_eq!(feed.watch_patterns().len(), 2);
+
+        assert!(feed.remove_watch("*moss*"));
+        assert_eq!(feed.watch_patterns().len(), 1);
+        assert!(!feed.remove_watch("nonexistent"));
+    }
+
+    #[test]
+    fn test_matches_any_pattern() {
+        let mut feed = SpawnAlertFeed::new(100);
+        feed.add_watch("*moss*");
+        feed.add_watch("Emperor Crush");
+
+        assert_eq!(feed.matches_any_pattern("a moss snake"), Some("*moss*"));
+        assert_eq!(
+            feed.matches_any_pattern("Emperor Crush"),
+            Some("Emperor Crush")
+        );
+        assert_eq!(feed.matches_any_pattern("a bear"), None);
+    }
+}

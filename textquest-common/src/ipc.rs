@@ -653,6 +653,19 @@ pub enum Response {
         /// Diagnostics snapshot.
         diagnostics: crate::nav::NavDiagnostics,
     },
+    /// Spawn alert notification — a watched or named spawn appeared/disappeared.
+    SpawnAlert {
+        /// PID of the client that detected the event.
+        client_id: ClientId,
+        /// Zone where the event occurred.
+        zone: String,
+        /// Name of the spawn.
+        spawn_name: String,
+        /// `true` = spawn appeared, `false` = spawn disappeared.
+        is_up: bool,
+        /// Timestamp in milliseconds when the alert was generated.
+        timestamp_ms: u64,
+    },
 }
 
 /// Wire-format for a single zone entry: (`zone_id`, name, `min_level`, `max_level`, connections).
