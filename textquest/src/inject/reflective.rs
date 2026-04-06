@@ -761,6 +761,13 @@ mod platform {
                         func_rvas[index * 4..(index + 1) * 4].try_into().unwrap(),
                     ) as usize;
 
+                    let export_dir_end = export_dir_rva.saturating_add(export_dir_size);
+                    if func_rva >= export_dir_rva && func_rva < export_dir_end {
+                        return Err(InjectError::ImportResolveFailed {
+                            dll: imp.dll_name.clone(),
+                            function: format!("#{ord}"),
+                        });
+                    }
                     Ok(base_addr + func_rva)
                 }
             }
