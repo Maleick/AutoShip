@@ -754,7 +754,7 @@ pub fn run_login_mode(
 /// Reads `config/accounts.toml` for the account roster. Per-account passwords
 /// come from `config/.credentials` (TSV: account\tpassword). Falls back to:
 /// 1. `--password` CLI flag (shared for all)
-/// 2. `DMFT_PASSWORD` environment variable (shared for all)
+/// 2. `TEXTQUEST_PASSWORD` environment variable (shared for all)
 /// 3. Interactive prompt (shared for all)
 ///
 /// # Errors
@@ -817,7 +817,7 @@ pub fn run_autologin_mode(
         // Only prompt if we have no per-account passwords
         if let Some(pw) = password_flag {
             Some(Zeroizing::new(pw))
-        } else if let Ok(pw) = std::env::var("DMFT_PASSWORD") {
+        } else if let Ok(pw) = std::env::var("TEXTQUEST_PASSWORD") {
             Some(Zeroizing::new(pw))
         } else {
             Some(
@@ -831,7 +831,7 @@ pub fn run_autologin_mode(
         // Per-account passwords available; only use shared as fallback if provided
         password_flag
             .map(Zeroizing::new)
-            .or_else(|| std::env::var("DMFT_PASSWORD").ok().map(Zeroizing::new))
+            .or_else(|| std::env::var("TEXTQUEST_PASSWORD").ok().map(Zeroizing::new))
     };
 
     // 3. Find existing EQ processes
@@ -843,7 +843,7 @@ pub fn run_autologin_mode(
         let eq_path = PathBuf::from(&config.launch.eq_path);
         if !eq_path.exists() {
             anyhow::bail!(
-                "EQ path not found: {}. Set launch.eq_path in config/dmft.toml",
+                "EQ path not found: {}. Set launch.eq_path in config/textquest.toml",
                 eq_path.display()
             );
         }
@@ -876,8 +876,15 @@ pub fn run_autologin_mode(
         );
         std::thread::sleep(Duration::from_secs(inject_delay_secs));
 
-        // Re-scan for processes
-        pids = process::memory::find_processes_by_name(&config.process_name)?;
+        // Merge spawned PIDs with any additional processes found by re-scan.
+        // Keep the spawned PIDs even if re-scan fails (OpenProcess may be denied
+        // for freshly created processes that haven't loaded their main module yet).
+        let rescanned = process::memory::find_processes_by_name(&config.process_name)?;
+        for &pid in &rescanned {
+            if !pids.contains(&pid) {
+                pids.push(pid);
+            }
+        }
         println!("Now have {} eqgame.exe process(es)", pids.len());
     }
 
@@ -960,8 +967,27 @@ pub fn run_autologin_mode(
             continue;
         };
 
-        // 5e. Connect and send StartLogin
-        match connect_authenticated_pipe(*pid) {
+        // 5e. Connect and send StartLogin (retry up to 10s for pipe to be ready)
+        let pipe_result = {
+            let mut last_err = None;
+            let mut connected = None;
+            for attempt in 0..10 {
+                match connect_authenticated_pipe(*pid) {
+                    Ok(pipe) => {
+                        connected = Some(pipe);
+                        break;
+                    }
+                    Err(e) => {
+                        if attempt < 9 {
+                            std::thread::sleep(Duration::from_secs(1));
+                        }
+                        last_err = Some(e);
+                    }
+                }
+            }
+            connected.ok_or_else(|| last_err.unwrap())
+        };
+        match pipe_result {
             Ok(pipe) => {
                 let cmd = Command::StartLogin {
                     account_name: account.name.clone(),
@@ -991,7 +1017,7 @@ pub fn run_autologin_mode(
     println!("  Success: {success_count}");
     println!("  Failed:  {fail_count}");
     println!("\nThe DLL login FSM handles all UI steps autonomously.");
-    println!("Check DLL logs for progress: %TEMP%\\dmft\\dmft-dll.log");
+    println!("Check DLL logs for progress: %TEMP%\\textquest\\textquest-dll.log");
 
     Ok(())
 }

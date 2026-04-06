@@ -327,10 +327,10 @@ pub fn register(
     CALLBACKS[idx].store(callback as usize, Ordering::Release);
     SLOTS[idx].address.store(address, Ordering::Release);
 
-    // Use QueueUserAPC to set the HWBP on EQ's main thread. The DLL init
-    // runs on a thread pool worker (PoolParty), so GetCurrentThread() would
-    // target the wrong thread. The APC fires on the main thread's next
-    // alertable wait, setting the debug register in the correct context.
+    // Set the HWBP on EQ's main thread via cross-thread SetThreadContext.
+    // The DLL init runs on a thread pool worker (PoolParty), so
+    // GetCurrentThread() would target the wrong thread. We suspend EQ's
+    // main thread, write the debug register, and resume.
     platform::set_breakpoint_on_main_thread(slot, address)
         .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
 
@@ -338,7 +338,7 @@ pub fn register(
     tracing::info!(
         slot = idx,
         addr = format!("{:#x}", address),
-        "HWBP registered (APC queued on main thread)"
+        "HWBP registered on main thread"
     );
     Ok(())
 }

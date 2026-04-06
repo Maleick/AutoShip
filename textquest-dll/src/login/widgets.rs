@@ -838,7 +838,7 @@ pub fn dismiss_splash(eqmain_base: u64) {
                     unsafe {
                         crate::eq::widgets::click_button_via_vtable(parent_wnd);
                     }
-                    tracing::info!(
+                    tracing::trace!(
                         parent = parent_text,
                         "Dismissed pre-login prompt (clicked parent, button not found)"
                     );

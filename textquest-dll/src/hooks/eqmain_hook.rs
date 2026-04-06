@@ -52,6 +52,9 @@ static SERVER_JOIN_SENT: AtomicBool = AtomicBool::new(false);
 /// Credentials to submit (set by IPC thread, consumed by main thread).
 static PENDING_CREDENTIALS: Mutex<Option<PendingLogin>> = Mutex::new(None);
 
+/// Server name for JoinServer — persists after credentials are consumed.
+static TARGET_SERVER_NAME: Mutex<Option<String>> = Mutex::new(None);
+
 struct PendingLogin {
     account: String,
     password: zeroize::Zeroizing<String>,
@@ -69,6 +72,10 @@ pub fn queue_login(
     server_name: String,
     character_name: String,
 ) {
+    // Save server name for JoinServer (persists after credentials are consumed).
+    if let Ok(mut name) = TARGET_SERVER_NAME.lock() {
+        *name = Some(server_name.clone());
+    }
     if let Ok(mut creds) = PENDING_CREDENTIALS.lock() {
         *creds = Some(PendingLogin {
             account,
@@ -100,11 +107,8 @@ pub fn is_active() -> bool {
 
 /// Install the GiveTime HWBP hook. Called when eqmain.dll is detected.
 ///
-/// NOTE: `hwbp::register` currently uses `GetCurrentThread()` which sets DR1
-/// on the calling thread, not EQ's main thread. This requires the
-/// cross-thread `NtSetContextThread` fix from `claude/fix-hwbp-main-thread`
-/// branch to work correctly. The same limitation applies to the game loop
-/// hook (DR0). Both will be fixed when that branch merges to master.
+/// `hwbp::register` uses cross-thread `SetThreadContext` (suspend/resume)
+/// to set DR1 on EQ's main thread, not the calling thread.
 pub fn install(eqmain_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     use textquest_common::offsets::eqmain as off;
 
@@ -181,14 +185,18 @@ fn execute_submit_credentials(eqmain_base: u64) {
         return;
     };
 
-    tracing::info!(account = %creds.account, "Main thread: writing credentials");
+    tracing::info!(account = %creds.account, "Main thread: writing credentials to EQLogin struct");
 
-    let wrote = crate::login::widgets::type_credentials_to_window(
+    // Write to EQLogin's internal char arrays. The IPC thread will handle
+    // the actual login submission via WM_CHAR (Tab + password + Enter),
+    // which is the proven working approach. We don't click Login here
+    // because the main thread can't pump messages (it IS the message pump).
+    let wrote_internal = crate::login::widgets::write_login_credentials(
         eqmain_base,
         &creds.account,
         &creds.password,
     );
-    tracing::info!(wrote, "Credentials written to UI fields");
+    tracing::info!(wrote_internal, "Credentials written to EQLogin struct");
 
     crate::login::start_login(
         creds.account,
@@ -196,6 +204,11 @@ fn execute_submit_credentials(eqmain_base: u64) {
         creds.server_name,
         creds.character_name,
     );
+
+    // Skip the FSM's own credential-entry tick since credentials are written.
+    if wrote_internal {
+        crate::login::advance_to_server_select();
+    }
 }
 
 /// Execute JoinServer on the main thread via LoginServerAPI.
@@ -212,6 +225,53 @@ fn execute_join_server(eqmain_base: u64) {
     {
         let _ = eqmain_base;
     }
+}
+
+/// Map a server name (from accounts.toml) to an EQ ServerID integer.
+/// Matches case-insensitively against both short names ("firiona") and
+/// display names ("Firiona Vie"). Returns `None` for unknown servers.
+fn resolve_server_id(name: &str) -> Option<i32> {
+    // Source: eqlib/include/eqlib/game/Constants.h `enum class ServerID`
+    const SERVERS: &[(&str, &[&str], i32)] = &[
+        ("test",        &["test", "test server"],                    1),
+        ("antonius",    &["antonius", "antonius bayle"],            100),
+        ("bertox",      &["bertox", "saryrn", "bertoxxulous"],     102),
+        ("bristle",     &["bristle", "bristlebane"],               104),
+        ("cazic",       &["cazic", "cazic thule", "cazic-thule"],  105),
+        ("drinal",      &["drinal"],                               106),
+        ("erollisi",    &["erollisi", "erollisi marr"],            109),
+        ("firiona",     &["firiona", "firiona vie", "fv"],         111),
+        ("luclin",      &["luclin"],                               116),
+        ("povar",       &["povar"],                                123),
+        ("rathe",       &["rathe", "the rathe"],                   127),
+        ("tunare",      &["tunare"],                               140),
+        ("xegony",      &["xegony"],                               144),
+        ("zek",         &["zek", "rallos zek"],                    147),
+        ("vox",         &["vox"],                                  158),
+        ("ragefire",    &["ragefire"],                              159),
+        ("mayong",      &["mayong"],                               163),
+        ("mangler",     &["mangler"],                              166),
+        ("rizlona",     &["rizlona"],                              169),
+        ("aradune",     &["aradune"],                              170),
+        ("mischief",    &["mischief"],                             171),
+        ("thornblade",  &["thornblade"],                           172),
+        ("vaniki",      &["vaniki"],                               173),
+        ("yelinak",     &["yelinak"],                              175),
+        ("tormax",      &["tormax"],                               176),
+        ("oakwynd",     &["oakwynd"],                              177),
+        ("teek",        &["teek"],                                 178),
+        ("fangbreaker", &["fangbreaker"],                          179),
+    ];
+
+    let lower = name.to_ascii_lowercase();
+    for &(_key, aliases, id) in SERVERS {
+        for &alias in aliases {
+            if alias == lower {
+                return Some(id);
+            }
+        }
+    }
+    None
 }
 
 /// Attempt to join server via `LoginServerAPI::JoinServer`. Returns `true` on success.
@@ -235,9 +295,15 @@ fn try_join_server_api(eqmain_base: u64) -> bool {
         return false;
     };
 
-    // TODO: Look up server ID from LoginClient::ServerList.
-    // Server ID 0 selects the last/default server.
-    let server_id: i32 = 0;
+    // Resolve server ID from the target server name.
+    let server_id: i32 = TARGET_SERVER_NAME
+        .lock()
+        .ok()
+        .and_then(|name| name.as_deref().and_then(resolve_server_id))
+        .unwrap_or_else(|| {
+            tracing::warn!("No target server name or unknown server — using ID 0 (default)");
+            0
+        });
 
     tracing::info!(
         api = format!("{:#x}", api),
@@ -298,5 +364,30 @@ fn detect_screen_state(eqmain_base: u64) {
     {
         tracing::info!("Server select detected — queuing JoinServer");
         queue_join_server();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_server_id_known_servers() {
+        assert_eq!(resolve_server_id("Firiona Vie"), Some(111));
+        assert_eq!(resolve_server_id("firiona vie"), Some(111));
+        assert_eq!(resolve_server_id("firiona"), Some(111));
+        assert_eq!(resolve_server_id("FV"), Some(111));
+        assert_eq!(resolve_server_id("Teek"), Some(178));
+        assert_eq!(resolve_server_id("fangbreaker"), Some(179));
+        assert_eq!(resolve_server_id("test"), Some(1));
+        assert_eq!(resolve_server_id("Bristlebane"), Some(104));
+        assert_eq!(resolve_server_id("Cazic Thule"), Some(105));
+        assert_eq!(resolve_server_id("The Rathe"), Some(127));
+    }
+
+    #[test]
+    fn resolve_server_id_unknown_returns_none() {
+        assert_eq!(resolve_server_id("Nonexistent"), None);
+        assert_eq!(resolve_server_id(""), None);
     }
 }

@@ -87,7 +87,7 @@ enum Commands {
         /// Login only accounts in this group number.
         #[arg(long)]
         group: Option<u32>,
-        /// EQ password (same for all accounts). Also reads DMFT_PASSWORD env var.
+        /// EQ password (same for all accounts). Also reads TEXTQUEST_PASSWORD env var.
         #[arg(long)]
         password: Option<String>,
         /// Spawn new EQ processes (default: use existing eqgame.exe processes)

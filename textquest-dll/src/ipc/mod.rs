@@ -174,12 +174,28 @@ fn handle_immediate_command(cmd: &Command) -> bool {
 
             if crate::hooks::eqmain_hook::is_active() {
                 tracing::info!("Routing StartLogin through main-thread GiveTime hook");
+                // Clone password before moving into queue_login — we need it
+                // for the WM_CHAR backup path on this (IPC) thread.
+                let pw_for_wm_char = (*password).clone();
                 crate::hooks::eqmain_hook::queue_login(
                     account_name,
                     password,
                     server_name.to_string(),
                     character_name.to_string(),
                 );
+                // Give main thread time to write credentials to EQLogin struct,
+                // then submit login via WM_CHAR from this thread.
+                // PostMessage works from any thread — the main thread pumps them.
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                let eqmain_base = crate::login::eqmain::find_eqmain();
+                if eqmain_base != 0 {
+                    let typed = crate::login::widgets::type_password_wm_char(
+                        eqmain_base,
+                        &pw_for_wm_char,
+                    );
+                    tracing::info!(typed, "IPC thread: WM_CHAR password + Enter submitted");
+                }
+                drop(pw_for_wm_char);
             } else {
                 // Fallback: eqmain hook not installed — execute directly on IPC thread.
                 tracing::warn!("eqmain hook not active, writing credentials on IPC thread");

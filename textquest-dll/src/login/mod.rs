@@ -57,6 +57,22 @@ pub fn start_login(
     }
 }
 
+/// Advance the FSM to WaitForServerSelect, skipping credential entry.
+/// Called by the GiveTime hook after it has already written credentials
+/// on the main thread — prevents the FSM from double-writing them.
+pub fn advance_to_server_select() {
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(fsm) = guard.as_mut() {
+        if fsm.state == State::WaitForLoginScreen || fsm.state == State::EnteringCredentials {
+            fsm.action_taken = true;
+            fsm.transition(State::WaitForServerSelect);
+            tracing::info!("FSM advanced to WaitForServerSelect (credentials already written by GiveTime hook)");
+        }
+    }
+}
+
 /// Get current login phase for status queries.
 pub fn phase() -> LoginPhase {
     let guard = LOGIN_FSM
