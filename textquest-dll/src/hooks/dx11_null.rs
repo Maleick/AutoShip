@@ -502,9 +502,8 @@ mod inner {
         let width = desc.Width;
         let height = desc.Height;
 
-        let mut device_ptr: Option<windows::Win32::Graphics::Direct3D11::ID3D11Device> = None;
-        unsafe { backbuffer.GetDevice(&mut device_ptr) };
-        let device = device_ptr.ok_or("GetDevice returned null")?;
+        let device: windows::Win32::Graphics::Direct3D11::ID3D11Device =
+            unsafe { backbuffer.GetDevice() }.map_err(|e| format!("GetDevice failed: {e}"))?;
 
         let staging_desc = WinTexDesc {
             Width: width,
@@ -518,20 +517,23 @@ mod inner {
             },
             Usage: D3D11_USAGE_STAGING,
             BindFlags: Default::default(),
-            CPUAccessFlags: D3D11_CPU_ACCESS_READ.into(),
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
             MiscFlags: Default::default(),
         };
 
-        let staging: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D = unsafe {
-            device
-                .CreateTexture2D(&staging_desc, None)
-                .map_err(|e| format!("CreateTexture2D (staging) failed: {e}"))?
+        let staging: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D = {
+            let mut tex: Option<windows::Win32::Graphics::Direct3D11::ID3D11Texture2D> = None;
+            unsafe {
+                device
+                    .CreateTexture2D(&staging_desc, None, Some(&mut tex))
+                    .map_err(|e| format!("CreateTexture2D (staging) failed: {e}"))?;
+            }
+            tex.ok_or("CreateTexture2D returned None")?
         };
 
-        let mut context_ptr: Option<windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext> =
-            None;
-        unsafe { device.GetImmediateContext(&mut context_ptr) };
-        let context = context_ptr.ok_or("GetImmediateContext returned null")?;
+        let context: windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext =
+            unsafe { device.GetImmediateContext() }
+                .map_err(|e| format!("GetImmediateContext failed: {e}"))?;
 
         unsafe { context.CopyResource(&staging, &backbuffer) };
 
