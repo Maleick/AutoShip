@@ -481,9 +481,11 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 prev_prev_wnd = prev_wnd;
                 prev_wnd = wnd_ptr;
 
-                // Stop scanning once we have both edit widgets + at least one login button.
-                // Continuing to scan can crash on bad window pointers later in the array.
-                if username_edit != 0 && password_edit != 0 && !login_candidates.is_empty() {
+                // Stop scanning once we have both edit widgets + at least two login
+                // candidates (menu tab + form submit button). If we only find one,
+                // keep scanning — the form submit is typically the second "LOGIN" widget.
+                // Continuing to scan past both can crash on bad window pointers.
+                if username_edit != 0 && password_edit != 0 && login_candidates.len() >= 2 {
                     break;
                 }
             }
