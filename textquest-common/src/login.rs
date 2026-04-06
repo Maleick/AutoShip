@@ -135,6 +135,12 @@ pub enum LoginPhase {
     PostLoginSetup,
     /// Login complete, client is ready for orchestration.
     Ready,
+    /// Client is executing /camp or /quit and waiting to leave the world.
+    CampingOut,
+    /// Client process has exited (cleanly or via crash).
+    Exited,
+    /// Client is being restarted by the launcher after an exit or crash.
+    Relaunching,
     /// Login failed with an error.
     Failed {
         /// The error that caused login to fail.
@@ -462,11 +468,14 @@ mod tests {
             LoginPhase::InWorld,
             LoginPhase::PostLoginSetup,
             LoginPhase::Ready,
+            LoginPhase::CampingOut,
+            LoginPhase::Exited,
+            LoginPhase::Relaunching,
             LoginPhase::Failed {
                 reason: LoginError::WrongPassword,
             },
         ];
-        assert_eq!(phases.len(), 11);
+        assert_eq!(phases.len(), 14);
     }
 
     #[test]
@@ -540,6 +549,9 @@ mod tests {
         let phases = vec![
             LoginPhase::NotStarted,
             LoginPhase::Ready,
+            LoginPhase::CampingOut,
+            LoginPhase::Exited,
+            LoginPhase::Relaunching,
             LoginPhase::Failed {
                 reason: LoginError::WrongPassword,
             },

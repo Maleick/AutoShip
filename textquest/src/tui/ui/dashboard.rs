@@ -372,6 +372,9 @@ fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'st
             SlotLifecycle::Blocked => ("Blocked", t.hp_low),
             SlotLifecycle::Configured => ("Configured", t.text_muted),
             SlotLifecycle::Live => ("Offline", t.hp_low),
+            SlotLifecycle::CampingOut => ("Camping…", t.text_highlight),
+            SlotLifecycle::Exited => ("Exited", t.hp_low),
+            SlotLifecycle::Relaunching => ("Relaunching", t.text_accent),
         };
         return (label, Style::default().fg(color));
     };
@@ -1388,6 +1391,9 @@ fn lifecycle_color(state: SlotLifecycle, t: &crate::tui::theme::Theme) -> ratatu
         | SlotLifecycle::WaitingForLogin
         | SlotLifecycle::EnteringWorld => t.text_accent,
         SlotLifecycle::Configured => t.text_muted,
+        SlotLifecycle::CampingOut => t.text_highlight,
+        SlotLifecycle::Exited => t.hp_low,
+        SlotLifecycle::Relaunching => t.text_accent,
     }
 }
 
