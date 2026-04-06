@@ -380,6 +380,42 @@ pub enum Command {
         /// Rendering mode to apply.
         mode: RenderMode,
     },
+    // Relog / Switch
+    /// Initiate a camp-relog cycle. The DLL issues `/camp desktop`, waits for
+    /// logout, then re-enters credentials with exponential backoff.
+    Relog {
+        /// Account name for re-login.
+        account_name: String,
+        /// Password (zeroized after use).
+        password: String,
+        /// Target server name.
+        server_name: String,
+        /// Character name to select.
+        character_name: String,
+        /// Relog configuration (retry policy, camp settings).
+        config: crate::login::RelogConfig,
+    },
+    /// Cancel an in-progress relog operation. The client stays wherever it is
+    /// (logged out, at char select, etc.) — no further reconnect attempts.
+    CancelRelog,
+    /// Switch to a different server without restarting the EQ process.
+    /// The DLL issues `/camp desktop`, then navigates to the target server.
+    SwitchServer {
+        /// Target server display name (e.g. "Teek", "Firiona Vie").
+        server_name: String,
+        /// Character name to select on the new server.
+        character_name: String,
+        /// Account credentials for re-authentication.
+        account_name: String,
+        /// Password (zeroized after use).
+        password: String,
+    },
+    /// Switch to a different character on the current server.
+    /// The DLL issues `/camp`, waits for character select, then picks the new character.
+    SwitchCharacter {
+        /// Character name to switch to.
+        character_name: String,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -392,6 +428,32 @@ impl std::fmt::Debug for Command {
                 ..
             } => f
                 .debug_struct("StartLogin")
+                .field("account_name", account_name)
+                .field("password", &"[REDACTED]")
+                .field("server_name", server_name)
+                .field("character_name", character_name)
+                .finish(),
+            Self::Relog {
+                account_name,
+                server_name,
+                character_name,
+                config,
+                ..
+            } => f
+                .debug_struct("Relog")
+                .field("account_name", account_name)
+                .field("password", &"[REDACTED]")
+                .field("server_name", server_name)
+                .field("character_name", character_name)
+                .field("config", config)
+                .finish(),
+            Self::SwitchServer {
+                server_name,
+                character_name,
+                account_name,
+                ..
+            } => f
+                .debug_struct("SwitchServer")
                 .field("account_name", account_name)
                 .field("password", &"[REDACTED]")
                 .field("server_name", server_name)
@@ -505,6 +567,18 @@ pub enum Response {
     RenderModeChanged {
         /// The new active render mode.
         mode: RenderMode,
+    },
+    /// Relog progress notification — sent on each phase transition.
+    RelogProgress {
+        /// Current relog phase.
+        phase: crate::login::RelogPhase,
+    },
+    /// Result of a SwitchServer or SwitchCharacter command.
+    SwitchResult {
+        /// Whether the switch succeeded.
+        success: bool,
+        /// Human-readable message (target name on success, error on failure).
+        message: String,
     },
 }
 

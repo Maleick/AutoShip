@@ -1443,6 +1443,48 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!("InteractTarget received — right-clicking current target");
             interact_with_target();
         }
+        Command::Relog {
+            account_name,
+            password,
+            server_name,
+            character_name,
+            config,
+        } => {
+            tracing::info!(
+                account = %account_name,
+                server = %server_name,
+                character = %character_name,
+                "Relog command received (password redacted)"
+            );
+            crate::login::start_relog(
+                account_name,
+                password,
+                server_name,
+                character_name,
+                config,
+            );
+        }
+        Command::CancelRelog => {
+            tracing::info!("CancelRelog received");
+            crate::login::cancel_relog();
+        }
+        Command::SwitchServer {
+            server_name,
+            character_name,
+            account_name,
+            password,
+        } => {
+            tracing::info!(
+                server = %server_name,
+                character = %character_name,
+                "SwitchServer command received (password redacted)"
+            );
+            crate::login::switch_server(server_name, character_name, account_name, password);
+        }
+        Command::SwitchCharacter { character_name } => {
+            tracing::info!(character = %character_name, "SwitchCharacter received");
+            crate::login::switch_character(character_name);
+        }
         other => {
             tracing::debug!(?other, "Unhandled command");
         }
