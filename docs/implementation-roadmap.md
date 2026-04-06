@@ -4,15 +4,30 @@ Canonical roadmap for the packet-first reset adopted in April 2026.
 
 This document is the source of truth for roadmap order, milestone gates, evidence handling, external research promotion, and GitHub Project mirroring. Older design and review docs remain useful historical evidence, but they are not canonical roadmap sources once they conflict with this file.
 
+## Milestone Status Summary
+
+| Milestone | Name                    | Status       | Notes                                                              |
+| --------- | ----------------------- | ------------ | ------------------------------------------------------------------ |
+| M1        | External Memory Reading | **COMPLETE** | TUI dashboard, spawn reading, process interaction                  |
+| M2        | DLL Injection + IPC     | **COMPLETE** | Injection, hooks, IPC, self-healing monitor                        |
+| M2.5      | Login Automation        | **COMPLETE** | Credential store, process spawner, login FSM, launch coordinator   |
+| M3        | Navigation              | **COMPLETE** | Waypoint pathfinding, Navigator FSM, humanization, stuck detection |
+| M4        | Combat                  | **COMPLETE** | ClassStrategy trait, 17 classes, HolyShit system, puller FSM       |
+| M5        | Anti-Cheat              | **~95%**     | Only #355 (launchpad token RE) remains open                        |
+| M6        | Web Dashboard           | **~55%**     | 11 closed, 9 open — axum + React/Vite/Tailwind SPA                 |
+| M7–M11    | Future                  | Planned      | Zoning, Orchestrator, RL, Economy, Soul Engine                     |
+
+_Last updated: 2026-04-06. ~1001 commits, ~1250 platform-independent tests across 3 crates._
+
 ## Historical Base
 
 The repository already contains substantial implemented surface area before this roadmap reset:
 
-- `M1`: external memory reading and TUI dashboard
-- `M2`: DLL injection, hooks, IPC, and self-healing monitor
-- `M2.5`: login automation and launch coordination
-- `M3`: navigation and route handling
-- `M4`: combat automation
+- `M1`: external memory reading and TUI dashboard — **COMPLETE**
+- `M2`: DLL injection, hooks, IPC, and self-healing monitor — **COMPLETE**
+- `M2.5`: login automation and launch coordination — **COMPLETE**
+- `M3`: navigation and route handling — **COMPLETE**
+- `M4`: combat automation — **COMPLETE**
 
 These milestones stay part of the project history.
 
