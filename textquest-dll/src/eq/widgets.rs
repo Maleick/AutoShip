@@ -487,6 +487,7 @@ pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
 /// # Safety
 /// `button_wnd` must be a valid `CXWnd` pointer with an intact vtable.
 #[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn click_button_for_phase(button_wnd: usize, in_eqmain: bool) {
     if button_wnd == 0 {
         tracing::warn!("click_button_for_phase: null button pointer");
