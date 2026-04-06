@@ -26,7 +26,8 @@ const CHAT_HOOK_SLOT: HwbpSlot = HwbpSlot::Dr1;
 fn chat_callback(exception_info: *mut ()) -> bool {
     // SAFETY: exception_info is a valid EXCEPTION_POINTERS from the VEH handler.
     let context = unsafe {
-        let ptrs = exception_info as *const windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS;
+        let ptrs =
+            exception_info as *const windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS;
         &*(*ptrs).ContextRecord
     };
 
