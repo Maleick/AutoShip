@@ -194,6 +194,20 @@ jobs:
       - run: cargo clippy -j 1 --all-targets --all-features -- -D warnings
       - run: cargo test -j 1
 
+  secrets_scan:
+    name: Secret scan (TruffleHog)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@v3.94.2
+        with:
+          extra_args: --only-verified
+
   windows:
     name: Windows release build (manual)
     if: github.event_name == 'workflow_dispatch' && inputs.run_release_build
