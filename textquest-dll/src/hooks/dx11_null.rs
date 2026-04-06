@@ -249,7 +249,7 @@ mod inner {
         use windows::Win32::UI::WindowsAndMessaging::FindWindowA;
         use windows::core::s;
 
-        let hwnd = unsafe { FindWindowA(s!("EverQuest"), None) };
+        let hwnd = unsafe { FindWindowA(s!("_EverQuestwndclass"), None) };
         if hwnd.0 == 0 { None } else { Some(hwnd) }
     }
 

@@ -69,17 +69,27 @@ pub fn read_spawn(
     let level = proc
         .read::<u8>(addr + player_zone::LEVEL)
         .context("critical field: level")?;
-    // Class is a direct uint8_t field in PlayerZoneClient at 0x0420
-    let class_id = proc.read::<u8>(addr + player_zone::CHAR_CLASS).unwrap_or(0);
+    // Use ActorClient::Class (int32_t at 0x0FDC) — the reliable field for all spawn types.
+    // PlayerZoneClient::CharClass (uint8_t at 0x0420) is often zero for NPCs/mercs/pets.
+    let class_id = proc
+        .read::<i32>(addr + actor_client::CHAR_CLASS)
+        .unwrap_or(0) as u8;
     let stand_state_id = proc.read::<u8>(addr + player_zone::STANDSTATE).unwrap_or(0);
     let hp_current = proc
         .read::<i64>(addr + player_zone::HP_CURRENT)
         .unwrap_or(0);
     let hp_max = proc.read::<i64>(addr + player_zone::HP_MAX).unwrap_or(0);
-    let mana_current = proc
+    // Mana fields are only valid for the local player — other spawns have garbage
+    // at these offsets. Clamp obviously invalid values to zero.
+    let raw_mana_current = proc
         .read::<i32>(addr + player_zone::MANA_CURRENT)
         .unwrap_or(0);
-    let mana_max = proc.read::<i32>(addr + player_zone::MANA_MAX).unwrap_or(0);
+    let raw_mana_max = proc.read::<i32>(addr + player_zone::MANA_MAX).unwrap_or(0);
+    let (mana_current, mana_max) = if raw_mana_max > 0 && raw_mana_max < 1_000_000 {
+        (raw_mana_current.max(0), raw_mana_max)
+    } else {
+        (0, 0)
+    };
     let endurance_current = proc
         .read::<i32>(addr + player_zone::ENDURANCE_CURRENT)
         .unwrap_or(0);

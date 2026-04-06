@@ -178,7 +178,9 @@ pub fn run_inject_mode() -> Result<()> {
 
     println!("Using DLL: {}", source_dll.display());
 
-    // Stage the DLL (copies with randomized name)
+    // Stage the DLL (copies with randomized name).
+    // TODO: Switch to reflective loader once d3d11.dll cross-process import
+    // resolution is fixed (addresses differ per-process due to ASLR).
     let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
     println!("Staged DLL: {}", staged_dll.display());
 
@@ -653,6 +655,7 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     // Write session token file BEFORE injection so DLL can read it during init.
     ipc::write_session_token_file(pid)?;
 
+    // TODO: Switch to reflective loader once cross-process import resolution is fixed.
     let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
     println!("Injecting into PID {pid}...");
 
@@ -1054,6 +1057,21 @@ pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 
     println!("Command sent successfully.");
 
+    Ok(())
+}
+
+/// Interact mode — send `InteractTarget` to right-click the current target.
+pub fn run_interact_mode(pid: u32) -> Result<()> {
+    use textquest_common::ipc::Command;
+
+    println!("Sending InteractTarget to PID {pid}...");
+
+    let pipe = connect_authenticated_pipe(pid)?;
+    let cmd = Command::InteractTarget;
+    pipe.send_async(&cmd)
+        .context("Failed to send InteractTarget")?;
+
+    println!("InteractTarget sent — NPC window should open if target is valid.");
     Ok(())
 }
 

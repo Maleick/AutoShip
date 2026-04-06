@@ -69,9 +69,10 @@ static VEH_HANDLE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(windows)]
 mod platform {
     use super::*;
+    use std::sync::atomic::AtomicU32;
     use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS, GetThreadContext,
-        RemoveVectoredExceptionHandler, SetThreadContext,
+        AddVectoredExceptionHandler, GetThreadContext, RemoveVectoredExceptionHandler,
+        SetThreadContext, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS,
     };
     use windows::Win32::System::Threading::GetCurrentThread;
 
@@ -81,6 +82,34 @@ mod platform {
     const EXCEPTION_CONTINUE_EXECUTION: i32 = -1;
     const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
+    /// Thread ID of EQ's main thread (the window message pump).
+    /// Set once by `find_main_thread_id`, read by `set_breakpoint_on_main_thread`.
+    static MAIN_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+
+    /// Find EQ's main thread by locating the thread that owns the "EverQuest" window.
+    pub fn find_main_thread_id() -> Result<u32, String> {
+        use windows::core::s;
+        use windows::Win32::UI::WindowsAndMessaging::{FindWindowA, GetWindowThreadProcessId};
+
+        let cached = MAIN_THREAD_ID.load(Ordering::Acquire);
+        if cached != 0 {
+            return Ok(cached);
+        }
+
+        let hwnd = unsafe { FindWindowA(s!("_EverQuestwndclass"), None) };
+        if hwnd.0 == 0 {
+            return Err("EverQuest window not found — character may not be in-world".into());
+        }
+        let tid = unsafe { GetWindowThreadProcessId(hwnd, None) };
+        if tid == 0 {
+            return Err("GetWindowThreadProcessId returned 0".into());
+        }
+        MAIN_THREAD_ID.store(tid, Ordering::Release);
+        tracing::info!(tid, "Resolved EQ main thread ID from window handle");
+        Ok(tid)
+    }
+
+    /// Set a hardware breakpoint on the current thread (caller's context).
     pub fn set_breakpoint(slot: HwbpSlot, address: usize) -> Result<(), String> {
         let idx = slot as usize;
         unsafe {
@@ -100,6 +129,73 @@ mod platform {
             ctx.Dr7 |= DR7_LOCAL_ENABLE[idx];
             SetThreadContext(thread, &ctx).map_err(|e| format!("SetThreadContext failed: {e}"))?;
         }
+        Ok(())
+    }
+
+    /// Set a hardware breakpoint on EQ's main thread via cross-thread
+    /// `SetThreadContext`.
+    ///
+    /// EQ's main loop uses `PeekMessage`/`GetMessage` — not alertable waits —
+    /// so `QueueUserAPC` never fires. We fall back to opening the main thread
+    /// handle and writing debug registers directly. This is a one-time call
+    /// during init, not continuous.
+    pub fn set_breakpoint_on_main_thread(slot: HwbpSlot, address: usize) -> Result<(), String> {
+        use windows::Win32::System::Threading::{
+            OpenThread, ResumeThread, SuspendThread, THREAD_GET_CONTEXT, THREAD_SET_CONTEXT,
+            THREAD_SUSPEND_RESUME,
+        };
+
+        let tid = find_main_thread_id()?;
+        let idx = slot as usize;
+
+        let thread = unsafe {
+            OpenThread(
+                THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME,
+                false,
+                tid,
+            )
+            .map_err(|e| format!("OpenThread({tid}) failed: {e}"))?
+        };
+
+        // Suspend → modify context → resume for a consistent snapshot.
+        unsafe {
+            SuspendThread(thread);
+        }
+
+        let result = unsafe {
+            let mut ctx: CONTEXT = std::mem::zeroed();
+            ctx.ContextFlags = CONTEXT_FLAGS(0x00100010); // CONTEXT_DEBUG_REGISTERS
+            GetThreadContext(thread, &mut ctx)
+                .map_err(|e| format!("GetThreadContext(TID {tid}) failed: {e}"))?;
+
+            match idx {
+                0 => ctx.Dr0 = address as u64,
+                1 => ctx.Dr1 = address as u64,
+                2 => ctx.Dr2 = address as u64,
+                3 => ctx.Dr3 = address as u64,
+                _ => unreachable!(),
+            }
+            ctx.Dr7 &= !DR7_COND_LEN_CLEAR[idx];
+            ctx.Dr7 |= DR7_LOCAL_ENABLE[idx];
+
+            SetThreadContext(thread, &ctx)
+                .map_err(|e| format!("SetThreadContext(TID {tid}) failed: {e}"))
+        };
+
+        unsafe {
+            ResumeThread(thread);
+        }
+
+        let _ = thread; // HANDLE is Copy in this crate version
+
+        result?;
+
+        tracing::info!(
+            tid,
+            slot = idx,
+            addr = format!("{:#x}", address),
+            "HWBP set on main thread via cross-thread SetThreadContext"
+        );
         Ok(())
     }
 
@@ -214,13 +310,19 @@ pub fn register(
     platform::install_veh().map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
     CALLBACKS[idx].store(callback as usize, Ordering::Release);
     SLOTS[idx].address.store(address, Ordering::Release);
-    platform::set_breakpoint(slot, address)
+
+    // Use QueueUserAPC to set the HWBP on EQ's main thread. The DLL init
+    // runs on a thread pool worker (PoolParty), so GetCurrentThread() would
+    // target the wrong thread. The APC fires on the main thread's next
+    // alertable wait, setting the debug register in the correct context.
+    platform::set_breakpoint_on_main_thread(slot, address)
         .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+
     SLOTS[idx].active.store(true, Ordering::Release);
     tracing::info!(
         slot = idx,
         addr = format!("{:#x}", address),
-        "HWBP registered"
+        "HWBP registered (APC queued on main thread)"
     );
     Ok(())
 }

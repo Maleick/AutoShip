@@ -3,7 +3,7 @@ use textquest::cli;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use tracing_appender::rolling;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 #[derive(Parser)]
 #[command(
@@ -105,6 +105,12 @@ enum Commands {
         pid: u32,
         /// Slash command (e.g., "/sit")
         command: String,
+    },
+
+    /// Right-click interact with current target (open bank/merchant/quest window)
+    Interact {
+        /// Target PID
+        pid: u32,
     },
 
     // ── Navigation ────────────────────────────────────────────────────
@@ -276,6 +282,7 @@ fn main() -> Result<()> {
 
         // Client commands
         Some(Commands::Cmd { pid, command }) => cli::run_cmd_mode(pid, &command),
+        Some(Commands::Interact { pid }) => cli::run_interact_mode(pid),
 
         // Rendering
         Some(Commands::Render { pid, mode }) => cli::run_render_mode(pid, &mode),

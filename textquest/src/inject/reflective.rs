@@ -323,12 +323,12 @@ mod platform {
     use windows::Win32::Foundation::{CloseHandle, WAIT_EVENT};
     use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
     use windows::Win32::System::Memory::{
-        MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
-        VirtualAllocEx, VirtualFreeEx, VirtualProtectEx,
+        VirtualAllocEx, VirtualFreeEx, VirtualProtectEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
     };
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
-        PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
+        CreateRemoteThread, OpenProcess, WaitForSingleObject, PROCESS_CREATE_THREAD,
+        PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
     };
 
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
@@ -441,7 +441,7 @@ mod platform {
 
             // 7. Execute DllMain via CreateRemoteThread
             let entry_addr = remote_base_addr + pe.entry_point_rva as usize;
-            Self::execute_entry(process_handle, entry_addr)?;
+            Self::execute_entry(process_handle, entry_addr, remote_base_addr)?;
 
             tracing::info!(
                 base = format_args!("{remote_base_addr:#x}"),
@@ -457,8 +457,10 @@ mod platform {
         /// kernel32/ntdll are at the same address in all processes on x64 Windows,
         /// so resolving locally gives correct addresses for the target.
         fn resolve_imports(image: &mut [u8], imports: &[ImportEntry]) -> Result<(), InjectError> {
-            use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
             use windows::core::PCSTR;
+            use windows::Win32::System::LibraryLoader::{
+                GetModuleHandleA, GetProcAddress, LoadLibraryA,
+            };
 
             for imp in imports {
                 let dll_cstr = std::ffi::CString::new(imp.dll_name.as_str()).map_err(|_| {
@@ -468,11 +470,18 @@ mod platform {
                     }
                 })?;
 
-                let module = unsafe { GetModuleHandleA(PCSTR(dll_cstr.as_ptr() as *const u8)) }
-                    .map_err(|_| InjectError::ImportResolveFailed {
-                        dll: imp.dll_name.clone(),
-                        function: String::new(),
-                    })?;
+                let dll_pcstr = PCSTR(dll_cstr.as_ptr() as *const u8);
+
+                // Try GetModuleHandle first (already loaded), fall back to
+                // LoadLibrary for lazily-loaded DLLs (e.g., d3d11.dll).
+                let module = unsafe { GetModuleHandleA(dll_pcstr) }.or_else(|_| {
+                    tracing::debug!(dll = %imp.dll_name, "Module not loaded, loading via LoadLibraryA");
+                    unsafe { LoadLibraryA(dll_pcstr) }.map(|m| m.into())
+                })
+                .map_err(|_| InjectError::ImportResolveFailed {
+                    dll: imp.dll_name.clone(),
+                    function: String::new(),
+                })?;
 
                 let addr = match &imp.function {
                     ImportName::Name(name) => {
@@ -508,33 +517,88 @@ mod platform {
             Ok(())
         }
 
-        /// Execute the DLL's entry point via `CreateRemoteThread`.
+        /// Execute the DLL's entry point via a small shellcode stub.
         ///
-        /// The thread parameter is passed as `DLL_PROCESS_ATTACH` (1).
+        /// DllMain expects `(HINSTANCE, DWORD fdwReason, LPVOID)` but
+        /// `CreateRemoteThread` only passes one parameter. We write a tiny
+        /// x64 stub that sets up the three arguments and calls the entry:
+        ///
+        /// ```asm
+        /// mov  rcx, <base_addr>     ; hinstDLL
+        /// mov  edx, 1               ; DLL_PROCESS_ATTACH
+        /// xor  r8, r8               ; lpvReserved = NULL
+        /// mov  rax, <entry_addr>
+        /// call rax
+        /// ret
+        /// ```
         fn execute_entry(
             process_handle: windows::Win32::Foundation::HANDLE,
             entry_addr: usize,
+            base_addr: usize,
         ) -> Result<(), InjectError> {
-            let entry_fn: unsafe extern "system" fn(*mut core::ffi::c_void) -> u32 =
-                unsafe { std::mem::transmute(entry_addr) };
+            // Build x64 shellcode stub for DllMain(base, DLL_PROCESS_ATTACH, NULL)
+            let mut stub = Vec::with_capacity(64);
+            // mov rcx, imm64 (base_addr = hinstDLL)
+            stub.extend_from_slice(&[0x48, 0xB9]);
+            stub.extend_from_slice(&(base_addr as u64).to_le_bytes());
+            // mov edx, 1 (DLL_PROCESS_ATTACH)
+            stub.extend_from_slice(&[0xBA, 0x01, 0x00, 0x00, 0x00]);
+            // xor r8, r8 (lpvReserved = NULL)
+            stub.extend_from_slice(&[0x4D, 0x31, 0xC0]);
+            // mov rax, imm64 (entry_addr)
+            stub.extend_from_slice(&[0x48, 0xB8]);
+            stub.extend_from_slice(&(entry_addr as u64).to_le_bytes());
+            // call rax
+            stub.extend_from_slice(&[0xFF, 0xD0]);
+            // xor eax, eax (return 0)
+            stub.extend_from_slice(&[0x31, 0xC0]);
+            // ret
+            stub.push(0xC3);
 
-            // DLL_PROCESS_ATTACH = 1
-            let thread = unsafe {
-                CreateRemoteThread(
+            // Allocate RWX memory in target for the stub
+            let stub_mem = unsafe {
+                VirtualAllocEx(
                     process_handle,
-                    None,
-                    0,
-                    Some(entry_fn),
-                    Some(std::ptr::dangling()),
-                    0,
+                    Some(std::ptr::null()),
+                    stub.len(),
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_EXECUTE_READWRITE,
+                )
+            };
+            if stub_mem.is_null() {
+                return Err(InjectError::EntryPointFailed(
+                    "VirtualAllocEx for stub failed".into(),
+                ));
+            }
+
+            // Write stub to target
+            unsafe {
+                WriteProcessMemory(
+                    process_handle,
+                    stub_mem,
+                    stub.as_ptr() as *const _,
+                    stub.len(),
                     None,
                 )
+            }
+            .map_err(|e| InjectError::EntryPointFailed(format!("WriteProcessMemory stub: {e}")))?;
+
+            // Execute stub via CreateRemoteThread
+            let stub_fn: unsafe extern "system" fn(*mut core::ffi::c_void) -> u32 =
+                unsafe { std::mem::transmute(stub_mem) };
+
+            let thread = unsafe {
+                CreateRemoteThread(process_handle, None, 0, Some(stub_fn), None, 0, None)
             }
             .map_err(|e| InjectError::EntryPointFailed(format!("CreateRemoteThread: {e}")))?;
 
             unsafe {
                 let wait = WaitForSingleObject(thread, ENTRY_TIMEOUT_MS);
                 let _ = CloseHandle(thread);
+
+                // Clean up stub memory
+                let _ = VirtualFreeEx(process_handle, stub_mem, 0, MEM_RELEASE);
+
                 if wait != WAIT_OBJECT_0 {
                     return Err(InjectError::EntryPointFailed(
                         "DllMain did not complete within timeout".into(),
@@ -595,7 +659,7 @@ mod platform {
     }
 }
 
-pub use platform::{ReflectiveLoader, inject_reflective};
+pub use platform::{inject_reflective, ReflectiveLoader};
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
