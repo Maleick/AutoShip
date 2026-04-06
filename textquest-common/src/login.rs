@@ -173,6 +173,66 @@ pub enum LoginError {
     MassFailure,
 }
 
+/// Configuration for the camp-relog cycle.
+///
+/// When a client needs to relog (e.g., after a crash, zone failure, or operator
+/// request), these settings control the backoff and retry behavior.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RelogConfig {
+    /// Retry policy for relog attempts (exponential backoff).
+    pub retry_policy: RetryPolicy,
+    /// Whether to attempt `/camp desktop` before reconnecting.
+    /// If false, assumes the client is already disconnected.
+    pub camp_before_relog: bool,
+    /// Maximum time to wait for the `/camp desktop` timer (seconds).
+    /// EQ's camp timer is typically 30 seconds.
+    pub camp_timeout_secs: u64,
+}
+
+impl Default for RelogConfig {
+    fn default() -> Self {
+        Self {
+            retry_policy: RetryPolicy {
+                max_retries: 5,
+                initial_delay: Duration::from_secs(5),
+                max_delay: Duration::from_secs(120),
+                backoff_multiplier: 2.0,
+                jitter: true,
+            },
+            camp_before_relog: true,
+            camp_timeout_secs: 35,
+        }
+    }
+}
+
+/// Progress of an in-flight relog operation, sent via IPC for operator telemetry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RelogPhase {
+    /// `/camp desktop` issued, waiting for camp timer.
+    Camping,
+    /// Camp complete, client is at server select / login screen.
+    LoggedOut,
+    /// Waiting before next reconnect attempt (backoff).
+    WaitingToReconnect {
+        /// Current attempt number (1-indexed).
+        attempt: u32,
+        /// Delay before this attempt in seconds.
+        delay_secs: f64,
+    },
+    /// Re-entering credentials / server select / character select.
+    Reconnecting {
+        /// Current attempt number (1-indexed).
+        attempt: u32,
+    },
+    /// Relog succeeded — back in world.
+    Complete,
+    /// Relog failed after exhausting retries.
+    Failed {
+        /// The error from the last attempt.
+        reason: LoginError,
+    },
+}
+
 /// Per-character account and server metadata for login orchestration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AccountInfo {
@@ -1106,5 +1166,92 @@ mod tests {
         assert_eq!(r.resolve("The Rathe"), Some("rathe"));
         assert_eq!(r.resolve("Rathe"), Some("rathe"));
         assert_eq!(r.display_name("rathe"), Some("The Rathe"));
+    }
+
+    // ── RelogConfig tests ──────────────────────────────────────────────
+
+    #[test]
+    fn relog_config_default_values() {
+        let config = RelogConfig::default();
+        assert!(config.camp_before_relog);
+        assert_eq!(config.camp_timeout_secs, 35);
+        assert_eq!(config.retry_policy.max_retries, 5);
+        assert_eq!(config.retry_policy.initial_delay, Duration::from_secs(5));
+        assert_eq!(config.retry_policy.max_delay, Duration::from_secs(120));
+    }
+
+    #[test]
+    fn relog_config_serialization_roundtrip() {
+        let config = RelogConfig::default();
+        let json = serde_json::to_string(&config).expect("serialize");
+        let restored: RelogConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(config, restored);
+    }
+
+    #[test]
+    fn relog_config_custom_values() {
+        let config = RelogConfig {
+            retry_policy: RetryPolicy {
+                max_retries: 10,
+                initial_delay: Duration::from_secs(1),
+                max_delay: Duration::from_secs(300),
+                backoff_multiplier: 1.5,
+                jitter: false,
+            },
+            camp_before_relog: false,
+            camp_timeout_secs: 60,
+        };
+        assert!(!config.camp_before_relog);
+        assert_eq!(config.camp_timeout_secs, 60);
+        assert_eq!(config.retry_policy.max_retries, 10);
+    }
+
+    // ── RelogPhase tests ──────────────────────────────────────────────
+
+    #[test]
+    fn relog_phase_all_variants_constructible() {
+        let phases = [
+            RelogPhase::Camping,
+            RelogPhase::LoggedOut,
+            RelogPhase::WaitingToReconnect {
+                attempt: 1,
+                delay_secs: 5.0,
+            },
+            RelogPhase::Reconnecting { attempt: 2 },
+            RelogPhase::Complete,
+            RelogPhase::Failed {
+                reason: LoginError::ServerDown,
+            },
+        ];
+        assert_eq!(phases.len(), 6);
+    }
+
+    #[test]
+    fn relog_phase_serialization_roundtrip() {
+        let phases = vec![
+            RelogPhase::Camping,
+            RelogPhase::LoggedOut,
+            RelogPhase::WaitingToReconnect {
+                attempt: 3,
+                delay_secs: 10.5,
+            },
+            RelogPhase::Reconnecting { attempt: 1 },
+            RelogPhase::Complete,
+            RelogPhase::Failed {
+                reason: LoginError::WrongPassword,
+            },
+        ];
+        for phase in &phases {
+            let json = serde_json::to_string(phase).expect("serialize");
+            let restored: RelogPhase = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(*phase, restored);
+        }
+    }
+
+    #[test]
+    fn relog_phase_equality() {
+        assert_eq!(RelogPhase::Camping, RelogPhase::Camping);
+        assert_ne!(RelogPhase::Camping, RelogPhase::LoggedOut);
+        assert_ne!(RelogPhase::Complete, RelogPhase::LoggedOut);
     }
 }

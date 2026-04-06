@@ -10,7 +10,7 @@ pub mod widgets;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use textquest_common::login::{LoginError, LoginPhase};
+use textquest_common::login::{LoginError, LoginPhase, RelogConfig, RelogPhase, RetryState};
 use zeroize::Zeroizing;
 
 /// Global login FSM instance, one per injected DLL.
@@ -67,6 +67,70 @@ pub fn phase() -> LoginPhase {
         .map_or(LoginPhase::NotStarted, |fsm| fsm.phase.clone())
 }
 
+/// Start a camp-relog cycle: camp → logout → reconnect with backoff.
+pub fn start_relog(
+    account_name: String,
+    password: String,
+    server_name: String,
+    character_name: String,
+    config: RelogConfig,
+) {
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(fsm) = guard.as_mut() {
+        fsm.start_relog(account_name, password, server_name, character_name, config);
+    } else {
+        let mut fsm = LoginFsm::new();
+        fsm.start_relog(account_name, password, server_name, character_name, config);
+        *guard = Some(fsm);
+    }
+}
+
+/// Cancel an in-progress relog. The client stays wherever it currently is.
+pub fn cancel_relog() {
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(fsm) = guard.as_mut() {
+        fsm.cancel_relog();
+    }
+}
+
+/// Switch to a different server. Issues `/camp desktop` then re-authenticates.
+pub fn switch_server(
+    server_name: String,
+    character_name: String,
+    account_name: String,
+    password: String,
+) {
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(fsm) = guard.as_mut() {
+        fsm.start_switch_server(server_name, character_name, account_name, password);
+    } else {
+        let mut fsm = LoginFsm::new();
+        fsm.start_switch_server(server_name, character_name, account_name, password);
+        *guard = Some(fsm);
+    }
+}
+
+/// Switch to a different character on the current server. Issues `/camp` then
+/// selects the new character at character select.
+pub fn switch_character(character_name: String) {
+    let mut guard = LOGIN_FSM
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(fsm) = guard.as_mut() {
+        fsm.start_switch_character(character_name);
+    } else {
+        let mut fsm = LoginFsm::new();
+        fsm.start_switch_character(character_name);
+        *guard = Some(fsm);
+    }
+}
+
 /// Check if the login FSM has completed (in world, error, or idle after completion).
 pub fn is_done() -> bool {
     let guard = LOGIN_FSM
@@ -94,6 +158,18 @@ enum State {
     WaitForWorld,
     InWorld,
     Error(LoginError),
+    // ── Relog states ──
+    /// `/camp desktop` issued, waiting for the camp timer to complete.
+    RelogCamping,
+    /// Camp complete, waiting for backoff delay before reconnecting.
+    RelogWaitingBackoff,
+    /// Re-entering the login flow after backoff.
+    RelogReconnecting,
+    // ── Switch states ──
+    /// `/camp desktop` issued for server switch, waiting for camp timer.
+    SwitchServerCamping,
+    /// `/camp` issued for character switch, waiting for character select.
+    SwitchCharacterCamping,
 }
 
 /// Throttle ticks between actions to avoid spamming EQ's UI.
@@ -116,6 +192,11 @@ struct Credentials {
     password: Zeroizing<String>,
     server_name: String,
     character_name: String,
+}
+
+/// Issue a slash command through the game loop's command queue.
+fn issue_slash_command(cmd: &str) {
+    crate::hooks::game_loop::queue_slash_command(cmd.to_string());
 }
 
 /// The login state machine. Drives EQ's login UI from credential entry to in-world.
@@ -143,6 +224,13 @@ pub struct LoginFsm {
     ticks_in_state: u32,
     /// Whether we've performed the action for this state (prevents double-actions).
     action_taken: bool,
+    // ── Relog state ──
+    /// Active relog configuration (set when a relog is in progress).
+    relog_config: Option<RelogConfig>,
+    /// Retry state for the current relog sequence.
+    relog_retry: RetryState,
+    /// Credentials stashed for relog reconnection (re-used across retries).
+    relog_credentials: Option<Credentials>,
 }
 
 impl LoginFsm {
@@ -160,6 +248,9 @@ impl LoginFsm {
             eqmain_base: 0,
             ticks_in_state: 0,
             action_taken: false,
+            relog_config: None,
+            relog_retry: RetryState::default(),
+            relog_credentials: None,
         }
     }
 
@@ -237,6 +328,11 @@ impl LoginFsm {
             State::WaitForCharSelect => self.tick_wait_for_char_select(),
             State::SelectingCharacter => self.tick_selecting_character(),
             State::WaitForWorld => self.tick_wait_for_world(),
+            State::RelogCamping => self.tick_relog_camping(),
+            State::RelogWaitingBackoff => self.tick_relog_waiting_backoff(),
+            State::RelogReconnecting => self.tick_relog_reconnecting(),
+            State::SwitchServerCamping => self.tick_switch_server_camping(),
+            State::SwitchCharacterCamping => self.tick_switch_character_camping(),
             _ => {}
         }
 
@@ -256,13 +352,26 @@ impl LoginFsm {
         }
 
         // OK dialog — error messages, server full, etc.
-        // Don't transition to error — let the FSM detect the actual state
-        // on the next tick (e.g., back to login screen means wrong password).
-        if let Some(dialog_wnd) =
-            widgets::find_visible_sidl_window(self.eqmain_base, widgets::SIDL_OK_DIALOG)
-        {
-            tracing::warn!("OK dialog detected — dismissing");
-            widgets::click_ok_dialog(dialog_wnd);
+        // Read dialog text, classify the error, and apply recovery logic.
+        if let Some(error) = widgets::check_error_dialog(self.eqmain_base) {
+            let action = widgets::recovery_action(&error);
+            match action {
+                widgets::RecoveryAction::Abort => {
+                    tracing::error!(error = ?error, "Login error — aborting");
+                    self.transition(State::Error(error));
+                    return true;
+                }
+                widgets::RecoveryAction::Retry => {
+                    tracing::warn!(error = ?error, "Transient error — resetting for retry");
+                    self.state_entered_at = Instant::now();
+                }
+                widgets::RecoveryAction::WaitAndRetry => {
+                    tracing::warn!(error = ?error, "Server-side error — retry with grace period");
+                    self.state_entered_at = Instant::now();
+                    // Give an extra retry attempt for server-side issues
+                    self.retries = self.retries.saturating_sub(1);
+                }
+            }
         }
 
         false
@@ -541,6 +650,37 @@ impl LoginFsm {
             return;
         };
 
+        // Pre-validate: scan the character list to confirm the target exists.
+        // This provides a clear error with available character names instead of
+        // silently selecting index 0 when the character isn't found.
+        match widgets::find_character_in_list(wnd, character_name) {
+            Ok(index) => {
+                tracing::info!(
+                    character = %character_name,
+                    index,
+                    wnd = format!("{:#x}", wnd),
+                    "Character found in list — proceeding to enter world"
+                );
+            }
+            Err(available) => {
+                let found_str = if available.is_empty() {
+                    "none (list empty or unreadable)".to_string()
+                } else {
+                    available.join(", ")
+                };
+                tracing::error!(
+                    expected = %character_name,
+                    available = %found_str,
+                    "Character not found in character list"
+                );
+                self.transition(State::Error(LoginError::CharacterNotFound {
+                    expected: character_name.to_string(),
+                    found: found_str,
+                }));
+                return;
+            }
+        }
+
         let Some(enter_world_addr) =
             textquest_common::offsets::rebase(textquest_common::offsets::ENTER_WORLD, eq_base)
         else {
@@ -590,6 +730,287 @@ impl LoginFsm {
         }
     }
 
+    // ── Relog methods ──────────────────────────────────────────────────
+
+    /// Begin a camp-relog cycle from in-world or any state.
+    fn start_relog(
+        &mut self,
+        account_name: String,
+        password: String,
+        server_name: String,
+        character_name: String,
+        config: RelogConfig,
+    ) {
+        tracing::info!(
+            account = %account_name,
+            server = %server_name,
+            character = %character_name,
+            camp_first = config.camp_before_relog,
+            "Starting relog sequence"
+        );
+        self.server_name = server_name.clone();
+        self.character_name = character_name.clone();
+        self.relog_retry.reset();
+        self.relog_credentials = Some(Credentials {
+            account_name,
+            password: Zeroizing::new(password),
+            server_name,
+            character_name,
+        });
+
+        if config.camp_before_relog {
+            self.send_relog_progress(RelogPhase::Camping);
+            self.relog_config = Some(config);
+            self.transition(State::RelogCamping);
+        } else {
+            self.relog_config = Some(config);
+            self.send_relog_progress(RelogPhase::LoggedOut);
+            self.transition(State::RelogWaitingBackoff);
+        }
+    }
+
+    /// Cancel an in-progress relog. Stay wherever we are.
+    fn cancel_relog(&mut self) {
+        if matches!(
+            self.state,
+            State::RelogCamping | State::RelogWaitingBackoff | State::RelogReconnecting
+        ) {
+            tracing::info!("Relog cancelled by operator");
+            self.relog_config = None;
+            self.relog_credentials = None;
+            self.relog_retry.reset();
+            self.transition(State::Idle);
+        }
+    }
+
+    fn tick_relog_camping(&mut self) {
+        // Issue `/camp desktop` once
+        if !self.action_taken {
+            tracing::info!("Issuing /camp desktop for relog");
+            issue_slash_command("/camp desktop");
+            self.action_taken = true;
+        }
+
+        // Check if we've left the world (local player pointer goes null)
+        if self.is_local_player_null() {
+            tracing::info!("Camp complete — player gone from world");
+            self.send_relog_progress(RelogPhase::LoggedOut);
+            self.transition(State::RelogWaitingBackoff);
+            return;
+        }
+
+        // Timeout: if camp takes too long, force transition
+        let camp_timeout = self
+            .relog_config
+            .as_ref()
+            .map_or(35, |c| c.camp_timeout_secs);
+        if self.state_entered_at.elapsed().as_secs() > camp_timeout {
+            tracing::warn!("Camp timeout exceeded — proceeding to reconnect");
+            self.send_relog_progress(RelogPhase::LoggedOut);
+            self.transition(State::RelogWaitingBackoff);
+        }
+    }
+
+    fn tick_relog_waiting_backoff(&mut self) {
+        let Some(config) = self.relog_config.as_ref() else {
+            self.transition(State::Error(LoginError::Timeout {
+                phase: "RelogWaitingBackoff (no config)".into(),
+            }));
+            return;
+        };
+
+        let delay = config.retry_policy.next_delay(&self.relog_retry);
+        match delay {
+            Some(d) => {
+                let attempt = self.relog_retry.attempt_count + 1;
+                // Only send progress once when entering this state
+                if !self.action_taken {
+                    self.send_relog_progress(RelogPhase::WaitingToReconnect {
+                        attempt,
+                        delay_secs: d.as_secs_f64(),
+                    });
+                    self.action_taken = true;
+                    tracing::info!(
+                        attempt,
+                        delay_secs = d.as_secs_f64(),
+                        "Waiting before relog attempt"
+                    );
+                }
+
+                // Wait for the backoff delay
+                if self.state_entered_at.elapsed() >= d {
+                    self.relog_retry.attempt_count += 1;
+                    self.send_relog_progress(RelogPhase::Reconnecting { attempt });
+                    self.transition(State::RelogReconnecting);
+                }
+            }
+            None => {
+                // Retries exhausted
+                let reason = self
+                    .relog_retry
+                    .last_error
+                    .clone()
+                    .unwrap_or(LoginError::Timeout {
+                        phase: "Relog retries exhausted".into(),
+                    });
+                tracing::error!(
+                    attempts = self.relog_retry.attempt_count,
+                    ?reason,
+                    "Relog failed — retries exhausted"
+                );
+                self.send_relog_progress(RelogPhase::Failed {
+                    reason: reason.clone(),
+                });
+                self.relog_config = None;
+                self.relog_credentials = None;
+                self.transition(State::Error(reason));
+            }
+        }
+    }
+
+    fn tick_relog_reconnecting(&mut self) {
+        // Feed credentials back into the normal login flow.
+        // The relog_credentials are cloned (not consumed) so retries can reuse them.
+        if !self.action_taken {
+            if let Some(creds) = self.relog_credentials.as_ref() {
+                tracing::info!(
+                    account = %creds.account_name,
+                    server = %creds.server_name,
+                    character = %creds.character_name,
+                    attempt = self.relog_retry.attempt_count,
+                    "Relog: starting login sequence"
+                );
+                self.server_name = creds.server_name.clone();
+                self.character_name = creds.character_name.clone();
+                self.credentials = Some(Credentials {
+                    account_name: creds.account_name.clone(),
+                    password: Zeroizing::new(creds.password.as_str().to_owned()),
+                    server_name: creds.server_name.clone(),
+                    character_name: creds.character_name.clone(),
+                });
+                self.action_taken = true;
+                // Transition into the normal login flow
+                self.transition(State::WaitForLoginScreen);
+            } else {
+                self.transition(State::Error(LoginError::Timeout {
+                    phase: "RelogReconnecting (no credentials)".into(),
+                }));
+            }
+        }
+    }
+
+    // ── Switch methods ──────────────────────────────────────────────────
+
+    /// Switch to a different server — camp desktop → re-authenticate on new server.
+    fn start_switch_server(
+        &mut self,
+        server_name: String,
+        character_name: String,
+        account_name: String,
+        password: String,
+    ) {
+        tracing::info!(
+            server = %server_name,
+            character = %character_name,
+            "Starting server switch"
+        );
+        self.server_name = server_name.clone();
+        self.character_name = character_name.clone();
+        self.credentials = Some(Credentials {
+            account_name,
+            password: Zeroizing::new(password),
+            server_name,
+            character_name,
+        });
+        self.transition(State::SwitchServerCamping);
+    }
+
+    /// Switch to a different character on the same server — camp → char select.
+    fn start_switch_character(&mut self, character_name: String) {
+        tracing::info!(character = %character_name, "Starting character switch");
+        self.character_name = character_name;
+        self.transition(State::SwitchCharacterCamping);
+    }
+
+    fn tick_switch_server_camping(&mut self) {
+        if !self.action_taken {
+            tracing::info!("Issuing /camp desktop for server switch");
+            issue_slash_command("/camp desktop");
+            self.action_taken = true;
+        }
+
+        if self.is_local_player_null() {
+            tracing::info!("Camp complete — transitioning to login for server switch");
+            self.transition(State::WaitForLoginScreen);
+            return;
+        }
+
+        if self.state_entered_at.elapsed().as_secs() > 45 {
+            tracing::error!("Server switch camp timeout");
+            crate::ipc::send_response(textquest_common::ipc::Response::SwitchResult {
+                success: false,
+                message: "Camp timeout during server switch".into(),
+            });
+            self.transition(State::Error(LoginError::Timeout {
+                phase: "SwitchServerCamping".into(),
+            }));
+        }
+    }
+
+    fn tick_switch_character_camping(&mut self) {
+        if !self.action_taken {
+            tracing::info!("Issuing /camp for character switch");
+            issue_slash_command("/camp");
+            self.action_taken = true;
+        }
+
+        // Detect char select: local player null while eqmain stays unloaded
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base != 0 && self.is_local_player_null() && self.eqmain_base == 0 {
+            tracing::info!("At character select — selecting new character");
+            self.transition(State::SelectingCharacter);
+            return;
+        }
+
+        if self.state_entered_at.elapsed().as_secs() > 45 {
+            tracing::error!("Character switch camp timeout");
+            crate::ipc::send_response(textquest_common::ipc::Response::SwitchResult {
+                success: false,
+                message: "Camp timeout during character switch".into(),
+            });
+            self.transition(State::Error(LoginError::Timeout {
+                phase: "SwitchCharacterCamping".into(),
+            }));
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    /// Check if local player pointer is null (not in world).
+    fn is_local_player_null(&self) -> bool {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            return true;
+        }
+        #[cfg(windows)]
+        {
+            if let Some(addr) = textquest_common::offsets::rebase(
+                textquest_common::offsets::PINST_LOCAL_PLAYER,
+                eq_base,
+            ) {
+                return unsafe { *(addr as *const usize) } == 0;
+            }
+            true
+        }
+        #[cfg(not(windows))]
+        true
+    }
+
+    /// Send a relog progress IPC response.
+    fn send_relog_progress(&self, phase: RelogPhase) {
+        crate::ipc::send_response(textquest_common::ipc::Response::RelogProgress { phase });
+    }
+
     fn handle_timeout(&mut self) {
         let phase_name = format!("{:?}", self.state);
         if self.retries < self.max_retries {
@@ -629,6 +1050,13 @@ impl LoginFsm {
             State::WaitForWorld => LoginPhase::Zoning,
             State::InWorld => LoginPhase::InWorld,
             State::Error(e) => LoginPhase::Failed { reason: e.clone() },
+            // Relog states map to AtLoginScreen since we're cycling back through login
+            State::RelogCamping | State::RelogWaitingBackoff | State::RelogReconnecting => {
+                LoginPhase::AtLoginScreen
+            }
+            // Switch states also map back to login phases
+            State::SwitchServerCamping => LoginPhase::ServerSelecting,
+            State::SwitchCharacterCamping => LoginPhase::CharacterSelecting,
         };
     }
 
@@ -841,5 +1269,210 @@ mod tests {
             fsm.handle_yesno_dialog(0, "This account already has an active character.");
         assert!(!transitioned);
         assert_eq!(fsm.state, State::WaitForLoginScreen);
+    }
+
+    // ── Relog tests ──────────────────────────────────────────────────────
+
+    fn make_relog_config(max_retries: u32) -> RelogConfig {
+        RelogConfig {
+            retry_policy: textquest_common::login::RetryPolicy {
+                max_retries,
+                initial_delay: std::time::Duration::from_millis(10),
+                max_delay: std::time::Duration::from_secs(1),
+                backoff_multiplier: 2.0,
+                jitter: false,
+            },
+            camp_before_relog: true,
+            camp_timeout_secs: 35,
+        }
+    }
+
+    #[test]
+    fn relog_with_camp_starts_in_camping_state() {
+        let mut fsm = LoginFsm::new();
+        fsm.start_relog(
+            "acc".into(),
+            "pass".into(),
+            "Teek".into(),
+            "Char".into(),
+            make_relog_config(3),
+        );
+        assert_eq!(fsm.state, State::RelogCamping);
+        assert!(fsm.relog_config.is_some());
+        assert!(fsm.relog_credentials.is_some());
+    }
+
+    #[test]
+    fn relog_without_camp_skips_to_backoff() {
+        let mut fsm = LoginFsm::new();
+        let mut config = make_relog_config(3);
+        config.camp_before_relog = false;
+        fsm.start_relog(
+            "acc".into(),
+            "pass".into(),
+            "Teek".into(),
+            "Char".into(),
+            config,
+        );
+        assert_eq!(fsm.state, State::RelogWaitingBackoff);
+    }
+
+    #[test]
+    fn cancel_relog_returns_to_idle() {
+        let mut fsm = LoginFsm::new();
+        fsm.start_relog(
+            "acc".into(),
+            "pass".into(),
+            "Teek".into(),
+            "Char".into(),
+            make_relog_config(3),
+        );
+        assert_eq!(fsm.state, State::RelogCamping);
+
+        fsm.cancel_relog();
+        assert_eq!(fsm.state, State::Idle);
+        assert!(fsm.relog_config.is_none());
+        assert!(fsm.relog_credentials.is_none());
+    }
+
+    #[test]
+    fn cancel_relog_noop_from_idle() {
+        let mut fsm = LoginFsm::new();
+        fsm.cancel_relog();
+        assert_eq!(fsm.state, State::Idle);
+    }
+
+    #[test]
+    fn relog_reconnecting_transitions_to_login_flow() {
+        let mut fsm = LoginFsm::new();
+        let mut config = make_relog_config(3);
+        config.camp_before_relog = false;
+        fsm.start_relog(
+            "acc".into(),
+            "pass".into(),
+            "Teek".into(),
+            "Char".into(),
+            config,
+        );
+        assert_eq!(fsm.state, State::RelogWaitingBackoff);
+
+        // Simulate backoff elapsed by transitioning directly
+        fsm.relog_retry.attempt_count = 1;
+        fsm.transition(State::RelogReconnecting);
+
+        // Tick should feed credentials into login flow
+        fsm.tick_relog_reconnecting();
+        assert_eq!(fsm.state, State::WaitForLoginScreen);
+        assert!(fsm.credentials.is_some());
+    }
+
+    #[test]
+    fn relog_retries_exhausted_transitions_to_error() {
+        let mut fsm = LoginFsm::new();
+        let mut config = make_relog_config(0); // zero retries
+        config.camp_before_relog = false;
+        fsm.start_relog(
+            "acc".into(),
+            "pass".into(),
+            "Teek".into(),
+            "Char".into(),
+            config,
+        );
+        assert_eq!(fsm.state, State::RelogWaitingBackoff);
+
+        // Tick should detect exhausted retries and error out
+        fsm.tick_relog_waiting_backoff();
+        assert!(matches!(fsm.state, State::Error(_)));
+    }
+
+    #[test]
+    fn relog_camping_phase_maps_to_at_login_screen() {
+        let mut fsm = LoginFsm::new();
+        fsm.transition(State::RelogCamping);
+        assert_eq!(fsm.phase, LoginPhase::AtLoginScreen);
+    }
+
+    #[test]
+    fn relog_waiting_backoff_phase_maps_to_at_login_screen() {
+        let mut fsm = LoginFsm::new();
+        fsm.transition(State::RelogWaitingBackoff);
+        assert_eq!(fsm.phase, LoginPhase::AtLoginScreen);
+    }
+
+    // ── Switch tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn switch_server_starts_camping() {
+        let mut fsm = LoginFsm::new();
+        fsm.start_switch_server(
+            "Firiona Vie".into(),
+            "NewChar".into(),
+            "acc".into(),
+            "pass".into(),
+        );
+        assert_eq!(fsm.state, State::SwitchServerCamping);
+        assert_eq!(fsm.server_name, "Firiona Vie");
+        assert_eq!(fsm.character_name, "NewChar");
+        assert!(fsm.credentials.is_some());
+    }
+
+    #[test]
+    fn switch_character_starts_camping() {
+        let mut fsm = LoginFsm::new();
+        fsm.start_switch_character("AltChar".into());
+        assert_eq!(fsm.state, State::SwitchCharacterCamping);
+        assert_eq!(fsm.character_name, "AltChar");
+    }
+
+    #[test]
+    fn switch_server_camping_phase_maps_to_server_selecting() {
+        let mut fsm = LoginFsm::new();
+        fsm.transition(State::SwitchServerCamping);
+        assert_eq!(fsm.phase, LoginPhase::ServerSelecting);
+    }
+
+    #[test]
+    fn switch_character_camping_phase_maps_to_character_selecting() {
+        let mut fsm = LoginFsm::new();
+        fsm.transition(State::SwitchCharacterCamping);
+        assert_eq!(fsm.phase, LoginPhase::CharacterSelecting);
+    }
+
+    #[test]
+    fn transition_resets_relog_unrelated_fields() {
+        let mut fsm = LoginFsm::new();
+        fsm.retries = 5;
+        fsm.ticks_in_state = 100;
+        fsm.action_taken = true;
+        fsm.transition(State::RelogCamping);
+        assert_eq!(fsm.retries, 0);
+        assert_eq!(fsm.ticks_in_state, 0);
+        assert!(!fsm.action_taken);
+    }
+
+    #[test]
+    fn relog_credentials_preserved_across_retries() {
+        let mut fsm = LoginFsm::new();
+        let mut config = make_relog_config(3);
+        config.camp_before_relog = false;
+        fsm.start_relog(
+            "myacc".into(),
+            "mypass".into(),
+            "Teek".into(),
+            "MyChar".into(),
+            config,
+        );
+
+        // Simulate first reconnect
+        fsm.relog_retry.attempt_count = 1;
+        fsm.transition(State::RelogReconnecting);
+        fsm.tick_relog_reconnecting();
+        assert_eq!(fsm.state, State::WaitForLoginScreen);
+
+        // relog_credentials should still be available for retry
+        assert!(fsm.relog_credentials.is_some());
+        let creds = fsm.relog_credentials.as_ref().unwrap();
+        assert_eq!(creds.account_name, "myacc");
+        assert_eq!(creds.server_name, "Teek");
     }
 }
