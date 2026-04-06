@@ -853,34 +853,18 @@ pub fn dismiss_splash(eqmain_base: u64) {
     }
 }
 
-/// Check for error dialogs (okdialog) and return the appropriate `LoginError`.
+/// Check for error dialogs (okdialog), classify the error, and dismiss.
 ///
-/// # Current behavior (partial stub)
-///
-/// Detects whether an OK dialog is visible and dismisses it, but always returns
-/// `LoginError::WrongPassword` regardless of the actual dialog content. This is
-/// because reading the dialog's `CStmlWnd` text requires `CXStr` pointer chasing
-/// that has not been validated on the target client.
-///
-/// # Intended behavior (when fully implemented)
-///
-/// 1. Detect the visible `okdialog` window.
-/// 2. Read the `CStmlWnd` text content (the dialog message body).
-/// 3. Pattern-match the text to return a specific `LoginError` variant:
-///    - "password" / "invalid" -> `WrongPassword`
-///    - "suspended" / "banned" -> `AccountLocked`
-///    - "server" / "full" -> `ServerFull`
-///    - "timeout" / "connection" -> `Timeout`
-/// 4. Dismiss the dialog by clicking OK.
+/// 1. Detects the visible `okdialog` window.
+/// 2. Reads the STML text content from the dialog's display child.
+/// 3. Strips STML tags and pattern-matches the text to a `LoginError` variant.
+/// 4. Dismisses the dialog by clicking OK.
+/// 5. Logs the classified error and recovery action for diagnostics.
 ///
 /// # Returns
 ///
-/// `Some(LoginError::WrongPassword)` if any OK dialog is visible (always the same
-/// variant until text parsing is implemented). `None` if no dialog is visible.
-///
-// NOTE: Dialog text parsing (CStmlWnd → CXStr) is not yet implemented. All error
-// dialogs are treated as WrongPassword. Refining this requires validating the CXStr
-// struct layout on a live client, then pattern-matching the message text.
+/// `Some(LoginError)` with the classified error if an OK dialog was visible,
+/// `None` if no dialog is visible.
 pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
     #[cfg(windows)]
     {
@@ -888,19 +872,277 @@ pub fn check_error_dialog(eqmain_base: u64) -> Option<LoginError> {
             return None;
         }
 
-        // Dismiss the dialog and report a generic error. Refining error
-        // classification requires CStmlWnd text parsing (CXStr layout unvalidated).
-        click_button(eqmain_base, OK_DIALOG);
-        tracing::warn!("Error dialog detected and dismissed");
+        // Read dialog text before dismissing
+        let dialog_text = read_ok_dialog_text(eqmain_base);
 
-        // Default to WrongPassword — will be refined with text parsing
-        Some(LoginError::WrongPassword)
+        // Dismiss the dialog
+        click_button(eqmain_base, OK_DIALOG);
+
+        let error = if let Some(ref text) = dialog_text {
+            let classified = classify_dialog_error(text);
+            let action = recovery_action(&classified);
+            tracing::warn!(
+                text = text.as_str(),
+                error = ?classified,
+                recovery = ?action,
+                "Login error dialog classified"
+            );
+            classified
+        } else {
+            tracing::warn!("Error dialog detected but text unreadable — treating as timeout");
+            LoginError::Timeout {
+                phase: "unreadable_dialog".into(),
+            }
+        };
+
+        Some(error)
     }
 
     #[cfg(not(windows))]
     {
         let _ = eqmain_base;
         None
+    }
+}
+
+// ─── Character List Scanning (#97) ───
+
+/// Enumerate all character names visible in the `Character_List` `CListWnd`.
+///
+/// Scans `CCharacterListWnd` → `Character_List` (child `CListWnd`) → rows,
+/// reading column 2 (character name) from each `SListWndLine`.
+/// Returns an empty vec if the list is not found or has no rows.
+pub fn enumerate_character_names(char_list_wnd: usize) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        const MAX_SCAN_ROWS: usize = 64;
+
+        if char_list_wnd == 0 {
+            return Vec::new();
+        }
+
+        unsafe {
+            let Some(list_wnd) =
+                crate::eq::widgets::find_child_by_sidl_text(char_list_wnd, CHARACTER_LIST)
+            else {
+                tracing::warn!("Character_List child not found in CCharacterListWnd");
+                return Vec::new();
+            };
+
+            let row_count = crate::eq::widgets::list_row_count(list_wnd);
+            let bounded = row_count.min(MAX_SCAN_ROWS);
+
+            let mut names = Vec::with_capacity(bounded);
+            for i in 0..bounded {
+                // Column 2 is the character name (MQ2 convention)
+                if let Some(name) = crate::eq::widgets::read_list_item_text(list_wnd, i, 2) {
+                    if !name.is_empty() {
+                        names.push(name);
+                    }
+                }
+            }
+
+            tracing::info!(
+                count = names.len(),
+                total_rows = row_count,
+                names = ?names,
+                "Enumerated character list"
+            );
+            names
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = char_list_wnd;
+        Vec::new()
+    }
+}
+
+/// Find a character by name in the `Character_List` `CListWnd`.
+///
+/// Returns `Ok(index)` with the 0-based row index on case-insensitive match,
+/// or `Err(available_names)` with all character names found in the list.
+pub fn find_character_in_list(
+    char_list_wnd: usize,
+    character_name: &str,
+) -> Result<usize, Vec<String>> {
+    let names = enumerate_character_names(char_list_wnd);
+
+    for (i, name) in names.iter().enumerate() {
+        if name.eq_ignore_ascii_case(character_name) {
+            return Ok(i);
+        }
+    }
+
+    Err(names)
+}
+
+// ─── Error Dialog Parsing (#101) ───
+
+/// Recovery action for a login error, used by the FSM to decide how to proceed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryAction {
+    /// Retry immediately (transient error).
+    Retry,
+    /// Wait before retrying (server-side throttle or capacity).
+    WaitAndRetry,
+    /// Do not retry — error is permanent for this session.
+    Abort,
+}
+
+/// Map a `LoginError` to the appropriate recovery action.
+pub fn recovery_action(error: &LoginError) -> RecoveryAction {
+    match error {
+        LoginError::WrongPassword => RecoveryAction::Abort,
+        LoginError::AccountLocked => RecoveryAction::Abort,
+        LoginError::CharacterAlreadyLoggedIn => RecoveryAction::WaitAndRetry,
+        LoginError::OfflineTrader => RecoveryAction::Abort,
+        LoginError::ServerDown => RecoveryAction::WaitAndRetry,
+        LoginError::ServerFull => RecoveryAction::WaitAndRetry,
+        LoginError::CharacterNotFound { .. } => RecoveryAction::Abort,
+        LoginError::Timeout { .. } => RecoveryAction::Retry,
+        LoginError::MassFailure => RecoveryAction::WaitAndRetry,
+    }
+}
+
+/// Strip STML/HTML-like tags from EQ dialog text.
+///
+/// EQ uses a simple markup language (STML) for dialog text with tags like
+/// `<BR>`, `<c "#FF0000">`, etc. This strips all `<...>` sequences and
+/// normalizes whitespace.
+fn strip_stml_tags(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut in_tag = false;
+
+    for ch in text.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(ch),
+            _ => {}
+        }
+    }
+
+    // Collapse multiple whitespace sequences into single spaces
+    let collapsed: String = result
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    collapsed
+}
+
+/// Read text content from the OK error dialog.
+///
+/// The `okdialog` window contains STML-formatted text in a child display widget.
+/// Walks child windows to find the text, then strips STML tags to return plain text.
+pub fn read_ok_dialog_text(eqmain_base: u64) -> Option<String> {
+    #[cfg(windows)]
+    {
+        use textquest_common::offsets::eqmain as off;
+
+        let dialog_wnd = find_visible_sidl_window(eqmain_base, SIDL_OK_DIALOG)?;
+
+        unsafe {
+            // Walk children looking for the display widget with the message text.
+            // The OK dialog's text child is typically the longest WindowText among children.
+            let mut best_text: Option<String> = None;
+            let mut child = *((dialog_wnd + off::CXWND_FIRST_NODE) as *const usize);
+            let mut count = 0u32;
+
+            while child != 0 && count < 200 {
+                count += 1;
+
+                if let Some(text) =
+                    crate::eq::widgets::read_cxstr(child + off::CXWND_WINDOW_TEXT)
+                {
+                    // The display child has the actual message — it's typically the
+                    // longest text among children (button labels are short like "OK").
+                    if text.len() > 3 {
+                        let stripped = strip_stml_tags(&text);
+                        if !stripped.is_empty() {
+                            if best_text.as_ref().is_none_or(|prev| stripped.len() > prev.len()) {
+                                best_text = Some(stripped);
+                            }
+                        }
+                    }
+                }
+
+                child = *((child + off::CXWND_NEXT) as *const usize);
+            }
+
+            if best_text.is_some() {
+                return best_text;
+            }
+
+            // Fallback: try the dialog window's own WindowText
+            if let Some(text) =
+                crate::eq::widgets::read_cxstr(dialog_wnd + off::CXWND_WINDOW_TEXT)
+            {
+                let stripped = strip_stml_tags(&text);
+                if !stripped.is_empty() {
+                    return Some(stripped);
+                }
+            }
+        }
+        None
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = eqmain_base;
+        None
+    }
+}
+
+/// Classify an error dialog's text into a specific `LoginError` variant.
+///
+/// Pattern-matches against known EQ login error messages. Patterns derived from
+/// observed EQ error dialogs and MQ2 AutoLogin's error handling.
+pub fn classify_dialog_error(text: &str) -> LoginError {
+    let lower = text.to_ascii_lowercase();
+
+    if lower.contains("password") || lower.contains("invalid") || lower.contains("incorrect") {
+        LoginError::WrongPassword
+    } else if lower.contains("suspended")
+        || lower.contains("banned")
+        || lower.contains("locked")
+        || lower.contains("terminated")
+    {
+        LoginError::AccountLocked
+    } else if lower.contains("already logged in")
+        || lower.contains("logged into")
+        || lower.contains("active on")
+    {
+        LoginError::CharacterAlreadyLoggedIn
+    } else if lower.contains("server is full")
+        || lower.contains("at capacity")
+        || lower.contains("queue")
+    {
+        LoginError::ServerFull
+    } else if lower.contains("server")
+        && (lower.contains("down")
+            || lower.contains("unavailable")
+            || lower.contains("not available")
+            || lower.contains("maintenance"))
+    {
+        LoginError::ServerDown
+    } else if lower.contains("timeout")
+        || lower.contains("timed out")
+        || lower.contains("connection")
+        || lower.contains("could not connect")
+    {
+        LoginError::Timeout {
+            phase: "login_dialog".into(),
+        }
+    } else {
+        tracing::warn!(text = text, "Unrecognized error dialog text — treating as timeout");
+        LoginError::Timeout {
+            phase: format!(
+                "unknown_dialog: {}",
+                &text[..text.len().min(80)]
+            ),
+        }
     }
 }
 
@@ -1386,5 +1628,200 @@ mod tests {
     #[test]
     fn click_ok_dialog_returns_false_on_macos() {
         assert!(!click_ok_dialog(0));
+    }
+
+    // ─── STML Tag Stripping Tests ───
+
+    #[test]
+    fn strip_stml_tags_removes_html_like_tags() {
+        assert_eq!(
+            strip_stml_tags("<c \"#FF0000\">Error:</c> Your password is incorrect."),
+            "Error: Your password is incorrect."
+        );
+    }
+
+    #[test]
+    fn strip_stml_tags_handles_br_tags() {
+        // <BR> tags become empty (no implicit space insertion) — adjacent text merges
+        assert_eq!(
+            strip_stml_tags("Line one<BR>Line two"),
+            "Line oneLine two"
+        );
+        // BR with surrounding whitespace gets collapsed
+        assert_eq!(
+            strip_stml_tags("Line one <BR> Line two"),
+            "Line one Line two"
+        );
+    }
+
+    #[test]
+    fn strip_stml_tags_collapses_whitespace() {
+        assert_eq!(
+            strip_stml_tags("  multiple   spaces  here  "),
+            "multiple spaces here"
+        );
+    }
+
+    #[test]
+    fn strip_stml_tags_plain_text_unchanged() {
+        assert_eq!(
+            strip_stml_tags("No tags here"),
+            "No tags here"
+        );
+    }
+
+    #[test]
+    fn strip_stml_tags_empty_string() {
+        assert_eq!(strip_stml_tags(""), "");
+    }
+
+    // ─── Error Dialog Classification Tests (#101) ───
+
+    #[test]
+    fn classify_wrong_password() {
+        assert_eq!(
+            classify_dialog_error("Your password is incorrect. Please try again."),
+            LoginError::WrongPassword
+        );
+        assert_eq!(
+            classify_dialog_error("Invalid username or password"),
+            LoginError::WrongPassword
+        );
+    }
+
+    #[test]
+    fn classify_account_locked() {
+        assert_eq!(
+            classify_dialog_error("Your account has been suspended."),
+            LoginError::AccountLocked
+        );
+        assert_eq!(
+            classify_dialog_error("This account has been banned."),
+            LoginError::AccountLocked
+        );
+        assert_eq!(
+            classify_dialog_error("Account locked due to too many failed attempts"),
+            LoginError::AccountLocked
+        );
+    }
+
+    #[test]
+    fn classify_already_logged_in() {
+        assert_eq!(
+            classify_dialog_error("A character is already logged in on this account."),
+            LoginError::CharacterAlreadyLoggedIn
+        );
+        assert_eq!(
+            classify_dialog_error("You are already logged into a server."),
+            LoginError::CharacterAlreadyLoggedIn
+        );
+    }
+
+    #[test]
+    fn classify_server_full() {
+        assert_eq!(
+            classify_dialog_error("The server is full. Please try again later."),
+            LoginError::ServerFull
+        );
+        assert_eq!(
+            classify_dialog_error("Server at capacity, you are in queue position 42"),
+            LoginError::ServerFull
+        );
+    }
+
+    #[test]
+    fn classify_server_down() {
+        assert_eq!(
+            classify_dialog_error("Server is down for maintenance."),
+            LoginError::ServerDown
+        );
+        assert_eq!(
+            classify_dialog_error("The server is currently unavailable."),
+            LoginError::ServerDown
+        );
+    }
+
+    #[test]
+    fn classify_timeout() {
+        assert_eq!(
+            classify_dialog_error("Connection timed out. Please try again."),
+            LoginError::Timeout {
+                phase: "login_dialog".into()
+            }
+        );
+        assert_eq!(
+            classify_dialog_error("Could not connect to the login server."),
+            LoginError::Timeout {
+                phase: "login_dialog".into()
+            }
+        );
+    }
+
+    #[test]
+    fn classify_unknown_defaults_to_timeout() {
+        let result = classify_dialog_error("Something completely unexpected happened.");
+        assert!(matches!(result, LoginError::Timeout { .. }));
+        if let LoginError::Timeout { phase } = result {
+            assert!(phase.starts_with("unknown_dialog:"));
+        }
+    }
+
+    // ─── Recovery Action Mapping Tests ───
+
+    #[test]
+    fn recovery_action_abort_for_permanent_errors() {
+        assert_eq!(recovery_action(&LoginError::WrongPassword), RecoveryAction::Abort);
+        assert_eq!(recovery_action(&LoginError::AccountLocked), RecoveryAction::Abort);
+        assert_eq!(recovery_action(&LoginError::OfflineTrader), RecoveryAction::Abort);
+        assert_eq!(
+            recovery_action(&LoginError::CharacterNotFound {
+                expected: "Foo".into(),
+                found: "Bar".into(),
+            }),
+            RecoveryAction::Abort
+        );
+    }
+
+    #[test]
+    fn recovery_action_wait_and_retry_for_server_errors() {
+        assert_eq!(
+            recovery_action(&LoginError::CharacterAlreadyLoggedIn),
+            RecoveryAction::WaitAndRetry
+        );
+        assert_eq!(recovery_action(&LoginError::ServerDown), RecoveryAction::WaitAndRetry);
+        assert_eq!(recovery_action(&LoginError::ServerFull), RecoveryAction::WaitAndRetry);
+        assert_eq!(recovery_action(&LoginError::MassFailure), RecoveryAction::WaitAndRetry);
+    }
+
+    #[test]
+    fn recovery_action_retry_for_transient_errors() {
+        assert_eq!(
+            recovery_action(&LoginError::Timeout {
+                phase: "test".into()
+            }),
+            RecoveryAction::Retry
+        );
+    }
+
+    // ─── Character List Scanning Tests (#97) ───
+
+    #[test]
+    fn enumerate_character_names_returns_empty_on_null_wnd() {
+        assert!(enumerate_character_names(0).is_empty());
+    }
+
+    #[test]
+    fn find_character_in_list_returns_err_on_null_wnd() {
+        let result = find_character_in_list(0, "TestChar");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_empty());
+    }
+
+    #[test]
+    fn classify_with_stml_tagged_text() {
+        // Simulates dialog text that has been run through strip_stml_tags
+        let raw = "<c \"#FF0000\">Error:</c> Your password is incorrect.<BR>Please try again.";
+        let stripped = strip_stml_tags(raw);
+        assert_eq!(classify_dialog_error(&stripped), LoginError::WrongPassword);
     }
 }
