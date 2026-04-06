@@ -1,4 +1,4 @@
-use dmft_common::combat::{CombatRole, SpellEntry};
+use dmft_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEntry};
 
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
@@ -15,6 +15,172 @@ pub struct EnchanterStrategy {
 impl EnchanterStrategy {
     pub fn new(class_id: u8) -> Self {
         Self { class_id }
+    }
+
+    /// Build enchanter ability sets — CC, haste, slow, nuke lines tiered by level.
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![
+            AbilitySet {
+                name: "Mez".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Bliss".into(),
+                        min_level: 65,
+                        spell_id: 5520,
+                    },
+                    AbilityCandidate {
+                        name: "Glamour of Kintaz".into(),
+                        min_level: 60,
+                        spell_id: 3341,
+                    },
+                    AbilityCandidate {
+                        name: "Dazzle".into(),
+                        min_level: 44,
+                        spell_id: 187,
+                    },
+                    AbilityCandidate {
+                        name: "Mesmerize".into(),
+                        min_level: 11,
+                        spell_id: 185,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "AoEMez".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Wake of Felicity".into(),
+                        min_level: 62,
+                        spell_id: 5521,
+                    },
+                    AbilityCandidate {
+                        name: "Fascination".into(),
+                        min_level: 53,
+                        spell_id: 2150,
+                    },
+                    AbilityCandidate {
+                        name: "Mesmerization".into(),
+                        min_level: 29,
+                        spell_id: 189,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Haste".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Speed of Vallon".into(),
+                        min_level: 65,
+                        spell_id: 5522,
+                    },
+                    AbilityCandidate {
+                        name: "Wonderous Rapidity".into(),
+                        min_level: 49,
+                        spell_id: 1693,
+                    },
+                    AbilityCandidate {
+                        name: "Alacrity".into(),
+                        min_level: 24,
+                        spell_id: 170,
+                    },
+                    AbilityCandidate {
+                        name: "Quickness".into(),
+                        min_level: 16,
+                        spell_id: 171,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Slow".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Dreary Deeds".into(),
+                        min_level: 60,
+                        spell_id: 3344,
+                    },
+                    AbilityCandidate {
+                        name: "Tepid Deeds".into(),
+                        min_level: 52,
+                        spell_id: 2151,
+                    },
+                    AbilityCandidate {
+                        name: "Shiftless Deeds".into(),
+                        min_level: 24,
+                        spell_id: 191,
+                    },
+                    AbilityCandidate {
+                        name: "Languid Pace".into(),
+                        min_level: 4,
+                        spell_id: 190,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Nuke".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Dementia".into(),
+                        min_level: 60,
+                        spell_id: 3343,
+                    },
+                    AbilityCandidate {
+                        name: "Sanity Warp".into(),
+                        min_level: 44,
+                        spell_id: 1694,
+                    },
+                    AbilityCandidate {
+                        name: "Chaotic Feedback".into(),
+                        min_level: 1,
+                        spell_id: 186,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Tash".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Wind of Tashani".into(),
+                        min_level: 62,
+                        spell_id: 5523,
+                    },
+                    AbilityCandidate {
+                        name: "Tashania".into(),
+                        min_level: 55,
+                        spell_id: 2153,
+                    },
+                    AbilityCandidate {
+                        name: "Tashan".into(),
+                        min_level: 1,
+                        spell_id: 188,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Charm".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Command of Druzzil".into(),
+                        min_level: 65,
+                        spell_id: 5524,
+                    },
+                    AbilityCandidate {
+                        name: "Allure".into(),
+                        min_level: 52,
+                        spell_id: 2152,
+                    },
+                    AbilityCandidate {
+                        name: "Beguile".into(),
+                        min_level: 24,
+                        spell_id: 192,
+                    },
+                    AbilityCandidate {
+                        name: "Charm".into(),
+                        min_level: 11,
+                        spell_id: 193,
+                    },
+                ],
+            },
+        ]
     }
 }
 
@@ -76,6 +242,10 @@ impl ClassStrategy for EnchanterStrategy {
 
     fn role(&self) -> CombatRole {
         CombatRole::CrowdControl
+    }
+
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Self::build_ability_sets()
     }
 }
 
@@ -310,5 +480,98 @@ mod tests {
         let config = CombatConfig::default();
         let ctx = make_ctx(&player, None, &[], &config);
         assert!(enc.select_spell(&ctx).is_none());
+    }
+
+    // ── AbilitySet tests ──────────────���─────────────────────────
+
+    fn enchanter_known_spells() -> Vec<dmft_common::combat::KnownAbility> {
+        EnchanterStrategy::build_ability_sets()
+            .iter()
+            .flat_map(|s| &s.candidates)
+            .map(|c| dmft_common::combat::KnownAbility {
+                name: c.name.clone(),
+                spell_id: c.spell_id,
+                level: c.min_level,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn enchanter_has_ability_sets() {
+        let enc = EnchanterStrategy::new(14);
+        let sets = enc.ability_sets();
+        assert!(!sets.is_empty());
+        let names: Vec<&str> = sets.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"Mez"));
+        assert!(names.contains(&"AoEMez"));
+        assert!(names.contains(&"Haste"));
+        assert!(names.contains(&"Slow"));
+        assert!(names.contains(&"Nuke"));
+        assert!(names.contains(&"Tash"));
+        assert!(names.contains(&"Charm"));
+    }
+
+    #[test]
+    fn enchanter_mez_resolution_at_65() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &enchanter_known_spells(), 65);
+        let mez = resolved.get("Mez").expect("should resolve Mez");
+        assert_eq!(mez.ability_name, "Bliss");
+    }
+
+    #[test]
+    fn enchanter_mez_resolution_at_45() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &enchanter_known_spells(), 45);
+        let mez = resolved.get("Mez").expect("should resolve Mez");
+        assert_eq!(mez.ability_name, "Dazzle");
+    }
+
+    #[test]
+    fn enchanter_mez_resolution_at_11() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &enchanter_known_spells(), 11);
+        let mez = resolved.get("Mez").expect("should resolve Mez");
+        assert_eq!(mez.ability_name, "Mesmerize");
+    }
+
+    #[test]
+    fn enchanter_haste_scales_with_level() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let known = enchanter_known_spells();
+        let r20 = dmft_common::combat::resolve_abilities(&sets, &known, 20);
+        assert_eq!(r20.get("Haste").unwrap().ability_name, "Quickness");
+        let r50 = dmft_common::combat::resolve_abilities(&sets, &known, 50);
+        assert_eq!(r50.get("Haste").unwrap().ability_name, "Wonderous Rapidity");
+        let r65 = dmft_common::combat::resolve_abilities(&sets, &known, 65);
+        assert_eq!(r65.get("Haste").unwrap().ability_name, "Speed of Vallon");
+    }
+
+    #[test]
+    fn enchanter_slow_scales_with_level() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let known = enchanter_known_spells();
+        let r5 = dmft_common::combat::resolve_abilities(&sets, &known, 5);
+        assert_eq!(r5.get("Slow").unwrap().ability_name, "Languid Pace");
+        let r60 = dmft_common::combat::resolve_abilities(&sets, &known, 60);
+        assert_eq!(r60.get("Slow").unwrap().ability_name, "Dreary Deeds");
+    }
+
+    #[test]
+    fn enchanter_no_mez_below_level_11() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &enchanter_known_spells(), 10);
+        assert!(!resolved.contains_key("Mez"));
+    }
+
+    #[test]
+    fn enchanter_all_lines_resolve_at_65() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &enchanter_known_spells(), 65);
+        assert_eq!(
+            resolved.len(),
+            7,
+            "All 7 enchanter ability lines should resolve at 65"
+        );
     }
 }

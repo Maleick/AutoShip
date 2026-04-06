@@ -1,4 +1,4 @@
-use dmft_common::combat::{CombatRole, SpellEntry};
+use dmft_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
@@ -29,6 +29,158 @@ pub struct ClericStrategy {
 impl ClericStrategy {
     pub fn new(class_id: u8) -> Self {
         Self { class_id }
+    }
+
+    /// Build cleric ability sets — maps heal/buff/rez lines to
+    /// level-tiered candidates, strongest first.
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![
+            AbilitySet {
+                name: "MainHeal".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Ethereal Light".into(),
+                        min_level: 65,
+                        spell_id: 5739,
+                    },
+                    AbilityCandidate {
+                        name: "Ethereal Remedy".into(),
+                        min_level: 63,
+                        spell_id: 5738,
+                    },
+                    AbilityCandidate {
+                        name: "Complete Heal".into(),
+                        min_level: 39,
+                        spell_id: 13,
+                    },
+                    AbilityCandidate {
+                        name: "Superior Healing".into(),
+                        min_level: 34,
+                        spell_id: 4950,
+                    },
+                    AbilityCandidate {
+                        name: "Greater Healing".into(),
+                        min_level: 20,
+                        spell_id: 15,
+                    },
+                    AbilityCandidate {
+                        name: "Healing".into(),
+                        min_level: 9,
+                        spell_id: 12,
+                    },
+                    AbilityCandidate {
+                        name: "Light Healing".into(),
+                        min_level: 5,
+                        spell_id: 200,
+                    },
+                    AbilityCandidate {
+                        name: "Minor Healing".into(),
+                        min_level: 1,
+                        spell_id: 201,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "GroupHeal".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Word of Restoration".into(),
+                        min_level: 60,
+                        spell_id: 3577,
+                    },
+                    AbilityCandidate {
+                        name: "Word of Replenishment".into(),
+                        min_level: 55,
+                        spell_id: 2175,
+                    },
+                    AbilityCandidate {
+                        name: "Word of Health".into(),
+                        min_level: 30,
+                        spell_id: 2176,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Rez".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Reviviscence".into(),
+                        min_level: 56,
+                        spell_id: 1524,
+                    },
+                    AbilityCandidate {
+                        name: "Resurrection".into(),
+                        min_level: 47,
+                        spell_id: 391,
+                    },
+                    AbilityCandidate {
+                        name: "Revive".into(),
+                        min_level: 12,
+                        spell_id: 392,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "HpBuff".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Aegolism".into(),
+                        min_level: 60,
+                        spell_id: 1447,
+                    },
+                    AbilityCandidate {
+                        name: "Symbol of Naltron".into(),
+                        min_level: 57,
+                        spell_id: 1448,
+                    },
+                    AbilityCandidate {
+                        name: "Symbol of Marzin".into(),
+                        min_level: 44,
+                        spell_id: 1449,
+                    },
+                    AbilityCandidate {
+                        name: "Symbol of Pinzarn".into(),
+                        min_level: 34,
+                        spell_id: 1450,
+                    },
+                    AbilityCandidate {
+                        name: "Courage".into(),
+                        min_level: 1,
+                        spell_id: 14,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "CureDisease".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Abolish Disease".into(),
+                        min_level: 58,
+                        spell_id: 2060,
+                    },
+                    AbilityCandidate {
+                        name: "Cure Disease".into(),
+                        min_level: 4,
+                        spell_id: 2054,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "CurePoison".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Abolish Poison".into(),
+                        min_level: 59,
+                        spell_id: 2061,
+                    },
+                    AbilityCandidate {
+                        name: "Cure Poison".into(),
+                        min_level: 1,
+                        spell_id: 2055,
+                    },
+                ],
+            },
+        ]
     }
 
     /// Find a dead group member who needs resurrection.
@@ -208,6 +360,10 @@ impl ClassStrategy for ClericStrategy {
 
     fn role(&self) -> CombatRole {
         CombatRole::Healer
+    }
+
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Self::build_ability_sets()
     }
 }
 
@@ -779,5 +935,88 @@ mod tests {
 
         let spell = cleric.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Minor Heal"); // moderate heal, not cure
+    }
+
+    // ── AbilitySet tests ────────────────────────────────────────
+
+    fn cleric_known_spells() -> Vec<dmft_common::combat::KnownAbility> {
+        ClericStrategy::build_ability_sets()
+            .iter()
+            .flat_map(|s| &s.candidates)
+            .map(|c| dmft_common::combat::KnownAbility {
+                name: c.name.clone(),
+                spell_id: c.spell_id,
+                level: c.min_level,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn cleric_has_ability_sets() {
+        let cleric = ClericStrategy::new(2);
+        let sets = cleric.ability_sets();
+        assert!(!sets.is_empty());
+        let names: Vec<&str> = sets.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"MainHeal"));
+        assert!(names.contains(&"GroupHeal"));
+        assert!(names.contains(&"Rez"));
+        assert!(names.contains(&"HpBuff"));
+        assert!(names.contains(&"CureDisease"));
+        assert!(names.contains(&"CurePoison"));
+    }
+
+    #[test]
+    fn cleric_heal_resolution_at_65() {
+        let sets = ClericStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &cleric_known_spells(), 65);
+        let heal = resolved.get("MainHeal").expect("should resolve MainHeal");
+        assert_eq!(heal.ability_name, "Ethereal Light");
+    }
+
+    #[test]
+    fn cleric_heal_resolution_at_39() {
+        let sets = ClericStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &cleric_known_spells(), 39);
+        let heal = resolved.get("MainHeal").expect("should resolve MainHeal");
+        assert_eq!(heal.ability_name, "Complete Heal");
+    }
+
+    #[test]
+    fn cleric_heal_resolution_at_10() {
+        let sets = ClericStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &cleric_known_spells(), 10);
+        let heal = resolved.get("MainHeal").expect("should resolve MainHeal");
+        assert_eq!(heal.ability_name, "Healing");
+        // No group heal at level 10
+        assert!(!resolved.contains_key("GroupHeal"));
+    }
+
+    #[test]
+    fn cleric_rez_resolution_scales() {
+        let sets = ClericStrategy::build_ability_sets();
+        let known = cleric_known_spells();
+        let r15 = dmft_common::combat::resolve_abilities(&sets, &known, 15);
+        assert_eq!(r15.get("Rez").unwrap().ability_name, "Revive");
+        let r50 = dmft_common::combat::resolve_abilities(&sets, &known, 50);
+        assert_eq!(r50.get("Rez").unwrap().ability_name, "Resurrection");
+        let r60 = dmft_common::combat::resolve_abilities(&sets, &known, 60);
+        assert_eq!(r60.get("Rez").unwrap().ability_name, "Reviviscence");
+    }
+
+    #[test]
+    fn cleric_no_abilities_at_level_0() {
+        let sets = ClericStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &cleric_known_spells(), 0);
+        assert!(resolved.is_empty());
+    }
+
+    #[test]
+    fn cleric_buff_resolution() {
+        let sets = ClericStrategy::build_ability_sets();
+        let known = cleric_known_spells();
+        let r1 = dmft_common::combat::resolve_abilities(&sets, &known, 1);
+        assert_eq!(r1.get("HpBuff").unwrap().ability_name, "Courage");
+        let r60 = dmft_common::combat::resolve_abilities(&sets, &known, 60);
+        assert_eq!(r60.get("HpBuff").unwrap().ability_name, "Aegolism");
     }
 }

@@ -113,8 +113,10 @@ unsafe extern "system" fn hooked_present(
     flags: u32,
 ) -> i32 {
     // On first call, hook the device's CreateTexture2D and CreateBuffer.
-    if !DEVICE_HOOKED.load(Ordering::Acquire) {
-        DEVICE_HOOKED.store(true, Ordering::Release);
+    if DEVICE_HOOKED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
         if let Err(e) = unsafe { inner::hook_device_from_swap_chain(this) } {
             tracing::warn!("Failed to hook ID3D11Device from Present: {}", e);
         }

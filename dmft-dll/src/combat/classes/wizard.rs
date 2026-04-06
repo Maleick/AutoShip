@@ -1,4 +1,4 @@
-use dmft_common::combat::{CombatRole, SpellEntry};
+use dmft_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEntry};
 
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
@@ -11,6 +11,137 @@ pub struct WizardStrategy {
 impl WizardStrategy {
     pub fn new(class_id: u8) -> Self {
         Self { class_id }
+    }
+
+    /// Build wizard ability sets — nuke lines tiered by level.
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![
+            AbilitySet {
+                name: "FireNuke".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Fire of Tallon".into(),
+                        min_level: 65,
+                        spell_id: 5006,
+                    },
+                    AbilityCandidate {
+                        name: "Sunstrike".into(),
+                        min_level: 49,
+                        spell_id: 1398,
+                    },
+                    AbilityCandidate {
+                        name: "Conflagration".into(),
+                        min_level: 20,
+                        spell_id: 1397,
+                    },
+                    AbilityCandidate {
+                        name: "Fireball".into(),
+                        min_level: 4,
+                        spell_id: 68,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "IceNuke".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Draught of E`ci".into(),
+                        min_level: 65,
+                        spell_id: 5007,
+                    },
+                    AbilityCandidate {
+                        name: "Ice Comet".into(),
+                        min_level: 60,
+                        spell_id: 1500,
+                    },
+                    AbilityCandidate {
+                        name: "Frost".into(),
+                        min_level: 52,
+                        spell_id: 1200,
+                    },
+                    AbilityCandidate {
+                        name: "Chill Sight".into(),
+                        min_level: 44,
+                        spell_id: 900,
+                    },
+                    AbilityCandidate {
+                        name: "Frost Bolt".into(),
+                        min_level: 1,
+                        spell_id: 66,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "MagicNuke".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Lure of Thunder".into(),
+                        min_level: 60,
+                        spell_id: 3347,
+                    },
+                    AbilityCandidate {
+                        name: "Thunder Strike".into(),
+                        min_level: 52,
+                        spell_id: 1201,
+                    },
+                    AbilityCandidate {
+                        name: "Shock of Lightning".into(),
+                        min_level: 1,
+                        spell_id: 69,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "AoENuke".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Jyll's Wave of Heat".into(),
+                        min_level: 60,
+                        spell_id: 3580,
+                    },
+                    AbilityCandidate {
+                        name: "Pillar of Frost".into(),
+                        min_level: 51,
+                        spell_id: 1399,
+                    },
+                    AbilityCandidate {
+                        name: "Ice Rain".into(),
+                        min_level: 24,
+                        spell_id: 1396,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Root".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Paralyzing Earth".into(),
+                        min_level: 55,
+                        spell_id: 2164,
+                    },
+                    AbilityCandidate {
+                        name: "Root".into(),
+                        min_level: 8,
+                        spell_id: 230,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Evac".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Succor".into(),
+                        min_level: 52,
+                        spell_id: 2160,
+                    },
+                    AbilityCandidate {
+                        name: "Evacuate".into(),
+                        min_level: 24,
+                        spell_id: 2161,
+                    },
+                ],
+            },
+        ]
     }
 }
 
@@ -43,6 +174,10 @@ impl ClassStrategy for WizardStrategy {
 
     fn role(&self) -> CombatRole {
         CombatRole::DpsRanged
+    }
+
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Self::build_ability_sets()
     }
 }
 
@@ -181,5 +316,84 @@ mod tests {
         let config = CombatConfig::default();
         let ctx = make_ctx(&player, None, &config);
         assert!(wiz.select_spell(&ctx).is_none());
+    }
+
+    // ── AbilitySet tests ────────────────────────────────────────
+
+    fn wizard_known_spells() -> Vec<dmft_common::combat::KnownAbility> {
+        WizardStrategy::build_ability_sets()
+            .iter()
+            .flat_map(|s| &s.candidates)
+            .map(|c| dmft_common::combat::KnownAbility {
+                name: c.name.clone(),
+                spell_id: c.spell_id,
+                level: c.min_level,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn wizard_has_ability_sets() {
+        let wiz = WizardStrategy::new(12);
+        let sets = wiz.ability_sets();
+        assert!(!sets.is_empty());
+        let names: Vec<&str> = sets.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"FireNuke"));
+        assert!(names.contains(&"IceNuke"));
+        assert!(names.contains(&"MagicNuke"));
+        assert!(names.contains(&"AoENuke"));
+        assert!(names.contains(&"Root"));
+        assert!(names.contains(&"Evac"));
+    }
+
+    #[test]
+    fn wizard_fire_nuke_resolution_at_65() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 65);
+        let fire = resolved.get("FireNuke").expect("should resolve FireNuke");
+        assert_eq!(fire.ability_name, "Fire of Tallon");
+    }
+
+    #[test]
+    fn wizard_fire_nuke_resolution_at_30() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 30);
+        let fire = resolved.get("FireNuke").expect("should resolve FireNuke");
+        assert_eq!(fire.ability_name, "Conflagration");
+    }
+
+    #[test]
+    fn wizard_ice_nuke_resolution_at_55() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 55);
+        let ice = resolved.get("IceNuke").expect("should resolve IceNuke");
+        assert_eq!(ice.ability_name, "Frost");
+    }
+
+    #[test]
+    fn wizard_evac_not_available_at_low_level() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 20);
+        assert!(!resolved.contains_key("Evac"));
+    }
+
+    #[test]
+    fn wizard_all_lines_resolve_at_65() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 65);
+        assert_eq!(
+            resolved.len(),
+            6,
+            "All 6 wizard ability lines should resolve at 65"
+        );
+    }
+
+    #[test]
+    fn wizard_level_1_has_basics() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved = dmft_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 1);
+        assert!(resolved.contains_key("IceNuke"), "Frost Bolt at level 1");
+        assert!(resolved.contains_key("MagicNuke"), "Shock at level 1");
+        assert!(!resolved.contains_key("AoENuke"), "No AoE at level 1");
     }
 }
