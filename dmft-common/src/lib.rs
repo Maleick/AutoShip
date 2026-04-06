@@ -24,6 +24,8 @@ pub mod packet;
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
 pub mod routing;
+/// Byte-pattern signature scanner for offset resolution across EQ patches.
+pub mod scanner;
 /// Soul Engine shared types (LLM personalities, memory, social dynamics).
 pub mod soul;
 /// Common type aliases and utility structures.
