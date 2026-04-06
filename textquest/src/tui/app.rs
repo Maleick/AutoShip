@@ -182,7 +182,6 @@ impl SpawnFilter {
     }
 }
 
-
 /// Sort column for the spawn list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpawnSort {
@@ -1950,8 +1949,7 @@ impl App {
                         indices.sort_by(|&a, &b| {
                             let da = (spawns[a].x - px).powi(2) + (spawns[a].y - py).powi(2);
                             let db = (spawns[b].x - px).powi(2) + (spawns[b].y - py).powi(2);
-                            let c =
-                                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal);
+                            let c = da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal);
                             if asc { c } else { c.reverse() }
                         });
                     }
@@ -1993,7 +1991,11 @@ impl App {
         }
         self.spawns_state.sort_column = next;
         self.spawns_state.table_state.select(Some(0));
-        let arrow = if self.spawns_state.sort_ascending { "\u{2191}" } else { "\u{2193}" };
+        let arrow = if self.spawns_state.sort_ascending {
+            "\u{2191}"
+        } else {
+            "\u{2193}"
+        };
         self.status_message = format!("Sort: {} {arrow}", next.label());
     }
 
@@ -2001,7 +2003,11 @@ impl App {
     pub fn toggle_spawn_sort_direction(&mut self) {
         self.spawns_state.sort_ascending = !self.spawns_state.sort_ascending;
         self.spawns_state.table_state.select(Some(0));
-        let dir = if self.spawns_state.sort_ascending { "\u{2191} asc" } else { "\u{2193} desc" };
+        let dir = if self.spawns_state.sort_ascending {
+            "\u{2191} asc"
+        } else {
+            "\u{2193} desc"
+        };
         self.status_message = format!("Sort: {} {dir}", self.spawns_state.sort_column.label());
     }
 
@@ -2010,7 +2016,6 @@ impl App {
         self.spawns_state.nav_scope = self.spawns_state.nav_scope.next();
         self.status_message = format!("Nav scope: {}", self.spawns_state.nav_scope.label());
     }
-
 
     /// Moves the spawn list selection down by one row.
     pub fn spawn_list_down(&mut self) {

@@ -1475,11 +1475,9 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                         }
                         std::thread::sleep(std::time::Duration::from_millis(10));
                     }
-                    crate::ipc::send_response(
-                        textquest_common::ipc::Response::ScreenshotFailed {
-                            reason: "Capture timed out after 2 seconds".into(),
-                        },
-                    );
+                    crate::ipc::send_response(textquest_common::ipc::Response::ScreenshotFailed {
+                        reason: "Capture timed out after 2 seconds".into(),
+                    });
                 });
             if let Err(e) = spawn_result {
                 tracing::error!(%e, "Failed to spawn screenshot polling thread");
