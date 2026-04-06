@@ -1967,6 +1967,30 @@ fn draw_navigation_summary(
     );
 }
 
+/// Draw a radius circle around a world position on the map grid.
+#[allow(clippy::too_many_arguments)]
+fn draw_radius_circle(
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    center_x: f32,
+    center_y: f32,
+    radius: f32,
+    color: Color,
+    w: u16,
+    h: u16,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let steps = (radius * 0.5).clamp(24.0, 120.0) as usize;
+    for i in 0..steps {
+        let angle = 2.0 * std::f32::consts::PI * (i as f32) / (steps as f32);
+        let wx = center_x + radius * angle.cos();
+        let wy = center_y + radius * angle.sin();
+        let (c, r) = to_grid(-wy, -wx);
+        if c >= 0 && c < w as i32 && r >= 0 && r < h as i32 {
+            grid[r as usize][c as usize] = ('·', color);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2237,29 +2261,5 @@ mod tests {
         // equal z endpoints gracefully (dz ≈ 0, both inside)
         let result = clip_line_z(10.0, 20.0, 50.0, 30.0, 40.0, 50.0, 50.0, 10.0);
         assert_eq!(result, Some((10.0, 20.0, 30.0, 40.0)));
-    }
-}
-
-/// Draw a radius circle around a world position on the map grid.
-#[allow(clippy::too_many_arguments)]
-fn draw_radius_circle(
-    to_grid: &impl Fn(f32, f32) -> (i32, i32),
-    center_x: f32,
-    center_y: f32,
-    radius: f32,
-    color: Color,
-    w: u16,
-    h: u16,
-    grid: &mut [Vec<(char, Color)>],
-) {
-    let steps = (radius * 0.5).clamp(24.0, 120.0) as usize;
-    for i in 0..steps {
-        let angle = 2.0 * std::f32::consts::PI * (i as f32) / (steps as f32);
-        let wx = center_x + radius * angle.cos();
-        let wy = center_y + radius * angle.sin();
-        let (c, r) = to_grid(-wy, -wx);
-        if c >= 0 && c < w as i32 && r >= 0 && r < h as i32 {
-            grid[r as usize][c as usize] = ('·', color);
-        }
     }
 }
