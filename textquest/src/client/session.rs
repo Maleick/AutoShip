@@ -2,6 +2,7 @@
 
 use super::healing::{ClientHealth, HealthMonitor};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 use textquest_common::types::{ClientId, GameState, HookStatus};
 
 /// Outer lifecycle state for a managed client slot.
@@ -26,6 +27,12 @@ pub enum SlotLifecycle {
     Recovering,
     /// Slot is blocked and requires operator attention before it can proceed.
     Blocked,
+    /// Client is executing /camp or /quit and waiting to leave the world.
+    CampingOut,
+    /// Client process has exited (cleanly or via crash).
+    Exited,
+    /// Client is being restarted by the launcher after an exit or crash.
+    Relaunching,
 }
 
 impl SlotLifecycle {
@@ -40,6 +47,9 @@ impl SlotLifecycle {
             Self::Live => "live",
             Self::Recovering => "recovering",
             Self::Blocked => "blocked",
+            Self::CampingOut => "camping",
+            Self::Exited => "exited",
+            Self::Relaunching => "relaunching",
         }
     }
 
@@ -77,6 +87,50 @@ pub enum PostLoginPhase {
     Ready,
 }
 
+/// Default timeout for camp-out before force-killing the process.
+const CAMP_OUT_TIMEOUT: Duration = Duration::from_secs(45);
+
+/// Tracks a graceful camp-out in progress.
+#[derive(Debug, Clone)]
+pub struct CampOutTracker {
+    /// When the camp-out command was sent.
+    pub started_at: Instant,
+    /// Maximum time to wait before force-killing.
+    pub timeout: Duration,
+}
+
+impl CampOutTracker {
+    /// Create a new tracker with the default timeout.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            started_at: Instant::now(),
+            timeout: CAMP_OUT_TIMEOUT,
+        }
+    }
+
+    /// Create a tracker with a custom timeout.
+    #[must_use]
+    pub fn with_timeout(timeout: Duration) -> Self {
+        Self {
+            started_at: Instant::now(),
+            timeout,
+        }
+    }
+
+    /// Whether the timeout has expired.
+    #[must_use]
+    pub fn is_timed_out(&self) -> bool {
+        self.started_at.elapsed() >= self.timeout
+    }
+
+    /// How long the camp-out has been running.
+    #[must_use]
+    pub fn elapsed(&self) -> Duration {
+        self.started_at.elapsed()
+    }
+}
+
 /// A single managed EQ client session.
 pub struct EqSession {
     /// Unique identifier for this client slot.
@@ -101,6 +155,8 @@ pub struct EqSession {
     pub post_login_phase: PostLoginPhase,
     /// Current outer lifecycle state for this slot.
     pub slot_lifecycle: SlotLifecycle,
+    /// Tracks an in-progress graceful camp-out, if any.
+    pub camp_out_tracker: Option<CampOutTracker>,
 }
 
 impl EqSession {
@@ -119,7 +175,37 @@ impl EqSession {
             bound_toon: None,
             post_login_phase: PostLoginPhase::NotStarted,
             slot_lifecycle: SlotLifecycle::Configured,
+            camp_out_tracker: None,
         }
+    }
+
+    /// Begin a graceful camp-out for this session.
+    ///
+    /// Sets the lifecycle to `CampingOut` and starts the timeout tracker.
+    /// Returns `false` if the session is already camping out.
+    pub fn begin_camp_out(&mut self) -> bool {
+        if matches!(self.slot_lifecycle, SlotLifecycle::CampingOut) {
+            return false;
+        }
+        self.slot_lifecycle = SlotLifecycle::CampingOut;
+        self.camp_out_tracker = Some(CampOutTracker::new());
+        tracing::info!(client_id = self.client_id, "Graceful camp-out initiated");
+        true
+    }
+
+    /// Check if the camp-out has timed out.
+    #[must_use]
+    pub fn is_camp_out_timed_out(&self) -> bool {
+        self.camp_out_tracker
+            .as_ref()
+            .is_some_and(|t| t.is_timed_out())
+    }
+
+    /// Mark this session as exited and clear the camp-out tracker.
+    pub fn mark_exited(&mut self) {
+        self.slot_lifecycle = SlotLifecycle::Exited;
+        self.camp_out_tracker = None;
+        tracing::info!(client_id = self.client_id, "Session marked as exited");
     }
 
     /// Whether this session is fully operational (non-mutating snapshot).
@@ -193,19 +279,15 @@ mod tests {
         assert!(s.bound_toon.is_none());
         assert!(matches!(s.post_login_phase, PostLoginPhase::NotStarted));
         assert!(matches!(s.slot_lifecycle, SlotLifecycle::Configured));
+        assert!(s.camp_out_tracker.is_none());
     }
 
     #[test]
     fn is_active_requires_hooks_active_and_healthy() {
         let mut s = EqSession::new(1, 100);
-        // Not active by default (NotInjected)
         assert!(!s.is_active());
-
-        // Still not active with just hooks
         s.hook_status = HookStatus::HooksActive;
-        assert!(s.is_active()); // healthy by default
-
-        // Not active if hook status is wrong
+        assert!(s.is_active());
         s.hook_status = HookStatus::Injected;
         assert!(!s.is_active());
     }
@@ -223,7 +305,6 @@ mod tests {
         let mut s = EqSession::new(1, 100);
         s.update_state(make_game_state("FirstName"));
         s.update_state(make_game_state("SecondName"));
-        // Should keep first name
         assert_eq!(s.character_name.as_deref(), Some("FirstName"));
     }
 
@@ -354,6 +435,9 @@ mod tests {
         assert_eq!(SlotLifecycle::Live.label(), "live");
         assert_eq!(SlotLifecycle::Recovering.label(), "recovering");
         assert_eq!(SlotLifecycle::Blocked.label(), "blocked");
+        assert_eq!(SlotLifecycle::CampingOut.label(), "camping");
+        assert_eq!(SlotLifecycle::Exited.label(), "exited");
+        assert_eq!(SlotLifecycle::Relaunching.label(), "relaunching");
     }
 
     #[test]
@@ -367,5 +451,72 @@ mod tests {
         let a = SlotLifecycle::Live;
         let b = a.clone();
         assert_eq!(a, b);
+    }
+
+    // ── CampOutTracker tests ──────────────────────────────────────────────
+
+    #[test]
+    fn camp_out_tracker_default_timeout() {
+        let tracker = CampOutTracker::new();
+        assert_eq!(tracker.timeout, Duration::from_secs(45));
+        assert!(!tracker.is_timed_out());
+    }
+
+    #[test]
+    fn camp_out_tracker_custom_timeout() {
+        let tracker = CampOutTracker::with_timeout(Duration::from_secs(10));
+        assert_eq!(tracker.timeout, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn camp_out_tracker_instant_timeout() {
+        let tracker = CampOutTracker::with_timeout(Duration::ZERO);
+        assert!(tracker.is_timed_out());
+    }
+
+    #[test]
+    fn camp_out_tracker_elapsed_increases() {
+        let tracker = CampOutTracker::new();
+        assert!(tracker.elapsed() < Duration::from_secs(1));
+    }
+
+    // ── Session camp-out integration tests ────────────────────────────────
+
+    #[test]
+    fn begin_camp_out_sets_lifecycle_and_tracker() {
+        let mut s = EqSession::new(1, 100);
+        s.slot_lifecycle = SlotLifecycle::Live;
+        assert!(s.begin_camp_out());
+        assert_eq!(s.slot_lifecycle, SlotLifecycle::CampingOut);
+        assert!(s.camp_out_tracker.is_some());
+    }
+
+    #[test]
+    fn begin_camp_out_returns_false_if_already_camping() {
+        let mut s = EqSession::new(1, 100);
+        s.slot_lifecycle = SlotLifecycle::Live;
+        assert!(s.begin_camp_out());
+        assert!(!s.begin_camp_out());
+    }
+
+    #[test]
+    fn is_camp_out_timed_out_false_when_no_tracker() {
+        let s = EqSession::new(1, 100);
+        assert!(!s.is_camp_out_timed_out());
+    }
+
+    #[test]
+    fn mark_exited_clears_tracker() {
+        let mut s = EqSession::new(1, 100);
+        s.begin_camp_out();
+        s.mark_exited();
+        assert_eq!(s.slot_lifecycle, SlotLifecycle::Exited);
+        assert!(s.camp_out_tracker.is_none());
+    }
+
+    #[test]
+    fn camp_out_tracker_none_by_default() {
+        let s = EqSession::new(1, 100);
+        assert!(s.camp_out_tracker.is_none());
     }
 }
