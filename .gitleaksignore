@@ -1,0 +1,11 @@
+# Fingerprints of known findings in git history.
+# These are baselined so they don't block future scans.
+# The credential has been rotated.
+
+# imgui vendored code — false positives (ImGuiKey enum names)
+eeaaf22b03e2c204b428aa3101e283c46483d8b7:contrib/imgui/docs/CHANGELOG.txt:generic-api-key:2913
+eeaaf22b03e2c204b428aa3101e283c46483d8b7:contrib/imgui/imgui.cpp:generic-api-key:4427
+
+# Historical hardcoded password in bat scripts (now removed, credential rotated)
+fa1d694a325035f6f5c2fad7a4739bba6d44248b:scripts/test_single_login.bat:generic-api-key:13
+e30e1c36d441d6fabf4c3142a0e2c91239b7c744:scripts/launch_and_login.bat:generic-api-key:9
