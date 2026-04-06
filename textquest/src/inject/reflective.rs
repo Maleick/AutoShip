@@ -476,7 +476,7 @@ mod platform {
                 // LoadLibrary for lazily-loaded DLLs (e.g., d3d11.dll).
                 let module = unsafe { GetModuleHandleA(dll_pcstr) }.or_else(|_| {
                     tracing::debug!(dll = %imp.dll_name, "Module not loaded, loading via LoadLibraryA");
-                    unsafe { LoadLibraryA(dll_pcstr) }.map(|m| m.into())
+                    unsafe { LoadLibraryA(dll_pcstr) }
                 })
                 .map_err(|_| InjectError::ImportResolveFailed {
                     dll: imp.dll_name.clone(),
