@@ -584,9 +584,7 @@ impl Navigator {
             let current_pos = self.controller.read_position();
             if config.is_beyond_leash(&current_pos) {
                 // #182: return_no_aggro — don't return if hostile NPCs are nearby.
-                if config.return_no_aggro
-                    && has_hostile_nearby(nearby, &current_pos)
-                {
+                if config.return_no_aggro && has_hostile_nearby(nearby, &current_pos) {
                     return;
                 }
                 let return_pos = config.return_position();
@@ -625,8 +623,7 @@ impl Navigator {
         self.cached_distance = dist;
 
         // Break-on-aggro: hostile NPC moving toward player within aggro radius.
-        if config.break_on_aggro && has_hostile_nearby(nearby, &current_pos)
-        {
+        if config.break_on_aggro && has_hostile_nearby(nearby, &current_pos) {
             tracing::info!("MoveToAdvanced: break_on_aggro triggered");
             self.stop_moveto();
             return;
