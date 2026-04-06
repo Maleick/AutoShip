@@ -799,6 +799,21 @@ pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     Ok(())
 }
 
+/// Interact mode — send `InteractTarget` to right-click the current target.
+pub fn run_interact_mode(pid: u32) -> Result<()> {
+    use dmft_common::ipc::Command;
+
+    println!("Sending InteractTarget to PID {pid}...");
+
+    let pipe = connect_authenticated_pipe(pid)?;
+    let cmd = Command::InteractTarget;
+    pipe.send_async(&cmd)
+        .context("Failed to send InteractTarget")?;
+
+    println!("InteractTarget sent — NPC window should open if target is valid.");
+    Ok(())
+}
+
 /// Parse a render mode string ("normal", "strobe", "null") into a `RenderMode`.
 fn parse_render_mode(s: &str) -> Result<dmft_common::ipc::RenderMode> {
     match s.to_lowercase().as_str() {
