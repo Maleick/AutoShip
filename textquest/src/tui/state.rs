@@ -439,6 +439,118 @@ impl MapFilters {
     }
 }
 
+/// How spawn labels are drawn on the map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MapNameStyle {
+    /// No labels.
+    #[default]
+    Off,
+    /// Show spawn name only.
+    Name,
+    /// Show name + level.
+    NameLevel,
+    /// Show name + class.
+    NameClass,
+}
+
+impl MapNameStyle {
+    /// Cycle to the next style.
+    pub fn next(self) -> Self {
+        match self {
+            Self::Off => Self::Name,
+            Self::Name => Self::NameLevel,
+            Self::NameLevel => Self::NameClass,
+            Self::NameClass => Self::Off,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Name => "name",
+            Self::NameLevel => "name+level",
+            Self::NameClass => "name+class",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "off" | "none" => Some(Self::Off),
+            "name" => Some(Self::Name),
+            "namelevel" | "name+level" | "nl" => Some(Self::NameLevel),
+            "nameclass" | "name+class" | "nc" => Some(Self::NameClass),
+            _ => None,
+        }
+    }
+}
+
+/// A spawn highlight with optional visual overrides.
+#[derive(Debug, Clone)]
+pub struct MapHighlight {
+    /// Spawn name pattern (case-insensitive substring match).
+    pub pattern: String,
+    /// Override color for the highlighted spawn marker.
+    pub color: Option<Color>,
+    /// Marker size: 1=small dot, 2=medium, 3=large.
+    pub size: u8,
+    /// Whether the marker should pulse (blink).
+    pub pulse: bool,
+}
+
+/// A location marker placed on the map.
+#[derive(Debug, Clone)]
+pub struct MapLocMarker {
+    pub x: f32,
+    pub y: f32,
+    pub label: String,
+}
+
+/// A radius overlay circle around the player.
+#[derive(Debug, Clone)]
+pub struct MapRadiusOverlay {
+    pub radius: f32,
+    pub color: Color,
+    pub label: String,
+}
+
+/// A saved set of map filter settings.
+#[derive(Debug, Clone)]
+pub struct MapFilterPreset {
+    pub name: String,
+    pub filters: MapFilters,
+    pub show_geometry: bool,
+    pub show_spawns: bool,
+    pub show_nav_paths: bool,
+    pub show_labels: bool,
+    pub show_annotations: bool,
+}
+
+/// What happens when the user presses Enter on the map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MapClickAction {
+    #[default]
+    None,
+    /// Place a loc marker at the cursor position.
+    PlaceLoc,
+    /// Navigate to the cursor position.
+    Navigate,
+}
+
+/// A preset that quickly shows/hides groups of map layers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapVisibilityPreset {
+    /// Show all layers.
+    All,
+    /// Geometry + spawns only (clean tactical view).
+    Tactical,
+    /// Spawns + nav paths (navigation focus).
+    Navigation,
+    /// Only geometry.
+    GeometryOnly,
+    /// Minimal — spawns only.
+    SpawnsOnly,
+}
+
 /// State for the Map screen.
 pub struct MapScreenState {
     /// Parsed zone map data (lines and points), if loaded.
@@ -464,6 +576,24 @@ pub struct MapScreenState {
     pub show_annotations: bool,
     /// MQ2Map-style visibility toggles for map overlay entities.
     pub filters: MapFilters,
+    /// Active spawn highlights.
+    pub highlights: Vec<MapHighlight>,
+    /// Location marker placed by :maploc.
+    pub loc_marker: Option<MapLocMarker>,
+    /// How spawn labels are rendered.
+    pub name_style: MapNameStyle,
+    /// Cast radius overlay circle.
+    pub cast_radius: Option<MapRadiusOverlay>,
+    /// Spell radius overlay circle.
+    pub spell_radius: Option<MapRadiusOverlay>,
+    /// Show target path overlay (nav waypoints to target).
+    pub show_target_path: bool,
+    /// Show direct line from player to target.
+    pub show_target_line: bool,
+    /// Saved filter presets by name.
+    pub saved_presets: Vec<MapFilterPreset>,
+    /// What the map click/enter action does.
+    pub click_action: MapClickAction,
 }
 
 impl MapScreenState {
@@ -488,6 +618,15 @@ impl MapScreenState {
             show_labels: false,
             show_annotations: false,
             filters: MapFilters::default(),
+            highlights: Vec::new(),
+            loc_marker: None,
+            name_style: MapNameStyle::Off,
+            cast_radius: None,
+            spell_radius: None,
+            show_target_path: true,
+            show_target_line: true,
+            saved_presets: Vec::new(),
+            click_action: MapClickAction::None,
         }
     }
 
@@ -585,6 +724,106 @@ impl MapScreenState {
             }
             _ => "Unknown layer",
         }
+    }
+
+    /// Apply a visibility preset.
+    pub fn apply_visibility_preset(&mut self, preset: MapVisibilityPreset) {
+        match preset {
+            MapVisibilityPreset::All => {
+                self.show_geometry = true;
+                self.show_spawns = true;
+                self.show_nav_paths = true;
+                self.show_labels = true;
+                self.show_annotations = true;
+                self.show_navmesh = true;
+            }
+            MapVisibilityPreset::Tactical => {
+                self.show_geometry = true;
+                self.show_spawns = true;
+                self.show_nav_paths = false;
+                self.show_labels = false;
+                self.show_annotations = false;
+                self.show_navmesh = false;
+            }
+            MapVisibilityPreset::Navigation => {
+                self.show_geometry = false;
+                self.show_spawns = true;
+                self.show_nav_paths = true;
+                self.show_labels = false;
+                self.show_annotations = false;
+                self.show_navmesh = true;
+            }
+            MapVisibilityPreset::GeometryOnly => {
+                self.show_geometry = true;
+                self.show_spawns = false;
+                self.show_nav_paths = false;
+                self.show_labels = false;
+                self.show_annotations = false;
+                self.show_navmesh = false;
+            }
+            MapVisibilityPreset::SpawnsOnly => {
+                self.show_geometry = false;
+                self.show_spawns = true;
+                self.show_nav_paths = false;
+                self.show_labels = false;
+                self.show_annotations = false;
+                self.show_navmesh = false;
+            }
+        }
+    }
+
+    /// Save current filter state as a named preset.
+    pub fn save_preset(&mut self, name: String) {
+        let preset = MapFilterPreset {
+            name: name.clone(),
+            filters: self.filters.clone(),
+            show_geometry: self.show_geometry,
+            show_spawns: self.show_spawns,
+            show_nav_paths: self.show_nav_paths,
+            show_labels: self.show_labels,
+            show_annotations: self.show_annotations,
+        };
+        if let Some(existing) = self.saved_presets.iter_mut().find(|p| p.name == name) {
+            *existing = preset;
+        } else {
+            self.saved_presets.push(preset);
+        }
+    }
+
+    /// Load a named preset, returning true if found.
+    pub fn load_preset(&mut self, name: &str) -> bool {
+        if let Some(preset) = self.saved_presets.iter().find(|p| p.name == name).cloned() {
+            self.filters = preset.filters;
+            self.show_geometry = preset.show_geometry;
+            self.show_spawns = preset.show_spawns;
+            self.show_nav_paths = preset.show_nav_paths;
+            self.show_labels = preset.show_labels;
+            self.show_annotations = preset.show_annotations;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Delete a named preset, returning true if found.
+    pub fn delete_preset(&mut self, name: &str) -> bool {
+        let before = self.saved_presets.len();
+        self.saved_presets.retain(|p| p.name != name);
+        self.saved_presets.len() < before
+    }
+
+    /// Add a spawn highlight.
+    pub fn add_highlight(&mut self, highlight: MapHighlight) {
+        self.highlights.push(highlight);
+    }
+
+    /// Remove highlights matching a pattern (case-insensitive).
+    pub fn remove_highlight(&mut self, pattern: &str) -> usize {
+        let lower = pattern.to_ascii_lowercase();
+        let before = self.highlights.len();
+        self.highlights
+            .retain(|h| h.pattern.to_ascii_lowercase() != lower);
+        before - self.highlights.len()
     }
 }
 
@@ -1458,5 +1697,62 @@ mod tests {
         assert!((state.zoom - 1.0).abs() < f32::EPSILON);
         assert!((state.pan_x - 0.0).abs() < f32::EPSILON);
         assert!((state.pan_y - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn map_name_style_cycles() {
+        assert_eq!(MapNameStyle::Off.next(), MapNameStyle::Name);
+        assert_eq!(MapNameStyle::NameClass.next(), MapNameStyle::Off);
+    }
+    #[test]
+    fn map_name_style_parse() {
+        assert_eq!(MapNameStyle::parse("off"), Some(MapNameStyle::Off));
+        assert_eq!(MapNameStyle::parse("nl"), Some(MapNameStyle::NameLevel));
+        assert_eq!(MapNameStyle::parse("x"), None);
+    }
+    #[test]
+    fn map_highlight_add_remove() {
+        let mut s = MapScreenState::new();
+        s.add_highlight(MapHighlight {
+            pattern: "Fippy".into(),
+            color: Some(Color::Red),
+            size: 2,
+            pulse: false,
+        });
+        s.add_highlight(MapHighlight {
+            pattern: "Guard".into(),
+            color: None,
+            size: 1,
+            pulse: true,
+        });
+        assert_eq!(s.highlights.len(), 2);
+        assert_eq!(s.remove_highlight("fippy"), 1);
+        assert_eq!(s.highlights.len(), 1);
+    }
+    #[test]
+    fn map_vis_preset() {
+        let mut s = MapScreenState::new();
+        s.show_geometry = false;
+        s.apply_visibility_preset(MapVisibilityPreset::All);
+        assert!(s.show_geometry && s.show_spawns && s.show_labels);
+    }
+    #[test]
+    fn map_preset_crud() {
+        let mut s = MapScreenState::new();
+        s.filters.show_npc = false;
+        s.save_preset("h".into());
+        s.filters.show_npc = true;
+        assert!(s.load_preset("h"));
+        assert!(!s.filters.show_npc);
+        assert!(s.delete_preset("h"));
+        assert!(!s.load_preset("h"));
+    }
+    #[test]
+    fn map_new_defaults() {
+        let s = MapScreenState::new();
+        assert!(s.show_target_path && s.show_target_line);
+        assert!(s.highlights.is_empty());
+        assert_eq!(s.name_style, MapNameStyle::Off);
+        assert_eq!(s.click_action, MapClickAction::None);
     }
 }

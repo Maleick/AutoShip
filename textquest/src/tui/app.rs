@@ -21,6 +21,7 @@ use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::orchestrator::Orchestrator;
 use crate::soul::coordinator::SoulCoordinator;
 use anyhow::Context;
+use ratatui::style::Color;
 
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
@@ -29,7 +30,8 @@ pub use super::state::{
     OverviewScreenState, PacketMonitorState, SpawnsScreenState, TacticalScreenState,
 };
 use super::state::{
-    FilteredSpawnCache, FilteredSpawnCacheKey, MapFilterKind, MapSpawnPresentationCache,
+    FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind, MapHighlight,
+    MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache, MapVisibilityPreset,
 };
 
 /// Which screen is currently displayed.
@@ -3240,62 +3242,14 @@ impl App {
                     }
                 }
             }
-            "mapfilter" => match parts.get(1).copied() {
-                None => {
-                    self.set_feedback(ToastLevel::Info, self.map_state.filters.summary(), false);
-                }
-                Some(arg) if arg.eq_ignore_ascii_case("reset") => {
-                    self.map_state.filters.set_all(true);
-                    self.map_spawn_cache.clear();
-                    self.set_feedback(
-                        ToastLevel::Success,
-                        String::from("Map filters reset (all ON)"),
-                        true,
-                    );
-                }
-                Some(arg) => {
-                    let Some(kind) = MapFilterKind::parse_kind(arg) else {
-                        self.usage_feedback(
-                            "mapfilter",
-                            "Usage: mapfilter <npc|pc|corpse|ground|pet|named|untargetable> [on|off]",
-                        );
-                        return;
-                    };
-                    let new_state = if let Some(state) = parts.get(2) {
-                        match state.to_ascii_lowercase().as_str() {
-                            "on" | "1" | "true" => {
-                                self.map_state.filters.set(kind, true);
-                                true
-                            }
-                            "off" | "0" | "false" => {
-                                self.map_state.filters.set(kind, false);
-                                false
-                            }
-                            _ => {
-                                self.usage_feedback(
-                                    "mapfilter",
-                                    "Usage: mapfilter <npc|pc|corpse|ground|pet|named|untargetable> [on|off]",
-                                );
-                                return;
-                            }
-                        }
-                    } else {
-                        self.map_state.filters.toggle(kind)
-                    };
-                    self.map_spawn_cache.clear();
-                    let status = if new_state { "ON" } else { "OFF" };
-                    self.set_feedback(
-                        ToastLevel::Info,
-                        format!(
-                            "{} {} | {}",
-                            kind.label(),
-                            status,
-                            self.map_state.filters.summary()
-                        ),
-                        true,
-                    );
-                }
-            },
+            "mapfilter" => self.handle_mapfilter_command(&parts),
+            "mapclick" => self.handle_mapclick_command(&parts),
+            "maploc" => self.handle_maploc_command(&parts),
+            "mapshow" => self.handle_mapshow_command(&parts),
+            "maphide" => self.handle_maphide_command(&parts),
+            "mapnames" => self.handle_mapnames_command(&parts),
+            "map" => self.handle_map_layer_command(&parts),
+            "highlight" | "hl" => self.handle_highlight_command(&parts),
             "loot" => {
                 let ok = self.send_ipc_to_focused(&textquest_common::ipc::Command::LootCorpse);
                 if ok == 0 {
@@ -4822,6 +4776,554 @@ impl App {
                 CampMember::new(client.pid, name, role)
             })
             .collect()
+    }
+
+    // ─── Map parity command handlers ─────────────────────────────────────
+
+    fn handle_mapfilter_command(&mut self, parts: &[&str]) {
+        match parts.get(1).copied() {
+            None => {
+                self.set_feedback(ToastLevel::Info, self.map_state.filters.summary(), false);
+            }
+            Some(arg) if arg.eq_ignore_ascii_case("reset") => {
+                self.map_state.filters.set_all(true);
+                self.map_spawn_cache.clear();
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Map filters reset (all ON)"),
+                    true,
+                );
+            }
+            Some(arg)
+                if arg.eq_ignore_ascii_case("castradius") || arg.eq_ignore_ascii_case("cr") =>
+            {
+                self.handle_mapfilter_radius(parts, true);
+            }
+            Some(arg)
+                if arg.eq_ignore_ascii_case("spellradius") || arg.eq_ignore_ascii_case("sr") =>
+            {
+                self.handle_mapfilter_radius(parts, false);
+            }
+            Some(arg) if arg.eq_ignore_ascii_case("targetpath") => {
+                let v = match parts.get(2).map(|s| s.to_ascii_lowercase()).as_deref() {
+                    Some("on" | "1" | "true") => true,
+                    Some("off" | "0" | "false") => false,
+                    _ => !self.map_state.show_target_path,
+                };
+                self.map_state.show_target_path = v;
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Target path {}", if v { "ON" } else { "OFF" }),
+                    true,
+                );
+            }
+            Some(arg) if arg.eq_ignore_ascii_case("targetline") => {
+                let v = match parts.get(2).map(|s| s.to_ascii_lowercase()).as_deref() {
+                    Some("on" | "1" | "true") => true,
+                    Some("off" | "0" | "false") => false,
+                    _ => !self.map_state.show_target_line,
+                };
+                self.map_state.show_target_line = v;
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Target line {}", if v { "ON" } else { "OFF" }),
+                    true,
+                );
+            }
+            Some(arg) if arg.eq_ignore_ascii_case("save") => {
+                let Some(name) = parts.get(2) else {
+                    self.usage_feedback("mapfilter save", "Usage: mapfilter save <name>");
+                    return;
+                };
+                self.map_state.save_preset((*name).to_string());
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Preset \"{name}\" saved"),
+                    true,
+                );
+            }
+            Some(arg) if arg.eq_ignore_ascii_case("load") => {
+                let Some(name) = parts.get(2) else {
+                    self.usage_feedback("mapfilter load", "Usage: mapfilter load <name>");
+                    return;
+                };
+                if self.map_state.load_preset(name) {
+                    self.map_spawn_cache.clear();
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Preset \"{name}\" loaded"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("No preset named \"{name}\""),
+                        false,
+                    );
+                }
+            }
+            Some(arg) if arg.eq_ignore_ascii_case("delete") => {
+                let Some(name) = parts.get(2) else {
+                    self.usage_feedback("mapfilter delete", "Usage: mapfilter delete <name>");
+                    return;
+                };
+                if self.map_state.delete_preset(name) {
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Preset \"{name}\" deleted"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("No preset named \"{name}\""),
+                        false,
+                    );
+                }
+            }
+            Some(arg) if arg.eq_ignore_ascii_case("list") => {
+                if self.map_state.saved_presets.is_empty() {
+                    self.set_feedback(ToastLevel::Info, String::from("No saved presets"), false);
+                } else {
+                    let names: Vec<&str> = self
+                        .map_state
+                        .saved_presets
+                        .iter()
+                        .map(|p| p.name.as_str())
+                        .collect();
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Presets: {}", names.join(", ")),
+                        false,
+                    );
+                }
+            }
+            Some(arg) => {
+                let Some(kind) = MapFilterKind::parse_kind(arg) else {
+                    self.usage_feedback("mapfilter", "Usage: mapfilter <type> [on|off]");
+                    return;
+                };
+                let ns = if let Some(st) = parts.get(2) {
+                    match st.to_ascii_lowercase().as_str() {
+                        "on" | "1" | "true" => {
+                            self.map_state.filters.set(kind, true);
+                            true
+                        }
+                        "off" | "0" | "false" => {
+                            self.map_state.filters.set(kind, false);
+                            false
+                        }
+                        _ => {
+                            self.usage_feedback("mapfilter", "Usage: mapfilter <type> [on|off]");
+                            return;
+                        }
+                    }
+                } else {
+                    self.map_state.filters.toggle(kind)
+                };
+                self.map_spawn_cache.clear();
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!(
+                        "{} {} | {}",
+                        kind.label(),
+                        if ns { "ON" } else { "OFF" },
+                        self.map_state.filters.summary()
+                    ),
+                    true,
+                );
+            }
+        }
+    }
+
+    fn handle_mapfilter_radius(&mut self, parts: &[&str], is_cast: bool) {
+        let label = if is_cast { "Cast" } else { "Spell" };
+        let field = if is_cast {
+            &mut self.map_state.cast_radius
+        } else {
+            &mut self.map_state.spell_radius
+        };
+        match parts.get(2).map(|s| s.to_ascii_lowercase()).as_deref() {
+            None | Some("off" | "0" | "clear") => {
+                *field = None;
+                self.set_feedback(ToastLevel::Info, format!("{label} radius cleared"), true);
+            }
+            Some(val) => {
+                let Ok(r) = val.parse::<f32>() else {
+                    let c = if is_cast { "castradius" } else { "spellradius" };
+                    self.usage_feedback(
+                        &format!("mapfilter {c}"),
+                        format!("Usage: mapfilter {c} <radius> [color]"),
+                    );
+                    return;
+                };
+                let color = parts
+                    .get(3)
+                    .and_then(|c| parse_highlight_color(c))
+                    .unwrap_or(if is_cast { Color::Cyan } else { Color::Yellow });
+                *field = Some(MapRadiusOverlay {
+                    radius: r,
+                    color,
+                    label: format!("{label} {r:.0}"),
+                });
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("{label} radius {r:.0} ({color:?})"),
+                    true,
+                );
+            }
+        }
+    }
+
+    fn handle_mapclick_command(&mut self, parts: &[&str]) {
+        match parts.get(1).map(|s| s.to_ascii_lowercase()).as_deref() {
+            None => {
+                let c = match self.map_state.click_action {
+                    MapClickAction::None => "none",
+                    MapClickAction::PlaceLoc => "loc",
+                    MapClickAction::Navigate => "nav",
+                };
+                self.set_feedback(ToastLevel::Info, format!("Map click action: {c}"), false);
+            }
+            Some("none" | "off") => {
+                self.map_state.click_action = MapClickAction::None;
+                self.set_feedback(ToastLevel::Info, String::from("Map click: disabled"), true);
+            }
+            Some("loc" | "marker") => {
+                self.map_state.click_action = MapClickAction::PlaceLoc;
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Map click: place loc marker"),
+                    true,
+                );
+            }
+            Some("nav" | "navigate") => {
+                self.map_state.click_action = MapClickAction::Navigate;
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Map click: navigate to point"),
+                    true,
+                );
+            }
+            _ => {
+                self.usage_feedback("mapclick", "Usage: mapclick [none|loc|nav]");
+            }
+        }
+    }
+
+    fn handle_maploc_command(&mut self, parts: &[&str]) {
+        match parts.get(1).map(|s| s.to_ascii_lowercase()).as_deref() {
+            None => {
+                if let Some(p) = &self.local_player {
+                    let m = MapLocMarker {
+                        x: p.x,
+                        y: p.y,
+                        label: String::from("loc"),
+                    };
+                    let msg = format!("Loc set at ({:.0}, {:.0})", p.x, p.y);
+                    self.map_state.loc_marker = Some(m);
+                    self.set_feedback(ToastLevel::Success, msg, true);
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("No player position available"),
+                        false,
+                    );
+                }
+            }
+            Some("recall" | "show") => {
+                if let Some(l) = &self.map_state.loc_marker {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Loc: ({:.0}, {:.0}) \"{}\"", l.x, l.y, l.label),
+                        false,
+                    );
+                } else {
+                    self.set_feedback(ToastLevel::Info, String::from("No loc marker set"), false);
+                }
+            }
+            Some("clear" | "off") => {
+                self.map_state.loc_marker = None;
+                self.set_feedback(ToastLevel::Info, String::from("Loc marker cleared"), true);
+            }
+            _ => {
+                self.usage_feedback("maploc", "Usage: maploc [recall|clear]");
+            }
+        }
+    }
+
+    fn handle_mapshow_command(&mut self, parts: &[&str]) {
+        let Some(pn) = parts.get(1) else {
+            self.usage_feedback(
+                "mapshow",
+                "Usage: mapshow <all|tactical|nav|geometry|spawns>",
+            );
+            return;
+        };
+        let preset = match pn.to_ascii_lowercase().as_str() {
+            "all" => MapVisibilityPreset::All,
+            "tactical" | "tac" => MapVisibilityPreset::Tactical,
+            "navigation" | "nav" => MapVisibilityPreset::Navigation,
+            "geometry" | "geo" => MapVisibilityPreset::GeometryOnly,
+            "spawns" => MapVisibilityPreset::SpawnsOnly,
+            _ => {
+                self.usage_feedback(
+                    "mapshow",
+                    "Usage: mapshow <all|tactical|nav|geometry|spawns>",
+                );
+                return;
+            }
+        };
+        self.map_state.apply_visibility_preset(preset);
+        self.map_spawn_cache.clear();
+        self.set_feedback(
+            ToastLevel::Success,
+            format!("Visibility preset: {pn}"),
+            true,
+        );
+    }
+
+    fn handle_maphide_command(&mut self, parts: &[&str]) {
+        let Some(layer) = parts.get(1) else {
+            self.usage_feedback(
+                "maphide",
+                "Usage: maphide <geometry|spawns|paths|mesh|labels|annotations>",
+            );
+            return;
+        };
+        let msg = match layer.to_ascii_lowercase().as_str() {
+            "geometry" | "geo" => {
+                self.map_state.show_geometry = false;
+                "Geometry hidden"
+            }
+            "spawns" => {
+                self.map_state.show_spawns = false;
+                self.map_spawn_cache.clear();
+                "Spawns hidden"
+            }
+            "paths" | "nav" => {
+                self.map_state.show_nav_paths = false;
+                "Nav paths hidden"
+            }
+            "mesh" | "navmesh" => {
+                self.map_state.show_navmesh = false;
+                "Navmesh hidden"
+            }
+            "labels" => {
+                self.map_state.show_labels = false;
+                "Labels hidden"
+            }
+            "annotations" => {
+                self.map_state.show_annotations = false;
+                "Annotations hidden"
+            }
+            _ => {
+                self.usage_feedback(
+                    "maphide",
+                    "Usage: maphide <geometry|spawns|paths|mesh|labels|annotations>",
+                );
+                return;
+            }
+        };
+        self.set_feedback(ToastLevel::Info, String::from(msg), true);
+    }
+
+    fn handle_mapnames_command(&mut self, parts: &[&str]) {
+        match parts.get(1) {
+            None => {
+                self.map_state.name_style = self.map_state.name_style.next();
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Map labels: {}", self.map_state.name_style.label()),
+                    true,
+                );
+            }
+            Some(s) => {
+                if let Some(style) = MapNameStyle::parse(s) {
+                    self.map_state.name_style = style;
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Map labels: {}", style.label()),
+                        true,
+                    );
+                } else {
+                    self.usage_feedback(
+                        "mapnames",
+                        "Usage: mapnames [off|name|namelevel|nameclass]",
+                    );
+                }
+            }
+        }
+    }
+
+    fn handle_map_layer_command(&mut self, parts: &[&str]) {
+        let Some(ln) = parts.get(1) else {
+            self.usage_feedback("map", "Usage: map <layer> [on|off]");
+            return;
+        };
+        let num = match ln.to_ascii_lowercase().as_str() {
+            "geometry" | "geo" => 1u8,
+            "spawns" => 2,
+            "paths" | "nav" => 3,
+            "mesh" | "navmesh" => 4,
+            "labels" => 5,
+            "annotations" => 6,
+            _ => {
+                self.usage_feedback("map", "Usage: map <layer> [on|off]");
+                return;
+            }
+        };
+        if let Some(st) = parts.get(2) {
+            let on = match st.to_ascii_lowercase().as_str() {
+                "on" | "1" | "true" => true,
+                "off" | "0" | "false" => false,
+                _ => {
+                    self.usage_feedback("map", "Usage: map <layer> [on|off]");
+                    return;
+                }
+            };
+            match num {
+                1 => self.map_state.show_geometry = on,
+                2 => self.map_state.show_spawns = on,
+                3 => self.map_state.show_nav_paths = on,
+                4 => self.map_state.show_navmesh = on,
+                5 => self.map_state.show_labels = on,
+                6 => self.map_state.show_annotations = on,
+                _ => {}
+            }
+            let l = match num {
+                1 => "Geometry",
+                2 => "Spawns",
+                3 => "Nav paths",
+                4 => "Navmesh",
+                5 => "Labels",
+                _ => "Annotations",
+            };
+            self.map_spawn_cache.clear();
+            self.set_feedback(
+                ToastLevel::Info,
+                format!("{l} {}", if on { "ON" } else { "OFF" }),
+                true,
+            );
+        } else {
+            let msg = self.map_state.toggle_layer(num);
+            self.map_spawn_cache.clear();
+            self.set_feedback(ToastLevel::Info, String::from(msg), true);
+        }
+    }
+
+    fn handle_highlight_command(&mut self, parts: &[&str]) {
+        match parts.get(1).map(|s| s.to_ascii_lowercase()).as_deref() {
+            Some("add") => {
+                let Some(pat) = parts.get(2) else {
+                    self.usage_feedback(
+                        "highlight",
+                        "Usage: highlight add <pattern> [color=X] [size=N] [pulse]",
+                    );
+                    return;
+                };
+                let (mut color, mut size, mut pulse) = (None, 1u8, false);
+                for &a in parts.iter().skip(3) {
+                    if let Some(c) = a.strip_prefix("color=") {
+                        color = parse_highlight_color(c);
+                    } else if let Some(s) = a.strip_prefix("size=") {
+                        size = s.parse().unwrap_or(1_u8).clamp(1, 3);
+                    } else if a.eq_ignore_ascii_case("pulse") {
+                        pulse = true;
+                    }
+                }
+                self.map_state.add_highlight(MapHighlight {
+                    pattern: (*pat).to_string(),
+                    color,
+                    size,
+                    pulse,
+                });
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Highlight added for \"{pat}\""),
+                    true,
+                );
+            }
+            Some("remove" | "rm") => {
+                let Some(pat) = parts.get(2) else {
+                    self.usage_feedback("highlight", "Usage: highlight remove <pattern>");
+                    return;
+                };
+                let n = self.map_state.remove_highlight(pat);
+                if n > 0 {
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Removed {n} highlight(s)"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("No highlight matching \"{pat}\""),
+                        false,
+                    );
+                }
+            }
+            Some("list") => {
+                if self.map_state.highlights.is_empty() {
+                    self.set_feedback(ToastLevel::Info, String::from("No highlights"), false);
+                } else {
+                    let items: Vec<String> = self
+                        .map_state
+                        .highlights
+                        .iter()
+                        .map(|h| {
+                            let mut d = format!("\"{}\"", h.pattern);
+                            if let Some(c) = h.color {
+                                d.push_str(&format!(" color={c:?}"));
+                            }
+                            if h.size > 1 {
+                                d.push_str(&format!(" size={}", h.size));
+                            }
+                            if h.pulse {
+                                d.push_str(" pulse");
+                            }
+                            d
+                        })
+                        .collect();
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Highlights: {}", items.join(", ")),
+                        false,
+                    );
+                }
+            }
+            Some("clear") => {
+                let n = self.map_state.highlights.len();
+                self.map_state.highlights.clear();
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Cleared {n} highlight(s)"),
+                    true,
+                );
+            }
+            _ => {
+                self.usage_feedback(
+                    "highlight",
+                    "Usage: highlight <add|remove|list|clear> [pattern] [color=X] [size=N] [pulse]",
+                );
+            }
+        }
+    }
+}
+
+/// Parse a color name into a ratatui Color.
+fn parse_highlight_color(s: &str) -> Option<Color> {
+    match s.to_ascii_lowercase().as_str() {
+        "red" => Some(Color::Red),
+        "green" => Some(Color::Green),
+        "blue" => Some(Color::Blue),
+        "yellow" => Some(Color::Yellow),
+        "cyan" => Some(Color::Cyan),
+        "magenta" | "purple" => Some(Color::Magenta),
+        "white" => Some(Color::White),
+        "orange" => Some(Color::Rgb(255, 165, 0)),
+        _ => None,
     }
 }
 
