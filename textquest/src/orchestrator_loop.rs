@@ -98,17 +98,19 @@ impl OrchestratorLoop {
         launch_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         orch_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-        let mut all_events = Vec::new();
-
         loop {
             tokio::select! {
                 _ = health_interval.tick() => {
                     let events = self.tick_health_checks();
-                    all_events.extend(events);
+                    for event in &events {
+                        tracing::debug!(?event, "orchestrator loop event");
+                    }
                 }
                 _ = launch_interval.tick() => {
                     let events = self.tick_launch_coordinator();
-                    all_events.extend(events);
+                    for event in &events {
+                        tracing::debug!(?event, "orchestrator loop event");
+                    }
                 }
                 _ = orch_interval.tick() => {
                     self.orchestrator.tick();
@@ -116,14 +118,11 @@ impl OrchestratorLoop {
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
                         tracing::info!("Shutdown signal received — stopping orchestrator loop");
-                        all_events.push(LoopEvent::ShuttingDown);
-                        break;
+                        return vec![LoopEvent::ShuttingDown];
                     }
                 }
             }
         }
-
-        all_events
     }
 
     /// Run health checks on all managed clients.
