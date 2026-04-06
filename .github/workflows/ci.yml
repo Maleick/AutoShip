@@ -191,8 +191,8 @@ jobs:
       - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
       - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
       - run: cargo fmt --all --check
-      - run: cargo clippy -j 2 --all-targets --all-features -- -D warnings
-      - run: cargo test -j 2
+      - run: cargo clippy -j 1 --all-targets --all-features -- -D warnings
+      - run: cargo test -j 1
 
   windows:
     name: Windows release build (manual)
