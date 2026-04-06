@@ -45,6 +45,12 @@ pub fn spawn_eq_client(
     };
     let mut pi = PROCESS_INFORMATION::default();
 
+    // EQ must run from its own directory (loads DLLs relative to CWD).
+    let eq_dir: Vec<u16> = OsString::from(eq_path.as_os_str())
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+
     // ACCEPTED RISK (security-H3): Account name is visible in process command line
     // via Task Manager. This is required by EQ's patchme launcher (/login: flag).
     // Mitigation: do not log the full command line. Consider PEB scrubbing
@@ -58,7 +64,7 @@ pub fn spawn_eq_client(
             false,
             PROCESS_CREATION_FLAGS(0),
             None,
-            None,
+            windows::core::PCWSTR(eq_dir.as_ptr()),
             &si,
             &mut pi,
         )?;
