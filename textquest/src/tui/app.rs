@@ -2860,7 +2860,11 @@ impl App {
             {
                 current_matched.insert(spawn.displayed_name.clone());
                 // Only alert on first appearance.
-                if !self.spawn_alert_feed.watched_seen().contains(&spawn.displayed_name) {
+                if !self
+                    .spawn_alert_feed
+                    .watched_seen()
+                    .contains(&spawn.displayed_name)
+                {
                     new_events.push(SpawnAlertEvent {
                         spawn_name: spawn.displayed_name.clone(),
                         zone: zone.clone(),
