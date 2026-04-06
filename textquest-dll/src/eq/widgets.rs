@@ -476,6 +476,40 @@ pub unsafe fn click_button_via_vtable(button_wnd: usize) {
 #[cfg(not(windows))]
 pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
 
+/// Click a button, choosing the correct mechanism for the current EQ phase.
+///
+/// During eqmain (login, server select): calls `click_button_via_vtable()` directly
+/// because ProcessGameEvents is not hooked yet and queue_button_click() would never drain.
+///
+/// During eqgame (character select, in-world): uses `queue_button_click()` to schedule
+/// the click on the game loop thread where it's safe to manipulate EQ UI state.
+///
+/// # Safety
+/// `button_wnd` must be a valid `CXWnd` pointer with an intact vtable.
+#[cfg(windows)]
+pub unsafe fn click_button_for_phase(button_wnd: usize, in_eqmain: bool) {
+    if button_wnd == 0 {
+        tracing::warn!("click_button_for_phase: null button pointer");
+        return;
+    }
+    if in_eqmain {
+        tracing::debug!(
+            ptr = format!("{:#x}", button_wnd),
+            "Direct vtable click (eqmain phase)"
+        );
+        click_button_via_vtable(button_wnd);
+    } else {
+        tracing::debug!(
+            ptr = format!("{:#x}", button_wnd),
+            "Queueing click on game loop (eqgame phase)"
+        );
+        crate::hooks::game_loop::queue_button_click(button_wnd);
+    }
+}
+
+#[cfg(not(windows))]
+pub unsafe fn click_button_for_phase(_button_wnd: usize, _in_eqmain: bool) {}
+
 /// Set text on a `CEditWnd` by calling `SetWindowText` through the vtable.
 ///
 /// **WARNING: Does NOT work in eqmain.dll context** (login screens). The vtable
@@ -879,6 +913,13 @@ mod tests {
         unsafe {
             click_button_via_vtable(0);
         } // should not panic
+    }
+
+    #[test]
+    fn click_button_for_phase_noop_on_non_windows() {
+        // On macOS, both paths are no-ops — just verify no panic.
+        unsafe { click_button_for_phase(0, true) };
+        unsafe { click_button_for_phase(0, false) };
     }
 
     #[test]
