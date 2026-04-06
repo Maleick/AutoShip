@@ -64,7 +64,7 @@ pub struct Navigator {
     /// Warp detection + pause gate.
     warp: WarpMonitor,
     /// State before user-initiated pause (for resume).
-    pre_pause_state: Option<Box<State>>,
+    pre_pause_state: Option<State>,
     /// Previous position for velocity calculation.
     prev_position: Option<Waypoint>,
     /// Cached velocity in world units per tick (updated each tick).
@@ -75,6 +75,19 @@ pub struct Navigator {
     moveto_config: Option<MoveToConfig>,
     /// Global autopause flag (#164).
     autopause: bool,
+}
+
+/// Radius for hostile NPC proximity checks (aggro detection).
+const AGGRO_CHECK_RADIUS: f32 = 50.0;
+
+/// Returns true if any hostile NPC (type=1, moving) is within aggro radius.
+fn has_hostile_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
+    nearby.iter().any(|s| {
+        s.spawn_type == 1 && s.speed_run > 0.0 && {
+            let sp = Waypoint::new(s.x, s.y, s.z);
+            pos.distance_2d(&sp) < AGGRO_CHECK_RADIUS
+        }
+    })
 }
 
 impl Navigator {
@@ -163,7 +176,7 @@ impl Navigator {
                 self.controller.stop_forward();
                 self.controller.stop_back();
                 let old_state = std::mem::replace(&mut self.state, State::Idle);
-                self.pre_pause_state = Some(Box::new(old_state));
+                self.pre_pause_state = Some(old_state);
                 self.state = State::Paused(PauseReason::UserPause);
                 tracing::info!("Navigation paused by user");
             }
@@ -177,7 +190,7 @@ impl Navigator {
     pub fn resume(&mut self) {
         if matches!(self.state, State::Paused(PauseReason::UserPause)) {
             if let Some(saved) = self.pre_pause_state.take() {
-                self.state = *saved;
+                self.state = saved;
                 self.stuck.reset();
                 tracing::info!("Navigation resumed by user");
             } else {
@@ -328,8 +341,10 @@ impl Navigator {
         nearby: &[SpawnData],
         target_sample: Option<&TargetSample>,
     ) {
-        // Update velocity tracking every tick.
-        self.update_velocity();
+        // Only update velocity when actively navigating (skip Idle/Arrived).
+        if !matches!(self.state, State::Idle | State::Arrived) {
+            self.update_velocity();
+        }
 
         let warp_action = match self.state {
             State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
@@ -570,12 +585,7 @@ impl Navigator {
             if config.is_beyond_leash(&current_pos) {
                 // #182: return_no_aggro — don't return if hostile NPCs are nearby.
                 if config.return_no_aggro
-                    && nearby.iter().any(|s| {
-                        s.spawn_type == 1 && s.speed_run > 0.0 && {
-                            let sp = Waypoint::new(s.x, s.y, s.z);
-                            current_pos.distance_2d(&sp) < 50.0
-                        }
-                    })
+                    && has_hostile_nearby(nearby, &current_pos)
                 {
                     return;
                 }
@@ -614,14 +624,8 @@ impl Navigator {
         let dist = current_pos.distance_2d(&destination);
         self.cached_distance = dist;
 
-        // Break-on-aggro: hostile NPC moving toward player within 50 units.
-        if config.break_on_aggro
-            && nearby.iter().any(|s| {
-                s.spawn_type == 1 && s.speed_run > 0.0 && {
-                    let sp = Waypoint::new(s.x, s.y, s.z);
-                    current_pos.distance_2d(&sp) < 50.0
-                }
-            })
+        // Break-on-aggro: hostile NPC moving toward player within aggro radius.
+        if config.break_on_aggro && has_hostile_nearby(nearby, &current_pos)
         {
             tracing::info!("MoveToAdvanced: break_on_aggro triggered");
             self.stop_moveto();

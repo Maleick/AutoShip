@@ -2801,12 +2801,16 @@ impl App {
         }
     }
 
+    /// Get the zone name of the active client, or empty string.
+    fn current_zone(&self) -> String {
+        self.active_client()
+            .map(|c| c.zone_name.clone())
+            .unwrap_or_default()
+    }
+
     pub fn update_spawn_alerts(&mut self) {
         let tick = self.tick_count;
-        let zone = self
-            .active_client()
-            .map(|c| c.zone_name.clone())
-            .unwrap_or_default();
+        let zone = self.current_zone();
         if self.spawn_watch_named {
             let alerts = self.named_tracker.update(&self.spawns, tick);
             for alert in &alerts {
@@ -2840,10 +2844,11 @@ impl App {
             return;
         }
         let tick = self.tick_count;
-        let zone = self
-            .active_client()
-            .map(|c| c.zone_name.clone())
-            .unwrap_or_default();
+        let zone = self.current_zone();
+
+        // Build set of currently matched spawn names.
+        let mut current_matched: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         let mut new_events: Vec<SpawnAlertEvent> = Vec::new();
         for spawn in &self.spawns {
             if is_named(&spawn.displayed_name) {
@@ -2853,19 +2858,52 @@ impl App {
                 .spawn_alert_feed
                 .matches_any_pattern(&spawn.displayed_name)
             {
-                new_events.push(SpawnAlertEvent {
-                    spawn_name: spawn.displayed_name.clone(),
-                    zone: zone.clone(),
-                    is_up: true,
-                    timestamp: std::time::SystemTime::now(),
-                    tick,
-                    match_source: MatchSource::WatchPattern(pattern.to_string()),
-                });
+                current_matched.insert(spawn.displayed_name.clone());
+                // Only alert on first appearance.
+                if !self.spawn_alert_feed.watched_seen().contains(&spawn.displayed_name) {
+                    new_events.push(SpawnAlertEvent {
+                        spawn_name: spawn.displayed_name.clone(),
+                        zone: zone.clone(),
+                        is_up: true,
+                        timestamp: std::time::SystemTime::now(),
+                        tick,
+                        match_source: MatchSource::WatchPattern(pattern.to_string()),
+                    });
+                }
             }
         }
+
+        // Detect despawns: names previously seen but no longer matched.
+        let previously_seen: Vec<String> = self
+            .spawn_alert_feed
+            .watched_seen()
+            .iter()
+            .filter(|n| !current_matched.contains(n.as_str()))
+            .cloned()
+            .collect();
+        for name in &previously_seen {
+            self.spawn_alert_feed.unmark_watched_seen(name);
+            let event = SpawnAlertEvent {
+                spawn_name: name.clone(),
+                zone: zone.clone(),
+                is_up: false,
+                timestamp: std::time::SystemTime::now(),
+                tick,
+                match_source: MatchSource::WatchPattern(String::new()),
+            };
+            self.spawn_alert_feed.push(event);
+            self.set_feedback(
+                ToastLevel::Warning,
+                format!("[Watch] {name} DOWN in {zone}"),
+                false,
+            );
+        }
+
+        // Mark new appearances and fire alerts.
         for event in new_events {
             let name = event.spawn_name.clone();
             let z = event.zone.clone();
+            self.spawn_alert_feed.mark_watched_seen(name.clone());
             self.spawn_alert_feed.push(event);
             self.set_feedback(
                 ToastLevel::Info,

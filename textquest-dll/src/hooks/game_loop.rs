@@ -1399,11 +1399,7 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!("NavDoor/NavItem received (not yet implemented)");
         }
         Command::NavReload => {
-            tracing::info!("NavReload received");
-            // Navmesh reload is a stub — actual mesh loading is an M7 feature.
-            // Set mesh_loaded to false then true to signal a reload cycle.
-            crate::nav::handle_command(crate::nav::NavCommand::SetMeshLoaded(false));
-            crate::nav::handle_command(crate::nav::NavCommand::SetMeshLoaded(true));
+            tracing::warn!("NavReload: stub — actual mesh loading is an M7 feature");
         }
         Command::NavWaypointSave { name } => {
             tracing::info!(name = %name, "NavWaypointSave received");

@@ -88,6 +88,10 @@ static ORIG_DRAW_AUTO: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::
 /// Cleared by `hooked_present` after the frame completes.
 static SCREENSHOT_FRAME: AtomicBool = AtomicBool::new(false);
 
+/// Per-frame cached draw suppression decision — avoids two atomic loads per draw call.
+/// Updated by `hooked_present` and `allow_draws_for_screenshot`.
+static SUPPRESS_DRAWS: AtomicBool = AtomicBool::new(false);
+
 /// Cached EQ base address for deferred installation.
 static CACHED_EQ_BASE: AtomicU64 = AtomicU64::new(0);
 
@@ -203,16 +207,24 @@ type DrawAutoFn = unsafe extern "system" fn(this: *mut core::ffi::c_void);
 
 // ─── Hook implementations ───
 
-/// Returns true if draw calls should be suppressed (NullRender and no screenshot pending).
+/// Returns true if draw calls should be suppressed. Uses a per-frame cached value
+/// to avoid two atomic loads on every draw call (thousands per frame).
 fn should_suppress_draw() -> bool {
-    super::render::mode() == textquest_common::ipc::RenderMode::NullRender
-        && !SCREENSHOT_FRAME.load(Ordering::Acquire)
+    SUPPRESS_DRAWS.load(Ordering::Relaxed)
+}
+
+/// Recompute the cached draw suppression flag.
+fn update_suppress_draws() {
+    let suppress = super::render::mode() == textquest_common::ipc::RenderMode::NullRender
+        && !SCREENSHOT_FRAME.load(Ordering::Relaxed);
+    SUPPRESS_DRAWS.store(suppress, Ordering::Release);
 }
 
 /// Request that draw calls pass through for one frame (screenshot capture).
 /// The flag is cleared automatically after the next `Present` call.
 pub fn request_screenshot_frame() {
     SCREENSHOT_FRAME.store(true, Ordering::Release);
+    update_suppress_draws();
     tracing::debug!("Screenshot frame requested — draw calls enabled for next frame");
 }
 
@@ -247,6 +259,7 @@ unsafe extern "system" fn hooked_present(
     if SCREENSHOT_FRAME.swap(false, Ordering::AcqRel) {
         tracing::debug!("Screenshot frame completed — draw suppression re-enabled");
     }
+    update_suppress_draws();
 
     // Capture the backbuffer if this was a capture frame.
     if is_capture {
@@ -829,7 +842,10 @@ mod inner {
     }
 
     /// Write BGRA pixel data to a 24-bit BMP file.
-    fn write_bmp(
+    ///
+    /// # Safety
+    /// `data` must point to a valid pixel buffer with at least `height * row_pitch` bytes.
+    unsafe fn write_bmp(
         path: &str,
         width: u32,
         height: u32,

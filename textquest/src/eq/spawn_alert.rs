@@ -100,6 +100,8 @@ pub struct SpawnAlertFeed {
     events: VecDeque<SpawnAlertEvent>,
     capacity: usize,
     watch_patterns: Vec<SpawnWatchPattern>,
+    /// Spawn names currently matched by watch patterns (dedup across ticks).
+    watched_seen: std::collections::HashSet<String>,
 }
 
 impl SpawnAlertFeed {
@@ -110,6 +112,7 @@ impl SpawnAlertFeed {
             events: VecDeque::with_capacity(capacity.min(1024)),
             capacity,
             watch_patterns: Vec::new(),
+            watched_seen: std::collections::HashSet::new(),
         }
     }
 
@@ -152,11 +155,25 @@ impl SpawnAlertFeed {
 
     /// Remove a watch pattern by its raw string. Returns `true` if found.
     pub fn remove_watch(&mut self, pattern: &str) -> bool {
-        let lower = pattern.to_lowercase();
         let before = self.watch_patterns.len();
         self.watch_patterns
-            .retain(|p| p.raw.to_lowercase() != lower);
+            .retain(|p| !p.raw.eq_ignore_ascii_case(pattern.trim()));
         self.watch_patterns.len() < before
+    }
+
+    /// Track which watch-matched spawns have been seen (for dedup).
+    pub fn watched_seen(&self) -> &std::collections::HashSet<String> {
+        &self.watched_seen
+    }
+
+    /// Mark a spawn name as seen by watch pattern matching.
+    pub fn mark_watched_seen(&mut self, name: String) {
+        self.watched_seen.insert(name);
+    }
+
+    /// Remove a name from the seen set (spawn despawned).
+    pub fn unmark_watched_seen(&mut self, name: &str) {
+        self.watched_seen.remove(name);
     }
 
     /// Current watch patterns.
