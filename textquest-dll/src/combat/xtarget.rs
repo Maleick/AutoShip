@@ -39,7 +39,7 @@ pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> 
     let slot_count = unsafe {
         std::ptr::read((array_base + offsets::ARRAY_CLASS_LENGTH as usize) as *const i32)
     };
-    if slot_count < 0 || slot_count > MAX_XTARGET_SLOTS {
+    if !(0..=MAX_XTARGET_SLOTS).contains(&slot_count) {
         tracing::trace!(slot_count, "XTarget slot count out of range");
         return Some(ExtendedTargetList {
             slots: Vec::new(),
@@ -75,7 +75,7 @@ pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> 
         };
 
         let name_ptr = (slot_base + offsets::XTARGET_SLOT_NAME as usize) as *const u8;
-        let name = read_c_string(name_ptr, EQ_MAX_NAME);
+        let name = unsafe { read_c_string(name_ptr, EQ_MAX_NAME) };
 
         slots.push(ExtendedTargetSlot {
             slot_type: XTargetType::from_raw(raw_type).unwrap_or(XTargetType::Empty),

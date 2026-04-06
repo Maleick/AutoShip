@@ -536,6 +536,22 @@ pub mod buff_slots {
 
     /// EQ tick duration in seconds.
     pub const SECONDS_PER_TICK: f32 = 6.0;
+
+    // ── Convenience aliases for external buff reads ──
+
+    /// Maximum buff slots to iterate (alias for `MAX_TOTAL_BUFFS`).
+    pub const MAX_BUFF_SLOTS: usize = MAX_TOTAL_BUFFS;
+
+    /// Offset from PcProfile to the buff array data (`BaseProfile::Buffs`).
+    /// This is `profile::BUFFS_ARRAY` — callers must first dereference the
+    /// profile pointer chain to reach the PcProfile base.
+    pub const BUFF_ARRAY_OFFSET: usize = super::profile::BUFFS_ARRAY;
+
+    /// Size of each buff entry (alias for `EQ_AFFECT_SIZE`).
+    pub const BUFF_ENTRY_SIZE: usize = EQ_AFFECT_SIZE;
+
+    /// Remaining duration in ticks (alias for `DURATION`).
+    pub const DURATION_TICKS: usize = DURATION;
 }
 
 /// Pointer chain from `PINST_LOCAL_PC` → profile → buff array.
@@ -1058,7 +1074,7 @@ mod tests {
 
     #[test]
     fn profile_offsets_consistent() {
-        assert!(profile::PROFILE_MANAGER > 0);
+        const _: () = assert!(profile::PROFILE_MANAGER > 0);
         assert_eq!(profile::BUFFS_ARRAY, 0x0098);
         assert_eq!(profile::ARRAY_DATA_PTR, 0x08);
         assert_eq!(profile::ARRAY_SIZE, 0x10);
