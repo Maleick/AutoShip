@@ -196,6 +196,12 @@ pub enum SlotLifecycle {
     /// Slot failed in a way that prevents automatic recovery; needs operator
     /// intervention.
     Blocked,
+    /// Client is executing /camp or /quit and waiting to leave the world.
+    CampingOut,
+    /// Client process has exited (cleanly or via crash).
+    Exited,
+    /// Client is being restarted by the launcher after an exit or crash.
+    Relaunching,
 }
 
 impl SlotLifecycle {
@@ -210,6 +216,9 @@ impl SlotLifecycle {
             Self::Live => "LIVE",
             Self::Recovering => "RECOV",
             Self::Blocked => "BLOCK",
+            Self::CampingOut => "CAMP",
+            Self::Exited => "EXIT",
+            Self::Relaunching => "RELAUNCH",
         }
     }
 
@@ -224,6 +233,9 @@ impl SlotLifecycle {
             Self::Live => "Live",
             Self::Recovering => "Recovering",
             Self::Blocked => "Blocked",
+            Self::CampingOut => "Camping out",
+            Self::Exited => "Exited",
+            Self::Relaunching => "Relaunching",
         }
     }
 
@@ -236,7 +248,22 @@ impl SlotLifecycle {
     /// Whether this lifecycle state represents a degraded or blocked slot.
     #[must_use]
     pub fn is_degraded(self) -> bool {
-        matches!(self, Self::Recovering | Self::Blocked)
+        matches!(
+            self,
+            Self::Recovering | Self::Blocked | Self::CampingOut | Self::Exited
+        )
+    }
+
+    /// Whether this lifecycle state means the process is no longer running.
+    #[must_use]
+    pub fn is_offline(self) -> bool {
+        matches!(self, Self::Exited | Self::Relaunching | Self::Configured)
+    }
+
+    /// Whether the slot is in a transitional shutdown/restart cycle.
+    #[must_use]
+    pub fn is_cycling(self) -> bool {
+        matches!(self, Self::CampingOut | Self::Relaunching)
     }
 }
 
@@ -531,6 +558,9 @@ mod tests {
         assert_eq!(SlotLifecycle::Live.label(), "LIVE");
         assert_eq!(SlotLifecycle::Recovering.label(), "RECOV");
         assert_eq!(SlotLifecycle::Blocked.label(), "BLOCK");
+        assert_eq!(SlotLifecycle::CampingOut.label(), "CAMP");
+        assert_eq!(SlotLifecycle::Exited.label(), "EXIT");
+        assert_eq!(SlotLifecycle::Relaunching.label(), "RELAUNCH");
     }
 
     #[test]
@@ -543,6 +573,9 @@ mod tests {
             SlotLifecycle::Live,
             SlotLifecycle::Recovering,
             SlotLifecycle::Blocked,
+            SlotLifecycle::CampingOut,
+            SlotLifecycle::Exited,
+            SlotLifecycle::Relaunching,
         ];
         for v in variants {
             assert!(!v.description().is_empty());
@@ -555,14 +588,39 @@ mod tests {
         assert!(!SlotLifecycle::Configured.is_healthy());
         assert!(!SlotLifecycle::Recovering.is_healthy());
         assert!(!SlotLifecycle::Blocked.is_healthy());
+        assert!(!SlotLifecycle::CampingOut.is_healthy());
+        assert!(!SlotLifecycle::Exited.is_healthy());
+        assert!(!SlotLifecycle::Relaunching.is_healthy());
     }
 
     #[test]
     fn slot_lifecycle_degraded_states() {
         assert!(SlotLifecycle::Recovering.is_degraded());
         assert!(SlotLifecycle::Blocked.is_degraded());
+        assert!(SlotLifecycle::CampingOut.is_degraded());
+        assert!(SlotLifecycle::Exited.is_degraded());
         assert!(!SlotLifecycle::Live.is_degraded());
         assert!(!SlotLifecycle::Configured.is_degraded());
+        assert!(!SlotLifecycle::Relaunching.is_degraded());
+    }
+
+    #[test]
+    fn slot_lifecycle_offline_states() {
+        assert!(SlotLifecycle::Exited.is_offline());
+        assert!(SlotLifecycle::Relaunching.is_offline());
+        assert!(SlotLifecycle::Configured.is_offline());
+        assert!(!SlotLifecycle::Live.is_offline());
+        assert!(!SlotLifecycle::CampingOut.is_offline());
+        assert!(!SlotLifecycle::Launching.is_offline());
+    }
+
+    #[test]
+    fn slot_lifecycle_cycling_states() {
+        assert!(SlotLifecycle::CampingOut.is_cycling());
+        assert!(SlotLifecycle::Relaunching.is_cycling());
+        assert!(!SlotLifecycle::Live.is_cycling());
+        assert!(!SlotLifecycle::Exited.is_cycling());
+        assert!(!SlotLifecycle::Blocked.is_cycling());
     }
 
     #[test]
