@@ -85,6 +85,8 @@ pub enum ActivePanel {
     OverviewCombat,
     /// Session statistics panel (uptime, loot).
     OverviewSession,
+    /// Heal/buff/debuff priority queue panel.
+    OverviewPriorities,
     /// Zone map display on tactical screen.
     TacticalMap,
     /// Spawn list on tactical screen.
@@ -462,6 +464,9 @@ pub struct App {
 
     /// Whether operator has paused all automation (HOME to pause, END to resume).
     pub automation_paused: bool,
+
+    /// Live priority queue snapshots per character (updated each tick).
+    pub priority_snapshots: Vec<super::priorities::PrioritySnapshot>,
 }
 
 /// Navigation status for a single client.
@@ -675,6 +680,7 @@ impl App {
             command_aliases: Self::build_default_aliases(),
             toast: None,
             automation_paused: false,
+            priority_snapshots: Vec::new(),
         };
         app.cmd_state.load_history_from_disk();
         app
@@ -837,6 +843,9 @@ impl App {
                     panels.push(ActivePanel::OverviewFilters);
                 }
                 panels.push(ActivePanel::OverviewCombat);
+                if !self.priority_snapshots.is_empty() {
+                    panels.push(ActivePanel::OverviewPriorities);
+                }
                 panels.push(ActivePanel::OverviewSession);
                 panels
             }
@@ -968,6 +977,11 @@ impl App {
             ActivePanel::OverviewSession => {
                 self.overview_state.session_collapsed = !self.overview_state.session_collapsed;
                 Some(("Session", self.overview_state.session_collapsed))
+            }
+            ActivePanel::OverviewPriorities => {
+                self.overview_state.priorities_collapsed =
+                    !self.overview_state.priorities_collapsed;
+                Some(("Priorities", self.overview_state.priorities_collapsed))
             }
             ActivePanel::TacticalNamed => {
                 self.tactical_state.named_collapsed = !self.tactical_state.named_collapsed;

@@ -481,6 +481,112 @@ pub fn demo_client_nav_info(name: &str, pid: u32, tick_count: u64) -> Option<Dem
     demo_action_for_profile(profile, tick_count).nav
 }
 
+/// Deterministic demo priority snapshots — cycles through healing/buffing/CC states.
+#[must_use]
+pub fn demo_priority_snapshots(tick_count: u64) -> Vec<crate::tui::priorities::PrioritySnapshot> {
+    use crate::tui::priorities::{BlockedReason, PriorityEntry, PrioritySnapshot};
+
+    let phase = (tick_count / 8) % 4;
+
+    let cleric = PrioritySnapshot {
+        name: "Thulsa".to_string(),
+        role_label: "CLR".to_string(),
+        current_intent: match phase {
+            0 => "Healing".to_string(),
+            1 => "Buffing".to_string(),
+            2 => "Medding".to_string(),
+            _ => "CH Rot".to_string(),
+        },
+        blocked: if phase == 2 {
+            Some(BlockedReason::Medding)
+        } else {
+            None
+        },
+        heal_queue: if phase == 0 || phase == 3 {
+            vec![PriorityEntry {
+                target: "Grothgar".to_string(),
+                spell: "Complete Heal".to_string(),
+                rank: 1,
+                active: phase == 0,
+            }]
+        } else {
+            vec![]
+        },
+        buff_queue: if phase == 1 {
+            vec![PriorityEntry {
+                target: "Xyris".to_string(),
+                spell: "Aegolism".to_string(),
+                rank: 1,
+                active: true,
+            }]
+        } else {
+            vec![]
+        },
+        debuff_queue: vec![],
+    };
+
+    let enchanter = PrioritySnapshot {
+        name: "Xyris".to_string(),
+        role_label: "ENC".to_string(),
+        current_intent: match phase {
+            0 | 1 => "Mezzing".to_string(),
+            2 => "Tashing".to_string(),
+            _ => "Slowing".to_string(),
+        },
+        blocked: if phase == 1 {
+            Some(BlockedReason::Cooldown)
+        } else {
+            None
+        },
+        heal_queue: vec![],
+        buff_queue: vec![],
+        debuff_queue: if phase == 2 || phase == 3 {
+            vec![PriorityEntry {
+                target: "a frost giant".to_string(),
+                spell: if phase == 2 {
+                    "Tashani".to_string()
+                } else {
+                    "Torpor".to_string()
+                },
+                rank: 1,
+                active: true,
+            }]
+        } else {
+            vec![]
+        },
+    };
+
+    let warrior = PrioritySnapshot {
+        name: "Grothgar".to_string(),
+        role_label: "WAR".to_string(),
+        current_intent: "Tanking".to_string(),
+        blocked: None,
+        heal_queue: vec![],
+        buff_queue: vec![],
+        debuff_queue: vec![],
+    };
+
+    let wizard = PrioritySnapshot {
+        name: "Pyrelen".to_string(),
+        role_label: "WIZ".to_string(),
+        current_intent: match phase {
+            0 | 1 => "Nuking".to_string(),
+            2 => "OOM".to_string(),
+            _ => "Medding".to_string(),
+        },
+        blocked: match phase {
+            2 => Some(BlockedReason::Oom),
+            3 => Some(BlockedReason::Medding),
+            _ => None,
+        },
+        heal_queue: vec![],
+        buff_queue: vec![],
+        debuff_queue: vec![],
+    };
+
+    vec![cleric, enchanter, warrior, wizard]
+}
+
 /// Full deterministic demo snapshot for a client.
 #[must_use]
 pub fn demo_client_snapshot(

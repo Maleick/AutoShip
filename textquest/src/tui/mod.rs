@@ -27,6 +27,8 @@ pub mod group_builder;
 pub(crate) mod live_cast_capture;
 /// Dropdown menu bar system for accessible command navigation.
 pub mod menu;
+/// Priority queue types for heal/buff/debuff visibility.
+pub mod priorities;
 /// TUI run loop — terminal setup, tick/render cycle, graceful shutdown.
 pub mod run;
 /// Session monitor — fleet overview and per-client drill-down tracking.
