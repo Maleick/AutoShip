@@ -47,6 +47,20 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         );
 
     let fl = app.spawns_state.spawn_type_filter.label();
+
+    // Build compact indicators for sort and nav scope
+    let sort_ind = if app.spawns_state.sort_column != crate::tui::app::SpawnSort::Default {
+        let arrow = if app.spawns_state.sort_ascending {
+            "\u{2191}"
+        } else {
+            "\u{2193}"
+        };
+        format!(" sort:{}{arrow}", app.spawns_state.sort_column.label())
+    } else {
+        String::new()
+    };
+    let nav_ind = format!(" nav:{}", app.spawns_state.nav_scope.label());
+
     let title = if app.spawns_state.search_mode {
         format!(
             " Spawns: {} ({}) [{}] search: \"{}\" [Esc to close] ",
@@ -57,7 +71,7 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         )
     } else if !app.spawns_state.spawn_filter.is_empty() {
         format!(
-            " Spawns: {} ({}) [{}] filter: \"{}\" ",
+            " Spawns: {} ({}) [{}] filter: \"{}\"{sort_ind}{nav_ind} ",
             client_label,
             filtered_indices.len(),
             fl,
@@ -65,13 +79,17 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         )
     } else if app.spawns_state.spawn_type_filter != crate::tui::app::SpawnFilter::All {
         format!(
-            " Spawns: {} ({}) [{}] ",
+            " Spawns: {} ({}) [{}]{sort_ind}{nav_ind} ",
             client_label,
             filtered_indices.len(),
             fl
         )
     } else {
-        format!(" Spawns: {} ({}) ", client_label, filtered_indices.len())
+        format!(
+            " Spawns: {} ({}){sort_ind}{nav_ind} ",
+            client_label,
+            filtered_indices.len()
+        )
     };
 
     // Get local player position for distance calculation

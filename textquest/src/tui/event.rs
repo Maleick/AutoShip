@@ -804,9 +804,12 @@ pub fn handle_events(
                     let max = app.filtered_spawn_count().saturating_sub(1);
                     app.spawns_state.table_state.select(Some(max));
                 }
-                KeyCode::Enter => app.debug_selected_spawn(),
-                KeyCode::Char('t') => app.navigate_to_selected_spawn(),
+                KeyCode::Enter => app.navigate_to_selected_spawn(),
+                KeyCode::Char('x') => app.debug_selected_spawn(),
                 KeyCode::Char('a') => app.target_selected_spawn(),
+                KeyCode::Char('s') => app.cycle_spawn_sort(),
+                KeyCode::Char('S') => app.toggle_spawn_sort_direction(),
+                KeyCode::Char('n') => app.cycle_nav_scope(),
                 _ => {}
             },
             ActivePanel::DebugHexDump => match key.code {

@@ -182,6 +182,74 @@ impl SpawnFilter {
     }
 }
 
+
+/// Sort column for the spawn list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpawnSort {
+    /// No explicit sort — use original spawn order.
+    Default,
+    /// Sort alphabetically by name.
+    Name,
+    /// Sort by class abbreviation.
+    Class,
+    /// Sort by level.
+    Level,
+    /// Sort by distance from local player.
+    Distance,
+}
+
+impl SpawnSort {
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::Default => Self::Name,
+            Self::Name => Self::Class,
+            Self::Class => Self::Level,
+            Self::Level => Self::Distance,
+            Self::Distance => Self::Default,
+        }
+    }
+
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Default",
+            Self::Name => "Name",
+            Self::Class => "Class",
+            Self::Level => "Level",
+            Self::Distance => "Dist",
+        }
+    }
+}
+
+/// Navigation target scope for spawn nav-to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavScope {
+    Active,
+    Group,
+    All,
+}
+
+impl NavScope {
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::Active => Self::Group,
+            Self::Group => Self::All,
+            Self::All => Self::Active,
+        }
+    }
+
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Active => "Active",
+            Self::Group => "Group",
+            Self::All => "All",
+        }
+    }
+}
+
 /// Status of a user-tracked spawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackedStatus {
@@ -1842,10 +1910,12 @@ impl App {
             spawn_revision: self.selected_client_spawn_revision(),
             spawn_filter: self.spawns_state.spawn_filter.to_ascii_lowercase(),
             spawn_type_filter: self.spawns_state.spawn_type_filter,
+            sort_column: self.spawns_state.sort_column,
+            sort_ascending: self.spawns_state.sort_ascending,
         };
 
         if self.filtered_spawn_cache.key.as_ref() != Some(&key) {
-            self.filtered_spawn_cache.indices = self
+            let mut indices: Vec<usize> = self
                 .spawns
                 .iter()
                 .enumerate()
@@ -1854,6 +1924,41 @@ impl App {
                         .then_some(index)
                 })
                 .collect();
+
+            let player_pos: Option<(f32, f32)> = self
+                .active_client()
+                .and_then(|c| c.local_player.as_ref())
+                .map(|p| (p.x, p.y));
+            let spawns = &self.spawns;
+            let asc = key.sort_ascending;
+            match key.sort_column {
+                SpawnSort::Default => {}
+                SpawnSort::Name => indices.sort_by(|&a, &b| {
+                    let c = spawns[a].displayed_name.cmp(&spawns[b].displayed_name);
+                    if asc { c } else { c.reverse() }
+                }),
+                SpawnSort::Class => indices.sort_by(|&a, &b| {
+                    let c = spawns[a].class_str().cmp(&spawns[b].class_str());
+                    if asc { c } else { c.reverse() }
+                }),
+                SpawnSort::Level => indices.sort_by(|&a, &b| {
+                    let c = spawns[a].level.cmp(&spawns[b].level);
+                    if asc { c } else { c.reverse() }
+                }),
+                SpawnSort::Distance => {
+                    if let Some((px, py)) = player_pos {
+                        indices.sort_by(|&a, &b| {
+                            let da = (spawns[a].x - px).powi(2) + (spawns[a].y - py).powi(2);
+                            let db = (spawns[b].x - px).powi(2) + (spawns[b].y - py).powi(2);
+                            let c =
+                                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal);
+                            if asc { c } else { c.reverse() }
+                        });
+                    }
+                }
+            }
+
+            self.filtered_spawn_cache.indices = indices;
             self.filtered_spawn_cache.key = Some(key);
         }
 
@@ -1880,6 +1985,32 @@ impl App {
         self.spawns_state.table_state.select(Some(0));
         self.status_message = format!("Filter: {}", self.spawns_state.spawn_type_filter.label());
     }
+    /// Cycles the spawn sort column (Default -> Name -> Class -> Level -> Distance).
+    pub fn cycle_spawn_sort(&mut self) {
+        let next = self.spawns_state.sort_column.next();
+        if next == SpawnSort::Default {
+            self.spawns_state.sort_ascending = true;
+        }
+        self.spawns_state.sort_column = next;
+        self.spawns_state.table_state.select(Some(0));
+        let arrow = if self.spawns_state.sort_ascending { "\u{2191}" } else { "\u{2193}" };
+        self.status_message = format!("Sort: {} {arrow}", next.label());
+    }
+
+    /// Toggles the sort direction (ascending / descending).
+    pub fn toggle_spawn_sort_direction(&mut self) {
+        self.spawns_state.sort_ascending = !self.spawns_state.sort_ascending;
+        self.spawns_state.table_state.select(Some(0));
+        let dir = if self.spawns_state.sort_ascending { "\u{2191} asc" } else { "\u{2193} desc" };
+        self.status_message = format!("Sort: {} {dir}", self.spawns_state.sort_column.label());
+    }
+
+    /// Cycles the navigation scope (Active -> Group -> All).
+    pub fn cycle_nav_scope(&mut self) {
+        self.spawns_state.nav_scope = self.spawns_state.nav_scope.next();
+        self.status_message = format!("Nav scope: {}", self.spawns_state.nav_scope.label());
+    }
+
 
     /// Moves the spawn list selection down by one row.
     pub fn spawn_list_down(&mut self) {
@@ -2042,7 +2173,8 @@ impl App {
         }
     }
 
-    /// Navigate focused clients to the currently selected spawn's location.
+    /// Navigate clients to the currently selected spawn's location.
+    /// Respects `nav_scope`: Active sends to selected client, Group to focused group, All to everyone.
     pub fn navigate_to_selected_spawn(&mut self) {
         let info = self.selected_filtered_spawn().map(|s| {
             (
@@ -2051,7 +2183,39 @@ impl App {
             )
         });
         if let Some((name, waypoint)) = info {
-            self.execute_waypoint_navigation(&name, waypoint, None);
+            let scope = self.spawns_state.nav_scope;
+            match scope {
+                NavScope::Active => {
+                    if let Some(client) = self.active_client() {
+                        let pid = client.pid;
+                        let cmd = textquest_common::ipc::Command::NavigateTo {
+                            waypoints: vec![waypoint],
+                        };
+                        if send_ipc_command(pid, &cmd).is_ok() {
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!("Nav \u{2192} {name} (active client)"),
+                                true,
+                            );
+                        } else {
+                            self.set_feedback(
+                                ToastLevel::Warning,
+                                format!("Failed to send nav to active client for {name}"),
+                                true,
+                            );
+                        }
+                    }
+                }
+                NavScope::Group => {
+                    self.execute_waypoint_navigation(&name, waypoint, None);
+                }
+                NavScope::All => {
+                    let saved_group = self.active_group;
+                    self.active_group = None;
+                    self.execute_waypoint_navigation(&name, waypoint, None);
+                    self.active_group = saved_group;
+                }
+            }
         }
     }
 

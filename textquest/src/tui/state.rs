@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ratatui::style::Color;
 use ratatui::widgets::TableState;
 
-use super::app::{NavClientStatus, SpawnFilter};
+use super::app::{NavClientStatus, NavScope, SpawnFilter, SpawnSort};
 use super::theme::ThemeKind;
 use crate::eq::map_parser::ZoneMap;
 use crate::eq::named_tracker;
@@ -22,6 +22,12 @@ pub struct SpawnsScreenState {
     pub spawn_type_filter: SpawnFilter,
     /// Whether the user is currently typing a search query.
     pub search_mode: bool,
+    /// Active sort column for the spawn list.
+    pub sort_column: SpawnSort,
+    /// Sort direction — true for ascending, false for descending.
+    pub sort_ascending: bool,
+    /// Navigation target scope (Active client, Group, or All).
+    pub nav_scope: NavScope,
 }
 
 impl SpawnsScreenState {
@@ -35,6 +41,9 @@ impl SpawnsScreenState {
             spawn_filter: String::new(),
             spawn_type_filter: SpawnFilter::All,
             search_mode: false,
+            sort_column: SpawnSort::Default,
+            sort_ascending: true,
+            nav_scope: NavScope::Active,
         }
     }
 }
@@ -45,6 +54,8 @@ pub(crate) struct FilteredSpawnCacheKey {
     pub spawn_revision: u64,
     pub spawn_filter: String,
     pub spawn_type_filter: SpawnFilter,
+    pub sort_column: SpawnSort,
+    pub sort_ascending: bool,
 }
 
 #[derive(Default)]
