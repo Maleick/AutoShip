@@ -199,6 +199,48 @@ pub enum Command {
     },
     /// Stop navigating, stay where you are.
     StopNavigation,
+    /// Pause navigation, retaining the current path (`/nav pause`).
+    NavPause,
+    /// Resume navigation from a user-initiated pause (`/nav pause` toggle).
+    NavResume,
+    /// Navigate to a specific location by coordinates (`/nav loc`).
+    NavLoc {
+        /// World X coordinate.
+        x: f32,
+        /// World Y coordinate.
+        y: f32,
+        /// World Z coordinate.
+        z: f32,
+    },
+    /// Navigate to the current target (`/nav target`).
+    NavTarget,
+    /// Navigate to the nearest door (`/nav door`).
+    NavDoor,
+    /// Navigate to the nearest ground item (`/nav item`).
+    NavItem,
+    /// Reload the navmesh for the current zone (`/nav reload`).
+    NavReload,
+    /// Save a named waypoint at the current position (`/nav waypoint save <name>`).
+    NavWaypointSave {
+        /// Name to assign to the waypoint.
+        name: String,
+    },
+    /// Navigate to a previously saved named waypoint (`/nav waypoint <name>`).
+    NavWaypointRecall {
+        /// Name of the waypoint to navigate to.
+        name: String,
+    },
+    /// List all saved named waypoints (`/nav waypoint list`).
+    NavWaypointList,
+    /// Delete a saved named waypoint (`/nav waypoint delete <name>`).
+    NavWaypointDelete {
+        /// Name of the waypoint to delete.
+        name: String,
+    },
+    /// Query navigation state signals (`Navigation.Active`, etc.).
+    NavSignalsQuery,
+    /// Query navigation diagnostics for debug overlay (`/nav ui`).
+    NavDiagnosticsQuery,
     /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
     ///
     /// The DLL navigator tracks a dynamic anchor (the leader's last-known position).
@@ -595,6 +637,21 @@ pub enum Response {
     ScreenshotFailed {
         /// Reason the capture failed.
         reason: String,
+    },
+    /// Response to `NavWaypointList` — all saved named waypoints.
+    NavWaypointList {
+        /// All saved named waypoints.
+        waypoints: Vec<crate::nav::NamedWaypoint>,
+    },
+    /// Navigation state signals response.
+    NavSignals {
+        /// Current navigation state signals.
+        signals: crate::nav::NavStateSignals,
+    },
+    /// Navigation diagnostics response for debug overlay.
+    NavDiagnosticsResult {
+        /// Diagnostics snapshot.
+        diagnostics: crate::nav::NavDiagnostics,
     },
 }
 
@@ -1484,6 +1541,18 @@ mod tests {
         }
     }
 
+    // ─── Nav parity IPC roundtrip tests (#168–#177) ───
+
+    #[test]
+    fn nav_pause_resume_roundtrip() {
+        use crate::protocol::{decode, encode};
+        for cmd in [Command::NavPause, Command::NavResume] {
+            let encoded = encode(&cmd).expect("encode");
+            let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+            assert_eq!(decoded, cmd);
+        }
+    }
+
     #[test]
     fn screenshot_failed_response_roundtrip() {
         use crate::protocol::{decode, encode};
@@ -1496,6 +1565,137 @@ mod tests {
             assert_eq!(reason, "not in NullRender mode");
         } else {
             panic!("expected ScreenshotFailed");
+        }
+    }
+
+    #[test]
+    fn nav_loc_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::NavLoc {
+            x: 100.0,
+            y: 200.0,
+            z: 10.0,
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::NavLoc { x, y, z } = decoded {
+            assert!((x - 100.0).abs() < f32::EPSILON);
+            assert!((y - 200.0).abs() < f32::EPSILON);
+            assert!((z - 10.0).abs() < f32::EPSILON);
+        } else {
+            panic!("expected NavLoc");
+        }
+    }
+
+    #[test]
+    fn nav_destination_commands_roundtrip() {
+        use crate::protocol::{decode, encode};
+        for cmd in [Command::NavTarget, Command::NavDoor, Command::NavItem] {
+            let encoded = encode(&cmd).expect("encode");
+            let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+            assert_eq!(decoded, cmd);
+        }
+    }
+
+    #[test]
+    fn nav_reload_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::NavReload;
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn nav_waypoint_save_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::NavWaypointSave {
+            name: "camp1".to_string(),
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn nav_waypoint_recall_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::NavWaypointRecall {
+            name: "puller_spot".to_string(),
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn nav_waypoint_list_response_roundtrip() {
+        use crate::nav::{NamedWaypoint, Waypoint};
+        use crate::protocol::{decode, encode};
+        let resp = Response::NavWaypointList {
+            waypoints: vec![
+                NamedWaypoint::new("camp1", Waypoint::new(1.0, 2.0, 3.0), "qey2hh1"),
+                NamedWaypoint::new("puller", Waypoint::new(4.0, 5.0, 6.0), "gukbottom"),
+            ],
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::NavWaypointList { waypoints } = decoded {
+            assert_eq!(waypoints.len(), 2);
+            assert_eq!(waypoints[0].name, "camp1");
+            assert_eq!(waypoints[1].zone, "gukbottom");
+        } else {
+            panic!("expected NavWaypointList");
+        }
+    }
+
+    #[test]
+    fn nav_signals_response_roundtrip() {
+        use crate::nav::NavStateSignals;
+        use crate::protocol::{decode, encode};
+        let resp = Response::NavSignals {
+            signals: NavStateSignals {
+                active: true,
+                mesh_loaded: true,
+                path_exists: true,
+                path_length: Some(150.0),
+                velocity: 12.5,
+                paused: false,
+            },
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::NavSignals { signals } = decoded {
+            assert!(signals.active);
+            assert!((signals.velocity - 12.5).abs() < f32::EPSILON);
+        } else {
+            panic!("expected NavSignals");
+        }
+    }
+
+    #[test]
+    fn nav_diagnostics_response_roundtrip() {
+        use crate::nav::NavDiagnostics;
+        use crate::protocol::{decode, encode};
+        let resp = Response::NavDiagnosticsResult {
+            diagnostics: NavDiagnostics {
+                state: "Moving".to_string(),
+                mesh_loaded: true,
+                path_exists: true,
+                path_length: Some(50.0),
+                velocity: 8.0,
+                waypoint_index: 1,
+                waypoint_count: 5,
+                distance_remaining: 25.0,
+            },
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::NavDiagnosticsResult { diagnostics } = decoded {
+            assert_eq!(diagnostics.state, "Moving");
+            assert_eq!(diagnostics.waypoint_count, 5);
+        } else {
+            panic!("expected NavDiagnosticsResult");
         }
     }
 }

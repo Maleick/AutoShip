@@ -11,7 +11,8 @@
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
-    CampSpot, FollowConfig, NavCampConfig, NavStatus, PauseReason, StickConfig, Waypoint,
+    CampSpot, FollowConfig, NavCampConfig, NavDiagnostics, NavStateSignals, NavStatus, PauseReason,
+    StickConfig, Waypoint,
 };
 use textquest_common::types::SpawnData;
 
@@ -60,6 +61,14 @@ pub struct Navigator {
     cached_stick_distance: f32,
     /// Warp detection + pause gate.
     warp: WarpMonitor,
+    /// State before user-initiated pause (for resume).
+    pre_pause_state: Option<Box<State>>,
+    /// Previous position for velocity calculation.
+    prev_position: Option<Waypoint>,
+    /// Cached velocity in world units per tick (updated each tick).
+    cached_velocity: f32,
+    /// Whether a navmesh is loaded (set externally via `set_mesh_loaded`).
+    mesh_loaded: bool,
 }
 
 impl Navigator {
@@ -77,6 +86,10 @@ impl Navigator {
             cached_stick_target_id: 0,
             cached_stick_distance: 0.0,
             warp: WarpMonitor::new(),
+            pre_pause_state: None,
+            prev_position: None,
+            cached_velocity: 0.0,
+            mesh_loaded: false,
         }
     }
 
@@ -130,8 +143,84 @@ impl Navigator {
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
+        self.pre_pause_state = None;
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
+    }
+
+    /// Pause navigation, retaining path and state for later resume (#168).
+    pub fn pause(&mut self) {
+        match self.state {
+            State::Moving | State::Following { .. } | State::Sticking => {
+                self.controller.stop_forward();
+                self.controller.stop_back();
+                let old_state = std::mem::replace(&mut self.state, State::Idle);
+                self.pre_pause_state = Some(Box::new(old_state));
+                self.state = State::Paused(PauseReason::UserPause);
+                tracing::info!("Navigation paused by user");
+            }
+            _ => {
+                tracing::debug!("Pause requested but not in a pauseable state");
+            }
+        }
+    }
+
+    /// Resume navigation from a user-initiated pause (#168).
+    pub fn resume(&mut self) {
+        if matches!(self.state, State::Paused(PauseReason::UserPause)) {
+            if let Some(saved) = self.pre_pause_state.take() {
+                self.state = *saved;
+                self.stuck.reset();
+                tracing::info!("Navigation resumed by user");
+            } else {
+                self.state = State::Idle;
+                tracing::warn!("Resume called but no pre-pause state saved");
+            }
+        } else {
+            tracing::debug!("Resume requested but not in user-paused state");
+        }
+    }
+
+    /// Set whether a navmesh is loaded for the current zone (#174).
+    pub fn set_mesh_loaded(&mut self, loaded: bool) {
+        self.mesh_loaded = loaded;
+    }
+
+    /// Get navigation state signals for TLO-style queries (#176).
+    pub fn signals(&self) -> NavStateSignals {
+        NavStateSignals {
+            active: matches!(
+                self.state,
+                State::Moving | State::Following { .. } | State::Sticking
+            ),
+            mesh_loaded: self.mesh_loaded,
+            path_exists: !self.queue.is_empty(),
+            path_length: if self.queue.is_empty() {
+                None
+            } else {
+                Some(self.cached_distance)
+            },
+            velocity: self.cached_velocity,
+            paused: matches!(self.state, State::Paused(_)),
+        }
+    }
+
+    /// Get navigation diagnostics snapshot (#177).
+    pub fn diagnostics(&self) -> NavDiagnostics {
+        NavDiagnostics {
+            state: self.status().label().to_string(),
+            mesh_loaded: self.mesh_loaded,
+            path_exists: !self.queue.is_empty(),
+            path_length: if self.queue.is_empty() {
+                None
+            } else {
+                Some(self.cached_distance)
+            },
+            velocity: self.cached_velocity,
+            waypoint_index: self.queue.index(),
+            waypoint_count: self.queue.len(),
+            distance_remaining: self.cached_distance,
+        }
     }
 
     /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
@@ -206,6 +295,9 @@ impl Navigator {
         nearby: &[SpawnData],
         target_sample: Option<&TargetSample>,
     ) {
+        // Update velocity tracking every tick.
+        self.update_velocity();
+
         let warp_action = match self.state {
             State::Idle | State::Arrived => WarpAction::None,
             _ => self.warp.update(target_sample),
@@ -218,7 +310,8 @@ impl Navigator {
                 return;
             }
             WarpAction::Resume => {
-                if matches!(self.state, State::Paused(_)) {
+                // Only auto-resume from warp pauses, not user-initiated pauses.
+                if matches!(self.state, State::Paused(PauseReason::Warp)) {
                     tracing::info!("Warp pause cleared — resuming navigation");
                     self.state = State::Moving;
                     self.stuck.reset();
@@ -511,6 +604,15 @@ impl Navigator {
             self.controller.stop_forward();
         }
     }
+
+    /// Update velocity cache based on position delta.
+    fn update_velocity(&mut self) {
+        let current_pos = self.controller.read_position();
+        if let Some(prev) = self.prev_position {
+            self.cached_velocity = current_pos.distance_2d(&prev);
+        }
+        self.prev_position = Some(current_pos);
+    }
 }
 
 #[cfg(test)]
@@ -545,5 +647,112 @@ mod tests {
             nav.tick(None, &[], Some(&stable_again));
         }
         assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+    }
+
+    #[test]
+    fn user_pause_and_resume() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+
+        nav.pause();
+        assert!(matches!(
+            nav.status(),
+            NavStatus::Paused {
+                reason: PauseReason::UserPause,
+                ..
+            }
+        ));
+
+        nav.resume();
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+    }
+
+    #[test]
+    fn pause_idle_is_noop() {
+        let mut nav = Navigator::new(0, 1);
+        assert!(matches!(nav.status(), NavStatus::Idle));
+        nav.pause();
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn resume_without_pause_is_noop() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        nav.resume(); // not paused
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+    }
+
+    #[test]
+    fn stop_clears_pause_state() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        nav.pause();
+        nav.stop();
+        assert!(matches!(nav.status(), NavStatus::Idle));
+        nav.resume(); // should be noop now
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn warp_resume_does_not_override_user_pause() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        nav.pause();
+
+        // Feed a warp sequence — should NOT affect user pause.
+        let warped = TargetSample {
+            id: 99,
+            position: Waypoint::new(200.0, 0.0, 0.0),
+        };
+        nav.tick(None, &[], Some(&warped));
+        // Still user-paused, not warp-paused.
+        assert!(matches!(
+            nav.status(),
+            NavStatus::Paused {
+                reason: PauseReason::UserPause,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn signals_reflect_state() {
+        let mut nav = Navigator::new(0, 1);
+        let sig = nav.signals();
+        assert!(!sig.active);
+        assert!(!sig.paused);
+        assert!(!sig.path_exists);
+
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        let sig = nav.signals();
+        assert!(sig.active);
+        assert!(sig.path_exists);
+        assert!(!sig.paused);
+    }
+
+    #[test]
+    fn diagnostics_reflect_state() {
+        let mut nav = Navigator::new(0, 1);
+        let diag = nav.diagnostics();
+        assert_eq!(diag.state, "Idle");
+        assert_eq!(diag.waypoint_count, 0);
+
+        nav.navigate(vec![
+            Waypoint::new(10.0, 0.0, 0.0),
+            Waypoint::new(20.0, 0.0, 0.0),
+        ]);
+        let diag = nav.diagnostics();
+        assert_eq!(diag.state, "Navigating");
+        assert_eq!(diag.waypoint_count, 2);
+    }
+
+    #[test]
+    fn mesh_loaded_flag() {
+        let mut nav = Navigator::new(0, 1);
+        assert!(!nav.signals().mesh_loaded);
+        nav.set_mesh_loaded(true);
+        assert!(nav.signals().mesh_loaded);
     }
 }

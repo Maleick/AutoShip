@@ -80,8 +80,29 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::StickOff => nav.stick_off(),
             NavCommand::StickMod(delta) => nav.stick_mod(delta),
             NavCommand::SetCampConfig(config) => nav.set_camp_config(config),
+            NavCommand::Pause => nav.pause(),
+            NavCommand::Resume => nav.resume(),
+            NavCommand::SetMeshLoaded(loaded) => nav.set_mesh_loaded(loaded),
         }
     }
+}
+
+/// Get navigation state signals for IPC queries (#176).
+pub fn signals() -> textquest_common::nav::NavStateSignals {
+    NAVIGATOR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()
+        .map_or_else(Default::default, state::Navigator::signals)
+}
+
+/// Get navigation diagnostics for debug overlay (#177).
+pub fn diagnostics() -> textquest_common::nav::NavDiagnostics {
+    NAVIGATOR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()
+        .map_or_else(Default::default, state::Navigator::diagnostics)
 }
 
 /// Commands that can be sent to the navigator.
@@ -111,4 +132,10 @@ pub enum NavCommand {
     StickOff,
     /// Adjust the active stick distance modifier.
     StickMod(f32),
+    /// Pause navigation, retaining path (#168).
+    Pause,
+    /// Resume from user-initiated pause (#168).
+    Resume,
+    /// Set mesh loaded status (#174).
+    SetMeshLoaded(bool),
 }
