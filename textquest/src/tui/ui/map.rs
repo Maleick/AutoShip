@@ -833,7 +833,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                     let (sc, sr) = to_grid(-spawn.y, -spawn.x);
                     if sc >= 0 && sc < w as i32 && sr >= 0 && sr < h as i32 {
                         let color = hl.color.unwrap_or(Color::Magenta);
-                        if hl.pulse && (app.tick_count / 5) % 2 == 0 {
+                        if hl.pulse && (app.tick_count / 5).is_multiple_of(2) {
                             continue;
                         }
                         let ch = match hl.size {
@@ -2241,6 +2241,7 @@ mod tests {
 }
 
 /// Draw a radius circle around a world position on the map grid.
+#[allow(clippy::too_many_arguments)]
 fn draw_radius_circle(
     to_grid: &impl Fn(f32, f32) -> (i32, i32),
     center_x: f32,
@@ -2251,7 +2252,7 @@ fn draw_radius_circle(
     h: u16,
     grid: &mut [Vec<(char, Color)>],
 ) {
-    let steps = (radius * 0.5).max(24.0).min(120.0) as usize;
+    let steps = (radius * 0.5).clamp(24.0, 120.0) as usize;
     for i in 0..steps {
         let angle = 2.0 * std::f32::consts::PI * (i as f32) / (steps as f32);
         let wx = center_x + radius * angle.cos();

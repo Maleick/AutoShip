@@ -4932,7 +4932,7 @@ impl App {
                     let c = if is_cast { "castradius" } else { "spellradius" };
                     self.usage_feedback(
                         &format!("mapfilter {c}"),
-                        &format!("Usage: mapfilter {c} <radius> [color]"),
+                        format!("Usage: mapfilter {c} <radius> [color]"),
                     );
                     return;
                 };
@@ -5206,7 +5206,7 @@ impl App {
                     if let Some(c) = a.strip_prefix("color=") {
                         color = parse_highlight_color(c);
                     } else if let Some(s) = a.strip_prefix("size=") {
-                        size = s.parse().unwrap_or(1).min(3).max(1);
+                        size = s.parse().unwrap_or(1_u8).clamp(1, 3);
                     } else if a.eq_ignore_ascii_case("pulse") {
                         pulse = true;
                     }
