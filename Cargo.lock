@@ -3200,7 +3200,7 @@ dependencies = [
 
 [[package]]
 name = "textquest"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3241,7 +3241,7 @@ dependencies = [
 
 [[package]]
 name = "textquest-common"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3254,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "textquest-dll"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "bincode",

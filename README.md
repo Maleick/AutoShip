@@ -435,7 +435,7 @@ Historical milestones already implemented in the repository:
 Canonical active roadmap order:
 
 - [ ] **M5** (~95%) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator). 1 open issue (#355 launchpad token RE)
-- [ ] **M6** (~55%) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme shipped; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks in progress
+- [x] **M6** (complete) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme shipped; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
 - [ ] **M9** — Learning/RL

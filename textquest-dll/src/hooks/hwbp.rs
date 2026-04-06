@@ -299,6 +299,10 @@ mod platform {
     pub fn remove_veh() {
         tracing::warn!("VEH removal stub (non-Windows)");
     }
+    pub fn set_breakpoint_on_main_thread(_slot: HwbpSlot, _address: usize) -> Result<(), String> {
+        tracing::warn!("HWBP set_breakpoint_on_main_thread stub (non-Windows)");
+        Ok(())
+    }
 }
 
 pub fn register(

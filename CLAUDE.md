@@ -26,7 +26,20 @@ cargo fmt --check        # Check formatting
 cargo test               # Run tests (macOS runs platform-independent subset)
 ```
 
-~1250 platform-independent tests across 3 crates (625 textquest + 431 textquest-common + 172 textquest-dll). Additional Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024.
+```bash
+# Per-crate tests
+cargo test -p textquest          # Orchestrator only
+cargo test -p textquest-common   # Shared types only
+cargo test -p textquest-dll      # DLL only (Windows, or stubs on macOS)
+
+# Single test by name (substring match)
+cargo test -p textquest test_name_here
+
+# Run a specific integration test
+cargo test -p textquest --test integration test_name
+```
+
+~2569 tests across 3 crates (1453 textquest + 431 textquest-common + 685 textquest-dll). Additional Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Windows CI requires nightly MSVC toolchain (`retour` uses unstable features); macOS builds work on stable.
 
 ## Autonomous Agent Pipeline
 
@@ -49,6 +62,10 @@ Claude is an optional issue worker in TextQuest. Follow [`AGENTS.md`](AGENTS.md)
 
 - **TUI mode** (default): ratatui-based live dashboard with spawn list, player/target panels, hex dump, map, navigation, group views
 - **Dump mode** (`--dump`): one-shot CLI output of player, target, and spawn data
+- **Inject mode** (`--inject` / `--inject-pid <pid>`): DLL injection into EQ clients
+- **Status mode** (`--status <pid>` / `--statusall`): query shared memory state
+- **Command mode** (`--cmd <pid> "/slash"`): send a slash command to a client
+- **Login mode** (`--login-pid <pid> <account> <password> [server] [character]`)
 
 ### Cross-platform strategy
 
@@ -104,8 +121,8 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **M2.5** (complete): Login automation — credential store, process spawner, login FSM, launch coordinator
 - **M3** (complete): Navigation — waypoint pathfinding, Navigator FSM, humanization, stuck detection, zone router
 - **M4** (complete): Combat automation — ClassStrategy trait, 17 classes, HolyShit system, puller FSM, combat coordinator
-- **M5** (~70% — 4 closed, 9 open, 5 PRs in review): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
-- **M6** (~55% — 11 closed, 9 open): Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements (EQ Internals, packet sniffer, map rework, Neriak theme)
+- **M5** (~95% — only #355 launchpad token RE remains): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
+- **M6** (complete): Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements (EQ Internals, packet sniffer, map rework, Neriak theme)
 - **M7**: Zoning/Movement — zone transitions, movement validation, travel recovery
 - **M8**: Orchestrator — multibox coordination, group/session control, relay surfaces
 - **M9**: Learning/RL — behavioral cloning, RL fine-tuning
@@ -129,3 +146,9 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **Offset addresses are not pointers**: Values in `offsets.rs` are preferred-base hex addresses, not ready-to-use pointers. Always `rebase()` before use.
 - **MacroQuest references are local submodules**: `third_party/eqlib` and `third_party/macroquest` are part of the repo as git submodules and are used for offset and struct-reference work. Routine `cargo build` / `cargo test` work does not require them, but offset/struct work does. Run `git submodule update --init --recursive` after checkout. Derived offsets still live in `textquest-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
+- **Nightly MSVC toolchain**: Windows builds require nightly Rust because `retour` (function hooking) uses unstable features. macOS builds work on stable.
+
+## Log Files
+
+- **Orchestrator:** `./logs/textquest.log` (daily rolling via `tracing-appender`)
+- **DLL:** `%TEMP%/textquest/textquest-dll.log` (daily rolling)
