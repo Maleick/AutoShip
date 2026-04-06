@@ -148,10 +148,27 @@ pub fn handle_events(
                     }
                     _ => {}
                 }
+            } else if app.config_panel_state.scope_selector_focused {
+                // Scope selector is focused — left/right to switch scope
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => {
+                        app.config_panel_state.active = false;
+                    }
+                    KeyCode::Left | KeyCode::Char('h') => app.config_panel_state.scope_prev(),
+                    KeyCode::Right | KeyCode::Char('l') => app.config_panel_state.scope_next(),
+                    KeyCode::Tab | KeyCode::Down => {
+                        app.config_panel_state.scope_selector_focused = false;
+                    }
+                    KeyCode::Char('R') => app.config_panel_state.reset_to_defaults(),
+                    _ => {}
+                }
             } else {
                 match key.code {
                     KeyCode::Esc | KeyCode::Char('q') => {
                         app.config_panel_state.active = false;
+                    }
+                    KeyCode::Tab => {
+                        app.config_panel_state.scope_selector_focused = true;
                     }
                     KeyCode::Up | KeyCode::Char('k') => app.config_panel_state.select_prev(),
                     KeyCode::Down | KeyCode::Char('j') => {
@@ -168,6 +185,7 @@ pub fn handle_events(
                         }
                     }
                     KeyCode::Char(' ') => app.config_panel_state.toggle_value(),
+                    KeyCode::Char('R') => app.config_panel_state.reset_to_defaults(),
                     _ => {}
                 }
             }

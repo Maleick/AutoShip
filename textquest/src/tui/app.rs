@@ -3682,6 +3682,12 @@ impl App {
             "config" => {
                 self.config_panel_state.active = !self.config_panel_state.active;
                 if self.config_panel_state.active {
+                    let group_names: Vec<String> =
+                        self.groups.iter().map(|g| g.name.clone()).collect();
+                    let toon_names = self.list_character_names();
+                    self.config_panel_state
+                        .set_available_scopes(group_names, toon_names);
+                    self.config_panel_state.rebuild_tree();
                     self.config_panel_state.sync_from_app(
                         self.theme_kind.label(),
                         self.privacy_mode,
