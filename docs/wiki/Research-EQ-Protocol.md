@@ -461,7 +461,7 @@ State change broadcast:
 
 ---
 
-## 9. Implications for DMFT Headless Client
+## 9. Implications for TextQuest Headless Client
 
 ### What's Needed
 

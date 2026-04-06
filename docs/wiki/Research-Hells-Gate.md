@@ -468,11 +468,11 @@ Statistical analysis: which processes normally invoke `NtProtectVirtualMemory` w
 
 ---
 
-## 5. Application to DMFT: Hiding VirtualProtect / NtSetContextThread / NtGetContextThread
+## 5. Application to TextQuest: Hiding VirtualProtect / NtSetContextThread / NtGetContextThread
 
 ### Current Exposure
 
-DMFT's injected DLL (`dmft-dll`) currently uses standard Win32 API calls which pass through ntdll's hooked stubs. If Daybreak ever deploys userland hooks (via their anti-cheat or a third-party AC), these calls become visible.
+TextQuest's injected DLL (`textquest-dll`) currently uses standard Win32 API calls which pass through ntdll's hooked stubs. If Daybreak ever deploys userland hooks (via their anti-cheat or a third-party AC), these calls become visible.
 
 ### What Direct Syscalls Would Protect
 
@@ -517,7 +517,7 @@ unsafe {
 
 - **Kernel-mode syscall interception** (ETW Threat Intelligence, minifilter drivers, kernel callbacks) -- these see every syscall regardless of invocation method.
 - **Behavioral detection** -- unusual patterns of `NtProtectVirtualMemory` with `PAGE_EXECUTE_READWRITE` are suspicious regardless of how the syscall is issued.
-- **Module scanning** -- if the anti-cheat enumerates loaded modules and finds `dmft-dll`, no amount of syscall evasion matters.
+- **Module scanning** -- if the anti-cheat enumerates loaded modules and finds `textquest-dll`, no amount of syscall evasion matters.
 - **Stack trace analysis** -- even indirect syscalls can be caught if the anti-cheat walks the full call stack and finds frames outside known modules.
 
 ---

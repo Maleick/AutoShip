@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/reconcile-agent-queue.sh [--dry-run] [--project-number N] <owner/repo>
 
-Reconcile the DMFT issue queue so open issues are added to the roadmap project,
+Reconcile the TextQuest issue queue so open issues are added to the roadmap project,
 roadmap-container epics stay skip-ready, active PR/work/block/blockers keep their
 non-ready status, and all other open issues become Ready for Agent.
 EOF

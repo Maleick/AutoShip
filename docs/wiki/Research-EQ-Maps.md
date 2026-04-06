@@ -272,7 +272,7 @@ fn parse_p_line(line: &str) -> Result<MapPoint> {
 
 ### Module Placement
 
-Suggested location: `dmft-common/src/map.rs` (shared types) + `dmft/src/tui/map.rs` (TUI rendering)
+Suggested location: `textquest-common/src/map.rs` (shared types) + `textquest/src/tui/map.rs` (TUI rendering)
 
 ## 5. TUI Rendering Plan
 
@@ -417,7 +417,7 @@ Overlay live spawn data on top of the static map:
 
 ### Implementation Phases
 
-1. **Phase 1 — Parser:** `dmft-common/src/map.rs` with `MapLine`, `MapPoint`, `ZoneMap`, `load_zone_map()`
+1. **Phase 1 — Parser:** `textquest-common/src/map.rs` with `MapLine`, `MapPoint`, `ZoneMap`, `load_zone_map()`
 2. **Phase 2 — Static render:** New TUI screen that loads a zone map and renders geometry with Bresenham's
 3. **Phase 3 — Player tracking:** Center on player position, auto-follow mode
 4. **Phase 4 — Spawn overlay:** Render live spawns on top of map

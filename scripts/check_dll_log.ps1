@@ -1,5 +1,5 @@
 # ============================================================
-#  DMFT DLL Log Checker
+#  TextQuest DLL Log Checker
 #  Reads latest DLL log and checks for success/failure markers
 #  Usage: powershell -ExecutionPolicy Bypass -File check_dll_log.ps1
 #         powershell -ExecutionPolicy Bypass -File check_dll_log.ps1 -Lines 50
@@ -24,7 +24,7 @@ function Write-Status {
 }
 
 # --- Find latest log file ---
-$logFiles = Get-ChildItem "$LogDir\dmft-dll.log*" -ErrorAction SilentlyContinue |
+$logFiles = Get-ChildItem "$LogDir\textquest-dll.log*" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending
 
 if (-not $logFiles) {

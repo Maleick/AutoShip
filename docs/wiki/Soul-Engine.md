@@ -2,7 +2,7 @@
 
 ## Current Operator View
 
-The Soul Engine is DMFT's personality and idle-behavior layer.
+The Soul Engine is TextQuest's personality and idle-behavior layer.
 
 It is configured through the `[soul]` section of `config/frostreaver.toml` and can influence:
 
@@ -16,7 +16,7 @@ The persistent database path is `data/soul_memory.db`.
 
 ## Current Behavior
 
-The current implementation is in `dmft/src/soul/` and shared types live in `dmft-common/src/soul.rs`.
+The current implementation is in `textquest/src/soul/` and shared types live in `textquest-common/src/soul.rs`.
 
 Current components:
 

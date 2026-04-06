@@ -8,7 +8,7 @@ Currently we develop on macOS and remote-control frostreaver via SSH/API. This c
 
 1. Edit Rust code and run `cargo build`
 2. Launch `eqgame.exe` (visible on desktop)
-3. Run the DLL injector (`dmft.exe --inject`)
+3. Run the DLL injector (`textquest.exe --inject`)
 4. Read DLL log files
 5. Iterate autonomously (build -> test -> check logs -> fix -> repeat)
 
@@ -40,7 +40,7 @@ Claude Code runs natively on Windows 10/11. No WSL required (though WSL is also 
    winget install Anthropic.ClaudeCode
    ```
 3. Install Rust toolchain (`rustup`) on frostreaver
-4. Clone the repo: `git clone https://github.com/<repo> C:\Projects\DMFT`
+4. Clone the repo: `git clone https://github.com/<repo> C:\Projects\TextQuest`
 5. Run `claude` in the project directory
 6. Authenticate with Anthropic account
 
@@ -52,7 +52,7 @@ Claude Code runs natively on Windows 10/11. No WSL required (though WSL is also 
 
 - Zero session isolation — runs in the user's desktop session
 - Full access to cargo, git, all CLI tools
-- Can launch eqgame.exe, run dmft.exe --inject, read logs
+- Can launch eqgame.exe, run textquest.exe --inject, read logs
 - Auto-updates, auto-installs, zero-config
 - Same CLAUDE.md / HANDOFF.md workflow we already use
 - Native Windows binary, signed by Anthropic
@@ -107,7 +107,7 @@ Computer Use lets Claude see the screen, move the mouse, and click buttons. This
 
 ### Verdict
 
-**Watch this space.** When Computer Use ships on Windows, it becomes a powerful complement to our DLL approach — useful for login automation and visual verification, but not a replacement for the core DMFT architecture. Check back monthly.
+**Watch this space.** When Computer Use ships on Windows, it becomes a powerful complement to our DLL approach — useful for login automation and visual verification, but not a replacement for the core TextQuest architecture. Check back monthly.
 
 ---
 
@@ -163,7 +163,7 @@ Cursor is a VS Code fork with built-in AI (uses Claude or GPT). It has a termina
 ### How It Works
 
 - Install Cursor on frostreaver
-- Open the DMFT project
+- Open the TextQuest project
 - Use Cursor's AI chat + terminal to build, test, iterate
 - Terminal runs in the desktop session — can launch GUI apps
 
@@ -211,7 +211,7 @@ frostreaver (deployment + live testing):
   - git pull
   - cargo build --release
   - Launch eqgame.exe
-  - Run dmft.exe --inject
+  - Run textquest.exe --inject
   - Check logs, iterate on bugs
   - Push fixes back to GitHub
 ```
@@ -260,8 +260,8 @@ The existing HANDOFF.md approach works perfectly:
 2. **Install Git for Windows**: `winget install Git.Git`
 3. **Install Claude Code**: `irm https://claude.ai/install.ps1 | iex`
 4. **Install Rust**: `winget install Rustlang.Rustup`
-5. **Clone repo**: `git clone <repo-url> C:\Projects\DMFT`
-6. **Run Claude Code**: Open PowerShell, `cd C:\Projects\DMFT`, `claude`
+5. **Clone repo**: `git clone <repo-url> C:\Projects\TextQuest`
+6. **Run Claude Code**: Open PowerShell, `cd C:\Projects\TextQuest`, `claude`
 7. **Test**: Ask Claude Code to run `cargo build` and launch a test `.exe`
 
 ### Long-term

@@ -332,7 +332,7 @@ def print_results(results: list[CheckResult], require_reference_trees: bool) -> 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="DMFT developer bootstrap/preflight helper.")
+    parser = argparse.ArgumentParser(description="TextQuest developer bootstrap/preflight helper.")
     parser.add_argument(
         "--init-submodules",
         action="store_true",

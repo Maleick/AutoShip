@@ -84,7 +84,7 @@ The repository also has a nightly wiki publish workflow:
 
 Behavior:
 
-- runs on the self-hosted runner labeled `[self-hosted, Windows, X64, dmft]`
+- runs on the self-hosted runner labeled `[self-hosted, Windows, X64, textquest]`
 - follows successful `Nightly Release` runs by default and also supports manual dispatch for ad hoc publishes
 - uses two UTC cron entries plus a local-time gate so the publish happens at 3 AM America/Chicago year-round
 - validates with `python scripts/sync_wiki.py --check`

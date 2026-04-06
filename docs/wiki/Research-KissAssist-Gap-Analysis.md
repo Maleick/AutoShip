@@ -1,6 +1,6 @@
 # KissAssist Gap and TUI Translation
 
-This document is the first deep external-research pass for DMFT's operator workflow roadmap.
+This document is the first deep external-research pass for TextQuest's operator workflow roadmap.
 
 Primary source anchors:
 
@@ -19,25 +19,25 @@ Supporting comparison inputs:
 
 Use KissAssist as a workflow benchmark, not as a UI clone target.
 
-The objective is to identify operator capabilities that DMFT still lacks or does not expose clearly enough, then translate them into native DMFT TUI surfaces and milestone slices.
+The objective is to identify operator capabilities that TextQuest still lacks or does not expose clearly enough, then translate them into native TextQuest TUI surfaces and milestone slices.
 
 ## Capability Matrix
 
-| Capability | External reference | Current DMFT position | Translation target | Evidence state |
+| Capability | External reference | Current TextQuest position | Translation target | Evidence state |
 | --- | --- | --- | --- | --- |
-| assist and pull control | [KissAssist](https://www.redguides.com/docs/projects/kissassist/) | DMFT already has combat, puller, and camp-loop structure, but operator surfaces are still command-heavy | add a clearer assist or pull operator surface in the TUI, with status visibility and fast overrides | Research-backed |
+| assist and pull control | [KissAssist](https://www.redguides.com/docs/projects/kissassist/) | TextQuest already has combat, puller, and camp-loop structure, but operator surfaces are still command-heavy | add a clearer assist or pull operator surface in the TUI, with status visibility and fast overrides | Research-backed |
 | heal, buff, and debuff priority visibility | [KissAssist](https://www.redguides.com/docs/projects/kissassist/) | class automation exists, but live priority visibility is still diffuse | expose priority queues, current intent, and blocked reasons in a compact status panel | Research-backed |
 | per-toon and per-group behavior configuration | [KissAssist](https://www.redguides.com/docs/projects/kissassist/) | configuration exists in TOML and command flows, but not yet as a first-class TUI editing workflow | add operator panels for role, behavior mode, thresholds, and scope overrides | Research-backed |
 | camp loop, medding, buffing, looting, and emergency state inspection | [KissAssist](https://www.redguides.com/docs/projects/kissassist/) | camp-loop logic is present, but live state explanation is still thin | surface state machine phase, blockers, timers, and next-action reasoning in the TUI | Research-backed |
-| multibox broadcast and relay patterns | [Joe Multiboxer](https://joemultiboxer.com/), [JMB Basic Core](https://github.com/LavishSoftware/JMB-Basic-Core) | DMFT already supports group focus and broadcast-style commands, but coordination models are not yet formalized | build clearer session, relay, and target-scope control surfaces | Research-backed |
-| window and session orchestration | [JMB WinEQ 2022](https://github.com/LavishSoftware/JMB-WinEQ-2022) | DMFT has launch and login coordination, but not a mature session orchestration surface | add session grouping, launch state, and operator-visible control routing | Research-backed |
+| multibox broadcast and relay patterns | [Joe Multiboxer](https://joemultiboxer.com/), [JMB Basic Core](https://github.com/LavishSoftware/JMB-Basic-Core) | TextQuest already supports group focus and broadcast-style commands, but coordination models are not yet formalized | build clearer session, relay, and target-scope control surfaces | Research-backed |
+| window and session orchestration | [JMB WinEQ 2022](https://github.com/LavishSoftware/JMB-WinEQ-2022) | TextQuest has launch and login coordination, but not a mature session orchestration surface | add session grouping, launch state, and operator-visible control routing | Research-backed |
 | hook and input model comparison | [JMB Input Hook Example](https://github.com/LavishSoftware/JMB-Input-Hook-Example) | useful as a bounded comparison input only | feed anti-cheat and operator-routing review, not direct feature parity | Provisional |
 
 ## Missing Operator Workflows
 
 The main gaps are not raw capability count. The larger gap is operator visibility and control density.
 
-DMFT still needs clearer native workflows for:
+TextQuest still needs clearer native workflows for:
 
 - switching between assist, pull, camp, and emergency overrides without dropping into free-form command entry
 - seeing why a character is medding, buffing, waiting, or blocked

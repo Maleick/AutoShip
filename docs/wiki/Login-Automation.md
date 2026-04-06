@@ -4,7 +4,7 @@
 
 There are two user-facing entry points:
 
-- CLI: `dmft.exe login <account> [--server ...] [--character ...]`
+- CLI: `textquest.exe login <account> [--server ...] [--character ...]`
 - TUI: `:login`, `:login all`, `:login G<n>`, `:login <account>`
 - TUI profile groups: `:profile list`, `:profile launch <name>`, `Ctrl+F1`–`Ctrl+F9`
 
@@ -51,7 +51,7 @@ The `:login G<n>` command continues to work for numeric group targeting.
 
 ## Current State Model
 
-Shared login phases are defined in `dmft-common/src/login.rs`:
+Shared login phases are defined in `textquest-common/src/login.rs`:
 
 - `NotStarted`
 - `ProcessLaunching`
@@ -69,7 +69,7 @@ Shared login phases are defined in `dmft-common/src/login.rs`:
 
 ### Orchestrator side
 
-Handled under `dmft/src/launcher/`:
+Handled under `textquest/src/launcher/`:
 
 - `spawner.rs`: start EQ clients
 - `login_sm.rs`: external login state machine and launch flow
@@ -78,7 +78,7 @@ Handled under `dmft/src/launcher/`:
 
 ### DLL side
 
-Handled under `dmft-dll/src/login/`:
+Handled under `textquest-dll/src/login/`:
 
 - resolve login UI state
 - write credentials into login widgets
@@ -93,13 +93,13 @@ The DLL is the part that actually manipulates EQ's login UI.
 Current repo behavior:
 
 - `config/accounts.toml` stores account names, server, character, class, group metadata, and profile group definitions
-- encrypted credential storage lives under `dmft/src/credentials/`
+- encrypted credential storage lives under `textquest/src/credentials/`
 - crypto uses Argon2id plus AES-256-GCM
 - the DLL zeroizes stored password material after credential entry
 
 ## Post-Login Sequencing
 
-The post-login sequencer in `dmft/src/launcher/post_login.rs` currently models:
+The post-login sequencer in `textquest/src/launcher/post_login.rs` currently models:
 
 - joining the designated group
 - applying buffs

@@ -1,4 +1,4 @@
-# DMFT Implementation Roadmap
+# TextQuest Implementation Roadmap
 
 Canonical roadmap for the packet-first reset adopted in April 2026.
 
@@ -121,7 +121,7 @@ Tech stack:
 - **Backend**: `axum` + `tokio-tungstenite` HTTP + WebSocket server embedded in the orchestrator binary
 - **Frontend**: Vite + React + Tailwind SPA, built to `dist/` and embedded via `rust-embed` or `include_dir`
 - **State**: SQLite (credentials already use it) + in-memory state broadcast via WebSocket
-- **Reactivity**: Watch internal DMFT state changes, broadcast over WebSocket to connected dashboards
+- **Reactivity**: Watch internal TextQuest state changes, broadcast over WebSocket to connected dashboards
 
 #### Implementation slices
 
@@ -328,7 +328,7 @@ GitHub Projects are a mirror, not a source of truth.
 
 Current mirror:
 
-- `DMFT Roadmap`: `https://github.com/users/Maleick/projects/1`
+- `TextQuest Roadmap`: `https://github.com/users/Maleick/projects/1`
 
 Use one roadmap project with these fields:
 
@@ -354,7 +354,7 @@ Rules:
 
 ## Autoresearch Workflow
 
-DMFT uses `codex-autoresearch` for the nightly external-research digest and milestone-slice discovery.
+TextQuest uses `codex-autoresearch` for the nightly external-research digest and milestone-slice discovery.
 
 Nightly digest defaults:
 
@@ -367,7 +367,7 @@ Nightly checkpoint cadence:
 
 1. update repo docs and research ledgers first
 2. run the roadmap verifier and wiki guard
-3. reconcile the active checkpoint batch in the `DMFT Roadmap` GitHub Project
+3. reconcile the active checkpoint batch in the `TextQuest Roadmap` GitHub Project
 4. promote mature current-window items into GitHub issues and remove overlapping drafts
 5. record project-sync results in the autoresearch artifacts
 
@@ -398,7 +398,7 @@ Expected outputs:
 
 The nightly external-research digest runs as a Codex automation after the GitHub workflows. It is intentionally separate from GitHub Actions because it needs evidence modeling, source weighting, and slice promotion rules that are easier to enforce in a Codex-guided research loop.
 
-Automation definition: `.codex/automations/dmft-night-research/automation.toml`
+Automation definition: `.codex/automations/textquest-night-research/automation.toml`
 
 Nightly project-sync rules:
 

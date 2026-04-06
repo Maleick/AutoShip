@@ -1,5 +1,5 @@
 # ============================================================
-#  DMFT Remote API Server
+#  TextQuest Remote API Server
 #  Minimal HTTP server for remote control from macOS
 #  Usage: powershell -ExecutionPolicy Bypass -File remote_api.ps1
 #         powershell -ExecutionPolicy Bypass -File remote_api.ps1 -Port 8080
@@ -16,9 +16,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = "C:\Users\xmale\Projects\DMFT"
+$ProjectDir = "C:\Users\xmale\Projects\TextQuest"
 
-Write-Host "Starting DMFT Remote API on port $Port..."
+Write-Host "Starting TextQuest Remote API on port $Port..."
 
 # Create HTTP listener (localhost-only to avoid remote exposure)
 $listener = New-Object System.Net.HttpListener
@@ -45,7 +45,7 @@ function Get-EqStatus {
     }
 
     # DLL log check
-    $logFiles = Get-ChildItem "$env:TEMP\dmft\dmft-dll.log*" -ErrorAction SilentlyContinue |
+    $logFiles = Get-ChildItem "$env:TEMP\dmft\textquest-dll.log*" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending
     if ($logFiles) {
         $latest = $logFiles[0]
@@ -65,7 +65,7 @@ function Get-EqStatus {
 
 function Get-DllLogTail {
     param([int]$Lines = 50)
-    $logFiles = Get-ChildItem "$env:TEMP\dmft\dmft-dll.log*" -ErrorAction SilentlyContinue |
+    $logFiles = Get-ChildItem "$env:TEMP\dmft\textquest-dll.log*" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending
     if ($logFiles) {
         $content = Get-Content $logFiles[0].FullName -Tail $Lines -ErrorAction SilentlyContinue
@@ -277,7 +277,7 @@ while ($listener.IsListening) {
                     Send-JsonResponse $response @{ error = "POST required" } 405
                 } else {
                     try {
-                        $result = & "$ProjectDir\target\release\dmft.exe" --inject 2>&1
+                        $result = & "$ProjectDir\target\release\textquest.exe" --inject 2>&1
                         Send-JsonResponse $response @{ success = $true; output = ($result -join "`n") }
                     } catch {
                         Send-JsonResponse $response @{ success = $false; error = $_.ToString() } 500

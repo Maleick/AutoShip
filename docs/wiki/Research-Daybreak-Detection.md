@@ -37,7 +37,7 @@ Secondary source families in use:
 - MMOBugs discussions
 - broader EQ automation communities
 
-## DMFT Interpretation Rules
+## TextQuest Interpretation Rules
 
 Use this digest to feed anti-cheat gates, not to justify unsupported features.
 

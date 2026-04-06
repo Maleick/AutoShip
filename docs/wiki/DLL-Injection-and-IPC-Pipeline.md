@@ -4,7 +4,7 @@
 
 The live-control path is:
 
-1. Build `dmft_dll.dll`
+1. Build `textquest_dll.dll`
 2. Stage it to a temp location with a randomized filename
 3. Write a 32-byte session token for the target PID
 4. Inject via `CreateRemoteThread + LoadLibraryW`
@@ -14,13 +14,13 @@ The live-control path is:
 
 ## Injection Path
 
-The orchestrator-side injection code lives under `dmft/src/inject/`.
+The orchestrator-side injection code lives under `textquest/src/inject/`.
 
 Key details:
 
-- `dmft/src/inject/dll_prep.rs` copies the built DLL to a temp directory with a randomized name.
-- `dmft/src/inject/loader.rs` uses the classic remote-thread loader path with `LoadLibraryW`.
-- `dmft-common/src/ipc.rs` writes `%TEMP%/dmft/token_<pid>.bin` before injection and a retained `%TEMP%/dmft/login_token_<pid>.bin` for later reconnects.
+- `textquest/src/inject/dll_prep.rs` copies the built DLL to a temp directory with a randomized name.
+- `textquest/src/inject/loader.rs` uses the classic remote-thread loader path with `LoadLibraryW`.
+- `textquest-common/src/ipc.rs` writes `%TEMP%/textquest/token_<pid>.bin` before injection and a retained `%TEMP%/textquest/login_token_<pid>.bin` for later reconnects.
 
 ## Session Token and Naming
 
@@ -31,7 +31,7 @@ The shared token is the root of client-specific IPC naming and authentication.
 - Pipe name format: `\\.\pipe\{session_id:x}_cmd_{client_id}`
 - Shared memory name format: `{session_id:x}_state_{client_id}`
 
-This is defined in `dmft-common/src/ipc.rs`.
+This is defined in `textquest-common/src/ipc.rs`.
 
 Important nuance:
 
@@ -40,7 +40,7 @@ Important nuance:
 
 ## Shared Memory Path
 
-The DLL publishes live `GameState` snapshots through a named file mapping created in `dmft-dll/src/ipc/shared.rs`.
+The DLL publishes live `GameState` snapshots through a named file mapping created in `textquest-dll/src/ipc/shared.rs`.
 
 Current layout:
 
@@ -54,14 +54,14 @@ Behavior:
 - even sequence: stable snapshot
 - zero sequence: no snapshot written yet
 
-The orchestrator-side reader in `dmft/src/ipc/shared.rs` checks the sequence before and after copying the payload so it can reject torn reads.
+The orchestrator-side reader in `textquest/src/ipc/shared.rs` checks the sequence before and after copying the payload so it can reject torn reads.
 
 ## Named Pipe Path
 
 Command delivery is handled by:
 
-- DLL side: `dmft-dll/src/ipc/pipe.rs`
-- Orchestrator side: `dmft/src/ipc/pipe.rs`
+- DLL side: `textquest-dll/src/ipc/pipe.rs`
+- Orchestrator side: `textquest/src/ipc/pipe.rs`
 
 Connection flow:
 
@@ -79,7 +79,7 @@ Connection flow:
 
 ## Command and Response Flow
 
-Shared command/response types live in `dmft-common/src/ipc.rs`.
+Shared command/response types live in `textquest-common/src/ipc.rs`.
 
 Examples of current command categories:
 

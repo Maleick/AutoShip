@@ -15,7 +15,7 @@
 
 ## 1. Login Automation
 
-Frostreaver: `dmft-dll/src/login/`, `dmft/src/launcher/`
+Frostreaver: `textquest-dll/src/login/`, `textquest/src/launcher/`
 MQ2: `third_party/macroquest/src/plugins/autologin/`
 
 | Feature                         | MQ2                                                      | Frostreaver                                                            | Status | Notes                                                                                                             |
@@ -43,7 +43,7 @@ MQ2: `third_party/macroquest/src/plugins/autologin/`
 
 ## 2. Combat System
 
-Frostreaver: `dmft-dll/src/combat/`, `dmft/src/combat/`
+Frostreaver: `textquest-dll/src/combat/`, `textquest/src/combat/`
 MQ2: Combat is via external plugins (MQ2Melee, MQ2Cast) — **not in reference codebase**
 
 | Feature              | MQ2 (via plugins)                      | Frostreaver                                                               | Status | Notes                                                                           |
@@ -70,7 +70,7 @@ MQ2: Combat is via external plugins (MQ2Melee, MQ2Cast) — **not in reference c
 
 ## 3. Navigation
 
-Frostreaver: `dmft-dll/src/nav/`, `dmft/src/nav/`
+Frostreaver: `textquest-dll/src/nav/`, `textquest/src/nav/`
 MQ2: Navigation is via MQ2Nav/MQ2MoveUtils (external plugins — **not in reference codebase**)
 
 | Feature                 | MQ2 (via plugins)                  | Frostreaver                                                                | Status | Notes                                                                |
@@ -92,7 +92,7 @@ MQ2: Navigation is via MQ2Nav/MQ2MoveUtils (external plugins — **not in refere
 
 ## 4. Window / UI Interaction
 
-Frostreaver: `dmft-dll/src/eq/widgets.rs`, `dmft-dll/src/login/widgets.rs`
+Frostreaver: `textquest-dll/src/eq/widgets.rs`, `textquest-dll/src/login/widgets.rs`
 MQ2: `third_party/macroquest/src/eqlib/include/eqlib/game/CXWnd.h`, UI headers
 
 | Feature                  | MQ2                                           | Frostreaver                                                | Status | Notes                                                          |
@@ -117,7 +117,7 @@ MQ2: `third_party/macroquest/src/eqlib/include/eqlib/game/CXWnd.h`, UI headers
 
 ## 5. IPC / Multi-Client Communication
 
-Frostreaver: `dmft-dll/src/ipc/`, `dmft/src/ipc/`, `dmft-common/src/protocol.rs`
+Frostreaver: `textquest-dll/src/ipc/`, `textquest/src/ipc/`, `textquest-common/src/protocol.rs`
 MQ2: `third_party/macroquest/src/routing/` (PostOffice, NamedPipes, Network)
 
 | Feature                  | MQ2                                            | Frostreaver                                                               | Status | Notes                                                                  |
@@ -139,7 +139,7 @@ MQ2: `third_party/macroquest/src/routing/` (PostOffice, NamedPipes, Network)
 
 ## 6. Offset Management
 
-Frostreaver: `dmft-common/src/offsets.rs`, `dmft-common/src/offset_db.rs`
+Frostreaver: `textquest-common/src/offsets.rs`, `textquest-common/src/offset_db.rs`
 MQ2: `third_party/macroquest/src/eqlib/include/eqlib/offsets/eqgame.h`
 
 | Feature                    | MQ2                                                 | Frostreaver                                                       | Status | Notes                                                               |
@@ -164,14 +164,14 @@ These features exist in Frostreaver but have no MQ2 equivalent:
 
 | Feature                        | Frostreaver Module                | Notes                                                                          |
 | ------------------------------ | --------------------------------- | ------------------------------------------------------------------------------ |
-| Soul Engine (LLM character AI) | `dmft/src/soul/`                  | M5: Character personalities, persistent memory, social dynamics, idle behavior |
-| Encrypted credential store     | `dmft/src/credentials/`           | AES-256-GCM + Argon2id + SQLite                                                |
-| CPU affinity management        | `dmft/src/client/affinity.rs`     | Per-client core pinning for 36-box                                             |
-| Self-healing monitor           | `dmft/src/client/healing.rs`      | Auto-restarts crashed clients                                                  |
-| External TUI dashboard         | `dmft/src/tui/`                   | ratatui-based live monitoring (spawn list, panels, hex dump)                   |
+| Soul Engine (LLM character AI) | `textquest/src/soul/`                  | M5: Character personalities, persistent memory, social dynamics, idle behavior |
+| Encrypted credential store     | `textquest/src/credentials/`           | AES-256-GCM + Argon2id + SQLite                                                |
+| CPU affinity management        | `textquest/src/client/affinity.rs`     | Per-client core pinning for 36-box                                             |
+| Self-healing monitor           | `textquest/src/client/healing.rs`      | Auto-restarts crashed clients                                                  |
+| External TUI dashboard         | `textquest/src/tui/`                   | ratatui-based live monitoring (spawn list, panels, hex dump)                   |
 | Cross-platform dev             | macOS stubs + demo data           | UI development without live EQ client                                          |
-| Post-login sequencer           | `dmft/src/launcher/post_login.rs` | Group→Buff→Camp automated pipeline                                             |
-| DLL injection (custom)         | `dmft/src/inject/`                | Rust-native DLL injection, no MQ2 dependency                                   |
+| Post-login sequencer           | `textquest/src/launcher/post_login.rs` | Group→Buff→Camp automated pipeline                                             |
+| DLL injection (custom)         | `textquest/src/inject/`                | Rust-native DLL injection, no MQ2 dependency                                   |
 
 ---
 

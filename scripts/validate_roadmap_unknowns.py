@@ -159,8 +159,8 @@ def analyze_roadmap(path: Path, *, requested_domains: list[str] | None = None) -
     text = load_text(path)
     normalized_text = normalize_text(text)
 
-    if "# DMFT Implementation Roadmap" not in text:
-        raise ValidationError("Expected the DMFT implementation roadmap title.")
+    if "# TextQuest Implementation Roadmap" not in text:
+        raise ValidationError("Expected the TextQuest implementation roadmap title.")
 
     milestone_ids, missing_milestones = collect_milestones(text)
     missing_domains = [domain for domain in EXPECTED_DOMAINS if domain not in text]

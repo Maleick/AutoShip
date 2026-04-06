@@ -1,14 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
 echo ============================================
-echo  DMFT - Group 1 Launch (6 clients)
+echo  TextQuest - Group 1 Launch (6 clients)
 echo  Per-PID injection + login targeting
 echo ============================================
 echo.
 
 set EQ_PATH=C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest
-set DMFT_PATH=C:\Users\xmale\Projects\DMFT
-set DMFT_EXE=%DMFT_PATH%\target\release\dmft.exe
+set TextQuest_PATH=C:\Users\xmale\Projects\TextQuest
+set TextQuest_EXE=%TextQuest_PATH%\target\release\textquest.exe
 set SERVER=Firiona Vie
 set INJECT_WAIT=12
 set HOOK_WAIT=2
@@ -33,7 +33,7 @@ taskkill /f /im eqgame.exe >nul 2>&1
 timeout /t 3 /nobreak >nul
 
 REM Clear DLL logs
-del /q "%TEMP%\dmft\dmft-dll.log.*" 2>nul
+del /q "%TEMP%\dmft\textquest-dll.log.*" 2>nul
 
 REM Snapshot existing PIDs before first launch
 for /f "tokens=2" %%a in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
@@ -60,7 +60,7 @@ for %%A in (
         REM Launch EQ
         cd /d "%EQ_PATH%"
         start "" "%EQ_PATH%\eqgame.exe" patchme /login:%%U
-        cd /d "%DMFT_PATH%"
+        cd /d "%TextQuest_PATH%"
 
         REM Wait for process to start, then find its PID
         timeout /t 3 /nobreak >nul
@@ -83,12 +83,12 @@ for %%A in (
 
             REM Inject into this specific PID
             echo   Injecting DLL into PID !NEW_PID!...
-            "%DMFT_EXE%" --inject-pid !NEW_PID!
+            "%TextQuest_EXE%" --inject-pid !NEW_PID!
             timeout /t %HOOK_WAIT% /nobreak >nul
 
             REM Send login to this specific PID
             echo   Sending login for %%U...
-            "%DMFT_EXE%" --login-pid !NEW_PID! %%U %%V "%SERVER%"
+            "%TextQuest_EXE%" --login-pid !NEW_PID! %%U %%V "%SERVER%"
             echo   %%U login sent to PID !NEW_PID!
 
             REM Stagger before next client

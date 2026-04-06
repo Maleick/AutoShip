@@ -1,6 +1,6 @@
 # Quick Start
 
-This page is the fastest path to a useful DMFT session.
+This page is the fastest path to a useful TextQuest session.
 
 ## Current Behavior
 
@@ -35,7 +35,7 @@ cargo run
 
 Expected result:
 
-- DMFT opens the TUI
+- TextQuest opens the TUI
 - the UI shows simulated characters and activity
 - the four main screens are usable without EQ running
 
@@ -51,16 +51,16 @@ Commands:
 
 ```powershell
 cargo build --release
-target\release\dmft.exe inject
-target\release\dmft.exe
+target\release\textquest.exe inject
+target\release\textquest.exe
 ```
 
 Useful follow-up commands:
 
 ```powershell
-target\release\dmft.exe cmd <pid> "/sit"
-target\release\dmft.exe status <pid>
-target\release\dmft.exe status-all
+target\release\textquest.exe cmd <pid> "/sit"
+target\release\textquest.exe status <pid>
+target\release\textquest.exe status-all
 ```
 
 ### 3. Learn the four TUI screens
@@ -94,10 +94,10 @@ Common starting commands:
 
 ## Internals That Matter Early
 
-- The TUI command parser and help text live in `dmft/src/tui/app.rs`.
-- CLI subcommands live in `dmft/src/main.rs` and call into `dmft/src/cli.rs`.
-- Pipe and shared-memory naming come from `dmft-common/src/ipc.rs`.
-- Demo mode is driven by `dmft/src/tui/demo_data.rs` and non-Windows stubs.
+- The TUI command parser and help text live in `textquest/src/tui/app.rs`.
+- CLI subcommands live in `textquest/src/main.rs` and call into `textquest/src/cli.rs`.
+- Pipe and shared-memory naming come from `textquest-common/src/ipc.rs`.
+- Demo mode is driven by `textquest/src/tui/demo_data.rs` and non-Windows stubs.
 
 ## Current Behavior vs Roadmap
 

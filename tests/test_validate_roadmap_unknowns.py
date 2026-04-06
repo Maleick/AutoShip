@@ -59,7 +59,7 @@ class RoadmapValidatorTests(unittest.TestCase):
     def test_strict_mode_fails_for_broken_evidence_rules(self) -> None:
         broken_doc = textwrap.dedent(
             """
-            # DMFT Implementation Roadmap
+            # TextQuest Implementation Roadmap
 
             ## Canonical Milestone Order
 
@@ -104,7 +104,7 @@ class RoadmapValidatorTests(unittest.TestCase):
     def test_analyze_custom_roadmap_detects_missing_sections(self) -> None:
         custom_doc = textwrap.dedent(
             """
-            # DMFT Implementation Roadmap
+            # TextQuest Implementation Roadmap
 
             ## Canonical Milestone Order
 

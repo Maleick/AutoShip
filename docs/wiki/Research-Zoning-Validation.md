@@ -37,13 +37,13 @@ Imported finding:
 
 Repo-fit implication:
 
-- DMFT should treat queue flush as a pre-zone checkpoint, not an assumed guarantee.
+- TextQuest should treat queue flush as a pre-zone checkpoint, not an assumed guarantee.
 - Any operator-facing zoning or movement recovery work should be able to distinguish "navigation still issuing movement" from "movement queue drained and zone handoff in progress."
 
 Current evidence state:
 
 - `Research-backed` for the existence of the checkpoint in imported notes
-- `Needs Live Proof` for DMFT behavior on a current live client
+- `Needs Live Proof` for TextQuest behavior on a current live client
 
 ### Zone loading timeout
 
@@ -54,7 +54,7 @@ Imported finding:
 
 Repo-fit implication:
 
-- DMFT needs an operator-visible timeout checkpoint for zoning work instead of collapsing all slow or failed transitions into a generic "stuck" bucket.
+- TextQuest needs an operator-visible timeout checkpoint for zoning work instead of collapsing all slow or failed transitions into a generic "stuck" bucket.
 - Follow-on implementation should preserve the distinction between a route blockage, a zone denial, and a zone load timeout.
 
 Current evidence state:
@@ -71,7 +71,7 @@ Imported finding:
 
 Repo-fit implication:
 
-- DMFT should model safe-coordinate recovery as a named checkpoint rather than as an opaque movement correction.
+- TextQuest should model safe-coordinate recovery as a named checkpoint rather than as an opaque movement correction.
 - Follow-on operator surfaces should be able to call out when the client has fallen back to a safe-coordinate restore versus when the route is simply recomputing.
 
 Current evidence state:
@@ -84,19 +84,19 @@ Current evidence state:
 ### Pre-zone queue flush
 
 - Imported basis: `ExecuteZoneTransition` calls `FlushMovementQueue` before validation.
-- What DMFT can claim now: this is a research-backed checkpoint candidate.
+- What TextQuest can claim now: this is a research-backed checkpoint candidate.
 - Live-proof requirement: capture a live zone-line or zone-request transition and confirm movement stops issuing before zone handoff.
 
 ### Zone load timeout
 
 - Imported basis: the zone loop waits for data and fails after about 120 seconds; timeout state noted as `0xFD`.
-- What DMFT can claim now: timeout is a named provisional failure mode.
+- What TextQuest can claim now: timeout is a named provisional failure mode.
 - Live-proof requirement: observe a controlled timeout on a current test client and record visible state, duration, and recovery outcome.
 
 ### Safe-coordinate recovery
 
 - Imported basis: the imported zoning summary and raw movement notes tie recovery to safe coordinates.
-- What DMFT can claim now: safe-coordinate recovery is a validation target.
+- What TextQuest can claim now: safe-coordinate recovery is a validation target.
 - Live-proof requirement: observe at least one current-build case where the client restores to safe coordinates and record the trigger category.
 
 ## Live Validation Tasks

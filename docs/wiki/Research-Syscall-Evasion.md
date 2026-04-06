@@ -34,7 +34,7 @@ C3                ret
 
 The `4C 8B D1 B8` prologue is destroyed. HellsGate-family techniques detect this by checking whether byte[0..4] matches the clean prologue.
 
-### Why This Matters for DMFT
+### Why This Matters for TextQuest
 
 Our DLL calls `VirtualProtect`, `NtSetContextThread` (hardware breakpoint installation), and `NtGetContextThread` from inside eqgame.exe. If the AC hooks these in ntdll, every call we make is intercepted. We need a way to invoke these functions without going through hooked stubs.
 
@@ -516,7 +516,7 @@ There is a circular dependency: `VirtualProtect` itself may be hooked. Solutions
 2. **Use native API from the fresh mapping**: resolve `NtProtectVirtualMemory` from the fresh ntdll copy and call it directly -- it is unhooked since it lives in the fresh mapping
 3. **Signal Labs approach**: use in-memory disassembly to find where the AC relocated the original function body, then call the relocated version
 
-Option 2 is the most practical for DMFT: map fresh ntdll, resolve `NtProtectVirtualMemory` from it, use that to make the hooked .text writable, overwrite, restore, unmap.
+Option 2 is the most practical for TextQuest: map fresh ntdll, resolve `NtProtectVirtualMemory` from it, use that to make the hooked .text writable, overwrite, restore, unmap.
 
 ### Detection Vectors
 
@@ -552,7 +552,7 @@ Per the SME research in `anti-detection.md`:
 | Static signatures       | None (fully runtime)                          | API call pattern                  | API call pattern            |
 | Best use case           | Targeted calls (VirtualProtect, NtSetContext) | Reference copy for SSN extraction | One-shot "clean everything" |
 
-## Recommended Approach for DMFT
+## Recommended Approach for TextQuest
 
 **Layer the techniques:**
 

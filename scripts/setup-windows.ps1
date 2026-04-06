@@ -1,5 +1,5 @@
 # =============================================================================
-# DMFT — Windows Setup Script
+# TextQuest — Windows Setup Script
 # =============================================================================
 # Installs Rust toolchain, VS Build Tools, clones repo, and builds all crates.
 #
@@ -9,15 +9,15 @@
 #   3. Run: .\scripts\setup-windows.ps1
 #
 # If the repo is already cloned, run from the repo root.
-# If not, run from any directory — the script will clone into .\DMFT
+# If not, run from any directory — the script will clone into .\TextQuest
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
-$RepoUrl = "https://github.com/Maleick/DMFT.git"
+$RepoUrl = "https://github.com/Maleick/TextQuest.git"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " DMFT — Windows Setup" -ForegroundColor Cyan
+Write-Host " TextQuest — Windows Setup" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -122,7 +122,7 @@ if (Get-Command rustup -ErrorAction SilentlyContinue) {
         Write-Host "  WARNING: Could not install rustfmt or clippy components." -ForegroundColor Yellow
     }
 } elseif ($rustVersion -notmatch "nightly") {
-    Write-Host "  ERROR: DMFT currently requires the nightly MSVC toolchain on Windows." -ForegroundColor Red
+    Write-Host "  ERROR: TextQuest currently requires the nightly MSVC toolchain on Windows." -ForegroundColor Red
     Write-Host "  Install rustup and run: rustup default $desiredToolchain" -ForegroundColor Red
     exit 1
 }
@@ -132,21 +132,21 @@ if (Get-Command rustup -ErrorAction SilentlyContinue) {
 # ---------------------------------------------------------------------------
 Write-Host "[4/6] Setting up repository..." -ForegroundColor Yellow
 
-# If we're already in the DMFT repo, just pull
+# If we're already in the TextQuest repo, just pull
 if (Test-Path "Cargo.toml") {
     $cargoContent = Get-Content "Cargo.toml" -Raw
     if ($cargoContent -match 'members.*=.*\[.*"dmft"') {
-        Write-Host "  Already in DMFT repo. Pulling latest..." -ForegroundColor Green
+        Write-Host "  Already in TextQuest repo. Pulling latest..." -ForegroundColor Green
         git pull
     }
-} elseif (Test-Path "DMFT\Cargo.toml") {
-    Write-Host "  DMFT directory exists. Pulling latest..." -ForegroundColor Green
-    Set-Location DMFT
+} elseif (Test-Path "TextQuest\Cargo.toml") {
+    Write-Host "  TextQuest directory exists. Pulling latest..." -ForegroundColor Green
+    Set-Location TextQuest
     git pull
 } else {
     Write-Host "  Cloning repository..." -ForegroundColor Green
     git clone --recurse-submodules $RepoUrl
-    Set-Location DMFT
+    Set-Location TextQuest
 }
 
 if ($LASTEXITCODE -ne 0) {
@@ -229,7 +229,7 @@ Write-Host "  2. Run tests:       .\scripts\test-windows.ps1" -ForegroundColor W
 Write-Host "  3. Run with EQ:     cargo run  (with eqgame.exe running)" -ForegroundColor White
 Write-Host ""
 Write-Host "Binaries built to:" -ForegroundColor Cyan
-Write-Host "  Debug:   target\debug\dmft.exe" -ForegroundColor White
-Write-Host "  Release: target\release\dmft.exe" -ForegroundColor White
-Write-Host "  DLL:     target\release\dmft_dll.dll" -ForegroundColor White
+Write-Host "  Debug:   target\debug\textquest.exe" -ForegroundColor White
+Write-Host "  Release: target\release\textquest.exe" -ForegroundColor White
+Write-Host "  DLL:     target\release\textquest_dll.dll" -ForegroundColor White
 Write-Host ""

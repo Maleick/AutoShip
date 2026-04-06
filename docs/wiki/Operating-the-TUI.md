@@ -2,7 +2,7 @@
 
 ## Current Operator Workflow
 
-DMFT's default interface is a ratatui-based dashboard with four main screens:
+TextQuest's default interface is a ratatui-based dashboard with four main screens:
 
 | Screen | Key | Main purpose |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ Use this for:
 
 ## Command and Overlay Surfaces
 
-- `:` opens the command bar defined in `dmft/src/tui/app.rs`.
+- `:` opens the command bar defined in `textquest/src/tui/app.rs`.
 - `?` opens a context-sensitive help overlay.
 - `config` opens the interactive configuration panel.
 - `chui` opens the CH chain panel.
@@ -96,11 +96,11 @@ Use this for:
 
 ## Internals
 
-- TUI state is centered in `dmft/src/tui/app.rs`.
-- Rendering is split under `dmft/src/tui/ui/`.
-- Demo content comes from `dmft/src/tui/demo_data.rs`.
-- Theme definitions live in `dmft/src/tui/theme.rs`.
-- Map and navigation overlays are fed from `dmft/src/tui/state.rs` and `dmft/src/nav/mesh.rs`.
+- TUI state is centered in `textquest/src/tui/app.rs`.
+- Rendering is split under `textquest/src/tui/ui/`.
+- Demo content comes from `textquest/src/tui/demo_data.rs`.
+- Theme definitions live in `textquest/src/tui/theme.rs`.
+- Map and navigation overlays are fed from `textquest/src/tui/state.rs` and `textquest/src/nav/mesh.rs`.
 
 ## Current Behavior vs Roadmap
 

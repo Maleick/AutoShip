@@ -19,7 +19,7 @@ Camp configs come from `config/camps/*.toml`. Class behavior comes from `config/
 
 ## Current Camp Loop State
 
-The current orchestrator-side camp loop in `dmft/src/camp/state.rs` uses these phases:
+The current orchestrator-side camp loop in `textquest/src/camp/state.rs` uses these phases:
 
 - `Idle`
 - `Pulling`
@@ -34,7 +34,7 @@ That matters because older docs may still summarize the system as a simpler five
 
 ### Orchestrator-side responsibilities
 
-Handled mostly in `dmft/src/camp/`, `dmft/src/combat/`, and `dmft/src/orchestrator.rs`:
+Handled mostly in `textquest/src/camp/`, `textquest/src/combat/`, and `textquest/src/orchestrator.rs`:
 
 - build camp membership
 - decide the high-level camp or hunt phase
@@ -45,7 +45,7 @@ Handled mostly in `dmft/src/camp/`, `dmft/src/combat/`, and `dmft/src/orchestrat
 
 ### DLL-side responsibilities
 
-Handled mostly in `dmft-dll/src/combat/`:
+Handled mostly in `textquest-dll/src/combat/`:
 
 - per-character combat FSM
 - class strategy selection
@@ -57,7 +57,7 @@ Handled mostly in `dmft-dll/src/combat/`:
 
 ## CH Chain
 
-The CH chain coordinator lives in `dmft/src/combat/coordinator.rs` and `dmft/src/combat/ch_chain.rs`.
+The CH chain coordinator lives in `textquest/src/combat/coordinator.rs` and `textquest/src/combat/ch_chain.rs`.
 
 Current command format:
 

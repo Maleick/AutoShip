@@ -1,13 +1,13 @@
 # M8 Cross-Client Control Model
 
-This document formalises the routing scope and session lifecycle model for DMFT's M8 Orchestrator milestone.  It maps the model to TUI workflows so that the exit gate ("cross-client control model is documented and mapped to TUI workflows") is satisfied.
+This document formalises the routing scope and session lifecycle model for TextQuest's M8 Orchestrator milestone.  It maps the model to TUI workflows so that the exit gate ("cross-client control model is documented and mapped to TUI workflows") is satisfied.
 
 ## Sources
 
 - [docs/external-research/jmb-session-and-relay-comparison.md](jmb-session-and-relay-comparison.md)
 - [docs/external-research/kissassist-gap-and-tui-translation.md](kissassist-gap-and-tui-translation.md)
-- `dmft-common/src/routing.rs` — `RoutingScope` enum
-- `dmft/src/client/session.rs` — `SlotLifecycle` enum
+- `textquest-common/src/routing.rs` — `RoutingScope` enum
+- `textquest/src/client/session.rs` — `SlotLifecycle` enum
 
 ## Routing Scope
 
@@ -49,7 +49,7 @@ The routing scope controls which clients receive dispatched commands.  All comma
 
 ## Session Slot Lifecycle
 
-Each managed client slot progresses through a defined lifecycle.  The `SlotLifecycle` enum in `dmft/src/client/session.rs` tracks this state.
+Each managed client slot progresses through a defined lifecycle.  The `SlotLifecycle` enum in `textquest/src/client/session.rs` tracks this state.
 
 | State | Meaning |
 |---|---|
@@ -108,10 +108,10 @@ All items in this document are **Research-backed** (see jmb-session-and-relay-co
 |---|---|---|
 | JMB coordination comparison | Done | `jmb-session-and-relay-comparison.md` |
 | KissAssist TUI translation | Done | `kissassist-gap-and-tui-translation.md` |
-| `RoutingScope` type | Done | `dmft-common/src/routing.rs` |
-| `SlotLifecycle` enum | Done | `dmft/src/client/session.rs` |
-| `:scope` command | Done | `dmft/src/tui/app.rs` |
-| `:session` command | Done | `dmft/src/tui/app.rs` |
+| `RoutingScope` type | Done | `textquest-common/src/routing.rs` |
+| `SlotLifecycle` enum | Done | `textquest/src/client/session.rs` |
+| `:scope` command | Done | `textquest/src/tui/app.rs` |
+| `:session` command | Done | `textquest/src/tui/app.rs` |
 | Cross-client control model doc | Done | this file |
 
 ## Follow-on Slices

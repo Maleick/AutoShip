@@ -1,7 +1,7 @@
-# DMFT (Dave Mike Fun Times)
+# TextQuest (Dave Mike Fun Times)
 
-[![CI](https://github.com/Maleick/DMFT/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/ci.yml)
-[![Release](https://github.com/Maleick/DMFT/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/DMFT/actions/workflows/release.yml)
+[![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
+[![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
 [![Rust LOC](https://img.shields.io/badge/Rust%20LOC-106%2C490-blue?style=flat-square)](#testing)
 [![Tests](https://img.shields.io/badge/Tests-2%2C506%20exact-brightgreen?style=flat-square)](#testing)
@@ -10,13 +10,13 @@
 
 External process memory reader, DLL injector, and multibox controller for EverQuest, built in Rust.
 
-DMFT reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
+TextQuest reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
 
 If you plan to do offset, struct, or MacroQuest reference work, clone with submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/Maleick/DMFT.git
-cd DMFT
+git clone --recurse-submodules https://github.com/Maleick/TextQuest.git
+cd TextQuest
 
 # Existing clone
 git submodule update --init --recursive
@@ -171,10 +171,10 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 ## Architecture
 
 ```text
-DMFT Workspace (3 crates, ~106K lines of Rust)
+TextQuest Workspace (3 crates, ~106K lines of Rust)
 ├── dmft/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
-├── dmft-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
-└── dmft-common/    — Shared types: IPC, offsets, combat/nav/soul types
+├── textquest-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
+└── textquest-common/    — Shared types: IPC, offsets, combat/nav/soul types
 ```
 
 ### Command Pipeline
@@ -218,18 +218,18 @@ For workflows that now target `self-hosted` Windows runners, use:
 
 Run `setup-self-hosted-runner.ps1` from an elevated PowerShell session for automatic service install.
 If `svc.cmd` is not present in that runner package, the script prints `sc.exe` fallback commands.
-For unattended PR merges and nightly jobs, keep this `dmft` runner on a dedicated
+For unattended PR merges and nightly jobs, keep this `textquest` runner on a dedicated
 always-on Windows box or VM instead of a personal laptop. The canonical bootstrap flow
 is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1).
 
 CI and nightly automation:
 
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
-- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`
+- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`
 - `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
 - self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using the workflow-provided `GH_TOKEN` (`secrets.GITHUB_TOKEN`) for `gh`
-- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `dmft.exe` and `dmft_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
+- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
 - `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
 - self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
 - `.github/workflows/copilot-ci-dispatch.yml` runs on GitHub-hosted Linux from `master`, dispatches `CI` on same-repo Copilot PR heads when GitHub leaves the PR-triggered run in `action_required`, and skips PRs that edit workflow files so approval-sensitive changes still require manual review
@@ -267,7 +267,7 @@ age-only pruning.
 
 ### Protected `master` workflow
 
-`master` remains the protected release branch for DMFT.
+`master` remains the protected release branch for TextQuest.
 
 1. Branch from `master` into a short-lived topic branch (`feature/*`, `hotfix/*`, `codex/*`, etc.).
 2. Push that branch. The expected path is that Codex or Claude opens the pull request back into `master`, though you can still open one manually if needed.
@@ -275,20 +275,20 @@ age-only pruning.
 4. Keep the PR up to date with `master`, address review comments in the PR thread, and merge once the required gate is green.
 5. Let GitHub auto-delete the merged topic branch. Auto-merge can stay enabled when the gate is already satisfied.
 
-DMFT-specific notes:
+TextQuest-specific notes:
 
 - The required merge blocker remains `PR gate (fmt + clippy + test + python)`.
-- Same-repo PRs, pushes to `master`, and manual `CI` dispatches run that gate on runner labels `self-hosted`, `Windows`, `X64`, and `dmft`.
+- Same-repo PRs, pushes to `master`, and manual `CI` dispatches run that gate on runner labels `self-hosted`, `Windows`, `X64`, and `textquest`.
 - Fork or otherwise untrusted PRs run the same visible gate name on GitHub-hosted `windows-latest` instead of the self-hosted runner.
 - The GitHub-hosted fork path uses `actions/setup-python@v6`; the self-hosted path stays cmd-safe and verifies any fallback Python ZIP before extraction.
 - That Windows gate currently boots the nightly MSVC Rust toolchain, because the Windows hook stack still depends on nightly-only `retour`.
-- The scheduled `DMFT PR manager` Codex cloud automation is expected to open missing PRs, address straightforward review feedback, and merge eligible branches into `master`.
+- The scheduled `TextQuest PR manager` Codex cloud automation is expected to open missing PRs, address straightforward review feedback, and merge eligible branches into `master`.
 - Manual `CI` workflow dispatch is the place to get the heavier `Windows release build (manual)` validation on a topic branch before merge.
 - Trusted agent PRs should carry `merge:auto` by default unless the PR or linked issue is labeled `human:required`, `risk:high`, or `agent:blocked`.
-- The scheduled `DMFT issue executor` opens trusted agent PRs into `master`, adds automation labels, and should default `merge:auto` on those PRs when the linked issue is not explicitly blocked from unattended merge.
-- The scheduled `DMFT PR manager` Codex cloud automation is expected to address straightforward review feedback, resolve clearly addressed bot review threads, merge eligible agent-authored PRs into `master`, and close stale or superseded agent-authored PRs when the queue has moved on.
+- The scheduled `TextQuest issue executor` opens trusted agent PRs into `master`, adds automation labels, and should default `merge:auto` on those PRs when the linked issue is not explicitly blocked from unattended merge.
+- The scheduled `TextQuest PR manager` Codex cloud automation is expected to address straightforward review feedback, resolve clearly addressed bot review threads, merge eligible agent-authored PRs into `master`, and close stale or superseded agent-authored PRs when the queue has moved on.
 - `.github/workflows/agent-ready.yml` keeps the `agent:ready` and `agent:skip-ready` labels aligned on issue events plus an hourly sweep, suppresses `agent:ready` while an issue already has an open linked PR or active `agent:working` / `agent:blocked` state, and treats roadmap-container titles that start with `M<number>` or `Mx` as skip-ready epics.
-- `scripts/reconcile-agent-queue.sh` plus the scheduled DMFT issue-queue reconciler automation add missing open issues to the `DMFT Roadmap` project, set `Agent Status`, strip stale `agent:ready` / `agent:working` labels from non-ready items, and promote every other open non-epic issue to `Ready for Agent`.
+- `scripts/reconcile-agent-queue.sh` plus the scheduled TextQuest issue-queue reconciler automation add missing open issues to the `TextQuest Roadmap` project, set `Agent Status`, strip stale `agent:ready` / `agent:working` labels from non-ready items, and promote every other open non-epic issue to `Ready for Agent`.
 - The `agent:close` label lets repo automation close only agent-authored PRs (`codex/*`, `claude/*`, or PRs carrying the `codex-automation` label) without touching unrelated human PRs.
 - Manual `CI` workflow dispatch can opt into the heavier `Windows release build (manual)` validation on a topic branch before merge.
 - `Release`, `Nightly Release`, `README Metrics`, and `Wiki Nightly` are not required merge gates.
@@ -321,19 +321,19 @@ Each zone has NPC spawns (including named bosses like Lady Vox, Wuoshi, Garudon)
 cargo build --release
 
 # Inject DLL into all running EQ clients
-target\release\dmft.exe --inject
+target\release\textquest.exe --inject
 
 # Send a slash command to a specific client
-target\release\dmft.exe --cmd <pid> "/sit"
+target\release\textquest.exe --cmd <pid> "/sit"
 
 # Run TUI dashboard
-target\release\dmft.exe
+target\release\textquest.exe
 ```
 
 ### Log Files
 
-- **Orchestrator:** `./logs/dmft.log` (daily rolling)
-- **DLL:** `%TEMP%/dmft/dmft-dll.log` (daily rolling)
+- **Orchestrator:** `./logs/textquest.log` (daily rolling)
+- **DLL:** `%TEMP%/dmft/textquest-dll.log` (daily rolling)
 
 ## Testing
 
@@ -438,7 +438,7 @@ Execution rules:
 - `docs/implementation-roadmap.md` — canonical roadmap, evidence model, milestone gates
 - `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md` — curated `M5`/`M6` control-path ledger that separates in-process defaults from packet candidates and blocked protocol gaps
-- `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native DMFT TUI translation targets
+- `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native TextQuest TUI translation targets
 - `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors, `M5`-`M8` risk gates, and operator hygiene inputs
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md` — curated `M6` checkpoint note for queue flush, timeout, and safe-coordinate recovery
 - `docs/research-imports/2026-04-02-packet-zoning/` — raw packet and zoning evidence archive

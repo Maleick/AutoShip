@@ -25,7 +25,7 @@ Error states: `ErrorDialog` (wrong password, server down, etc.) with retry logic
 
 ### IPC Changes
 
-New commands in `dmft-common/src/ipc.rs`:
+New commands in `textquest-common/src/ipc.rs`:
 
 ```rust
 // Orchestrator → DLL
@@ -175,16 +175,16 @@ The DLL detects which screen is active by checking:
 ## Files to Create/Modify
 
 ### New files
-- `dmft-dll/src/login/mod.rs` — DLL-side login FSM
-- `dmft-dll/src/login/eqmain.rs` — eqmain.dll discovery + widget access
-- `dmft-dll/src/login/widgets.rs` — CEditWnd/CButtonWnd/CListWnd manipulation
+- `textquest-dll/src/login/mod.rs` — DLL-side login FSM
+- `textquest-dll/src/login/eqmain.rs` — eqmain.dll discovery + widget access
+- `textquest-dll/src/login/widgets.rs` — CEditWnd/CButtonWnd/CListWnd manipulation
 
 ### Modified files
-- `dmft-common/src/ipc.rs` — Add `StartLogin` command
-- `dmft-common/src/offsets.rs` — Add eqmain.dll offsets
-- `dmft-dll/src/hooks/game_loop.rs` — Integrate login FSM tick
-- `dmft-dll/src/ipc/mod.rs` — Handle `StartLogin` command
-- `dmft/src/launcher/coordinator.rs` — Send credentials via IPC after injection
+- `textquest-common/src/ipc.rs` — Add `StartLogin` command
+- `textquest-common/src/offsets.rs` — Add eqmain.dll offsets
+- `textquest-dll/src/hooks/game_loop.rs` — Integrate login FSM tick
+- `textquest-dll/src/ipc/mod.rs` — Handle `StartLogin` command
+- `textquest/src/launcher/coordinator.rs` — Send credentials via IPC after injection
 
 ## Testing Strategy
 

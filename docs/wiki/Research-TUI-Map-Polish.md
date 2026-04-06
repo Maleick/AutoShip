@@ -18,7 +18,7 @@ Brewall maps use the **ShowEQ/MQ2 map format** — plain text files with one rec
 | `zone_2.txt` | 2 (custom)   | Custom additions — compass markers, grid overlays, annotations |
 | `zone_3.txt` | 3 (extended) | Additional geometry (rare, large zones only)                   |
 
-DMFT currently loads all 4 layers via `dmft/src/eq/map_parser.rs:load_zone_map`.
+TextQuest currently loads all 4 layers via `textquest/src/eq/map_parser.rs:load_zone_map`.
 
 ### Line Types
 
@@ -31,7 +31,7 @@ L x1, y1, z1, x2, y2, z2, r, g, b
 - 9 comma-separated fields after the `L` prefix
 - Coordinates are EQ world-space floats (Y-up in EQ, but map files use X,Y,Z order)
 - RGB color values 0-255
-- `(0,0,0)` = default/black — DMFT maps these to `theme.map_lines` (dim gray)
+- `(0,0,0)` = default/black — TextQuest maps these to `theme.map_lines` (dim gray)
 - Colored lines typically represent: zone boundaries (red 255,0,0), water (blue), elevation changes (gray 150,150,150), buildings (varied)
 
 **P (Point/label):**
@@ -51,7 +51,7 @@ P x, y, z, r, g, b, size, label_text
 
 - EQ world: Y increases North, X increases East, Z is vertical (up)
 - Map files store coordinates as-is from EQ
-- DMFT's map rendering negates both axes: `to_grid(-spawn.y, -spawn.x)` — this flips the map so North=up, East=right on screen
+- TextQuest's map rendering negates both axes: `to_grid(-spawn.y, -spawn.x)` — this flips the map so North=up, East=right on screen
 - The `MapBounds` bounding box is computed from raw map coordinates, and the `to_grid` transform handles the axis mapping
 
 ### Data Scale
@@ -80,7 +80,7 @@ The current implementation in `map_parser.rs` and `map.rs` is **fully functional
 
 ### How It Works Now
 
-The map renderer (`dmft/src/tui/ui/map.rs`, ~1,500+ lines) uses a **character grid** approach:
+The map renderer (`textquest/src/tui/ui/map.rs`, ~1,500+ lines) uses a **character grid** approach:
 
 1. **Grid allocation**: `Vec<Vec<(char, Color)>>` — one cell per terminal character
 2. **Transform pipeline**: `MapTransform` converts world coords → grid coords via center/scale
@@ -372,7 +372,7 @@ Braille gives the highest effective resolution: a 100x50 terminal area becomes 2
 ```
 EQ World:  X=East/West, Y=North/South, Z=Up/Down
 Map Files: Same as EQ (X, Y, Z order in L/P lines)
-DMFT Grid: to_grid(-spawn.y, -spawn.x) → (col, row)
+TextQuest Grid: to_grid(-spawn.y, -spawn.x) → (col, row)
            This means: map_X = -EQ_Y, map_Y = -EQ_X
            North = up, East = right on screen ✓
 ```

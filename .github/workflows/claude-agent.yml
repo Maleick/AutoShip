@@ -45,8 +45,8 @@ jobs:
           prompt: |
             Follow `docs/claude-issue-worker.md` exactly.
             Read `AGENTS.md` and `CLAUDE.md` before editing.
-            In DMFT, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge.
+            In TextQuest, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge.
           claude_args: |
             --model claude-sonnet-4-6
             --max-turns 12
-            --append-system-prompt "Read AGENTS.md and CLAUDE.md before editing. In DMFT, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge."
+            --append-system-prompt "Read AGENTS.md and CLAUDE.md before editing. In TextQuest, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge."

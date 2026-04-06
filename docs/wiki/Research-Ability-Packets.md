@@ -2,12 +2,12 @@
 
 Curated `M5` validation note for issue `#60`.
 
-This document turns the April 2026 packet import set into an explicit ability-packet validation matrix. It does not treat imported reverse-engineering notes as proof that DMFT already supports packet-driven ability execution. The current evidence state for this checkpoint set remains `Needs Live Proof`.
+This document turns the April 2026 packet import set into an explicit ability-packet validation matrix. It does not treat imported reverse-engineering notes as proof that TextQuest already supports packet-driven ability execution. The current evidence state for this checkpoint set remains `Needs Live Proof`.
 
 ## Scope
 
 - map imported ability packet families to concrete validation cases
-- separate DMFT's current in-process execution paths from packet-candidate paths
+- separate TextQuest's current in-process execution paths from packet-candidate paths
 - document targetability and range assumptions before any packet-first implementation claim
 
 ## Source Stack
@@ -15,8 +15,8 @@ This document turns the April 2026 packet import set into an explicit ability-pa
 Primary repo inputs:
 
 - `docs/implementation-roadmap.md`
-- `dmft-dll/src/eq/mod.rs`
-- `dmft-common/src/ipc.rs`
+- `textquest-dll/src/eq/mod.rs`
+- `textquest-common/src/ipc.rs`
 
 Curated import summaries:
 
@@ -27,7 +27,7 @@ Evidence handling notes:
 
 - `EQ_Ability_Packet_Structures.md` is the strongest imported source for opcode families, payload shapes, and candidate target rules in this slice.
 - `EQ_Network_Architecture.md` is the strongest imported source for the broader send-path split between high-level ability helpers, `NetworkSend`, and lower-level packet transmission.
-- DMFT's current executable baseline is still in-process: `do_combat_ability` calls `PcZoneClient::DoCombatAbility`, and the shared `CombatForceAbility` IPC enum exists as schema groundwork rather than a wired DLL command path.
+- TextQuest's current executable baseline is still in-process: `do_combat_ability` calls `PcZoneClient::DoCombatAbility`, and the shared `CombatForceAbility` IPC enum exists as schema groundwork rather than a wired DLL command path.
 
 ## Current Repo Baseline
 
@@ -35,7 +35,7 @@ Evidence handling notes:
 
 Repo-grounded finding:
 
-- DMFT already exposes an in-process combat-ability baseline through `dmft_dll::eq::do_combat_ability`, while `dmft_common::ipc::Command::CombatForceAbility` remains declared but not yet handled by the injected DLL dispatcher.
+- TextQuest already exposes an in-process combat-ability baseline through `textquest_dll::eq::do_combat_ability`, while `textquest_common::ipc::Command::CombatForceAbility` remains declared but not yet handled by the injected DLL dispatcher.
 - This path is distinct from a packet-first implementation. It relies on the client function path, not on packet construction or a standalone outbound ability packet injector.
 
 Repo-fit implication:
@@ -60,7 +60,7 @@ Imported finding:
 Repo-fit implication:
 
 - These are the strongest packet candidates for early validation because they do not require a hostile target and appear to have the simplest payload shape.
-- DMFT still cannot claim packet execution support for these abilities until a current client proves the imported opcodes, payload layout, and any send-counter side effects.
+- TextQuest still cannot claim packet execution support for these abilities until a current client proves the imported opcodes, payload layout, and any send-counter side effects.
 
 Current evidence state:
 
@@ -77,7 +77,7 @@ Imported finding:
 Repo-fit implication:
 
 - These abilities are packet candidates, but they are not "free target" actions. They depend on a current hostile target ID and likely inherit melee-range, line-of-sight, and facing constraints even when the payload itself is small.
-- DMFT should treat targetability and combat-state prerequisites as part of the validation case, not as assumed packet-only details.
+- TextQuest should treat targetability and combat-state prerequisites as part of the validation case, not as assumed packet-only details.
 
 Current evidence state:
 
@@ -94,7 +94,7 @@ Imported finding:
 Repo-fit implication:
 
 - These are higher-risk packet candidates than self-only skills because the import set explicitly calls out tighter server validation around melee range and position.
-- DMFT should treat these as validation targets with stricter acceptance criteria than the simpler self-only family.
+- TextQuest should treat these as validation targets with stricter acceptance criteria than the simpler self-only family.
 
 Current evidence state:
 
@@ -121,7 +121,7 @@ Current evidence state:
 
 ## Validation Matrix
 
-| Ability family | Example skills | Current DMFT baseline | Imported packet candidate | Targetability rule to validate | What DMFT can claim now | Evidence state |
+| Ability family | Example skills | Current TextQuest baseline | Imported packet candidate | Targetability rule to validate | What TextQuest can claim now | Evidence state |
 | --- | --- | --- | --- | --- | --- | --- |
 | Self-only utility | Feign Death, Hide, Mend, Sense Traps | in-process client helper path | dedicated self-only opcode per skill, 12-byte payload | self only; confirm player spawn ID and no hostile target dependency | packet family is research-backed but not implemented | Research-backed / Needs Live Proof |
 | Target ability | Kick, Bash, Backstab, Round Kick, Flying Kick, Frenzy | in-process helper path | compact target-ability packet | hostile target ID required; validate facing, range, and combat-state rules | packet family is a validation target, not a supported feature | Research-backed / Needs Live Proof |
@@ -133,7 +133,7 @@ Current evidence state:
 
 ### Keep in-process as the production default when
 
-- DMFT already has a working client-function path for the ability
+- TextQuest already has a working client-function path for the ability
 - imported packet notes do not yet prove current-build opcode stability
 - the ability depends on target, position, or melee-state rules that have not been live-validated
 
@@ -223,6 +223,6 @@ Pass condition:
 
 ## Operator and Documentation Guidance
 
-- Do not describe packet ability execution as implemented DMFT behavior until a branch contains the packet path and a current client live-validates it.
+- Do not describe packet ability execution as implemented TextQuest behavior until a branch contains the packet path and a current client live-validates it.
 - Keep self-only, target, and attack families separate in docs and future tasks; they do not share the same risk profile.
 - When follow-on tasks are promoted into roadmap execution work, carry forward the exact evidence label instead of collapsing imported findings into generic "packet support" language.

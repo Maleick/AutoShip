@@ -1,4 +1,4 @@
-# DMFT Documentation Index
+# TextQuest Documentation Index
 
 This directory stores project documentation and is split into distinct buckets.
 

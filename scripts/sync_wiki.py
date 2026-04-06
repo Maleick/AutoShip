@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and publish repo-tracked GitHub wiki pages for DMFT."""
+"""Validate and publish repo-tracked GitHub wiki pages for TextQuest."""
 
 from __future__ import annotations
 

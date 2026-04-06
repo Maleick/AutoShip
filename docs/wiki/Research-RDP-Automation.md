@@ -20,7 +20,7 @@
 
 ## 1. Extend Existing Rust Remote API (RECOMMENDED)
 
-**Approach:** Add Win32 `SendInput` / `FindWindow` / screenshot endpoints to the existing `dmft` remote API already running on frostreaver.
+**Approach:** Add Win32 `SendInput` / `FindWindow` / screenshot endpoints to the existing `textquest` remote API already running on frostreaver.
 
 ### How It Works
 - The remote API already runs on frostreaver (port 3000) in the desktop session
