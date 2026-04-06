@@ -188,13 +188,11 @@ jobs:
 
       - name: Ensure cmake on PATH
         uses: ./.github/actions/ensure-cmake
-      - name: Clean corrupted build cache
-        run: cargo clean
       - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
       - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
       - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test
+      - run: cargo clippy -j 2 --all-targets --all-features -- -D warnings
+      - run: cargo test -j 2
 
   windows:
     name: Windows release build (manual)
