@@ -1,6 +1,6 @@
 //! `ClientManager` — discovers, tracks, and manages all EQ client sessions.
 
-use super::session::EqSession;
+use super::session::{EqSession, SlotLifecycle};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
@@ -94,10 +94,19 @@ impl ClientManager {
     }
 
     /// Check health of all clients and return IDs that need restart.
+    ///
+    /// Skips clients that are already in a camp-out or exited state.
     pub fn check_health(&mut self) -> Vec<ClientId> {
         let mut needs_restart = Vec::new();
 
         for (id, session) in &mut self.sessions {
+            // Don't flag for restart if we're already camping out or exited.
+            if matches!(
+                session.slot_lifecycle,
+                SlotLifecycle::CampingOut | SlotLifecycle::Exited | SlotLifecycle::Relaunching
+            ) {
+                continue;
+            }
             session.health_monitor.check();
             if session.health_monitor.should_restart() {
                 needs_restart.push(*id);
@@ -105,6 +114,62 @@ impl ClientManager {
         }
 
         needs_restart
+    }
+
+    /// Initiate a graceful camp-out for a client.
+    ///
+    /// Transitions the session to `CampingOut` and starts the timeout tracker.
+    /// The caller is responsible for sending the `/camp desktop` IPC command
+    /// to the DLL via the named pipe.
+    /// Returns `true` if the camp-out was initiated, `false` if the client was
+    /// already camping or not found.
+    pub fn initiate_camp_out(&mut self, client_id: ClientId) -> bool {
+        if let Some(session) = self.sessions.get_mut(&client_id) {
+            session.begin_camp_out()
+        } else {
+            false
+        }
+    }
+
+    /// Check all camping-out sessions and return IDs that are ready for
+    /// process termination (either the process exited on its own or the
+    /// camp-out timeout expired).
+    pub fn check_camp_outs(&mut self) -> Vec<ClientId> {
+        let mut ready_to_kill = Vec::new();
+
+        for (id, session) in &mut self.sessions {
+            if session.slot_lifecycle != SlotLifecycle::CampingOut {
+                continue;
+            }
+
+            if !session.health_monitor.is_process_alive() {
+                // Process exited cleanly — camp succeeded.
+                tracing::info!(
+                    client_id = *id,
+                    "Camp-out completed: process exited cleanly"
+                );
+                session.mark_exited();
+                ready_to_kill.push(*id);
+            } else if session.is_camp_out_timed_out() {
+                // Camp timer expired — need to force-kill.
+                tracing::warn!(
+                    client_id = *id,
+                    "Camp-out timed out: will force-kill process"
+                );
+                ready_to_kill.push(*id);
+            }
+        }
+
+        ready_to_kill
+    }
+
+    /// Get all sessions currently in a camping-out state.
+    #[must_use]
+    pub fn camping_sessions(&self) -> Vec<&EqSession> {
+        self.sessions
+            .values()
+            .filter(|s| s.slot_lifecycle == SlotLifecycle::CampingOut)
+            .collect()
     }
 
     /// Get a reference to a session.
@@ -146,5 +211,28 @@ impl ClientManager {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initiate_camp_out_returns_false_for_missing_client() {
+        let mut mgr = ClientManager::new("eqgame.exe");
+        assert!(!mgr.initiate_camp_out(999));
+    }
+
+    #[test]
+    fn camping_sessions_empty_by_default() {
+        let mgr = ClientManager::new("eqgame.exe");
+        assert!(mgr.camping_sessions().is_empty());
+    }
+
+    #[test]
+    fn check_camp_outs_ignores_non_camping_sessions() {
+        let mut mgr = ClientManager::new("eqgame.exe");
+        assert!(mgr.check_camp_outs().is_empty());
     }
 }
