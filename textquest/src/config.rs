@@ -187,6 +187,10 @@ pub struct AppConfig {
     /// Orchestrator event loop configuration
     #[serde(default)]
     pub orchestrator: OrchestratorConfig,
+
+    /// Spawn watch / alert feed configuration
+    #[serde(default)]
+    pub spawn_watch: SpawnWatchConfig,
 }
 
 /// Discord webhook and bot configuration.
@@ -407,6 +411,28 @@ impl AppConfig {
             soul: SoulConfig::default(),
             discord: DiscordConfig::default(),
             orchestrator: OrchestratorConfig::default(),
+            spawn_watch: SpawnWatchConfig::default(),
+        }
+    }
+}
+
+/// Configuration for spawn watch alerts and the alert feed.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct SpawnWatchConfig {
+    pub enabled: bool,
+    pub watch_names: Vec<String>,
+    pub alert_named: bool,
+    pub max_feed_entries: usize,
+}
+
+impl Default for SpawnWatchConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            watch_names: Vec::new(),
+            alert_named: true,
+            max_feed_entries: 200,
         }
     }
 }

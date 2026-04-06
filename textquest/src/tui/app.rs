@@ -16,7 +16,8 @@ use crate::config::AccountsConfig;
 use crate::eq::log_parser::{ChatEvent, LootDatabase};
 use crate::eq::log_watcher::LogWatcher;
 use crate::eq::named_db::NamedMobDatabase;
-use crate::eq::named_tracker::NamedTracker;
+use crate::eq::named_tracker::{NamedAlert, NamedTracker};
+use crate::eq::spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed};
 use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::orchestrator::Orchestrator;
 use crate::soul::coordinator::SoulCoordinator;
@@ -462,6 +463,11 @@ pub struct App {
     /// Named mob tracker for rare spawn monitoring.
     pub named_tracker: NamedTracker,
 
+    /// Spawn alert feed.
+    pub spawn_alert_feed: SpawnAlertFeed,
+    /// Whether to auto-alert on named NPC spawns.
+    pub spawn_watch_named: bool,
+
     /// User-tracked spawns registered via the `:track` command.
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
 
@@ -710,6 +716,8 @@ impl App {
                     None => NamedTracker::new(),
                 }
             },
+            spawn_alert_feed: SpawnAlertFeed::new(200),
+            spawn_watch_named: true,
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -2793,6 +2801,175 @@ impl App {
         }
     }
 
+    pub fn update_spawn_alerts(&mut self) {
+        let tick = self.tick_count;
+        let zone = self
+            .active_client()
+            .map(|c| c.zone_name.clone())
+            .unwrap_or_default();
+        if self.spawn_watch_named {
+            let alerts = self.named_tracker.update(&self.spawns, tick);
+            for alert in &alerts {
+                let (name, is_up) = match alert {
+                    NamedAlert::SpawnUp { name, .. } => (name.clone(), true),
+                    NamedAlert::SpawnDown { name, .. } => (name.clone(), false),
+                };
+                self.spawn_alert_feed.push(SpawnAlertEvent {
+                    spawn_name: name.clone(),
+                    zone: zone.clone(),
+                    is_up,
+                    timestamp: std::time::SystemTime::now(),
+                    tick,
+                    match_source: MatchSource::Named,
+                });
+                let label = if is_up { "UP" } else { "DOWN" };
+                let level = if is_up {
+                    ToastLevel::Success
+                } else {
+                    ToastLevel::Warning
+                };
+                self.set_feedback(level, format!("[Named] {name} {label} in {zone}"), true);
+            }
+        }
+        self.check_watched_spawn_changes();
+    }
+
+    fn check_watched_spawn_changes(&mut self) {
+        use crate::eq::named_tracker::is_named;
+        if self.spawn_alert_feed.watch_patterns().is_empty() {
+            return;
+        }
+        let tick = self.tick_count;
+        let zone = self
+            .active_client()
+            .map(|c| c.zone_name.clone())
+            .unwrap_or_default();
+        let mut new_events: Vec<SpawnAlertEvent> = Vec::new();
+        for spawn in &self.spawns {
+            if is_named(&spawn.displayed_name) {
+                continue;
+            }
+            if let Some(pattern) = self
+                .spawn_alert_feed
+                .matches_any_pattern(&spawn.displayed_name)
+            {
+                new_events.push(SpawnAlertEvent {
+                    spawn_name: spawn.displayed_name.clone(),
+                    zone: zone.clone(),
+                    is_up: true,
+                    timestamp: std::time::SystemTime::now(),
+                    tick,
+                    match_source: MatchSource::WatchPattern(pattern.to_string()),
+                });
+            }
+        }
+        for event in new_events {
+            let name = event.spawn_name.clone();
+            let z = event.zone.clone();
+            self.spawn_alert_feed.push(event);
+            self.set_feedback(
+                ToastLevel::Info,
+                format!("[Watch] {name} spotted in {z}"),
+                false,
+            );
+        }
+    }
+
+    fn execute_watch_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            None => {
+                self.usage_feedback(
+                    "watch",
+                    "Usage: watch <pattern> | watch list | watch named [on|off]",
+                );
+            }
+            Some("list") => {
+                let patterns = self.spawn_alert_feed.watch_patterns();
+                if patterns.is_empty() {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("No watch patterns set"),
+                        false,
+                    );
+                } else {
+                    let list: Vec<&str> = patterns.iter().map(|p| p.raw.as_str()).collect();
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Watch patterns: {}", list.join(", ")),
+                        false,
+                    );
+                }
+            }
+            Some("named") => {
+                let new_state = match args.get(1).copied() {
+                    Some("on") | Some("true") => true,
+                    Some("off") | Some("false") => false,
+                    _ => !self.spawn_watch_named,
+                };
+                self.spawn_watch_named = new_state;
+                let label = if new_state { "ON" } else { "OFF" };
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Named spawn alerts: {label}"),
+                    true,
+                );
+            }
+            Some(_) => {
+                let full = args.join(" ");
+                let clean = full.trim_matches('"');
+                let parsed = self.spawn_alert_feed.add_watch(clean);
+                let msg = format!("Watching: {} ({:?})", parsed.raw, parsed.mode);
+                self.set_feedback(ToastLevel::Success, msg, true);
+            }
+        }
+    }
+
+    fn execute_alerts_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            None => {
+                let count = self.spawn_alert_feed.len();
+                if count == 0 {
+                    self.set_feedback(ToastLevel::Info, String::from("Alert feed is empty"), false);
+                } else {
+                    let events = self.spawn_alert_feed.events();
+                    let recent: Vec<String> = events
+                        .iter()
+                        .rev()
+                        .take(5)
+                        .map(|e| {
+                            let a = if e.is_up { "\u{25b2}" } else { "\u{25bc}" };
+                            format!("{a} {}", e.spawn_name)
+                        })
+                        .collect();
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Alerts ({count}): {}", recent.join(", ")),
+                        false,
+                    );
+                }
+            }
+            Some("clear") => {
+                self.spawn_alert_feed.clear();
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Alert feed cleared"),
+                    true,
+                );
+            }
+            Some("count") => {
+                let count = self.spawn_alert_feed.len();
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Alert feed: {count} events"),
+                    false,
+                );
+            }
+            Some(sub) => {
+                self.usage_feedback("alerts", format!("Unknown subcommand: {sub}"));
+            }
+        }
+    }
+
     /// Load the zone map for the given zone short name from the map directory.
     pub fn load_zone_map(&mut self, zone_short_name: &str) {
         let zone_short_name = zone_short_name.trim().to_ascii_lowercase();
@@ -3512,6 +3689,33 @@ impl App {
                 } else {
                     self.usage_feedback("untrack", "Missing tracked spawn name.");
                 }
+            }
+            "watch" => {
+                self.execute_watch_command(&parts[1..]);
+            }
+            "unwatch" => {
+                if parts.get(1).is_some() {
+                    let full = parts[1..].join(" ");
+                    let clean = full.trim_matches('"');
+                    if self.spawn_alert_feed.remove_watch(clean) {
+                        self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Removed watch: {clean}"),
+                            true,
+                        );
+                    } else {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            format!("No watch pattern: {clean}"),
+                            true,
+                        );
+                    }
+                } else {
+                    self.usage_feedback("unwatch", "Missing pattern.");
+                }
+            }
+            "alerts" => {
+                self.execute_alerts_command(&parts[1..]);
             }
             "mode" => match parts.get(1).copied() {
                 Some("camp") => {
@@ -5603,6 +5807,9 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "restart"
             | "track"
             | "untrack"
+            | "watch"
+            | "unwatch"
+            | "alerts"
             | "mode"
             | "combat"
             | "ma"
@@ -5884,6 +6091,9 @@ mod tests {
             "restart",
             "track",
             "untrack",
+            "watch",
+            "unwatch",
+            "alerts",
             "mode",
             "combat",
             "ma",

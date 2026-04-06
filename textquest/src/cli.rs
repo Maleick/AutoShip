@@ -148,6 +148,18 @@ pub fn run_tui_mode() -> Result<()> {
     // Initialize Discord integration if webhook URL is configured
     app.init_discord(&config.discord);
 
+    // Apply spawn watch config
+    if config.spawn_watch.enabled {
+        app.spawn_watch_named = config.spawn_watch.alert_named;
+        app.spawn_alert_feed =
+            crate::eq::spawn_alert::SpawnAlertFeed::new(config.spawn_watch.max_feed_entries);
+        for pattern in &config.spawn_watch.watch_names {
+            app.spawn_alert_feed.add_watch(pattern);
+        }
+    } else {
+        app.spawn_watch_named = false;
+    }
+
     let orchestrator = orchestrator::Orchestrator::new();
     tui::run::run_tui(app, orchestrator)
 }

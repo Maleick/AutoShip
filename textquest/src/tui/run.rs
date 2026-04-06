@@ -166,6 +166,7 @@ fn run_loop(
                 app.sync_ch_chain_state(orchestrator);
             }
             app.update_tracked_spawns();
+            app.update_spawn_alerts();
             last_refresh = Instant::now();
         }
 
