@@ -25,11 +25,9 @@ credentials.db*
 # Local Claude workspace artifacts (runtime, not config)
 .claude/worktrees/
 logs/
-autoresearch-launch.json
-autoresearch-state.json
-autoresearch-state.prev.json
+autoresearch-*.json
+autoresearch-*.tsv
 research-results.tsv
-autoresearch-project-sync.json
 __pycache__/
 *.pyc
 
