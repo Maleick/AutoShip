@@ -10,17 +10,12 @@ const GAME_LOOP_SLOT: HwbpSlot = HwbpSlot::Dr0;
 
 /// HWBP callback for the game loop hook.
 ///
-/// Lives in `.tq` section so it remains executable when stealth::sleep()
-/// encrypts `.text` between frames.
+/// Lives in `.tq` section so it remains executable when `.text` is encrypted.
+/// wake()/sleep() are handled by the VEH handler that wraps all callbacks,
+/// so this function runs with `.text` already decrypted.
 #[cfg_attr(windows, unsafe(link_section = ".tq"))]
 fn game_loop_callback(_exception_info: *mut ()) -> bool {
-    // Wake: decrypt .text + set RX (no-op if stealth disabled).
-    crate::stealth::wake();
-
     on_game_tick();
-
-    // Sleep: set RW + encrypt .text (no-op if stealth disabled).
-    crate::stealth::sleep();
     true
 }
 

