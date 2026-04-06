@@ -238,13 +238,17 @@ fn login_chain_phase2() {
         // Guard: only look for PLAY EVERQUEST once we're actually at the server
         // select screen. The login screen can have a "PLAY EVERQUEST!" label/tab
         // that would be a false positive.
-        let at_server_select =
-            crate::login::widgets::is_sidl_window_visible(eqmain_base, "serverselect");
+        let at_server_select = crate::login::widgets::is_sidl_window_visible(
+            eqmain_base,
+            crate::login::widgets::SIDL_SERVER_SELECT,
+        );
         if !at_server_select {
             // Log screen state every 5s for debugging
             if attempt % 10 == 0 {
-                let has_connect =
-                    crate::login::widgets::is_sidl_window_visible(eqmain_base, "connect");
+                let has_connect = crate::login::widgets::is_sidl_window_visible(
+                    eqmain_base,
+                    crate::login::widgets::SIDL_CONNECT,
+                );
                 tracing::info!(
                     attempt,
                     has_serverselect = false,
@@ -253,13 +257,7 @@ fn login_chain_phase2() {
                     "Phase 2: screen state check"
                 );
             }
-            // Press Enter every 3s to dismiss any blocking dialogs
-            if attempt % 6 == 3 {
-                crate::login::widgets::simulate_enter_key(eqmain_base);
-            }
-            continue;
-        }
-        if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
+        } else if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
             tracing::info!(
                 ptr = format!("{:#x}", play_btn),
                 attempt,
