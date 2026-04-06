@@ -74,6 +74,15 @@ pub const EXECUTE_CMD: u64 = 0x0001_4022_35B0;
 /// Signature: void InterpretCmd(PlayerClient*, const char*)
 pub const INTERPRET_CMD: u64 = 0x0001_4028_3FB0;
 
+/// `CEverQuest::RightClickedOnPlayer` — open NPC interaction window (merchant, bank, quest)
+/// Signature: void RightClickedOnPlayer(PlayerClient* target, int unknown)
+/// Source: eqlib/offsets/eqgame.h `CEverQuest__RightClickedOnPlayer_x`
+pub const RIGHT_CLICKED_ON_PLAYER: u64 = 0x0001_4029_6D30;
+
+/// `pinstCEverQuest` — pointer to the global CEverQuest instance
+/// Source: eqlib/offsets/eqgame.h `pinstCEverQuest_x`
+pub const PINST_EVERQUEST: u64 = 0x0001_40F1_1758;
+
 /// pinstCXWndManager — eqgame.exe's UI window manager (not eqmain.dll's)
 pub const PINST_CXWND_MANAGER: u64 = 0x0001_40F3_7B28;
 

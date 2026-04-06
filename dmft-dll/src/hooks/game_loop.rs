@@ -1432,10 +1432,68 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
                 queue_slash_command(format!("/cast {spell_slot}"));
             }
         }
+        Command::InteractTarget => {
+            tracing::info!("InteractTarget received — right-clicking current target");
+            interact_with_target();
+        }
         other => {
             tracing::debug!(?other, "Unhandled command");
         }
     }
+}
+
+/// Call `CEverQuest::RightClickedOnPlayer(target, 0)` to open NPC interaction windows.
+fn interact_with_target() {
+    #[cfg(windows)]
+    {
+        use dmft_common::offsets;
+
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            tracing::warn!("InteractTarget: EQ base not resolved");
+            return;
+        }
+
+        // Read pinstCEverQuest
+        let Some(pinst_eq_addr) = offsets::rebase(offsets::PINST_EVERQUEST, eq_base) else {
+            tracing::warn!("InteractTarget: rebase PINST_EVERQUEST failed");
+            return;
+        };
+        let eq_inst = unsafe { std::ptr::read(pinst_eq_addr as *const usize) };
+        if eq_inst == 0 {
+            tracing::warn!("InteractTarget: pinstCEverQuest is null");
+            return;
+        }
+
+        // Read pinstCurrentTarget
+        let Some(pinst_target_addr) = offsets::rebase(offsets::PINST_TARGET, eq_base) else {
+            tracing::warn!("InteractTarget: rebase PINST_TARGET failed");
+            return;
+        };
+        let target_ptr = unsafe { std::ptr::read(pinst_target_addr as *const usize) };
+        if target_ptr == 0 {
+            tracing::warn!("InteractTarget: no target selected");
+            return;
+        }
+
+        // Call CEverQuest::RightClickedOnPlayer(target, 0)
+        let Some(func_addr) = offsets::rebase(offsets::RIGHT_CLICKED_ON_PLAYER, eq_base) else {
+            tracing::warn!("InteractTarget: rebase RIGHT_CLICKED_ON_PLAYER failed");
+            return;
+        };
+
+        type RightClickFn = unsafe extern "C" fn(this: usize, target: usize, unknown: i32);
+        let func: RightClickFn = unsafe { std::mem::transmute(func_addr) };
+        unsafe { func(eq_inst, target_ptr, 0) };
+
+        tracing::info!(
+            eq_inst = format!("{eq_inst:#x}"),
+            target = format!("{target_ptr:#x}"),
+            "RightClickedOnPlayer called"
+        );
+    }
+    #[cfg(not(windows))]
+    tracing::trace!("InteractTarget (stub)");
 }
 
 /// Call EQ's `InterpretCmd` to execute a slash command string.

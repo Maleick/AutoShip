@@ -174,6 +174,8 @@ pub enum Command {
     },
     /// Clear the current target.
     ClearTarget,
+    /// Right-click interact with the current target (opens merchant, bank, quest windows).
+    InteractTarget,
     // Utility
     /// Sit down (mana/HP regen).
     Sit,
