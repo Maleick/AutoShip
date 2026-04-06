@@ -676,6 +676,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
 
     // ─── Nav path overlay ─────────────────────────────────────────────────
     if app.map_state.show_nav_paths
+        && app.map_state.show_target_path
         && let Some(client) = app.active_client()
         && let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
         && nav.waypoints.len() >= 2
@@ -706,7 +707,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     }
 
     // ─── Target line overlay ─────────────────────────────────────────────────
-    if app.map_state.show_nav_paths
+    if app.map_state.show_target_line
         && let (Some(player), Some(target)) = (&app.local_player, &app.target)
     {
         let (pc, pr) = to_grid(-player.y, -player.x);
@@ -787,6 +788,73 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
 
         if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
             grid[row as usize][col as usize] = ('◆', t.map_you);
+        }
+
+        // ─── Radius circle overlays ─────────────────────────────────────────
+        for overlay in app
+            .map_state
+            .cast_radius
+            .iter()
+            .chain(app.map_state.spell_radius.iter())
+        {
+            draw_radius_circle(
+                &to_grid,
+                player.x,
+                player.y,
+                overlay.radius,
+                overlay.color,
+                w as u16,
+                h as u16,
+                &mut grid,
+            );
+        }
+    }
+
+    // ─── Loc marker overlay ──────────────────────────────────────────────
+    if let Some(loc) = &app.map_state.loc_marker {
+        let (lc, lr) = to_grid(-loc.y, -loc.x);
+        if lc >= 0 && lc < w as i32 && lr >= 0 && lr < h as i32 {
+            grid[lr as usize][lc as usize] = ('⊗', Color::Yellow);
+            for (i, ch) in loc.label.chars().take(12).enumerate() {
+                let col = lc + 2 + i as i32;
+                if col >= 0 && col < w as i32 {
+                    grid[lr as usize][col as usize] = (ch, Color::Yellow);
+                }
+            }
+        }
+    }
+
+    // ─── Spawn highlights overlay ────────────────────────────────────────
+    if !app.map_state.highlights.is_empty() {
+        for spawn in &app.spawns {
+            let lower_name = spawn.name.to_ascii_lowercase();
+            for hl in &app.map_state.highlights {
+                if lower_name.contains(&hl.pattern.to_ascii_lowercase()) {
+                    let (sc, sr) = to_grid(-spawn.y, -spawn.x);
+                    if sc >= 0 && sc < w as i32 && sr >= 0 && sr < h as i32 {
+                        let color = hl.color.unwrap_or(Color::Magenta);
+                        if hl.pulse && (app.tick_count / 5) % 2 == 0 {
+                            continue;
+                        }
+                        let ch = match hl.size {
+                            1 => '●',
+                            2 => '◉',
+                            _ => '◈',
+                        };
+                        grid[sr as usize][sc as usize] = (ch, color);
+                        if hl.size >= 2 {
+                            for &(dx, dy) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                                let nc = sc + dx;
+                                let nr = sr + dy;
+                                if nc >= 0 && nc < w as i32 && nr >= 0 && nr < h as i32 {
+                                    grid[nr as usize][nc as usize] = ('·', color);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
         }
     }
 
@@ -2169,5 +2237,28 @@ mod tests {
         // equal z endpoints gracefully (dz ≈ 0, both inside)
         let result = clip_line_z(10.0, 20.0, 50.0, 30.0, 40.0, 50.0, 50.0, 10.0);
         assert_eq!(result, Some((10.0, 20.0, 30.0, 40.0)));
+    }
+}
+
+/// Draw a radius circle around a world position on the map grid.
+fn draw_radius_circle(
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    center_x: f32,
+    center_y: f32,
+    radius: f32,
+    color: Color,
+    w: u16,
+    h: u16,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let steps = (radius * 0.5).max(24.0).min(120.0) as usize;
+    for i in 0..steps {
+        let angle = 2.0 * std::f32::consts::PI * (i as f32) / (steps as f32);
+        let wx = center_x + radius * angle.cos();
+        let wy = center_y + radius * angle.sin();
+        let (c, r) = to_grid(-wy, -wx);
+        if c >= 0 && c < w as i32 && r >= 0 && r < h as i32 {
+            grid[r as usize][c as usize] = ('·', color);
+        }
     }
 }
