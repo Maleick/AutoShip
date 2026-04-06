@@ -183,6 +183,10 @@ pub struct AppConfig {
     /// Discord integration configuration
     #[serde(default)]
     pub discord: DiscordConfig,
+
+    /// Orchestrator event loop configuration
+    #[serde(default)]
+    pub orchestrator: OrchestratorConfig,
 }
 
 /// Discord webhook and bot configuration.
@@ -343,6 +347,31 @@ impl Default for RetryConfig {
     }
 }
 
+/// Configuration for the orchestrator event loop tick rates.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct OrchestratorConfig {
+    /// Interval in milliseconds between health checks on connected clients.
+    pub health_check_interval_ms: u64,
+    /// Interval in milliseconds between launch coordinator ticks.
+    pub launch_tick_interval_ms: u64,
+    /// Interval in milliseconds between camp/hunt orchestrator ticks.
+    pub orchestrator_tick_interval_ms: u64,
+    /// Interval in milliseconds between game state polls from shared memory.
+    pub state_poll_interval_ms: u64,
+}
+
+impl Default for OrchestratorConfig {
+    fn default() -> Self {
+        Self {
+            health_check_interval_ms: 5000,
+            launch_tick_interval_ms: 1000,
+            orchestrator_tick_interval_ms: 250,
+            state_poll_interval_ms: 100,
+        }
+    }
+}
+
 fn default_process_name() -> String {
     "eqgame.exe".to_string()
 }
@@ -377,6 +406,7 @@ impl AppConfig {
             retry: RetryConfig::default(),
             soul: SoulConfig::default(),
             discord: DiscordConfig::default(),
+            orchestrator: OrchestratorConfig::default(),
         }
     }
 }

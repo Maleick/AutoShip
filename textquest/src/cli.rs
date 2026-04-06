@@ -1258,6 +1258,40 @@ pub fn run_dump_mode() -> Result<()> {
     Ok(())
 }
 
+// ─── Orchestration ──────────────────────────────────────────────────────────
+
+/// Run the orchestrator event loop — health checks, launch coordinator, camp loop.
+///
+/// Blocks until Ctrl+C is pressed.
+pub fn run_orchestrate_mode() -> Result<()> {
+    let config = load_config()?;
+
+    let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
+    rt.block_on(async {
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+        // Catch Ctrl+C for graceful shutdown
+        let tx = shutdown_tx.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                let _ = tx.send(true);
+            }
+        });
+
+        let mut oloop =
+            crate::orchestrator_loop::OrchestratorLoop::from_config(&config, shutdown_rx);
+
+        info!("Orchestrator loop starting — press Ctrl+C to stop");
+        eprintln!("Orchestrator loop running. Press Ctrl+C to stop.");
+
+        let events = oloop.run().await;
+        info!(events = events.len(), "Orchestrator loop stopped");
+        eprintln!("Orchestrator loop stopped ({} events).", events.len());
+    });
+
+    Ok(())
+}
+
 // ─── Daemon lifecycle ───────────────────────────────────────────────────────
 
 const PIDFILE_PATH: &str = "textquest.pid";

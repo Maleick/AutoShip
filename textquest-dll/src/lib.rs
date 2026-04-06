@@ -196,12 +196,11 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("IPC startup failed (continuing without IPC): {}", e);
     }
 
-    // 6. Sleep obfuscation DISABLED for stability testing.
-    // TODO: Re-enable once game loop hook is confirmed stable.
-    // if let Err(e) = stealth::init() {
-    //     tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
-    // }
-    tracing::info!("Sleep obfuscation DISABLED (stability testing)");
+    // 6. Sleep obfuscation — encrypts .text between game loop ticks.
+    // VEH handler (in .tq section) calls wake()/sleep() around callbacks.
+    if let Err(e) = stealth::init() {
+        tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
+    }
 
     tracing::info!("DMFT DLL initialized successfully");
     Ok(())
