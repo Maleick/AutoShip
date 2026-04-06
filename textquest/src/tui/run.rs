@@ -565,6 +565,8 @@ fn apply_demo_scenario(app: &mut App) {
         app.ch_chain_status = None;
     }
 
+    app.priority_snapshots = super::demo_data::demo_priority_snapshots(tick_count);
+
     app.status_message = format!(
         "DEMO MODE - {} scripted clients",
         app.clients.iter().filter(|client| client.is_demo).count()

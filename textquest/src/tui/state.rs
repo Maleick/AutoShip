@@ -608,6 +608,8 @@ pub struct OverviewScreenState {
     pub session_collapsed: bool,
     /// Whether the slot-profile panel is collapsed.
     pub profile_collapsed: bool,
+    /// Whether the priorities panel is collapsed.
+    pub priorities_collapsed: bool,
 }
 
 impl OverviewScreenState {
@@ -624,6 +626,7 @@ impl OverviewScreenState {
             combat_collapsed: false,
             session_collapsed: false,
             profile_collapsed: false,
+            priorities_collapsed: false,
         }
     }
 }
