@@ -219,7 +219,7 @@ pub fn click_yesno_yes(dialog_wnd: usize) -> bool {
         }
         if let Some(yes_btn) = find_visible_child_by_sidl(dialog_wnd, SIDL_YESNO_YES_BUTTON) {
             unsafe {
-                crate::eq::widgets::click_button_via_vtable(yes_btn);
+                crate::eq::widgets::click_button_for_phase(yes_btn, true);
             }
             true
         } else {
@@ -227,7 +227,7 @@ pub fn click_yesno_yes(dialog_wnd: usize) -> bool {
             unsafe {
                 if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "Yes")
                 {
-                    crate::eq::widgets::click_button_via_vtable(btn);
+                    crate::eq::widgets::click_button_for_phase(btn, true);
                     return true;
                 }
             }
@@ -251,14 +251,14 @@ pub fn click_yesno_no(dialog_wnd: usize) -> bool {
         }
         if let Some(no_btn) = find_visible_child_by_sidl(dialog_wnd, SIDL_YESNO_NO_BUTTON) {
             unsafe {
-                crate::eq::widgets::click_button_via_vtable(no_btn);
+                crate::eq::widgets::click_button_for_phase(no_btn, true);
             }
             true
         } else {
             // Fallback: try finding by WindowText
             unsafe {
                 if let Some(btn) = crate::eq::widgets::find_child_button_by_text(dialog_wnd, "No") {
-                    crate::eq::widgets::click_button_via_vtable(btn);
+                    crate::eq::widgets::click_button_for_phase(btn, true);
                     return true;
                 }
             }
@@ -760,8 +760,9 @@ pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
             return false;
         };
 
+        // Server select is eqmain territory — use phase-aware click
         unsafe {
-            crate::eq::widgets::click_button_via_vtable(button_wnd);
+            crate::eq::widgets::click_button_for_phase(button_wnd, true);
         }
 
         tracing::debug!(window = window_name, "Clicked button");

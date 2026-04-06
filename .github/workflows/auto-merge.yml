@@ -29,26 +29,48 @@ jobs:
         github.event_name == 'workflow_run' &&
         github.event.workflow_run.conclusion == 'success'
       )
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64, textquest]
     steps:
       - name: Enable auto-merge on labeled PRs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            pr_number="${{ github.event.pull_request.number }}"
-            echo "Enabling auto-merge on PR #${pr_number}"
-            gh pr merge "$pr_number" --repo "${{ github.repository }}" --auto --merge || true
-            exit 0
-          fi
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const mergeLabel = "merge:auto";
 
-          prs=$(gh pr list --repo "${{ github.repository }}" --state open \
-            --label "merge:auto" --json number --jq '.[].number')
-          if [ -z "$prs" ]; then
-            echo "No open merge:auto PRs."
-            exit 0
-          fi
-          for pr in $prs; do
-            echo "Enabling auto-merge on PR #${pr}"
-            gh pr merge "$pr" --repo "${{ github.repository }}" --auto --merge || true
-          done
+            async function enableAutoMerge(prNumber) {
+              try {
+                const result = await github.graphql(`
+                  mutation($prId: ID!) {
+                    enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: MERGE }) {
+                      clientMutationId
+                    }
+                  }
+                `, {
+                  prId: (await github.rest.pulls.get({ owner, repo, pull_number: prNumber })).data.node_id,
+                });
+                core.info(`Enabled auto-merge on PR #${prNumber}`);
+              } catch (error) {
+                core.warning(`Failed to enable auto-merge on PR #${prNumber}: ${error.message}`);
+              }
+            }
+
+            if (context.eventName === "pull_request") {
+              await enableAutoMerge(context.payload.pull_request.number);
+              return;
+            }
+
+            const openPrs = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            for (const pr of openPrs) {
+              const labels = (pr.labels || []).map((l) => l.name);
+              if (labels.includes(mergeLabel)) {
+                await enableAutoMerge(pr.number);
+              }
+            }

@@ -1,10 +1,10 @@
-# TextQuest (Dave Mike Fun Times)
+# TextQuest
 
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-106%2C490-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-2%2C506%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-108%2C448-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-2%2C569%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -171,8 +171,8 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 ## Architecture
 
 ```text
-TextQuest Workspace (3 crates, ~106K lines of Rust)
-├── dmft/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
+TextQuest Workspace (3 crates, ~108K lines of Rust)
+├── textquest/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
 ├── textquest-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
 └── textquest-common/    — Shared types: IPC, offsets, combat/nav/soul types
 ```
@@ -320,24 +320,39 @@ Each zone has NPC spawns (including named bosses like Lady Vox, Wuoshi, Garudon)
 # Build
 cargo build --release
 
+# Run TUI dashboard (live mode with connected EQ clients)
+target\release\textquest.exe
+
+# One-shot CLI dump of player, target, and spawn data
+target\release\textquest.exe --dump
+
 # Inject DLL into all running EQ clients
 target\release\textquest.exe --inject
 
+# Inject DLL into a specific client by PID
+target\release\textquest.exe --inject-pid <pid>
+
+# Start login automation for a specific client
+target\release\textquest.exe --login-pid <pid> <account> <password> [server] [character]
+
+# Query shared memory state for a single client
+target\release\textquest.exe --status <pid>
+
+# Summary table of all connected EQ clients
+target\release\textquest.exe --statusall
+
 # Send a slash command to a specific client
 target\release\textquest.exe --cmd <pid> "/sit"
-
-# Run TUI dashboard
-target\release\textquest.exe
 ```
 
 ### Log Files
 
 - **Orchestrator:** `./logs/textquest.log` (daily rolling)
-- **DLL:** `%TEMP%/dmft/textquest-dll.log` (daily rolling)
+- **DLL:** `%TEMP%/textquest/textquest-dll.log` (daily rolling)
 
 ## Testing
 
-Current workspace totals: 106,490 Rust lines and 2,506 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
+Current workspace totals: 108,448 Rust lines and 2,569 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -360,7 +375,7 @@ Release and wiki automation now run separately on the self-hosted Windows runner
 
 ```toml
 [[accounts]]
-name = "dmft01"
+name = "textquest01"
 server = "Firiona Vie"
 character = "Camrene"
 class = "WAR"
@@ -420,7 +435,7 @@ Historical milestones already implemented in the repository:
 Canonical active roadmap order:
 
 - [ ] **M5** (~95%) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator). 1 open issue (#355 launchpad token RE)
-- [x] **M6** — Dashboard + TUI — all 22 issues shipped: EQ Internals, packet monitor, map rework, DPS bars, Neriak theme, web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
+- [ ] **M6** (~55%) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme shipped; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks in progress
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
 - [ ] **M9** — Learning/RL

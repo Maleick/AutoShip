@@ -41,11 +41,11 @@ numeric `id` that matches `AccountEntry::group`.
 
 ### TUI Commands
 
-| Command | Effect |
-|---------|--------|
-| `:profile list` | List all profile groups with hotkey and online count |
-| `:profile launch <name>` | Queue all accounts in the named profile for launch |
-| `Ctrl+F1`–`Ctrl+F9` | Launch the profile group assigned to that hotkey |
+| Command                  | Effect                                               |
+| ------------------------ | ---------------------------------------------------- |
+| `:profile list`          | List all profile groups with hotkey and online count |
+| `:profile launch <name>` | Queue all accounts in the named profile for launch   |
+| `Ctrl+F1`–`Ctrl+F9`      | Launch the profile group assigned to that hotkey     |
 
 The `:login G<n>` command continues to work for numeric group targeting.
 
@@ -115,6 +115,46 @@ Shared IPC commands already exist for:
 ## Important Platform Note
 
 The TUI `:login` and `:profile launch` flows are stubbed on non-Windows. In that environment they log what would have launched instead of controlling live EQ.
+
+## Login Chain Fixes (April 2026)
+
+Three targeted fixes hardened the login chain after live testing revealed that the
+DLL's button-click queue mechanism does not work during `eqmain.dll` phases:
+
+### Root cause
+
+`ProcessGameEvents` is not hooked during the `eqmain` phase (pre-server-select).
+The DLL's `queue_button_click` mechanism relies on the `ProcessGameEvents` hook to
+drain the click queue each frame. Since this hook only activates after the game loop
+starts (post-character-select), queued clicks during Phases 1 and 2 were silently
+dropped.
+
+### Phase 1 — Credential entry (eqmain)
+
+- **Fix**: Click the LOGIN button directly via vtable call instead of queueing
+- Scans for both `"LOGIN"` and `"Login"` button name candidates before selecting
+- Uses `CXWnd::WndNotification` vtable call (index 32) for immediate execution
+- Commit: `1936c4b07`, `0ec24b77d`
+
+### Phase 2 — Server select (eqmain)
+
+- **Fix**: Click the PLAY EVERQUEST button directly via vtable call
+- Added SIDL guard for reliable server-select screen detection
+- Same direct vtable mechanism as Phase 1
+- Commit: `6c42cda73`
+
+### Phase 3 — Character select and enter world (game loop)
+
+- No changes needed — `ProcessGameEvents` hook is active during the game loop,
+  so the existing `queue_button_click` mechanism works correctly for character
+  select and enter world
+
+### Key lesson
+
+The eqmain/game-loop boundary is a critical architectural seam. Any UI automation
+that runs before `ProcessGameEvents` is hooked must use direct vtable calls, not
+the queued click system. This applies to login, server select, and any future
+pre-game-loop UI interactions.
 
 ## Current Behavior vs Roadmap
 
