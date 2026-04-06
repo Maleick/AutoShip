@@ -76,7 +76,8 @@ fn read_active_buffs_windows(eq_base: u64) -> Vec<BuffInfo> {
         let entry = data_ptr + i * buff_slots::EQ_AFFECT_SIZE;
 
         let spell_id = read_i32_safe(entry + buff_slots::SPELL_ID).unwrap_or(-1);
-        if spell_id <= 0 {
+        // Empty slot markers: 0, negative (garbage), or 0xFFFF (EQ sentinel)
+        if spell_id <= 0 || spell_id == 0xFFFF {
             continue;
         }
 
