@@ -189,10 +189,7 @@ impl EqSession {
         }
         self.slot_lifecycle = SlotLifecycle::CampingOut;
         self.camp_out_tracker = Some(CampOutTracker::new());
-        tracing::info!(
-            client_id = self.client_id,
-            "Graceful camp-out initiated"
-        );
+        tracing::info!(client_id = self.client_id, "Graceful camp-out initiated");
         true
     }
 
@@ -208,10 +205,7 @@ impl EqSession {
     pub fn mark_exited(&mut self) {
         self.slot_lifecycle = SlotLifecycle::Exited;
         self.camp_out_tracker = None;
-        tracing::info!(
-            client_id = self.client_id,
-            "Session marked as exited"
-        );
+        tracing::info!(client_id = self.client_id, "Session marked as exited");
     }
 
     /// Whether this session is fully operational (non-mutating snapshot).
