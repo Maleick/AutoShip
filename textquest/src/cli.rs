@@ -746,6 +746,261 @@ pub fn run_login_mode(
     Ok(())
 }
 
+/// End-to-end autologin: find/spawn EQ processes → inject DLL → send StartLogin.
+///
+/// Reads `config/accounts.toml` for the account roster. Per-account passwords
+/// come from `config/.credentials` (TSV: account\tpassword). Falls back to:
+/// 1. `--password` CLI flag (shared for all)
+/// 2. `DMFT_PASSWORD` environment variable (shared for all)
+/// 3. Interactive prompt (shared for all)
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_autologin_mode(
+    filter_account: Option<String>,
+    filter_group: Option<u32>,
+    password_flag: Option<String>,
+    spawn_new: bool,
+    inject_delay_secs: u64,
+) -> Result<()> {
+    use textquest_common::ipc::Command;
+
+    let config = load_config()?;
+
+    // 1. Load accounts
+    let accounts_path = Path::new("config/accounts.toml");
+    let accounts_config = config::AccountsConfig::load(accounts_path)
+        .context("Failed to load config/accounts.toml — create it first")?;
+
+    let mut targets: Vec<&config::AccountEntry> = accounts_config.accounts.iter().collect();
+
+    // Filter by account name
+    if let Some(ref name) = filter_account {
+        targets.retain(|a| a.name.eq_ignore_ascii_case(name));
+        if targets.is_empty() {
+            anyhow::bail!("Account '{name}' not found in accounts.toml");
+        }
+    }
+
+    // Filter by group
+    if let Some(gid) = filter_group {
+        targets.retain(|a| a.group == gid);
+        if targets.is_empty() {
+            anyhow::bail!("No accounts in group {gid} in accounts.toml");
+        }
+    }
+
+    if targets.is_empty() {
+        println!("No accounts configured in accounts.toml.");
+        return Ok(());
+    }
+
+    println!(
+        "Autologin: {} account(s) to process",
+        targets.len()
+    );
+
+    // 2. Load per-account passwords from config/.credentials (TSV)
+    let credentials_map = load_credentials_file();
+    let has_per_account = !credentials_map.is_empty();
+
+    if has_per_account {
+        println!(
+            "Loaded {} per-account password(s) from config/.credentials",
+            credentials_map.len()
+        );
+    }
+
+    // Shared password fallback (for accounts not in .credentials)
+    let shared_password = if !has_per_account {
+        // Only prompt if we have no per-account passwords
+        if let Some(pw) = password_flag {
+            Some(Zeroizing::new(pw))
+        } else if let Ok(pw) = std::env::var("DMFT_PASSWORD") {
+            Some(Zeroizing::new(pw))
+        } else {
+            Some(
+                crate::credentials::prompt::prompt_password(
+                    "EQ Password (shared for all accounts): ",
+                )
+                .context("Failed to read password")?,
+            )
+        }
+    } else {
+        // Per-account passwords available; only use shared as fallback if provided
+        password_flag
+            .map(Zeroizing::new)
+            .or_else(|| std::env::var("DMFT_PASSWORD").ok().map(Zeroizing::new))
+    };
+
+    // 3. Find existing EQ processes
+    let mut pids = process::memory::find_processes_by_name(&config.process_name)?;
+    println!("Found {} existing eqgame.exe process(es)", pids.len());
+
+    // 4. Spawn new processes if requested
+    if spawn_new {
+        let eq_path = PathBuf::from(&config.launch.eq_path);
+        if !eq_path.exists() {
+            anyhow::bail!(
+                "EQ path not found: {}. Set launch.eq_path in config/dmft.toml",
+                eq_path.display()
+            );
+        }
+
+        for target in &targets {
+            println!("Spawning EQ for account {}...", target.name);
+            match crate::launcher::spawner::spawn_eq_client(
+                &eq_path,
+                &target.name,
+                &target.server,
+                &config.launch.launch_args,
+            ) {
+                Ok(spawned) => {
+                    println!("  PID {} spawned for {}", spawned.pid, target.name);
+                    pids.push(spawned.pid);
+                }
+                Err(e) => {
+                    error!(account = %target.name, %e, "Failed to spawn EQ");
+                    println!("  FAILED to spawn for {}: {e}", target.name);
+                }
+            }
+            // Stagger spawns
+            std::thread::sleep(Duration::from_secs(3));
+        }
+
+        // Wait for spawned processes to initialize
+        println!(
+            "Waiting {}s for processes to initialize...",
+            inject_delay_secs
+        );
+        std::thread::sleep(Duration::from_secs(inject_delay_secs));
+
+        // Re-scan for processes
+        pids = process::memory::find_processes_by_name(&config.process_name)?;
+        println!("Now have {} eqgame.exe process(es)", pids.len());
+    }
+
+    if pids.is_empty() {
+        println!("No EQ processes found. Use --spawn to launch them, or start EQ manually.");
+        return Ok(());
+    }
+
+    // 5. Inject + Login for each process
+    let source_dll = resolve_built_dll_path()?;
+    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
+
+    let mut success_count = 0u32;
+    let mut fail_count = 0u32;
+
+    // Pair PIDs with accounts: if we spawned, they're 1:1 in order.
+    // If using existing processes, we inject all and send the same login to each,
+    // or match by index if we have the same count.
+    let pairs: Vec<(u32, &config::AccountEntry)> = if pids.len() == targets.len() {
+        // 1:1 pairing (e.g., spawned, or user has exactly N processes for N accounts)
+        pids.iter().copied().zip(targets.iter().copied()).collect()
+    } else if targets.len() == 1 {
+        // Single account → send to all processes
+        pids.iter().map(|&pid| (pid, targets[0])).collect()
+    } else {
+        // Multiple accounts, mismatched process count — send first account to all
+        // (user should use --spawn for proper 1:1 mapping)
+        println!(
+            "Warning: {} accounts but {} processes. Sending first account to all.",
+            targets.len(),
+            pids.len()
+        );
+        pids.iter().map(|&pid| (pid, targets[0])).collect()
+    };
+
+    for (pid, account) in &pairs {
+        println!("\n─── PID {} (account: {}) ───", pid, account.name);
+
+        // 5a. Check if already injected by trying IPC connection
+        let already_injected = connect_authenticated_pipe(*pid).is_ok();
+
+        if already_injected {
+            println!("  DLL already injected — skipping injection");
+        } else {
+            // 5b. Write session token + inject
+            println!("  Writing session token...");
+            if let Err(e) = ipc::write_session_token_file(*pid) {
+                println!("  FAILED: token write: {e}");
+                fail_count += 1;
+                continue;
+            }
+
+            println!("  Injecting DLL...");
+            match inject::loader::inject_dll(*pid, &staged_dll) {
+                Ok(()) => println!("  DLL injected successfully"),
+                Err(e) => {
+                    println!("  FAILED: injection: {e}");
+                    fail_count += 1;
+                    continue;
+                }
+            }
+
+            // 5c. Wait for DLL to initialize IPC
+            println!(
+                "  Waiting {}s for DLL initialization...",
+                inject_delay_secs
+            );
+            std::thread::sleep(Duration::from_secs(inject_delay_secs));
+        }
+
+        // 5d. Resolve password for this account
+        let acct_password = credentials_map
+            .get(&account.name)
+            .cloned()
+            .or_else(|| shared_password.as_ref().map(|p| p.to_string()));
+
+        let Some(acct_pw) = acct_password else {
+            println!(
+                "  SKIPPED: no password for '{}' (not in .credentials, no shared password)",
+                account.name
+            );
+            fail_count += 1;
+            continue;
+        };
+
+        // 5e. Connect and send StartLogin
+        match connect_authenticated_pipe(*pid) {
+            Ok(pipe) => {
+                let cmd = Command::StartLogin {
+                    account_name: account.name.clone(),
+                    password: acct_pw,
+                    server_name: account.server.clone(),
+                    character_name: account.character.clone(),
+                };
+                match pipe.send_async(&cmd) {
+                    Ok(()) => {
+                        println!("  StartLogin sent — FSM will drive UI automation");
+                        success_count += 1;
+                    }
+                    Err(e) => {
+                        println!("  FAILED to send StartLogin: {e}");
+                        fail_count += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                println!("  FAILED to connect IPC after injection: {e}");
+                fail_count += 1;
+            }
+        }
+    }
+
+    println!("\n═══ Autologin Summary ═══");
+    println!("  Success: {success_count}");
+    println!("  Failed:  {fail_count}");
+    println!(
+        "\nThe DLL login FSM handles all UI steps autonomously."
+    );
+    println!("Check DLL logs for progress: %TEMP%\\dmft\\dmft-dll.log");
+
+    Ok(())
+}
+
 /// Calibrate mode (--calibrate) — find all EQ processes and send `calibrate_login` to each.
 ///
 /// # Errors
@@ -1177,7 +1432,32 @@ pub fn run_config_show_mode() -> Result<()> {
 
 // ─── Credential management ──────────────────────────────────────────────────
 
+const CREDENTIALS_FILE_PATH: &str = "config/.credentials";
 const CREDENTIAL_DB_PATH: &str = "data/credentials.db";
+
+/// Load per-account passwords from `config/.credentials` (TSV: account\tpassword).
+/// Returns an empty map if the file doesn't exist or can't be read.
+fn load_credentials_file() -> std::collections::HashMap<String, String> {
+    let path = Path::new(CREDENTIALS_FILE_PATH);
+    let mut map = std::collections::HashMap::new();
+
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return map,
+    };
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((account, password)) = line.split_once('\t') {
+            map.insert(account.trim().to_string(), password.trim().to_string());
+        }
+    }
+
+    map
+}
 
 /// Add or update an account credential.
 pub fn run_credential_add_mode(

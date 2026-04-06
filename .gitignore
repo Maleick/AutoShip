@@ -48,6 +48,7 @@ mq2-reference/
 # Account credentials
 accounts.csv
 config/accounts.toml
+config/.credentials
 
 # Large map text files (200MB+ each, use config/maps/*.zip instead)
 config/maps/*.txt

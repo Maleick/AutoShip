@@ -79,6 +79,24 @@ enum Commands {
         #[arg(long)]
         pid: Option<u32>,
     },
+    /// End-to-end autologin: spawn → inject → login (reads accounts.toml)
+    Autologin {
+        /// Login only this account (from accounts.toml). Omit for all accounts.
+        #[arg(long)]
+        account: Option<String>,
+        /// Login only accounts in this group number.
+        #[arg(long)]
+        group: Option<u32>,
+        /// EQ password (same for all accounts). Also reads DMFT_PASSWORD env var.
+        #[arg(long)]
+        password: Option<String>,
+        /// Spawn new EQ processes (default: use existing eqgame.exe processes)
+        #[arg(long)]
+        spawn: bool,
+        /// Seconds to wait after injection before sending login (default: 3)
+        #[arg(long, default_value = "3")]
+        inject_delay: u64,
+    },
 
     // ── Client commands ───────────────────────────────────────────────
     /// Send a slash command to a PID
@@ -247,6 +265,14 @@ fn main() -> Result<()> {
                 cli::run_login_mode(&account, password, &server, &character)
             }
         }
+
+        Some(Commands::Autologin {
+            account,
+            group,
+            password,
+            spawn,
+            inject_delay,
+        }) => cli::run_autologin_mode(account, group, password, spawn, inject_delay),
 
         // Client commands
         Some(Commands::Cmd { pid, command }) => cli::run_cmd_mode(pid, &command),

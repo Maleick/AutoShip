@@ -175,7 +175,11 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             );
 
             // Write credentials inline FIRST (before mem::take).
-            // Use the proven CStrRep + vtable click approach that worked at 22:04 UTC.
+            // Two-phase approach:
+            // 1. Write username/password to CXStr memory (for EQ's internal state)
+            // 2. Type password via WM_CHAR + Enter (for actual form submission)
+            // Phase 2 is critical: CXStr memory writes alone don't trigger EQ's
+            // login form handler. WM_CHAR simulates real keyboard input.
             let eqmain_base = crate::login::eqmain::find_eqmain();
             if eqmain_base != 0 {
                 let wrote = crate::login::widgets::type_credentials_to_window(
@@ -183,7 +187,16 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                     &account_name,
                     &password,
                 );
-                tracing::info!(wrote, "Inline: type_credentials_to_window");
+                tracing::info!(wrote, "Inline: type_credentials_to_window (memory write)");
+
+                // Now type the password via WM_CHAR and press Enter to actually
+                // submit the form. The /login: flag filled the username, so we
+                // only need to tab to password, type it, and hit Enter.
+                let typed = crate::login::widgets::type_password_wm_char(
+                    eqmain_base,
+                    &password,
+                );
+                tracing::info!(typed, "Inline: type_password_wm_char (keyboard submit)");
             }
 
             // Store credentials in the FSM for character select phase.
@@ -217,63 +230,70 @@ fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
 }
 
 /// Phase 2+3: server select → character select.
-/// Uses direct vtable click for PLAY EVERQUEST — `queue_button_click()` won't
-/// work here because ProcessGameEvents is NOT hooked during eqmain (the hook
-/// only activates after eqgame.exe takes over).
+/// Detects server select via SIDL window name (not "PLAY EVERQUEST!" text which
+/// exists on the login screen too). Uses direct vtable click — `queue_button_click()`
+/// won't work because ProcessGameEvents is NOT hooked during eqmain.
 /// Polls for eqmain.dll unload. Game loop tick handles character select.
 fn login_chain_phase2() {
-    // Phase 2: Wait for authentication, then click PLAY EVERQUEST
-    tracing::info!("Phase 2: Waiting 5s for authentication...");
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    // Phase 2: Wait for authentication to complete by detecting the server select
+    // SIDL window ("serverselect"). Don't scan for "PLAY EVERQUEST!" text — that
+    // element exists on the login screen as a branding label and causes false positives.
+    tracing::info!("Phase 2: Waiting for server select screen...");
 
-    tracing::info!("Phase 2: Polling for server select screen...");
     let mut found = false;
-    for attempt in 0..50 {
+    for attempt in 0..60 {
         std::thread::sleep(std::time::Duration::from_millis(500));
         let eqmain_base = crate::login::eqmain::find_eqmain();
         if eqmain_base == 0 {
             tracing::info!(attempt, "Phase 2: eqmain.dll gone — already at char select");
             return;
         }
-        // Guard: only look for PLAY EVERQUEST once we're actually at the server
-        // select screen. The login screen can have a "PLAY EVERQUEST!" label/tab
-        // that would be a false positive.
-        let at_server_select =
-            crate::login::widgets::is_sidl_window_visible(eqmain_base, "serverselect");
-        if !at_server_select {
-            if attempt % 10 == 0 {
-                tracing::debug!(attempt, "Phase 2: Not at server select yet, waiting...");
-            }
-            // Press Enter every 3s to dismiss any blocking dialogs
-            if attempt % 6 == 3 {
-                crate::login::widgets::simulate_enter_key(eqmain_base);
-            }
-            continue;
-        }
-        if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
-            tracing::info!(
-                ptr = format!("{:#x}", play_btn),
-                attempt,
-                "Phase 2: Found PLAY EVERQUEST! on server select screen"
-            );
+
+        // Check for the actual server select SIDL window.
+        // Don't scan for "PLAY EVERQUEST!" text alone — it exists on the login
+        // screen as a branding label and causes false positives.
+        if crate::login::widgets::is_sidl_window_visible(
+            eqmain_base,
+            crate::login::widgets::SIDL_SERVER_SELECT,
+        ) {
+            tracing::info!(attempt, "Phase 2: Server select screen detected (SIDL)");
+
             // Direct vtable click — ProcessGameEvents isn't hooked during eqmain,
             // so queue_button_click() would never drain.
-            std::thread::sleep(std::time::Duration::from_millis(150));
-            unsafe { crate::eq::widgets::click_button_via_vtable(play_btn) };
-            // Also press Enter via PostMessage as backup
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            crate::login::widgets::simulate_enter_key(eqmain_base);
-            tracing::info!("Phase 2: PLAY EVERQUEST clicked + Enter");
+            if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
+                tracing::info!(
+                    ptr = format!("{:#x}", play_btn),
+                    "Phase 2: Clicking PLAY EVERQUEST via vtable"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                unsafe { crate::eq::widgets::click_button_via_vtable(play_btn) };
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                crate::login::widgets::simulate_enter_key(eqmain_base);
+                tracing::info!("Phase 2: PLAY EVERQUEST clicked + Enter");
+            } else {
+                // Fallback: just press Enter
+                tracing::info!("Phase 2: PLAY EVERQUEST button not found, sending Enter");
+                crate::login::widgets::simulate_enter_key(eqmain_base);
+            }
             found = true;
             break;
         }
-        // Press Enter every 3s to dismiss any blocking dialogs
-        if attempt % 6 == 3 {
+
+        // Check for "already logged in" dialog during authentication
+        if attempt % 2 == 0 {
+            if crate::login::widgets::click_yesno_yes(eqmain_base as usize) {
+                tracing::info!(attempt, "Phase 2: Clicked Yes on dialog during auth");
+            }
+        }
+
+        // Press Enter every 5s to dismiss blocking dialogs (EULA, notices)
+        if attempt % 10 == 5 {
             crate::login::widgets::simulate_enter_key(eqmain_base);
+            tracing::info!(attempt, "Phase 2: Enter sent to dismiss potential dialog");
         }
     }
     if !found {
-        tracing::warn!("Phase 2: PLAY EVERQUEST not found after 25s");
+        tracing::warn!("Phase 2: Server select not detected after 30s");
     }
 
     // Phase 3: Poll for eqmain.dll unload (character select)

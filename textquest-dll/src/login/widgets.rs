@@ -517,7 +517,11 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             let donor_rep = {
                 let it = *(un_input_addr as *const usize);
                 let wt = *(un_wt_addr as *const usize);
-                if it != 0 { it } else { wt }
+                if it != 0 {
+                    it
+                } else {
+                    wt
+                }
             };
 
             // If username InputText is null, allocate a CStrRep for it
@@ -625,8 +629,13 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
                 crate::eq::widgets::click_button_via_vtable(login_button);
                 tracing::info!("Login button clicked");
             } else {
-                tracing::warn!("Login button not found — credentials written but not submitted");
+                tracing::warn!("Login button not found — will try Enter key fallback");
             }
+            // Always send Enter via PostMessage as the reliable submit path.
+            // During eqmain, the game loop hook isn't active so queued button
+            // clicks won't execute. PostMessage delivers directly to the window.
+            simulate_enter_key(eqmain_base);
+            tracing::info!("Enter key sent via PostMessage as login submit");
         }
 
         true
