@@ -217,14 +217,16 @@ fn find_button_by_text(eqmain_base: u64, target_text: &str) -> Option<usize> {
 }
 
 /// Phase 2+3: server select → character select.
-/// Uses vtable click for PLAY EVERQUEST (proven working at 22:04 UTC).
+/// Uses direct vtable click for PLAY EVERQUEST — `queue_button_click()` won't
+/// work here because ProcessGameEvents is NOT hooked during eqmain (the hook
+/// only activates after eqgame.exe takes over).
 /// Polls for eqmain.dll unload. Game loop tick handles character select.
 fn login_chain_phase2() {
     // Phase 2: Wait for authentication, then click PLAY EVERQUEST
     tracing::info!("Phase 2: Waiting 5s for authentication...");
     std::thread::sleep(std::time::Duration::from_secs(5));
 
-    tracing::info!("Phase 2: Polling for PLAY EVERQUEST...");
+    tracing::info!("Phase 2: Polling for server select screen...");
     let mut found = false;
     for attempt in 0..50 {
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -233,13 +235,31 @@ fn login_chain_phase2() {
             tracing::info!(attempt, "Phase 2: eqmain.dll gone — already at char select");
             return;
         }
+        // Guard: only look for PLAY EVERQUEST once we're actually at the server
+        // select screen. The login screen can have a "PLAY EVERQUEST!" label/tab
+        // that would be a false positive.
+        let at_server_select =
+            crate::login::widgets::is_sidl_window_visible(eqmain_base, "serverselect");
+        if !at_server_select {
+            if attempt % 10 == 0 {
+                tracing::debug!(attempt, "Phase 2: Not at server select yet, waiting...");
+            }
+            // Press Enter every 3s to dismiss any blocking dialogs
+            if attempt % 6 == 3 {
+                crate::login::widgets::simulate_enter_key(eqmain_base);
+            }
+            continue;
+        }
         if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
             tracing::info!(
                 ptr = format!("{:#x}", play_btn),
                 attempt,
-                "Phase 2: Found PLAY EVERQUEST!"
+                "Phase 2: Found PLAY EVERQUEST! on server select screen"
             );
-            crate::hooks::game_loop::queue_button_click(play_btn);
+            // Direct vtable click — ProcessGameEvents isn't hooked during eqmain,
+            // so queue_button_click() would never drain.
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            unsafe { crate::eq::widgets::click_button_via_vtable(play_btn) };
             // Also press Enter via PostMessage as backup
             std::thread::sleep(std::time::Duration::from_millis(200));
             crate::login::widgets::simulate_enter_key(eqmain_base);
