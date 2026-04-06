@@ -29,11 +29,25 @@ enum LoginAction {
     JoinServer = 2,
 }
 
+impl LoginAction {
+    fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::SubmitCredentials,
+            2 => Self::JoinServer,
+            _ => Self::None,
+        }
+    }
+}
+
 /// Atomic flag for the pending login action.
 static PENDING_ACTION: AtomicU8 = AtomicU8::new(LoginAction::None as u8);
 
 /// Whether the hook is installed and active.
 static HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Whether we have already attempted to auto-join the server.
+/// Reset is not needed — the hook is removed and reinstalled per eqmain load.
+static SERVER_JOIN_SENT: AtomicBool = AtomicBool::new(false);
 
 /// Credentials to submit (set by IPC thread, consumed by main thread).
 static PENDING_CREDENTIALS: Mutex<Option<PendingLogin>> = Mutex::new(None);
@@ -63,6 +77,10 @@ pub fn queue_login(
             character_name,
         });
     }
+    // Reset server-join flag so detect_screen_state can fire again
+    // (handles retry after login failure or multi-character login).
+    SERVER_JOIN_SENT.store(false, Ordering::Release);
+
     PENDING_ACTION.store(LoginAction::SubmitCredentials as u8, Ordering::Release);
     tracing::info!("Queued SubmitCredentials for main thread");
 }
@@ -81,6 +99,12 @@ pub fn is_active() -> bool {
 // ─── Hook installation ───
 
 /// Install the GiveTime HWBP hook. Called when eqmain.dll is detected.
+///
+/// NOTE: `hwbp::register` currently uses `GetCurrentThread()` which sets DR1
+/// on the calling thread, not EQ's main thread. This requires the
+/// cross-thread `NtSetContextThread` fix from `claude/fix-hwbp-main-thread`
+/// branch to work correctly. The same limitation applies to the game loop
+/// hook (DR0). Both will be fixed when that branch merges to master.
 pub fn install(eqmain_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     use textquest_common::offsets::eqmain as off;
 
@@ -105,6 +129,7 @@ pub fn remove() {
         }
     }
     HOOK_ACTIVE.store(false, Ordering::Release);
+    SERVER_JOIN_SENT.store(false, Ordering::Release);
     tracing::info!("eqmain GiveTime hook removed");
 }
 
@@ -128,16 +153,12 @@ fn on_eqmain_tick() {
         return;
     }
 
-    // Check for pending actions from IPC thread.
-    let action = PENDING_ACTION.load(Ordering::Acquire);
-    if action != LoginAction::None as u8 {
-        PENDING_ACTION.store(LoginAction::None as u8, Ordering::Release);
-
-        if action == LoginAction::SubmitCredentials as u8 {
-            execute_submit_credentials(eqmain_base);
-        } else if action == LoginAction::JoinServer as u8 {
-            execute_join_server(eqmain_base);
-        }
+    // Consume pending action from IPC thread.
+    let action = LoginAction::from_u8(PENDING_ACTION.swap(LoginAction::None as u8, Ordering::AcqRel));
+    match action {
+        LoginAction::SubmitCredentials => execute_submit_credentials(eqmain_base),
+        LoginAction::JoinServer => execute_join_server(eqmain_base),
+        LoginAction::None => {}
     }
 
     // Dismiss pre-login prompts (EULA, splash, news) every tick.
@@ -154,33 +175,20 @@ fn on_eqmain_tick() {
 
 /// Execute credential submission on the main thread.
 fn execute_submit_credentials(eqmain_base: u64) {
-    let creds = {
-        let mut lock = match PENDING_CREDENTIALS.lock() {
-            Ok(l) => l,
-            Err(_) => return,
-        };
-        lock.take()
-    };
-
-    let Some(creds) = creds else {
-        tracing::warn!("SubmitCredentials action but no credentials queued");
+    let Some(creds) = PENDING_CREDENTIALS.lock().ok().and_then(|mut l| l.take()) else {
+        tracing::warn!("SubmitCredentials action but no credentials available");
         return;
     };
 
-    tracing::info!(
-        account = %creds.account,
-        "Main thread: writing credentials + clicking Login"
-    );
+    tracing::info!(account = %creds.account, "Main thread: writing credentials");
 
-    // Write credentials to CXStr (same as before, but now on main thread).
     let wrote = crate::login::widgets::type_credentials_to_window(
         eqmain_base,
         &creds.account,
         &creds.password,
     );
-    tracing::info!(wrote, "Main thread: credentials written to UI fields");
+    tracing::info!(wrote, "Credentials written to UI fields");
 
-    // Store credentials in FSM for character select phase.
     crate::login::start_login(
         creds.account,
         (*creds.password).clone(),
@@ -195,22 +203,19 @@ fn execute_join_server(eqmain_base: u64) {
     {
         use textquest_common::offsets::eqmain as off;
 
-        // Resolve LoginServerAPI*
         let Some(api_ptr) = crate::login::eqmain::resolve_login_server_api(eqmain_base) else {
-            tracing::warn!("JoinServer: LoginServerAPI not resolved — falling back to button click");
+            tracing::warn!("JoinServer: LoginServerAPI not resolved, falling back to button click");
             fallback_click_play(eqmain_base);
             return;
         };
 
-        // Read pLoginServerAPI (it's a pointer to the API object)
         let api = unsafe { *(api_ptr as *const usize) };
         if api == 0 {
-            tracing::warn!("JoinServer: LoginServerAPI is null — falling back to button click");
+            tracing::warn!("JoinServer: LoginServerAPI is null, falling back to button click");
             fallback_click_play(eqmain_base);
             return;
         }
 
-        // Resolve JoinServer function address
         let Some(join_fn_addr) = off::rebase(off::JOIN_SERVER, eqmain_base) else {
             tracing::warn!("JoinServer: failed to rebase JOIN_SERVER offset");
             fallback_click_play(eqmain_base);
@@ -218,21 +223,18 @@ fn execute_join_server(eqmain_base: u64) {
         };
 
         // TODO: Look up server ID from LoginClient::ServerList.
-        // For now, use server ID 0 which selects the last/default server.
-        // MQ2 iterates g_pLoginClient->ServerList to find by name.
-        // We'll implement proper server lookup in a follow-up.
+        // Server ID 0 selects the last/default server.
         let server_id: i32 = 0;
 
         tracing::info!(
             api = format!("{:#x}", api),
             join_fn = format!("{:#x}", join_fn_addr),
             server_id,
-            "Main thread: calling LoginServerAPI::JoinServer"
+            "Calling LoginServerAPI::JoinServer"
         );
 
         // SAFETY: api is the LoginServerAPI* from eqmain globals.
-        // JoinServer signature: unsigned int JoinServer(int serverID, void* userdata, int timeout)
-        // It's a member function: this=RCX, serverID=RDX, userdata=R8, timeout=R9
+        // Member fn: this=RCX, serverID=RDX, userdata=R8, timeout=R9
         type JoinServerFn = unsafe extern "C" fn(this: usize, server_id: i32, userdata: usize, timeout: i32) -> u32;
         let func: JoinServerFn = unsafe { std::mem::transmute(join_fn_addr) };
         let result = unsafe { func(api, server_id, 0, 10) };
@@ -282,17 +284,11 @@ fn handle_eqmain_dialogs(eqmain_base: u64) {
 fn detect_screen_state(eqmain_base: u64) {
     use crate::login::widgets;
 
-    // If server select is visible and FSM is waiting, queue JoinServer.
-    if widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_SERVER_SELECT) {
-        // Check if we already tried to join
-        if PENDING_ACTION.load(Ordering::Acquire) == LoginAction::None as u8 {
-            // Only auto-join if FSM is in the right state
-            // (the FSM will also handle this, but we provide the main-thread path)
-            static JOINED: AtomicBool = AtomicBool::new(false);
-            if !JOINED.swap(true, Ordering::AcqRel) {
-                tracing::info!("Server select detected — queuing JoinServer");
-                queue_join_server();
-            }
-        }
+    // Auto-join when server select appears (once per eqmain hook lifetime).
+    if widgets::is_sidl_window_visible(eqmain_base, widgets::SIDL_SERVER_SELECT)
+        && !SERVER_JOIN_SENT.swap(true, Ordering::AcqRel)
+    {
+        tracing::info!("Server select detected — queuing JoinServer");
+        queue_join_server();
     }
 }

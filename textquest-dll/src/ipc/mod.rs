@@ -162,10 +162,8 @@ fn handle_immediate_command(cmd: &Command) -> bool {
             let account_name: String = account_name.chars().take(MAX_LOGIN_FIELD_CHARS).collect();
             let password: String = password.chars().take(MAX_LOGIN_FIELD_CHARS).collect();
 
-            // Clone password into Zeroizing wrapper so the local copy is wiped
-            // from memory when this scope exits — prevents plaintext from
-            // lingering on the IPC thread's stack after credential entry.
-            let mut password = zeroize::Zeroizing::new(password);
+            // Zeroizing wrapper wipes the plaintext from memory on drop.
+            let password = zeroize::Zeroizing::new(password);
 
             tracing::info!(
                 account = %account_name,
@@ -174,11 +172,6 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 "StartLogin received (password redacted)"
             );
 
-            // Queue credential submission for EQ's main thread.
-            // The eqmain GiveTime hook will execute on the next frame:
-            //   1. Write username/password to CXStr fields
-            //   2. Click LOGIN_ConnectButton via WndNotification(XWM_LCLICK)
-            // This matches MQ2's approach: all UI ops on the main thread.
             if crate::hooks::eqmain_hook::is_active() {
                 tracing::info!("Routing StartLogin through main-thread GiveTime hook");
                 crate::hooks::eqmain_hook::queue_login(
@@ -188,9 +181,8 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                     character_name.to_string(),
                 );
             } else {
-                // Fallback: eqmain hook not installed (e.g., eqmain was already
-                // unloaded). Execute directly — we may be at char select already.
-                tracing::warn!("eqmain hook not active — executing credentials on IPC thread (fallback)");
+                // Fallback: eqmain hook not installed — execute directly on IPC thread.
+                tracing::warn!("eqmain hook not active, writing credentials on IPC thread");
                 let eqmain_base = crate::login::eqmain::find_eqmain();
                 if eqmain_base != 0 {
                     crate::login::widgets::type_credentials_to_window(
@@ -201,7 +193,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 }
                 crate::login::start_login(
                     account_name,
-                    std::mem::take(&mut *password),
+                    (*password).clone(),
                     server_name.to_string(),
                     character_name.to_string(),
                 );
@@ -212,10 +204,6 @@ fn handle_immediate_command(cmd: &Command) -> bool {
         _ => false,
     }
 }
-
-// Background thread login_chain_phase2 has been removed.
-// All login UI operations now run on EQ's main thread via the
-// eqmain_hook::GiveTime HWBP hook, matching MQ2's approach.
 
 /// Background thread: creates a `CommandListener` and loops receiving commands
 /// until `IPC_RUNNING` is cleared or the DLL is shutting down.
