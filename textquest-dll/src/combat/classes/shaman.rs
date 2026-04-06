@@ -236,6 +236,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = shaman.select_spell(&ctx);
@@ -272,6 +273,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = shaman.select_spell(&ctx);
@@ -299,6 +301,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = shaman.select_spell(&ctx);
@@ -327,6 +330,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(shaman.should_assist(&ctx));
@@ -360,6 +364,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
@@ -384,6 +389,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert_eq!(shaman.select_target(&ctx), Some(99));
@@ -410,6 +416,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         shaman.on_engage(&ctx);
@@ -438,6 +445,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         shaman.on_engage(&ctx);
@@ -460,6 +468,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(shaman.select_spell(&ctx).is_none());

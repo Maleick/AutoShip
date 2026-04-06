@@ -456,6 +456,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(!cleric.should_assist(&ctx));
@@ -482,6 +483,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -510,6 +512,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -538,6 +541,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -560,6 +564,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(cleric.should_cancel_heal(&ctx));
@@ -581,6 +586,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(!cleric.should_cancel_heal(&ctx));
@@ -620,6 +626,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -662,6 +669,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -702,6 +710,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -740,6 +749,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -769,6 +779,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -810,6 +821,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -851,6 +863,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -892,6 +905,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: Some(8), // Chain says: cast gem 8
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 
@@ -930,6 +944,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
 

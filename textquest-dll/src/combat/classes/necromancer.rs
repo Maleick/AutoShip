@@ -127,6 +127,7 @@ mod tests {
             in_combat: false,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(necro.should_assist(&ctx));
@@ -151,6 +152,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert_eq!(necro.select_target(&ctx), Some(99));
@@ -195,6 +197,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = necro.select_spell(&ctx).unwrap();
@@ -248,6 +251,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = necro.select_spell(&ctx).unwrap();
@@ -283,6 +287,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         let spell = necro.select_spell(&ctx).unwrap();
@@ -304,6 +309,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(necro.select_spell(&ctx).is_none());
@@ -338,6 +344,7 @@ mod tests {
             in_combat: true,
             ch_chain_slot: None,
             active_buffs: &[],
+            buff_info: &[],
             target_is_mezzed: false,
         };
         assert!(necro.select_spell(&ctx).is_none());
