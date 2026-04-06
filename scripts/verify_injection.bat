@@ -1,12 +1,12 @@
 @echo off
 REM ============================================================
-REM  DMFT Injection Verification Script
+REM  TextQuest Injection Verification Script
 REM  Checks: DLL loaded? Logs exist? Named pipe created?
 REM ============================================================
 setlocal enabledelayedexpansion
 
 echo.
-echo  === DMFT Injection Verification ===
+echo  === TextQuest Injection Verification ===
 echo.
 
 set PASS=0
@@ -27,10 +27,10 @@ if %EQ_COUNT%==0 (
 echo   OK: Found %EQ_COUNT% eqgame.exe process(es).
 set /a PASS+=1
 
-REM --- Check 2: Is dmft_dll.dll loaded in eqgame.exe? ---
+REM --- Check 2: Is textquest_dll.dll loaded in eqgame.exe? ---
 :check2
 echo.
-echo [2/4] Checking if dmft_dll.dll is loaded in eqgame.exe...
+echo [2/4] Checking if textquest_dll.dll is loaded in eqgame.exe...
 set DLL_FOUND=0
 for /L %%i in (1,1,%EQ_COUNT%) do (
     set "CPID=!PID_%%i!"
@@ -59,14 +59,14 @@ if %DLL_FOUND% gtr 0 (
 REM --- Check 3: DLL log file exists and has recent entries? ---
 echo.
 echo [3/4] Checking DLL log file...
-set "LOG_FILE=%TEMP%\dmft\dmft-dll.log"
+set "LOG_FILE=%TEMP%\dmft\textquest-dll.log"
 
 REM tracing-appender rolling::daily appends the date to the filename
 set "TODAY=%date:~-4%-%date:~4,2%-%date:~7,2%"
 
-REM Check for any dmft-dll log files in the temp dir
+REM Check for any textquest-dll log files in the temp dir
 set LOG_FOUND=0
-for %%f in ("%TEMP%\dmft\dmft-dll.log*") do (
+for %%f in ("%TEMP%\dmft\textquest-dll.log*") do (
     set LOG_FOUND=1
     set "FOUND_LOG=%%f"
 )
@@ -81,14 +81,14 @@ if %LOG_FOUND%==1 (
     echo   ---
     set /a PASS+=1
 ) else (
-    echo   FAIL: No DLL log file found at %TEMP%\dmft\dmft-dll.log*
+    echo   FAIL: No DLL log file found at %TEMP%\dmft\textquest-dll.log*
     echo         The DLL either failed to load or failed to initialize tracing.
     set /a FAIL+=1
 )
 
 REM --- Check 4: Named pipe created? ---
 echo.
-echo [4/4] Checking for DMFT named pipes...
+echo [4/4] Checking for TextQuest named pipes...
 set PIPE_FOUND=0
 for /L %%i in (1,1,%EQ_COUNT%) do (
     set "CPID=!PID_%%i!"
@@ -118,7 +118,7 @@ if %FAIL%==0 (
 ) else (
     echo  Some checks failed. Review output above.
     echo  Check logs:
-    echo    Orchestrator: logs\dmft.log
-    echo    DLL: %TEMP%\dmft\dmft-dll.log*
+    echo    Orchestrator: logs\textquest.log
+    echo    DLL: %TEMP%\dmft\textquest-dll.log*
 )
 echo.

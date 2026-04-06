@@ -19,12 +19,12 @@
 - PR #5 is now merged (the code was manually applied), but the failure will recur on future Copilot agent runs
 
 ### Why the API shows no rulesets
-- `gh api repos/Maleick/DMFT/rulesets` returns `[]`
-- `gh api repos/Maleick/DMFT/rulesets?includes_parents=true` returns `[]`
+- `gh api repos/Maleick/TextQuest/rulesets` returns `[]`
+- `gh api repos/Maleick/TextQuest/rulesets?includes_parents=true` returns `[]`
 - Branch protection on master is disabled
 - Earlier `claude/*` branches (PRs #1, #2, #3) succeeded — this restriction was **added recently**
 - GitHub has default/managed rulesets that are enforced server-side but not exposed via REST API
-- The restriction is only visible through the **web UI**: `https://github.com/Maleick/DMFT/settings/rules`
+- The restriction is only visible through the **web UI**: `https://github.com/Maleick/TextQuest/settings/rules`
 
 ### Branch history
 | PR | Branch | Status |
@@ -45,7 +45,7 @@ This is the correct fix if you want the Copilot agent to keep working as designe
 
 - [ ] **Step 1: Open the rulesets page**
 
-Navigate to: `https://github.com/Maleick/DMFT/settings/rules`
+Navigate to: `https://github.com/Maleick/TextQuest/settings/rules`
 
 Look for any ruleset that has a "Restrict creations" rule enabled. This is likely a recently-added default ruleset or one you configured without realizing it affects `claude/*` branches.
 
@@ -97,8 +97,8 @@ Expected: Push succeeds without GH013 error.
 
 ```bash
 # After saving the ruleset change, the API should reflect it
-gh api repos/Maleick/DMFT/rulesets
-gh api "/repos/Maleick/DMFT/rules/branches/claude%2Ftest"
+gh api repos/Maleick/TextQuest/rulesets
+gh api "/repos/Maleick/TextQuest/rules/branches/claude%2Ftest"
 ```
 
 ---
@@ -112,7 +112,7 @@ If the ruleset is GitHub-managed and not editable, create a new ruleset that exp
 - [ ] **Step 1: Create a ruleset that allows `claude/*` branch creation**
 
 ```bash
-gh api repos/Maleick/DMFT/rulesets \
+gh api repos/Maleick/TextQuest/rulesets \
   --method POST \
   --field name="Allow Copilot Branches" \
   --field target="branch" \
@@ -135,10 +135,10 @@ If neither Option A nor B works (the restriction is invisible and non-editable):
 Go to: `https://support.github.com/`
 
 Include:
-- Repository: `Maleick/DMFT`
+- Repository: `Maleick/TextQuest`
 - Error: `GH013: Repository rule violations found for refs/heads/claude/funny-mclean`
 - Context: Copilot coding agent (SWE agent) cannot push to its own `claude/*` branches
-- Evidence: `gh api repos/Maleick/DMFT/rulesets` returns `[]` — no user-configured rulesets visible
+- Evidence: `gh api repos/Maleick/TextQuest/rulesets` returns `[]` — no user-configured rulesets visible
 - Request: Remove or bypass the default "Restrict creations" rule for Copilot agent branches
 
 ---
@@ -149,7 +149,7 @@ The merged PR #5 also has **CI failures** (both macOS and Windows checks failed)
 
 ```bash
 # View the CI failure details
-gh run view 23811722919 --repo Maleick/DMFT --log-failed
+gh run view 23811722919 --repo Maleick/TextQuest --log-failed
 ```
 
 These CI failures are on the standard `ci.yml` workflow (fmt + clippy + test on macOS, build on Windows), not the Copilot agent action. They may indicate the merged test code has issues that need fixing on master.

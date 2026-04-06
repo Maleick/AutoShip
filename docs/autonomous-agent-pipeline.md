@@ -1,6 +1,6 @@
-# DMFT Autonomous Agent Pipeline
+# TextQuest Autonomous Agent Pipeline
 
-This document is the operator manual for the DMFT issue queue that runs through Codex by default and Claude optionally.
+This document is the operator manual for the TextQuest issue queue that runs through Codex by default and Claude optionally.
 
 ## Roles
 
@@ -16,7 +16,7 @@ GitHub Projects mirror repo truth. The repo remains authoritative, especially [`
 
 An issue enters the autonomous queue only when both are true:
 
-1. The issue is in the `DMFT Roadmap` GitHub Project with `Agent Status = Ready for Agent`.
+1. The issue is in the `TextQuest Roadmap` GitHub Project with `Agent Status = Ready for Agent`.
 2. The issue has label `agent:ready`.
 
 Expected `Agent Status` values:
@@ -43,7 +43,7 @@ Queue and policy labels:
 
 1. Create the issue with [`.github/ISSUE_TEMPLATE/agent-task.yml`](../.github/ISSUE_TEMPLATE/agent-task.yml).
 2. Fill in `Scope`, `Done when`, `Verify`, `Out of scope`, and `Source docs`.
-3. Add the issue to the `DMFT Roadmap` GitHub Project.
+3. Add the issue to the `TextQuest Roadmap` GitHub Project.
 4. Leave the issue in `Backlog` until it is ready for hands-off execution.
 5. When ready, set `Agent Status = Ready for Agent` and add `agent:ready`.
 6. Optionally add:
@@ -84,7 +84,7 @@ Verification policy:
 
 ## Merge Policy
 
-Only the shared Codex PR manager merges DMFT pull requests.
+Only the shared Codex PR manager merges TextQuest pull requests.
 
 The PR manager may merge or enable auto-merge only when all are true:
 
@@ -101,13 +101,13 @@ If any of those conditions fail, the PR stays open and the blocker should be sum
 
 Codex app automations:
 
-- `DMFT issue executor`
-  - root: the DMFT repository checkout on the always-on automation host
+- `TextQuest issue executor`
+  - root: the TextQuest repository checkout on the always-on automation host
   - execution mode: worktree
   - purpose: claim one eligible issue, implement it, verify it, and open a PR
   - current cadence: hourly
-- `DMFT PR manager`
-  - root: the DMFT repository checkout on the always-on automation host
+- `TextQuest PR manager`
+  - root: the TextQuest repository checkout on the always-on automation host
   - execution mode: worktree
   - purpose: open missing PRs, address straightforward review feedback, and merge eligible PRs
   - cadence: hourly
@@ -121,8 +121,8 @@ GitHub workflow:
 
 ## External Setup And Constraints
 
-- The Codex app must stay running on the always-on machine that has a DMFT repository checkout available on disk.
-- GitHub CLI auth on that machine needs `project` and `read:project` scopes in order to inspect and mutate the `DMFT Roadmap` project state.
+- The Codex app must stay running on the always-on machine that has a TextQuest repository checkout available on disk.
+- GitHub CLI auth on that machine needs `project` and `read:project` scopes in order to inspect and mutate the `TextQuest Roadmap` project state.
 - The autonomous queue uses the custom `Agent Status` field so the project can keep the built-in `Status` field for broader roadmap progress.
 - The optional Claude workflow requires repository secret `ANTHROPIC_API_KEY`.
 - `master` stays protected, with the Windows `PR gate (fmt + clippy + test + python)` check as the merge blocker.

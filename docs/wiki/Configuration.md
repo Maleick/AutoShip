@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 | --- | --- |
-| `config/frostreaver.toml` | Main DMFT app config |
+| `config/frostreaver.toml` | Main TextQuest app config |
 | `config/accounts.toml` | Account and group-launch metadata |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
 | `config/classes/*.toml` | Per-class combat and ability config |
@@ -15,7 +15,7 @@
 
 ## Main App Config
 
-The current main app file is still named `config/frostreaver.toml`. That filename is historical, but it is the active DMFT config path today.
+The current main app file is still named `config/frostreaver.toml`. That filename is historical, but it is the active TextQuest config path today.
 
 Current sections include:
 
@@ -92,13 +92,13 @@ Current repo coverage includes classes such as:
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.
-- `config/offsets.json` is the hot-updatable offsets store that complements the compiled constants in `dmft-common/src/offsets.rs`.
+- `config/offsets.json` is the hot-updatable offsets store that complements the compiled constants in `textquest-common/src/offsets.rs`.
 
 ## Internals
 
-- App config types are defined in `dmft/src/config.rs`.
+- App config types are defined in `textquest/src/config.rs`.
 - Accounts config loads into `AccountsConfig` and is used by TUI `:login` flows.
-- Soul config types are defined in `dmft/src/soul/config.rs`.
+- Soul config types are defined in `textquest/src/soul/config.rs`.
 
 ## Current Behavior vs Roadmap
 

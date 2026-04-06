@@ -7,7 +7,7 @@ This ledger tracks external automation sources that can feed milestone slices an
 An external finding may enter the roadmap queue only when it includes:
 
 1. at least one source citation
-2. explicit DMFT repo-fit rationale
+2. explicit TextQuest repo-fit rationale
 3. a concrete slice or validation task
 4. an evidence state
 

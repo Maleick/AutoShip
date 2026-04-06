@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**DMFT (Dave Mike Fun Times)** is a Rust-based EverQuest multibox controller (targeting a 36-box setup on a TLP server). It has two components: an external process that reads game state via `ReadProcessMemory` and displays it in a TUI dashboard, and an injected DLL (`cdylib`) that hooks internal EQ functions for direct control (movement, casting, navigation).
+**TextQuest** is a Rust-based EverQuest multibox controller (targeting a 36-box setup on a TLP server). It has two components: an external process that reads game state via `ReadProcessMemory` and displays it in a TUI dashboard, and an injected DLL (`cdylib`) that hooks internal EQ functions for direct control (movement, casting, navigation).
 
 ## Build Commands
 
@@ -26,13 +26,13 @@ cargo fmt --check        # Check formatting
 cargo test               # Run tests (macOS runs platform-independent subset)
 ```
 
-~1250 platform-independent tests across 3 crates (625 dmft + 431 dmft-common + 172 dmft-dll). Additional Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024.
+~1250 platform-independent tests across 3 crates (625 textquest + 431 textquest-common + 172 textquest-dll). Additional Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024.
 
 ## Autonomous Agent Pipeline
 
-Claude is an optional issue worker in DMFT. Follow [`AGENTS.md`](AGENTS.md) and mirror these rules whenever you act through GitHub or a local Claude Code session:
+Claude is an optional issue worker in TextQuest. Follow [`AGENTS.md`](AGENTS.md) and mirror these rules whenever you act through GitHub or a local Claude Code session:
 
-- Only execute an issue when it is in the `DMFT Roadmap` GitHub Project with `Agent Status = Ready for Agent` and has label `agent:ready`.
+- Only execute an issue when it is in the `TextQuest Roadmap` GitHub Project with `Agent Status = Ready for Agent` and has label `agent:ready`.
 - Claude is opt-in. Treat `worker:claude` or an explicit `@claude` mention as the routing signal. Otherwise Codex is the default worker.
 - Claim exactly one issue per run by moving `Agent Status` to `Agent Working`, replacing `agent:ready` with `agent:working`, and posting a short claim comment.
 - Branch from `master` as `claude/issue-<number>-<slug>`.
@@ -40,7 +40,7 @@ Claude is an optional issue worker in DMFT. Follow [`AGENTS.md`](AGENTS.md) and 
 - If an issue has `mode:research`, use the same docs-first workflow as the Codex autoresearch loop: update roadmap or research docs first, run the verifier and guard commands, and do not commit transient automation state.
 - If the task spans multiple independent surfaces, use parallel workers or subagents automatically and integrate before final verification.
 - Always run the issue's `Verify` commands. If Rust, config, or scripts changed, also run repo gate commands when feasible. If the diff is docs, workflow, or prompt only, run lightweight syntax checks plus `python3 scripts/sync_wiki.py --check`.
-- Open a non-draft PR into `master`, link the issue, and stop there. Claude never merges DMFT pull requests; the shared Codex PR manager owns merge decisions.
+- Open a non-draft PR into `master`, link the issue, and stop there. Claude never merges TextQuest pull requests; the shared Codex PR manager owns merge decisions.
 - If blocked, move the issue `Agent Status` to `Blocked`, add `agent:blocked`, and leave a concrete unblock comment.
 
 ## Architecture
@@ -52,11 +52,11 @@ Claude is an optional issue worker in DMFT. Follow [`AGENTS.md`](AGENTS.md) and 
 
 ### Cross-platform strategy
 
-All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. The TUI runs on macOS with demo data (`dmft/src/tui/run.rs:load_demo_data`), making UI development possible without a live EQ client.
+All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. The TUI runs on macOS with demo data (`textquest/src/tui/run.rs:load_demo_data`), making UI development possible without a live EQ client.
 
 ### Module map
 
-**`dmft/` — Orchestrator (external process)**
+**`textquest/` — Orchestrator (external process)**
 
 | Module            | Purpose                                                                                                                                                     |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -75,7 +75,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 | `credentials/`    | Encrypted credential store — Argon2id + AES-256-GCM, SQLite backend                                                                                         |
 | `soul/`           | Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics                                                         |
 
-**`dmft-dll/` — Injected DLL (cdylib)**
+**`textquest-dll/` — Injected DLL (cdylib)**
 
 | Module      | Purpose                                                                                                                                                                                                    |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -87,7 +87,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 | `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                                                                      |
 | `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                                                         |
 
-**`dmft-common/` — Shared types**
+**`textquest-common/` — Shared types**
 
 | Module                                       | Purpose                                                                                                                                         |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -117,7 +117,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **Offset rebasing**: All EQ pointers in `offsets.rs` are absolute preferred-base addresses. Use `offsets::rebase(preferred_addr, actual_base)` to convert to runtime addresses.
 - **Spawn linked list**: `TList<PlayerClient*>` via SpawnManager. `read_all_spawns` walks `NEXT` pointers with a max-count safety limit.
 - **Field-by-field reads**: `SpawnInfo` is populated by individual `proc.read::<T>(addr + OFFSET)` calls, not by reading a C struct wholesale. This is intentional — field offsets from MQ2 headers may not be contiguous.
-- **Logging**: Use `tracing` + `tracing-appender` for file-based structured logging; do not use the `log` crate. `println!` / `eprintln!` are reserved for user-facing CLI/TUI output only (e.g., `dmft/src/main.rs`), not for structured logs.
+- **Logging**: Use `tracing` + `tracing-appender` for file-based structured logging; do not use the `log` crate. `println!` / `eprintln!` are reserved for user-facing CLI/TUI output only (e.g., `textquest/src/main.rs`), not for structured logs.
 - **Platform gates**: All OS APIs behind `#[cfg(windows)]` with macOS/Linux stubs. Never use `#[cfg(target_os)]` directly — use `#[cfg(windows)]` / `#[cfg(not(windows))]`.
 - **DLL injection approach**: Custom Rust DLL (like MacroQuest) rather than PostMessage — enables direct EQ function calls, navmesh access, and game memory writes.
 - **Tests**: Unit tests in-file (#[cfg(test)]); core logic tests are platform-independent and run on macOS, while Windows-specific tests are gated behind #[cfg(windows)].
@@ -127,5 +127,5 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **CMAKE env var**: `CMAKE_POLICY_VERSION_MINIMUM=3.5` is already set via `.cargo/config.toml`. Only export it manually if you are troubleshooting outside the normal Cargo flow.
 - **macOS stubs**: `#[cfg(not(windows))]` stubs return dummy data. Some code paths are unreachable on macOS — don't chase bugs in stub implementations.
 - **Offset addresses are not pointers**: Values in `offsets.rs` are preferred-base hex addresses, not ready-to-use pointers. Always `rebase()` before use.
-- **MacroQuest references are local submodules**: `third_party/eqlib` and `third_party/macroquest` are part of the repo as git submodules and are used for offset and struct-reference work. Routine `cargo build` / `cargo test` work does not require them, but offset/struct work does. Run `git submodule update --init --recursive` after checkout. Derived offsets still live in `dmft-common/src/offsets.rs`.
+- **MacroQuest references are local submodules**: `third_party/eqlib` and `third_party/macroquest` are part of the repo as git submodules and are used for offset and struct-reference work. Routine `cargo build` / `cargo test` work does not require them, but offset/struct work does. Run `git submodule update --init --recursive` after checkout. Derived offsets still live in `textquest-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.

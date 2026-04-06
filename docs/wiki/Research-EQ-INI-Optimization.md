@@ -160,7 +160,7 @@ These cannot be set via INI and must be configured in-game per client:
 Each EQ client has its own `eqclient.ini` in its install directory. For 36 clients:
 
 1. **Template approach**: Maintain `config/eqclient_multibox.ini` as the master template
-2. **Launcher integration**: The M2.5 launcher (`dmft/src/launcher/`) can deploy the INI to each client directory before launch
+2. **Launcher integration**: The M2.5 launcher (`textquest/src/launcher/`) can deploy the INI to each client directory before launch
 3. **Per-client overrides**: The driver client gets a relaxed profile; all other 35 get the aggressive bot profile
 4. **Read-only lock**: After deploying, mark INIs read-only so EQ doesn't revert settings on exit
 
@@ -196,14 +196,14 @@ The real magic is **Rendering Limiting** — it slows the rate at which the 3D w
 
 ### What This Means for Frostreaver
 
-Since we already have an injected DLL (`dmft-dll`), we can implement the same technique directly in our game loop hook (`dmft-dll/src/hooks/game_loop.rs`):
+Since we already have an injected DLL (`textquest-dll`), we can implement the same technique directly in our game loop hook (`textquest-dll/src/hooks/game_loop.rs`):
 
 1. **Check if window is focused** (use `GetForegroundWindow()` or track via `WM_ACTIVATE`)
 2. **When unfocused, skip the 3D render call** — the `ProcessGameEvents` hook can conditionally bypass the render/present portion
 3. **Keep processing game logic** — macros, IPC commands, combat logic still execute at full speed
 4. **Result**: GPU usage drops to near-zero for 35 background clients while maintaining full bot functionality
 
-This is the single most impactful optimization beyond INI settings and should be a high-priority addition to `dmft-dll`.
+This is the single most impactful optimization beyond INI settings and should be a high-priority addition to `textquest-dll`.
 
 ### INI Settings That Interact
 
@@ -256,7 +256,7 @@ Instead of hard limits, use `JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION` to get **
 
 #### Rust Implementation
 
-Fits naturally alongside `dmft/src/client/affinity.rs`. Requires adding `"Win32_System_JobObjects"` to the `windows` crate features in `dmft/Cargo.toml`:
+Fits naturally alongside `textquest/src/client/affinity.rs`. Requires adding `"Win32_System_JobObjects"` to the `windows` crate features in `textquest/Cargo.toml`:
 
 ```rust
 use windows::Win32::System::JobObjects::*;

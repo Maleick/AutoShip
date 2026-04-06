@@ -1,10 +1,10 @@
-# DMFT Wiki
+# TextQuest Wiki
 
-DMFT is a Rust workspace for operating and automating EverQuest clients in two layers:
+TextQuest is a Rust workspace for operating and automating EverQuest clients in two layers:
 
-- `dmft`: the external orchestrator, TUI, config loader, launcher, and camp logic
-- `dmft-dll`: the injected DLL that runs inside `eqgame.exe`
-- `dmft-common`: shared IPC, offsets, nav, combat, login, and soul types
+- `textquest`: the external orchestrator, TUI, config loader, launcher, and camp logic
+- `textquest-dll`: the injected DLL that runs inside `eqgame.exe`
+- `textquest-common`: shared IPC, offsets, nav, combat, login, and soul types
 
 This wiki is the long-lived operator and developer reference for the current repository state. It is technical on purpose: use it to build, run, operate, debug, and extend the codebase.
 
@@ -48,10 +48,10 @@ Use these files first when validating or updating the wiki:
 - `HANDOFF.md`
 - `CLAUDE.md`
 - `third_party/README.md`
-- `dmft/src/main.rs`
-- `dmft/src/tui/app.rs`
-- `dmft-common/src/ipc.rs`
-- `dmft-common/src/offsets.rs`
+- `textquest/src/main.rs`
+- `textquest/src/tui/app.rs`
+- `textquest-common/src/ipc.rs`
+- `textquest-common/src/offsets.rs`
 
 Repository rules that matter for documentation:
 
@@ -72,7 +72,7 @@ Repository rules that matter for documentation:
 - The canonical active roadmap now resumes at `M5` Anti-Cheat (active) and places locally-hosted Soul/LLM work at `M11`.
 - The current code keeps the queue/provider abstraction for Soul behavior, but routine live provider use is not yet the claimed default operating mode.
 - Some live-client behavior still needs regular Windows validation after EQ patches, especially login selectors, offsets, and nav/combat edge cases.
-- Old research docs may still say "Frostreaver"; treat the current product name as DMFT and prefer code plus current top-level docs if anything conflicts.
+- Old research docs may still say "Frostreaver"; treat the current product name as TextQuest and prefer code plus current top-level docs if anything conflicts.
 
 ## Documentation Policy
 

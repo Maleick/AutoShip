@@ -96,13 +96,13 @@ MQ2Nav includes an optional in-game overlay (via **imgui** + DirectX hooking) th
 ### Relevance to Frostreaver
 
 **What we already have (M3):**
-- `dmft-dll/src/nav/state.rs` — Navigator FSM with waypoint-based pathfinding
-- `dmft-dll/src/nav/stuck.rs` — StuckDetector with escalating recovery
-- `dmft-dll/src/nav/humanize.rs` — MovementPersonality for human-like movement
-- `dmft-dll/src/nav/waypoint.rs` — WaypointQueue
-- `dmft/src/nav/recorder.rs` — WaypointRecorder with RDP simplification
-- `dmft/src/nav/camp.rs` — CampManager
-- `dmft/src/nav/router.rs` — Zone routing
+- `textquest-dll/src/nav/state.rs` — Navigator FSM with waypoint-based pathfinding
+- `textquest-dll/src/nav/stuck.rs` — StuckDetector with escalating recovery
+- `textquest-dll/src/nav/humanize.rs` — MovementPersonality for human-like movement
+- `textquest-dll/src/nav/waypoint.rs` — WaypointQueue
+- `textquest/src/nav/recorder.rs` — WaypointRecorder with RDP simplification
+- `textquest/src/nav/camp.rs` — CampManager
+- `textquest/src/nav/router.rs` — Zone routing
 
 **What MQ2Nav adds that we lack:**
 - **Navmesh-based pathfinding** — Our M3 uses pre-recorded waypoints, not dynamic path computation. This is the #1 gap identified in prior research.
@@ -235,7 +235,7 @@ Built-in stuck logic with configurable parameters:
 - StuckDetector with escalating recovery (matches MQ2MoveUtils stuck logic)
 - MovementPersonality for humanization (matches `loose` heading mode)
 - CampManager covers `/makecamp` equivalent
-- Combat positioning in `dmft-dll/src/combat/positioning.rs`
+- Combat positioning in `textquest-dll/src/combat/positioning.rs`
 
 **What MQ2MoveUtils adds that we lack:**
 - **Full /stick implementation** — Our combat positioning is simpler. MQ2MoveUtils' `behind`, `!front`, `pin`, `snaproll`, arc configuration, and `moveback` are more sophisticated. This is gap #2 from prior research.
@@ -340,9 +340,9 @@ The plugin tracks 18 distinct casting outcomes:
 ### Relevance to Frostreaver
 
 **What we already have (M4):**
-- `dmft-dll/src/hooks/casting.rs` — Spell casting hooks
-- `dmft-dll/src/combat/gcd.rs` — GCD tracker
-- `dmft-dll/src/combat/mana.rs` — ManaGovernor
+- `textquest-dll/src/hooks/casting.rs` — Spell casting hooks
+- `textquest-dll/src/combat/gcd.rs` — GCD tracker
+- `textquest-dll/src/combat/mana.rs` — ManaGovernor
 - Direct function calls via `CAST_SPELL` offset (`0x1400D9F20`)
 
 **What MQ2Cast adds that we should implement:**
@@ -545,7 +545,7 @@ When hovering over map elements:
 ### Relevance to Frostreaver
 
 **What we already have (M1 TUI):**
-- `dmft/src/tui/ui.rs` — Spawn list table with filtering
+- `textquest/src/tui/ui.rs` — Spawn list table with filtering
 - Spawn data reading (name, class, level, position, HP)
 - Demo mode on macOS for UI development
 
@@ -717,20 +717,20 @@ For a 36-box raid force (6 groups of 6), the composition must balance:
 
 ### Architecture Recommendations
 
-**For navmesh:** Create `dmft-dll/src/nav/mesh.rs` that:
+**For navmesh:** Create `textquest-dll/src/nav/mesh.rs` that:
 - Loads MQ2Nav v5 `.navmesh` files (zlib decompress → protobuf deserialize → dtNavMesh)
 - Wraps Detour's `dtNavMeshQuery` for path queries
 - Feeds waypoints to existing Navigator FSM
 - Consider: `recast-rs` crate or raw FFI to RecastNavigation C++ lib
 
-**For casting:** Create `dmft-dll/src/combat/cast_engine.rs` that:
+**For casting:** Create `textquest-dll/src/combat/cast_engine.rs` that:
 - State machine: Idle → Immobilizing → Targeting → Casting → Recovering
 - Tracks all 18 MQ2Cast result states via game memory reads
 - Retry logic with configurable max attempts
 - Coordinates with Navigator (pause movement during cast)
 - Handles item equip/use/return cycle
 
-**For configuration:** Create `dmft-common/src/ability_config.rs` that:
+**For configuration:** Create `textquest-common/src/ability_config.rs` that:
 - Defines TOML schema mirroring KissAssist INI sections
 - Per-character files: `config/toons/<server>_<name>.toml`
 - Sections: `[heals]`, `[buffs]`, `[debuffs]`, `[nukes]`, `[dots]`, `[melee]`, `[cc]`, `[pulls]`

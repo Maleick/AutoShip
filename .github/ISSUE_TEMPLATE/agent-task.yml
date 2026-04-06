@@ -8,7 +8,7 @@ body:
         Use this form for work you want an autonomous coding agent to execute.
 
         Queue rule:
-        - the issue is only eligible for automatic pickup after it is added to the `DMFT Roadmap` GitHub Project
+        - the issue is only eligible for automatic pickup after it is added to the `TextQuest Roadmap` GitHub Project
         - set the project `Agent Status` field to `Ready for Agent`
         - add label `agent:ready`
 

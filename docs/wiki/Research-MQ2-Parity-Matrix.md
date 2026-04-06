@@ -1,6 +1,6 @@
 # MQ2 Plugin Parity Matrix
 
-Deep comparison of MacroQuest plugin capabilities vs DMFT's current implementation. Organized by plugin priority for the WAR/CLR/SHM/MNK/BRD/BER melee-heavy 6-box composition.
+Deep comparison of MacroQuest plugin capabilities vs TextQuest's current implementation. Organized by plugin priority for the WAR/CLR/SHM/MNK/BRD/BER melee-heavy 6-box composition.
 
 Primary sources:
 
@@ -20,7 +20,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 1.1 /stick — Stick-to-Target Engine
 
-| Feature                                     | MQ2 Capability                                                | DMFT Status                                                                                                 | Gap                                    | Priority | Complexity |
+| Feature                                     | MQ2 Capability                                                | TextQuest Status                                                                                                 | Gap                                    | Priority | Complexity |
 | ------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------- | ---------- |
 | `/stick #` absolute distance                | Stick at N EQ units                                           | **Done** — `StickDistance::Absolute(f32)`                                                                   | None                                   | —        | —          |
 | `/stick #%` percentage distance             | Stick at N% of default melee range                            | **Done** — `StickDistance::Percent(f32)`                                                                    | None                                   | —        | —          |
@@ -67,7 +67,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 1.2 /makecamp — Camp Positioning
 
-| Feature                               | MQ2 Capability                                               | DMFT Status                                                                            | Gap                                                        | Priority | Complexity |
+| Feature                               | MQ2 Capability                                               | TextQuest Status                                                                            | Gap                                                        | Priority | Complexity |
 | ------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------- | ---------- |
 | `/makecamp` set at current pos        | Set camp at player's current location                        | **Partial** — `CampSpot` struct exists with position/heading/role, used in `Navigator` | Camp exists but no dynamic set-at-current-pos command path | P1       | Low        |
 | `/makecamp on [#]` with radius        | Activate camp with configurable radius                       | **Missing**                                                                            | No camp radius enforcement in Navigator                    | **P0**   | Medium     |
@@ -88,7 +88,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 1.3 /moveto — Point-to-Point Movement
 
-| Feature               | MQ2 Capability                     | DMFT Status                                                                      | Gap                    | Priority | Complexity |
+| Feature               | MQ2 Capability                     | TextQuest Status                                                                      | Gap                    | Priority | Complexity |
 | --------------------- | ---------------------------------- | -------------------------------------------------------------------------------- | ---------------------- | -------- | ---------- |
 | `/moveto loc Y X [Z]` | Move to coordinates                | **Done** — Navigator accepts waypoints via `WaypointQueue`                       | None                   | —        | —          |
 | `/moveto id # \| id`  | Move to spawn ID or current target | **Partial** — no spawn-ID moveto, but nav can target waypoints                   | No spawn-ID shortcut   | P1       | Low        |
@@ -103,7 +103,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 1.4 /circle — Circular Pathing
 
-| Feature           | MQ2 Capability                              | DMFT Status | Gap                | Priority | Complexity |
+| Feature           | MQ2 Capability                              | TextQuest Status | Gap                | Priority | Complexity |
 | ----------------- | ------------------------------------------- | ----------- | ------------------ | -------- | ---------- |
 | `/circle on [#]`  | Circle at current location, optional radius | **Missing** | No circle movement | P2       | Medium     |
 | `drunken`         | Random turn intervals                       | **Missing** | —                  | P3       | Low        |
@@ -112,7 +112,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 1.5 MoveUtils TLO (Top-Level Object) State Reporting
 
-| TLO Member               | MQ2 Returns   | DMFT Equivalent            | Gap                                    |
+| TLO Member               | MQ2 Returns   | TextQuest Equivalent            | Gap                                    |
 | ------------------------ | ------------- | -------------------------- | -------------------------------------- |
 | `${Stick.Active}`        | bool          | `StickEngine::is_active()` | **Done**                               |
 | `${Stick.Distance}`      | float         | `cached_stick_distance`    | **Done**                               |
@@ -137,7 +137,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 2.1 Navigation Commands
 
-| Feature                             | MQ2 Capability                        | DMFT Status                                                             | Gap                                    | Priority | Complexity |
+| Feature                             | MQ2 Capability                        | TextQuest Status                                                             | Gap                                    | Priority | Complexity |
 | ----------------------------------- | ------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------- | -------- | ---------- |
 | `/nav target`                       | Navigate to current target            | **Done** — Navigator FSM with waypoint queue                            | None                                   | —        | —          |
 | `/nav id #`                         | Navigate to spawn by ID               | **Partial** — no direct spawn-ID nav command, but IPC can set waypoints | No convenience command                 | P1       | Low        |
@@ -155,7 +155,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 2.2 Navigation State Signals
 
-| Signal     | MQ2 Provides | DMFT Equivalent                          | Gap                                     |
+| Signal     | MQ2 Provides | TextQuest Equivalent                          | Gap                                     |
 | ---------- | ------------ | ---------------------------------------- | --------------------------------------- |
 | Active     | bool         | `State::Moving` / `State::Sticking` etc. | **Done**                                |
 | MeshLoaded | bool         | —                                        | **Missing** — no navmesh state tracking |
@@ -166,7 +166,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 2.3 Zone Transitions
 
-| Feature                           | MQ2 Capability                                 | DMFT Status                                            | Gap                                                   | Priority | Complexity |
+| Feature                           | MQ2 Capability                                 | TextQuest Status                                            | Gap                                                   | Priority | Complexity |
 | --------------------------------- | ---------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------- | -------- | ---------- |
 | Cross-zone navigation             | MQ2Nav v5 supports zone boundary paths         | **Partial** — `zone_graph.rs` exists with zone routing | Zone routing exists but not wired to live zone events | P1       | High       |
 | Auto-reload on zone change        | MQ2Nav reloads mesh when zone changes detected | **Missing**                                            | No auto-reload on zone                                | P1       | Medium     |
@@ -178,7 +178,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 3.1 Map Rendering & Display
 
-| Feature                            | MQ2 Capability                             | DMFT Status                                                                   | Gap                                               | Priority | Complexity |
+| Feature                            | MQ2 Capability                             | TextQuest Status                                                                   | Gap                                               | Priority | Complexity |
 | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------- | -------- | ---------- |
 | Zone map rendering                 | In-game overlay on EQ map window           | **Done** — TUI `ui/map.rs` renders Brewall maps in terminal                   | Different medium (TUI vs in-game), but functional | —        | —          |
 | Brewall map parsing                | Uses Brewall `.txt` map format (L/P lines) | **Done** — `eq/map_parser.rs` parses L lines (MapLine) and P lines (MapPoint) | None                                              | —        | —          |
@@ -205,13 +205,13 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 
 ### 3.2 Map Data Format
 
-MQ2Map and DMFT both use Brewall's map format:
+MQ2Map and TextQuest both use Brewall's map format:
 
 - **L lines**: `L x1, y1, z1, x2, y2, z2, r, g, b` — line segments (walls, boundaries)
 - **P lines**: `P x, y, z, r, g, b, size, label` — labeled points (zone connections, POIs)
 - Files named `<zoneshortname>.txt`, with optional `<zoneshortname>_1.txt`, `_2.txt`, `_3.txt` layers
 
-DMFT's `map_parser.rs` already handles both L and P line types with `MapLine` and `MapPoint` structs.
+TextQuest's `map_parser.rs` already handles both L and P line types with `MapLine` and `MapPoint` structs.
 
 ---
 
@@ -219,7 +219,7 @@ DMFT's `map_parser.rs` already handles both L and P line types with `MapLine` an
 
 ### 4.1 Casting Commands
 
-| Feature                  | MQ2 Capability                     | DMFT Status                                                       | Gap                            | Priority | Complexity |
+| Feature                  | MQ2 Capability                     | TextQuest Status                                                       | Gap                            | Priority | Complexity |
 | ------------------------ | ---------------------------------- | ----------------------------------------------------------------- | ------------------------------ | -------- | ---------- |
 | `/casting "Spell" gem#`  | Cast spell from specific gem       | **Partial** — `eq::slash_command()` can issue `/cast #`           | No gem-aware casting framework | P1       | Medium     |
 | `-targetid\|####`        | Cast on specific target ID         | **Missing**                                                       | No target-switch-and-cast      | **P0**   | Medium     |
@@ -234,7 +234,7 @@ DMFT's `map_parser.rs` already handles both L and P line types with `MapLine` an
 
 ### 4.2 Cast State & Results
 
-| Feature          | MQ2 Returns             | DMFT Equivalent          | Gap                                        |
+| Feature          | MQ2 Returns             | TextQuest Equivalent          | Gap                                        |
 | ---------------- | ----------------------- | ------------------------ | ------------------------------------------ |
 | `${Cast.Active}` | bool                    | —                        | **Missing** — no cast-active tracking      |
 | `${Cast.Effect}` | spell name              | —                        | **Missing**                                |
@@ -244,7 +244,7 @@ DMFT's `map_parser.rs` already handles both L and P line types with `MapLine` an
 | `${Cast.Taken}`  | spell didn't take hold  | —                        | **Missing**                                |
 | `${SpellTimer}`  | remaining buff duration | —                        | **Missing** — no buff timer tracking       |
 
-### 4.3 Cast Result Codes (MQ2 reference, needed for DMFT)
+### 4.3 Cast Result Codes (MQ2 reference, needed for TextQuest)
 
 ```
 CAST_SUCCESS, CAST_FIZZLE, CAST_INTERRUPTED, CAST_RESIST, CAST_IMMUNE,
@@ -259,13 +259,13 @@ CAST_TAKEHOLD, CAST_UNKNOWN
 
 ## 5. MQ2Twist / MQ2Medley — Bard Song Rotation (CRITICAL for BRD)
 
-### Current DMFT Approach
+### Current TextQuest Approach
 
-DMFT's `BardStrategy` (`dmft-dll/src/combat/classes/bard.rs`) delegates entirely to EQ's built-in `/melody` command. This is a deliberate simplification — `/melody` handles basic song cycling automatically. However, `/melody` has significant limitations compared to MQ2Twist/MQ2Medley:
+TextQuest's `BardStrategy` (`textquest-dll/src/combat/classes/bard.rs`) delegates entirely to EQ's built-in `/melody` command. This is a deliberate simplification — `/melody` handles basic song cycling automatically. However, `/melody` has significant limitations compared to MQ2Twist/MQ2Medley:
 
 ### 5.1 MQ2Twist Features
 
-| Feature                | MQ2 Capability                                    | DMFT Status                           | Gap                                    | Priority | Complexity |
+| Feature                | MQ2 Capability                                    | TextQuest Status                           | Gap                                    | Priority | Complexity |
 | ---------------------- | ------------------------------------------------- | ------------------------------------- | -------------------------------------- | -------- | ---------- |
 | `/twist # # # #`       | Twist up to 10 songs in order                     | **Replaced** — uses `/melody` instead | `/melody` is simpler but less flexible | P1       | —          |
 | `/twist once # # #`    | Execute sequence once, revert                     | **Missing**                           | No one-shot twist                      | P1       | Medium     |
@@ -278,7 +278,7 @@ DMFT's `BardStrategy` (`dmft-dll/src/combat/classes/bard.rs`) delegates entirely
 
 ### 5.2 MQ2Medley Features (Twist successor)
 
-| Feature                  | MQ2 Capability                                    | DMFT Status | Gap                        | Priority | Complexity |
+| Feature                  | MQ2 Capability                                    | TextQuest Status | Gap                        | Priority | Complexity |
 | ------------------------ | ------------------------------------------------- | ----------- | -------------------------- | -------- | ---------- |
 | Conditional songs        | `songif=condition` per song entry                 | **Missing** | No conditional song logic  | P1       | Medium     |
 | Priority scheduling      | Songs 1-20 in priority order, skip if buff active | **Missing** | `/melody` is fixed-order   | **P0**   | High       |
@@ -303,13 +303,13 @@ DMFT's `BardStrategy` (`dmft-dll/src/combat/classes/bard.rs`) delegates entirely
 - On interrupt: resets current song index to re-attempt
 - MQ2Medley: more sophisticated — skips to next song if conditions not met
 
-**DMFT recommendation:** For Classic/Kunark where bard songs are simpler, `/melody` may suffice. For Velious+, a proper twist engine with interrupt recovery and priority scheduling becomes critical (especially for CC-heavy encounters). The `/melody` approach should be the fallback, with a custom twist FSM as the upgrade path.
+**TextQuest recommendation:** For Classic/Kunark where bard songs are simpler, `/melody` may suffice. For Velious+, a proper twist engine with interrupt recovery and priority scheduling becomes critical (especially for CC-heavy encounters). The `/melody` approach should be the fallback, with a custom twist FSM as the upgrade path.
 
 ---
 
 ## 6. MQ2SpawnMaster — Named Spawn Tracking
 
-| Feature                    | MQ2 Capability                         | DMFT Status | Gap                         | Priority | Complexity |
+| Feature                    | MQ2 Capability                         | TextQuest Status | Gap                         | Priority | Complexity |
 | -------------------------- | -------------------------------------- | ----------- | --------------------------- | -------- | ---------- |
 | `/spawnmaster add`         | Add spawn to watch list                | **Missing** | No spawn watch system       | P1       | Medium     |
 | Case-sensitive exact match | Match by exact spawn name              | **Missing** | —                           | P1       | Low        |
@@ -319,7 +319,7 @@ DMFT's `BardStrategy` (`dmft-dll/src/combat/classes/bard.rs`) delegates entirely
 | Last sighting tracking     | When spawn was last seen               | **Missing** | —                           | P2       | Low        |
 | Visual/audio notification  | Beep, popup, speech on spawn           | **Missing** | TUI could show spawn alerts | P1       | Low        |
 
-**DMFT has a named spawn tracker panel in the TUI map screen** (`ui/map.rs` header: "named tracker panel"), but it's display-only — no alerting, no custom watch lists, no per-zone configuration.
+**TextQuest has a named spawn tracker panel in the TUI map screen** (`ui/map.rs` header: "named tracker panel"), but it's display-only — no alerting, no custom watch lists, no per-zone configuration.
 
 ---
 
@@ -353,49 +353,49 @@ These are the features without which the melee group comp (WAR/CLR/SHM/MNK/BRD/B
 
 Add `StickMode` enum to `StickConfig`: `Behind`, `NotFront`, `Pin`, `Front`, `None`. Implement arc calculation in `StickEngine::tick()` using `positioning.rs::behind_target()` as the foundation. Add configurable `behind_arc` and `not_front_arc` fields.
 
-**Files:** `dmft-common/src/nav.rs` (StickConfig), `dmft-dll/src/nav/stick.rs` (StickEngine), `dmft-dll/src/combat/positioning.rs` (arc math)
+**Files:** `textquest-common/src/nav.rs` (StickConfig), `textquest-dll/src/nav/stick.rs` (StickEngine), `textquest-dll/src/combat/positioning.rs` (arc math)
 
 ### Phase 2: Stick Moveback + Break Conditions (P0-P1)
 
 Add moveback logic when distance drops below minimum threshold. Add `BreakCondition` enum for target change, aggro, GM detection.
 
-**Files:** `dmft-dll/src/nav/stick.rs`, `dmft-common/src/nav.rs`
+**Files:** `textquest-dll/src/nav/stick.rs`, `textquest-common/src/nav.rs`
 
 ### Phase 3: Camp Scatter + Radius (P0)
 
 Add `CampConfig` with radius, scatter geometry (bearing/scatdist/scatsize), return delays, and aggro gates. Replace hardcoded `MAX_CAMP_DRIFT` in positioning.rs.
 
-**Files:** `dmft-common/src/nav.rs`, `dmft-dll/src/nav/state.rs`, `dmft-dll/src/combat/positioning.rs`
+**Files:** `textquest-common/src/nav.rs`, `textquest-dll/src/nav/state.rs`, `textquest-dll/src/combat/positioning.rs`
 
 ### Phase 4: Cast Target Switching (P0)
 
 Add cast-with-targetid to the combat framework: save current target, switch, cast, restore. Build on existing `eq::slash_command()` path.
 
-**Files:** `dmft-dll/src/combat/state.rs`, `dmft-dll/src/hooks/casting.rs`
+**Files:** `textquest-dll/src/combat/state.rs`, `textquest-dll/src/hooks/casting.rs`
 
 ### Phase 5: Bard Twist Engine (P0)
 
 Replace `/melody`-only approach with a proper twist FSM: song queue, interrupt detection, hold/priority, mez queue. Keep `/melody` as fallback for simple rotations.
 
-**Files:** `dmft-dll/src/combat/classes/bard.rs` (new twist FSM), `dmft-common/src/combat.rs`
+**Files:** `textquest-dll/src/combat/classes/bard.rs` (new twist FSM), `textquest-common/src/combat.rs`
 
 ### Phase 6: Map Enhancements (P1)
 
 Add filter toggles, radius overlays, target line, con colors to TUI map panel. Multi-layer map support.
 
-**Files:** `dmft/src/tui/ui/map.rs`, `dmft/src/eq/map_parser.rs`
+**Files:** `textquest/src/tui/ui/map.rs`, `textquest/src/eq/map_parser.rs`
 
 ### Phase 7: Named Spawn Alerting (P1)
 
 Add spawn watch list with per-zone config, substring matching, TUI alert panel.
 
-**Files:** New module, `dmft/src/tui/ui/map.rs` (alert panel)
+**Files:** New module, `textquest/src/tui/ui/map.rs` (alert panel)
 
 ### Phase 8: Named Waypoints + Nav Enhancements (P1)
 
 Add waypoint save/recall, spawn-ID navigation, zone-transition handling.
 
-**Files:** `dmft-dll/src/nav/waypoint.rs`, `dmft-common/src/nav.rs`
+**Files:** `textquest-dll/src/nav/waypoint.rs`, `textquest-common/src/nav.rs`
 
 ---
 
@@ -426,7 +426,7 @@ Add waypoint save/recall, spawn-ID navigation, zone-transition handling.
 
 Common 6-box melee configs from RedGuides community:
 
-- **WAR/CLR/SHM/MNK/BRD/BER** (DMFT's exact comp) — considered strong for TLP
+- **WAR/CLR/SHM/MNK/BRD/BER** (TextQuest's exact comp) — considered strong for TLP
 - WAR sticks front with `hold`, CLR uses `healer` stick on WAR
 - SHM stands at 30 range for debuffs/heals, BRD in melee range
 - MNK uses `!front` (Flying Kick doesn't require behind, but avoids riposte)

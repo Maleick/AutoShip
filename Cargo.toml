@@ -1,5 +1,5 @@
 [workspace]
-members = ["dmft", "dmft-dll", "dmft-common", "dmft-web"]
+members = ["textquest", "textquest-dll", "textquest-common", "textquest-web"]
 resolver = "2"
 
 # Shared dependencies — versions and base features declared once here.

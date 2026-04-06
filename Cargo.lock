@@ -891,91 +891,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dmft"
-version = "0.5.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "argon2",
- "bincode",
- "cc",
- "chrono",
- "clap",
- "crossterm 0.28.1",
- "dmft-common",
- "flate2",
- "goblin",
- "prost",
- "rand 0.8.5",
- "ratatui",
- "recastnavigation-sys",
- "reqwest",
- "rpassword",
- "rusqlite",
- "serde",
- "serde_json",
- "serenity",
- "tempfile",
- "tokio",
- "toml",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "tui-big-text",
- "tui-menu",
- "tui-popup",
- "tui-scrollview",
- "tui-tree-widget",
- "tui-widget-list",
- "windows",
- "zeroize",
-]
-
-[[package]]
-name = "dmft-common"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "bincode",
- "rand 0.8.5",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "dmft-dll"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "bincode",
- "dmft-common",
- "getrandom 0.2.17",
- "retour",
- "thiserror 2.0.18",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "windows",
- "zeroize",
-]
-
-[[package]]
-name = "dmft-web"
-version = "0.1.0"
-dependencies = [
- "axum",
- "dmft-common",
- "serde",
- "serde_json",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3281,6 +3196,91 @@ dependencies = [
  "wezterm-dynamic",
  "wezterm-input-types",
  "winapi",
+]
+
+[[package]]
+name = "textquest"
+version = "0.5.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "argon2",
+ "bincode",
+ "cc",
+ "chrono",
+ "clap",
+ "crossterm 0.28.1",
+ "flate2",
+ "goblin",
+ "prost",
+ "rand 0.8.5",
+ "ratatui",
+ "recastnavigation-sys",
+ "reqwest",
+ "rpassword",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serenity",
+ "tempfile",
+ "textquest-common",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "tui-big-text",
+ "tui-menu",
+ "tui-popup",
+ "tui-scrollview",
+ "tui-tree-widget",
+ "tui-widget-list",
+ "windows",
+ "zeroize",
+]
+
+[[package]]
+name = "textquest-common"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "rand 0.8.5",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "textquest-dll"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "getrandom 0.2.17",
+ "retour",
+ "textquest-common",
+ "thiserror 2.0.18",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "windows",
+ "zeroize",
+]
+
+[[package]]
+name = "textquest-web"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde",
+ "serde_json",
+ "textquest-common",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

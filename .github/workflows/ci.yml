@@ -102,7 +102,7 @@ jobs:
   pr_gate_trusted:
     name: PR gate (fmt + clippy + test + python)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, Windows, X64, dmft]
+    runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 45
     defaults:
       run:
@@ -117,7 +117,7 @@ jobs:
             echo [fatal] GITHUB_WORKSPACE is not defined.
             exit /b 1
           )
-          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\TextQuest\TextQuest" "C:\actions-runner\_work\TextQuest") do (
             git config --global --add safe.directory "%%~D" || (
               echo [fatal] Unable to add safe.directory for %%~D.
               exit /b 1
@@ -224,7 +224,7 @@ jobs:
     name: Windows release build (manual)
     if: github.event_name == 'workflow_dispatch' && inputs.run_release_build
     needs: pr_gate_trusted
-    runs-on: [self-hosted, Windows, X64, dmft]
+    runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 30
     defaults:
       run:
@@ -239,7 +239,7 @@ jobs:
             echo [fatal] GITHUB_WORKSPACE is not defined.
             exit /b 1
           )
-          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\TextQuest\TextQuest" "C:\actions-runner\_work\TextQuest") do (
             git config --global --add safe.directory "%%~D" || (
               echo [fatal] Unable to add safe.directory for %%~D.
               exit /b 1

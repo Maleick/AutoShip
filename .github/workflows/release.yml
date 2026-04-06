@@ -14,7 +14,7 @@ permissions:
 jobs:
   build:
     name: Build Windows release
-    runs-on: [self-hosted, Windows, X64, dmft]
+    runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 30
     defaults:
       run:
@@ -82,12 +82,12 @@ jobs:
 
       - name: Verify release outputs
         run: |
-          if not exist target\release\dmft.exe (
-            echo [fatal] target\release\dmft.exe missing after cargo build.
+          if not exist target\release\textquest.exe (
+            echo [fatal] target\release\textquest.exe missing after cargo build.
             exit /b 1
           )
-          if not exist target\release\dmft_dll.dll (
-            echo [fatal] target\release\dmft_dll.dll missing after cargo build.
+          if not exist target\release\textquest_dll.dll (
+            echo [fatal] target\release\textquest_dll.dll missing after cargo build.
             exit /b 1
           )
           echo [info] Release artifact check passed.
@@ -95,12 +95,12 @@ jobs:
       - name: Package artifacts
         run: |
           if not exist release mkdir release
-          copy /Y target\release\dmft.exe release\dmft.exe
-          if exist target\release\dmft_dll.dll copy /Y target\release\dmft_dll.dll release\dmft_dll.dll
+          copy /Y target\release\textquest.exe release\textquest.exe
+          if exist target\release\textquest_dll.dll copy /Y target\release\textquest_dll.dll release\textquest_dll.dll
 
       - name: Write release version file
         shell: pwsh
-        run: Set-Content -Path release/VERSION.txt -NoNewline -Value ("DMFT " + $env:GITHUB_REF_NAME)
+        run: Set-Content -Path release/VERSION.txt -NoNewline -Value ("TextQuest " + $env:GITHUB_REF_NAME)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

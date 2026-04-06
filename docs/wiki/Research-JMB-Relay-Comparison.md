@@ -4,7 +4,7 @@ This document is the second orchestration-focused external research pass for `M8
 
 ## Goal
 
-Formalize DMFT operator routing scopes and session concepts from the Joe Multiboxer ecosystem without treating JMB's runtime model as a feature-parity target.
+Formalize TextQuest operator routing scopes and session concepts from the Joe Multiboxer ecosystem without treating JMB's runtime model as a feature-parity target.
 
 ## Source anchors
 
@@ -27,10 +27,10 @@ The Joe Multiboxer developer guide uses separate `Session` and `Uplink` entry po
 - an uplink or coordinator surface that can focus and route work
 - operator-visible launch and agent lifecycle controls
 
-Repo fit for DMFT:
+Repo fit for TextQuest:
 
-- DMFT already has per-client sessions in [dmft/src/client/session.rs](../../dmft/src/client/session.rs)
-- the TUI already exposes group focus and scope state in [dmft/src/tui/app.rs](../../dmft/src/tui/app.rs) and [dmft/src/tui/ui/dashboard.rs](../../dmft/src/tui/ui/dashboard.rs)
+- TextQuest already has per-client sessions in [textquest/src/client/session.rs](../../textquest/src/client/session.rs)
+- the TUI already exposes group focus and scope state in [textquest/src/tui/app.rs](../../textquest/src/tui/app.rs) and [textquest/src/tui/ui/dashboard.rs](../../textquest/src/tui/ui/dashboard.rs)
 - launch and login coordination already exist, but they are not yet modeled as an operator-facing session shell
 
 Evidence state: `Research-backed`
@@ -43,23 +43,23 @@ Evidence state: `Research-backed`
 - relay commands to one target or one named subset
 - keep routing visible to the operator
 
-Repo fit for DMFT:
+Repo fit for TextQuest:
 
-- DMFT already supports one-character commands, focused-group routing, and `all` broadcast routing in the command bar
+- TextQuest already supports one-character commands, focused-group routing, and `all` broadcast routing in the command bar
 - combat summaries already expose current scope labels instead of burying routing in logs
-- DMFT does not yet define a stable abstraction for `one-toon`, `group`, and `all-session` routing beyond the current command grammar
+- TextQuest does not yet define a stable abstraction for `one-toon`, `group`, and `all-session` routing beyond the current command grammar
 
 Evidence state: `Research-backed`
 
 ### Window presets and launch presets should stay operator-facing
 
-The Joe Multiboxer guide and WinEQ research both treat launch setup as a combination of reusable profiles plus per-slot window or focus behavior. DMFT does not need the same runtime or virtual file model, but it does need the same operator clarity:
+The Joe Multiboxer guide and WinEQ research both treat launch setup as a combination of reusable profiles plus per-slot window or focus behavior. TextQuest does not need the same runtime or virtual file model, but it does need the same operator clarity:
 
 - which clients belong to a launch profile
 - which groups or slots belong to a session preset
 - which slots are launched, attached, logged in, recovering, or blocked
 
-Repo fit for DMFT:
+Repo fit for TextQuest:
 
 - this maps cleanly onto the existing launcher and login coordinator
 - it does not require new hook behavior or gameplay automation changes
@@ -69,17 +69,17 @@ Evidence state: `Research-backed`
 
 ### Input-hook examples are comparison input only
 
-The JMB Input Hook Example is useful for understanding the shape of JMB's operator runtime, but DMFT should not translate it into broader hidden input capture or control escalation. The anti-cheat digest keeps hook and module exposure as explicit `M7` categories.
+The JMB Input Hook Example is useful for understanding the shape of JMB's operator runtime, but TextQuest should not translate it into broader hidden input capture or control escalation. The anti-cheat digest keeps hook and module exposure as explicit `M7` categories.
 
-Repo fit for DMFT:
+Repo fit for TextQuest:
 
-- keep command routing on DMFT's authenticated IPC path
+- keep command routing on TextQuest's authenticated IPC path
 - prefer explicit operator actions and visible TUI scope over new background input hooks
 - treat any future focus or hotkey support as an operator convenience slice that still stays inside the current trust boundary
 
 Evidence state: `Provisional` for direct implementation guidance, `Research-backed` as a risk boundary
 
-## DMFT routing model
+## TextQuest routing model
 
 These routing scopes are the repo-fit translation from the JMB comparison.
 
@@ -124,7 +124,7 @@ Operator expectations:
 
 ## Session-shell concepts worth translating
 
-The JMB comparison suggests three operator-facing concepts that fit DMFT well.
+The JMB comparison suggests three operator-facing concepts that fit TextQuest well.
 
 ### Launch profile
 
@@ -132,7 +132,7 @@ A reusable description of which characters or accounts should be launched togeth
 
 Repo-fit note:
 
-- this belongs in DMFT's launcher and credential flow, not in the combat engine
+- this belongs in TextQuest's launcher and credential flow, not in the combat engine
 
 ### Session preset
 
@@ -156,7 +156,7 @@ A visible state machine for each slot:
 
 Repo-fit note:
 
-- DMFT already has the underlying launcher and login sequencing; the gap is operator visibility and stable naming
+- TextQuest already has the underlying launcher and login sequencing; the gap is operator visibility and stable naming
 
 ## Risk boundary
 
@@ -185,6 +185,6 @@ Recommended sequencing:
 
 The JMB comparison supports a bounded `M8` conclusion:
 
-- DMFT should formalize routing scope and session-shell concepts
-- DMFT should not chase JMB runtime parity or hidden hook parity
+- TextQuest should formalize routing scope and session-shell concepts
+- TextQuest should not chase JMB runtime parity or hidden hook parity
 - the next implementation work should improve operator-visible routing and lifecycle control, not expand gameplay automation risk

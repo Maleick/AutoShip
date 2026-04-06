@@ -2,13 +2,13 @@
 
 ## Current Architecture
 
-DMFT is a three-crate Rust workspace:
+TextQuest is a three-crate Rust workspace:
 
 | Crate | Role |
 | --- | --- |
-| `dmft` | External orchestrator, TUI, config, process reading, injection, launcher, camp loop, Soul coordinator |
-| `dmft-dll` | Injected DLL for in-process EQ control, hooks, IPC server, login/nav/combat FSMs |
-| `dmft-common` | Shared types for IPC, offsets, nav, combat, login, soul, and wire formats |
+| `textquest` | External orchestrator, TUI, config, process reading, injection, launcher, camp loop, Soul coordinator |
+| `textquest-dll` | Injected DLL for in-process EQ control, hooks, IPC server, login/nav/combat FSMs |
+| `textquest-common` | Shared types for IPC, offsets, nav, combat, login, soul, and wire formats |
 
 ## Runtime Modes
 
@@ -25,16 +25,16 @@ DMFT is a three-crate Rust workspace:
 
 ## High-Level Data Flow
 
-1. `dmft` discovers or launches EQ clients.
-2. `dmft` stages a session token and injects `dmft_dll.dll`.
-3. `dmft-dll` hooks into the game, reads internal state, and exposes control surfaces.
-4. `dmft-dll` publishes `GameState` snapshots over shared memory.
-5. `dmft` reads those snapshots, renders the TUI, and makes orchestration decisions.
+1. `textquest` discovers or launches EQ clients.
+2. `textquest` stages a session token and injects `textquest_dll.dll`.
+3. `textquest-dll` hooks into the game, reads internal state, and exposes control surfaces.
+4. `textquest-dll` publishes `GameState` snapshots over shared memory.
+5. `textquest` reads those snapshots, renders the TUI, and makes orchestration decisions.
 6. Operator commands or orchestrator decisions are serialized as IPC commands and sent back to the DLL over authenticated named pipes.
 
 ## Key Module Boundaries
 
-### In `dmft`
+### In `textquest`
 
 - `process/`: OS process discovery and memory access
 - `eq/`: external memory reading and spawn traversal
@@ -49,7 +49,7 @@ DMFT is a three-crate Rust workspace:
 - `credentials/`: encrypted credential store
 - `soul/`: personality, memory, social graph, idle behavior
 
-### In `dmft-dll`
+### In `textquest-dll`
 
 - `hooks/`: game loop, render, and command execution hooks
 - `eq/`: EQ function bindings and UI widget helpers
@@ -61,9 +61,9 @@ DMFT is a three-crate Rust workspace:
 
 ## Operator Path Through the System
 
-- TUI input is parsed in `dmft/src/tui/app.rs`.
-- CLI commands are parsed in `dmft/src/main.rs`.
-- Both eventually issue `dmft_common::ipc::Command` messages or mutate orchestrator state.
+- TUI input is parsed in `textquest/src/tui/app.rs`.
+- CLI commands are parsed in `textquest/src/main.rs`.
+- Both eventually issue `textquest_common::ipc::Command` messages or mutate orchestrator state.
 - The DLL executes the game-facing behavior and reports results through shared state or async responses.
 
 ## Current Behavior vs Roadmap

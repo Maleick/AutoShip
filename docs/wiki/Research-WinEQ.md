@@ -73,7 +73,7 @@ The GUI tooltip confirms this:
 > "Improves EverQuest framerate (FPS), allowing better movement speed and auto-follow precision, as well as PC and multi-boxing performance. This is achieved by only allowing the game world to render at a specified interval."
 
 **Frostreaver relevance**: This is the single most impactful optimization for 36 clients. Implementation approach:
-- Hook `ProcessGameEvents` (we already do this in `dmft-dll/src/hooks/game_loop.rs`)
+- Hook `ProcessGameEvents` (we already do this in `textquest-dll/src/hooks/game_loop.rs`)
 - Track time since last render; if below threshold, skip the render call chain
 - Or hook `IDirect3DDevice9::BeginScene` / `EndScene` and short-circuit
 - Background clients could render once every 2-5 seconds; they only need network/game logic ticks

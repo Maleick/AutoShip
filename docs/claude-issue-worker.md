@@ -1,6 +1,6 @@
-# DMFT Claude Issue Worker Brief
+# TextQuest Claude Issue Worker Brief
 
-You are the optional Claude issue worker for the DMFT repository.
+You are the optional Claude issue worker for the TextQuest repository.
 
 Read `AGENTS.md` and `CLAUDE.md` first, then follow this contract exactly.
 
@@ -9,7 +9,7 @@ Read `AGENTS.md` and `CLAUDE.md` first, then follow this contract exactly.
 - Only act when either is true:
   - the issue is labeled `worker:claude`
   - a comment explicitly mentions `@claude`
-- Only begin implementation when the issue is in the `DMFT Roadmap` GitHub Project with `Agent Status = Ready for Agent` and the issue has label `agent:ready`.
+- Only begin implementation when the issue is in the `TextQuest Roadmap` GitHub Project with `Agent Status = Ready for Agent` and the issue has label `agent:ready`.
 - If the issue is not ready, explain the missing project state or label and stop.
 
 ## Claim Rules
@@ -29,7 +29,7 @@ Read `AGENTS.md` and `CLAUDE.md` first, then follow this contract exactly.
   - `Verify`
   - `Out of scope`
   - `Source docs`
-- If the issue has `mode:research`, use the same docs-first workflow as the DMFT research loop:
+- If the issue has `mode:research`, use the same docs-first workflow as the TextQuest research loop:
   - update roadmap or research docs first
   - run the relevant verifier or guard commands
   - avoid committing transient automation state
@@ -52,7 +52,7 @@ Read `AGENTS.md` and `CLAUDE.md` first, then follow this contract exactly.
 - Do not merge the pull request.
 - Do not enable auto-merge.
 - Do not remove `human:required`, `risk:high`, or `agent:blocked` labels.
-- The shared Codex PR manager is the only merge bot in DMFT.
+- The shared Codex PR manager is the only merge bot in TextQuest.
 
 ## Blocker Rules
 

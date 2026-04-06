@@ -1,6 +1,6 @@
 # Anti-Detection and Operator Risk
 
-This document summarizes DMFT's current anti-detection posture and the rules for promoting outside research into roadmap work.
+This document summarizes TextQuest's current anti-detection posture and the rules for promoting outside research into roadmap work.
 
 It is intentionally evidence-focused. It does not promise stealth or guarantee safety.
 
@@ -32,18 +32,18 @@ Use these categories when `M5` work evaluates whether a change expands exposure.
 
 | Category                      | Current repo surface                                                                                                                                                                 | Confidence | Why it matters                                                                                               |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------ |
-| Module presence               | `dmft/src/inject/loader.rs` injects `dmft-dll` with `CreateRemoteThread` + `LoadLibraryW`, and `dmft-dll` then remains loaded in `eqgame.exe`                                        | High       | A loaded third-party module is a concrete exposure surface even before any gameplay behavior is considered.  |
-| Detour hooks                  | `dmft-dll/src/lib.rs` installs the game-loop and render hooks                                                                                                                        | High       | Hooked code paths create an exposure surface that should be reviewed separately from operator behavior.      |
-| In-process function calls     | `dmft-common/src/ipc.rs`, `dmft-dll/src/hooks/game_loop.rs`, and the login/widget helpers execute `InterpretCmd`, UI clicks, and related internal calls inside the client process    | High       | Internal control paths can look different from external input simulation and need their own risk labeling.   |
-| IPC naming and authentication | `dmft-common/src/ipc.rs`, `dmft-dll/src/ipc/pipe.rs`, and `dmft-dll/src/ipc/shared.rs` implement session-derived names, per-session raw token authentication, and current-user DACLs | High       | These reduce casual local exposure, but they do not remove host-level forensic or anti-cheat risk.           |
-| Timing variation              | `dmft-dll/src/hooks/game_loop.rs`, `dmft-dll/src/nav/humanize.rs`, and `dmft-dll/src/combat/humanize.rs` apply command jitter, movement humanization, and behavior timing variation  | Medium     | These are practical hardening measures, not evidence of safety against any specific Daybreak detection path. |
+| Module presence               | `textquest/src/inject/loader.rs` injects `textquest-dll` with `CreateRemoteThread` + `LoadLibraryW`, and `textquest-dll` then remains loaded in `eqgame.exe`                                        | High       | A loaded third-party module is a concrete exposure surface even before any gameplay behavior is considered.  |
+| Detour hooks                  | `textquest-dll/src/lib.rs` installs the game-loop and render hooks                                                                                                                        | High       | Hooked code paths create an exposure surface that should be reviewed separately from operator behavior.      |
+| In-process function calls     | `textquest-common/src/ipc.rs`, `textquest-dll/src/hooks/game_loop.rs`, and the login/widget helpers execute `InterpretCmd`, UI clicks, and related internal calls inside the client process    | High       | Internal control paths can look different from external input simulation and need their own risk labeling.   |
+| IPC naming and authentication | `textquest-common/src/ipc.rs`, `textquest-dll/src/ipc/pipe.rs`, and `textquest-dll/src/ipc/shared.rs` implement session-derived names, per-session raw token authentication, and current-user DACLs | High       | These reduce casual local exposure, but they do not remove host-level forensic or anti-cheat risk.           |
+| Timing variation              | `textquest-dll/src/hooks/game_loop.rs`, `textquest-dll/src/nav/humanize.rs`, and `textquest-dll/src/combat/humanize.rs` apply command jitter, movement humanization, and behavior timing variation  | Medium     | These are practical hardening measures, not evidence of safety against any specific Daybreak detection path. |
 | Operator environment          | Live machine cleanliness, runner hygiene, artifact handling, and avoiding unrelated cheat tooling                                                                                    | High       | Official Daybreak policy applies account-wide and is not limited to a single game session.                   |
 | Community detection claims    | RedGuides, MMOBugs, and similar discussions                                                                                                                                          | Low        | Useful for hypotheses and validation tasks only; not strong enough to prove safety claims.                   |
 
 ### Confidence rules
 
-- `High`: directly grounded in current DMFT code or official Daybreak policy.
-- `Medium`: grounded in current DMFT code, but the actual anti-detection value is inferred rather than proven.
+- `High`: directly grounded in current TextQuest code or official Daybreak policy.
+- `Medium`: grounded in current TextQuest code, but the actual anti-detection value is inferred rather than proven.
 - `Low`: community reporting, speculative interpretation, or exploit-oriented claims without stronger corroboration.
 
 ## `M5` / `M7` / `M8` Validation Gates
@@ -78,9 +78,9 @@ Use this checklist before live testing, on the always-on runner, and when writin
 
 ### Live machine hygiene
 
-- keep live-play machines free of unrelated cheat tooling, reverse-engineering utilities, or abandoned test binaries that are not required for the current DMFT workflow
+- keep live-play machines free of unrelated cheat tooling, reverse-engineering utilities, or abandoned test binaries that are not required for the current TextQuest workflow
 - avoid reusing stale staged DLLs, copied token files, or mixed old/new build artifacts across client launches
-- treat `%TEMP%/dmft` logs and token-bearing artifacts as sensitive operational data and clean them up when they are no longer needed
+- treat `%TEMP%/textquest` logs and token-bearing artifacts as sensitive operational data and clean them up when they are no longer needed
 - separate high-risk research machines from normal live-play machines when testing speculative packet, zoning, or exploit-adjacent ideas
 
 ### Runner and build hygiene

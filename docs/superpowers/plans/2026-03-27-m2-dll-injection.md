@@ -4,7 +4,7 @@
 
 **Goal:** Inject a Rust-built DLL (`cdylib`) into eqgame.exe to hook internal EQ functions for direct control -- movement, casting, targeting -- enabling multibox orchestration of up to 36 clients on a TLP server.
 
-**Architecture:** Single DMFT binary handles injection, orchestration, and TUI. A separate `cdylib` crate produces the injected DLL payload. Classic `CreateRemoteThread` + `LoadLibraryW` injection with randomized DLL names. IPC between the orchestrator and injected DLLs uses shared memory (high-frequency game state) and named pipes (commands). Self-healing monitors for EQ crashes and auto-restarts + re-injects.
+**Architecture:** Single TextQuest binary handles injection, orchestration, and TUI. A separate `cdylib` crate produces the injected DLL payload. Classic `CreateRemoteThread` + `LoadLibraryW` injection with randomized DLL names. IPC between the orchestrator and injected DLLs uses shared memory (high-frequency game state) and named pipes (commands). Self-healing monitors for EQ crashes and auto-restarts + re-injects.
 
 **Tech Stack:** Rust workspace, `windows` crate (Win32 APIs), `retour` crate (function detouring), `shared_memory` crate (cross-process shared memory), existing M1 memory reading code.
 
@@ -38,7 +38,7 @@ dmft/                   (bin) -- orchestrator + TUI + injector
       pipe.rs           -- named pipe client (send commands)
       shared.rs         -- shared memory reader (read game state)
 
-dmft-dll/               (cdylib) -- injected DLL payload
+textquest-dll/               (cdylib) -- injected DLL payload
   Cargo.toml
   src/
     lib.rs              -- DllMain entry point, initialization
@@ -55,7 +55,7 @@ dmft-dll/               (cdylib) -- injected DLL payload
     eq/
       mod.rs            -- EQ internal function addresses + signatures
 
-dmft-common/            (lib) -- shared types + IPC protocol
+textquest-common/            (lib) -- shared types + IPC protocol
   Cargo.toml
   src/
     lib.rs
@@ -78,7 +78,7 @@ dmft-common/            (lib) -- shared types + IPC protocol
 
 **Files to move:**
 
-- `src/**` -> `dmft/src/**`
+- `src/**` -> `textquest/src/**`
 - `config/` stays at workspace root (shared config files)
 
 ### Steps
@@ -90,7 +90,7 @@ Back up the existing `Cargo.toml`. Create a new workspace root:
 ```toml
 # Cargo.toml (workspace root)
 [workspace]
-members = ["dmft", "dmft-dll", "dmft-common"]
+members = ["dmft", "textquest-dll", "textquest-common"]
 resolver = "2"
 ```
 
@@ -108,7 +108,7 @@ name = "dmft"
 path = "src/main.rs"
 
 [dependencies]
-dmft-common = { path = "../dmft-common" }
+textquest-common = { path = "../textquest-common" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 tracing = "0.1"
@@ -133,20 +133,20 @@ windows = { version = "0.54", features = [
 - [ ] **Step 1.3: Move source files**
 
 ```bash
-mkdir -p dmft/src
-mv src/* dmft/src/
+mkdir -p textquest/src
+mv src/* textquest/src/
 rmdir src
 ```
 
-- [ ] **Step 1.4: Create placeholder `dmft-common/` and `dmft-dll/` so workspace resolves**
+- [ ] **Step 1.4: Create placeholder `textquest-common/` and `textquest-dll/` so workspace resolves**
 
-Create minimal `dmft-common/Cargo.toml` and `dmft-common/src/lib.rs` (empty lib).
-Create minimal `dmft-dll/Cargo.toml` and `dmft-dll/src/lib.rs` (empty lib).
+Create minimal `textquest-common/Cargo.toml` and `textquest-common/src/lib.rs` (empty lib).
+Create minimal `textquest-dll/Cargo.toml` and `textquest-dll/src/lib.rs` (empty lib).
 
 ```toml
-# dmft-common/Cargo.toml
+# textquest-common/Cargo.toml
 [package]
-name = "dmft-common"
+name = "textquest-common"
 version = "0.1.0"
 edition = "2024"
 
@@ -156,9 +156,9 @@ bincode = "1"
 ```
 
 ```toml
-# dmft-dll/Cargo.toml
+# textquest-dll/Cargo.toml
 [package]
-name = "dmft-dll"
+name = "textquest-dll"
 version = "0.1.0"
 edition = "2024"
 
@@ -166,7 +166,7 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-dmft-common = { path = "../dmft-common" }
+textquest-common = { path = "../textquest-common" }
 retour = "0.3"
 tracing = "0.1"
 
@@ -181,9 +181,9 @@ windows = { version = "0.54", features = [
 ] }
 ```
 
-- [ ] **Step 1.5: Update `dmft/src/main.rs` imports**
+- [ ] **Step 1.5: Update `textquest/src/main.rs` imports**
 
-The `eq::offsets` module still lives in `dmft/src/eq/offsets.rs` for now (will be migrated to `dmft-common` in Task 2). Ensure `dmft/src/main.rs` has `use dmft_common;` (even if unused initially) to validate the dependency.
+The `eq::offsets` module still lives in `textquest/src/eq/offsets.rs` for now (will be migrated to `textquest-common` in Task 2). Ensure `textquest/src/main.rs` has `use textquest_common;` (even if unused initially) to validate the dependency.
 
 - [ ] **Step 1.6: Update `.gitignore`**
 
@@ -199,21 +199,21 @@ cargo run -p dmft -- --dump 2>&1  # must work as before
 
 ---
 
-## Task 2: Create `dmft-common` Crate (Shared Types + IPC Protocol)
+## Task 2: Create `textquest-common` Crate (Shared Types + IPC Protocol)
 
 **Goal:** Define all types shared between the orchestrator and the injected DLL: game state structures, IPC message definitions, command enums, and shared memory layout.
 
 **Files to create:**
 
-- `dmft-common/src/lib.rs`
-- `dmft-common/src/types.rs`
-- `dmft-common/src/ipc.rs`
-- `dmft-common/src/offsets.rs`
-- `dmft-common/src/protocol.rs`
+- `textquest-common/src/lib.rs`
+- `textquest-common/src/types.rs`
+- `textquest-common/src/ipc.rs`
+- `textquest-common/src/offsets.rs`
+- `textquest-common/src/protocol.rs`
 
 ### Steps
 
-- [ ] **Step 2.1: Define core types in `dmft-common/src/types.rs`**
+- [ ] **Step 2.1: Define core types in `textquest-common/src/types.rs`**
 
 ```rust
 use serde::{Serialize, Deserialize};
@@ -290,7 +290,7 @@ pub enum Response {
 }
 ```
 
-- [ ] **Step 2.2: Define IPC constants and shared memory layout in `dmft-common/src/ipc.rs`**
+- [ ] **Step 2.2: Define IPC constants and shared memory layout in `textquest-common/src/ipc.rs`**
 
 ```rust
 /// Named pipe name template. The `{}` is replaced with the client PID.
@@ -324,7 +324,7 @@ pub fn shmem_name(pid: u32) -> String {
 }
 ```
 
-- [ ] **Step 2.3: Define protocol framing in `dmft-common/src/protocol.rs`**
+- [ ] **Step 2.3: Define protocol framing in `textquest-common/src/protocol.rs`**
 
 ```rust
 /// Named pipe message format:
@@ -355,11 +355,11 @@ pub fn read_message<R: Read, T: serde::de::DeserializeOwned>(reader: &mut R) -> 
 }
 ```
 
-- [ ] **Step 2.4: Move offset constants to `dmft-common/src/offsets.rs`**
+- [ ] **Step 2.4: Move offset constants to `textquest-common/src/offsets.rs`**
 
-Copy the contents of `dmft/src/eq/offsets.rs` into `dmft-common/src/offsets.rs`. Keep the original file in `dmft/` but change it to re-export: `pub use dmft_common::offsets::*;`. This way both the orchestrator and the DLL share identical offset definitions.
+Copy the contents of `textquest/src/eq/offsets.rs` into `textquest-common/src/offsets.rs`. Keep the original file in `dmft/` but change it to re-export: `pub use textquest_common::offsets::*;`. This way both the orchestrator and the DLL share identical offset definitions.
 
-- [ ] **Step 2.5: Wire up `dmft-common/src/lib.rs`**
+- [ ] **Step 2.5: Wire up `textquest-common/src/lib.rs`**
 
 ```rust
 pub mod types;
@@ -371,26 +371,26 @@ pub mod protocol;
 - [ ] **Step 2.6: Verification**
 
 ```bash
-cargo build -p dmft-common 2>&1    # must compile
+cargo build -p textquest-common 2>&1    # must compile
 cargo build 2>&1                    # full workspace must compile
 ```
 
 ---
 
-## Task 3: Create `dmft-dll` Crate (DLL Payload with DllMain)
+## Task 3: Create `textquest-dll` Crate (DLL Payload with DllMain)
 
 **Goal:** Build the `cdylib` crate that will be injected into eqgame.exe. Implement `DllMain` entry point with attach/detach handling and a logging/initialization framework. No hooks yet -- just the skeleton.
 
 **Files to create/modify:**
 
-- `dmft-dll/src/lib.rs` -- `DllMain` + initialization
-- `dmft-dll/src/hooks/mod.rs` -- hook manager skeleton
-- `dmft-dll/src/ipc/mod.rs` -- IPC skeleton
-- `dmft-dll/src/eq/mod.rs` -- EQ function address resolution skeleton
+- `textquest-dll/src/lib.rs` -- `DllMain` + initialization
+- `textquest-dll/src/hooks/mod.rs` -- hook manager skeleton
+- `textquest-dll/src/ipc/mod.rs` -- IPC skeleton
+- `textquest-dll/src/eq/mod.rs` -- EQ function address resolution skeleton
 
 ### Steps
 
-- [ ] **Step 3.1: Implement `DllMain` in `dmft-dll/src/lib.rs`**
+- [ ] **Step 3.1: Implement `DllMain` in `textquest-dll/src/lib.rs`**
 
 ```rust
 #![cfg_attr(windows, no_main)]
@@ -418,7 +418,7 @@ pub extern "system" fn DllMain(
                 if let Err(e) = initialize() {
                     // Log to a file since we have no console.
                     let _ = std::fs::write(
-                        "C:\\dmft\\dmft-dll-error.log",
+                        "C:\\dmft\\textquest-dll-error.log",
                         format!("Init failed: {e:?}"),
                     );
                 }
@@ -453,7 +453,7 @@ fn shutdown() {
 pub fn _stub() {}
 ```
 
-- [ ] **Step 3.2: Create hook manager skeleton (`dmft-dll/src/hooks/mod.rs`)**
+- [ ] **Step 3.2: Create hook manager skeleton (`textquest-dll/src/hooks/mod.rs`)**
 
 ```rust
 pub mod game_loop;
@@ -469,11 +469,11 @@ pub fn unhook_all() {
 
 Create empty stub files for each hook module (`game_loop.rs`, `movement.rs`, `casting.rs`, `targeting.rs`) -- each should contain a comment placeholder and `#![allow(dead_code)]`.
 
-- [ ] **Step 3.3: Create IPC skeleton (`dmft-dll/src/ipc/mod.rs`)**
+- [ ] **Step 3.3: Create IPC skeleton (`textquest-dll/src/ipc/mod.rs`)**
 
 Stub out `pub fn setup_ipc(pid: u32) -> anyhow::Result<()>` and `pub fn shutdown_ipc()`.
 
-- [ ] **Step 3.4: Create EQ address resolution skeleton (`dmft-dll/src/eq/mod.rs`)**
+- [ ] **Step 3.4: Create EQ address resolution skeleton (`textquest-dll/src/eq/mod.rs`)**
 
 ```rust
 /// Resolve the base address of eqgame.exe from within the process.
@@ -486,33 +486,33 @@ pub fn get_eq_base() -> anyhow::Result<usize> {
 
 #[cfg(not(windows))]
 pub fn get_eq_base() -> anyhow::Result<usize> {
-    Ok(dmft_common::offsets::EQ_PREFERRED_BASE as usize)
+    Ok(textquest_common::offsets::EQ_PREFERRED_BASE as usize)
 }
 ```
 
 - [ ] **Step 3.5: Verification**
 
 ```bash
-cargo build -p dmft-dll 2>&1   # must compile (cdylib on Windows, rlib fallback on macOS)
+cargo build -p textquest-dll 2>&1   # must compile (cdylib on Windows, rlib fallback on macOS)
 ```
 
 Note: On macOS, `cdylib` will produce a `.dylib` -- that is fine. The actual `.dll` is only needed on Windows. The key check is that the code compiles.
 
 ---
 
-## Task 4: Add Injection Logic to `dmft` Binary
+## Task 4: Add Injection Logic to `textquest` Binary
 
 **Goal:** Implement `CreateRemoteThread` + `LoadLibraryW` injection from the orchestrator into a running eqgame.exe process. Include randomized DLL name to avoid simple signature detection.
 
 **Files to create:**
 
-- `dmft/src/inject/mod.rs`
-- `dmft/src/inject/loader.rs` -- injection logic
-- `dmft/src/inject/dll_prep.rs` -- DLL file preparation (copy + rename)
+- `textquest/src/inject/mod.rs`
+- `textquest/src/inject/loader.rs` -- injection logic
+- `textquest/src/inject/dll_prep.rs` -- DLL file preparation (copy + rename)
 
 ### Steps
 
-- [ ] **Step 4.1: Implement DLL preparation (`dmft/src/inject/dll_prep.rs`)**
+- [ ] **Step 4.1: Implement DLL preparation (`textquest/src/inject/dll_prep.rs`)**
 
 ```rust
 use anyhow::{Result, Context};
@@ -522,7 +522,7 @@ use std::path::{Path, PathBuf};
 /// Copy the compiled DLL to a temp location with a randomized name.
 /// Returns the full path to the copied DLL.
 ///
-/// The source DLL is expected at `./dmft-dll.dll` (or from a configured path).
+/// The source DLL is expected at `./textquest-dll.dll` (or from a configured path).
 /// The destination is `C:\dmft\payloads\<random_name>.dll`.
 pub fn prepare_dll(source_dll: &Path) -> Result<PathBuf> {
     // Generate random 8-char hex name
@@ -548,7 +548,7 @@ pub fn cleanup_dll(path: &Path) -> Result<()> {
 
 Non-Windows: Both functions should have `#[cfg(windows)]` with stubs that return `Ok` with a dummy path / no-op.
 
-- [ ] **Step 4.2: Implement injection (`dmft/src/inject/loader.rs`)**
+- [ ] **Step 4.2: Implement injection (`textquest/src/inject/loader.rs`)**
 
 ```rust
 use anyhow::{Result, Context, bail};
@@ -613,7 +613,7 @@ Add these features to `dmft/Cargo.toml` Windows dependencies:
 "Win32_System_LibraryLoader",
 ```
 
-- [ ] **Step 4.3: Create `dmft/src/inject/mod.rs`**
+- [ ] **Step 4.3: Create `textquest/src/inject/mod.rs`**
 
 ```rust
 pub mod loader;
@@ -632,7 +632,7 @@ pub fn inject_into(pid: u32, source_dll: &Path) -> Result<(u64, std::path::PathB
 }
 ```
 
-- [ ] **Step 4.4: Wire injection module into `dmft/src/main.rs`**
+- [ ] **Step 4.4: Wire injection module into `textquest/src/main.rs`**
 
 Add `mod inject;` to the module declarations. Do not call it from `main()` yet -- that happens in Task 11 (multi-client management).
 
@@ -653,18 +653,18 @@ On Windows (manual test): build, then inject into a test process (not yet eqgame
 
 **Files to create/modify:**
 
-- `dmft/src/ipc/mod.rs`, `dmft/src/ipc/pipe.rs`, `dmft/src/ipc/shared.rs` -- orchestrator side
-- `dmft-dll/src/ipc/mod.rs`, `dmft-dll/src/ipc/pipe.rs`, `dmft-dll/src/ipc/shared.rs` -- DLL side
+- `textquest/src/ipc/mod.rs`, `textquest/src/ipc/pipe.rs`, `textquest/src/ipc/shared.rs` -- orchestrator side
+- `textquest-dll/src/ipc/mod.rs`, `textquest-dll/src/ipc/pipe.rs`, `textquest-dll/src/ipc/shared.rs` -- DLL side
 
 ### Steps
 
-- [ ] **Step 5.1: Implement shared memory writer in `dmft-dll/src/ipc/shared.rs`**
+- [ ] **Step 5.1: Implement shared memory writer in `textquest-dll/src/ipc/shared.rs`**
 
 The DLL side creates the shared memory region and writes `GameState` snapshots using the seqlock pattern from `SharedGameStateHeader`:
 
 ```rust
 /// Create shared memory and return a writer handle.
-/// Name: "dmft-state-{pid}" (from dmft_common::ipc::shmem_name)
+/// Name: "dmft-state-{pid}" (from textquest_common::ipc::shmem_name)
 /// Size: SHMEM_SIZE (4096 bytes)
 ///
 /// Write pattern (seqlock):
@@ -678,7 +678,7 @@ The DLL side creates the shared memory region and writes `GameState` snapshots u
 
 Use `CreateFileMappingW` + `MapViewOfFile` on Windows; stub on macOS.
 
-- [ ] **Step 5.2: Implement shared memory reader in `dmft/src/ipc/shared.rs`**
+- [ ] **Step 5.2: Implement shared memory reader in `textquest/src/ipc/shared.rs`**
 
 The orchestrator side opens the existing shared memory and reads `GameState`:
 
@@ -695,7 +695,7 @@ The orchestrator side opens the existing shared memory and reads `GameState`:
 /// pub fn read_state(&self) -> Result<GameState>
 ```
 
-- [ ] **Step 5.3: Implement named pipe server in `dmft-dll/src/ipc/pipe.rs`**
+- [ ] **Step 5.3: Implement named pipe server in `textquest-dll/src/ipc/pipe.rs`**
 
 The DLL creates a named pipe server and listens for commands in a background thread:
 
@@ -710,7 +710,7 @@ The DLL creates a named pipe server and listens for commands in a background thr
 
 Use `CreateNamedPipeW` + `ConnectNamedPipe` on Windows; stub on macOS.
 
-- [ ] **Step 5.4: Implement named pipe client in `dmft/src/ipc/pipe.rs`**
+- [ ] **Step 5.4: Implement named pipe client in `textquest/src/ipc/pipe.rs`**
 
 The orchestrator connects to the DLL's named pipe to send commands:
 
@@ -726,7 +726,7 @@ Use `CreateFileW` to open the pipe on Windows; stub on macOS.
 
 - [ ] **Step 5.5: Wire up IPC modules**
 
-Add `mod ipc;` to both `dmft/src/main.rs` and `dmft-dll/src/lib.rs`.
+Add `mod ipc;` to both `textquest/src/main.rs` and `textquest-dll/src/lib.rs`.
 
 - [ ] **Step 5.6: Verification**
 
@@ -744,14 +744,14 @@ On Windows (manual test): write a small integration test that creates shared mem
 
 **Files to create/modify:**
 
-- `dmft-dll/src/hooks/game_loop.rs`
-- `dmft-dll/src/eq/mod.rs` -- add game loop function address
+- `textquest-dll/src/hooks/game_loop.rs`
+- `textquest-dll/src/eq/mod.rs` -- add game loop function address
 
 ### Steps
 
 - [ ] **Step 6.1: Identify the game loop function address**
 
-The target function is `CEverQuest::MainLoop` (or the render tick). From MQ2 reference, identify the function signature and preferred-base address. Add to `dmft-common/src/offsets.rs`:
+The target function is `CEverQuest::MainLoop` (or the render tick). From MQ2 reference, identify the function signature and preferred-base address. Add to `textquest-common/src/offsets.rs`:
 
 ```rust
 /// CEverQuest::MainLoop -- called once per frame
@@ -762,11 +762,11 @@ pub const FN_CEVERQUEST_MAIN_LOOP: u64 = 0x0; // TODO: extract from MQ2 referenc
 
 The actual address must be extracted from the MQ2 reference source. Look in `mq2-reference/` for `ProcessGameEvents`, `RealRender_World`, or `MainLoop` patterns.
 
-- [ ] **Step 6.2: Implement the game loop hook (`dmft-dll/src/hooks/game_loop.rs`)**
+- [ ] **Step 6.2: Implement the game loop hook (`textquest-dll/src/hooks/game_loop.rs`)**
 
 ```rust
 use retour::static_detour;
-use dmft_common::offsets;
+use textquest_common::offsets;
 
 // Define the detour
 static_detour! {
@@ -802,11 +802,11 @@ pub unsafe fn uninstall() -> anyhow::Result<()> {
 }
 ```
 
-- [ ] **Step 6.3: Call from `initialize()` in `dmft-dll/src/lib.rs`**
+- [ ] **Step 6.3: Call from `initialize()` in `textquest-dll/src/lib.rs`**
 
 Wire the hook installation into the DLL's initialization function.
 
-- [ ] **Step 6.4: Add to `unhook_all()` in `dmft-dll/src/hooks/mod.rs`**
+- [ ] **Step 6.4: Add to `unhook_all()` in `textquest-dll/src/hooks/mod.rs`**
 
 - [ ] **Step 6.5: Verification**
 
@@ -820,8 +820,8 @@ On Windows: inject into eqgame.exe, verify the hook fires by writing a timestamp
 
 **Files to create/modify:**
 
-- `dmft-dll/src/hooks/movement.rs`
-- `dmft-common/src/offsets.rs` -- add movement function addresses
+- `textquest-dll/src/hooks/movement.rs`
+- `textquest-common/src/offsets.rs` -- add movement function addresses
 
 ### Steps
 
@@ -833,7 +833,7 @@ From MQ2 reference, find:
 - `CEverQuest::MoveToLocation` or equivalent -- high-level move-to command
 - `PlayerClient::ChangePosition` -- position update
 
-Add to `dmft-common/src/offsets.rs`:
+Add to `textquest-common/src/offsets.rs`:
 
 ```rust
 /// Movement-related function addresses (preferred base).
@@ -843,7 +843,7 @@ pub const FN_SET_HEADING: u64 = 0x0;          // TODO: extract
 pub const FN_CHANGE_POSITION: u64 = 0x0;      // TODO: extract
 ```
 
-- [ ] **Step 7.2: Implement movement hooks (`dmft-dll/src/hooks/movement.rs`)**
+- [ ] **Step 7.2: Implement movement hooks (`textquest-dll/src/hooks/movement.rs`)**
 
 ```rust
 use retour::static_detour;
@@ -855,11 +855,11 @@ static_detour! {
 }
 
 /// Pending movement command (set by command handler, consumed by hook).
-static PENDING_MOVE: std::sync::Mutex<Option<dmft_common::types::Position>> =
+static PENDING_MOVE: std::sync::Mutex<Option<textquest_common::types::Position>> =
     std::sync::Mutex::new(None);
 
 /// Queue a movement command.
-pub fn queue_move(pos: dmft_common::types::Position) {
+pub fn queue_move(pos: textquest_common::types::Position) {
     *PENDING_MOVE.lock().unwrap() = Some(pos);
 }
 
@@ -897,8 +897,8 @@ On Windows: inject into eqgame.exe, send a `MoveTo` command via named pipe from 
 
 **Files to create/modify:**
 
-- `dmft-dll/src/hooks/casting.rs`
-- `dmft-common/src/offsets.rs` -- add casting function addresses
+- `textquest-dll/src/hooks/casting.rs`
+- `textquest-common/src/offsets.rs` -- add casting function addresses
 
 ### Steps
 
@@ -910,7 +910,7 @@ From MQ2 reference, find:
 - `PcZoneClient::UseAbility` -- alternative entry point for abilities/AAs
 - Spell gem slot mapping
 
-Add to `dmft-common/src/offsets.rs`:
+Add to `textquest-common/src/offsets.rs`:
 
 ```rust
 /// Casting-related function addresses (preferred base).
@@ -918,7 +918,7 @@ pub const FN_CAST_SPELL: u64 = 0x0;           // TODO: extract from MQ2 referenc
 pub const FN_STOP_CAST: u64 = 0x0;            // TODO: extract
 ```
 
-- [ ] **Step 8.2: Implement casting hooks (`dmft-dll/src/hooks/casting.rs`)**
+- [ ] **Step 8.2: Implement casting hooks (`textquest-dll/src/hooks/casting.rs`)**
 
 Two approaches (implement both, use whichever works):
 
@@ -954,8 +954,8 @@ On Windows: inject into eqgame.exe, send a `CastSpell` command. Verify the chara
 
 **Files to create/modify:**
 
-- `dmft-dll/src/hooks/targeting.rs`
-- `dmft-common/src/offsets.rs` -- add targeting function addresses
+- `textquest-dll/src/hooks/targeting.rs`
+- `textquest-common/src/offsets.rs` -- add targeting function addresses
 
 ### Steps
 
@@ -967,14 +967,14 @@ From MQ2 reference, find:
 - `CEverQuest::SetTarget` -- higher-level target setter
 - The global `PINST_TARGET` pointer (already in offsets.rs: `0x140E8E428`)
 
-Add to `dmft-common/src/offsets.rs`:
+Add to `textquest-common/src/offsets.rs`:
 
 ```rust
 /// Targeting-related function addresses (preferred base).
 pub const FN_SET_TARGET: u64 = 0x0;           // TODO: extract from MQ2 reference
 ```
 
-- [ ] **Step 9.2: Implement targeting (`dmft-dll/src/hooks/targeting.rs`)**
+- [ ] **Step 9.2: Implement targeting (`textquest-dll/src/hooks/targeting.rs`)**
 
 ```rust
 /// Set the current target by spawn ID.
@@ -984,7 +984,7 @@ pub const FN_SET_TARGET: u64 = 0x0;           // TODO: extract from MQ2 referenc
 /// Must be called from the game loop thread.
 pub unsafe fn set_target(eq_base: usize, spawn_id: u32) -> anyhow::Result<()> {
     // 1. Read SpawnManager pointer
-    // 2. Walk the spawn linked list (reuse offset constants from dmft_common::offsets)
+    // 2. Walk the spawn linked list (reuse offset constants from textquest_common::offsets)
     // 3. Find the spawn with matching SPAWN_ID
     // 4. Write the spawn pointer to PINST_TARGET
     // Alternatively, call CEverQuest::SetTarget(PlayerClient*) if available
@@ -993,8 +993,8 @@ pub unsafe fn set_target(eq_base: usize, spawn_id: u32) -> anyhow::Result<()> {
 
 /// Clear the current target (write null to PINST_TARGET).
 pub unsafe fn clear_target(eq_base: usize) -> anyhow::Result<()> {
-    let target_addr = dmft_common::offsets::rebase(
-        dmft_common::offsets::PINST_TARGET, eq_base as u64
+    let target_addr = textquest_common::offsets::rebase(
+        textquest_common::offsets::PINST_TARGET, eq_base as u64
     );
     std::ptr::write(target_addr as *mut u64, 0);
     Ok(())
@@ -1017,11 +1017,11 @@ On Windows: inject into eqgame.exe, send a `TargetSpawn` command with a known sp
 
 **Files to create:**
 
-- `dmft/src/client/healing.rs`
+- `textquest/src/client/healing.rs`
 
 ### Steps
 
-- [ ] **Step 10.1: Implement process health monitor (`dmft/src/client/healing.rs`)**
+- [ ] **Step 10.1: Implement process health monitor (`textquest/src/client/healing.rs`)**
 
 ```rust
 /// Health check result for a single EQ client.
@@ -1094,19 +1094,19 @@ On Windows: start the orchestrator with one EQ client. Kill eqgame.exe via Task 
 
 **Files to create/modify:**
 
-- `dmft/src/client/mod.rs`
-- `dmft/src/client/manager.rs`
-- `dmft/src/client/session.rs`
-- `dmft/src/tui/app.rs` -- integrate ClientManager
-- `dmft/src/main.rs` -- wire up injection on startup
+- `textquest/src/client/mod.rs`
+- `textquest/src/client/manager.rs`
+- `textquest/src/client/session.rs`
+- `textquest/src/tui/app.rs` -- integrate ClientManager
+- `textquest/src/main.rs` -- wire up injection on startup
 
 ### Steps
 
-- [ ] **Step 11.1: Define `EqSession` (`dmft/src/client/session.rs`)**
+- [ ] **Step 11.1: Define `EqSession` (`textquest/src/client/session.rs`)**
 
 ```rust
 use std::path::PathBuf;
-use dmft_common::types::{ClientId, GameState};
+use textquest_common::types::{ClientId, GameState};
 
 /// Represents a single managed EQ client.
 pub struct EqSession {
@@ -1121,7 +1121,7 @@ pub struct EqSession {
 }
 ```
 
-- [ ] **Step 11.2: Implement `ClientManager` (`dmft/src/client/manager.rs`)**
+- [ ] **Step 11.2: Implement `ClientManager` (`textquest/src/client/manager.rs`)**
 
 ```rust
 use std::sync::{Arc, Mutex};
@@ -1157,7 +1157,7 @@ impl ClientManager {
 
 On Windows:
 
-1. Build or locate `dmft-dll.dll` (from the workspace build output)
+1. Build or locate `textquest-dll.dll` (from the workspace build output)
 2. Create `ClientManager` with the DLL path
 3. Call `discover_and_inject()` to find and inject all running EQ processes
 4. Start the healing loop (Task 10)
@@ -1236,13 +1236,13 @@ Several tasks require extracting function addresses from the MQ2 reference sourc
 1. Search `mq2-reference/src/eqlib/` for the function name
 2. Find the address in the offset headers (eqgame.h or similar)
 3. Record the preferred-base address and calling convention
-4. Add to `dmft-common/src/offsets.rs`
+4. Add to `textquest-common/src/offsets.rs`
 
 ### Logging strategy
 
 The injected DLL cannot use stdout. Use file-based logging:
 
-- DLL log file: `C:\dmft\logs\dmft-dll-{pid}.log`
+- DLL log file: `C:\dmft\logs\textquest-dll-{pid}.log`
 - Use `tracing` with a file appender subscriber initialized in `DllMain`
 
 ### Safety notes

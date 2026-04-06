@@ -20,8 +20,8 @@ and `third_party/macroquest`. After checkout, run
 
 ```
 dmft  (v0.5.0)
-dmft-dll  (v0.5.0)
-dmft-common  (v0.5.0)
+textquest-dll  (v0.5.0)
+textquest-common  (v0.5.0)
 ```
 
 ## Recent Commits (last 20)
@@ -83,7 +83,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 | — | 0 | 0 |
 | — | 0 | 0 |
 
-## Key Offsets (from dmft-common/src/offsets.rs)
+## Key Offsets (from textquest-common/src/offsets.rs)
 
 | Constant | Value |
 |----------|-------|

@@ -12,7 +12,7 @@
 4. [Class Config Structure](#class-config-structure)
 5. [Per-Class Priority Analysis](#per-class-priority-analysis)
 6. [MQ2 Plugin Ecosystem](#mq2-plugin-ecosystem)
-7. [Gap Analysis vs DMFT](#gap-analysis-vs-dmft)
+7. [Gap Analysis vs TextQuest](#gap-analysis-vs-textquest)
 8. [Recommended Adoption Priorities](#recommended-adoption-priorities)
 
 ---
@@ -76,7 +76,7 @@ rgmercs/
 - **Campfire**: Fellowship campfire management with kit types
 - **Stuck detection**: Tracks position changes, detects when stuck
 
-**Comparison to DMFT**: Our Navigator FSM in `dmft-dll/src/nav/` handles similar concepts (waypoint queue, stuck detection, humanized movement). Key differences:
+**Comparison to TextQuest**: Our Navigator FSM in `textquest-dll/src/nav/` handles similar concepts (waypoint queue, stuck detection, humanized movement). Key differences:
 
 - RGMercs delegates to MQ2Nav/MQ2MoveUtils plugins; we implement our own navmesh walking
 - RGMercs has circle-strafing for positional combat; we don't yet
@@ -115,7 +115,7 @@ rgmercs/
 - Safe targeting: Skips mobs already fighting other groups
 - Fallback: Area spawn search if XTarget list insufficient
 
-**Comparison to DMFT**: Our Combatant FSM + aggro detection handles similar flow but is simpler. Key gaps:
+**Comparison to TextQuest**: Our Combatant FSM + aggro detection handles similar flow but is simpler. Key gaps:
 
 - We lack the sophisticated MA target scan with named/trash priority
 - No aggro percentage tracking (requires reading XTarget aggro data)
@@ -153,7 +153,7 @@ A massive utility (~37k tokens) handling all spell/ability execution:
 - `ItemReady()` — clicky timer check
 - `AbilityReady()` — combat ability ready + range check
 
-**Comparison to DMFT**: Our GCD tracker + spell queue is much simpler. We don't have:
+**Comparison to TextQuest**: Our GCD tracker + spell queue is much simpler. We don't have:
 
 - Dynamic spell memorization (swapping gems on the fly)
 - Buff stacking checks
@@ -199,10 +199,10 @@ For each entry in rotation table:
 - `SetSpellLoadOutByGem()` — legacy system: per-gem spell assignments
 - `LoadSpellLoadOut()` — memorizes spells into gem slots
 
-**Comparison to DMFT**: This is the biggest architectural difference:
+**Comparison to TextQuest**: This is the biggest architectural difference:
 
 - RGMercs: Data-driven rotation tables with condition functions
-- DMFT: `ClassStrategy::select_spell()` returns a single `Option<SpellEntry>`
+- TextQuest: `ClassStrategy::select_spell()` returns a single `Option<SpellEntry>`
 - RGMercs has multi-step rotation execution with step limits; we pick one action per frame
 - RGMercs memorizes spells dynamically; we don't manage spell gems yet
 
@@ -232,7 +232,7 @@ PULL_IDLE → PULL_GROUPWATCH_WAIT → PULL_SCAN → PULL_NAV_TO_TARGET
 - Group watch (wait for group to be ready before pulling)
 - Named mob detection during pulls
 
-**Comparison to DMFT**: Our puller FSM in `dmft-dll/src/combat/puller.rs` is similar but doesn't have:
+**Comparison to TextQuest**: Our puller FSM in `textquest-dll/src/combat/puller.rs` is similar but doesn't have:
 
 - Multiple pull modes (chain, hunt, farm)
 - Waypoint path following during pulls
@@ -247,7 +247,7 @@ Dedicated crowd control module:
 - Mez tracker (which mobs are mezzed, remaining duration)
 - Configurable: mez start count, AE mez count, max mez count
 
-**Comparison to DMFT**: Our `mez_queue.rs` is simpler — we should adopt:
+**Comparison to TextQuest**: Our `mez_queue.rs` is simpler — we should adopt:
 
 - Mez immune tracking
 - Duration-based re-mez logic
@@ -261,7 +261,7 @@ Charm automation for enchanter/bard:
 - Charm break detection
 - Re-charm logic
 
-**Comparison to DMFT**: We have no charm automation yet.
+**Comparison to TextQuest**: We have no charm automation yet.
 
 ---
 
@@ -378,7 +378,7 @@ _ClassConfig = {
 | **BER** | (single)     | Combat, Burn, Downtime                                                         | Frenzy, volley                                     |
 | **BST** | (single)     | Pet, Combat, Heal, Burn, Downtime                                              | Pet management, self-heal                          |
 
-### Bard Song Weaving (Critical for DMFT)
+### Bard Song Weaving (Critical for TextQuest)
 
 RGMercs bard uses `doFullRotation = true` on combat rotations, meaning:
 
@@ -420,7 +420,7 @@ MQ2Melee is the foundational melee automation plugin. RGMercs largely replaces i
 - **Taunt**: Auto-taunt management
 - **Holy shit**: Emergency ability when HP drops below threshold
 
-**What DMFT should adopt**: Our positioning module handles some of this, but we should add:
+**What TextQuest should adopt**: Our positioning module handles some of this, but we should add:
 
 - Configurable stick positions (behind, front, pin)
 - Move-back behavior
@@ -437,7 +437,7 @@ MQ2Cast handles the complexities of EQ spell casting:
 - **GCD tracking**: Global cooldown awareness
 - **Custom events**: "CAST_SUCCESS", "CAST_IMMUNE", "CAST_RESIST"
 
-**What DMFT should adopt**:
+**What TextQuest should adopt**:
 
 - Our `gcd.rs` tracks GCD but we lack interrupt detection
 - We should add spell memorization management
@@ -452,7 +452,7 @@ For multibox healing across groups:
 - **Heal assignment**: Prevent multiple healers from healing same target
 - **Over-heal prevention**: Cancel heals if target HP recovered
 
-**What DMFT should adopt**: This is critical for 36-box. Our IPC system can carry health data but we need:
+**What TextQuest should adopt**: This is critical for 36-box. Our IPC system can carry health data but we need:
 
 - Cross-group heal target arbitration
 - Heal assignment/deconfliction
@@ -465,15 +465,15 @@ For multibox healing across groups:
 - Named mob highlighting
 - Spawn filtering
 
-**What DMFT should adopt**: Our TUI map already has some of this. Consider adding camp/pull radius visualization.
+**What TextQuest should adopt**: Our TUI map already has some of this. Consider adding camp/pull radius visualization.
 
 ---
 
-## Gap Analysis vs DMFT
+## Gap Analysis vs TextQuest
 
 ### What RGMercs Has That We Don't
 
-| Feature                               | RGMercs                                  | DMFT Status                         | Priority                                        |
+| Feature                               | RGMercs                                  | TextQuest Status                         | Priority                                        |
 | ------------------------------------- | ---------------------------------------- | ----------------------------------- | ----------------------------------------------- |
 | **Data-driven rotation tables**       | Full Lua table system                    | Hardcoded `select_spell()`          | HIGH — our class strategies are skeletal        |
 | **Spell resolution (best available)** | `ResolveActions()` auto-picks best spell | `config.spells` static list         | HIGH — TLP level progression needs this         |
@@ -494,9 +494,9 @@ For multibox healing across groups:
 | **Group readiness checking**          | GroupWatch before pulls                  | Not implemented                     | MEDIUM                                          |
 | **DanNet communication**              | Lua-based cross-client messaging         | Rust IPC (named pipes + shared mem) | EQUIVALENT — different impl                     |
 
-### What DMFT Has That RGMercs Doesn't
+### What TextQuest Has That RGMercs Doesn't
 
-| Feature                       | DMFT                                 | Notes                                                  |
+| Feature                       | TextQuest                                 | Notes                                                  |
 | ----------------------------- | ------------------------------------ | ------------------------------------------------------ |
 | **Compiled Rust performance** | Native DLL, zero Lua overhead        | Significant for 36 clients                             |
 | **HolyShit system**           | Emergency preemption framework       | RGMercs has basic HP checks but less structured        |

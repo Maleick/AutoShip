@@ -138,11 +138,11 @@ fi
 echo ""
 
 # --- Key offsets ---
-echo "## Key Offsets (from dmft-common/src/offsets.rs)"
+echo "## Key Offsets (from textquest-common/src/offsets.rs)"
 echo ""
 echo "| Constant | Value |"
 echo "|----------|-------|"
-grep -E '^pub const' dmft-common/src/offsets.rs | sed 's/pub const \([A-Z0-9_]*\):[^=]*= \(0x[0-9A-Fa-f_]*\);/| \1 | `\2` |/' | head -30
+grep -E '^pub const' textquest-common/src/offsets.rs | sed 's/pub const \([A-Z0-9_]*\):[^=]*= \(0x[0-9A-Fa-f_]*\);/| \1 | `\2` |/' | head -30
 echo ""
 
 # --- Build requirements ---

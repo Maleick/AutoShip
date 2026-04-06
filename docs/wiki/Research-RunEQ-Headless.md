@@ -14,7 +14,7 @@ RunEQ is a fully headless EverQuest client written in Go that implements the EQ 
 
 The binary targets the **Rain of Fear (RoF)** client protocol version, includes `gopacket` for packet capture/analysis, and uses `bubbletea`/`tview` for its terminal UI. It has a simulation layer (`sim` package) that mirrors the zone client's state, including a `SpawnManager` for tracking all entities.
 
-**Key takeaway for DMFT:** RunEQ proves the EQ protocol is fully implementable outside eqgame.exe. Its packet definitions, opcode table, protocol flow, and EQStream layer design are directly applicable to DMFT's future packet sniffer (M6), potential headless-client experimentation, and protocol understanding for the injected DLL's network hooks.
+**Key takeaway for TextQuest:** RunEQ proves the EQ protocol is fully implementable outside eqgame.exe. Its packet definitions, opcode table, protocol flow, and EQStream layer design are directly applicable to TextQuest's future packet sniffer (M6), potential headless-client experimentation, and protocol understanding for the injected DLL's network hooks.
 
 ---
 
@@ -599,11 +599,11 @@ Data files referenced:
 
 ---
 
-## 9. Implications for DMFT
+## 9. Implications for TextQuest
 
 ### 9.1 Headless Client Potential
 
-RunEQ demonstrates that a fully headless EQ client is achievable. For DMFT's 36-box setup, this has massive implications:
+RunEQ demonstrates that a fully headless EQ client is achievable. For TextQuest's 36-box setup, this has massive implications:
 
 **Resource savings:** A headless client would eliminate the ~2-4GB RAM and GPU overhead per eqgame.exe instance. For 36 boxes, that is 72-144GB of RAM savings and eliminates the GPU bottleneck entirely. RunEQ as a Go binary is likely under 100MB RAM per instance.
 
@@ -611,15 +611,15 @@ RunEQ demonstrates that a fully headless EQ client is achievable. For DMFT's 36-
 
 **Risk:** This is the most detectable approach possible. A headless client has no DirectX rendering, no eqgame.exe process, completely different network fingerprint (Go's UDP stack vs Windows Winsock), and would fail any client-side integrity check. On a TLP server with active anti-cheat, this would be an instant ban.
 
-### 9.2 Protocol Reference for DMFT
+### 9.2 Protocol Reference for TextQuest
 
 Even without building a headless client, RunEQ's extracted protocol data is directly useful:
 
-**Packet sniffer (M6 TUI):** The opcode table and packet structures map directly to what DMFT's packet sniffer hook needs to decode. The `OP_*` names, field names, and RoF packet definitions serve as a decode reference.
+**Packet sniffer (M6 TUI):** The opcode table and packet structures map directly to what TextQuest's packet sniffer hook needs to decode. The `OP_*` names, field names, and RoF packet definitions serve as a decode reference.
 
-**Protocol validation:** DMFT's DLL hooks send/recv at the network layer. RunEQ's protocol flow confirms the exact sequence of packets during login, zoning, and gameplay -- useful for validating that our hooks see the right traffic.
+**Protocol validation:** TextQuest's DLL hooks send/recv at the network layer. RunEQ's protocol flow confirms the exact sequence of packets during login, zoning, and gameplay -- useful for validating that our hooks see the right traffic.
 
-**EQStream layer:** The session negotiation, encryption (XOR with encode key), CRC verification, sequencing, fragmentation, and combined packet handling documented here matches what DMFT needs to decode in its packet sniffer.
+**EQStream layer:** The session negotiation, encryption (XOR with encode key), CRC verification, sequencing, fragmentation, and combined packet handling documented here matches what TextQuest needs to decode in its packet sniffer.
 
 **Float encoding:** The EQ10/12/13/19 fixed-point float conversions are critical for decoding position packets. These confirm the encoding format we need for movement data.
 
@@ -635,14 +635,14 @@ Even without building a headless client, RunEQ's extracted protocol data is dire
 
 ### 9.4 Detection Considerations
 
-If DMFT ever explored a hybrid approach (headless clients for non-visible boxes, real clients for visible ones):
+If TextQuest ever explored a hybrid approach (headless clients for non-visible boxes, real clients for visible ones):
 
 - **Network fingerprint:** Go's UDP stack produces different packet timing, MTU behavior, and socket options than eqgame.exe's Winsock calls. Detectable by server-side analysis.
 - **Missing client data:** Headless clients cannot provide valid WorldClientCRC values without having the actual game files and computing real CRCs. Faking these is possible but another detection vector.
 - **No rendering callbacks:** Server-side checks that expect client-side rendering state (screenshot requests, UI element queries) would fail.
 - **Session characteristics:** Packet timing, update frequency, and response latency patterns would differ from a real client.
 
-**Verdict for DMFT:** Use RunEQ as a protocol reference, not as an operational approach. The injected DLL strategy provides full client fidelity while RunEQ's protocol documentation accelerates packet sniffer development and protocol understanding.
+**Verdict for TextQuest:** Use RunEQ as a protocol reference, not as an operational approach. The injected DLL strategy provides full client fidelity while RunEQ's protocol documentation accelerates packet sniffer development and protocol understanding.
 
 ---
 
