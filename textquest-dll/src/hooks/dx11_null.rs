@@ -817,24 +817,19 @@ mod inner {
             .join(format!("screenshot_{}_{}.bmp", pid, timestamp));
         let path = path.to_string_lossy().into_owned();
 
-        let write_result = unsafe {
-            write_bmp(
-                &path,
-                width,
-                height,
-                mapped.RowPitch,
-                mapped.pData as *const u8,
-            )
-        };
+        let write_result = write_bmp(
+            &path,
+            width,
+            height,
+            mapped.RowPitch,
+            mapped.pData as *const u8,
+        );
         unsafe { context.Unmap(&staging, 0) };
         write_result.map(|()| path)
     }
 
     /// Write BGRA pixel data to a 24-bit BMP file.
-    ///
-    /// # Safety
-    /// `data` must point to a valid pixel buffer with at least `height * row_pitch` bytes.
-    unsafe fn write_bmp(
+    fn write_bmp(
         path: &str,
         width: u32,
         height: u32,
