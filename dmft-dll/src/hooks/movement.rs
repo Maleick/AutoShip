@@ -14,14 +14,18 @@ pub const CMD_FORWARD: u32 = 2;
 pub const CMD_BACK: u32 = 3;
 
 /// Calculate heading from current position to target (EQ heading: 0-512, 0=north, increases CW).
+///
+/// Matches MQ2's formula from MQCommands.cpp `/face`:
+///   `atan2(target.x - player.x, target.y - player.y) * 256 / PI`
+/// which is equivalent to `atan2(dx, dy) * 256 / PI` mapped to 0..512.
 pub fn calc_heading(from: &Waypoint, to: &Waypoint) -> f32 {
     let dx = to.x - from.x;
     let dy = to.y - from.y;
-    // EQ uses atan2(-dx, dy) mapped to 0..512
-    let rad = (-dx).atan2(dy);
-    let deg = rad.to_degrees();
-    // Convert -180..180 to 0..512
-    (deg * 512.0 / 360.0 + 512.0) % 512.0
+    let rad = dx.atan2(dy);
+    // 256/PI converts radians to EQ heading units (512 = full circle)
+    let heading = rad * 256.0 / std::f32::consts::PI;
+    // Normalize to 0..512
+    (heading + 512.0) % 512.0
 }
 
 /// Movement controller state -- holds a pointer to the local player's
