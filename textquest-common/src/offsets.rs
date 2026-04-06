@@ -983,16 +983,20 @@ mod tests {
         assert_eq!(buff_slots::EQ_AFFECT_SIZE, 0x98);
         assert_eq!(buff_slots::MAX_TOTAL_BUFFS, 93);
         assert_eq!(buff_slots::NUM_LONG_BUFFS + buff_slots::NUM_SHORT_BUFFS, 93);
-        assert!(buff_slots::SPELL_ID < buff_slots::EQ_AFFECT_SIZE);
-        assert!(buff_slots::DURATION < buff_slots::EQ_AFFECT_SIZE);
-        assert!(buff_slots::CASTER_LEVEL < buff_slots::EQ_AFFECT_SIZE);
+        const _: () = {
+            assert!(buff_slots::SPELL_ID < buff_slots::EQ_AFFECT_SIZE);
+            assert!(buff_slots::DURATION < buff_slots::EQ_AFFECT_SIZE);
+            assert!(buff_slots::CASTER_LEVEL < buff_slots::EQ_AFFECT_SIZE);
+        };
     }
 
     #[test]
     fn profile_offsets_consistent() {
-        assert!(profile::PROFILE_MANAGER > 0);
-        assert!(profile::BUFFS_ARRAY > 0);
-        assert!(profile::ARRAY_DATA_PTR < profile::ARRAY_SIZE);
+        const _: () = {
+            assert!(profile::PROFILE_MANAGER > 0);
+            assert!(profile::BUFFS_ARRAY > 0);
+            assert!(profile::ARRAY_DATA_PTR < profile::ARRAY_SIZE);
+        };
     }
 
     #[test]
