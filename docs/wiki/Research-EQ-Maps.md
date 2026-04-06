@@ -5,6 +5,7 @@ Research into integrating EverQuest zone maps into the Frostreaver TUI dashboard
 ## 1. Map Sources
 
 ### Brewall's EQ Maps (Recommended)
+
 - **Website:** https://www.eqmaps.info/eq-map-files/
 - **Download:** https://www.eqmaps.info/wp-content/uploads/2024/01/brewall-20240109.zip
 - **Format:** ZIP of `.txt` map files, one set per zone
@@ -12,12 +13,14 @@ Research into integrating EverQuest zone maps into the Frostreaver TUI dashboard
 - **Color standards:** Documented at https://www.eqmaps.info/eq-map-files/mapping-standards/
 
 ### Good's EQ Maps
+
 - **GitHub:** https://github.com/RedGuides/goodurden-maps
 - **RedGuides:** https://www.redguides.com/community/resources/goods-everquest-map-pack.303/
 - **Format:** Same `.txt` format as Brewall's
 - **Quality:** Extremely detailed, broad community support
 
 ### EQ Atlas (Legacy)
+
 - Historical reference maps, mostly image-based (not parseable)
 - Not useful for programmatic integration
 
@@ -28,6 +31,7 @@ Research into integrating EverQuest zone maps into the Frostreaver TUI dashboard
 ### File Naming Convention
 
 Each zone has up to 4 layer files:
+
 ```
 <zoneshortname>.txt      — Layer 0: Zone geometry (walls, terrain)
 <zoneshortname>_1.txt    — Layer 1: Labels/points (NPC names, locations)
@@ -43,13 +47,14 @@ Example: `ecommons.txt`, `ecommons_1.txt`, `ecommons_2.txt`, `ecommons_3.txt`
 L x1, y1, z1, x2, y2, z2, r, g, b
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| x1, y1, z1 | float | Start point coordinates |
-| x2, y2, z2 | float | End point coordinates |
-| r, g, b | int (0-255) | Line color |
+| Field      | Type        | Description             |
+| ---------- | ----------- | ----------------------- |
+| x1, y1, z1 | float       | Start point coordinates |
+| x2, y2, z2 | float       | End point coordinates   |
+| r, g, b    | int (0-255) | Line color              |
 
 Example:
+
 ```
 L 2881.0, -2022.0, -295.0, 2885.0, -2027.0, -295.0, 128, 255, 0
 ```
@@ -60,16 +65,17 @@ L 2881.0, -2022.0, -295.0, 2885.0, -2027.0, -295.0, 128, 255, 0
 P x, y, z, r, g, b, size, label_text
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| x, y, z | float | Point coordinates |
-| r, g, b | int (0-255) | Label color |
-| size | int (1-3) | Font size |
-| label_text | string | Text label (may contain commas, underscores = spaces) |
+| Field      | Type        | Description                                           |
+| ---------- | ----------- | ----------------------------------------------------- |
+| x, y, z    | float       | Point coordinates                                     |
+| r, g, b    | int (0-255) | Label color                                           |
+| size       | int (1-3)   | Font size                                             |
+| label_text | string      | Text label (may contain commas, underscores = spaces) |
 
 The label field is parsed with `splitn(8, ',')` so commas in the label text are preserved.
 
 Example:
+
 ```
 P 5531.2642, -168.7061, -299.5485, 128, 255, 0, 2, Gargoyle_Island
 P -3710.0198, -1594.5485, -192.5240, 128, 255, 0, 2, Gull_Skytalon_(Named,Roam)
@@ -124,7 +130,7 @@ This is inherited from the ShowEQ/LoY cartography format and is a well-known sou
 
 ## 3. MQ2Map Plugin Analysis
 
-The MQ2Map plugin in `mq2-reference/src/plugins/map/` (5,108 lines total) is a **real-time spawn overlay**, not a zone geometry loader. Key insight:
+The MQ2Map plugin in `third_party/macroquest/src/plugins/map/` (5,108 lines total) is a **real-time spawn overlay**, not a zone geometry loader. Key insight:
 
 - `MapGenerate()` iterates the live spawn list from memory
 - Creates `MapObject` instances for each spawn (PC, NPC, pet, corpse, ground item)
@@ -134,6 +140,7 @@ The MQ2Map plugin in `mq2-reference/src/plugins/map/` (5,108 lines total) is a *
 **What MQ2Map does NOT do:** It does not parse zone map `.txt` files. Zone geometry rendering is handled by the EQ client's built-in `MapViewMap` window, which MQ2Map hooks into via `PostDraw`.
 
 **In-memory structs** (from `eqlib/game/UI.h`):
+
 ```cpp
 struct MapViewLine {          // sizeof 0x30
     MapViewLine*  pNext;
@@ -291,6 +298,7 @@ Transform pipeline:
 Map file X → terminal column (horizontal), Map file Y → terminal row (vertical).
 
 Since map coords are `(-locY, -locX)`, and our TUI reads locY/locX from memory:
+
 ```rust
 let map_x = -loc_y;  // player's map X
 let map_y = -loc_x;  // player's map Y
@@ -320,34 +328,35 @@ fn rasterize_line(
 
 ### Zoom Levels
 
-| Level | Scale | Coverage (~120 col terminal) | Use Case |
-|-------|-------|------------------------------|----------|
-| 1 (far) | 0.05 chars/unit | ~2400 EQ units | Full zone overview |
-| 2 | 0.1 | ~1200 units | Area overview |
-| 3 | 0.2 | ~600 units | Neighborhood |
-| 4 (close) | 0.5 | ~240 units | Immediate surroundings |
-| 5 (detail) | 1.0 | ~120 units | Fine detail |
+| Level      | Scale           | Coverage (~120 col terminal) | Use Case               |
+| ---------- | --------------- | ---------------------------- | ---------------------- |
+| 1 (far)    | 0.05 chars/unit | ~2400 EQ units               | Full zone overview     |
+| 2          | 0.1             | ~1200 units                  | Area overview          |
+| 3          | 0.2             | ~600 units                   | Neighborhood           |
+| 4 (close)  | 0.5             | ~240 units                   | Immediate surroundings |
+| 5 (detail) | 1.0             | ~120 units                   | Fine detail            |
 
 Zoom controlled by `+`/`-` keys. Pan with arrow keys (or auto-follow player).
 
 ### Rendering Characters
 
-| Element | Character | Notes |
-|---------|-----------|-------|
-| Horizontal wall | `─` | Box-drawing |
-| Vertical wall | `│` | Box-drawing |
-| Diagonal | `/` `\` | Based on slope |
-| Generic wall | `·` | Fallback for any line pixel |
-| Player | `@` | Bright green, always on top |
-| Group member | `*` | Cyan |
-| NPC | `+` | Yellow |
-| Named NPC | `!` | Red, bold |
-| Corpse | `%` | Dark grey |
-| Label text | actual text | Rendered at map point location |
+| Element         | Character   | Notes                          |
+| --------------- | ----------- | ------------------------------ |
+| Horizontal wall | `─`         | Box-drawing                    |
+| Vertical wall   | `│`         | Box-drawing                    |
+| Diagonal        | `/` `\`     | Based on slope                 |
+| Generic wall    | `·`         | Fallback for any line pixel    |
+| Player          | `@`         | Bright green, always on top    |
+| Group member    | `*`         | Cyan                           |
+| NPC             | `+`         | Yellow                         |
+| Named NPC       | `!`         | Red, bold                      |
+| Corpse          | `%`         | Dark grey                      |
+| Label text      | actual text | Rendered at map point location |
 
 ### Z-Level Filtering
 
 Use the player's current Z (elevation) to filter which lines to render:
+
 ```rust
 const Z_TOLERANCE: f32 = 50.0; // tunable
 let visible = line.z1.abs() - player_z.abs() < Z_TOLERANCE
@@ -359,6 +368,7 @@ This prevents rendering floors above/below the player, which is critical for mul
 ### Color Mapping
 
 Map RGB colors to terminal colors (ratatui `Color::Rgb` for true-color terminals):
+
 ```rust
 fn map_color(r: u8, g: u8, b: u8) -> Color {
     Color::Rgb(r, g, b)  // True color — most modern terminals support this
@@ -370,6 +380,7 @@ Fallback for 256-color terminals: quantize to nearest ANSI color.
 ### Spawn Overlay
 
 Overlay live spawn data on top of the static map:
+
 1. Read spawn positions from existing `SpawnInfo` data (already available in TUI)
 2. Transform spawn coordinates to terminal coords using same pipeline
 3. Render spawn glyphs on top of map geometry
@@ -421,5 +432,5 @@ Overlay live spawn data on top of the static map:
 - nox-maps Python parser: https://github.com/devin-hart/nox-maps
 - ZlizEQMap C# parser: https://github.com/hada79/ZlizEQMap
 - MQ2Map plugin docs: https://docs.macroquest.org/plugins/core-plugins/mq2map/
-- MQ2Map source: `mq2-reference/src/plugins/map/` (5,108 lines)
-- MapViewLine/MapViewLabel structs: `mq2-reference/src/eqlib/include/eqlib/game/UI.h`
+- MQ2Map source: `third_party/macroquest/src/plugins/map/` (5,108 lines)
+- MapViewLine/MapViewLabel structs: `third_party/macroquest/src/eqlib/include/eqlib/game/UI.h`
