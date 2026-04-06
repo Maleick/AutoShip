@@ -256,10 +256,9 @@ fn login_chain_phase2() {
                 attempt,
                 "Phase 2: Found PLAY EVERQUEST! on server select screen"
             );
-            // Direct vtable click — ProcessGameEvents isn't hooked during eqmain,
-            // so queue_button_click() would never drain.
+            // Phase-aware click — eqmain is still loaded, so direct vtable.
             std::thread::sleep(std::time::Duration::from_millis(150));
-            unsafe { crate::eq::widgets::click_button_via_vtable(play_btn) };
+            unsafe { crate::eq::widgets::click_button_for_phase(play_btn, true) };
             // Also press Enter via PostMessage as backup
             std::thread::sleep(std::time::Duration::from_millis(200));
             crate::login::widgets::simulate_enter_key(eqmain_base);
