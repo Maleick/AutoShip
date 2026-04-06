@@ -241,8 +241,17 @@ fn login_chain_phase2() {
         let at_server_select =
             crate::login::widgets::is_sidl_window_visible(eqmain_base, "serverselect");
         if !at_server_select {
+            // Log screen state every 5s for debugging
             if attempt % 10 == 0 {
-                tracing::debug!(attempt, "Phase 2: Not at server select yet, waiting...");
+                let has_connect =
+                    crate::login::widgets::is_sidl_window_visible(eqmain_base, "connect");
+                tracing::info!(
+                    attempt,
+                    has_serverselect = false,
+                    has_connect,
+                    eqmain_base = format!("{:#x}", eqmain_base),
+                    "Phase 2: screen state check"
+                );
             }
             // Press Enter every 3s to dismiss any blocking dialogs
             if attempt % 6 == 3 {
@@ -296,6 +305,14 @@ fn login_chain_phase2() {
             tracing::info!(
                 attempt,
                 "Phase 3: Clicked Yes on 'already logged in' dialog"
+            );
+        }
+        // Log screen state every 10s for debugging
+        if attempt % 20 == 0 {
+            tracing::info!(
+                attempt,
+                eqmain_base = format!("{:#x}", eqmain_base),
+                "Phase 3: eqmain still loaded, waiting for character select"
             );
         }
         // Press Enter every 3s to dismiss other dialogs
