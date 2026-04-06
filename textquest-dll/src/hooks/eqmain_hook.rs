@@ -198,54 +198,62 @@ fn execute_submit_credentials(eqmain_base: u64) {
 }
 
 /// Execute JoinServer on the main thread via LoginServerAPI.
+/// Falls back to clicking "PLAY EVERQUEST" button if the API is unavailable.
 fn execute_join_server(eqmain_base: u64) {
     #[cfg(windows)]
     {
-        use textquest_common::offsets::eqmain as off;
-
-        let Some(api_ptr) = crate::login::eqmain::resolve_login_server_api(eqmain_base) else {
-            tracing::warn!("JoinServer: LoginServerAPI not resolved, falling back to button click");
+        if !try_join_server_api(eqmain_base) {
             fallback_click_play(eqmain_base);
-            return;
-        };
-
-        let api = unsafe { *(api_ptr as *const usize) };
-        if api == 0 {
-            tracing::warn!("JoinServer: LoginServerAPI is null, falling back to button click");
-            fallback_click_play(eqmain_base);
-            return;
         }
-
-        let Some(join_fn_addr) = off::rebase(off::JOIN_SERVER, eqmain_base) else {
-            tracing::warn!("JoinServer: failed to rebase JOIN_SERVER offset");
-            fallback_click_play(eqmain_base);
-            return;
-        };
-
-        // TODO: Look up server ID from LoginClient::ServerList.
-        // Server ID 0 selects the last/default server.
-        let server_id: i32 = 0;
-
-        tracing::info!(
-            api = format!("{:#x}", api),
-            join_fn = format!("{:#x}", join_fn_addr),
-            server_id,
-            "Calling LoginServerAPI::JoinServer"
-        );
-
-        // SAFETY: api is the LoginServerAPI* from eqmain globals.
-        // Member fn: this=RCX, serverID=RDX, userdata=R8, timeout=R9
-        type JoinServerFn = unsafe extern "C" fn(this: usize, server_id: i32, userdata: usize, timeout: i32) -> u32;
-        let func: JoinServerFn = unsafe { std::mem::transmute(join_fn_addr) };
-        let result = unsafe { func(api, server_id, 0, 10) };
-
-        tracing::info!(result, "JoinServer returned");
     }
 
     #[cfg(not(windows))]
     {
         let _ = eqmain_base;
     }
+}
+
+/// Attempt to join server via `LoginServerAPI::JoinServer`. Returns `true` on success.
+#[cfg(windows)]
+fn try_join_server_api(eqmain_base: u64) -> bool {
+    use textquest_common::offsets::eqmain as off;
+
+    let Some(api_ptr) = crate::login::eqmain::resolve_login_server_api(eqmain_base) else {
+        tracing::warn!("JoinServer: LoginServerAPI not resolved");
+        return false;
+    };
+
+    let api = unsafe { *(api_ptr as *const usize) };
+    if api == 0 {
+        tracing::warn!("JoinServer: LoginServerAPI is null");
+        return false;
+    }
+
+    let Some(join_fn_addr) = off::rebase(off::JOIN_SERVER, eqmain_base) else {
+        tracing::warn!("JoinServer: failed to rebase JOIN_SERVER offset");
+        return false;
+    };
+
+    // TODO: Look up server ID from LoginClient::ServerList.
+    // Server ID 0 selects the last/default server.
+    let server_id: i32 = 0;
+
+    tracing::info!(
+        api = format!("{:#x}", api),
+        join_fn = format!("{:#x}", join_fn_addr),
+        server_id,
+        "Calling LoginServerAPI::JoinServer"
+    );
+
+    // SAFETY: api is the LoginServerAPI* from eqmain globals.
+    // Member fn: this=RCX, serverID=RDX, userdata=R8, timeout=R9
+    type JoinServerFn =
+        unsafe extern "C" fn(this: usize, server_id: i32, userdata: usize, timeout: i32) -> u32;
+    let func: JoinServerFn = unsafe { std::mem::transmute(join_fn_addr) };
+    let result = unsafe { func(api, server_id, 0, 10) };
+
+    tracing::info!(result, "JoinServer returned");
+    true
 }
 
 /// Fallback: click PLAY EVERQUEST button if JoinServer can't be called.

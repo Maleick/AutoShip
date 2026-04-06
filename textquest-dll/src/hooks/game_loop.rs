@@ -288,15 +288,11 @@ pub fn queue_slash_command(command: String) {
 
 /// Enqueue a command with a human-like jitter delay.
 fn enqueue_command(cmd: textquest_common::ipc::Command, current_tick: u64) {
-    let delay = if let Ok(mut rng) = JITTER_RNG.lock() {
-        if let Some(ref mut r) = *rng {
-            human_jitter_ticks(r)
-        } else {
-            5 // fallback: middle of range
-        }
-    } else {
-        5
-    };
+    let delay = JITTER_RNG
+        .lock()
+        .ok()
+        .and_then(|mut guard| guard.as_mut().map(human_jitter_ticks))
+        .unwrap_or(5);
 
     if let Ok(mut queue) = PENDING_COMMANDS.lock() {
         queue.push(PendingCommand {
@@ -308,24 +304,25 @@ fn enqueue_command(cmd: textquest_common::ipc::Command, current_tick: u64) {
 
 /// Drain and execute any commands whose scheduled tick has arrived.
 fn process_pending_commands(current_tick: u64) {
-    let ready: Vec<textquest_common::ipc::Command> = if let Ok(mut queue) = PENDING_COMMANDS.lock()
-    {
-        if queue.is_empty() {
-            return;
-        }
-        let mut ready = Vec::new();
-        queue.retain(|pending| {
-            if current_tick >= pending.execute_at_tick {
-                ready.push(pending.command.clone());
-                false
-            } else {
-                true
-            }
-        });
-        ready
-    } else {
+    let Ok(mut queue) = PENDING_COMMANDS.lock() else {
         return;
     };
+    if queue.is_empty() {
+        return;
+    }
+
+    let mut ready = Vec::new();
+    queue.retain(|pending| {
+        if current_tick >= pending.execute_at_tick {
+            ready.push(pending.command.clone());
+            false
+        } else {
+            true
+        }
+    });
+
+    // Drop the lock before dispatching to avoid holding it during command execution.
+    drop(queue);
 
     for cmd in ready {
         dispatch_command(cmd);
@@ -1458,35 +1455,28 @@ fn interact_with_target() {
     {
         use textquest_common::offsets;
 
+        /// Rebase an offset and read the pointer it points to, returning `None`
+        /// if the rebase fails or the stored pointer is null.
+        unsafe fn rebase_read_ptr(offset: u64, eq_base: u64) -> Option<usize> {
+            let addr = offsets::rebase(offset, eq_base)?;
+            let ptr = unsafe { std::ptr::read(addr as *const usize) };
+            if ptr == 0 { None } else { Some(ptr) }
+        }
+
         let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
         if eq_base == 0 {
             tracing::warn!("InteractTarget: EQ base not resolved");
             return;
         }
 
-        // Read pinstCEverQuest
-        let Some(pinst_eq_addr) = offsets::rebase(offsets::PINST_EVERQUEST, eq_base) else {
-            tracing::warn!("InteractTarget: rebase PINST_EVERQUEST failed");
+        let Some(eq_inst) = (unsafe { rebase_read_ptr(offsets::PINST_EVERQUEST, eq_base) }) else {
+            tracing::warn!("InteractTarget: pinstCEverQuest not available");
             return;
         };
-        let eq_inst = unsafe { std::ptr::read(pinst_eq_addr as *const usize) };
-        if eq_inst == 0 {
-            tracing::warn!("InteractTarget: pinstCEverQuest is null");
-            return;
-        }
-
-        // Read pinstCurrentTarget
-        let Some(pinst_target_addr) = offsets::rebase(offsets::PINST_TARGET, eq_base) else {
-            tracing::warn!("InteractTarget: rebase PINST_TARGET failed");
-            return;
-        };
-        let target_ptr = unsafe { std::ptr::read(pinst_target_addr as *const usize) };
-        if target_ptr == 0 {
+        let Some(target_ptr) = (unsafe { rebase_read_ptr(offsets::PINST_TARGET, eq_base) }) else {
             tracing::warn!("InteractTarget: no target selected");
             return;
-        }
-
-        // Call CEverQuest::RightClickedOnPlayer(target, 0)
+        };
         let Some(func_addr) = offsets::rebase(offsets::RIGHT_CLICKED_ON_PLAYER, eq_base) else {
             tracing::warn!("InteractTarget: rebase RIGHT_CLICKED_ON_PLAYER failed");
             return;
