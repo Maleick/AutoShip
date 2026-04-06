@@ -11,7 +11,7 @@ pub fn has_aggro_on_me(
 ) -> bool {
     let dx = my_pos.x - target_pos.x;
     let dy = my_pos.y - target_pos.y;
-    let heading_to_me = ((-dx).atan2(dy).to_degrees() * 512.0 / 360.0 + 512.0) % 512.0;
+    let heading_to_me = (dx.atan2(dy).to_degrees() * 512.0 / 360.0 + 512.0) % 512.0;
     let diff = ((target_heading - heading_to_me) + 512.0) % 512.0;
     let diff = if diff > 256.0 { 512.0 - diff } else { diff };
     let threshold_eq = threshold_degrees * 512.0 / 360.0;
@@ -113,19 +113,20 @@ mod tests {
 
     #[test]
     fn cardinal_directions() {
-        // EQ heading: North=0, West=128, South=256, East=384
+        // EQ axes: +X=West, -X=East, +Y=North, -Y=South
+        // EQ heading: 0=North, 128=West(+X), 256=South, 384=East(-X)
         let center = Waypoint::new(0.0, 0.0, 0.0);
 
-        // East: heading_to_me=384, so target facing 384 = facing east
-        let east = Waypoint::new(10.0, 0.0, 0.0);
-        assert!(has_aggro_on_me(384.0, &center, &east, 45.0));
+        // West (+X): heading_to_me=128, target facing 128 = facing west toward me
+        let west = Waypoint::new(10.0, 0.0, 0.0);
+        assert!(has_aggro_on_me(128.0, &center, &west, 45.0));
 
-        // South: heading_to_me=256
+        // South (-Y): heading_to_me=256
         let south = Waypoint::new(0.0, -10.0, 0.0);
         assert!(has_aggro_on_me(256.0, &center, &south, 45.0));
 
-        // West: heading_to_me=128
-        let west = Waypoint::new(-10.0, 0.0, 0.0);
-        assert!(has_aggro_on_me(128.0, &center, &west, 45.0));
+        // East (-X): heading_to_me=384
+        let east = Waypoint::new(-10.0, 0.0, 0.0);
+        assert!(has_aggro_on_me(384.0, &center, &east, 45.0));
     }
 }

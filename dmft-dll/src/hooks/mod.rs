@@ -6,6 +6,7 @@ pub mod fingerprint;
 pub mod game_loop;
 pub mod hwbp;
 pub mod movement;
+pub mod packet_hook;
 pub mod render;
 pub mod targeting;
 

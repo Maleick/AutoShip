@@ -47,6 +47,9 @@ const PROCESS_SCAN_INTERVAL: Duration = Duration::from_secs(10);
 /// How often to poll log watchers (2 seconds).
 const LOG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
+/// How often to poll DLL clients for captured packet events (500ms).
+const PACKET_POLL_INTERVAL: Duration = Duration::from_millis(500);
+
 /// Camp loop tick interval (1 second).
 const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -118,6 +121,7 @@ fn run_loop(
     let mut last_process_scan = Instant::now();
     let mut last_camp_tick = Instant::now();
     let mut last_log_poll = Instant::now();
+    let mut last_packet_poll = Instant::now();
     let mut process_handles: HashMap<u32, crate::process::memory::ProcessHandle> = HashMap::new();
 
     while app.running {
@@ -182,6 +186,30 @@ fn run_loop(
         if last_log_poll.elapsed() >= LOG_POLL_INTERVAL {
             poll_log_watchers(app);
             last_log_poll = Instant::now();
+        }
+
+        // Poll DLL clients for captured packet events.
+        if last_packet_poll.elapsed() >= PACKET_POLL_INTERVAL && !app.packet_monitor_state.paused {
+            let pids: Vec<u32> = app
+                .clients
+                .iter()
+                .filter(|c| !c.is_demo)
+                .map(|c| c.pid)
+                .collect();
+            for pid in pids {
+                let events = orchestrator.poll_packets(pid);
+                for evt in events {
+                    app.packet_monitor_state
+                        .push(crate::tui::state::PacketRecord {
+                            client_id: evt.client_id,
+                            opcode: evt.opcode,
+                            direction: evt.direction,
+                            timestamp_ms: evt.timestamp_ms,
+                            payload_size: evt.payload_size,
+                        });
+                }
+            }
+            last_packet_poll = Instant::now();
         }
 
         // Poll Discord bridge for inbound commands.

@@ -485,7 +485,7 @@ impl MapScreenState {
             show_geometry: true,
             show_spawns: true,
             show_nav_paths: true,
-            show_labels: true,
+            show_labels: false,
             show_annotations: false,
             filters: MapFilters::default(),
         }

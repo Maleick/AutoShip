@@ -331,6 +331,33 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     continue;
                 }
 
+                // Respond to PollPackets inline — drain accumulated packet events.
+                if matches!(&cmd, Command::PollPackets) {
+                    let pending = drain_responses();
+                    let events: Vec<dmft_common::ipc::PacketEventInfo> = pending
+                        .into_iter()
+                        .filter_map(|r| match r {
+                            Response::PacketEvent {
+                                client_id,
+                                opcode,
+                                direction,
+                                timestamp_ms,
+                                payload_size,
+                            } => Some(dmft_common::ipc::PacketEventInfo {
+                                client_id,
+                                opcode,
+                                direction,
+                                timestamp_ms,
+                                payload_size,
+                            }),
+                            _ => None,
+                        })
+                        .collect();
+                    let _ = listener.respond(&Response::PacketBatch { events });
+                    listener.disconnect();
+                    continue;
+                }
+
                 // Queue for game loop processing (bounded to prevent OOM
                 // if the game loop stalls during loading screens).
                 const MAX_PENDING: usize = 256;

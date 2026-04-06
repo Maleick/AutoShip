@@ -11,7 +11,7 @@ use crate::camp::vendor::{SellCycle, SellState, VendorConfig};
 use crate::combat::coordinator::CombatCoordinator;
 use crate::ipc::pipe::CommandPipe;
 use crate::ipc::shared::SharedStateReader;
-use dmft_common::ipc::{Command, SessionToken};
+use dmft_common::ipc::{Command, Response, SessionToken};
 use dmft_common::types::GameState;
 use std::collections::HashMap;
 
@@ -724,6 +724,22 @@ impl Orchestrator {
             }
         }
         // pipe is dropped here — DLL will disconnect its end too
+    }
+
+    /// Poll a client for accumulated packet events.
+    /// Sends `PollPackets` and returns any `PacketEventInfo` entries.
+    pub fn poll_packets(&mut self, pid: u32) -> Vec<dmft_common::ipc::PacketEventInfo> {
+        let Some(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollPackets) {
+            Ok(Response::PacketBatch { events }) => events,
+            Ok(_) => Vec::new(),
+            Err(e) => {
+                tracing::debug!(pid, error = %e, "Failed to poll packets");
+                Vec::new()
+            }
+        }
     }
 
     /// Eject the DLL from a client and clean up its tracked state.

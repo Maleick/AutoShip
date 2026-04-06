@@ -655,12 +655,12 @@ pub fn handle_events(
 
         if app.active_screen == ActiveScreen::Tactical {
             match key.code {
-                KeyCode::Char('+' | '=') => {
-                    app.map_state.increase_z_filter();
+                KeyCode::Char('<') => {
+                    app.map_state.decrease_z_filter();
                     return Ok(true);
                 }
-                KeyCode::Char('-' | '_') => {
-                    app.map_state.decrease_z_filter();
+                KeyCode::Char('>') => {
+                    app.map_state.increase_z_filter();
                     return Ok(true);
                 }
                 _ => {}
@@ -704,11 +704,11 @@ pub fn handle_events(
                     app.pan_tactical_map_down();
                     return Ok(true);
                 }
-                KeyCode::PageUp => {
+                KeyCode::PageUp | KeyCode::Char('+' | '=') => {
                     app.zoom_tactical_map_in();
                     return Ok(true);
                 }
-                KeyCode::PageDown => {
+                KeyCode::PageDown | KeyCode::Char('-' | '_') => {
                     app.zoom_tactical_map_out();
                     return Ok(true);
                 }
@@ -724,6 +724,32 @@ pub fn handle_events(
                     let enabled = app.map_state.toggle_navmesh();
                     app.status_message =
                         format!("Navmesh overlay: {}", if enabled { "ON" } else { "OFF" });
+                    return Ok(true);
+                }
+                // Layer toggles — Mac-friendly alternatives to Alt+1-6
+                KeyCode::Char('g') => {
+                    let status = app.map_state.toggle_layer(1);
+                    app.status_message = status.to_string();
+                    return Ok(true);
+                }
+                KeyCode::Char('s') => {
+                    let status = app.map_state.toggle_layer(2);
+                    app.status_message = status.to_string();
+                    return Ok(true);
+                }
+                KeyCode::Char('w') => {
+                    let status = app.map_state.toggle_layer(3);
+                    app.status_message = status.to_string();
+                    return Ok(true);
+                }
+                KeyCode::Char('x') => {
+                    let status = app.map_state.toggle_layer(4);
+                    app.status_message = status.to_string();
+                    return Ok(true);
+                }
+                KeyCode::Char('l') => {
+                    let status = app.map_state.toggle_layer(5);
+                    app.status_message = status.to_string();
                     return Ok(true);
                 }
                 _ => {}

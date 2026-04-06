@@ -350,6 +350,10 @@ pub enum Command {
     // Zone graph
     /// Request the zone adjacency graph from `ZoneGuideManagerClient`.
     QueryZoneGraph,
+    // Packet monitor
+    /// Poll for accumulated captured packet events.
+    /// The DLL drains its pending packet buffer and responds with `PacketBatch`.
+    PollPackets,
     // System
     /// Heartbeat ping — expects a Pong response.
     Ping,
@@ -407,6 +411,21 @@ pub enum PacketDirection {
     Outbound,
     /// Server → client (inbound).
     Inbound,
+}
+
+/// Wire-format for a single packet event in a `PacketBatch` response.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PacketEventInfo {
+    /// PID of the client that captured the packet.
+    pub client_id: ClientId,
+    /// EQ protocol opcode identifier.
+    pub opcode: u16,
+    /// Whether the packet was inbound or outbound.
+    pub direction: PacketDirection,
+    /// Timestamp in milliseconds when the packet was captured.
+    pub timestamp_ms: u64,
+    /// Size of the packet payload in bytes.
+    pub payload_size: u32,
 }
 
 /// Responses sent from the DLL back to the manager
@@ -467,6 +486,11 @@ pub enum Response {
         timestamp_ms: u64,
         /// Size of the packet payload in bytes.
         payload_size: u32,
+    },
+    /// Batched packet events in response to `Command::PollPackets`.
+    PacketBatch {
+        /// Accumulated packet events since last poll.
+        events: Vec<PacketEventInfo>,
     },
     /// Zone adjacency graph from `ZoneGuideManagerClient`.
     /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).

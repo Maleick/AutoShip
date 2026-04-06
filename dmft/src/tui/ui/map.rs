@@ -508,8 +508,16 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
                 continue;
             }
-            let (c1, r1) = to_grid(ml.x1, ml.y1);
-            let (c2, r2) = to_grid(ml.x2, ml.y2);
+            let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
+                match clip_line_z(ml.x1, ml.y1, ml.z1, ml.x2, ml.y2, ml.z2, pz, z_range) {
+                    Some(coords) => coords,
+                    None => continue,
+                }
+            } else {
+                (ml.x1, ml.y1, ml.x2, ml.y2)
+            };
+            let (c1, r1) = to_grid(lx1, ly1);
+            let (c2, r2) = to_grid(lx2, ly2);
             let color = map_rgb_to_color(ml.r, ml.g, ml.b, t);
             bresenham_line(
                 c1,
@@ -582,14 +590,19 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
                 continue;
             }
-            if let Some(pz) = player_z
-                && (segment.z1 - pz).abs() > z_range
-                && (segment.z2 - pz).abs() > z_range
-            {
-                continue;
-            }
-            let (c1, r1) = to_grid(segment.x1, segment.y1);
-            let (c2, r2) = to_grid(segment.x2, segment.y2);
+            let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
+                match clip_line_z(
+                    segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2, pz,
+                    z_range,
+                ) {
+                    Some(coords) => coords,
+                    None => continue,
+                }
+            } else {
+                (segment.x1, segment.y1, segment.x2, segment.y2)
+            };
+            let (c1, r1) = to_grid(lx1, ly1);
+            let (c2, r2) = to_grid(lx2, ly2);
             bresenham_line(
                 c1,
                 r1,
@@ -608,14 +621,19 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
                     continue;
                 }
-                if let Some(pz) = player_z
-                    && (segment.z1 - pz).abs() > z_range
-                    && (segment.z2 - pz).abs() > z_range
-                {
-                    continue;
-                }
-                let (c1, r1) = to_grid(segment.x1, segment.y1);
-                let (c2, r2) = to_grid(segment.x2, segment.y2);
+                let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
+                    match clip_line_z(
+                        segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2, pz,
+                        z_range,
+                    ) {
+                        Some(coords) => coords,
+                        None => continue,
+                    }
+                } else {
+                    (segment.x1, segment.y1, segment.x2, segment.y2)
+                };
+                let (c1, r1) = to_grid(lx1, ly1);
+                let (c2, r2) = to_grid(lx2, ly2);
                 bresenham_line(
                     c1,
                     r1,
@@ -1301,6 +1319,96 @@ fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {
         }
         _ => mode.label().to_string(),
     }
+}
+
+/// Clip a line segment against a Z-height range centered on `center_z`.
+///
+/// Returns `None` if both endpoints are outside the range (line fully culled).
+/// Otherwise returns the (possibly clipped) `(x1, y1, x2, y2)` coordinates,
+/// interpolating XY at the height boundary when one endpoint is outside.
+#[allow(clippy::too_many_arguments)]
+fn clip_line_z(
+    x1: f32,
+    y1: f32,
+    z1: f32,
+    x2: f32,
+    y2: f32,
+    z2: f32,
+    center_z: f32,
+    z_range: f32,
+) -> Option<(f32, f32, f32, f32)> {
+    let min_z = center_z - z_range;
+    let max_z = center_z + z_range;
+
+    let p1_inside = z1 >= min_z && z1 <= max_z;
+    let p2_inside = z2 >= min_z && z2 <= max_z;
+
+    if p1_inside && p2_inside {
+        return Some((x1, y1, x2, y2));
+    }
+    if !p1_inside && !p2_inside {
+        // Both outside — but check if the segment crosses through the range
+        // (e.g., one below min and one above max). If both are on the same side, cull.
+        if (z1 < min_z && z2 < min_z) || (z1 > max_z && z2 > max_z) {
+            return None;
+        }
+    }
+
+    let dz = z2 - z1;
+    // Avoid division by zero (horizontal line in Z — already handled above)
+    if dz.abs() < f32::EPSILON {
+        return if p1_inside || p2_inside {
+            Some((x1, y1, x2, y2))
+        } else {
+            None
+        };
+    }
+
+    let mut cx1 = x1;
+    let mut cy1 = y1;
+    let mut cz1 = z1;
+    let mut cx2 = x2;
+    let mut cy2 = y2;
+    let mut cz2 = z2;
+
+    // Clip p1 against min
+    if cz1 < min_z {
+        let t = (min_z - cz1) / (cz2 - cz1);
+        cx1 = cx1 + t * (cx2 - cx1);
+        cy1 = cy1 + t * (cy2 - cy1);
+        cz1 = min_z;
+    }
+    // Clip p2 against min
+    if cz2 < min_z {
+        let t = (min_z - cz2) / (cz1 - cz2);
+        cx2 = cx2 + t * (cx1 - cx2);
+        cy2 = cy2 + t * (cy1 - cy2);
+        cz2 = min_z;
+    }
+    // Clip p1 against max
+    if cz1 > max_z {
+        let t = (max_z - cz1) / (cz2 - cz1);
+        cx1 = cx1 + t * (cx2 - cx1);
+        cy1 = cy1 + t * (cy2 - cy1);
+        cz1 = max_z;
+    }
+    // Clip p2 against max
+    if cz2 > max_z {
+        let t = (max_z - cz2) / (cz1 - cz2);
+        cx2 = cx2 + t * (cx1 - cx2);
+        cy2 = cy2 + t * (cy1 - cy2);
+        #[allow(unused_assignments)]
+        {
+            cz2 = max_z;
+        }
+    }
+
+    // Final sanity: both clipped Z values should be in range
+    if cz1 < min_z || cz1 > max_z {
+        return None;
+    }
+
+    Some((cx1, cy1, cx2, cy2))
 }
 
 fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {
@@ -1990,5 +2098,76 @@ mod tests {
         rebuild_map_spawn_cache(&mut app, key, Some(0.0), None, |x, y| (x as i32, y as i32));
         let without_named = app.map_spawn_cache.cells.len();
         assert_eq!(without_named, 1);
+    }
+
+    // ── clip_line_z tests ──────────────────────────────────────────────
+
+    #[test]
+    fn clip_line_z_both_inside() {
+        let result = clip_line_z(0.0, 0.0, 50.0, 100.0, 100.0, 60.0, 55.0, 20.0);
+        assert_eq!(result, Some((0.0, 0.0, 100.0, 100.0)));
+    }
+
+    #[test]
+    fn clip_line_z_both_outside_same_side() {
+        // Both below min
+        assert_eq!(
+            clip_line_z(0.0, 0.0, 10.0, 100.0, 100.0, 20.0, 100.0, 10.0),
+            None
+        );
+        // Both above max
+        assert_eq!(
+            clip_line_z(0.0, 0.0, 200.0, 100.0, 100.0, 300.0, 100.0, 10.0),
+            None
+        );
+    }
+
+    #[test]
+    fn clip_line_z_p1_below_min() {
+        // p1 at z=0, p2 at z=100, center=50, range=50 → min=0, max=100
+        // Narrow: center=80, range=20 → min=60, max=100
+        // p1 z=0 < 60, p2 z=100 inside. t = (60-0)/(100-0) = 0.6
+        let result = clip_line_z(0.0, 0.0, 0.0, 100.0, 200.0, 100.0, 80.0, 20.0);
+        let (x1, y1, x2, y2) = result.unwrap();
+        assert!((x1 - 60.0).abs() < 0.01, "x1={x1}");
+        assert!((y1 - 120.0).abs() < 0.01, "y1={y1}");
+        assert!((x2 - 100.0).abs() < 0.01);
+        assert!((y2 - 200.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn clip_line_z_p2_above_max() {
+        // center=50, range=10 → min=40, max=60
+        // p1 z=50 (inside), p2 z=100 (above max)
+        // t = (60-100)/(50-100) = -40/-50 = 0.8
+        let result = clip_line_z(0.0, 0.0, 50.0, 100.0, 200.0, 100.0, 50.0, 10.0);
+        let (x1, y1, x2, y2) = result.unwrap();
+        assert!((x1 - 0.0).abs() < 0.01);
+        assert!((y1 - 0.0).abs() < 0.01);
+        assert!((x2 - 20.0).abs() < 0.01, "x2={x2}");
+        assert!((y2 - 40.0).abs() < 0.01, "y2={y2}");
+    }
+
+    #[test]
+    fn clip_line_z_both_outside_crossing() {
+        // p1 below min, p2 above max — line crosses through the range
+        // center=50, range=10 → min=40, max=60
+        // p1 z=0, p2 z=100
+        let result = clip_line_z(0.0, 0.0, 0.0, 100.0, 100.0, 100.0, 50.0, 10.0);
+        let (x1, y1, x2, y2) = result.unwrap();
+        // Clip p1 to min=40: t=(40-0)/100=0.4 → x=40, y=40
+        assert!((x1 - 40.0).abs() < 0.01, "x1={x1}");
+        assert!((y1 - 40.0).abs() < 0.01, "y1={y1}");
+        // Clip p2 to max=60: t=(60-100)/(0-100)=0.4 → x2=100+0.4*(0-100)=60, y2=60
+        assert!((x2 - 60.0).abs() < 0.01, "x2={x2}");
+        assert!((y2 - 60.0).abs() < 0.01, "y2={y2}");
+    }
+
+    #[test]
+    fn clip_line_z_no_player_z_passthrough() {
+        // When there's no player_z, clip_line_z isn't called — but verify it handles
+        // equal z endpoints gracefully (dz ≈ 0, both inside)
+        let result = clip_line_z(10.0, 20.0, 50.0, 30.0, 40.0, 50.0, 50.0, 10.0);
+        assert_eq!(result, Some((10.0, 20.0, 30.0, 40.0)));
     }
 }

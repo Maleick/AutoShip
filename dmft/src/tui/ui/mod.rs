@@ -29,7 +29,7 @@ use ratatui::{
 };
 
 use crate::tui::app::{ActivePanel, ActiveScreen, App, HelpFocus, ToastLevel};
-use crate::tui::command::{self, HelpSection};
+use crate::tui::command::HelpSection;
 use crate::tui::ui::widgets::{
     WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
 };
@@ -379,39 +379,34 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
         match width_class {
             WidthClass::Narrow => &[
                 ("1-4", "screen"),
-                ("Tab", "pane"),
-                ("[ ]", "client"),
+                ("+/-", "zoom"),
                 ("n", "mesh"),
                 ("v", "view"),
-                ("+/-", "depth"),
                 ("?", "help"),
             ],
             WidthClass::Medium => &[
                 ("1-4", "screen"),
-                ("Tab", "pane"),
-                ("[ ]", "client"),
-                ("Alt+1", "geo"),
-                ("Alt+2", "spawns"),
-                ("Alt+3", "paths"),
-                ("Alt+4", "mesh"),
+                ("+/-", "zoom"),
+                ("g", "geo"),
+                ("s", "spawns"),
+                ("w", "paths"),
+                ("x", "mesh"),
                 ("n", "navmesh"),
                 ("v", "view"),
-                ("PgUp/Dn", "zoom"),
                 ("?", "help"),
             ],
             WidthClass::Wide => &[
                 ("1-4", "screen"),
                 ("Tab", "pane"),
-                ("[ ]", "client"),
-                ("Alt+1", "geo"),
-                ("Alt+2", "spawns"),
-                ("Alt+3", "paths"),
-                ("Alt+4", "mesh"),
+                ("+/-", "zoom"),
+                ("g", "geo"),
+                ("s", "spawns"),
+                ("w", "paths"),
+                ("x", "mesh"),
                 ("n", "navmesh"),
-                ("Alt+5", "labels"),
+                ("l", "labels"),
                 ("v", "view"),
-                ("PgUp/Dn", "zoom"),
-                ("+/-", "depth"),
+                ("</>", "depth"),
                 ("Home", "reset"),
                 ("?", "help"),
             ],
@@ -747,43 +742,80 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
     rows.push(help_row(None, HelpCell::Text(String::new())));
     match app.active_screen {
         ActiveScreen::Overview => {
+            push_heading(&mut rows, None, "Dashboard Controls");
+            push_kv(&mut rows, None, "j/k", "Navigate the client roster");
+            push_kv(
+                &mut rows,
+                None,
+                "Enter",
+                "Expand selected character details",
+            );
             push_kv(&mut rows, None, "g", "Toggle group roster section");
             push_kv(&mut rows, None, "v", "Toggle scope / filters section");
-            push_kv(
-                &mut rows,
-                None,
-                "z",
-                "Collapse or expand the focused section",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "j/k or Up/Down",
-                "Navigate the client roster",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "e / d / l",
-                "Engage, disengage, or loot quickly",
-            );
+            push_kv(&mut rows, None, "z", "Collapse or expand focused section");
+            rows.push(help_row(None, HelpCell::Text(String::new())));
+            push_heading(&mut rows, None, "Quick Commands");
+            push_kv(&mut rows, None, "e", "Engage combat on current target");
+            push_kv(&mut rows, None, "d", "Disengage from combat");
+            push_kv(&mut rows, None, "l", "Loot nearby corpses");
+            push_kv(&mut rows, None, "r", "Repeat last command");
         }
         ActiveScreen::Tactical => {
-            push_kv(&mut rows, None, "+ / -", "Adjust Z-depth slice");
+            push_heading(&mut rows, None, "Map Controls");
+            push_kv(&mut rows, None, "+ / -", "Zoom in / out");
             push_kv(&mut rows, None, "Arrows", "Pan the map viewport");
-            push_kv(&mut rows, None, "PgUp / PgDn", "Zoom the map");
             push_kv(
                 &mut rows,
                 None,
-                "v / n / m",
-                "Cycle view, mesh, or maximize map",
+                "< / >",
+                "Adjust Z-depth slice (height filter)",
             );
             push_kv(
                 &mut rows,
                 None,
-                "/ and f",
-                "Search and filter the spawn list",
+                "v",
+                "Cycle viewport: Auto / Local / Global",
             );
+            push_kv(&mut rows, None, "n", "Toggle navmesh overlay data");
+            push_kv(&mut rows, None, "m", "Maximize / restore map panel");
+            push_kv(&mut rows, None, "Home", "Reset zoom, pan, and viewport");
+            rows.push(help_row(None, HelpCell::Text(String::new())));
+            push_heading(&mut rows, None, "Map Layers");
+            push_kv(
+                &mut rows,
+                None,
+                "g",
+                "Geometry: zone walls, floors, and boundaries from map files",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "s",
+                "Spawns: NPC/PC markers showing mob and player positions",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "w",
+                "Paths: navigation waypoint routes your characters follow",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "x",
+                "Mesh: navigation mesh walkable-area overlay for pathfinding",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "l",
+                "Labels: text POI markers (zone connections, banks, NPCs)",
+            );
+            rows.push(help_row(None, HelpCell::Text(String::new())));
+            push_heading(&mut rows, None, "Spawn List");
+            push_kv(&mut rows, None, "/", "Search spawns by name");
+            push_kv(&mut rows, None, "f", "Cycle filter: All / PC / NPC / Named");
+            push_kv(&mut rows, None, "j/k", "Navigate spawn list");
         }
         ActiveScreen::Navigation => {
             push_kv(
@@ -796,19 +828,13 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             push_kv(&mut rows, None, ":nav <dest>", "Send a navigation command");
         }
         ActiveScreen::Debug => {
-            push_kv(
-                &mut rows,
-                None,
-                "j/k or Up/Down",
-                "Navigate spawns / scroll hex",
-            );
+            push_heading(&mut rows, None, "Debug Controls");
+            push_kv(&mut rows, None, "j/k", "Navigate spawns or scroll hex dump");
             push_kv(&mut rows, None, "Enter", "Inspect the selected spawn");
-            push_kv(
-                &mut rows,
-                None,
-                "/ and f",
-                "Search and filter the spawn list",
-            );
+            push_kv(&mut rows, None, "/", "Search spawns by name");
+            push_kv(&mut rows, None, "f", "Cycle spawn filter");
+            push_kv(&mut rows, None, "a", "Toggle hex dump annotations");
+            push_kv(&mut rows, None, "c", "Cycle EQ Internals category filter");
         }
         ActiveScreen::PacketMonitor => {
             push_kv(&mut rows, None, "Space", "Pause / resume packet capture");
@@ -818,226 +844,30 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
     }
     rows.push(help_row(None, HelpCell::Text(String::new())));
 
-    push_heading(
+    push_heading(&mut rows, None, "Global Controls");
+    push_kv(
+        &mut rows,
+        None,
+        "1-4",
+        "Switch screen: Dashboard / Map / Nav / Debug",
+    );
+    push_kv(&mut rows, None, "[ ]", "Previous / next client");
+    push_kv(&mut rows, None, "Tab", "Cycle panel focus");
+    push_kv(&mut rows, None, ":", "Enter command mode");
+    push_kv(&mut rows, None, "T", "Cycle theme");
+    push_kv(&mut rows, None, "Esc", "Clear focus or filter");
+    push_kv(&mut rows, None, "q", "Quit");
+    rows.push(help_row(None, HelpCell::Text(String::new())));
+    push_kv(
         &mut rows,
         Some(HelpFocus::Section(HelpSection::Workflows)),
-        "Most-used Live Workflows",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":help / :commands",
-        "Open help at live workflows or jump straight to the command reference.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":mode hunt",
-        "Switch the current operating mode before issuing live actions.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":assist Warrior",
-        "Set Main Assist with the faster alias, then reuse it across the focused scope.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":tank Paladin",
-        "Show or change Main Tank without leaving the TUI.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":nav gfay",
-        "Route the focused scope to a zone, camp, or coordinate set.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":track \"Fippy Darkpaw\"",
-        "Track a named spawn and surface it on the tactical panels.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":pull 3472 / :combat status",
-        "Kick combat on the focused scope and inspect the current combat scope summary.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":ch adaptive on",
-        "Adjust CH chain behavior without opening another panel.",
-    );
-    rows.push(help_row(None, HelpCell::Text(String::new())));
-
-    push_heading(
-        &mut rows,
-        Some(HelpFocus::Section(HelpSection::Targeting)),
-        "How Targeting Works",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":G1 /follow Warrior",
-        "Send a slash command to every online client in one group.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":all /sit",
-        "Broadcast one slash command to every connected client.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":Cleric01 /assist Warrior",
-        "Target one client by character name.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":@all /assist Warrior",
-        "Force a direct target name even if it collides with a reserved command.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        ":1234 /assist Warrior",
-        "Target one client directly by PID.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        "Tip",
-        "Group, character, PID, and :all targets all expect slash commands after the target.",
-    );
-    rows.push(help_row(None, HelpCell::Text(String::new())));
-
-    push_heading(
-        &mut rows,
-        Some(HelpFocus::Section(HelpSection::Combat)),
-        "Combat & Group Control",
-    );
-    for entry in command::command_entries().iter().filter(|entry| {
-        entry.section == HelpSection::Combat || entry.section == HelpSection::Targeting
-    }) {
-        let alias_note = if entry.aliases.is_empty() {
-            String::new()
-        } else {
-            format!(" Alias: {}", entry.aliases.join(", "))
-        };
-        push_kv(
-            &mut rows,
-            Some(HelpFocus::Command(entry.phrase)),
-            format!(":{}", entry.usage),
-            format!("{}{}", entry.summary, alias_note),
-        );
-    }
-    rows.push(help_row(None, HelpCell::Text(String::new())));
-
-    push_heading(
-        &mut rows,
-        Some(HelpFocus::Section(HelpSection::Navigation)),
-        "Navigation, Tracking & Camps",
-    );
-    for entry in command::command_entries()
-        .iter()
-        .filter(|entry| entry.section == HelpSection::Navigation)
-    {
-        push_kv(
-            &mut rows,
-            Some(HelpFocus::Command(entry.phrase)),
-            format!(":{}", entry.usage),
-            entry.summary,
-        );
-    }
-    rows.push(help_row(None, HelpCell::Text(String::new())));
-
-    push_heading(
-        &mut rows,
-        Some(HelpFocus::Section(HelpSection::ChChain)),
-        "CH Chain",
-    );
-    for entry in command::command_entries()
-        .iter()
-        .filter(|entry| entry.section == HelpSection::ChChain)
-    {
-        push_kv(
-            &mut rows,
-            Some(HelpFocus::Command(entry.phrase)),
-            format!(":{}", entry.usage),
-            entry.summary,
-        );
-    }
-    rows.push(help_row(None, HelpCell::Text(String::new())));
-
-    push_heading(
-        &mut rows,
-        Some(HelpFocus::Section(HelpSection::Lifecycle)),
-        "Lifecycle, Setup & Panels",
-    );
-    for entry in command::command_entries()
-        .iter()
-        .filter(|entry| entry.section == HelpSection::Lifecycle)
-    {
-        let alias_note = if entry.aliases.is_empty() {
-            String::new()
-        } else {
-            format!(" Alias: {}", entry.aliases.join(", "))
-        };
-        push_kv(
-            &mut rows,
-            Some(HelpFocus::Command(entry.phrase)),
-            format!(":{}", entry.usage),
-            format!("{}{}", entry.summary, alias_note),
-        );
-    }
-    rows.push(help_row(None, HelpCell::Text(String::new())));
-
-    push_heading(
-        &mut rows,
-        Some(HelpFocus::Section(HelpSection::Troubleshooting)),
-        "Troubleshooting",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        "Unknown command",
-        "Use :commands for the reference, or accept the did-you-mean suggestion.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        "Invalid arguments",
-        "Most command errors now include the exact usage plus one concrete example.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        "No MA / MT / CH",
-        "Check the right-side status badges or use :ma, :mt, and :ch status.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        "No clients / pipe errors",
-        "Use :status, confirm the current scope, and reconnect or relaunch as needed.",
-    );
-    push_kv(
-        &mut rows,
-        None,
-        "Command mode",
-        "Tab completes, Up/Down browses history, Left/Right/Home/End edit in place.",
+        ":commands",
+        "Full command reference (type in command mode)",
     );
     rows.push(help_row(None, HelpCell::Text(String::new())));
     rows.push(help_row(
         None,
-        HelpCell::Text(String::from(
-            "Scroll: j/k or Up/Down   Page: PgUp/PgDn   Top: Home   Close: ? / Esc",
-        )),
+        HelpCell::Text(String::from("Close: ? or Esc")),
     ));
 
     rows
@@ -1090,7 +920,7 @@ pub fn help_scroll_for_focus(app: &App, focus: HelpFocus) -> Option<usize> {
 
 fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     let t = &app.theme;
-    let popup_area = centered_popup(area, 76, 80, 42, 14, 88, 40, 1);
+    let popup_area = centered_popup(area, 80, 85, 50, 18, 100, 50, 1);
     let compact_rows = popup_area.width < 64;
     let rendered_rows = render_help_outline(build_help_outline(app), compact_rows, app);
 
@@ -1196,18 +1026,17 @@ mod tests {
 
         assert!(rendered.contains("Help"));
         assert!(rendered.contains("Active: Characters"));
-        assert!(rendered.contains("g - Toggle group roster section"));
+        assert!(rendered.contains("Dashboard Controls"));
     }
 
     #[test]
     fn help_scroll_focus_finds_command_reference_anchor() {
         let app = sample_app();
-        let combat_anchor =
-            help_scroll_for_focus(&app, HelpFocus::Section(HelpSection::Combat)).expect("anchor");
-        let nav_anchor = help_scroll_for_focus(&app, HelpFocus::Command("nav")).expect("anchor");
+        let workflows_anchor =
+            help_scroll_for_focus(&app, HelpFocus::Section(HelpSection::Workflows));
 
-        assert!(combat_anchor > 0);
-        assert!(nav_anchor > combat_anchor);
+        // Workflows anchor exists (used by :commands navigation)
+        assert!(workflows_anchor.is_some());
     }
 
     #[test]
