@@ -1408,6 +1408,7 @@ fn dispatch_command(cmd: dmft_common::ipc::Command) {
         Command::SetRenderMode { mode } => {
             tracing::info!(%mode, "SetRenderMode received");
             crate::hooks::render::set_mode(mode);
+            crate::ipc::send_response(dmft_common::ipc::Response::RenderModeChanged { mode });
         }
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");

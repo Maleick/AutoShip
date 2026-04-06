@@ -475,6 +475,11 @@ pub enum Response {
         /// List of zone entries with connectivity data.
         zones: Vec<ZoneGraphEntry>,
     },
+    /// Confirmation that the render mode was changed.
+    RenderModeChanged {
+        /// The new active render mode.
+        mode: RenderMode,
+    },
 }
 
 /// Wire-format for a single zone entry: (`zone_id`, name, `min_level`, `max_level`, connections).
@@ -888,6 +893,15 @@ mod tests {
             Command::LootCorpse,
             Command::LootAll,
             Command::QueryZoneGraph,
+            Command::SetRenderMode {
+                mode: RenderMode::NullRender,
+            },
+            Command::SetRenderMode {
+                mode: RenderMode::Normal,
+            },
+            Command::SetRenderMode {
+                mode: RenderMode::Strobe,
+            },
         ];
         for cmd in &commands {
             let encoded = encode(cmd).expect("encode failed");
@@ -926,6 +940,9 @@ mod tests {
                 status: crate::combat::CombatStatus::Idle,
             },
             Response::ZoneGraph { zones: vec![] },
+            Response::RenderModeChanged {
+                mode: RenderMode::NullRender,
+            },
         ];
         for resp in &responses {
             let encoded = encode(resp).expect("encode failed");
@@ -1271,5 +1288,52 @@ mod tests {
         } else {
             panic!("expected NavUpdate(Sticking)");
         }
+    }
+
+    #[test]
+    fn render_mode_serde_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        for mode in [
+            RenderMode::Normal,
+            RenderMode::Strobe,
+            RenderMode::NullRender,
+        ] {
+            let cmd = Command::SetRenderMode { mode };
+            let encoded = encode(&cmd).expect("encode SetRenderMode");
+            let (decoded, _): (Command, _) = decode(&encoded).expect("decode SetRenderMode");
+            if let Command::SetRenderMode { mode: decoded_mode } = decoded {
+                assert_eq!(decoded_mode, mode);
+            } else {
+                panic!("expected SetRenderMode");
+            }
+        }
+    }
+
+    #[test]
+    fn render_mode_changed_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        for mode in [
+            RenderMode::Normal,
+            RenderMode::Strobe,
+            RenderMode::NullRender,
+        ] {
+            let resp = Response::RenderModeChanged { mode };
+            let encoded = encode(&resp).expect("encode RenderModeChanged");
+            let (decoded, _): (Response, _) = decode(&encoded).expect("decode RenderModeChanged");
+            if let Response::RenderModeChanged { mode: decoded_mode } = decoded {
+                assert_eq!(decoded_mode, mode);
+            } else {
+                panic!("expected RenderModeChanged");
+            }
+        }
+    }
+
+    #[test]
+    fn render_mode_display() {
+        assert_eq!(RenderMode::Normal.to_string(), "normal");
+        assert_eq!(RenderMode::Strobe.to_string(), "strobe");
+        assert_eq!(RenderMode::NullRender.to_string(), "null");
     }
 }
