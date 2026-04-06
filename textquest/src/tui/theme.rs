@@ -608,7 +608,8 @@ pub fn neriak() -> Theme {
 // ─── ThemeKind ───────────────────────────────────────────────────────────────
 
 /// Enum so the app can store which theme is active and cycle through them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ThemeKind {
     /// Polished dark theme with RGB colors and rounded borders.
     #[default]
@@ -653,6 +654,38 @@ impl ThemeKind {
             Self::Dracula => dracula(),
             Self::Neriak => neriak(),
         }
+    }
+
+    /// Path to the TUI preferences file.
+    fn prefs_path() -> std::path::PathBuf {
+        std::path::PathBuf::from("config/tui-prefs.toml")
+    }
+
+    /// Save the current theme preference to disk.
+    pub fn save(self) {
+        #[derive(serde::Serialize)]
+        struct Prefs {
+            theme: ThemeKind,
+        }
+        let content = toml::to_string_pretty(&Prefs { theme: self }).unwrap_or_default();
+        if let Err(e) = std::fs::write(Self::prefs_path(), content) {
+            tracing::warn!("failed to save theme preference: {e}");
+        }
+    }
+
+    /// Load the saved theme preference from disk, or return the default.
+    #[must_use]
+    pub fn load_saved() -> Self {
+        #[derive(serde::Deserialize)]
+        struct Prefs {
+            #[serde(default)]
+            theme: ThemeKind,
+        }
+        std::fs::read_to_string(Self::prefs_path())
+            .ok()
+            .and_then(|s| toml::from_str::<Prefs>(&s).ok())
+            .map(|p| p.theme)
+            .unwrap_or_default()
     }
 }
 
@@ -956,6 +989,24 @@ mod tests {
         assert!(matches!(theme.hp_high, Color::Rgb(_, _, _)));
         assert!(matches!(theme.hp_mid, Color::Rgb(_, _, _)));
         assert!(matches!(theme.hp_low, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn theme_kind_serde_round_trip() {
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct W {
+            theme: ThemeKind,
+        }
+        for kind in [
+            ThemeKind::DarkModern,
+            ThemeKind::Classic,
+            ThemeKind::Dracula,
+            ThemeKind::Neriak,
+        ] {
+            let serialized = toml::to_string(&W { theme: kind }).unwrap();
+            let deserialized: W = toml::from_str(&serialized).unwrap();
+            assert_eq!(kind, deserialized.theme, "round-trip failed for {:?}", kind);
+        }
     }
 
     #[test]
