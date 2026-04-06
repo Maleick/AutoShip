@@ -173,7 +173,14 @@ mod tests {
         let xt = make_hater_list(&[42, 99]);
         let target_pos = Waypoint::new(0.0, 0.0, 0.0);
         let my_pos = Waypoint::new(0.0, 10.0, 0.0);
-        assert!(has_aggro_xtarget(42, 256.0, &target_pos, &my_pos, Some(&xt), 45.0));
+        assert!(has_aggro_xtarget(
+            42,
+            256.0,
+            &target_pos,
+            &my_pos,
+            Some(&xt),
+            45.0
+        ));
     }
 
     #[test]
@@ -181,8 +188,22 @@ mod tests {
         let xt = make_hater_list(&[99]);
         let target_pos = Waypoint::new(0.0, 0.0, 0.0);
         let my_pos = Waypoint::new(0.0, 10.0, 0.0);
-        assert!(has_aggro_xtarget(42, 0.0, &target_pos, &my_pos, Some(&xt), 45.0));
-        assert!(!has_aggro_xtarget(42, 256.0, &target_pos, &my_pos, Some(&xt), 45.0));
+        assert!(has_aggro_xtarget(
+            42,
+            0.0,
+            &target_pos,
+            &my_pos,
+            Some(&xt),
+            45.0
+        ));
+        assert!(!has_aggro_xtarget(
+            42,
+            256.0,
+            &target_pos,
+            &my_pos,
+            Some(&xt),
+            45.0
+        ));
     }
 
     #[test]
@@ -190,6 +211,13 @@ mod tests {
         let target_pos = Waypoint::new(0.0, 0.0, 0.0);
         let my_pos = Waypoint::new(0.0, 10.0, 0.0);
         assert!(has_aggro_xtarget(42, 0.0, &target_pos, &my_pos, None, 45.0));
-        assert!(!has_aggro_xtarget(42, 256.0, &target_pos, &my_pos, None, 45.0));
+        assert!(!has_aggro_xtarget(
+            42,
+            256.0,
+            &target_pos,
+            &my_pos,
+            None,
+            45.0
+        ));
     }
 }

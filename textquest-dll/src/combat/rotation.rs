@@ -153,9 +153,9 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::XTargetHaterCountAbove(count) => ctx
             .extended_targets
             .is_some_and(|xt| xt.hater_count() as u32 >= *count),
-        ConditionExpr::HasXTargetAggro => ctx
-            .extended_targets
-            .is_some_and(|xt| xt.hater_count() > 0),
+        ConditionExpr::HasXTargetAggro => {
+            ctx.extended_targets.is_some_and(|xt| xt.hater_count() > 0)
+        }
     }
 }
 
