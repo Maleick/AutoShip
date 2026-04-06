@@ -614,22 +614,18 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
             tracing::info!("=== END HEX DUMP ===");
 
-            // Click the Login button directly via vtable WndNotification.
-            // During the eqmain login screen, ProcessGameEvents is NOT hooked yet
-            // (it fires only after eqgame.exe takes over), so queue_button_click()
-            // would never drain. Direct invocation is safe here because eqmain's UI
-            // thread is the one calling into our IPC handler during login.
+            // Click the Login button using phase-aware helper.
+            // eqmain is loaded → direct vtable click (game loop not active yet).
             if login_button != 0 {
-                // Small delay to let credential writes settle before clicking.
                 std::thread::sleep(std::time::Duration::from_millis(150));
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
-                    "Clicking Login button directly (eqmain phase — no game loop)"
+                    "Phase 1: Clicking Login button (eqmain context)"
                 );
-                crate::eq::widgets::click_button_via_vtable(login_button);
-                tracing::info!("Login button clicked");
+                click_button_for_phase(login_button, true); // eqmain = true
+                tracing::info!("Phase 1: Login button clicked");
             } else {
-                tracing::warn!("Login button not found — will try Enter key fallback");
+                tracing::warn!("Phase 1: Login button not found — will try Enter key fallback");
             }
             // Always send Enter via PostMessage as the reliable submit path.
             // During eqmain, the game loop hook isn't active so queued button
@@ -776,6 +772,40 @@ pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
     {
         let _ = (eqmain_base, window_name);
         false
+    }
+}
+
+/// Click a button, choosing the right mechanism for the current login phase.
+///
+/// During **eqmain** (login screen, server select), `ProcessGameEvents` is NOT
+/// hooked — `queue_button_click()` queues a pointer that never drains. So we
+/// call `click_button_via_vtable()` directly on the IPC/background thread.
+///
+/// During **eqgame** (character select, in-world), the game loop hook IS active,
+/// so we queue the click for the next game tick to stay on the correct thread.
+///
+/// The `in_eqmain` flag indicates which context we're in:
+/// - `true` = eqmain.dll is loaded (login screen or server select)
+/// - `false` = eqmain.dll is unloaded (character select or in-game)
+pub fn click_button_for_phase(button_wnd: usize, in_eqmain: bool) {
+    if button_wnd == 0 {
+        return;
+    }
+
+    if in_eqmain {
+        // eqmain context: direct vtable click (game loop hook not active)
+        tracing::debug!(
+            ptr = format!("{:#x}", button_wnd),
+            "click_button_for_phase: direct vtable click (eqmain)"
+        );
+        unsafe { crate::eq::widgets::click_button_via_vtable(button_wnd) };
+    } else {
+        // eqgame context: queue for game loop thread
+        tracing::debug!(
+            ptr = format!("{:#x}", button_wnd),
+            "click_button_for_phase: queued for game loop (eqgame)"
+        );
+        crate::hooks::game_loop::queue_button_click(button_wnd);
     }
 }
 

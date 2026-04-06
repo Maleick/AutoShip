@@ -432,12 +432,14 @@ impl LoginFsm {
             return;
         }
 
-        // Click "PLAY EVERQUEST!" to join the default/last server.
-        let clicked = widgets::click_button(self.eqmain_base, "PLAY EVERQUEST!")
-            || widgets::click_button(self.eqmain_base, "QUICK CONNECT TO LAST SERVER");
+        // Click "PLAY EVERQUEST!" via phase-aware helper.
+        // eqmain_base != 0 means we're still in eqmain context → direct vtable click.
+        let in_eqmain = self.eqmain_base != 0;
+        let clicked = Self::try_click_button(self.eqmain_base, "PLAY EVERQUEST!", in_eqmain)
+            || Self::try_click_button(self.eqmain_base, "QUICK CONNECT TO LAST SERVER", in_eqmain);
 
         if clicked {
-            tracing::info!(server = %self.server_name, "PLAY EVERQUEST clicked");
+            tracing::info!(server = %self.server_name, in_eqmain, "PLAY EVERQUEST clicked");
             self.action_taken = true;
         } else {
             // Fallback: try Enter key
@@ -445,6 +447,29 @@ impl LoginFsm {
                 tracing::info!("Server select: Enter key sent as fallback");
                 self.action_taken = true;
             }
+        }
+    }
+
+    /// Find a button by name and click it using the phase-aware helper.
+    fn try_click_button(eqmain_base: u64, window_name: &str, in_eqmain: bool) -> bool {
+        #[cfg(windows)]
+        {
+            let Some(cxwnd_mgr) = eqmain::resolve_cxwnd_manager(eqmain_base) else {
+                return false;
+            };
+            let Some(button_wnd) =
+                (unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, window_name) })
+            else {
+                return false;
+            };
+            widgets::click_button_for_phase(button_wnd, in_eqmain);
+            tracing::debug!(window = window_name, in_eqmain, "FSM clicked button");
+            true
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (eqmain_base, window_name, in_eqmain);
+            false
         }
     }
 

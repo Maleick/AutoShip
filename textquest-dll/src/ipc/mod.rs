@@ -258,15 +258,14 @@ fn login_chain_phase2() {
         ) {
             tracing::info!(attempt, "Phase 2: Server select screen detected (SIDL)");
 
-            // Direct vtable click — ProcessGameEvents isn't hooked during eqmain,
-            // so queue_button_click() would never drain.
+            // Click via phase-aware helper (eqmain = true → direct vtable click).
             if let Some(play_btn) = find_button_by_text(eqmain_base, "PLAY EVERQUEST!") {
                 tracing::info!(
                     ptr = format!("{:#x}", play_btn),
-                    "Phase 2: Clicking PLAY EVERQUEST via vtable"
+                    "Phase 2: Clicking PLAY EVERQUEST (eqmain context)"
                 );
                 std::thread::sleep(std::time::Duration::from_millis(150));
-                unsafe { crate::eq::widgets::click_button_via_vtable(play_btn) };
+                crate::login::widgets::click_button_for_phase(play_btn, true); // eqmain = true
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 crate::login::widgets::simulate_enter_key(eqmain_base);
                 tracing::info!("Phase 2: PLAY EVERQUEST clicked + Enter");
@@ -284,6 +283,35 @@ fn login_chain_phase2() {
             if crate::login::widgets::click_yesno_yes(eqmain_base as usize) {
                 tracing::info!(attempt, "Phase 2: Clicked Yes on dialog during auth");
             }
+        }
+
+        // Screen-state trace every 5s for diagnostics
+        if attempt % 10 == 0 {
+            let connect = crate::login::widgets::is_sidl_window_visible(
+                eqmain_base,
+                crate::login::widgets::SIDL_CONNECT,
+            );
+            let server = crate::login::widgets::is_sidl_window_visible(
+                eqmain_base,
+                crate::login::widgets::SIDL_SERVER_SELECT,
+            );
+            let yesno = crate::login::widgets::is_sidl_window_visible(
+                eqmain_base,
+                crate::login::widgets::SIDL_YES_NO_DIALOG,
+            );
+            let ok_dlg = crate::login::widgets::is_sidl_window_visible(
+                eqmain_base,
+                crate::login::widgets::SIDL_OK_DIALOG,
+            );
+            tracing::info!(
+                attempt,
+                connect,
+                server,
+                yesno,
+                ok_dlg,
+                eqmain = format!("{:#x}", eqmain_base),
+                "Phase 2: screen state"
+            );
         }
 
         // Press Enter every 5s to dismiss blocking dialogs (EULA, notices)
@@ -322,6 +350,24 @@ fn login_chain_phase2() {
         // Press Enter every 3s to dismiss other dialogs
         if attempt % 6 == 3 && eqmain_base != 0 {
             crate::login::widgets::simulate_enter_key(eqmain_base);
+        }
+        // Screen-state trace every 10s for diagnostics
+        if attempt % 20 == 0 && eqmain_base != 0 {
+            let server = crate::login::widgets::is_sidl_window_visible(
+                eqmain_base,
+                crate::login::widgets::SIDL_SERVER_SELECT,
+            );
+            let yesno = crate::login::widgets::is_sidl_window_visible(
+                eqmain_base,
+                crate::login::widgets::SIDL_YES_NO_DIALOG,
+            );
+            tracing::info!(
+                attempt,
+                server,
+                yesno,
+                eqmain = format!("{:#x}", eqmain_base),
+                "Phase 3: screen state (eqmain still loaded)"
+            );
         }
     }
     tracing::warn!("Phase 3: Timed out after 60s");
