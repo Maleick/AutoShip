@@ -9,7 +9,7 @@
 //! when the mode is Normal — in that case, a non-foreground window falls back
 //! to Strobe automatically.
 
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use dmft_common::ipc::RenderMode;
 

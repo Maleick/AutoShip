@@ -30,14 +30,13 @@ mod inner {
         let c_name = std::ffi::CString::new(module_name).unwrap_or_default();
 
         let (base, size) = unsafe {
-            let handle: HMODULE =
-                match GetModuleHandleA(PCSTR::from_raw(c_name.as_ptr().cast())) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        warn!("GetModuleHandleA({module_name}) failed: {e}");
-                        return Vec::new();
-                    }
-                };
+            let handle: HMODULE = match GetModuleHandleA(PCSTR::from_raw(c_name.as_ptr().cast())) {
+                Ok(h) => h,
+                Err(e) => {
+                    warn!("GetModuleHandleA({module_name}) failed: {e}");
+                    return Vec::new();
+                }
+            };
 
             let mut info = MODULEINFO::default();
             if GetModuleInformation(
@@ -146,7 +145,6 @@ mod inner {
 
             Self { saved }
         }
-
     }
 
     /// Panic-safe restoration: Drop restores original return addresses

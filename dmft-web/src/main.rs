@@ -35,10 +35,9 @@ async fn main() {
 
     // Serve the pre-built React SPA from web/dist/.
     // The fallback sends index.html for any unmatched path (SPA client-side routing).
-    let spa_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../web/dist");
-    let serve_spa = ServeDir::new(&spa_dir)
-        .not_found_service(ServeFile::new(spa_dir.join("index.html")));
+    let spa_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../web/dist");
+    let serve_spa =
+        ServeDir::new(&spa_dir).not_found_service(ServeFile::new(spa_dir.join("index.html")));
 
     let app = Router::new()
         .route("/api/health", get(api::health))

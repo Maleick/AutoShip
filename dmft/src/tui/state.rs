@@ -1128,7 +1128,6 @@ impl PacketMonitorState {
     }
 }
 
-
 // ─── EQ Internals panel state ───────────────────────────────────────────────
 
 /// Category filter for the EQ Internals offset browser.

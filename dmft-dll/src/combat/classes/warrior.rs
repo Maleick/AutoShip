@@ -31,52 +31,80 @@ impl WarriorStrategy {
             AbilitySet {
                 name: "Deflection".into(),
                 candidates: vec![
-                    AbilityCandidate { name: "Deflection Discipline".into(), min_level: 62, spell_id: 4694 },
-                    AbilityCandidate { name: "Evasive Discipline".into(), min_level: 52, spell_id: 4670 },
+                    AbilityCandidate {
+                        name: "Deflection Discipline".into(),
+                        min_level: 62,
+                        spell_id: 4694,
+                    },
+                    AbilityCandidate {
+                        name: "Evasive Discipline".into(),
+                        min_level: 52,
+                        spell_id: 4670,
+                    },
                 ],
             },
             AbilitySet {
                 name: "LeechCurse".into(),
-                candidates: vec![
-                    AbilityCandidate { name: "Leechbane Discipline".into(), min_level: 63, spell_id: 4695 },
-                ],
+                candidates: vec![AbilityCandidate {
+                    name: "Leechbane Discipline".into(),
+                    min_level: 63,
+                    spell_id: 4695,
+                }],
             },
             AbilitySet {
                 name: "Carapace".into(),
                 candidates: vec![
-                    AbilityCandidate { name: "Stonewall Discipline".into(), min_level: 65, spell_id: 8001 },
-                    AbilityCandidate { name: "Defensive Discipline".into(), min_level: 55, spell_id: 4685 },
+                    AbilityCandidate {
+                        name: "Stonewall Discipline".into(),
+                        min_level: 65,
+                        spell_id: 8001,
+                    },
+                    AbilityCandidate {
+                        name: "Defensive Discipline".into(),
+                        min_level: 55,
+                        spell_id: 4685,
+                    },
                 ],
             },
             AbilitySet {
                 name: "Mantle".into(),
-                candidates: vec![
-                    AbilityCandidate { name: "Furious Discipline".into(), min_level: 56, spell_id: 4674 },
-                ],
+                candidates: vec![AbilityCandidate {
+                    name: "Furious Discipline".into(),
+                    min_level: 56,
+                    spell_id: 4674,
+                }],
             },
             AbilitySet {
                 name: "MeleeMit".into(),
-                candidates: vec![
-                    AbilityCandidate { name: "Precision Discipline".into(), min_level: 57, spell_id: 4676 },
-                ],
+                candidates: vec![AbilityCandidate {
+                    name: "Precision Discipline".into(),
+                    min_level: 57,
+                    spell_id: 4676,
+                }],
             },
             AbilitySet {
                 name: "Blade".into(),
-                candidates: vec![
-                    AbilityCandidate { name: "Mighty Strike Discipline".into(), min_level: 54, spell_id: 4672 },
-                ],
+                candidates: vec![AbilityCandidate {
+                    name: "Mighty Strike Discipline".into(),
+                    min_level: 54,
+                    spell_id: 4672,
+                }],
             },
             AbilitySet {
                 name: "CombatEndRegen".into(),
-                candidates: vec![
-                    AbilityCandidate { name: "Second Wind Discipline".into(), min_level: 57, spell_id: 4675 },
-                ],
+                candidates: vec![AbilityCandidate {
+                    name: "Second Wind Discipline".into(),
+                    min_level: 57,
+                    spell_id: 4675,
+                }],
             },
             AbilitySet {
                 name: "EndRegen".into(),
-                candidates: vec![
-                    AbilityCandidate { name: "Breather".into(), min_level: 1, spell_id: -1 },
-                ],
+                candidates: vec![AbilityCandidate {
+                    name: "Breather".into(),
+                    min_level: 1,
+                    spell_id: -1,
+                }],
             },
         ]
     }
@@ -548,7 +576,9 @@ mod tests {
             })
             .collect();
         let resolved = dmft_common::combat::resolve_abilities(&sets, &known, 65);
-        let deflection = resolved.get("Deflection").expect("should resolve Deflection");
+        let deflection = resolved
+            .get("Deflection")
+            .expect("should resolve Deflection");
         assert_eq!(deflection.ability_name, "Deflection Discipline");
         let carapace = resolved.get("Carapace").expect("should resolve Carapace");
         assert_eq!(carapace.ability_name, "Stonewall Discipline");
@@ -569,7 +599,9 @@ mod tests {
             .collect();
         let resolved = dmft_common::combat::resolve_abilities(&sets, &known, 55);
         // At level 55, Deflection (62) is too high — should pick Evasive (52)
-        let deflection = resolved.get("Deflection").expect("should resolve Deflection");
+        let deflection = resolved
+            .get("Deflection")
+            .expect("should resolve Deflection");
         assert_eq!(deflection.ability_name, "Evasive Discipline");
         // Carapace: Stonewall (65) too high, picks Defensive (55)
         let carapace = resolved.get("Carapace").expect("should resolve Carapace");

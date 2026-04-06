@@ -200,7 +200,7 @@ mod inner {
         hook_fn: *const core::ffi::c_void,
     ) -> Option<*mut core::ffi::c_void> {
         use windows::Win32::System::Memory::{
-            VirtualProtect, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
+            PAGE_PROTECTION_FLAGS, PAGE_READWRITE, VirtualProtect,
         };
 
         let vtable_ptr = unsafe { *(object as *const *mut *mut core::ffi::c_void) };
@@ -244,15 +244,11 @@ mod inner {
 
     /// Find EQ's main window handle. Looks for the "EverQuest" window class.
     fn find_eq_hwnd() -> Option<windows::Win32::Foundation::HWND> {
-        use windows::core::s;
         use windows::Win32::UI::WindowsAndMessaging::FindWindowA;
+        use windows::core::s;
 
         let hwnd = unsafe { FindWindowA(s!("EverQuest"), None) };
-        if hwnd.0 == 0 {
-            None
-        } else {
-            Some(hwnd)
-        }
+        if hwnd.0 == 0 { None } else { Some(hwnd) }
     }
 
     /// Create a temporary D3D11 device + swap chain to capture the DXGI vtable,
@@ -260,7 +256,6 @@ mod inner {
     fn hook_present_via_dummy_device(
         hwnd: windows::Win32::Foundation::HWND,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use windows::core::Interface;
         use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
         use windows::Win32::Graphics::Direct3D11::D3D11CreateDeviceAndSwapChain;
         use windows::Win32::Graphics::Dxgi::Common::{
@@ -269,6 +264,7 @@ mod inner {
         use windows::Win32::Graphics::Dxgi::{
             DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
         };
+        use windows::core::Interface;
 
         let swap_chain_desc = DXGI_SWAP_CHAIN_DESC {
             BufferDesc: DXGI_MODE_DESC {

@@ -12,13 +12,13 @@
 mod inner {
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-    use windows::core::s;
     use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, GetThreadContext, RemoveVectoredExceptionHandler,
-        SetThreadContext, CONTEXT, CONTEXT_FLAGS,
+        AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, GetThreadContext,
+        RemoveVectoredExceptionHandler, SetThreadContext,
     };
     use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
     use windows::Win32::System::Threading::GetCurrentThread;
+    use windows::core::s;
 
     /// Address of `NtTraceEvent` — set once during init, read by the VEH.
     static NT_TRACE_EVENT_ADDR: AtomicU64 = AtomicU64::new(0);

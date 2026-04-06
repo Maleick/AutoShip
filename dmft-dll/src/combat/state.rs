@@ -397,13 +397,13 @@ impl Combatant {
                         // Resolve the action's spell line name to a concrete spell ID
                         // via the pre-resolved ability map. If no resolution exists,
                         // the action name is treated as a literal and spell_id=0.
-                        let (spell_id, resolved_name) =
-                            if let Some(resolved) = self.resolved_abilities.get(&action.entry_name)
-                            {
-                                (resolved.spell_id, resolved.ability_name.as_str())
-                            } else {
-                                (0, action.entry_name.as_str())
-                            };
+                        let (spell_id, resolved_name) = if let Some(resolved) =
+                            self.resolved_abilities.get(&action.entry_name)
+                        {
+                            (resolved.spell_id, resolved.ability_name.as_str())
+                        } else {
+                            (0, action.entry_name.as_str())
+                        };
 
                         tracing::debug!(
                             entry = %action.entry_name,

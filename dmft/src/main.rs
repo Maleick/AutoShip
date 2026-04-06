@@ -312,7 +312,7 @@ fn main() -> Result<()> {
                     .context("Failed to read master password")?;
                 cli::run_credential_remove_mode(&account, password)
             }
-        }
+        },
 
         None => {
             // Check top-level flags for backward compatibility

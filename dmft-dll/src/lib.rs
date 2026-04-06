@@ -266,7 +266,10 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     // Install DX11 null device hooks — vtable-hook CreateTexture2D + CreateBuffer
     // so NullRender mode can create 1×1 textures instead of full-size, saving ~500 MB.
     if let Err(e) = hooks::dx11_null::install(eq_base) {
-        tracing::warn!("DX11 null hooks failed (continuing without texture reduction): {}", e);
+        tracing::warn!(
+            "DX11 null hooks failed (continuing without texture reduction): {}",
+            e
+        );
     }
 
     Ok(())

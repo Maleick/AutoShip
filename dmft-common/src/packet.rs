@@ -256,10 +256,8 @@ pub struct SessionDiff {
 
 /// Compare two capture sessions by opcode frequency.
 pub fn diff_sessions(a: &CaptureSession, b: &CaptureSession) -> SessionDiff {
-    let hist_a: std::collections::HashMap<u16, usize> =
-        a.opcode_histogram().into_iter().collect();
-    let hist_b: std::collections::HashMap<u16, usize> =
-        b.opcode_histogram().into_iter().collect();
+    let hist_a: std::collections::HashMap<u16, usize> = a.opcode_histogram().into_iter().collect();
+    let hist_b: std::collections::HashMap<u16, usize> = b.opcode_histogram().into_iter().collect();
 
     let keys_a: HashSet<u16> = hist_a.keys().copied().collect();
     let keys_b: HashSet<u16> = hist_b.keys().copied().collect();
@@ -351,15 +349,12 @@ pub fn load_binary<R: Read>(mut reader: R) -> io::Result<CaptureSession> {
     let label_len = u16::from_le_bytes(buf2) as usize;
     // Cap label length at 4 KiB to prevent malicious files from consuming memory.
     if label_len > 4096 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "label too long",
-        ));
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "label too long"));
     }
     let mut label_buf = vec![0u8; label_len];
     reader.read_exact(&mut label_buf)?;
-    let label = String::from_utf8(label_buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let label =
+        String::from_utf8(label_buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
     let mut buf8 = [0u8; 8];
     reader.read_exact(&mut buf8)?;
@@ -392,7 +387,7 @@ pub fn load_binary<R: Read>(mut reader: R) -> io::Result<CaptureSession> {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid direction byte",
-                ))
+                ));
             }
         };
 
@@ -515,8 +510,7 @@ mod tests {
 
     #[test]
     fn filter_whitelist_with_direction() {
-        let f =
-            PacketFilter::whitelist([0x1234]).with_direction(PacketDirection::ClientToServer);
+        let f = PacketFilter::whitelist([0x1234]).with_direction(PacketDirection::ClientToServer);
         // Right opcode, right direction.
         assert!(f.matches(&make_packet(0, PacketDirection::ClientToServer, 0x1234)));
         // Right opcode, wrong direction.
@@ -529,7 +523,11 @@ mod tests {
     fn session_ring_buffer() {
         let mut s = CaptureSession::new("test", 3);
         for i in 0..5 {
-            s.record(make_packet(i * 100, PacketDirection::ClientToServer, i as u16));
+            s.record(make_packet(
+                i * 100,
+                PacketDirection::ClientToServer,
+                i as u16,
+            ));
         }
         assert_eq!(s.len(), 3);
         assert_eq!(s.total_seen, 5);
@@ -540,8 +538,7 @@ mod tests {
 
     #[test]
     fn session_filter_rejects() {
-        let mut s = CaptureSession::new("test", 100)
-            .with_filter(PacketFilter::whitelist([0x0001]));
+        let mut s = CaptureSession::new("test", 100).with_filter(PacketFilter::whitelist([0x0001]));
         assert!(s.record(make_packet(0, PacketDirection::ClientToServer, 0x0001)));
         assert!(!s.record(make_packet(0, PacketDirection::ClientToServer, 0x0002)));
         assert_eq!(s.len(), 1);

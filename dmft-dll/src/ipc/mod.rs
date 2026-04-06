@@ -341,7 +341,10 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                         queue.push(cmd);
                         true
                     } else {
-                        tracing::warn!(client_id, "Command queue full ({MAX_PENDING}), dropping command");
+                        tracing::warn!(
+                            client_id,
+                            "Command queue full ({MAX_PENDING}), dropping command"
+                        );
                         false
                     }
                 } else {

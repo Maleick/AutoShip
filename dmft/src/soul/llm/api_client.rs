@@ -3,7 +3,7 @@
 //! Each operator provides their own API key in config. When no key is set
 //! (or provider = "none"), the caller should fall back to `TraitDrivenResponder`.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
 use super::{LlmProvider, LlmRequest, LlmResponse, Situation};

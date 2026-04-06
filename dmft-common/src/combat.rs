@@ -1179,18 +1179,42 @@ mod tests {
         AbilitySet {
             name: "Nuke".into(),
             candidates: vec![
-                AbilityCandidate { name: "Ice Comet".into(), min_level: 60, spell_id: 1500 },
-                AbilityCandidate { name: "Frost".into(), min_level: 52, spell_id: 1200 },
-                AbilityCandidate { name: "Chill Sight".into(), min_level: 44, spell_id: 900 },
+                AbilityCandidate {
+                    name: "Ice Comet".into(),
+                    min_level: 60,
+                    spell_id: 1500,
+                },
+                AbilityCandidate {
+                    name: "Frost".into(),
+                    min_level: 52,
+                    spell_id: 1200,
+                },
+                AbilityCandidate {
+                    name: "Chill Sight".into(),
+                    min_level: 44,
+                    spell_id: 900,
+                },
             ],
         }
     }
 
     fn known_spells() -> Vec<KnownAbility> {
         vec![
-            KnownAbility { name: "Ice Comet".into(), spell_id: 1500, level: 60 },
-            KnownAbility { name: "Frost".into(), spell_id: 1200, level: 52 },
-            KnownAbility { name: "Chill Sight".into(), spell_id: 900, level: 44 },
+            KnownAbility {
+                name: "Ice Comet".into(),
+                spell_id: 1500,
+                level: 60,
+            },
+            KnownAbility {
+                name: "Frost".into(),
+                spell_id: 1200,
+                level: 52,
+            },
+            KnownAbility {
+                name: "Chill Sight".into(),
+                spell_id: 900,
+                level: 44,
+            },
         ]
     }
 
@@ -1229,13 +1253,23 @@ mod tests {
     fn resolve_multiple_sets() {
         let heal_set = AbilitySet {
             name: "Heal".into(),
-            candidates: vec![
-                AbilityCandidate { name: "Complete Heal".into(), min_level: 39, spell_id: 13 },
-            ],
+            candidates: vec![AbilityCandidate {
+                name: "Complete Heal".into(),
+                min_level: 39,
+                spell_id: 13,
+            }],
         };
         let known = vec![
-            KnownAbility { name: "Ice Comet".into(), spell_id: 1500, level: 60 },
-            KnownAbility { name: "Complete Heal".into(), spell_id: 13, level: 39 },
+            KnownAbility {
+                name: "Ice Comet".into(),
+                spell_id: 1500,
+                level: 60,
+            },
+            KnownAbility {
+                name: "Complete Heal".into(),
+                spell_id: 13,
+                level: 39,
+            },
         ];
         let result = resolve_abilities(&[nuke_set(), heal_set], &known, 65);
         assert_eq!(result.len(), 2);
@@ -1272,8 +1306,16 @@ mod tests {
     fn resolve_first_known_candidate_wins() {
         let sets = vec![nuke_set()];
         let known = vec![
-            KnownAbility { name: "Frost".into(), spell_id: 1200, level: 52 },
-            KnownAbility { name: "Chill Sight".into(), spell_id: 900, level: 44 },
+            KnownAbility {
+                name: "Frost".into(),
+                spell_id: 1200,
+                level: 52,
+            },
+            KnownAbility {
+                name: "Chill Sight".into(),
+                spell_id: 900,
+                level: 44,
+            },
         ];
         let result = resolve_abilities(&sets, &known, 55);
         let nuke = result.get("Nuke").expect("should resolve Nuke");

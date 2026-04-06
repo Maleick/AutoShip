@@ -326,9 +326,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             ));
 
             // Annotation label: show field name if this row starts at or contains a field boundary.
-            if annotating
-                && let Some(ann) = app.hex_state.annotation_at(row_offset)
-            {
+            if annotating && let Some(ann) = app.hex_state.annotation_at(row_offset) {
                 let color = ANNOTATION_COLORS[ann.color_idx as usize % 6];
                 // Only show label on the first row of the field.
                 if row_offset <= ann.offset + 15 {
