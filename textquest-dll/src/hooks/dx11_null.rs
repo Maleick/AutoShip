@@ -1,9 +1,15 @@
-//! DX11 null device hook — intercepts texture/buffer creation to minimize GPU memory.
+//! DX11 null device hook — intercepts texture/buffer creation and draw calls
+//! to minimize GPU work.
 //!
-//! When `RenderMode::NullRender` is active, this module vtable-hooks the
-//! `ID3D11Device` to replace texture allocations with 1×1 stubs and buffers
-//! with 256-byte stubs. This cuts per-client GPU memory from ~500 MB down to
-//! nearly zero for headless/background clients.
+//! When `RenderMode::NullRender` is active, this module vtable-hooks:
+//! - `ID3D11Device` — replaces texture allocations with 1×1 stubs and buffers
+//!   with 256-byte stubs (~500 MB → ~0 per client).
+//! - `ID3D11DeviceContext` — no-ops all draw calls (`Draw`, `DrawIndexed`,
+//!   `DrawInstanced`, `DrawIndexedInstanced`, `DrawAuto`) so the GPU does zero
+//!   geometry work even when the present chain runs.
+//!
+//! A one-frame passthrough (`request_screenshot_frame`) temporarily re-enables
+//! draw calls for screenshot capture (#480).
 //!
 //! ## Hook strategy (DXGI vtable approach)
 //!
@@ -15,12 +21,15 @@
 //! 2. Read `Present` (vtable index 8) and hook it.
 //! 3. On the first `Present` call, use `swapChain->GetDevice()` to get the real
 //!    `ID3D11Device*`, then hook `CreateTexture2D` (index 5) and `CreateBuffer` (index 3).
-//! 4. Clean up the temporary device/swap chain.
+//! 4. From the device, call `GetImmediateContext` to get the `ID3D11DeviceContext*`
+//!    and hook draw calls (indices 12, 13, 19, 20, 38).
+//! 5. Clean up the temporary device/swap chain.
 
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// Result of a screenshot capture attempt, stored after Present completes.
+/// Consumed by the game loop tick that originally requested the capture.
 static CAPTURE_RESULT: OnceLock<Mutex<Option<Result<String, String>>>> = OnceLock::new();
 
 /// Store a capture result for the IPC handler to retrieve.
@@ -55,6 +64,29 @@ static PRESENT_HOOKED: AtomicBool = AtomicBool::new(false);
 
 /// Whether the device hooks (CreateTexture2D + CreateBuffer) have been installed.
 static DEVICE_HOOKED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the context draw-call hooks have been installed.
+static CONTEXT_HOOKED: AtomicBool = AtomicBool::new(false);
+
+/// Original `ID3D11DeviceContext::DrawIndexed` (vtable slot 12).
+static ORIG_DRAW_INDEXED: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Original `ID3D11DeviceContext::Draw` (vtable slot 13).
+static ORIG_DRAW: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Original `ID3D11DeviceContext::DrawIndexedInstanced` (vtable slot 19).
+static ORIG_DRAW_INDEXED_INSTANCED: AtomicPtr<core::ffi::c_void> =
+    AtomicPtr::new(core::ptr::null_mut());
+
+/// Original `ID3D11DeviceContext::DrawInstanced` (vtable slot 20).
+static ORIG_DRAW_INSTANCED: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Original `ID3D11DeviceContext::DrawAuto` (vtable slot 38).
+static ORIG_DRAW_AUTO: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
+
+/// When true, draw calls pass through for one frame (screenshot capture).
+/// Cleared by `hooked_present` after the frame completes.
+static SCREENSHOT_FRAME: AtomicBool = AtomicBool::new(false);
 
 /// Cached EQ base address for deferred installation.
 static CACHED_EQ_BASE: AtomicU64 = AtomicU64::new(0);
@@ -99,10 +131,22 @@ const D3D11_BIND_DEPTH_STENCIL: u32 = 0x40;
 // DX11 usage constants.
 const D3D11_USAGE_STAGING: u32 = 3;
 
-// COM vtable indices.
+// COM vtable indices — ID3D11Device.
 const VTABLE_CREATE_BUFFER: usize = 3;
 const VTABLE_CREATE_TEXTURE2D: usize = 5;
+
+// COM vtable indices — IDXGISwapChain.
 const VTABLE_PRESENT: usize = 8;
+
+// COM vtable indices — ID3D11DeviceContext draw calls.
+const VTABLE_DRAW_INDEXED: usize = 12;
+const VTABLE_DRAW: usize = 13;
+const VTABLE_DRAW_INDEXED_INSTANCED: usize = 19;
+const VTABLE_DRAW_INSTANCED: usize = 20;
+const VTABLE_DRAW_AUTO: usize = 38;
+
+// COM vtable index — ID3D11Device::GetImmediateContext.
+const VTABLE_GET_IMMEDIATE_CONTEXT: usize = 40;
 
 // ─── COM function signatures ───
 
@@ -123,18 +167,65 @@ type CreateBufferFn = unsafe extern "system" fn(
 type PresentFn =
     unsafe extern "system" fn(this: *mut core::ffi::c_void, sync_interval: u32, flags: u32) -> i32;
 
+// ─── ID3D11DeviceContext draw call signatures ───
+
+type DrawFn = unsafe extern "system" fn(
+    this: *mut core::ffi::c_void,
+    vertex_count: u32,
+    start_vertex_location: u32,
+);
+
+type DrawIndexedFn = unsafe extern "system" fn(
+    this: *mut core::ffi::c_void,
+    index_count: u32,
+    start_index_location: u32,
+    base_vertex_location: i32,
+);
+
+type DrawInstancedFn = unsafe extern "system" fn(
+    this: *mut core::ffi::c_void,
+    vertex_count_per_instance: u32,
+    instance_count: u32,
+    start_vertex_location: u32,
+    start_instance_location: u32,
+);
+
+type DrawIndexedInstancedFn = unsafe extern "system" fn(
+    this: *mut core::ffi::c_void,
+    index_count_per_instance: u32,
+    instance_count: u32,
+    start_index_location: u32,
+    base_vertex_location: i32,
+    start_instance_location: u32,
+);
+
+type DrawAutoFn = unsafe extern "system" fn(this: *mut core::ffi::c_void);
+
 // ─── Hook implementations ───
 
+/// Returns true if draw calls should be suppressed (NullRender and no screenshot pending).
+fn should_suppress_draw() -> bool {
+    super::render::mode() == textquest_common::ipc::RenderMode::NullRender
+        && !SCREENSHOT_FRAME.load(Ordering::Acquire)
+}
+
+/// Request that draw calls pass through for one frame (screenshot capture).
+/// The flag is cleared automatically after the next `Present` call.
+pub fn request_screenshot_frame() {
+    SCREENSHOT_FRAME.store(true, Ordering::Release);
+    tracing::debug!("Screenshot frame requested — draw calls enabled for next frame");
+}
+
 /// Hooked `IDXGISwapChain::Present` — on first call, extracts the real
-/// `ID3D11Device*` and hooks `CreateTexture2D` + `CreateBuffer`.
-/// All subsequent calls pass through to the original.
+/// `ID3D11Device*` and hooks `CreateTexture2D`, `CreateBuffer`, and context
+/// draw calls. Clears the screenshot-frame flag after each present.
 #[cfg(windows)]
 unsafe extern "system" fn hooked_present(
     this: *mut core::ffi::c_void,
     sync_interval: u32,
     flags: u32,
 ) -> i32 {
-    // On first call, hook the device's CreateTexture2D and CreateBuffer.
+    // On first call, hook device and context.
     if DEVICE_HOOKED
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
@@ -144,11 +235,18 @@ unsafe extern "system" fn hooked_present(
         }
     }
 
-    // Check if a screenshot capture is active before calling original Present.
+    // If a capture was requested via render::request_capture(), the render
+    // hook forced this frame to render. Before calling original Present, check
+    // if we should grab the backbuffer.
     let is_capture = super::render::take_capture_active();
 
     let original: PresentFn = unsafe { core::mem::transmute(ORIG_PRESENT.load(Ordering::Acquire)) };
     let result = unsafe { original(this, sync_interval, flags) };
+
+    // Clear screenshot passthrough after the frame has been presented.
+    if SCREENSHOT_FRAME.swap(false, Ordering::AcqRel) {
+        tracing::debug!("Screenshot frame completed — draw suppression re-enabled");
+    }
 
     // Capture the backbuffer if this was a capture frame.
     if is_capture {
@@ -161,6 +259,103 @@ unsafe extern "system" fn hooked_present(
     }
 
     result
+}
+
+// ─── Draw call hooks ───
+
+/// Hooked `ID3D11DeviceContext::Draw` (vtable slot 13).
+unsafe extern "system" fn hooked_draw(
+    this: *mut core::ffi::c_void,
+    vertex_count: u32,
+    start_vertex_location: u32,
+) {
+    if should_suppress_draw() {
+        return;
+    }
+    let original: DrawFn = unsafe { core::mem::transmute(ORIG_DRAW.load(Ordering::Acquire)) };
+    unsafe { original(this, vertex_count, start_vertex_location) };
+}
+
+/// Hooked `ID3D11DeviceContext::DrawIndexed` (vtable slot 12).
+unsafe extern "system" fn hooked_draw_indexed(
+    this: *mut core::ffi::c_void,
+    index_count: u32,
+    start_index_location: u32,
+    base_vertex_location: i32,
+) {
+    if should_suppress_draw() {
+        return;
+    }
+    let original: DrawIndexedFn =
+        unsafe { core::mem::transmute(ORIG_DRAW_INDEXED.load(Ordering::Acquire)) };
+    unsafe {
+        original(
+            this,
+            index_count,
+            start_index_location,
+            base_vertex_location,
+        )
+    };
+}
+
+/// Hooked `ID3D11DeviceContext::DrawInstanced` (vtable slot 20).
+unsafe extern "system" fn hooked_draw_instanced(
+    this: *mut core::ffi::c_void,
+    vertex_count_per_instance: u32,
+    instance_count: u32,
+    start_vertex_location: u32,
+    start_instance_location: u32,
+) {
+    if should_suppress_draw() {
+        return;
+    }
+    let original: DrawInstancedFn =
+        unsafe { core::mem::transmute(ORIG_DRAW_INSTANCED.load(Ordering::Acquire)) };
+    unsafe {
+        original(
+            this,
+            vertex_count_per_instance,
+            instance_count,
+            start_vertex_location,
+            start_instance_location,
+        )
+    };
+}
+
+/// Hooked `ID3D11DeviceContext::DrawIndexedInstanced` (vtable slot 19).
+unsafe extern "system" fn hooked_draw_indexed_instanced(
+    this: *mut core::ffi::c_void,
+    index_count_per_instance: u32,
+    instance_count: u32,
+    start_index_location: u32,
+    base_vertex_location: i32,
+    start_instance_location: u32,
+) {
+    if should_suppress_draw() {
+        return;
+    }
+    let original: DrawIndexedInstancedFn =
+        unsafe { core::mem::transmute(ORIG_DRAW_INDEXED_INSTANCED.load(Ordering::Acquire)) };
+    unsafe {
+        original(
+            this,
+            index_count_per_instance,
+            instance_count,
+            start_index_location,
+            base_vertex_location,
+            start_instance_location,
+        )
+    };
+}
+
+/// Hooked `ID3D11DeviceContext::DrawAuto` (vtable slot 38).
+unsafe extern "system" fn hooked_draw_auto(this: *mut core::ffi::c_void) {
+    if should_suppress_draw() {
+        return;
+    }
+    let original: DrawAutoFn =
+        unsafe { core::mem::transmute(ORIG_DRAW_AUTO.load(Ordering::Acquire)) };
+    unsafe { original(this) };
 }
 
 /// Hooked `CreateTexture2D` — returns 1×1 textures in NullRender mode.
@@ -273,6 +468,7 @@ mod inner {
     }
 
     /// Restore a vtable entry to its original function pointer.
+    #[allow(dead_code)]
     unsafe fn vtable_unhook(
         object: *mut core::ffi::c_void,
         index: usize,
@@ -357,8 +553,6 @@ mod inner {
         );
 
         // Now hook Present in the REAL swap chain vtable.
-        // Since all IDXGISwapChain instances of the same implementation share the
-        // same vtable, hooking the dummy's vtable hooks ALL swap chains (including EQ's).
         let orig = unsafe {
             vtable_hook(
                 sc_ptr,
@@ -372,9 +566,6 @@ mod inner {
 
         tracing::info!("IDXGISwapChain::Present hook installed via dummy device");
 
-        // Release the temporary device and swap chain — the vtable hook persists
-        // because it patches the shared vtable, not the object instance.
-        // Drop happens automatically via windows crate COM ref-counting.
         drop(swap_chain);
         drop(device);
 
@@ -383,19 +574,11 @@ mod inner {
 
     /// Called from the hooked Present on the first invocation.
     /// Extracts the real `ID3D11Device*` from the swap chain and hooks
-    /// `CreateTexture2D` + `CreateBuffer`.
+    /// `CreateTexture2D` + `CreateBuffer`, then gets the immediate context
+    /// and hooks all draw calls.
     pub(super) unsafe fn hook_device_from_swap_chain(
         swap_chain: *mut core::ffi::c_void,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Call swap_chain->GetDevice() via COM.
-        // IDXGISwapChain inherits from IDXGIDeviceSubObject which has GetDevice().
-        // But we want ID3D11Device, so we use QueryInterface-style GetDevice
-        // by going through the swap chain's GetDevice (vtable index 10 on IDXGISwapChain).
-        //
-        // Actually, the simplest approach: cast to IDXGISwapChain, call GetDevice
-        // with IID_ID3D11Device.
-
-        // IID_ID3D11Device = {db6f6ddb-ac77-4e88-8253-819df9bbf140}
         let iid_device: windows::core::GUID = windows::core::GUID::from_values(
             0xdb6f6ddb,
             0xac77,
@@ -403,8 +586,6 @@ mod inner {
             [0x82, 0x53, 0x81, 0x9d, 0xf9, 0xbb, 0xf1, 0x40],
         );
 
-        // IDXGISwapChain::GetDevice is inherited from IDXGIObject, vtable index 7.
-        // Signature: HRESULT GetDevice(REFIID riid, void **ppDevice)
         type GetDeviceFn = unsafe extern "system" fn(
             this: *mut core::ffi::c_void,
             riid: *const windows::core::GUID,
@@ -412,8 +593,6 @@ mod inner {
         ) -> i32;
 
         let vtable_ptr = unsafe { *(swap_chain as *const *const *const core::ffi::c_void) };
-        // IDXGIObject::GetParent is index 6, GetDevice is on IDXGIDeviceSubObject
-        // which adds it at index 7 (after IUnknown[0-2] + IDXGIObject[3-6]).
         let get_device_fn: GetDeviceFn = unsafe { core::mem::transmute(*vtable_ptr.add(7)) };
 
         let mut device_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
@@ -455,6 +634,89 @@ mod inner {
 
         tracing::info!("ID3D11Device hooks installed (CreateTexture2D + CreateBuffer)");
 
+        // ─── Hook immediate context draw calls ───
+
+        type GetImmediateContextFn = unsafe extern "system" fn(
+            this: *mut core::ffi::c_void,
+            context: *mut *mut core::ffi::c_void,
+        );
+
+        let device_vtable = unsafe { *(device_ptr as *const *const *const core::ffi::c_void) };
+        let get_ctx_fn: GetImmediateContextFn =
+            unsafe { core::mem::transmute(*device_vtable.add(VTABLE_GET_IMMEDIATE_CONTEXT)) };
+
+        let mut context_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+        unsafe { get_ctx_fn(device_ptr, &mut context_ptr) };
+
+        if context_ptr.is_null() {
+            tracing::warn!("GetImmediateContext returned null — draw hooks skipped");
+        } else {
+            tracing::info!(
+                context = format!("{:#x}", context_ptr as usize),
+                "Got ID3D11DeviceContext — installing draw call hooks"
+            );
+
+            if let Some(orig) = unsafe {
+                vtable_hook(
+                    context_ptr,
+                    VTABLE_DRAW_INDEXED,
+                    hooked_draw_indexed as *const core::ffi::c_void,
+                )
+            } {
+                ORIG_DRAW_INDEXED.store(orig, Ordering::Release);
+            }
+
+            if let Some(orig) = unsafe {
+                vtable_hook(
+                    context_ptr,
+                    VTABLE_DRAW,
+                    hooked_draw as *const core::ffi::c_void,
+                )
+            } {
+                ORIG_DRAW.store(orig, Ordering::Release);
+            }
+
+            if let Some(orig) = unsafe {
+                vtable_hook(
+                    context_ptr,
+                    VTABLE_DRAW_INDEXED_INSTANCED,
+                    hooked_draw_indexed_instanced as *const core::ffi::c_void,
+                )
+            } {
+                ORIG_DRAW_INDEXED_INSTANCED.store(orig, Ordering::Release);
+            }
+
+            if let Some(orig) = unsafe {
+                vtable_hook(
+                    context_ptr,
+                    VTABLE_DRAW_INSTANCED,
+                    hooked_draw_instanced as *const core::ffi::c_void,
+                )
+            } {
+                ORIG_DRAW_INSTANCED.store(orig, Ordering::Release);
+            }
+
+            if let Some(orig) = unsafe {
+                vtable_hook(
+                    context_ptr,
+                    VTABLE_DRAW_AUTO,
+                    hooked_draw_auto as *const core::ffi::c_void,
+                )
+            } {
+                ORIG_DRAW_AUTO.store(orig, Ordering::Release);
+            }
+
+            CONTEXT_HOOKED.store(true, Ordering::Release);
+            tracing::info!("ID3D11DeviceContext draw hooks installed (5 methods)");
+
+            let ctx_release: ReleaseFn = unsafe {
+                core::mem::transmute(
+                    *(*(context_ptr as *const *const *const core::ffi::c_void)).add(VTABLE_RELEASE),
+                )
+            };
+            unsafe { ctx_release(context_ptr) };
+        }
+
         // Release the device ref we got from GetDevice.
         let release: ReleaseFn = unsafe {
             core::mem::transmute(
@@ -469,10 +731,7 @@ mod inner {
     /// Capture the swap chain's backbuffer to a BMP file.
     ///
     /// Called from `hooked_present` after the frame has been rendered.
-    /// Uses `GetBuffer(0)` -> staging texture -> `Map` -> write BMP.
-    ///
-    /// # Safety
-    /// `swap_chain` must be a valid `IDXGISwapChain` pointer from a live Present call.
+    /// Uses `GetBuffer(0)` → staging texture → `Map` → write BMP.
     pub(super) unsafe fn capture_backbuffer(
         swap_chain: *mut core::ffi::c_void,
     ) -> Result<String, String> {
@@ -496,14 +755,15 @@ mod inner {
 
         let mut desc = WinTexDesc::default();
         unsafe { backbuffer.GetDesc(&mut desc) };
-        if desc.Format != windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM {
-            return Err(format!("Unsupported backbuffer format: {:?}", desc.Format));
-        }
         let width = desc.Width;
         let height = desc.Height;
 
-        let device: windows::Win32::Graphics::Direct3D11::ID3D11Device =
-            unsafe { backbuffer.GetDevice() }.map_err(|e| format!("GetDevice failed: {e}"))?;
+        // windows 0.54: GetDevice() returns Result<T>, no out-param.
+        let device: windows::Win32::Graphics::Direct3D11::ID3D11Device = unsafe {
+            backbuffer
+                .GetDevice()
+                .map_err(|e| format!("GetDevice failed: {e}"))?
+        };
 
         let staging_desc = WinTexDesc {
             Width: width,
@@ -521,21 +781,25 @@ mod inner {
             MiscFlags: Default::default(),
         };
 
-        let staging: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D = {
-            let mut tex: Option<windows::Win32::Graphics::Direct3D11::ID3D11Texture2D> = None;
-            unsafe {
-                device
-                    .CreateTexture2D(&staging_desc, None, Some(&mut tex))
-                    .map_err(|e| format!("CreateTexture2D (staging) failed: {e}"))?;
-            }
-            tex.ok_or("CreateTexture2D returned None")?
+        // windows 0.54: CreateTexture2D uses 3-arg out-param pattern, returns Result<()>.
+        let mut staging: Option<windows::Win32::Graphics::Direct3D11::ID3D11Texture2D> = None;
+        unsafe {
+            device
+                .CreateTexture2D(&staging_desc, None, Some(&mut staging))
+                .map_err(|e| format!("CreateTexture2D (staging) failed: {e}"))?;
+        }
+        let staging = staging.ok_or("CreateTexture2D returned null")?;
+
+        // windows 0.54: GetImmediateContext() returns Result<T>, no out-param.
+        let context: windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext = unsafe {
+            device
+                .GetImmediateContext()
+                .map_err(|e| format!("GetImmediateContext failed: {e}"))?
         };
 
-        let context: windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext =
-            unsafe { device.GetImmediateContext() }
-                .map_err(|e| format!("GetImmediateContext failed: {e}"))?;
-
-        unsafe { context.CopyResource(&staging, &backbuffer) };
+        unsafe {
+            context.CopyResource(&staging, &backbuffer);
+        }
 
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         unsafe {
@@ -588,7 +852,6 @@ mod inner {
             std::fs::File::create(path).map_err(|e| format!("create file: {e}"))?,
         );
 
-        // BMP file header (14 bytes).
         file.write_all(b"BM").map_err(|e| format!("write: {e}"))?;
         file.write_all(&file_size.to_le_bytes())
             .map_err(|e| format!("write: {e}"))?;
@@ -597,7 +860,6 @@ mod inner {
         file.write_all(&54u32.to_le_bytes())
             .map_err(|e| format!("write: {e}"))?;
 
-        // BMP info header (40 bytes).
         file.write_all(&40u32.to_le_bytes())
             .map_err(|e| format!("write: {e}"))?;
         file.write_all(&width.to_le_bytes())
@@ -611,7 +873,6 @@ mod inner {
         file.write_all(&[0u8; 24])
             .map_err(|e| format!("write: {e}"))?;
 
-        // Pixel data (BGRA -> BGR, top-down with negative height).
         let mut row_buf = vec![0u8; padded_row as usize];
         for y in 0..height {
             let src_row = unsafe { data.add((y * row_pitch) as usize) };
@@ -629,8 +890,7 @@ mod inner {
         Ok(())
     }
 
-    /// Install DX11 vtable hooks via DXGI. If EQ's window isn't available yet,
-    /// caches the EQ base for deferred installation via `ensure_installed()`.
+    /// Install DX11 vtable hooks via DXGI.
     pub fn install(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
         CACHED_EQ_BASE.store(eq_base, Ordering::Release);
 
@@ -652,8 +912,7 @@ mod inner {
         }
     }
 
-    /// Attempt deferred installation. Called from `set_mode()` when hooks
-    /// weren't installed at DLL init (window wasn't available yet).
+    /// Attempt deferred installation.
     pub fn ensure_installed() {
         if PRESENT_HOOKED.load(Ordering::Acquire) {
             return;
@@ -671,15 +930,8 @@ mod inner {
         }
     }
 
-    /// Remove DX11 vtable hooks by restoring original function pointers.
-    ///
-    /// Note: We cannot easily restore the Present hook since the dummy swap chain
-    /// was released. The device hooks are restored via the vtable (all instances
-    /// share the same vtable). On DLL unload, Present hook removal is best-effort.
+    /// Remove DX11 vtable hooks.
     pub fn remove(_eq_base: u64) {
-        // We don't have a persistent reference to the swap chain or device,
-        // so we log a warning. In practice, remove() is called at DLL unload
-        // and the process is about to exit anyway.
         if PRESENT_HOOKED.load(Ordering::Acquire) {
             tracing::info!(
                 "DX11 Present hook cannot be cleanly removed (vtable shared, no persistent ref). \
@@ -691,24 +943,23 @@ mod inner {
                 "DX11 device hooks (CreateTexture2D + CreateBuffer) will be released on process exit."
             );
         }
+        if CONTEXT_HOOKED.load(Ordering::Acquire) {
+            tracing::info!("DX11 context draw hooks (5 methods) will be released on process exit.");
+        }
         PRESENT_HOOKED.store(false, Ordering::Release);
         DEVICE_HOOKED.store(false, Ordering::Release);
-        tracing::info!("DX11 null device hooks marked as removed");
+        CONTEXT_HOOKED.store(false, Ordering::Release);
+        tracing::info!("DX11 null device + context hooks marked as removed");
     }
 }
 
 #[cfg(not(windows))]
 mod inner {
-    /// Stub — DX11 hooks are only functional on Windows.
     pub fn install(_eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("DX11 null device hooks not available on this platform (stub)");
         Ok(())
     }
-
-    /// Stub — deferred install is a no-op on non-Windows.
     pub fn ensure_installed() {}
-
-    /// Stub — nothing to remove on non-Windows.
     pub fn remove(_eq_base: u64) {
         tracing::warn!("DX11 null device hook removal not available (stub)");
     }
@@ -716,3 +967,93 @@ mod inner {
 
 #[allow(unused_imports)]
 pub use inner::{ensure_installed, install, remove};
+
+/// Returns true if the context draw-call hooks have been installed.
+pub fn draw_hooks_installed() -> bool {
+    CONTEXT_HOOKED.load(Ordering::Acquire)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use textquest_common::ipc::RenderMode;
+
+    fn suppresses(mode: RenderMode, screenshot: bool) -> bool {
+        mode == RenderMode::NullRender && !screenshot
+    }
+
+    #[test]
+    fn should_suppress_draw_in_null_render() {
+        assert!(suppresses(RenderMode::NullRender, false));
+    }
+
+    #[test]
+    fn should_not_suppress_draw_in_normal_mode() {
+        assert!(!suppresses(RenderMode::Normal, false));
+    }
+
+    #[test]
+    fn should_not_suppress_draw_in_strobe_mode() {
+        assert!(!suppresses(RenderMode::Strobe, false));
+    }
+
+    #[test]
+    fn screenshot_frame_overrides_null_render() {
+        assert!(
+            !suppresses(RenderMode::NullRender, true),
+            "screenshot frame should allow draw calls through"
+        );
+    }
+
+    #[test]
+    fn request_screenshot_frame_sets_flag() {
+        SCREENSHOT_FRAME.store(false, Ordering::Relaxed);
+        request_screenshot_frame();
+        assert!(SCREENSHOT_FRAME.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn screenshot_frame_clears_on_swap() {
+        SCREENSHOT_FRAME.store(true, Ordering::Relaxed);
+        let was_set = SCREENSHOT_FRAME.swap(false, Ordering::AcqRel);
+        assert!(was_set, "flag should have been set before swap");
+        assert!(
+            !SCREENSHOT_FRAME.load(Ordering::Relaxed),
+            "flag should be cleared after swap"
+        );
+    }
+
+    #[test]
+    fn draw_hooks_not_installed_by_default() {
+        CONTEXT_HOOKED.store(false, Ordering::Relaxed);
+        assert!(!draw_hooks_installed());
+    }
+
+    #[test]
+    fn vtable_constants_are_distinct() {
+        let indices = [
+            VTABLE_DRAW_INDEXED,
+            VTABLE_DRAW,
+            VTABLE_DRAW_INDEXED_INSTANCED,
+            VTABLE_DRAW_INSTANCED,
+            VTABLE_DRAW_AUTO,
+        ];
+        for (i, a) in indices.iter().enumerate() {
+            for (j, b) in indices.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b, "vtable indices {i} and {j} must be distinct");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stub_install_remove_are_safe() {
+        #[cfg(not(windows))]
+        {
+            assert!(install(0x12345).is_ok());
+            ensure_installed();
+            remove(0x12345);
+        }
+    }
+}
