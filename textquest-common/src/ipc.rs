@@ -416,6 +416,12 @@ pub enum Command {
         /// Character name to switch to.
         character_name: String,
     },
+    /// Capture a single-frame screenshot from a null-rendered client.
+    ///
+    /// Temporarily enables rendering for one frame, captures the backbuffer
+    /// after Present, saves to a temp file, and restores the previous render mode.
+    /// Returns `ScreenshotCaptured` with the file path on success.
+    CaptureScreenshot,
 }
 
 impl std::fmt::Debug for Command {
@@ -579,6 +585,16 @@ pub enum Response {
         success: bool,
         /// Human-readable message (target name on success, error on failure).
         message: String,
+    },
+    /// Screenshot captured successfully. The image was saved to a temp file.
+    ScreenshotCaptured {
+        /// Absolute path to the saved screenshot (BMP format).
+        path: String,
+    },
+    /// Screenshot capture failed.
+    ScreenshotFailed {
+        /// Reason the capture failed.
+        reason: String,
     },
 }
 
@@ -1002,6 +1018,7 @@ mod tests {
             Command::SetRenderMode {
                 mode: RenderMode::Strobe,
             },
+            Command::CaptureScreenshot,
         ];
         for cmd in &commands {
             let encoded = encode(cmd).expect("encode failed");
@@ -1042,6 +1059,12 @@ mod tests {
             Response::ZoneGraph { zones: vec![] },
             Response::RenderModeChanged {
                 mode: RenderMode::NullRender,
+            },
+            Response::ScreenshotCaptured {
+                path: "/tmp/textquest_screenshot_1234.bmp".into(),
+            },
+            Response::ScreenshotFailed {
+                reason: "not in NullRender mode".into(),
             },
         ];
         for resp in &responses {
@@ -1435,5 +1458,44 @@ mod tests {
         assert_eq!(RenderMode::Normal.to_string(), "normal");
         assert_eq!(RenderMode::Strobe.to_string(), "strobe");
         assert_eq!(RenderMode::NullRender.to_string(), "null");
+    }
+
+    #[test]
+    fn capture_screenshot_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::CaptureScreenshot;
+        let encoded = encode(&cmd).expect("encode CaptureScreenshot");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode CaptureScreenshot");
+        assert_eq!(decoded, Command::CaptureScreenshot);
+    }
+
+    #[test]
+    fn screenshot_captured_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let resp = Response::ScreenshotCaptured {
+            path: "/tmp/textquest_screenshot_42.bmp".into(),
+        };
+        let encoded = encode(&resp).expect("encode ScreenshotCaptured");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode ScreenshotCaptured");
+        if let Response::ScreenshotCaptured { path } = decoded {
+            assert_eq!(path, "/tmp/textquest_screenshot_42.bmp");
+        } else {
+            panic!("expected ScreenshotCaptured");
+        }
+    }
+
+    #[test]
+    fn screenshot_failed_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let resp = Response::ScreenshotFailed {
+            reason: "not in NullRender mode".into(),
+        };
+        let encoded = encode(&resp).expect("encode ScreenshotFailed");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode ScreenshotFailed");
+        if let Response::ScreenshotFailed { reason } = decoded {
+            assert_eq!(reason, "not in NullRender mode");
+        } else {
+            panic!("expected ScreenshotFailed");
+        }
     }
 }

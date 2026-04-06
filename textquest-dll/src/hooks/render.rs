@@ -9,7 +9,7 @@
 //! when the mode is Normal — in that case, a non-foreground window falls back
 //! to Strobe automatically.
 
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use textquest_common::ipc::RenderMode;
 
@@ -21,6 +21,14 @@ static RENDER_TICK: AtomicU64 = AtomicU64::new(0);
 
 /// Current render mode. Encoded as u8: 0=Normal, 1=Strobe, 2=NullRender.
 static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
+
+/// When true, the next `should_render()` call returns true (one-shot override)
+/// and the post-Present hook captures the backbuffer.
+static CAPTURE_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// When true, we are in the middle of a capture frame — render was forced on,
+/// and the post-Present hook should capture + restore mode.
+static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Set the render mode. Called from the IPC command handler.
 ///
@@ -124,6 +132,24 @@ mod inner {
 #[allow(unused_imports)]
 pub use inner::{install, remove};
 
+/// Request a single-frame capture. Sets the capture flag so the next
+/// `should_render()` returns true even in NullRender mode.
+pub fn request_capture() {
+    CAPTURE_REQUESTED.store(true, Ordering::Release);
+    tracing::info!("Screenshot capture requested — next frame will render");
+}
+
+/// Check and clear the capture-active flag. Called from the Present hook
+/// after the frame has been rendered.
+pub fn take_capture_active() -> bool {
+    CAPTURE_ACTIVE.swap(false, Ordering::AcqRel)
+}
+
+/// Check if a capture is currently active (frame is rendering for capture).
+pub fn is_capture_active() -> bool {
+    CAPTURE_ACTIVE.load(Ordering::Acquire)
+}
+
 /// Determine whether to render this frame based on the current render mode.
 ///
 /// - `Normal` + foreground → always render.
@@ -131,6 +157,12 @@ pub use inner::{install, remove};
 /// - `Strobe` → render every `STROBE_INTERVAL` ticks.
 /// - `NullRender` → never render.
 fn should_render() -> bool {
+    // One-shot override: if a capture was requested, force-render this frame.
+    if CAPTURE_REQUESTED.swap(false, Ordering::AcqRel) {
+        CAPTURE_ACTIVE.store(true, Ordering::Release);
+        return true;
+    }
+
     match mode() {
         RenderMode::NullRender => false,
         RenderMode::Strobe => {
@@ -211,5 +243,42 @@ mod tests {
             assert!(install(0x12345).is_ok());
             remove();
         }
+    }
+
+    #[test]
+    fn capture_flag_forces_render_in_null_mode() {
+        RENDER_MODE.store(2, Ordering::Relaxed); // NullRender
+        CAPTURE_REQUESTED.store(false, Ordering::Relaxed);
+        CAPTURE_ACTIVE.store(false, Ordering::Relaxed);
+
+        // Without capture, NullRender should not render.
+        assert!(!should_render());
+
+        // Request a capture — next call should force-render.
+        request_capture();
+        assert!(should_render());
+        // The capture-active flag should now be set.
+        assert!(is_capture_active());
+
+        // Subsequent call should NOT render (one-shot).
+        assert!(!should_render());
+    }
+
+    #[test]
+    fn take_capture_active_clears_flag() {
+        CAPTURE_ACTIVE.store(true, Ordering::Relaxed);
+        assert!(take_capture_active());
+        assert!(!take_capture_active());
+    }
+
+    #[test]
+    fn capture_does_not_interfere_with_normal_mode() {
+        RENDER_MODE.store(0, Ordering::Relaxed); // Normal
+        CAPTURE_REQUESTED.store(false, Ordering::Relaxed);
+        CAPTURE_ACTIVE.store(false, Ordering::Relaxed);
+
+        request_capture();
+        assert!(should_render());
+        assert!(is_capture_active());
     }
 }
