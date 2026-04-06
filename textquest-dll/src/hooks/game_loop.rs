@@ -1263,6 +1263,35 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
 
     match cmd {
         Command::SlashCommand { command } => {
+            // Intercept /cleartarget — not a real EQ command. Route to our
+            // ClearTarget handler which writes NULL to pinstTarget directly.
+            let trimmed = command.trim();
+            if trimmed.eq_ignore_ascii_case("/cleartarget") {
+                tracing::info!("Intercepted /cleartarget slash command → ClearTarget");
+                dispatch_command(Command::ClearTarget);
+                return;
+            }
+
+            // When /target is issued while already targeting, EQ's InterpretCmd
+            // may not switch. Clear the current target first so /target reliably
+            // acquires a new one.
+            if trimmed.len() > 7
+                && trimmed[..7].eq_ignore_ascii_case("/target")
+                && trimmed.as_bytes().get(7).copied() == Some(b' ')
+            {
+                let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+                if eq_base != 0 {
+                    let has_target = read_target_state(eq_base).is_some();
+                    if has_target {
+                        tracing::debug!(cmd = %command, "Pre-clearing target before /target switch");
+                        let controller = super::targeting::TargetingController::new(eq_base);
+                        if let Err(e) = controller.clear_target() {
+                            tracing::warn!(error = %e, "Failed to pre-clear target");
+                        }
+                    }
+                }
+            }
+
             tracing::info!(cmd = %command, "Executing slash command");
             execute_slash_command(&command);
         }
