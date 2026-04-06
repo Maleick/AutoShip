@@ -73,13 +73,30 @@ PRs #499-#506 have Gemini auto-reviews. PR #507 needs dashboard.rs fix before me
 
 ## Next Session Plan
 
-1. **Kara pushes** GiveTime rewrite to master
-2. **Merge 9 PRs** (fix #507 dashboard.rs first)
-3. **Run simplify + codex** on merged code
-4. **Burn down issues** starting with oldest, using 6-agent teams:
-   - Start with post-M7 backlog (oldest issues first: #46, #50, #55, etc.)
-   - Then remaining M5/M6 items
-5. **Live login test** on Frostreaver after Kara's push
+1. **Merge 9 PRs** (fix #507 dashboard.rs first, then #499-#506)
+2. **Run simplify + codex** on merged code
+3. **Burn down issues with 6-agent teams**, priority order:
+
+**Wave 1 — Close out M5 + active M6 (6 agents):**
+| Issue | What | Why first |
+|-------|------|-----------|
+| #487 | Sleep obfuscation crash fix | M5 bug, blocks milestone close |
+| #491 | Reflective loader import resolution | M5 feature, blocks milestone close |
+| #494 | Orchestrator main loop | M6 core, wires everything together |
+| #55 | Per-toon/group config panels | M6 TUI feature |
+| #46 | Rolling nightly prerelease CI | Infrastructure, oldest open |
+| #50 | Zone transition state mapping | M7 research, oldest enhancement |
+
+**Wave 2 — Oldest post-M7 issues (6 agents):**
+#97, #99, #100, #101, #102, #103
+
+**Wave 3+ — Continue post-M7 backlog oldest-first:**
+#105, #106, #107, #116, #117, #120, then remaining 57 issues
+
+**After each wave:** Run simplify + code-review + codex
+
+4. **Coordinate with Kara** — her GiveTime rewrite is on master (pushed), needs HWBP cross-thread fix
+5. **Live login test** on Frostreaver
 
 ## Key References
 
