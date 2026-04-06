@@ -610,15 +610,20 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             }
             tracing::info!("=== END HEX DUMP ===");
 
-            // Queue Login button click for execution on EQ's main game loop thread.
-            // Never invoke WndNotification directly from IPC/background threads.
+            // Click the Login button directly via vtable WndNotification.
+            // During the eqmain login screen, ProcessGameEvents is NOT hooked yet
+            // (it fires only after eqgame.exe takes over), so queue_button_click()
+            // would never drain. Direct invocation is safe here because eqmain's UI
+            // thread is the one calling into our IPC handler during login.
             if login_button != 0 {
+                // Small delay to let credential writes settle before clicking.
+                std::thread::sleep(std::time::Duration::from_millis(150));
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),
-                    "Queueing Login button click on game loop thread"
+                    "Clicking Login button directly (eqmain phase — no game loop)"
                 );
-                crate::hooks::game_loop::queue_button_click(login_button);
-                tracing::info!("Login button click queued");
+                crate::eq::widgets::click_button_via_vtable(login_button);
+                tracing::info!("Login button clicked");
             } else {
                 tracing::warn!("Login button not found — credentials written but not submitted");
             }
