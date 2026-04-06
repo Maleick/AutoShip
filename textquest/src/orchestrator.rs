@@ -635,6 +635,12 @@ impl Orchestrator {
         }
     }
 
+    /// Get the session token for a client PID (if registered).
+    #[must_use]
+    pub fn session_tokens_get(&self, pid: u32) -> Option<&SessionToken> {
+        self.session_tokens.get(&pid)
+    }
+
     /// Register a client PID and generate a CSPRNG session token for it.
     /// Returns the token so the caller can pass it to the DLL during injection.
     #[allow(dead_code)]

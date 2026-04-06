@@ -168,6 +168,10 @@ enum Commands {
     /// Calibrate login addresses for all processes
     Calibrate,
 
+    // ── Orchestration ─────────────────────────────────────────────────
+    /// Run the orchestrator event loop (health checks, launch coordinator, camp loop)
+    Orchestrate,
+
     // ── Configuration ─────────────────────────────────────────────────
     /// Configuration management
     Config {
@@ -306,6 +310,9 @@ fn main() -> Result<()> {
         Some(Commands::ClientStatusAll) => cli::run_statusall_mode(),
         Some(Commands::Zones { pid }) => cli::run_zones_mode(pid),
         Some(Commands::Calibrate) => cli::run_calibrate_mode(),
+
+        // Orchestration
+        Some(Commands::Orchestrate) => cli::run_orchestrate_mode(),
 
         // Configuration
         Some(Commands::Config { action }) => match action {

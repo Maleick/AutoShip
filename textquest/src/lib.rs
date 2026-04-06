@@ -44,6 +44,8 @@ pub mod metrics;
 pub mod nav;
 /// Orchestrator — wires camp loop state machine to IPC command delivery.
 pub mod orchestrator;
+/// Orchestrator event loop — async tick loop wiring ClientManager, LaunchCoordinator, and Orchestrator.
+pub mod orchestrator_loop;
 /// OS-level process interaction — open, read memory, find processes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod process;
