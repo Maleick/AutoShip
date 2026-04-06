@@ -355,7 +355,7 @@ pub enum ConditionExpr {
     Always,
     /// Number of mobs on the extended target hate list is at or above the given count.
     XTargetHaterCountAbove(u32),
-    /// We have aggro from a specific mob (checked via XTarget auto-hater list).
+    /// We have aggro from at least one mob (checked via the XTarget auto-hater list).
     HasXTargetAggro,
 }
 
