@@ -26,11 +26,12 @@ pub fn spawn_eq_client(
         CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW,
     };
 
+    // MQ2 syntax: eqgame.exe patchme /login:username
+    // No /server: flag — server selection is handled post-login by the automation.
     let cmd = format!(
-        "\"{}\" patchme /login:{} /server:{}{}",
+        "\"{}\\eqgame.exe\" patchme /login:{}{}",
         eq_path.display(),
         account,
-        server,
         if extra_args.is_empty() {
             String::new()
         } else {
