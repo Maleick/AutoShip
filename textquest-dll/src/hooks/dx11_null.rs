@@ -830,13 +830,15 @@ mod inner {
             .join(format!("screenshot_{}_{}.bmp", pid, timestamp));
         let path = path.to_string_lossy().into_owned();
 
-        let write_result = write_bmp(
-            &path,
-            width,
-            height,
-            mapped.RowPitch,
-            mapped.pData as *const u8,
-        );
+        let write_result = unsafe {
+            write_bmp(
+                &path,
+                width,
+                height,
+                mapped.RowPitch,
+                mapped.pData as *const u8,
+            )
+        };
         unsafe { context.Unmap(&staging, 0) };
         write_result.map(|()| path)
     }
