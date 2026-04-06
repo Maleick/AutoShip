@@ -816,6 +816,8 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             push_kv(&mut rows, None, "/", "Search spawns by name");
             push_kv(&mut rows, None, "f", "Cycle filter: All / PC / NPC / Named");
             push_kv(&mut rows, None, "j/k", "Navigate spawn list");
+            push_kv(&mut rows, None, "t", "Navigate to selected spawn");
+            push_kv(&mut rows, None, "a", "Target selected spawn (/target)");
         }
         ActiveScreen::Navigation => {
             push_kv(

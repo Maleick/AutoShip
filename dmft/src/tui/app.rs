@@ -2025,6 +2025,45 @@ impl App {
         }
     }
 
+    /// Navigate focused clients to the currently selected spawn's location.
+    pub fn navigate_to_selected_spawn(&mut self) {
+        let sel = self.spawn_selected();
+        let info: Option<(String, f32, f32, f32)> = self
+            .filtered_spawn_at(sel)
+            .map(|s| (s.displayed_name.clone(), s.x, s.y, s.z));
+        if let Some((name, x, y, z)) = info {
+            let waypoint = dmft_common::nav::Waypoint::new(x, y, z);
+            self.execute_waypoint_navigation(&name, waypoint, None);
+        }
+    }
+
+    /// Send `/target <name>` slash command for the currently selected spawn.
+    pub fn target_selected_spawn(&mut self) {
+        let sel = self.spawn_selected();
+        let name: Option<String> = self
+            .filtered_spawn_at(sel)
+            .map(|s| s.displayed_name.clone());
+        if let Some(name) = name {
+            let cmd = dmft_common::ipc::Command::SlashCommand {
+                command: format!("/target {name}"),
+            };
+            let ok = self.send_ipc_to_focused(&cmd);
+            if ok == 0 {
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    format!("No clients connected to target {name}"),
+                    true,
+                );
+            } else {
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Target → {name} (sent to {ok} clients)"),
+                    true,
+                );
+            }
+        }
+    }
+
     /// Read spawn memory on Windows for hex dump display.
     #[cfg(windows)]
     fn read_spawn_hex_data(&self, spawn_id: u32) -> Vec<u8> {

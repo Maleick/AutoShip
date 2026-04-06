@@ -787,6 +787,8 @@ pub fn handle_events(
                     app.spawns_state.table_state.select(Some(max));
                 }
                 KeyCode::Enter => app.debug_selected_spawn(),
+                KeyCode::Char('t') => app.navigate_to_selected_spawn(),
+                KeyCode::Char('a') => app.target_selected_spawn(),
                 _ => {}
             },
             ActivePanel::DebugHexDump => match key.code {
