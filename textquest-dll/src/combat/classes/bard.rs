@@ -361,6 +361,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         }
     }
 

@@ -1,4 +1,23 @@
+use textquest_common::combat::ExtendedTargetList;
 use textquest_common::nav::Waypoint;
+
+/// Check if a specific mob has aggro on us, using the extended target list
+/// (auto-haters) first, falling back to heading heuristics.
+pub fn has_aggro_xtarget(
+    target_spawn_id: u32,
+    target_heading: f32,
+    target_pos: &Waypoint,
+    my_pos: &Waypoint,
+    extended_targets: Option<&ExtendedTargetList>,
+    threshold_degrees: f32,
+) -> bool {
+    if let Some(xt) = extended_targets {
+        if xt.is_hater(target_spawn_id) {
+            return true;
+        }
+    }
+    has_aggro_on_me(target_heading, target_pos, my_pos, threshold_degrees)
+}
 
 /// Heuristic aggro check: is the target NPC facing toward us?
 /// EQ has no explicit aggro flag readable from memory, so we use
@@ -128,5 +147,49 @@ mod tests {
         // East (-X): heading_to_me=384
         let east = Waypoint::new(-10.0, 0.0, 0.0);
         assert!(has_aggro_on_me(384.0, &center, &east, 45.0));
+    }
+
+    use textquest_common::combat::{
+        ExtendedTargetList, ExtendedTargetSlot, XTargetSlotStatus, XTargetType,
+    };
+
+    fn make_hater_list(spawn_ids: &[u32]) -> ExtendedTargetList {
+        ExtendedTargetList {
+            slots: spawn_ids
+                .iter()
+                .map(|&id| ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: id,
+                    name: format!("mob_{id}"),
+                })
+                .collect(),
+            auto_add_haters: true,
+        }
+    }
+
+    #[test]
+    fn xtarget_aggro_detects_hater() {
+        let xt = make_hater_list(&[42, 99]);
+        let target_pos = Waypoint::new(0.0, 0.0, 0.0);
+        let my_pos = Waypoint::new(0.0, 10.0, 0.0);
+        assert!(has_aggro_xtarget(42, 256.0, &target_pos, &my_pos, Some(&xt), 45.0));
+    }
+
+    #[test]
+    fn xtarget_aggro_falls_back_to_heading() {
+        let xt = make_hater_list(&[99]);
+        let target_pos = Waypoint::new(0.0, 0.0, 0.0);
+        let my_pos = Waypoint::new(0.0, 10.0, 0.0);
+        assert!(has_aggro_xtarget(42, 0.0, &target_pos, &my_pos, Some(&xt), 45.0));
+        assert!(!has_aggro_xtarget(42, 256.0, &target_pos, &my_pos, Some(&xt), 45.0));
+    }
+
+    #[test]
+    fn xtarget_aggro_none_list_falls_back() {
+        let target_pos = Waypoint::new(0.0, 0.0, 0.0);
+        let my_pos = Waypoint::new(0.0, 10.0, 0.0);
+        assert!(has_aggro_xtarget(42, 0.0, &target_pos, &my_pos, None, 45.0));
+        assert!(!has_aggro_xtarget(42, 256.0, &target_pos, &my_pos, None, 45.0));
     }
 }

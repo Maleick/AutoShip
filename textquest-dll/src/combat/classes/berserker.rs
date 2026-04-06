@@ -82,6 +82,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         }
     }
 
@@ -192,6 +193,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = ber.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Frenzy");

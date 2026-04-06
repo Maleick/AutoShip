@@ -129,6 +129,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(necro.should_assist(&ctx));
     }
@@ -154,6 +155,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert_eq!(necro.select_target(&ctx), Some(99));
     }
@@ -199,6 +201,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = necro.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Lifetap"); // lifetap priority at low HP
@@ -253,6 +256,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = necro.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Venom of Solusek"); // DoT priority
@@ -289,6 +293,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = necro.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Nuke"); // fallback
@@ -311,6 +316,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(necro.select_spell(&ctx).is_none());
     }
@@ -346,6 +352,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(necro.select_spell(&ctx).is_none());
     }

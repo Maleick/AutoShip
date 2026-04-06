@@ -150,6 +150,12 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::Not(inner) => !evaluate_condition(inner, ctx),
         ConditionExpr::And(exprs) => exprs.iter().all(|e| evaluate_condition(e, ctx)),
         ConditionExpr::Or(exprs) => exprs.iter().any(|e| evaluate_condition(e, ctx)),
+        ConditionExpr::XTargetHaterCountAbove(count) => ctx
+            .extended_targets
+            .is_some_and(|xt| xt.hater_count() as u32 >= *count),
+        ConditionExpr::HasXTargetAggro => ctx
+            .extended_targets
+            .is_some_and(|xt| xt.hater_count() > 0),
     }
 }
 
@@ -438,6 +444,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         }
     }
 
@@ -743,6 +750,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let mut g = group(
             "Heals",

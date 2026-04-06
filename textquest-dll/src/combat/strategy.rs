@@ -1,6 +1,6 @@
 use textquest_common::combat::{
-    AbilitySet, BuffInfo, CombatConfig, CombatRole, HpPreference, NamedPreference, SpellEntry,
-    TargetScanConfig,
+    AbilitySet, BuffInfo, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
+    NamedPreference, SpellEntry, TargetScanConfig,
 };
 use textquest_common::types::SpawnData;
 
@@ -39,10 +39,13 @@ pub struct CombatContext<'a> {
     pub ch_chain_slot: Option<u8>,
     /// Active buff spell IDs on the player (populated from buff window scan).
     pub active_buffs: &'a [i32],
-    /// Full buff info with duration/category (populated from `EQ_Affect` array).
+    /// Full buff details with duration/hit-count info (see `combat::buffs`).
     pub buff_info: &'a [BuffInfo],
     /// Whether the current target is mezzed (has a mesmerize debuff active).
     pub target_is_mezzed: bool,
+    /// Extended target list snapshot (hate list, group roles, etc.).
+    /// `None` if the data couldn't be read (not yet loaded, zoning, etc.).
+    pub extended_targets: Option<&'a ExtendedTargetList>,
 }
 
 #[derive(Debug, Clone)]
@@ -455,6 +458,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert_eq!(assist_target(&ctx), Some(42));
     }
@@ -475,6 +479,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(assist_target(&ctx).is_none());
     }
@@ -526,6 +531,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = best_spell_by_mana(&ctx).unwrap();
         assert_eq!(spell.name, "High"); // highest priority that we can afford
@@ -547,6 +553,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
     }
@@ -579,6 +586,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(best_spell_by_mana(&ctx).is_none());
     }
@@ -699,6 +707,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let result = lowest_hp_member(&ctx);
         assert_eq!(result, Some((2, 50.0)));

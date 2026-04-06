@@ -135,6 +135,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         }
     }
 
@@ -173,6 +174,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(ranger.should_assist(&ctx));
     }
