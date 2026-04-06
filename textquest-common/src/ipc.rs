@@ -372,6 +372,7 @@ pub enum Command {
     /// - `/stick hold`   → `config.hold = true`
     /// - `/stick always` → `config.always = true`
     /// - `/stick id #`   → `config.id = Some(#)`
+    ///
     /// Advanced moveto — MQ2MoveUtils `/moveto` with full option support (#184).
     MoveToAdvanced {
         /// Full moveto configuration including target tracking, break conditions.
