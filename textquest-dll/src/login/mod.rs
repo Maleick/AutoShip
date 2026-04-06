@@ -68,7 +68,9 @@ pub fn advance_to_server_select() {
         if fsm.state == State::WaitForLoginScreen || fsm.state == State::EnteringCredentials {
             fsm.action_taken = true;
             fsm.transition(State::WaitForServerSelect);
-            tracing::info!("FSM advanced to WaitForServerSelect (credentials already written by GiveTime hook)");
+            tracing::info!(
+                "FSM advanced to WaitForServerSelect (credentials already written by GiveTime hook)"
+            );
         }
     }
 }

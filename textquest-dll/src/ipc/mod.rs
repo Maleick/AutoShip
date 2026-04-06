@@ -189,10 +189,8 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 std::thread::sleep(std::time::Duration::from_millis(300));
                 let eqmain_base = crate::login::eqmain::find_eqmain();
                 if eqmain_base != 0 {
-                    let typed = crate::login::widgets::type_password_wm_char(
-                        eqmain_base,
-                        &pw_for_wm_char,
-                    );
+                    let typed =
+                        crate::login::widgets::type_password_wm_char(eqmain_base, &pw_for_wm_char);
                     tracing::info!(typed, "IPC thread: WM_CHAR password + Enter submitted");
                 }
                 drop(pw_for_wm_char);

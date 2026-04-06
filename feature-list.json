@@ -83,7 +83,7 @@
       "name": "M5 packet control-path matrix",
       "status": "complete",
       "acceptance_tests": [
-        "docs/external-research/packet-zoning-send-path-and-state-ledger.md inventories combat, utility, and chat control surfaces",
+        "docs/wiki/Roadmap-and-Known-Gaps.md inventories combat, utility, and chat control surfaces",
         "The ledger labels current paths as in-process, packet candidate, or blocked instead of implying support by enum shape alone",
         "docs/wiki/Roadmap-and-Known-Gaps.md and docs/wiki/Architecture-Overview.md mirror the current IPC plus in-process control boundary and link back to the packet ledger",
         "python3 -m unittest discover -s tests -p 'test_packet_control_path_inventory.py' -v",

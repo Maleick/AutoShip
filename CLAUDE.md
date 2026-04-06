@@ -29,6 +29,11 @@ cargo test test_name                 # Run matching tests across all crates
 ```
 
 ```bash
+# Python tests (CI also runs these)
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+```bash
 # Per-crate tests
 cargo test -p textquest          # Orchestrator only
 cargo test -p textquest-common   # Shared types only
@@ -41,9 +46,11 @@ cargo test -p textquest test_name_here
 cargo test -p textquest --test integration test_name
 ```
 
-~2,500 tests across 4 workspace crates (auto-counted by `scripts/update_readme_metrics.py`). Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
+~2,500+ tests across 4 workspace crates (auto-counted by `scripts/update_readme_metrics.py`). Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
 
 **CI gate**: Required check is `PR gate (fmt + clippy + test + python)`. Runs on self-hosted Windows runner for same-repo PRs, GitHub-hosted Windows for forks. Dev preflight: `python3 scripts/dev-preflight.py`.
+
+**Dev preflight** runs the same fmt → clippy → test → Python test sequence as CI. Run it before pushing to catch failures locally.
 
 ## Autonomous Agent Pipeline
 
@@ -130,13 +137,8 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **M2.5** (complete): Login automation — credential store, process spawner, login FSM, launch coordinator
 - **M3** (complete): Navigation — waypoint pathfinding, Navigator FSM, humanization, stuck detection, zone router
 - **M4** (complete): Combat automation — ClassStrategy trait, 17 classes, HolyShit system, puller FSM, combat coordinator
-<<<<<<< HEAD
-- **M5** (~95% — only #355 launchpad token RE remains): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
+- **M5** (complete): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
 - **M6** (complete): Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements (EQ Internals, packet sniffer, map rework, Neriak theme)
-=======
-- **M5** (in progress): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
-- **M6** (in progress): Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements (EQ Internals, packet sniffer, map rework, Neriak theme)
->>>>>>> ba4cd82 (feat(login): server name→ID lookup, EQLogin struct write, dual-path credential submission)
 - **M7**: Zoning/Movement — zone transitions, movement validation, travel recovery
 - **M8**: Orchestrator — multibox coordination, group/session control, relay surfaces
 - **M9**: Learning/RL — behavioral cloning, RL fine-tuning
@@ -176,8 +178,3 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **MacroQuest references are local submodules**: `third_party/eqlib` and `third_party/macroquest` are part of the repo as git submodules and are used for offset and struct-reference work. Routine `cargo build` / `cargo test` work does not require them, but offset/struct work does. Run `git submodule update --init --recursive` after checkout. Derived offsets still live in `textquest-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
 - **Nightly MSVC toolchain**: Windows builds require nightly Rust because `retour` (function hooking) uses unstable features. macOS builds work on stable.
-
-## Log Files
-
-- **Orchestrator:** `./logs/textquest.log` (daily rolling via `tracing-appender`)
-- **DLL:** `%TEMP%/textquest/textquest-dll.log` (daily rolling)

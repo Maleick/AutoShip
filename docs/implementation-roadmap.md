@@ -13,11 +13,11 @@ This document is the source of truth for roadmap order, milestone gates, evidenc
 | M2.5      | Login Automation        | **COMPLETE** | Credential store, process spawner, login FSM, launch coordinator   |
 | M3        | Navigation              | **COMPLETE** | Waypoint pathfinding, Navigator FSM, humanization, stuck detection |
 | M4        | Combat                  | **COMPLETE** | ClassStrategy trait, 17 classes, HolyShit system, puller FSM       |
-| M5        | Anti-Cheat              | **~95%**     | Only #355 (launchpad token RE) remains open                        |
-| M6        | Web Dashboard           | **~55%**     | 11 closed, 9 open — axum + React/Vite/Tailwind SPA                 |
+| M5        | Anti-Cheat              | **COMPLETE** | #355 closed — launchpad bypassed via /patchme                      |
+| M6        | Web Dashboard           | **COMPLETE** | TUI enhancements, axum + React/Vite/Tailwind SPA, fleet metrics   |
 | M7–M11    | Future                  | Planned      | Zoning, Orchestrator, RL, Economy, Soul Engine                     |
 
-_Last updated: 2026-04-06. ~1001 commits, ~1250 platform-independent tests across 3 crates._
+_Last updated: 2026-04-06. ~1001 commits, ~2584 tests across 4 crates._
 
 ## Historical Base
 

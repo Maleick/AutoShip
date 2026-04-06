@@ -9,8 +9,8 @@ use tracing_subscriber::{EnvFilter, fmt};
 #[command(
     author,
     version,
-    about = "DMFT — EverQuest multibox controller",
-    long_about = "DMFT is an EverQuest multibox controller with TUI dashboard, DLL injection,\n\
+    about = "TextQuest — EverQuest multibox controller",
+    long_about = "TextQuest is an EverQuest multibox controller with TUI dashboard, DLL injection,\n\
                    navigation, combat automation, and web dashboard support.\n\n\
                    Run without arguments to launch the TUI dashboard."
 )]
@@ -31,13 +31,13 @@ struct Args {
 #[derive(Subcommand)]
 enum Commands {
     // ── Daemon lifecycle ──────────────────────────────────────────────
-    /// Start the DMFT daemon (TUI + background services)
+    /// Start the TextQuest daemon (TUI + background services)
     Start {
         /// Run in foreground instead of daemonizing
         #[arg(long)]
         foreground: bool,
     },
-    /// Stop a running DMFT daemon gracefully
+    /// Stop a running TextQuest daemon gracefully
     Stop,
     /// Show the running daemon's status
     #[command(name = "status")]
@@ -241,7 +241,7 @@ fn main() -> Result<()> {
         .with_ansi(false)
         .init();
 
-    tracing::info!("DMFT orchestrator starting");
+    tracing::info!("TextQuest orchestrator starting");
 
     let args = Args::parse();
 

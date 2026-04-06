@@ -3,8 +3,8 @@
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-108%2C448-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-2%2C569%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-113%2C387-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-2%2C584%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -171,10 +171,11 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 ## Architecture
 
 ```text
-TextQuest Workspace (3 crates, ~108K lines of Rust)
+TextQuest Workspace (4 crates, ~113K lines of Rust)
 ├── textquest/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
 ├── textquest-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
-└── textquest-common/    — Shared types: IPC, offsets, combat/nav/soul types
+├── textquest-common/    — Shared types: IPC, offsets, combat/nav/soul types
+└── textquest-web/       — Web dashboard: axum REST API, WebSocket session monitoring
 ```
 
 ### Command Pipeline
@@ -352,7 +353,7 @@ target\release\textquest.exe --cmd <pid> "/sit"
 
 ## Testing
 
-Current workspace totals: 108,448 Rust lines and 2,569 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
+Current workspace totals: 113,387 Rust lines and 2,584 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -434,7 +435,7 @@ Historical milestones already implemented in the repository:
 
 Canonical active roadmap order:
 
-- [ ] **M5** (~95%) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator). 1 open issue (#355 launchpad token RE)
+- [x] **M5** (complete) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator). #355 closed (launchpad bypassed via /patchme)
 - [x] **M6** (complete) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme shipped; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator

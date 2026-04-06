@@ -30,7 +30,7 @@ External research may add slices and validation tasks, but it may not reorder mi
 
 ## Current Validated State
 
-As of 2026-04-04: 939 commits, ~83.5K lines of Rust, 1,958 tests (all passing). M5 Anti-Cheat ~70% complete (4/13 issues closed, 5 PRs in review). M6 Web Dashboard ~55% complete (11/20 issues closed).
+As of 2026-04-06: ~1,001 commits, ~113K lines of Rust, 2,584 tests (all passing). M5 Anti-Cheat complete (#355 closed — launchpad bypassed via /patchme). M6 Web Dashboard complete (TUI enhancements, axum + React SPA scaffold, fleet metrics).
 
 - TUI with four primary screens and command bar
 - demo mode for non-Windows and no-client workflows
