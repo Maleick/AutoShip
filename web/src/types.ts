@@ -60,3 +60,54 @@ export type NavItem = {
   active?: boolean;
   pulse?: boolean;
 };
+
+// ── Group Builder types ────────────────────────────────────────────────────
+
+export type EQClass =
+  | "Warrior"
+  | "Paladin"
+  | "Shadow Knight"
+  | "Ranger"
+  | "Monk"
+  | "Bard"
+  | "Rogue"
+  | "Berserker"
+  | "Cleric"
+  | "Druid"
+  | "Shaman"
+  | "Necromancer"
+  | "Wizard"
+  | "Magician"
+  | "Enchanter"
+  | "Beastlord";
+
+export type Role = "Tank" | "Healer" | "DPS" | "Support" | "Puller" | "CC";
+
+export interface Character {
+  id: string;
+  name: string;
+  eqClass: EQClass;
+  level: number;
+  zone?: string;
+  status: "online" | "idle" | "offline";
+}
+
+export interface GroupSlot {
+  role: Role;
+  characterId: string | null;
+  locked: boolean;
+  classPreference?: EQClass;
+}
+
+export interface GroupTemplate {
+  id: string;
+  name: string;
+  description: string;
+  slots: GroupSlot[];
+}
+
+export interface GroupBuilderState {
+  templates: GroupTemplate[];
+  activeTemplateId: string;
+  characters: Character[];
+}

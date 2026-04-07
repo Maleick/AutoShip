@@ -5,6 +5,8 @@ import type {
   CombatLogEntry,
   Alert,
   NavItem,
+  Character,
+  GroupTemplate,
 } from "../types";
 
 export const assaults: Assault[] = [
@@ -151,5 +153,55 @@ export const navItems: NavItem[] = [
     id: "security",
     label: "Security Wards",
     icon: "ShieldCheck",
+  },
+];
+
+// ── Group Builder demo data ────────────────────────────────────────────────
+
+export const demoCharacters: Character[] = [
+  { id: "c1",  name: "Thorin",       eqClass: "Warrior",      level: 60, zone: "Plane of Hate",   status: "online" },
+  { id: "c2",  name: "Aelara",       eqClass: "Cleric",       level: 60, zone: "Plane of Hate",   status: "online" },
+  { id: "c3",  name: "Mystik",       eqClass: "Enchanter",    level: 58, zone: "Plane of Hate",   status: "online" },
+  { id: "c4",  name: "Zappy",        eqClass: "Wizard",       level: 60, zone: "Plane of Hate",   status: "online" },
+  { id: "c5",  name: "Stabby",       eqClass: "Rogue",        level: 57, zone: "Neriak Commons",  status: "idle"   },
+  { id: "c6",  name: "Boomy",        eqClass: "Magician",     level: 59, zone: "Plane of Hate",   status: "online" },
+  { id: "c7",  name: "Rhapsody",     eqClass: "Bard",         level: 60, zone: "Temple of Veeshan", status: "online" },
+  { id: "c8",  name: "Valerius",     eqClass: "Paladin",      level: 55, zone: "Oasis of Marr",   status: "idle"   },
+  { id: "c9",  name: "Shadows",      eqClass: "Shadow Knight",level: 58, zone: "Lower Guk",       status: "online" },
+  { id: "c10", name: "Lifeline",     eqClass: "Druid",        level: 60, zone: "Temple of Veeshan", status: "online" },
+  { id: "c11", name: "Bonesaw",      eqClass: "Necromancer",  level: 60, zone: "Plane of Hate",   status: "online" },
+  { id: "c12", name: "Ironfist",     eqClass: "Monk",         level: 56, zone: "Neriak Commons",  status: "idle"   },
+  { id: "c13", name: "Totemic",      eqClass: "Shaman",       level: 60, zone: "Temple of Veeshan", status: "online" },
+  { id: "c14", name: "Snakeyes",     eqClass: "Ranger",       level: 54, zone: "East Commonlands", status: "idle"   },
+  { id: "c15", name: "Whirlwind",    eqClass: "Berserker",    level: 57, zone: "Lower Guk",       status: "online" },
+  { id: "c16", name: "Fangclaw",     eqClass: "Beastlord",    level: 55, zone: "East Commonlands", status: "offline"},
+];
+
+export const demoGroupTemplates: GroupTemplate[] = [
+  {
+    id: "tpl-standard",
+    name: "Standard Group",
+    description: "Balanced 6-man group",
+    slots: [
+      { role: "Tank",   characterId: "c1", locked: false },
+      { role: "Healer", characterId: "c2", locked: false },
+      { role: "CC",     characterId: "c3", locked: false },
+      { role: "DPS",    characterId: "c4", locked: false },
+      { role: "DPS",    characterId: "c6", locked: false },
+      { role: "DPS",    characterId: null,  locked: false },
+    ],
+  },
+  {
+    id: "tpl-raid-main",
+    name: "Raid Main Group",
+    description: "Primary raid group with puller",
+    slots: [
+      { role: "Tank",    characterId: "c9",  locked: false },
+      { role: "Healer",  characterId: "c10", locked: false },
+      { role: "Support", characterId: "c13", locked: false },
+      { role: "CC",      characterId: "c7",  locked: false },
+      { role: "DPS",     characterId: "c11", locked: false },
+      { role: "Puller",  characterId: "c12", locked: false },
+    ],
   },
 ];

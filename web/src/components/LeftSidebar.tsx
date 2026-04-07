@@ -6,14 +6,21 @@ import {
   ShieldWarning,
 } from "@phosphor-icons/react";
 
-const navItems = [
-  { icon: Sword, label: "Active Engagements", active: true, pulse: true },
-  { icon: UsersThree, label: "Fleet Formations" },
-  { icon: Globe, label: "Realm Map (Norrath)" },
-  { icon: ShieldWarning, label: "Security Wards" },
+export type ActiveView = "engagements" | "formations" | "map" | "security";
+
+const navItems: { icon: typeof Sword; label: string; id: ActiveView; pulse?: boolean }[] = [
+  { icon: Sword,         label: "Active Engagements", id: "engagements", pulse: true },
+  { icon: UsersThree,    label: "Fleet Formations",   id: "formations" },
+  { icon: Globe,         label: "Realm Map (Norrath)", id: "map" },
+  { icon: ShieldWarning, label: "Security Wards",      id: "security" },
 ];
 
-export default function LeftSidebar() {
+interface LeftSidebarProps {
+  activeView: ActiveView;
+  onNavigate: (view: ActiveView) => void;
+}
+
+export default function LeftSidebar({ activeView, onNavigate }: LeftSidebarProps) {
   return (
     <aside className="stone-pillar w-[320px] h-full flex flex-col pt-6 pb-2 px-1 relative z-20">
       {/* Eye icon crown */}
@@ -60,32 +67,35 @@ export default function LeftSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 overflow-y-auto pr-2 flex flex-col gap-2">
-        {navItems.map((item) => (
-          <a
-            key={item.label}
-            href="#"
-            className={`group flex items-center gap-3 px-4 py-3 border border-transparent transition-all ${
-              item.active
-                ? "bg-white/5 hover:border-magentadark hover:bg-violet/50"
-                : "bg-transparent hover:border-spectral hover:bg-violet/50"
-            }`}
-          >
-            <item.icon
-              size={20}
-              className={`text-white/40 transition-colors ${
-                item.active
-                  ? "group-hover:text-magentaglow"
-                  : "group-hover:text-spectral"
+        {navItems.map((item) => {
+          const isActive = item.id === activeView;
+          return (
+            <button
+              key={item.label}
+              onClick={() => onNavigate(item.id)}
+              className={`group flex items-center gap-3 px-4 py-3 border border-transparent transition-all w-full text-left ${
+                isActive
+                  ? "bg-white/5 border-magentadark/30 hover:border-magentadark hover:bg-violet/50"
+                  : "bg-transparent hover:border-spectral hover:bg-violet/50"
               }`}
-            />
-            <span className="font-medium tracking-wide text-white/70 group-hover:text-white transition-colors">
-              {item.label}
-            </span>
-            {item.pulse && (
-              <div className="ml-auto w-1.5 h-1.5 bg-magentaglow rounded-full pulsing-flame" />
-            )}
-          </a>
-        ))}
+            >
+              <item.icon
+                size={20}
+                className={`text-white/40 transition-colors ${
+                  isActive
+                    ? "text-magentaglow group-hover:text-magentaglow"
+                    : "group-hover:text-spectral"
+                }`}
+              />
+              <span className={`font-medium tracking-wide transition-colors ${isActive ? "text-white" : "text-white/70 group-hover:text-white"}`}>
+                {item.label}
+              </span>
+              {item.pulse && (
+                <div className="ml-auto w-1.5 h-1.5 bg-magentaglow rounded-full pulsing-flame" />
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       {/* System status footer */}
