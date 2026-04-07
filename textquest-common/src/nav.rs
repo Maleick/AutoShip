@@ -330,6 +330,30 @@ pub struct NavPathMetrics {
     pub path_length: Option<f32>,
     /// Human-readable reason when no navmesh path could be found.
     pub failure_reason: Option<String>,
+    /// Stable classification for route-planning failures.
+    pub failure_kind: Option<NavPathFailureKind>,
+    /// Whether the caller should attempt a fresh navmesh query later.
+    pub replan_recommended: bool,
+}
+
+/// Stable route-planning failure classes for operator diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NavPathFailureKind {
+    /// Required navmesh coverage/data is unavailable for the query.
+    DataGap,
+    /// A navmesh exists, but the route is temporarily blocked or disconnected.
+    TransientBlockage,
+}
+
+impl NavPathFailureKind {
+    /// Short operator-facing label for the failure class.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::DataGap => "data gap",
+            Self::TransientBlockage => "transient blockage",
+        }
+    }
 }
 
 impl NavPathMetrics {
@@ -340,16 +364,25 @@ impl NavPathMetrics {
             path_exists: true,
             path_length,
             failure_reason: None,
+            failure_kind: None,
+            replan_recommended: false,
         }
     }
 
     /// Construct metrics for a failed navmesh query.
     #[must_use]
-    pub fn failure(reason: impl Into<String>, path_length: Option<f32>) -> Self {
+    pub fn failure(
+        reason: impl Into<String>,
+        failure_kind: NavPathFailureKind,
+        path_length: Option<f32>,
+        replan_recommended: bool,
+    ) -> Self {
         Self {
             path_exists: false,
             path_length,
             failure_reason: Some(reason.into()),
+            failure_kind: Some(failure_kind),
+            replan_recommended,
         }
     }
 }
@@ -1694,6 +1727,37 @@ mod tests {
         assert!(!diag.path_exists);
         assert!(diag.path_length.is_none());
         assert!(diag.velocity.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn nav_path_metrics_success_clears_failure_metadata() {
+        let metrics = NavPathMetrics::success(Some(42.0));
+        assert!(metrics.path_exists);
+        assert_eq!(metrics.path_length, Some(42.0));
+        assert_eq!(metrics.failure_reason, None);
+        assert_eq!(metrics.failure_kind, None);
+        assert!(!metrics.replan_recommended);
+    }
+
+    #[test]
+    fn nav_path_metrics_failure_tracks_kind_and_replan_state() {
+        let metrics = NavPathMetrics::failure(
+            "No path found between start and end",
+            NavPathFailureKind::TransientBlockage,
+            None,
+            true,
+        );
+        assert!(!metrics.path_exists);
+        assert_eq!(metrics.path_length, None);
+        assert_eq!(
+            metrics.failure_reason.as_deref(),
+            Some("No path found between start and end")
+        );
+        assert_eq!(
+            metrics.failure_kind,
+            Some(NavPathFailureKind::TransientBlockage)
+        );
+        assert!(metrics.replan_recommended);
     }
 
     // ─── NavStateSignals tests (#176) ───

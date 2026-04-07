@@ -709,10 +709,10 @@ pub mod profile {
     pub const BUFF_IDS: usize = 0x068;
 
     /// Total spellbook slots stored in `BaseProfile::SpellBook`.
-    pub const SPELL_BOOK_SLOTS: usize = 1280;
+    pub const SPELL_BOOK_SLOTS: usize = SPELL_BOOK_SLOT_COUNT;
 
     /// Visible memorized spell gems stored in `BaseProfile::MemorizedSpells`.
-    pub const MEMORIZED_SPELL_GEMS: usize = 15;
+    pub const MEMORIZED_SPELL_GEMS: usize = MEMORIZED_SPELL_GEM_COUNT;
 }
 
 /// Offsets within `CDisplay`.

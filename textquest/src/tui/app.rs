@@ -3213,6 +3213,7 @@ impl App {
 
         let mut mesh_routes = 0usize;
         let mut fallback_routes = 0usize;
+        let mut blocked_routes = 0usize;
         let mut sent = 0usize;
         let mut previews = 0usize;
         let mut skipped = 0usize;
@@ -3257,9 +3258,12 @@ impl App {
             match route.source {
                 crate::nav::mesh::RouteSource::NavMesh => mesh_routes += 1,
                 crate::nav::mesh::RouteSource::StraightLineFallback => fallback_routes += 1,
+                crate::nav::mesh::RouteSource::NavMeshBlocked => blocked_routes += 1,
             }
 
-            let delivered = if focused_client.is_demo {
+            let delivered = if route.waypoints.is_empty() {
+                false
+            } else if focused_client.is_demo {
                 previews += 1;
                 true
             } else {
@@ -3284,7 +3288,8 @@ impl App {
                 }
             };
 
-            if delivered {
+            if delivered || matches!(route.source, crate::nav::mesh::RouteSource::NavMeshBlocked) {
+                let failure_kind = route.metrics.failure_kind;
                 let from = textquest_common::nav::Waypoint::new(
                     focused_client.position.0,
                     focused_client.position.1,
@@ -3292,13 +3297,52 @@ impl App {
                 );
                 let distance_remaining = from.distance_3d(&target);
                 let waypoint_count = route.waypoints.len().max(1);
-                let status = if distance_remaining <= 5.0 {
-                    textquest_common::nav::NavStatus::Arrived
+                let status =
+                    if matches!(route.source, crate::nav::mesh::RouteSource::NavMeshBlocked) {
+                        textquest_common::nav::NavStatus::Idle
+                    } else if distance_remaining <= 5.0 {
+                        textquest_common::nav::NavStatus::Arrived
+                    } else {
+                        textquest_common::nav::NavStatus::Moving {
+                            waypoint_index: 0,
+                            waypoint_count,
+                            distance_remaining,
+                        }
+                    };
+                let route_state = match route.source {
+                    crate::nav::mesh::RouteSource::NavMesh => String::from("Navmesh route"),
+                    crate::nav::mesh::RouteSource::StraightLineFallback => {
+                        String::from("Fallback route")
+                    }
+                    crate::nav::mesh::RouteSource::NavMeshBlocked => String::from("Replan blocked"),
+                };
+                let recovery_state = if route.metrics.replan_recommended {
+                    Some(String::from("Replan recommended"))
                 } else {
-                    textquest_common::nav::NavStatus::Moving {
-                        waypoint_index: 0,
-                        waypoint_count,
-                        distance_remaining,
+                    None
+                };
+                let blockers = match route.source {
+                    crate::nav::mesh::RouteSource::NavMesh => Vec::new(),
+                    crate::nav::mesh::RouteSource::StraightLineFallback => {
+                        let failure_label =
+                            failure_kind.map(|kind| kind.label()).unwrap_or("data gap");
+                        vec![format!(
+                            "Navmesh {failure_label} for {}; using deterministic straight-line fallback.",
+                            focused_client.zone_short
+                        )]
+                    }
+                    crate::nav::mesh::RouteSource::NavMeshBlocked => {
+                        let failure_label = failure_kind
+                            .map(|kind| kind.label())
+                            .unwrap_or("transient blockage");
+                        let mut blockers = vec![format!(
+                            "Navmesh {failure_label} for {}; holding position instead of taking a straight-line shortcut.",
+                            focused_client.zone_short
+                        )];
+                        if let Some(reason) = route.metrics.failure_reason.as_ref() {
+                            blockers.push(reason.clone());
+                        }
+                        blockers
                     }
                 };
 
@@ -3312,29 +3356,9 @@ impl App {
                         path_exists: route.metrics.path_exists,
                         path_length: route.metrics.path_length,
                         failure_reason: route.metrics.failure_reason.clone(),
-                        route_state: match route.source {
-                            crate::nav::mesh::RouteSource::NavMesh => String::from("Navmesh route"),
-                            crate::nav::mesh::RouteSource::StraightLineFallback => {
-                                String::from("Fallback route")
-                            }
-                        },
-                        recovery_state: None,
-                        blockers: match route.source {
-                            crate::nav::mesh::RouteSource::NavMesh => Vec::new(),
-                            crate::nav::mesh::RouteSource::StraightLineFallback => {
-                                if route.mesh_cached {
-                                    vec![format!(
-                                        "Mesh exists for {} but path query fell back to a straight line.",
-                                        focused_client.zone_short
-                                    )]
-                                } else {
-                                    vec![format!(
-                                        "No cached navmesh for {}; using straight-line fallback.",
-                                        focused_client.zone_short
-                                    )]
-                                }
-                            }
-                        },
+                        route_state,
+                        recovery_state,
+                        blockers,
                         is_demo_scripted: false,
                     },
                 );
@@ -3347,6 +3371,9 @@ impl App {
         }
         if fallback_routes > 0 {
             details.push(format!("{} fallback", fallback_routes));
+        }
+        if blocked_routes > 0 {
+            details.push(format!("{} blocked", blocked_routes));
         }
         if sent > 0 {
             details.push(format!("{} sent", sent));
@@ -3362,7 +3389,7 @@ impl App {
         }
 
         self.set_feedback(
-            if failed > 0 || (sent == 0 && previews == 0) {
+            if failed > 0 || blocked_routes > 0 || (sent == 0 && previews == 0) {
                 ToastLevel::Warning
             } else {
                 ToastLevel::Success
@@ -3654,6 +3681,48 @@ impl App {
                     self.set_feedback(
                         ToastLevel::Info,
                         format!("Loot → sent to {ok} clients"),
+                        false,
+                    );
+                }
+            }
+            "door" => {
+                let ok = self.send_ipc_to_focused(&textquest_common::ipc::Command::InteractDoor);
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        "Door: no clients received command. Check connection with :status",
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Door interact → sent to {ok} clients"),
+                        false,
+                    );
+                }
+            }
+            "click" => {
+                let sub = parts.get(1).map(|s| s.to_ascii_lowercase());
+                let cmd = match sub.as_deref() {
+                    Some("door") => textquest_common::ipc::Command::InteractDoor,
+                    _ => textquest_common::ipc::Command::ClickObject,
+                };
+                let label = if matches!(sub.as_deref(), Some("door")) {
+                    "door"
+                } else {
+                    "item"
+                };
+                let ok = self.send_ipc_to_focused(&cmd);
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("Click {label}: no clients received command. Check connection with :status"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Click {label} → sent to {ok} clients"),
                         false,
                     );
                 }
@@ -5843,6 +5912,8 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "camp"
             | "nav"
             | "loot"
+            | "door"
+            | "click"
             | "status"
             | "login"
             | "launch"
@@ -6129,6 +6200,8 @@ mod tests {
             "camp",
             "nav",
             "loot",
+            "door",
+            "click",
             "login",
             "launch",
             "profile",

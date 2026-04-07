@@ -270,6 +270,14 @@ pub enum Command {
     ClearTarget,
     /// Right-click interact with the current target (opens merchant, bank, quest windows).
     InteractTarget,
+    /// Target and activate the nearest door or switch (`/doortarget` + `/click left door`).
+    ///
+    /// Equivalent to MQ2's `/click door` — selects the nearest EQ switch and opens it.
+    InteractDoor,
+    /// Click the nearest ground item or world object (`/click left item`).
+    ///
+    /// Equivalent to MQ2's `/click item` — interacts with the nearest ground spawn.
+    ClickObject,
     // Utility
     /// Sit down (mana/HP regen).
     Sit,
@@ -791,12 +799,16 @@ pub enum Response {
     },
     /// An intercepted chat message from the game's `dsp_chat` function.
     ChatMessage {
-        /// The chat text content.
+        /// The chat text content (may contain STML markup tags).
         text: String,
         /// EQ chat color code (e.g., 273 = default, 269 = system).
         color: i32,
         /// Timestamp in milliseconds when the message was captured.
         timestamp_ms: u64,
+        /// Structured chat event extracted from `text` after stripping STML markup.
+        /// `None` when the text does not match a recognised EQ chat verb pattern
+        /// (e.g. system messages, spell feedback, or unknown formats).
+        parsed: Option<crate::chat::ChatEvent>,
     },
 }
 
@@ -1210,6 +1222,8 @@ mod tests {
             Command::CombatDisengage,
             Command::LootCorpse,
             Command::LootAll,
+            Command::InteractDoor,
+            Command::ClickObject,
             Command::QueryZoneGraph,
             Command::SetRenderMode {
                 mode: RenderMode::NullRender,
@@ -1272,6 +1286,7 @@ mod tests {
                 text: "You say, 'Hello'".into(),
                 color: 273,
                 timestamp_ms: 1234567890,
+                parsed: None,
             },
         ];
         for resp in &responses {

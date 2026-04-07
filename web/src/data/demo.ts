@@ -1,12 +1,27 @@
 import type {
+  Account,
   Assault,
+  BankingRule,
   DpsEntry,
+  DzHistoryEntry,
+  DzLockout,
+  KronoSettings,
   Player,
   CombatLogEntry,
   Alert,
+  AutoLootFilter,
   NavItem,
   Character,
   GroupTemplate,
+  RaidInstance,
+  TradeskillSupply,
+  VendorRoute,
+  WealthHistory,
+  LootRules,
+  CharacterLootFilter,
+  DistributionConfig,
+  MasterLooter,
+  LootHistoryEntry,
 } from "../types";
 
 export const assaults: Assault[] = [
@@ -154,72 +169,6 @@ export const navItems: NavItem[] = [
     label: "Security Wards",
     icon: "ShieldCheck",
   },
-  {
-    id: "economy",
-    label: "Economy Ledger",
-    icon: "Coins",
-  },
-];
-
-// ── Economy demo data ────────────────────────────────────────────────────────
-
-export const kronoSettings: KronoSettings = {
-  target_rate_per_day: 3,
-  min_sell_price: 800,
-  max_buy_price: 750,
-  restock_threshold: 5,
-  enabled: true,
-};
-
-export const vendorRoutes: VendorRoute[] = [
-  {
-    id: "vr-1",
-    zone: "East Commonlands",
-    npc_name: "Merchant Ooldi",
-    path_notes: "Near zone-in from West Commonlands, sells food/drink.",
-    item_categories: ["Food", "Drink", "Reagents"],
-    enabled: true,
-  },
-  {
-    id: "vr-2",
-    zone: "Neriak Commons",
-    npc_name: "Vira S`Lex",
-    path_notes: "Inside the Neriak armory building, sells weapons.",
-    item_categories: ["Weapons", "Armor"],
-    enabled: true,
-  },
-  {
-    id: "vr-3",
-    zone: "North Freeport",
-    npc_name: "Deldaon Sagelore",
-    path_notes: "Academy of Arcane Science, sells spell reagents.",
-    item_categories: ["Reagents", "Scrolls"],
-    enabled: false,
-  },
-];
-
-export const bankingRules: BankingRule[] = [
-  {
-    id: "br-1",
-    item_category: "Plat",
-    deposit_threshold: 5000,
-    keep_on_hand: 500,
-    auto_deposit: true,
-  },
-  {
-    id: "br-2",
-    item_category: "Krono",
-    deposit_threshold: 10,
-    keep_on_hand: 2,
-    auto_deposit: true,
-  },
-  {
-    id: "br-3",
-    item_category: "Tradeskill Mats",
-    deposit_threshold: 200,
-    keep_on_hand: 20,
-    auto_deposit: false,
-  },
 ];
 
 // ── Group Builder demo data ────────────────────────────────────────────────
@@ -269,5 +218,363 @@ export const demoGroupTemplates: GroupTemplate[] = [
       { role: "DPS",     characterId: "c11", locked: false },
       { role: "Puller",  characterId: "c12", locked: false },
     ],
+  },
+];
+
+// ── Accounts demo data ───────────────────────────────────────────────────────
+
+export const accounts: Account[] = [
+  {
+    id: "acct-1",
+    name: "frostreaver01",
+    server: "Firiona Vie",
+    character: "Frostreaver",
+    class: "CLR",
+    group: 1,
+    status: "active",
+    has_password: true,
+  },
+  {
+    id: "acct-2",
+    name: "noxus01",
+    server: "Firiona Vie",
+    character: "Noxus",
+    class: "WAR",
+    group: 1,
+    status: "active",
+    has_password: true,
+  },
+  {
+    id: "acct-3",
+    name: "shadowdancer01",
+    server: "Rizlona",
+    character: "Shadowdancer",
+    class: "ROG",
+    group: 2,
+    status: "locked",
+    has_password: false,
+  },
+  {
+    id: "acct-4",
+    name: "ironclad01",
+    server: "Teek",
+    character: "Ironclad",
+    class: "PAL",
+    group: 0,
+    status: "banned",
+    has_password: false,
+  },
+];
+
+// ── Dynamic zone demo data ──────────────────────────────────────────────────
+
+export const dzLockouts: DzLockout[] = [
+  {
+    id: "dz-lockout-1",
+    expedition: "Plane of Time",
+    lockout_type: "6.5d full",
+    character: "Frostreaver",
+    expires_at: "2026-04-08T03:30:00Z",
+  },
+  {
+    id: "dz-lockout-2",
+    expedition: "Tacvi",
+    lockout_type: "18h replay",
+    character: "Noxus",
+    expires_at: "2026-04-07T23:45:00Z",
+  },
+  {
+    id: "dz-lockout-3",
+    expedition: "Anguish",
+    lockout_type: "2.5d mission",
+    character: "Shadowdancer",
+    expires_at: "2026-04-10T10:00:00Z",
+  },
+];
+
+export const raidInstances: RaidInstance[] = [
+  {
+    id: "raid-inst-1",
+    expedition: "Citadel of Anguish",
+    zone: "Anguish",
+    group: "Raid Alpha",
+    entered_at: "2026-04-07T18:10:00Z",
+    members: ["Frostreaver", "Noxus", "Shadowdancer", "Ironclad", "Mystik", "Boomy"],
+  },
+  {
+    id: "raid-inst-2",
+    expedition: "Temple of Veeshan",
+    zone: "ToV",
+    group: "Raid Beta",
+    entered_at: "2026-04-07T19:05:00Z",
+    members: ["Valerius", "Rhapsody", "Lifeline", "Bonesaw"],
+  },
+];
+
+export const dzHistory: DzHistoryEntry[] = [
+  {
+    id: "dz-history-1",
+    expedition: "Plane of Time",
+    zone: "Plane of Time",
+    completed_at: "2026-04-06T04:20:00Z",
+    duration_secs: 7140,
+    participants: ["Frostreaver", "Noxus", "Mystik", "Boomy", "Shadowdancer"],
+    loot: ["Quarm's Token", "Timeless Breastplate Mold"],
+  },
+  {
+    id: "dz-history-2",
+    expedition: "Tacvi",
+    zone: "Tacvi",
+    completed_at: "2026-04-05T02:55:00Z",
+    duration_secs: 5280,
+    participants: ["Ironclad", "Rhapsody", "Lifeline", "Bonesaw"],
+    loot: ["Qvic Portal Stone"],
+  },
+];
+
+// ── Economy demo data ───────────────────────────────────────────────────────
+
+export const kronoSettings: KronoSettings = {
+  target_rate_per_day: 3,
+  min_sell_price: 800,
+  max_buy_price: 750,
+  restock_threshold: 5,
+  enabled: true,
+};
+
+export const vendorRoutes: VendorRoute[] = [
+  {
+    id: "vr-1",
+    zone: "East Commonlands",
+    npc_name: "Merchant Ooldi",
+    path_notes: "Near the West Commonlands tunnel for fast reagent restocks.",
+    item_categories: ["Food", "Drink", "Reagents"],
+    enabled: true,
+  },
+  {
+    id: "vr-2",
+    zone: "Neriak Commons",
+    npc_name: "Vira S`Lex",
+    path_notes: "Armory circuit for weapon and armor liquidation.",
+    item_categories: ["Weapons", "Armor"],
+    enabled: true,
+  },
+];
+
+export const bankingRules: BankingRule[] = [
+  {
+    id: "bank-plat",
+    item_category: "Platinum",
+    deposit_threshold: 5000,
+    keep_on_hand: 500,
+    auto_deposit: true,
+  },
+  {
+    id: "bank-krono",
+    item_category: "Krono",
+    deposit_threshold: 10,
+    keep_on_hand: 2,
+    auto_deposit: true,
+  },
+  {
+    id: "bank-tradeskill",
+    item_category: "Tradeskill Mats",
+    deposit_threshold: 200,
+    keep_on_hand: 20,
+    auto_deposit: false,
+  },
+];
+
+export const tradeskillSupplies: TradeskillSupply[] = [
+  {
+    id: "ts-1",
+    skill: "Tailoring",
+    materials: ["Silk Thread", "Spiderling Silk", "High Quality Bear Skin"],
+    restock_quantity: 120,
+    source_zone: "East Karana",
+    enabled: true,
+  },
+  {
+    id: "ts-2",
+    skill: "Smithing",
+    materials: ["Iron Ore", "Coal", "High Quality Ore"],
+    restock_quantity: 50,
+    source_zone: "Kaladim",
+    enabled: true,
+  },
+  {
+    id: "ts-3",
+    skill: "Baking",
+    materials: ["Bat Wings", "Mammoth Meat", "Frosting"],
+    restock_quantity: 80,
+    source_zone: "Thurgadin",
+    enabled: false,
+  },
+];
+
+export const wealthHistory: WealthHistory = {
+  snapshots: [
+    {
+      timestamp: "2026-04-01T00:00:00Z",
+      plat: 120_000,
+      krono: 28,
+      item_value_estimate: 210_000,
+    },
+    {
+      timestamp: "2026-04-02T00:00:00Z",
+      plat: 134_500,
+      krono: 30,
+      item_value_estimate: 230_000,
+    },
+    {
+      timestamp: "2026-04-03T00:00:00Z",
+      plat: 148_200,
+      krono: 33,
+      item_value_estimate: 255_000,
+    },
+    {
+      timestamp: "2026-04-04T00:00:00Z",
+      plat: 155_900,
+      krono: 35,
+      item_value_estimate: 270_000,
+    },
+    {
+      timestamp: "2026-04-05T00:00:00Z",
+      plat: 164_100,
+      krono: 38,
+      item_value_estimate: 285_000,
+    },
+    {
+      timestamp: "2026-04-06T00:00:00Z",
+      plat: 172_800,
+      krono: 40,
+      item_value_estimate: 298_000,
+    },
+    {
+      timestamp: "2026-04-07T00:00:00Z",
+      plat: 187_430,
+      krono: 42,
+      item_value_estimate: 312_000,
+    },
+  ],
+  current: {
+    timestamp: "2026-04-07T00:00:00Z",
+    plat: 187_430,
+    krono: 42,
+    item_value_estimate: 312_000,
+  },
+};
+
+// ── Loot demo data ────────────────────────────────────────────────────────────
+
+export const demoLootRules: LootRules = {
+  keep_items: ["Rubicite Breastplate", "Mithril Breastplate", "Flowing Black Silk Sash"],
+  sell_items: ["Rusty Sword", "Tattered Cloth"],
+  destroy_items: ["Bone Chips", "Rat Whisker"],
+  loot_all: true,
+  auto_split: true,
+};
+
+export const demoCharacterFilters: CharacterLootFilter[] = [
+  {
+    character: "Frostreaver",
+    filters: [
+      { item_name: "Bone Chips", action: "destroy" },
+      { item_name: "Rusty Sword", action: "sell" },
+    ],
+  },
+  {
+    character: "Shadowdancer",
+    filters: [
+      { item_name: "Bone Chips", action: "destroy" },
+      { item_name: "Tattered Cloth", action: "sell" },
+    ],
+  },
+  {
+    character: "Ironclad",
+    filters: [
+      { item_name: "Bone Chips", action: "destroy" },
+    ],
+  },
+  {
+    character: "Lightbringer",
+    filters: [
+      { item_name: "Rat Whisker", action: "destroy" },
+      { item_name: "Rusty Sword", action: "sell" },
+    ],
+  },
+];
+
+export const demoDistributionConfig: DistributionConfig = {
+  rules: [
+    { id: "rule-1", item_type: "armor",  quality: "nodrop", method: "need_before_greed" },
+    { id: "rule-2", item_type: "weapon", quality: "nodrop", method: "need_before_greed" },
+    { id: "rule-3", item_type: "armor",  quality: "rare",   method: "master_looter" },
+    { id: "rule-4", item_type: "all",    quality: null,     method: "round_robin" },
+  ],
+};
+
+export const demoMasterLooter: MasterLooter = { character: null };
+
+export const demoLootHistory: LootHistoryEntry[] = [
+  {
+    id: 1,
+    timestamp: "2025-01-15 23:14:01",
+    item_name: "Mithril Breastplate",
+    recipient: "Frostreaver",
+    source_mob: "Maestro of Rancor",
+    zone: "Plane of Hate",
+    quantity: 1,
+    assigned_by: "Frostreaver",
+  },
+  {
+    id: 2,
+    timestamp: "2025-01-15 23:10:45",
+    item_name: "Flowing Black Silk Sash",
+    recipient: "Shadowdancer",
+    source_mob: "Maestro of Rancor",
+    zone: "Plane of Hate",
+    quantity: 1,
+    assigned_by: "Frostreaver",
+  },
+  {
+    id: 3,
+    timestamp: "2025-01-15 22:55:12",
+    item_name: "Rubicite Breastplate",
+    recipient: "Ironclad",
+    source_mob: "Innoruuk",
+    zone: "Plane of Hate",
+    quantity: 1,
+    assigned_by: "Frostreaver",
+  },
+  {
+    id: 4,
+    timestamp: "2025-01-15 22:30:00",
+    item_name: "Lendiniara's Signet Ring",
+    recipient: "Lightbringer",
+    source_mob: "Lendiniara the Keeper",
+    zone: "Temple of Veeshan",
+    quantity: 1,
+    assigned_by: null,
+  },
+  {
+    id: 5,
+    timestamp: "2025-01-15 22:20:33",
+    item_name: "Bone Chips",
+    recipient: "Frostreaver",
+    source_mob: "Skeleton",
+    zone: "Lower Guk",
+    quantity: 5,
+    assigned_by: null,
+  },
+  {
+    id: 6,
+    timestamp: "2025-01-15 21:45:00",
+    item_name: "Veeshan's Peak Key",
+    recipient: "Shadowdancer",
+    source_mob: "Phara Dar",
+    zone: "Veeshan's Peak",
+    quantity: 1,
+    assigned_by: "Frostreaver",
   },
 ];

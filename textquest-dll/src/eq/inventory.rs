@@ -228,7 +228,7 @@ unsafe fn query_open_container_slots_windows(
     if !crate::eq::validate_fn_ptr(get_item_base_addr, "CInvSlot::GetItemBase") {
         return Vec::new();
     }
-    let get_item_base: GetItemBaseFn = std::mem::transmute(get_item_base_addr);
+    let get_item_base: GetItemBaseFn = unsafe { std::mem::transmute(get_item_base_addr) };
 
     let mut raw_slots = Vec::new();
     for idx in 0..total_slots {
@@ -323,7 +323,9 @@ unsafe fn read_slot_item(
     get_item_base: unsafe extern "C" fn(usize, *mut usize),
 ) -> Option<ContainerSlotItemInfo> {
     let mut item_ptr = 0usize;
-    get_item_base(slot_ptr, &mut item_ptr);
+    unsafe {
+        get_item_base(slot_ptr, &mut item_ptr);
+    }
     if item_ptr == 0
         || !crate::hooks::game_loop::is_readable(item_ptr, offsets::item_base::GLOBAL_INDEX)
     {
@@ -371,7 +373,7 @@ unsafe fn read_slot_item(
 }
 
 #[cfg(windows)]
-unsafe fn read_item_global_index(addr: usize) -> Option<(i32, i16, i16, i16)> {
+fn read_item_global_index(addr: usize) -> Option<(i32, i16, i16, i16)> {
     if !crate::hooks::game_loop::is_readable(addr, offsets::item_global_index::SIZE) {
         return None;
     }
@@ -385,12 +387,12 @@ unsafe fn read_item_global_index(addr: usize) -> Option<(i32, i16, i16, i16)> {
 }
 
 #[cfg(windows)]
-unsafe fn read_fixed_c_string(addr: usize, max_len: usize) -> Option<String> {
+fn read_fixed_c_string(addr: usize, max_len: usize) -> Option<String> {
     if !crate::hooks::game_loop::is_readable(addr, max_len) {
         return None;
     }
 
-    let bytes = std::slice::from_raw_parts(addr as *const u8, max_len);
+    let bytes = unsafe { std::slice::from_raw_parts(addr as *const u8, max_len) };
     let len = bytes.iter().position(|b| *b == 0).unwrap_or(max_len);
     std::str::from_utf8(&bytes[..len])
         .ok()
@@ -398,11 +400,11 @@ unsafe fn read_fixed_c_string(addr: usize, max_len: usize) -> Option<String> {
 }
 
 #[cfg(windows)]
-unsafe fn read_value<T: Copy>(addr: usize) -> Option<T> {
+fn read_value<T: Copy>(addr: usize) -> Option<T> {
     if !crate::hooks::game_loop::is_readable(addr, size_of::<T>()) {
         return None;
     }
-    Some(std::ptr::read_unaligned(addr as *const T))
+    Some(unsafe { std::ptr::read_unaligned(addr as *const T) })
 }
 
 #[cfg(test)]
