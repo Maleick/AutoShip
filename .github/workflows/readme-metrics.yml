@@ -1,6 +1,8 @@
 name: README Metrics
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
@@ -102,27 +104,32 @@ jobs:
       - name: Update README metrics
         run: '%PYTHON_CMD% scripts/update_readme_metrics.py'
 
-      - name: Decide whether this ref can be updated directly
+      - name: Commit and push or open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if /I "%GITHUB_REF_NAME%"=="master" (
-            echo CAN_PUSH=false>>"%GITHUB_ENV%"
-            echo [notice] master is protected. Run README Metrics on a topic branch and merge it via PR.
-          ) else (
-            echo CAN_PUSH=true>>"%GITHUB_ENV%"
+          setlocal EnableDelayedExpansion
+          git diff --quiet -- README.md && (
+            echo [info] No changes to README.md — exiting early.
+            exit /b 0
           )
-
-      - name: Commit updated README metrics
-        if: env.CAN_PUSH == 'true'
-        run: |
-          git diff --quiet -- README.md && exit /b 0
+          
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "chore(readme): refresh project metrics"
-          git push
-
-      - name: Report skipped protected-branch update
-        if: env.CAN_PUSH != 'true'
-        run: |
-          git diff --quiet -- README.md && exit /b 0
-          echo [notice] README metrics changed, but this workflow will not push directly to protected master. Re-run it on a topic branch and merge that PR.
+          
+          if /I "%GITHUB_REF_NAME%"=="master" (
+            echo [info] Creating topic branch for README metrics refresh.
+            set "BRANCH_NAME=chore/readme-metrics-refresh-%GITHUB_RUN_ID%"
+            git checkout -b !BRANCH_NAME!
+            git add README.md
+            git commit -m "chore(readme): refresh project metrics"
+            git push origin !BRANCH_NAME!
+            
+            echo [info] Opening pull request for metrics refresh.
+            gh pr create --title "chore(readme): refresh project metrics" --body "Automated README metrics refresh via GitHub Actions." --head !BRANCH_NAME! --base master --label "merge:auto"
+          ) else (
+            echo [info] Pushing metrics update directly to topic branch.
+            git add README.md
+            git commit -m "chore(readme): refresh project metrics"
+            git push
+          )
