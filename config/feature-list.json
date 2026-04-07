@@ -35,7 +35,7 @@
       "status": "complete",
       "acceptance_tests": [
         "ActiveScreen::Overview still dispatches through textquest/src/tui/ui/mod.rs to textquest/src/tui/ui/dashboard.rs",
-        "Overview-only render tests prove the Characters screen shows Ops Roster/Session chrome while Navigation keeps the route-specific renderer output",
+        "Cross-screen render tests prove the Characters screen shows Ops Roster/Session chrome while Navigation keeps the route-specific renderer output",
         "cargo test -p textquest tui::ui::tests::overview_screen_dispatches_to_dashboard_renderer"
       ],
       "notes": "Issue #581 is the verification tracker for the old PR #507 handoff claim. The current Characters screen wiring is intact, so the PR #507 'missing dashboard.rs renderer' note is historical evidence only and should not be reused as an active tracker."
