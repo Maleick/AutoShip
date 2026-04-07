@@ -2116,7 +2116,7 @@ mod tests {
     #[test]
     fn find_command_hint_matches_nav() {
         let hint = find_command_hint("nav ");
-        assert_eq!(hint, Some("nav <camp_name|x y z|zone>"));
+        assert_eq!(hint, Some("nav <camp_name|x y z|zone|reload>"));
     }
 
     #[test]

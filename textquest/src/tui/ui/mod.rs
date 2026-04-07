@@ -853,6 +853,12 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             );
             push_kv(&mut rows, None, "Enter", "Jump back to the map panel");
             push_kv(&mut rows, None, ":nav <dest>", "Send a navigation command");
+            push_kv(
+                &mut rows,
+                None,
+                ":nav reload",
+                "Refresh the active zone navmesh",
+            );
         }
         ActiveScreen::Debug => {
             push_heading(&mut rows, None, "Debug Controls");

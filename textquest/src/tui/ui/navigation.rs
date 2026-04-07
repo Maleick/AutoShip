@@ -362,6 +362,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
     for (cmd, desc) in &[
         (":nav <dest>", "Mesh route or slash fallback"),
+        (":nav reload", "Redownload the active zone navmesh"),
         (":mode camp ", "Camp mode"),
         (":mode hunt ", "Hunt mode"),
         (":camp start", "Start camp"),
