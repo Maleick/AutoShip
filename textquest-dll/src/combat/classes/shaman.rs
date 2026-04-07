@@ -238,6 +238,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -275,6 +276,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -303,6 +305,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -332,6 +335,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(shaman.should_assist(&ctx));
     }
@@ -366,6 +370,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
     }
@@ -391,6 +396,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(99));
     }
@@ -418,6 +424,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         shaman.on_engage(&ctx);
         assert!(!shaman.target_slowed);
@@ -447,6 +454,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         shaman.on_engage(&ctx);
         assert!(shaman.target_slowed);
@@ -470,6 +478,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(shaman.select_spell(&ctx).is_none());
     }

@@ -255,6 +255,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(druid.should_assist(&ctx));
     }
@@ -279,6 +280,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
 
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();

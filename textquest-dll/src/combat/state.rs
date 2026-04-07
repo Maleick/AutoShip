@@ -214,6 +214,7 @@ impl Combatant {
                 active_buffs: &[],
                 buff_info: &[],
                 target_is_mezzed: false,
+                extended_targets: None,
             };
             // If we were mid-cast, notify the strategy this was an interrupt (not completion)
             if let CombatState::Casting { spell_slot, .. } = &self.state {
@@ -252,6 +253,7 @@ impl Combatant {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
 
         // --- Call on_engage when first entering Engaging state ---
@@ -328,6 +330,7 @@ impl Combatant {
                         active_buffs: &[],
                         buff_info: &[],
                         target_is_mezzed: false,
+                        extended_targets: None,
                     };
                     self.strategy.on_action_complete(&flee_ctx);
                     self.assist_target = None;
@@ -490,6 +493,7 @@ impl Combatant {
                         active_buffs: &[],
                         buff_info: &[],
                         target_is_mezzed: false,
+                        extended_targets: None,
                     };
                     self.strategy.on_action_complete(&ctx);
                     self.state = CombatState::OnGcd;
@@ -609,6 +613,7 @@ impl Combatant {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         self.strategy.on_action_complete(&ctx);
 

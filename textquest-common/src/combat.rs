@@ -2,46 +2,216 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Whether a buff occupies a long-duration or short-duration slot.
+// ---------------------------------------------------------------------------
+// Extended Target (XTarget) types — read from EQ's ExtendedTargetList
+// ---------------------------------------------------------------------------
+
+/// Role assigned to an extended target slot.
+/// Source: eqlib EQData.h `XTargetTypes` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u32)]
+pub enum XTargetType {
+    Empty = 0,
+    AutoHater = 1,
+    SpecificPc = 2,
+    SpecificNpc = 3,
+    TargetsTarget = 4,
+    GroupTank = 5,
+    GroupTanksTarget = 6,
+    GroupAssist = 7,
+    GroupAssistTarget = 8,
+    GroupPuller = 9,
+    GroupPullerTarget = 10,
+    GroupMark1 = 11,
+    GroupMark2 = 12,
+    GroupMark3 = 13,
+    RaidAssist1 = 14,
+    RaidAssist2 = 15,
+    RaidAssist3 = 16,
+    RaidAssist1Target = 17,
+    RaidAssist2Target = 18,
+    RaidAssist3Target = 19,
+    RaidMark1 = 20,
+    RaidMark2 = 21,
+    RaidMark3 = 22,
+    MyPet = 23,
+    MyPetTarget = 24,
+    MyMercenary = 25,
+    MyMercenaryTarget = 26,
+}
+
+impl XTargetType {
+    pub fn from_raw(v: u32) -> Option<Self> {
+        match v {
+            0 => Some(Self::Empty),
+            1 => Some(Self::AutoHater),
+            2 => Some(Self::SpecificPc),
+            3 => Some(Self::SpecificNpc),
+            4 => Some(Self::TargetsTarget),
+            5 => Some(Self::GroupTank),
+            6 => Some(Self::GroupTanksTarget),
+            7 => Some(Self::GroupAssist),
+            8 => Some(Self::GroupAssistTarget),
+            9 => Some(Self::GroupPuller),
+            10 => Some(Self::GroupPullerTarget),
+            11 => Some(Self::GroupMark1),
+            12 => Some(Self::GroupMark2),
+            13 => Some(Self::GroupMark3),
+            14 => Some(Self::RaidAssist1),
+            15 => Some(Self::RaidAssist2),
+            16 => Some(Self::RaidAssist3),
+            17 => Some(Self::RaidAssist1Target),
+            18 => Some(Self::RaidAssist2Target),
+            19 => Some(Self::RaidAssist3Target),
+            20 => Some(Self::RaidMark1),
+            21 => Some(Self::RaidMark2),
+            22 => Some(Self::RaidMark3),
+            23 => Some(Self::MyPet),
+            24 => Some(Self::MyPetTarget),
+            25 => Some(Self::MyMercenary),
+            26 => Some(Self::MyMercenaryTarget),
+            _ => None,
+        }
+    }
+
+    pub fn is_auto_hater(self) -> bool {
+        self == Self::AutoHater
+    }
+}
+
+/// Slot status in the extended target window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u32)]
+pub enum XTargetSlotStatus {
+    Empty = 0,
+    CurrentZone = 1,
+    DifferentZone = 2,
+    Unknown = 3,
+}
+
+impl XTargetSlotStatus {
+    pub fn from_raw(v: u32) -> Self {
+        match v {
+            0 => Self::Empty,
+            1 => Self::CurrentZone,
+            2 => Self::DifferentZone,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// A single slot from the EQ Extended Target window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExtendedTargetSlot {
+    pub slot_type: XTargetType,
+    pub status: XTargetSlotStatus,
+    pub spawn_id: u32,
+    pub name: String,
+}
+
+impl ExtendedTargetSlot {
+    pub fn is_active(&self) -> bool {
+        self.status == XTargetSlotStatus::CurrentZone
+            && self.spawn_id != 0
+            && self.slot_type != XTargetType::Empty
+    }
+}
+
+/// Snapshot of the full extended target list, read from EQ memory.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExtendedTargetList {
+    pub slots: Vec<ExtendedTargetSlot>,
+    pub auto_add_haters: bool,
+}
+
+impl ExtendedTargetList {
+    pub fn hater_spawn_ids(&self) -> Vec<u32> {
+        self.slots
+            .iter()
+            .filter(|s| s.is_active() && s.slot_type.is_auto_hater())
+            .map(|s| s.spawn_id)
+            .collect()
+    }
+
+    pub fn is_hater(&self, spawn_id: u32) -> bool {
+        self.slots
+            .iter()
+            .any(|s| s.is_active() && s.slot_type.is_auto_hater() && s.spawn_id == spawn_id)
+    }
+
+    pub fn hater_count(&self) -> usize {
+        self.slots
+            .iter()
+            .filter(|s| s.is_active() && s.slot_type.is_auto_hater())
+            .count()
+    }
+
+    pub fn get_by_type(&self, slot_type: XTargetType) -> Option<&ExtendedTargetSlot> {
+        self.slots
+            .iter()
+            .find(|s| s.is_active() && s.slot_type == slot_type)
+    }
+
+    pub fn active_slots(&self) -> Vec<&ExtendedTargetSlot> {
+        self.slots.iter().filter(|s| s.is_active()).collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Buff tracking
+// ---------------------------------------------------------------------------
+
+/// Which buff window category a buff belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuffCategory {
+    /// Long-duration buff (slots 0–61).
     LongBuff,
+    /// Short-duration / song / combat discipline (slots 62–92).
     ShortBuff,
 }
 
-/// Snapshot of a single active buff read from the player's `EQ_Affect` array.
+/// A single active buff read from the `EQ_Affect` array.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BuffInfo {
+    /// EQ spell ID for this buff.
     pub spell_id: i32,
+    /// Remaining duration in ticks (6 s/tick). 0 = permanent / no timer.
     pub duration_ticks: i32,
+    /// Duration when the buff was first applied (ticks).
     pub initial_duration: i32,
+    /// Remaining hit count for limited-hit buffs. 0 = unlimited.
     pub hit_count: i32,
+    /// Buff category (long vs short/song).
     pub category: BuffCategory,
+    /// Level of the caster who applied the buff.
     pub caster_level: u8,
+    /// Slot index in the buff array (0-based).
     pub slot_index: usize,
 }
 
 impl BuffInfo {
-    /// Remaining buff duration in seconds (ticks × 6).
+    /// Remaining duration in seconds (ticks × 6). Returns 0 for permanent buffs.
     #[must_use]
     pub fn remaining_seconds(&self) -> f32 {
-        self.duration_ticks as f32 * 6.0
+        if self.duration_ticks <= 0 {
+            return 0.0;
+        }
+        self.duration_ticks as f32 * crate::offsets::buff_slots::SECONDS_PER_TICK
     }
 
-    /// Total (original) buff duration in seconds.
+    /// Total initial duration in seconds.
     #[must_use]
     pub fn total_seconds(&self) -> f32 {
-        self.initial_duration as f32 * 6.0
+        if self.initial_duration <= 0 {
+            return 0.0;
+        }
+        self.initial_duration as f32 * crate::offsets::buff_slots::SECONDS_PER_TICK
     }
 
-    /// Returns `true` if this buff will expire within `threshold_secs`.
-    /// Permanent buffs (duration 0, initial 0) never expire.
+    /// Returns true if this buff will expire within `threshold_secs` seconds.
     #[must_use]
     pub fn expires_within(&self, threshold_secs: f32) -> bool {
-        if self.duration_ticks == 0 && self.initial_duration == 0 {
-            return false; // permanent
-        }
-        self.remaining_seconds() <= threshold_secs
+        self.duration_ticks > 0 && self.remaining_seconds() <= threshold_secs
     }
 }
 
@@ -168,7 +338,8 @@ pub enum ConditionExpr {
     BuffActive(i32),
     /// A specific buff/spell ID is NOT active on the player.
     BuffMissing(i32),
-    /// Buff is active but will expire within `threshold_secs` seconds.
+    /// A buff will expire within the given number of seconds.
+    /// (spell_id, threshold_seconds)
     BuffExpiringSoon(i32, f32),
     /// Target distance is below the given range (melee check).
     TargetDistanceBelow(f32),
@@ -182,6 +353,10 @@ pub enum ConditionExpr {
     Not(Box<ConditionExpr>),
     /// Always true — unconditional trigger.
     Always,
+    /// Number of mobs on the extended target hate list is at or above the given count.
+    XTargetHaterCountAbove(u32),
+    /// We have aggro from at least one mob (checked via the XTarget auto-hater list).
+    HasXTargetAggro,
 }
 
 /// An emergency reaction rule that fires when conditions are met.

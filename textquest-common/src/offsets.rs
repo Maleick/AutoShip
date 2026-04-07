@@ -83,6 +83,50 @@ pub const RIGHT_CLICKED_ON_PLAYER: u64 = 0x0001_4029_6D30;
 /// Source: eqlib/offsets/eqgame.h `pinstCEverQuest_x`
 pub const PINST_EVERQUEST: u64 = 0x0001_40F1_1758;
 
+// ─── PcClient struct field offsets ───
+// Source: eqlib PcClient.h, client date 20260310
+
+/// Offset of `pExtendedTargetList` within PcClient (ExtendedTargetList*).
+/// Source: PcClient.h line 1690: `/*0x2e98*/ ExtendedTargetList* pExtendedTargetList`
+pub const PCCLIENT_EXTENDED_TARGET_LIST: u64 = 0x2e98;
+
+/// Offset of `InCombat` within PcClient (bool).
+/// Source: PcClient.h line 1693: `/*0x2eac*/ bool InCombat`
+pub const PCCLIENT_IN_COMBAT: u64 = 0x2eac;
+
+// ─── ExtendedTargetList internal layout ───
+// Source: PcClient.h, ArrayClass in Containers.h
+// ExtendedTargetList has a vtable at 0x00, then:
+//   ArrayClass<ExtendedTargetSlot> m_targetSlots at 0x08
+//   bool m_autoAddHaters at 0x20
+
+/// Offset of m_targetSlots (ArrayClass) within ExtendedTargetList.
+/// ArrayClass layout (inherits CDynamicArrayBase):
+///   0x00: int m_length (from CDynamicArrayBase)
+///   0x08: T* m_array
+///   0x10: int m_alloc
+pub const XTARGET_LIST_SLOTS_OFFSET: u64 = 0x08;
+/// Offset of m_autoAddHaters within ExtendedTargetList.
+pub const XTARGET_LIST_AUTO_ADD_HATERS: u64 = 0x20;
+
+// ─── ArrayClass internal layout (CDynamicArrayBase + ArrayClass<T>) ───
+/// Offset of m_length within ArrayClass (from CDynamicArrayBase base).
+pub const ARRAY_CLASS_LENGTH: u64 = 0x00;
+/// Offset of m_array (T*) within ArrayClass.
+pub const ARRAY_CLASS_ARRAY_PTR: u64 = 0x08;
+
+// ─── ExtendedTargetSlot layout (size 0x4c) ───
+/// Size of a single ExtendedTargetSlot.
+pub const XTARGET_SLOT_SIZE: u64 = 0x4c;
+/// Offset of xTargetType (DWORD) within ExtendedTargetSlot.
+pub const XTARGET_SLOT_TYPE: u64 = 0x00;
+/// Offset of XTargetSlotStatus (DWORD enum) within ExtendedTargetSlot.
+pub const XTARGET_SLOT_STATUS: u64 = 0x04;
+/// Offset of SpawnID (uint32_t) within ExtendedTargetSlot.
+pub const XTARGET_SLOT_SPAWN_ID: u64 = 0x08;
+/// Offset of Name (char[64]) within ExtendedTargetSlot.
+pub const XTARGET_SLOT_NAME: u64 = 0x0c;
+
 /// pinstCXWndManager — eqgame.exe's UI window manager (not eqmain.dll's)
 pub const PINST_CXWND_MANAGER: u64 = 0x0001_40F3_7B28;
 
@@ -454,55 +498,91 @@ pub mod player_base {
     pub const LASTNAME: usize = 0x048;
 }
 
-/// Buff slot offsets within `CharacterZoneClient`.
-/// Source: third_party/eqlib/include/eqlib/game/PcClient.h (`EQ_Affect` array).
-/// TODO: calibrate exact `BUFF_ARRAY_OFFSET` against live 20260310 client hex dump.
+/// Buff slot constants and `EQ_Affect` field offsets.
+/// Source: third_party/eqlib/include/eqlib/game/Spells.h (`EQ_Affect`),
+///         third_party/eqlib/include/eqlib/game/Constants.h (slot counts),
+///         third_party/eqlib/include/eqlib/game/PcClient.h (access path).
 pub mod buff_slots {
-    /// Long-duration buff slots (buffs, songs, disciplines).
+    /// Number of long-duration buff slots.
     pub const NUM_LONG_BUFFS: usize = 62;
-    /// Short-duration buff slots (combat effects, procs).
+
+    /// Number of short-duration (song/temp) buff slots.
     pub const NUM_SHORT_BUFFS: usize = 31;
-    /// Total buff slots in the `SoeUtil::Array<EQ_Affect>`.
+
+    /// Total buff slots (long + short).
     pub const MAX_TOTAL_BUFFS: usize = NUM_LONG_BUFFS + NUM_SHORT_BUFFS; // 93
 
-    /// `sizeof(EQ_Affect)` — verified from eqlib `EQ_Affect` struct layout.
+    /// sizeof(`EQ_Affect`) — each buff entry is 0x98 bytes.
+    /// Source: Spells.h `EQ_Affect_size = 0x98`.
     pub const EQ_AFFECT_SIZE: usize = 0x98;
 
-    /// `EQ_Affect::SpellID` (i32 at +0x6C).
+    // ── `EQ_Affect` field offsets ──
+
+    /// `EQ_Affect::SpellID` (i32 at +0x6c). -1 or 0 = empty slot.
     pub const SPELL_ID: usize = 0x6c;
+
     /// `EQ_Affect::Duration` (i32 at +0x70) — remaining ticks (6 sec/tick).
     pub const DURATION: usize = 0x70;
-    /// `EQ_Affect::InitialDuration` (i32 at +0x74) — original duration ticks.
+
+    /// `EQ_Affect::InitialDuration` (i32 at +0x74) — ticks when applied.
     pub const INITIAL_DURATION: usize = 0x74;
-    /// `EQ_Affect::HitCount` (i32 at +0x78).
+
+    /// `EQ_Affect::HitCount` (i32 at +0x78) — remaining hit count for limited-hit buffs.
     pub const HIT_COUNT: usize = 0x78;
-    /// `EQ_Affect::Modifier` (f32 at +0x80).
+
+    /// `EQ_Affect::Modifier` (f32 at +0x80) — bard song modifier (1.0 default).
     pub const MODIFIER: usize = 0x80;
-    /// `EQ_Affect::Type` (u8 at +0x90) — buff type flags.
+
+    /// `EQ_Affect::Type` (u8 at +0x90) — buff type (2 = standard buff).
     pub const BUFF_TYPE: usize = 0x90;
+
     /// `EQ_Affect::Level` (u8 at +0x91) — caster level.
     pub const CASTER_LEVEL: usize = 0x91;
 
-    /// Seconds per EQ tick.
+    /// EQ tick duration in seconds.
     pub const SECONDS_PER_TICK: f32 = 6.0;
+
+    // ── Convenience aliases for external buff reads ──
+
+    /// Maximum buff slots to iterate (alias for `MAX_TOTAL_BUFFS`).
+    pub const MAX_BUFF_SLOTS: usize = MAX_TOTAL_BUFFS;
+
+    /// Offset from PcProfile to the buff array data (`BaseProfile::Buffs`).
+    /// This is `profile::BUFFS_ARRAY` — callers must first dereference the
+    /// profile pointer chain to reach the PcProfile base.
+    pub const BUFF_ARRAY_OFFSET: usize = super::profile::BUFFS_ARRAY;
+
+    /// Size of each buff entry (alias for `EQ_AFFECT_SIZE`).
+    pub const BUFF_ENTRY_SIZE: usize = EQ_AFFECT_SIZE;
+
+    /// Remaining duration in ticks (alias for `DURATION`).
+    pub const DURATION_TICKS: usize = DURATION;
 }
 
-/// Pointer chain for navigating to the player's `PcProfile` and buff array.
-/// Chain: `PINST_LOCAL_PC` → `PcClient` + `PROFILE_MANAGER` → `ProfileList*` → `PcProfile*` → `Buffs`.
+/// Pointer chain from `PINST_LOCAL_PC` → profile → buff array.
+/// Source: PcClient.h (`ProfileManager` at 0x2e48, `GetCurrentProfile()`),
+///         PcProfile.h (`BaseProfile::Buffs` at 0x0098, `SoeUtil::Array` layout).
 pub mod profile {
-    /// `PcClient` → `ProfileManager` offset.
+    /// `PcClient::ProfileManager` offset within PcClient.
     pub const PROFILE_MANAGER: usize = 0x2e48;
-    /// `ProfileManager` → `ProfileList*` (first pointer in the manager).
+
+    /// `ProfileManager::pFirst` (ProfileList*) at +0x00.
     pub const PROFILE_LIST_PTR: usize = 0x00;
-    /// `ProfileList` → first `PcProfile*`.
+
+    /// `ProfileList::pFirst` (PcProfile*) at +0x00.
     pub const PROFILE_FIRST: usize = 0x00;
-    /// `BaseProfile` → `Buffs` (`SoeUtil::Array<EQ_Affect>`).
+
+    /// `BaseProfile::Buffs` (`SoeUtil::Array<EQ_Affect>`) at +0x0098.
     pub const BUFFS_ARRAY: usize = 0x0098;
-    /// `SoeUtil::Array` → data pointer (m_array).
+
+    /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
     pub const ARRAY_DATA_PTR: usize = 0x08;
-    /// `SoeUtil::Array` → element count (m_size).
+
+    /// `SoeUtil::Array::m_size` (i32 element count) at +0x10 within the array.
     pub const ARRAY_SIZE: usize = 0x10;
-    /// `PcClient` → `BuffIDs` flat array (int[62] spell IDs, no duration).
+
+    /// `PcClient::BuffIDs` — flat array of `i32[62]` spell IDs for long buffs.
+    /// Faster than the full profile chain when only spell IDs are needed.
     pub const BUFF_IDS: usize = 0x068;
 }
 
@@ -987,23 +1067,25 @@ mod tests {
 
     #[test]
     fn buff_slots_constants_match_eqlib() {
-        assert_eq!(buff_slots::EQ_AFFECT_SIZE, 0x98);
+        assert_eq!(buff_slots::NUM_LONG_BUFFS, 62);
+        assert_eq!(buff_slots::NUM_SHORT_BUFFS, 31);
         assert_eq!(buff_slots::MAX_TOTAL_BUFFS, 93);
-        assert_eq!(buff_slots::NUM_LONG_BUFFS + buff_slots::NUM_SHORT_BUFFS, 93);
-        const _: () = {
-            assert!(buff_slots::SPELL_ID < buff_slots::EQ_AFFECT_SIZE);
-            assert!(buff_slots::DURATION < buff_slots::EQ_AFFECT_SIZE);
-            assert!(buff_slots::CASTER_LEVEL < buff_slots::EQ_AFFECT_SIZE);
-        };
+        assert_eq!(buff_slots::EQ_AFFECT_SIZE, 0x98);
+        assert_eq!(buff_slots::SPELL_ID, 0x6c);
+        assert_eq!(buff_slots::DURATION, 0x70);
+        assert_eq!(buff_slots::INITIAL_DURATION, 0x74);
+        assert_eq!(buff_slots::HIT_COUNT, 0x78);
+        assert_eq!(buff_slots::CASTER_LEVEL, 0x91);
+        assert_eq!(buff_slots::BUFF_TYPE, 0x90);
     }
 
     #[test]
     fn profile_offsets_consistent() {
-        const _: () = {
-            assert!(profile::PROFILE_MANAGER > 0);
-            assert!(profile::BUFFS_ARRAY > 0);
-            assert!(profile::ARRAY_DATA_PTR < profile::ARRAY_SIZE);
-        };
+        const _: () = assert!(profile::PROFILE_MANAGER > 0);
+        assert_eq!(profile::BUFFS_ARRAY, 0x0098);
+        assert_eq!(profile::ARRAY_DATA_PTR, 0x08);
+        assert_eq!(profile::ARRAY_SIZE, 0x10);
+        assert_eq!(profile::BUFF_IDS, 0x068);
     }
 
     #[test]

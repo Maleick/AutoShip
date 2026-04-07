@@ -270,6 +270,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         }
     }
 
@@ -368,6 +369,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = w.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Taunt");
@@ -425,6 +427,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         // Only the Downtime group should produce actions out of combat
         let downtime = &mut groups[0];
@@ -465,6 +468,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let result = crate::combat::rotation::execute_group(emergency, &ctx);
         assert!(
@@ -486,6 +490,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let result = crate::combat::rotation::execute_group(emergency, &ctx);
         assert!(
@@ -512,6 +517,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
 
         // All combat groups should produce nothing during downtime
@@ -548,6 +554,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
 
         // Execute full rotation — should return an action from HateTools (first combat group)

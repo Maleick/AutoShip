@@ -188,6 +188,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         assert!(!pal.should_assist(&ctx));
     }
@@ -292,6 +293,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
@@ -320,6 +322,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
@@ -348,6 +351,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
@@ -376,6 +380,7 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
+            extended_targets: None,
         };
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
