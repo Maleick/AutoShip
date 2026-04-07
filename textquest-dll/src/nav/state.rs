@@ -346,6 +346,7 @@ impl Navigator {
         self.warp.reset();
         self.last_moveto_hp = self.controller.read_hp_current();
         self.moveto_config = Some(config);
+        self.last_hp_current = self.controller.read_hp_current();
         self.state = State::MovingTo;
     }
 
@@ -708,6 +709,14 @@ impl Navigator {
             return;
         }
 
+        if config.break_on_hit
+            && break_on_hit_triggered(&mut self.last_hp_current, self.controller.read_hp_current())
+        {
+            tracing::info!("MoveToAdvanced: break_on_hit triggered");
+            self.stop_moveto();
+            return;
+        }
+
         // Arrival check.
         if dist < ARRIVAL_DISTANCE {
             tracing::info!("MoveToAdvanced: arrived at destination");
@@ -845,6 +854,37 @@ impl Navigator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn break_on_hit_triggers_on_hp_drop() {
+        let mut last_hp_current = Some(100);
+        assert!(break_on_hit_triggered(&mut last_hp_current, Some(90)));
+        assert_eq!(last_hp_current, Some(90));
+    }
+
+    #[test]
+    fn break_on_hit_ignores_stable_or_rising_hp() {
+        let mut last_hp_current = Some(100);
+        assert!(!break_on_hit_triggered(&mut last_hp_current, Some(100)));
+        assert_eq!(last_hp_current, Some(100));
+
+        assert!(!break_on_hit_triggered(&mut last_hp_current, Some(110)));
+        assert_eq!(last_hp_current, Some(110));
+    }
+
+    #[test]
+    fn break_on_hit_ignores_missing_hp_sample() {
+        let mut last_hp_current = Some(100);
+        assert!(!break_on_hit_triggered(&mut last_hp_current, None));
+        assert_eq!(last_hp_current, Some(100));
+    }
+
+    #[test]
+    fn break_on_hit_records_initial_sample_without_triggering() {
+        let mut last_hp_current = None;
+        assert!(!break_on_hit_triggered(&mut last_hp_current, Some(100)));
+        assert_eq!(last_hp_current, Some(100));
+    }
 
     #[test]
     fn pauses_and_resumes_on_warp() {
