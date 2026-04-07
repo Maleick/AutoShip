@@ -26,7 +26,7 @@ env:
 
 jobs:
   pr_gate_untrusted:
-    name: PR gate (fmt + clippy + test + python)
+    name: PR gate (fork PR path)
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
     timeout-minutes: 45
@@ -87,7 +87,7 @@ jobs:
       - run: cargo test
 
   pr_gate_trusted:
-    name: PR gate (fmt + clippy + test + python)
+    name: PR gate (trusted path)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: windows-latest
     timeout-minutes: 45
@@ -160,6 +160,52 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test -- --nocapture
+
+  pr_gate:
+    name: PR gate (fmt + clippy + test + python)
+    if: always()
+    needs: [pr_gate_untrusted, pr_gate_trusted]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate runner-specific gate result
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || '' }}
+          REPOSITORY: ${{ github.repository }}
+          TRUSTED_RESULT: ${{ needs.pr_gate_trusted.result }}
+          UNTRUSTED_RESULT: ${{ needs.pr_gate_untrusted.result }}
+        run: |
+          set -euo pipefail
+
+          expected="trusted"
+          result="$TRUSTED_RESULT"
+          other_label="untrusted"
+          other_result="$UNTRUSTED_RESULT"
+
+          if [[ "$EVENT_NAME" == "pull_request" && "$HEAD_REPO" != "$REPOSITORY" ]]; then
+            expected="untrusted"
+            result="$UNTRUSTED_RESULT"
+            other_label="trusted"
+            other_result="$TRUSTED_RESULT"
+          fi
+
+          echo "Expected gate path: $expected"
+          echo "Trusted result: $TRUSTED_RESULT"
+          echo "Untrusted result: $UNTRUSTED_RESULT"
+
+          if [[ "$result" != "success" ]]; then
+            echo "::error::Expected the $expected PR gate path to succeed, got '$result'."
+            exit 1
+          fi
+
+          case "$other_result" in
+            skipped|success)
+              ;;
+            *)
+              echo "::error::Unexpected $other_label PR gate result '$other_result'."
+              exit 1
+              ;;
+          esac
 
   secrets_scan:
     name: Secret scan (TruffleHog)
