@@ -1,7 +1,7 @@
-//! HTTP-based LLM provider — calls Anthropic, OpenAI, or ollama APIs.
+//! HTTP-based LLM provider — calls local ollama-compatible APIs.
 //!
-//! Each operator provides their own API key in config. When no key is set
-//! (or provider = "none"), the caller should fall back to `TraitDrivenResponder`.
+//! When no local provider is configured (or provider = "none"), the caller
+//! should fall back to `TraitDrivenResponder`.
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -74,97 +74,6 @@ impl ApiLlmClient {
         }
     }
 
-    fn call_anthropic(&self, system: &str, user_msg: &str) -> Result<(String, u32)> {
-        let base = if self.config.base_url.is_empty() {
-            "https://api.anthropic.com"
-        } else {
-            &self.config.base_url
-        };
-
-        let body = serde_json::json!({
-            "model": self.config.model,
-            "max_tokens": self.config.max_tokens,
-            "temperature": self.config.temperature,
-            "system": system,
-            "messages": [{"role": "user", "content": user_msg}]
-        });
-
-        let resp = self
-            .http
-            .post(format!("{base}/v1/messages"))
-            .header("x-api-key", &self.config.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .context("Anthropic API request failed")?;
-
-        let status = resp.status();
-        let text = resp.text().context("Failed to read Anthropic response")?;
-        if !status.is_success() {
-            bail!("Anthropic API error {status}: {text}");
-        }
-
-        let parsed: AnthropicResponse =
-            serde_json::from_str(&text).context("Failed to parse Anthropic response")?;
-
-        let content = parsed
-            .content
-            .into_iter()
-            .filter(|b| b.content_type == "text")
-            .map(|b| b.text)
-            .collect::<Vec<_>>()
-            .join("");
-
-        let tokens = parsed.usage.output_tokens;
-        Ok((content, tokens))
-    }
-
-    fn call_openai(&self, system: &str, user_msg: &str) -> Result<(String, u32)> {
-        let base = if self.config.base_url.is_empty() {
-            "https://api.openai.com"
-        } else {
-            &self.config.base_url
-        };
-
-        let body = serde_json::json!({
-            "model": self.config.model,
-            "max_tokens": self.config.max_tokens,
-            "temperature": self.config.temperature,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg}
-            ]
-        });
-
-        let resp = self
-            .http
-            .post(format!("{base}/v1/chat/completions"))
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .context("OpenAI API request failed")?;
-
-        let status = resp.status();
-        let text = resp.text().context("Failed to read OpenAI response")?;
-        if !status.is_success() {
-            bail!("OpenAI API error {status}: {text}");
-        }
-
-        let parsed: OpenAiResponse =
-            serde_json::from_str(&text).context("Failed to parse OpenAI response")?;
-
-        let content = parsed
-            .choices
-            .first()
-            .map(|c| c.message.content.clone())
-            .unwrap_or_default();
-
-        let tokens = parsed.usage.map(|u| u.completion_tokens).unwrap_or(0);
-        Ok((content, tokens))
-    }
-
     fn call_ollama(&self, system: &str, user_msg: &str) -> Result<(String, u32)> {
         let base = if self.config.base_url.is_empty() {
             "http://localhost:11434"
@@ -213,8 +122,6 @@ impl LlmProvider for ApiLlmClient {
         let user_msg = Self::situation_to_prompt(request);
 
         let (text, tokens_used) = match self.config.provider {
-            LlmProviderKind::Anthropic => self.call_anthropic(&system, &user_msg)?,
-            LlmProviderKind::Openai => self.call_openai(&system, &user_msg)?,
             LlmProviderKind::Ollama => self.call_ollama(&system, &user_msg)?,
             LlmProviderKind::None => {
                 bail!("No LLM provider configured");
@@ -230,8 +137,6 @@ impl LlmProvider for ApiLlmClient {
 
     fn name(&self) -> &str {
         match self.config.provider {
-            LlmProviderKind::Anthropic => "anthropic",
-            LlmProviderKind::Openai => "openai",
             LlmProviderKind::Ollama => "ollama",
             LlmProviderKind::None => "none",
         }
@@ -239,7 +144,6 @@ impl LlmProvider for ApiLlmClient {
 
     fn is_available(&self) -> bool {
         match self.config.provider {
-            LlmProviderKind::Anthropic | LlmProviderKind::Openai => !self.config.api_key.is_empty(),
             LlmProviderKind::Ollama => true,
             LlmProviderKind::None => false,
         }
@@ -247,46 +151,6 @@ impl LlmProvider for ApiLlmClient {
 }
 
 // ─── API Response Types ───
-
-#[derive(Debug, Deserialize)]
-struct AnthropicResponse {
-    content: Vec<AnthropicContentBlock>,
-    usage: AnthropicUsage,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicContentBlock {
-    #[serde(rename = "type")]
-    content_type: String,
-    #[serde(default)]
-    text: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicUsage {
-    output_tokens: u32,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiResponse {
-    choices: Vec<OpenAiChoice>,
-    usage: Option<OpenAiUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiChoice {
-    message: OpenAiMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiMessage {
-    content: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiUsage {
-    completion_tokens: u32,
-}
 
 #[derive(Debug, Deserialize)]
 struct OllamaResponse {
@@ -334,8 +198,8 @@ mod tests {
 
     #[test]
     fn api_client_construction() {
-        let client = ApiLlmClient::new(test_config(LlmProviderKind::Anthropic), test_personality());
-        assert_eq!(client.name(), "anthropic");
+        let client = ApiLlmClient::new(test_config(LlmProviderKind::Ollama), test_personality());
+        assert_eq!(client.name(), "ollama");
         assert!(client.is_available());
     }
 
@@ -344,17 +208,6 @@ mod tests {
         let client = ApiLlmClient::new(test_config(LlmProviderKind::None), test_personality());
         assert!(!client.is_available());
         assert_eq!(client.name(), "none");
-    }
-
-    #[test]
-    fn empty_api_key_not_available() {
-        let config = LlmConfig {
-            provider: LlmProviderKind::Anthropic,
-            api_key: String::new(),
-            ..LlmConfig::default()
-        };
-        let client = ApiLlmClient::new(config, test_personality());
-        assert!(!client.is_available());
     }
 
     #[test]
@@ -370,7 +223,7 @@ mod tests {
 
     #[test]
     fn system_prompt_uses_preset() {
-        let client = ApiLlmClient::new(test_config(LlmProviderKind::Anthropic), test_personality());
+        let client = ApiLlmClient::new(test_config(LlmProviderKind::Ollama), test_personality());
         let prompt = client.system_prompt();
         assert!(prompt.contains("Fippy Darkpaw"));
         assert!(prompt.contains("gnoll"));
@@ -383,7 +236,7 @@ mod tests {
             system_prompt: "Also mention loot drops.".into(),
             ..BotPersonalityConfig::default()
         };
-        let client = ApiLlmClient::new(test_config(LlmProviderKind::Anthropic), personality);
+        let client = ApiLlmClient::new(test_config(LlmProviderKind::Ollama), personality);
         let prompt = client.system_prompt();
         assert!(prompt.contains("Fippy Darkpaw"));
         assert!(prompt.contains("Also mention loot drops."));
@@ -456,8 +309,6 @@ mod tests {
     #[test]
     fn provider_names() {
         for (kind, expected) in [
-            (LlmProviderKind::Anthropic, "anthropic"),
-            (LlmProviderKind::Openai, "openai"),
             (LlmProviderKind::Ollama, "ollama"),
             (LlmProviderKind::None, "none"),
         ] {
