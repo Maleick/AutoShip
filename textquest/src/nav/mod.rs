@@ -36,8 +36,9 @@ fn navmesh_zone_for_pid(pid: u32) -> Result<String> {
         )
     })?;
     let session_id = textquest_common::ipc::session_id_from_token(&token);
-    let mut reader = ipc::shared::SharedStateReader::new(pid, session_id)
-        .with_context(|| format!("Cannot open shared memory for PID {pid} — is the DLL injected?"))?;
+    let mut reader = ipc::shared::SharedStateReader::new(pid, session_id).with_context(|| {
+        format!("Cannot open shared memory for PID {pid} — is the DLL injected?")
+    })?;
     let state = read_shared_state_with_retry(&mut reader, NAV_RELOAD_SHARED_STATE_TIMEOUT)
         .ok_or_else(|| anyhow::anyhow!("No shared memory data available for PID {pid}"))?;
     if state.zone_short_name.is_empty() {
