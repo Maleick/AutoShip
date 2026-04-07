@@ -193,8 +193,8 @@ pub fn run_inject_mode() -> Result<()> {
     // Stage the DLL (copies with randomized name).
     // TODO: Switch to reflective loader once d3d11.dll cross-process import
     // resolution is fixed (addresses differ per-process due to ASLR).
-    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
-    println!("Staged DLL: {}", staged_dll.display());
+    let staged_dll = inject::dll_prep::prepare_dll_locked(&source_dll)?;
+    println!("Staged DLL: {}", staged_dll.path().display());
 
     let mut success = 0u32;
     let mut failed = 0u32;
@@ -208,7 +208,7 @@ pub fn run_inject_mode() -> Result<()> {
             failed += 1;
             continue;
         }
-        match inject::loader::inject_dll(pid, &staged_dll) {
+        match inject::loader::inject_dll(pid, staged_dll.path()) {
             Ok(()) => {
                 println!("OK");
                 info!(pid, "Injection succeeded");
@@ -668,10 +668,10 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     ipc::write_session_token_file(pid)?;
 
     // TODO: Switch to reflective loader once cross-process import resolution is fixed.
-    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
+    let staged_dll = inject::dll_prep::prepare_dll_locked(&source_dll)?;
     println!("Injecting into PID {pid}...");
 
-    inject::loader::inject_dll(pid, &staged_dll)?;
+    inject::loader::inject_dll(pid, staged_dll.path())?;
     println!("OK — DLL injected into PID {pid}");
     Ok(())
 }
@@ -914,8 +914,6 @@ pub fn run_autologin_mode(
 
     // 5. Inject + Login for each process
     let source_dll = resolve_built_dll_path()?;
-    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
-
     let mut success_count = 0u32;
     let mut fail_count = 0u32;
 
@@ -957,7 +955,15 @@ pub fn run_autologin_mode(
             }
 
             println!("  Injecting DLL...");
-            match inject::loader::inject_dll(*pid, &staged_dll) {
+            let staged_dll = match inject::dll_prep::prepare_dll_locked(&source_dll) {
+                Ok(staged) => staged,
+                Err(e) => {
+                    println!("  FAILED: staging DLL: {e}");
+                    fail_count += 1;
+                    continue;
+                }
+            };
+            match inject::loader::inject_dll(*pid, staged_dll.path()) {
                 Ok(()) => println!("  DLL injected successfully"),
                 Err(e) => {
                     println!("  FAILED: injection: {e}");

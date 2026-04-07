@@ -6,6 +6,22 @@ use anyhow::{Context, Result, anyhow};
 
 const MAX_PREP_ATTEMPTS: u32 = 24;
 const DLL_EXTENSION: &str = "dll";
+#[cfg(windows)]
+const FILE_SHARE_READ: u32 = 0x0000_0001;
+
+/// A prepared on-disk DLL plus a live file-handle guard that prevents
+/// replacement while injection is in-flight.
+pub struct StagedDll {
+    path: PathBuf,
+    _guard: std::fs::File,
+}
+
+impl StagedDll {
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
 
 /// Legitimate Microsoft DLL names used for stealth staging.
 ///
@@ -203,6 +219,45 @@ pub fn prepare_dll(source_dll: &Path) -> Result<PathBuf> {
     ))
 }
 
+/// Prepare a DLL and keep a restrictive file handle open so other local
+/// processes cannot swap or rewrite the staged payload before `LoadLibraryW`.
+pub fn prepare_dll_locked(source_dll: &Path) -> Result<StagedDll> {
+    validate_source_dll(source_dll)?;
+
+    let target_dir = prepare_payload_dir()?;
+    std::fs::create_dir_all(&target_dir)?;
+
+    for _ in 0..MAX_PREP_ATTEMPTS {
+        let random_name = generate_random_dll_name();
+        let target_path = target_dir.join(&random_name);
+
+        match stage_dll_copy_locked(source_dll, &target_path) {
+            Ok(guard) => {
+                tracing::info!(name = %random_name, "Prepared locked DLL payload");
+                return Ok(StagedDll {
+                    path: target_path,
+                    _guard: guard,
+                });
+            }
+            Err(err) => {
+                let should_retry = err
+                    .root_cause()
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::AlreadyExists);
+
+                if should_retry {
+                    continue;
+                }
+                return Err(err);
+            }
+        }
+    }
+
+    Err(anyhow!(
+        "Failed to prepare DLL after {MAX_PREP_ATTEMPTS} randomized path attempts"
+    ))
+}
+
 /// Clean up a previously prepared DLL.
 pub fn cleanup_dll(path: &Path) {
     if path.exists() {
@@ -249,15 +304,44 @@ fn prepare_payload_dir() -> Result<PathBuf> {
 fn stage_dll_copy(source: &Path, target: &Path) -> Result<()> {
     let mut source_file = std::fs::File::open(source)
         .with_context(|| format!("Failed to open source DLL {}", source.display()))?;
-    let mut target_file = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(target)
-        .with_context(|| format!("Failed to open staging path {}", target.display()))?;
+    let mut target_file = stage_target_file(target)?;
     std::io::copy(&mut source_file, &mut target_file)
         .with_context(|| format!("Failed to copy DLL to {}", target.display()))?;
     target_file.flush().ok();
     Ok(())
+}
+
+fn stage_dll_copy_locked(source: &Path, target: &Path) -> Result<std::fs::File> {
+    let mut source_file = std::fs::File::open(source)
+        .with_context(|| format!("Failed to open source DLL {}", source.display()))?;
+    let mut target_file = stage_target_file(target)?;
+    std::io::copy(&mut source_file, &mut target_file)
+        .with_context(|| format!("Failed to copy DLL to {}", target.display()))?;
+    target_file.flush().ok();
+    Ok(target_file)
+}
+
+fn stage_target_file(target: &Path) -> Result<std::fs::File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(target)
+            .with_context(|| format!("Failed to open staging path {}", target.display()))
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .read(true)
+            .open(target)
+            .with_context(|| format!("Failed to open staging path {}", target.display()))
+    }
 }
 
 /// Generate a random hex DLL name with no guessable pattern.
