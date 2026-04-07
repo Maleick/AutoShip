@@ -128,6 +128,8 @@ fn run_loop(
     let mut process_handles: HashMap<u32, crate::process::memory::ProcessHandle> = HashMap::new();
     #[cfg(windows)]
     let mut shared_state_readers: HashMap<u32, SharedStateReader> = HashMap::new();
+    #[cfg(windows)]
+    let mut shared_state_reader_retry_at: HashMap<u32, Instant> = HashMap::new();
 
     while app.running {
         // Draw the UI
@@ -149,6 +151,8 @@ fn run_loop(
             process_handles.retain(|pid, _| active_live_pids.contains(pid));
             #[cfg(windows)]
             shared_state_readers.retain(|pid, _| active_live_pids.contains(pid));
+            #[cfg(windows)]
+            shared_state_reader_retry_at.retain(|pid, _| active_live_pids.contains(pid));
 
             // Sync orchestrator's client list from app
             orchestrator.client_pids = app.clients.iter().map(|c| c.pid).collect();
@@ -163,7 +167,12 @@ fn run_loop(
         // Periodic data refresh from EQ process
         if last_refresh.elapsed() >= refresh_interval {
             #[cfg(windows)]
-            refresh_eq_data(app, &mut process_handles, &mut shared_state_readers);
+            refresh_eq_data(
+                app,
+                &mut process_handles,
+                &mut shared_state_readers,
+                &mut shared_state_reader_retry_at,
+            );
             #[cfg(not(windows))]
             refresh_eq_data(app, &mut process_handles);
             app.tick_count += 1;
@@ -635,10 +644,16 @@ fn refresh_eq_data(
     app: &mut App,
     _process_handles: &mut HashMap<u32, crate::process::memory::ProcessHandle>,
     #[cfg(windows)] _shared_state_readers: &mut HashMap<u32, SharedStateReader>,
+    #[cfg(windows)] _shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
 ) {
     #[cfg(windows)]
     {
-        refresh_eq_data_live(app, _process_handles, _shared_state_readers);
+        refresh_eq_data_live(
+            app,
+            _process_handles,
+            _shared_state_readers,
+            _shared_state_reader_retry_at,
+        );
         // If no EQ processes found, load demo data so TUI is testable on Windows too
         if app.clients.is_empty() {
             load_demo_data(app);
@@ -675,13 +690,14 @@ fn refresh_eq_data_live(
     app: &mut App,
     process_handles: &mut HashMap<u32, crate::process::memory::ProcessHandle>,
     shared_state_readers: &mut HashMap<u32, SharedStateReader>,
+    shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
 ) {
     use crate::eq;
     use crate::process::memory::ProcessHandle;
 
     let selected_index = app.selected_client;
     let now = Instant::now();
-    let mut live_nav_updates = Vec::new();
+    let mut nav_status_updates = Vec::new();
 
     for (client_index, client) in app.clients.iter_mut().enumerate() {
         if client.is_demo {
@@ -818,12 +834,16 @@ fn refresh_eq_data_live(
             }
         }
 
-        if let Some((zone_name, nav_status)) = read_live_nav_state(client.pid, shared_state_readers)
-        {
+        if let Some((zone_name, nav_status)) = read_live_nav_state(
+            client.pid,
+            shared_state_readers,
+            shared_state_reader_retry_at,
+            now,
+        ) {
             if !zone_name.is_empty() {
                 client.zone_name = zone_name;
             }
-            live_nav_updates.push((
+            nav_status_updates.push((
                 client.pid,
                 build_live_nav_client_status(&nav_status, &client.zone_name),
             ));
@@ -834,7 +854,7 @@ fn refresh_eq_data_live(
         }
     }
 
-    for (pid, status) in live_nav_updates {
+    for (pid, status) in nav_status_updates {
         app.nav_state.nav_statuses.insert(pid, status);
     }
 
@@ -849,16 +869,30 @@ fn refresh_eq_data_live(
 fn read_live_nav_state(
     pid: u32,
     shared_state_readers: &mut HashMap<u32, SharedStateReader>,
+    shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
+    now: Instant,
 ) -> Option<(String, NavStatus)> {
+    if shared_state_reader_retry_at
+        .get(&pid)
+        .is_some_and(|retry_at| *retry_at > now)
+    {
+        return None;
+    }
+
     if let std::collections::hash_map::Entry::Vacant(entry) = shared_state_readers.entry(pid) {
-        let token = crate::ipc::load_session_token(pid)?;
+        let Some(token) = crate::ipc::load_session_token(pid) else {
+            shared_state_reader_retry_at.insert(pid, now + Duration::from_secs(2));
+            return None;
+        };
         let session_id = textquest_common::ipc::session_id_from_token(&token);
         match SharedStateReader::new(pid, session_id) {
             Ok(reader) => {
                 entry.insert(reader);
+                shared_state_reader_retry_at.remove(&pid);
             }
             Err(error) => {
                 tracing::trace!(pid, %error, "Failed to open TUI shared state reader");
+                shared_state_reader_retry_at.insert(pid, now + Duration::from_secs(2));
                 return None;
             }
         }
@@ -867,13 +901,17 @@ fn read_live_nav_state(
     let reader = shared_state_readers.get_mut(&pid)?;
     let state = reader.read()?;
     Some((
-        if state.zone_long_name.is_empty() {
-            state.zone_short_name
-        } else {
-            state.zone_long_name
-        },
+        resolve_live_zone_name(state.zone_long_name, state.zone_short_name),
         state.nav_status,
     ))
+}
+
+fn resolve_live_zone_name(zone_long_name: String, zone_short_name: String) -> String {
+    if zone_long_name.is_empty() {
+        zone_short_name
+    } else {
+        zone_long_name
+    }
 }
 
 fn build_live_nav_client_status(status: &NavStatus, zone_name: &str) -> NavClientStatus {
