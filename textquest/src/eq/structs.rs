@@ -526,6 +526,31 @@ impl SpawnInfo {
             id => format!("R{id}"),
         }
     }
+
+    /// Total learned spell count for the local player snapshot.
+    #[must_use]
+    pub fn learned_spell_count(&self) -> usize {
+        self.spellbook.len()
+    }
+
+    /// Chunk the active spellset into compact UI lines.
+    #[must_use]
+    pub fn current_spellset_lines(&self, chunk_size: usize) -> Vec<String> {
+        if chunk_size == 0 {
+            return Vec::new();
+        }
+
+        self.current_spellset
+            .chunks(chunk_size)
+            .map(|chunk| {
+                chunk
+                    .iter()
+                    .map(|spell| format!("G{} {}", spell.gem, spell.display_name()))
+                    .collect::<Vec<_>>()
+                    .join("  ")
+            })
+            .collect()
+    }
 }
 
 impl fmt::Display for SpawnInfo {
@@ -656,6 +681,41 @@ mod tests {
             caster_level: 60,
         };
         assert_eq!(b.duration_str(), "18s");
+    }
+
+    #[test]
+    fn spell_book_entry_empty_detection() {
+        assert!(
+            SpellBookEntry {
+                slot: 0,
+                spell_id: -1,
+            }
+            .is_empty()
+        );
+        assert!(
+            !SpellBookEntry {
+                slot: 1,
+                spell_id: 123,
+            }
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn memorized_spell_display_name_prefers_resolved_name() {
+        let named = MemorizedSpell {
+            gem: 1,
+            spell_id: 123,
+            spell_name: Some("Complete Heal".to_string()),
+        };
+        let unnamed = MemorizedSpell {
+            gem: 2,
+            spell_id: 456,
+            spell_name: None,
+        };
+
+        assert_eq!(named.display_name(), "Complete Heal");
+        assert_eq!(unnamed.display_name(), "Spell 456");
     }
 
     #[test]
@@ -824,6 +884,47 @@ mod tests {
         let mut s = make_spawn_info(1);
         s.hp_max = 0;
         assert!((s.hp_pct() - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn spawn_info_current_spellset_lines_chunk_and_label_spells() {
+        let mut s = make_spawn_info(1);
+        s.spellbook = vec![
+            SpellBookEntry {
+                slot: 0,
+                spell_id: 123,
+            },
+            SpellBookEntry {
+                slot: 1,
+                spell_id: 456,
+            },
+        ];
+        s.current_spellset = vec![
+            MemorizedSpell {
+                gem: 1,
+                spell_id: 123,
+                spell_name: Some("Complete Heal".to_string()),
+            },
+            MemorizedSpell {
+                gem: 2,
+                spell_id: 456,
+                spell_name: None,
+            },
+            MemorizedSpell {
+                gem: 3,
+                spell_id: 789,
+                spell_name: Some("Celestial Remedy".to_string()),
+            },
+        ];
+
+        assert_eq!(s.learned_spell_count(), 2);
+        assert_eq!(
+            s.current_spellset_lines(2),
+            vec![
+                String::from("G1 Complete Heal  G2 Spell 456"),
+                String::from("G3 Celestial Remedy"),
+            ]
+        );
     }
 
     #[test]
