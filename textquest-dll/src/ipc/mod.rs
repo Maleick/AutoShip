@@ -29,6 +29,11 @@ static PENDING_COMMANDS: OnceLock<Mutex<Vec<Command>>> = OnceLock::new();
 /// Flag checked by the listener thread to know when to exit.
 static IPC_RUNNING: AtomicBool = AtomicBool::new(false);
 
+/// True when the IPC listener thread is active.
+pub fn is_running() -> bool {
+    IPC_RUNNING.load(Ordering::SeqCst)
+}
+
 /// Start IPC: shared memory writer + command listener thread.
 ///
 /// `client_id` identifies this EQ client instance. `token` is the session token

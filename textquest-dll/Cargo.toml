@@ -40,3 +40,10 @@ windows = { version = "0.54", features = [
     "Win32_Graphics_Direct3D11",
 ] }
 retour = { version = "0.3", features = ["static-detour"] }
+
+[features]
+# Opt-in gate for Windows runtime tests that require being injected into a real
+# process, call Windows thread pool / memory APIs, or exhibit process-teardown
+# side-effects that crash the default test harness.
+# DO NOT enable in CI; run manually: cargo test -p textquest-dll --features windows-dangerous-tests
+windows-dangerous-tests = []

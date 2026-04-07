@@ -54,11 +54,12 @@ pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> 
         return None;
     }
 
-    let auto_add_haters = unsafe {
+    let auto_add_haters_raw = unsafe {
         std::ptr::read(
-            (xtarget_list_ptr + offsets::XTARGET_LIST_AUTO_ADD_HATERS as usize) as *const bool,
+            (xtarget_list_ptr + offsets::XTARGET_LIST_AUTO_ADD_HATERS as usize) as *const u8,
         )
     };
+    let auto_add_haters = auto_add_haters_raw != 0;
 
     let mut slots = Vec::with_capacity(slot_count as usize);
     for i in 0..slot_count {
