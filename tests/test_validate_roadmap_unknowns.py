@@ -157,6 +157,21 @@ class RoadmapValidatorTests(unittest.TestCase):
         )
         self.assertEqual(report.missing_requested_domains, [])
 
+    def test_m9_section_defines_metrics_and_guardrails(self) -> None:
+        roadmap = (REPO_ROOT / "docs" / "implementation-roadmap.md").read_text(
+            encoding="utf-8"
+        )
+        m9_section = roadmap.split("### `M9` Learning/RL", maxsplit=1)[1].split(
+            "### `M10` Economy", maxsplit=1
+        )[0]
+
+        self.assertIn("behavior optimization targets", m9_section)
+        self.assertIn("measurable tuning loops", m9_section)
+        self.assertIn("guardrails that prevent regressions from training-driven changes", m9_section)
+        self.assertIn("named baseline, success metric, regression budget, and rollback path", m9_section)
+        self.assertIn("replay, shadow, or canary mode", m9_section)
+        self.assertIn("authenticated control boundary", m9_section)
+
 
 if __name__ == "__main__":
     unittest.main()

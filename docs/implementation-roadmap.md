@@ -236,11 +236,35 @@ Objective:
 
 - add tuning and optimization loops after core control and orchestration surfaces exist
 
+Scope constraints:
+
+- optimize operator-visible outcomes such as encounter throughput, recovery rate, command completion latency, and resource efficiency
+- do not treat training-driven work as permission to widen packet usage, anti-cheat exposure, zoning shortcuts, or autonomous runtime authority
+- require every candidate optimization to name the metric it moves, the allowed regression budget, and the rollback path before live rollout
+
 Initial slices:
 
 - behavior optimization targets
 - measurable tuning loops
 - guardrails that prevent regressions from training-driven changes
+
+Current curated intake:
+
+- `textquest/src/metrics/store.rs`
+- `docs/wiki/Roadmap-and-Known-Gaps.md`
+
+Entry gate:
+
+- M8 orchestration exposes stable operator-visible control surfaces and routing scopes
+- fleet metrics capture is good enough to produce a baseline scorecard before candidate tuning changes ship
+- packet, zoning, and anti-cheat gates remain explicit so optimization work cannot widen runtime risk by default
+
+Exit gate:
+
+- every optimization target has a named baseline, success metric, regression budget, and rollback path
+- tuning loops can evaluate candidates in replay, shadow, or canary mode before broader live rollout
+- training-driven changes stay operator-opt-in and preserve the existing authenticated control boundary
+- any promoted policy or model change carries explicit live-validation tasks for the surfaces it can affect
 
 ### `M10` Economy
 

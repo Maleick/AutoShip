@@ -450,9 +450,9 @@ Canonical active roadmap order:
 - [x] **M6** (complete) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme shipped; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
-- [ ] **M9** — Learning/RL
-- [ ] **M10** — Soul Engine + LLM
-- [ ] **M11** — Economy
+- [ ] **M9** — Learning/RL — metrics-backed tuning loops with explicit regression budgets, canary/shadow rollout, and rollback paths
+- [ ] **M10** — Economy
+- [ ] **M11** — Soul Engine + LLM
 
 Execution rules:
 
