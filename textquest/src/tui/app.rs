@@ -33,7 +33,9 @@ pub use super::state::{
 use super::state::{
     FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind, MapHighlight,
     MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache, MapVisibilityPreset,
+    NamedMapMarker,
 };
+use super::state::{load_named_markers_pub, save_named_markers};
 
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3722,6 +3724,7 @@ impl App {
             "mapfilter" => self.handle_mapfilter_command(&parts),
             "mapclick" => self.handle_mapclick_command(&parts),
             "maploc" => self.handle_maploc_command(&parts),
+            "mapmarker" => self.handle_mapmarker_command(&parts),
             "mapshow" => self.handle_mapshow_command(&parts),
             "maphide" => self.handle_maphide_command(&parts),
             "mapnames" => self.handle_mapnames_command(&parts),
@@ -5584,6 +5587,241 @@ impl App {
             }
             _ => {
                 self.usage_feedback("maploc", "Usage: maploc [recall|clear]");
+            }
+        }
+    }
+
+    fn handle_mapmarker_command(&mut self, parts: &[&str]) {
+        match parts.get(1).map(|s| s.to_ascii_lowercase()).as_deref() {
+            // :mapmarker set <name> [x y [z]]
+            Some("set") => {
+                let Some(name) = parts.get(2) else {
+                    self.usage_feedback(
+                        "mapmarker",
+                        "Usage: mapmarker set <name> [x y [z]]",
+                    );
+                    return;
+                };
+                let name = (*name).to_string();
+
+                // Explicit coordinates supplied?
+                let (x, y, z, zone) = if let (Some(xs), Some(ys)) =
+                    (parts.get(3), parts.get(4))
+                {
+                    let Ok(xv) = xs.parse::<f32>() else {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            format!("Invalid x coordinate: {xs}"),
+                            false,
+                        );
+                        return;
+                    };
+                    let Ok(yv) = ys.parse::<f32>() else {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            format!("Invalid y coordinate: {ys}"),
+                            false,
+                        );
+                        return;
+                    };
+                    let zv = parts
+                        .get(5)
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
+                    let zone = self
+                        .active_client()
+                        .and_then(|c| c.local_player.as_ref())
+                        .and(self.current_zone_short_name())
+                        .unwrap_or_default();
+                    (xv, yv, zv, zone)
+                } else {
+                    // Use player position.
+                    let Some(player) = self
+                        .active_client()
+                        .and_then(|c| c.local_player.as_ref())
+                    else {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            String::from("No player position available"),
+                            false,
+                        );
+                        return;
+                    };
+                    let (px, py, pz) = (player.x, player.y, player.z);
+                    let zone = self.current_zone_short_name().unwrap_or_default();
+                    (px, py, pz, zone)
+                };
+
+                let key = name.to_ascii_lowercase();
+                // Remove existing marker with the same name (case-insensitive).
+                self.map_state
+                    .named_markers
+                    .retain(|m| m.name.to_ascii_lowercase() != key);
+                let marker = NamedMapMarker {
+                    name: name.clone(),
+                    x,
+                    y,
+                    z,
+                    label: None,
+                    zone,
+                };
+                self.map_state.named_markers.push(marker);
+
+                let msg = format!("Marker \"{name}\" set at ({x:.0}, {y:.0})");
+                if let Err(e) = save_named_markers(
+                    &self.map_state.marker_file.clone(),
+                    &self.map_state.named_markers.clone(),
+                ) {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("{msg} (save failed: {e})"),
+                        false,
+                    );
+                } else {
+                    self.set_feedback(ToastLevel::Success, msg, true);
+                }
+            }
+
+            // :mapmarker recall <name> — show marker info
+            Some("recall" | "show") => {
+                let Some(name) = parts.get(2) else {
+                    self.usage_feedback("mapmarker", "Usage: mapmarker recall <name>");
+                    return;
+                };
+                let key = name.to_ascii_lowercase();
+                if let Some(m) = self
+                    .map_state
+                    .named_markers
+                    .iter()
+                    .find(|m| m.name.to_ascii_lowercase() == key)
+                {
+                    let zone_tag = if m.zone.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" [{}]", m.zone)
+                    };
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!(
+                            "Marker \"{}\": ({:.0}, {:.0}, {:.0}){}",
+                            m.name, m.x, m.y, m.z, zone_tag
+                        ),
+                        false,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("No marker named \"{name}\""),
+                        false,
+                    );
+                }
+            }
+
+            // :mapmarker clear <name> | all
+            Some("clear" | "delete" | "remove") => {
+                let Some(name) = parts.get(2) else {
+                    self.usage_feedback("mapmarker", "Usage: mapmarker clear <name|all>");
+                    return;
+                };
+                let msg = if name.to_ascii_lowercase() == "all" {
+                    self.map_state.named_markers.clear();
+                    String::from("All markers cleared")
+                } else {
+                    let key = name.to_ascii_lowercase();
+                    let before = self.map_state.named_markers.len();
+                    self.map_state
+                        .named_markers
+                        .retain(|m| m.name.to_ascii_lowercase() != key);
+                    if self.map_state.named_markers.len() < before {
+                        format!("Marker \"{name}\" cleared")
+                    } else {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            format!("No marker named \"{name}\""),
+                            false,
+                        );
+                        return;
+                    }
+                };
+                if let Err(e) = save_named_markers(
+                    &self.map_state.marker_file.clone(),
+                    &self.map_state.named_markers.clone(),
+                ) {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("{msg} (save failed: {e})"),
+                        false,
+                    );
+                } else {
+                    self.set_feedback(ToastLevel::Success, msg, true);
+                }
+            }
+
+            // :mapmarker list
+            Some("list" | "ls") => {
+                if self.map_state.named_markers.is_empty() {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("No named markers set"),
+                        false,
+                    );
+                } else {
+                    let lines: Vec<String> = self
+                        .map_state
+                        .named_markers
+                        .iter()
+                        .map(|m| {
+                            let zone_tag = if m.zone.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" [{}]", m.zone)
+                            };
+                            format!("  {} ({:.0}, {:.0}){}", m.name, m.x, m.y, zone_tag)
+                        })
+                        .collect();
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Markers:\n{}", lines.join("\n")),
+                        false,
+                    );
+                }
+            }
+
+            // :mapmarker save — explicit disk flush
+            Some("save") => {
+                let path = self.map_state.marker_file.clone();
+                let markers = self.map_state.named_markers.clone();
+                match save_named_markers(&path, &markers) {
+                    Ok(()) => self.set_feedback(
+                        ToastLevel::Success,
+                        String::from("Markers saved"),
+                        true,
+                    ),
+                    Err(e) => self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("Save failed: {e}"),
+                        false,
+                    ),
+                }
+            }
+
+            // :mapmarker load — reload from disk
+            Some("load" | "reload") => {
+                let path = self.map_state.marker_file.clone();
+                self.map_state.named_markers = load_named_markers_pub(&path);
+                let n = self.map_state.named_markers.len();
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Loaded {n} marker(s) from disk"),
+                    true,
+                );
+            }
+
+            _ => {
+                self.usage_feedback(
+                    "mapmarker",
+                    "Usage: mapmarker <set|recall|clear|list|save|load> [name] [x y [z]]",
+                );
             }
         }
     }
