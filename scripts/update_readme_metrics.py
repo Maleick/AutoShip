@@ -13,6 +13,7 @@ from urllib.parse import quote
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 README_PATH = REPO_ROOT / "README.md"
 RUNNING_TESTS_RE = re.compile(r"^running (\d+) tests?$", re.MULTILINE)
+TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(tokio::)?test(\]|#\[[^\]]*\]\()")
 
 
 def tracked_rust_files() -> list[pathlib.Path]:
@@ -34,6 +35,16 @@ def rust_loc() -> int:
     return total
 
 
+def test_count_from_source() -> int:
+    count = 0
+    for path in tracked_rust_files():
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if TEST_ANNOTATION_RE.search(line):
+                    count += 1
+    return count
+
+
 def test_count() -> int:
     result = subprocess.run(
         ["cargo", "test", "--workspace"],
@@ -44,7 +55,10 @@ def test_count() -> int:
         env={**os.environ, "CARGO_TERM_COLOR": "never"},
     )
     output = f"{result.stdout}\n{result.stderr}"
-    return sum(int(match.group(1)) for match in RUNNING_TESTS_RE.finditer(output))
+    running = sum(int(match.group(1)) for match in RUNNING_TESTS_RE.finditer(output))
+    if result.returncode == 0 and running > 0:
+        return running
+    return test_count_from_source()
 
 
 def badge(label: str, value: str, color: str) -> str:
