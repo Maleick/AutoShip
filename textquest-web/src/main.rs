@@ -9,7 +9,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
-use axum::routing::get;
+use axum::routing::{get, put};
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -42,6 +42,11 @@ async fn main() {
     let app = Router::new()
         .route("/api/health", get(api::health))
         .route("/api/sessions", get(api::list_sessions))
+        // Economy endpoints
+        .route("/api/economy/settings", get(api::get_economy_settings).put(api::put_economy_settings))
+        .route("/api/economy/vendor-routes", get(api::list_vendor_routes).post(api::create_vendor_route))
+        .route("/api/economy/vendor-routes/{id}", put(api::update_vendor_route).delete(api::delete_vendor_route))
+        .route("/api/economy/wealth", get(api::get_wealth))
         .route("/ws", get(ws::ws_handler))
         .fallback_service(serve_spa)
         .layer(CorsLayer::permissive())

@@ -4,6 +4,7 @@ import {
   UsersThree,
   Globe,
   ShieldWarning,
+  Coins,
 } from "@phosphor-icons/react";
 
 export type ActiveView = "engagements" | "formations" | "map" | "security";
