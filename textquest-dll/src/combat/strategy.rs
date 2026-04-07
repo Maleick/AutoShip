@@ -115,6 +115,28 @@ impl CombatContext<'_> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PetStatus {
+    pub spawn_id: Option<u32>,
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    pub fn has_pet(self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    pub fn is_attacking(self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PetAction {
+    Attack,
+    Buff { spell: SpellEntry },
+}
+
 #[derive(Debug, Clone)]
 pub struct GroupMemberState {
     pub spawn_id: u32,

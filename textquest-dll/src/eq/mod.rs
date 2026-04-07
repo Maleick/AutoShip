@@ -2,6 +2,7 @@
 //! These are offsets from the eqgame.exe base address.
 //! Derived from MQ2 source headers.
 
+pub mod context_menu;
 pub mod inventory;
 pub mod widgets;
 

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
 use textquest_common::combat::{
-    CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
+    ActionType, CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
 };
 use textquest_common::nav::Waypoint;
 use textquest_common::types::SpawnData;
@@ -25,6 +25,7 @@ use super::strategy::{
     ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
     pet_attack_focused, pet_back_off,
 };
+use super::toon_config;
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
@@ -85,23 +86,24 @@ fn plan_spell_cast(
     spell_id: i32,
     memorized_spells: &[i32],
 ) -> Option<PlannedSpellCast> {
-    let preferred_gem = match preferred_slot {
-        Some(slot) => Some(normalize_gem_id(slot)?),
-        None => None,
-    };
-    if let Some(gem_id) = preferred_gem {
-        if memorized_spells
-            .get(gem_id as usize)
-            .copied()
-            .unwrap_or_default()
-            == spell_id
-        {
+    if let Some(slot) = preferred_slot {
+        let gem_id = normalize_gem_id(slot)?;
+        if spell_id <= 0 {
             return Some(PlannedSpellCast {
                 gem_id,
                 spell_id,
                 source: SpellCastSource::PreferredGem,
             });
         }
+        if memorized_spells.get(gem_id as usize).copied() == Some(spell_id) {
+            return Some(PlannedSpellCast {
+                gem_id,
+                spell_id,
+                source: SpellCastSource::PreferredGem,
+            });
+        }
+    } else if spell_id <= 0 {
+        return None;
     }
 
     if spell_id > 0
@@ -120,11 +122,7 @@ fn plan_spell_cast(
     Some(PlannedSpellCast {
         gem_id: 0,
         spell_id,
-        source: if spell_id <= 0 && preferred_gem.is_some() {
-            SpellCastSource::PreferredGem
-        } else {
-            SpellCastSource::SpellIdDirect
-        },
+        source: SpellCastSource::SpellIdDirect,
     })
 }
 
@@ -163,6 +161,66 @@ fn item_action_key(item_name: &str) -> i32 {
     (hash & 0x7FFF_FFFF) as i32
 }
 
+fn normalize_action_name(action_name: &str) -> String {
+    action_name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+const COMBAT_SKILL_ID_TAUNT: u32 = 73;
+const COMBAT_SKILL_ID_BASH: u32 = 10;
+const COMBAT_SKILL_ID_KICK: u32 = 30;
+const COMBAT_SKILL_ID_FLYING_KICK: u32 = 26;
+const COMBAT_SKILL_ID_ROUND_KICK: u32 = 38;
+const COMBAT_SKILL_ID_TIGER_CLAW: u32 = 52;
+const COMBAT_SKILL_ID_EAGLE_STRIKE: u32 = 23;
+const COMBAT_SKILL_ID_BACKSTAB: u32 = 8;
+
+const COMBAT_SKILL_IDS: &[(&str, u32)] = &[
+    ("taunt", COMBAT_SKILL_ID_TAUNT),
+    ("bash", COMBAT_SKILL_ID_BASH),
+    ("kick", COMBAT_SKILL_ID_KICK),
+    ("flyingkick", COMBAT_SKILL_ID_FLYING_KICK),
+    ("roundkick", COMBAT_SKILL_ID_ROUND_KICK),
+    ("tigerclaw", COMBAT_SKILL_ID_TIGER_CLAW),
+    ("eaglestrike", COMBAT_SKILL_ID_EAGLE_STRIKE),
+    ("backstab", COMBAT_SKILL_ID_BACKSTAB),
+];
+
+const WARRIOR_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_TAUNT, COMBAT_SKILL_ID_KICK];
+const PALADIN_MELEE_SKILLS: &[u32] = &[
+    COMBAT_SKILL_ID_TAUNT,
+    COMBAT_SKILL_ID_BASH,
+    COMBAT_SKILL_ID_KICK,
+];
+const SHADOW_KNIGHT_MELEE_SKILLS: &[u32] = &[
+    COMBAT_SKILL_ID_TAUNT,
+    COMBAT_SKILL_ID_BASH,
+    COMBAT_SKILL_ID_KICK,
+];
+const MONK_MELEE_SKILLS: &[u32] = &[
+    COMBAT_SKILL_ID_FLYING_KICK,
+    COMBAT_SKILL_ID_ROUND_KICK,
+    COMBAT_SKILL_ID_TIGER_CLAW,
+    COMBAT_SKILL_ID_EAGLE_STRIKE,
+];
+const ROGUE_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_BACKSTAB];
+const BEASTLORD_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_KICK, COMBAT_SKILL_ID_FLYING_KICK];
+const DEFAULT_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_KICK];
+
+fn lookup_combat_skill_id(normalized_action_name: &str) -> Option<u32> {
+    COMBAT_SKILL_IDS
+        .iter()
+        .find_map(|(name, id)| (*name == normalized_action_name).then_some(*id))
+}
+
+fn combat_skill_id(action_name: &str) -> Option<u32> {
+    let normalized_action_name = normalize_action_name(action_name);
+    lookup_combat_skill_id(&normalized_action_name)
+}
+
 /// The main combat state machine for a single EQ character.
 pub struct Combatant {
     state: CombatState,
@@ -197,6 +255,7 @@ pub struct Combatant {
     config: CombatConfig,
     pending_cast_result: Option<CastResult>,
     last_cast_result: Option<CastResult>,
+    toon_actions_loaded: bool,
 }
 
 impl Combatant {
@@ -246,6 +305,50 @@ impl Combatant {
             config,
             pending_cast_result: None,
             last_cast_result: None,
+            toon_actions_loaded: false,
+        }
+    }
+
+    fn try_load_toon_actions(&mut self, player: &SpawnData) {
+        if self.toon_actions_loaded {
+            return;
+        }
+
+        let toon_name = if player.name.trim().is_empty() {
+            player.displayed_name.trim()
+        } else {
+            player.name.trim()
+        };
+
+        if toon_name.is_empty() {
+            return;
+        }
+
+        self.toon_actions_loaded = true;
+
+        match toon_config::load_for_toon(toon_name) {
+            Ok(Some((path, toon_config))) => {
+                toon_config.apply_to(&mut self.config, &mut self.rotation_groups);
+                self.config
+                    .disciplines
+                    .sort_by_key(|discipline| discipline.priority);
+                self.holyshit = HolyShitEvaluator::new(self.config.holyshit_rules.clone());
+                tracing::info!(
+                    toon = toon_name,
+                    path = %path.display(),
+                    spells = self.config.spells.len(),
+                    disciplines = self.config.disciplines.len(),
+                    holyshit_rules = self.config.holyshit_rules.len(),
+                    rotation_groups = self.rotation_groups.as_ref().map_or(0, Vec::len),
+                    "Loaded per-toon combat actions"
+                );
+            }
+            Ok(None) => {
+                tracing::debug!(toon = toon_name, "No per-toon combat action config found");
+            }
+            Err(error) => {
+                tracing::warn!(toon = toon_name, error = %error, "Failed to load per-toon combat action config");
+            }
         }
     }
 
@@ -283,6 +386,7 @@ impl Combatant {
     /// Advance the combat FSM by one frame (~50ms, ~20/sec).
     /// Note: an EQ "game tick" is 6 seconds (~120 frames); this runs every frame.
     pub fn tick(&mut self, player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]) {
+        self.try_load_toon_actions(player);
         self.tick_count += 1;
         self.gcd.tick();
         self.skill_cooldowns.tick();
@@ -590,18 +694,108 @@ impl Combatant {
                             target = action.target_id,
                             "Rotation engine selected action"
                         );
-                        let memorized_spells = crate::eq::read_memorized_spells();
-                        let cast_plan = plan_spell_cast(None, spell_id, &memorized_spells).expect(
-                            "rotation spell planning without preferred slot should be valid",
-                        );
-                        crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
-                        let cast_delay = u32::from(self.personality.next_cast_delay());
-                        self.gcd.consume();
-                        self.state = CombatState::Casting {
-                            spell_slot: 0,
-                            target_id: action.target_id,
-                            ticks_remaining: 20 + cast_delay,
-                        };
+                        match &action.action_type {
+                            ActionType::Spell(_) | ActionType::Song(_) => {
+                                if spell_id <= 0 {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        action = ?action.action_type,
+                                        "Skipping unresolved spell/song from rotation"
+                                    );
+                                    return;
+                                }
+                                let memorized_spells = crate::eq::read_memorized_spells();
+                                let Some(cast_plan) =
+                                    plan_spell_cast(None, spell_id, &memorized_spells)
+                                else {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        spell_id,
+                                        action = ?action.action_type,
+                                        "Skipping spell/song from rotation because no valid cast plan was found"
+                                    );
+                                    return;
+                                };
+                                crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
+                                let cast_delay = u32::from(self.personality.next_cast_delay());
+                                self.gcd.consume();
+                                self.state = CombatState::Casting {
+                                    spell_slot: cast_plan.gem_id,
+                                    target_id: action.target_id,
+                                    ticks_remaining: 20 + cast_delay,
+                                };
+                            }
+                            ActionType::Disc(_) | ActionType::AA(_) => {
+                                if spell_id <= 0 {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        action = ?action.action_type,
+                                        "Skipping unresolved activated ability from rotation"
+                                    );
+                                    return;
+                                }
+                                if !self.ability_cooldowns.can_use(spell_id, self.tick_count) {
+                                    tracing::debug!(
+                                        entry = %action.entry_name,
+                                        spell_id,
+                                        "Activated rotation ability blocked by cooldown metadata"
+                                    );
+                                    return;
+                                }
+                                crate::eq::do_combat_ability(spell_id, true);
+                                self.ability_cooldowns
+                                    .consume(spell_id, None, self.tick_count);
+                                self.gcd.consume();
+                                self.state = CombatState::OnGcd;
+                            }
+                            ActionType::Ability(ability_name) => {
+                                let Some(skill_id) = combat_skill_id(ability_name) else {
+                                    tracing::warn!(
+                                        ability = %ability_name,
+                                        entry = %action.entry_name,
+                                        "Skipping unknown combat skill from rotation"
+                                    );
+                                    return;
+                                };
+                                if !self.skill_cooldowns.is_ready(skill_id) {
+                                    tracing::debug!(
+                                        skill_id,
+                                        ability = %ability_name,
+                                        "Rotation skill blocked by cooldown"
+                                    );
+                                    return;
+                                }
+                                crate::eq::use_skill(skill_id, None);
+                                if let Some(cooldown) = default_cooldown(skill_id) {
+                                    self.skill_cooldowns.consume(skill_id, cooldown);
+                                }
+                                self.gcd.consume();
+                                self.state = CombatState::OnGcd;
+                            }
+                            ActionType::Item(item_name) => {
+                                let Some(command) = use_item_command(item_name) else {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        "Skipping item rotation with empty sanitized name"
+                                    );
+                                    return;
+                                };
+                                let item_key = item_action_key(item_name);
+                                if !self.ability_cooldowns.can_use(item_key, self.tick_count) {
+                                    tracing::debug!(
+                                        entry = %action.entry_name,
+                                        item = %item_name,
+                                        "Rotation item blocked by cooldown metadata"
+                                    );
+                                    return;
+                                }
+                                crate::eq::slash_command(&command);
+                                self.ability_cooldowns
+                                    .consume(item_key, None, self.tick_count);
+                                self.gcd.consume();
+                                self.state = CombatState::OnGcd;
+                            }
+                        }
                     }
                     return;
                 }
@@ -794,9 +988,11 @@ impl Combatant {
         // Tanks: immediate taunt to establish aggro on engage
         let role = self.strategy.role();
         if matches!(role, CombatRole::MainTank | CombatRole::OffTank) {
-            crate::eq::use_skill(73, None); // skill 73 = taunt
-            self.skill_cooldowns
-                .consume(73, super::skill_cooldowns::skill_timers::TAUNT.1);
+            crate::eq::use_skill(COMBAT_SKILL_ID_TAUNT, None);
+            self.skill_cooldowns.consume(
+                COMBAT_SKILL_ID_TAUNT,
+                super::skill_cooldowns::skill_timers::TAUNT.1,
+            );
             tracing::info!("Tank: immediate taunt on engage");
         }
 
@@ -931,13 +1127,13 @@ impl Combatant {
 
         // Build the skill list for this class
         let skills: &[u32] = match class_id {
-            1 => &[73, 30],         // Warrior: taunt, kick
-            3 => &[73, 10, 30],     // Paladin: taunt, bash, kick
-            5 => &[73, 10, 30],     // Shadow Knight: taunt, bash, kick
-            7 => &[26, 38, 52, 23], // Monk: flying kick, round kick, tiger claw, eagle strike
-            9 => &[8],              // Rogue: backstab
-            15 => &[30, 26],        // Beastlord: kick, flying kick
-            _ => &[30],             // Berserker / Generic: kick
+            1 => WARRIOR_MELEE_SKILLS,       // Warrior: taunt, kick
+            3 => PALADIN_MELEE_SKILLS,       // Paladin: taunt, bash, kick
+            5 => SHADOW_KNIGHT_MELEE_SKILLS, // Shadow Knight: taunt, bash, kick
+            7 => MONK_MELEE_SKILLS, // Monk: flying kick, round kick, tiger claw, eagle strike
+            9 => ROGUE_MELEE_SKILLS, // Rogue: backstab
+            15 => BEASTLORD_MELEE_SKILLS, // Beastlord: kick, flying kick
+            _ => DEFAULT_MELEE_SKILLS, // Berserker / Generic: kick
         };
 
         // Fire each skill independently when its cooldown is ready
@@ -1447,6 +1643,19 @@ mod tests {
     #[test]
     fn plan_spell_cast_rejects_invalid_preferred_slot() {
         assert_eq!(plan_spell_cast(Some(99), 1500, &[0, 0, 0]), None);
+    }
+
+    #[test]
+    fn combat_skill_id_maps_known_rotation_skills() {
+        assert_eq!(combat_skill_id("Taunt"), Some(73));
+        assert_eq!(combat_skill_id("Kick"), Some(30));
+        assert_eq!(combat_skill_id("Flying Kick"), Some(26));
+        assert_eq!(combat_skill_id("Backstab"), Some(8));
+    }
+
+    #[test]
+    fn combat_skill_id_rejects_unknown_rotation_skills() {
+        assert_eq!(combat_skill_id("Mystery Skill"), None);
     }
 
     #[test]

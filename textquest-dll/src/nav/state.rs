@@ -1096,8 +1096,10 @@ mod tests {
     #[test]
     fn stick_target_loss_stays_active_with_always() {
         let mut nav = Navigator::new(0, 1);
-        let mut config = StickConfig::default();
-        config.always = true;
+        let config = StickConfig {
+            always: true,
+            ..StickConfig::default()
+        };
         nav.stick_to(config, Some(42));
 
         nav.tick(None, &[], None);
@@ -1133,14 +1135,19 @@ mod tests {
             id: target.spawn_id,
             position: Waypoint::new(10.0, 0.0, 0.0),
         };
-        nav.tick(Some(&target), &[target.clone()], Some(&stable));
+        nav.tick(Some(&target), std::slice::from_ref(&target), Some(&stable));
         assert!(matches!(nav.status(), NavStatus::Sticking { .. }));
 
+        let warped_target = follow_spawn(9, "a_mob", 200.0, 0.0);
         let warped = TargetSample {
-            id: target.spawn_id,
+            id: warped_target.spawn_id,
             position: Waypoint::new(200.0, 0.0, 0.0),
         };
-        nav.tick(Some(&target), &[target.clone()], Some(&warped));
+        nav.tick(
+            Some(&warped_target),
+            std::slice::from_ref(&warped_target),
+            Some(&warped),
+        );
         assert!(matches!(nav.status(), NavStatus::Idle));
     }
 

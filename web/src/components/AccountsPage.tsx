@@ -310,7 +310,7 @@ export default function AccountsPage() {
             <tbody>
               {filtered.map((account, i) => (
                 <tr
-                  key={account.id}
+                  key={account.name}
                   className={`border-b border-white/5 hover:bg-white/[0.03] transition-colors ${
                     i % 2 === 0 ? "" : "bg-white/[0.01]"
                   }`}
