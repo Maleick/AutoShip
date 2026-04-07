@@ -12,6 +12,7 @@ use crate::combat::coordinator::CombatCoordinator;
 use crate::ipc::pipe::CommandPipe;
 use crate::ipc::shared::SharedStateReader;
 use std::collections::HashMap;
+use textquest_common::combat::HateTargetCategory;
 use textquest_common::ipc::{Command, Response, SessionToken};
 use textquest_common::types::GameState;
 
@@ -491,6 +492,7 @@ impl Orchestrator {
                     camp.push_event(CampEvent::AddSpawned {
                         spawn_id: spawn.spawn_id,
                         name: spawn.name.clone(),
+                        category: HateTargetCategory::default(),
                     });
                 }
 
@@ -1240,6 +1242,7 @@ mod tests {
     #[test]
     fn test_charm_break_detection() {
         use crate::camp::cc::{CcTarget, CcType};
+        use textquest_common::combat::HateTargetCategory;
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -1255,6 +1258,7 @@ mod tests {
                 cc_expiry_tick: 100,
                 assigned_to_pid: Some(102),
                 debuffed: false,
+                category: HateTargetCategory::default(),
             });
         }
 
@@ -1364,6 +1368,7 @@ mod tests {
     #[test]
     fn test_cc_expiry_detection() {
         use crate::camp::cc::CcTarget;
+        use textquest_common::combat::HateTargetCategory;
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -1379,6 +1384,7 @@ mod tests {
                 cc_expiry_tick: 20, // 2 ticks away, within CC_EXPIRY_BUFFER (3)
                 assigned_to_pid: Some(102),
                 debuffed: false,
+                category: HateTargetCategory::default(),
             });
         }
 

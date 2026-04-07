@@ -8,7 +8,7 @@
 //! Stuck detection and recovery are handled inline by `StuckDetector`
 //! rather than via a separate FSM state.
 
-use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
+use crate::hooks::movement::{self, MovementController, ARRIVAL_DISTANCE};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
     CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals,
@@ -73,6 +73,8 @@ pub struct Navigator {
     mesh_loaded: bool,
     /// Active moveto configuration (#184).
     moveto_config: Option<MoveToConfig>,
+    /// Last observed HP while running moveto break-on-hit checks.
+    last_moveto_hp: Option<i64>,
     /// Global autopause flag (#164).
     autopause: bool,
     /// Break-on-GM flag — pause navigation when a GM is detected nearby.
@@ -81,6 +83,8 @@ pub struct Navigator {
 
 /// Radius for hostile NPC proximity checks (aggro detection), in EQ world units.
 const AGGRO_CHECK_RADIUS: f32 = 50.0;
+/// Distance delta that counts as an unexpected player displacement (e.g. summon).
+const SUMMON_DISTANCE_THRESHOLD: f32 = 60.0;
 
 /// Radius for GM proximity check (break-on-GM detection), in EQ world units.
 const GM_CHECK_RADIUS: f32 = 500.0;
@@ -125,6 +129,7 @@ impl Navigator {
             cached_velocity: 0.0,
             mesh_loaded: false,
             moveto_config: None,
+            last_moveto_hp: None,
             autopause: false,
             break_on_gm: false,
         }
@@ -174,12 +179,15 @@ impl Navigator {
     /// Stop navigation immediately.
     pub fn stop(&mut self) {
         self.controller.stop_forward();
+        self.controller.stop_back();
         self.queue.clear();
         self.camp = None;
         self.camp_config = None;
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
+        self.moveto_config = None;
+        self.last_moveto_hp = None;
         self.pre_pause_state = None;
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
@@ -328,6 +336,7 @@ impl Navigator {
             use_walk = config.use_walk,
             use_back = config.use_back,
             break_on_aggro = config.break_on_aggro,
+            break_on_hit = config.break_on_hit,
             "Starting advanced moveto"
         );
         self.controller.stop_forward();
@@ -337,7 +346,9 @@ impl Navigator {
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
+        self.last_moveto_hp = self.controller.read_hp_current();
         self.moveto_config = Some(config);
+        self.last_hp_current = self.controller.read_hp_current();
         self.state = State::MovingTo;
     }
 
@@ -366,27 +377,61 @@ impl Navigator {
         nearby: &[SpawnData],
         target_sample: Option<&TargetSample>,
     ) {
+        let summon_displacement = if self.should_break_moveto_on_summon() {
+            self.current_tick_displacement()
+        } else {
+            None
+        };
+
         // Only update velocity when actively navigating (skip Idle/Arrived).
         if !matches!(self.state, State::Idle | State::Arrived) {
             self.update_velocity();
         }
 
-        let warp_action = match self.state {
-            State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
-            _ => self.warp.update(target_sample),
+        if summon_displacement.is_some_and(|distance| distance > SUMMON_DISTANCE_THRESHOLD) {
+            tracing::info!(
+                displacement = summon_displacement,
+                "MoveToAdvanced: break_on_summon triggered"
+            );
+            self.stop_moveto();
+            return;
+        }
+
+        let moveto_target_sample = self.moveto_target_sample(nearby, target_sample);
+        let warp_action = if self.should_track_moveto_warp() {
+            self.warp.update(moveto_target_sample.as_ref())
+        } else {
+            match self.state {
+                State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
+                _ => self.warp.update(target_sample),
+            }
         };
 
         match warp_action {
             WarpAction::Pause => {
+                if self.should_break_moveto_on_warp() {
+                    tracing::info!("MoveToAdvanced: break_on_warp triggered");
+                    self.stop_moveto();
+                    return;
+                }
+                if matches!(
+                    self.state,
+                    State::Paused(PauseReason::UserPause | PauseReason::UserInput)
+                ) {
+                    return;
+                }
                 self.controller.stop_forward();
-                self.state = State::Paused(PauseReason::Warp);
+                self.controller.stop_back();
+                let old_state =
+                    std::mem::replace(&mut self.state, State::Paused(PauseReason::Warp));
+                self.pre_pause_state = Some(old_state);
                 return;
             }
             WarpAction::Resume => {
                 // Only auto-resume from warp pauses, not user-initiated pauses.
                 if matches!(self.state, State::Paused(PauseReason::Warp)) {
                     tracing::info!("Warp pause cleared — resuming navigation");
-                    self.state = State::Moving;
+                    self.state = self.pre_pause_state.take().unwrap_or(State::Moving);
                     self.stuck.reset();
                 }
             }
@@ -679,9 +724,31 @@ impl Navigator {
         let dist = current_pos.distance_2d(&destination);
         self.cached_distance = dist;
 
+        if config.break_on_hit {
+            if let Some(current_hp) = self.controller.read_hp_current() {
+                let took_damage = self
+                    .last_moveto_hp
+                    .is_some_and(|previous_hp| current_hp < previous_hp);
+                self.last_moveto_hp = Some(current_hp);
+                if took_damage {
+                    tracing::info!(current_hp, "MoveToAdvanced: break_on_hit triggered");
+                    self.stop_moveto();
+                    return;
+                }
+            }
+        }
+
         // Break-on-aggro: hostile NPC moving toward player within aggro radius.
         if config.break_on_aggro && has_hostile_nearby(nearby, &current_pos) {
             tracing::info!("MoveToAdvanced: break_on_aggro triggered");
+            self.stop_moveto();
+            return;
+        }
+
+        if config.break_on_hit
+            && break_on_hit_triggered(&mut self.last_hp_current, self.controller.read_hp_current())
+        {
+            tracing::info!("MoveToAdvanced: break_on_hit triggered");
             self.stop_moveto();
             return;
         }
@@ -709,7 +776,7 @@ impl Navigator {
 
         if config.use_back {
             // Move backward: face away from destination, press back.
-            let reverse = wobbled + std::f32::consts::PI;
+            let reverse = (wobbled + 256.0) % 512.0;
             self.controller.write_heading(reverse);
             self.controller.write_speed_heading(reverse);
             self.controller.stop_forward();
@@ -727,8 +794,79 @@ impl Navigator {
         self.controller.stop_forward();
         self.controller.stop_back();
         self.moveto_config = None;
+        self.last_moveto_hp = None;
         self.stuck.reset();
+        self.warp.reset();
+        self.pre_pause_state = None;
         self.state = State::Idle;
+    }
+
+    fn should_track_moveto_warp(&self) -> bool {
+        match self.state {
+            State::MovingTo => {
+                self.should_break_moveto_on_warp() || self.should_pause_moveto_on_warp()
+            }
+            State::Paused(PauseReason::Warp) => {
+                matches!(self.pre_pause_state, Some(State::MovingTo))
+                    && (self.should_break_moveto_on_warp() || self.should_pause_moveto_on_warp())
+            }
+            _ => false,
+        }
+    }
+
+    fn should_break_moveto_on_warp(&self) -> bool {
+        self.moveto_config
+            .as_ref()
+            .is_some_and(|config| config.break_on_warp)
+    }
+
+    fn should_pause_moveto_on_warp(&self) -> bool {
+        self.moveto_config
+            .as_ref()
+            .is_some_and(|config| config.pause_on_warp)
+    }
+
+    fn should_break_moveto_on_summon(&self) -> bool {
+        match self.state {
+            State::MovingTo => self
+                .moveto_config
+                .as_ref()
+                .is_some_and(|config| config.break_on_summon),
+            State::Paused(PauseReason::Warp) => {
+                matches!(self.pre_pause_state, Some(State::MovingTo))
+                    && self
+                        .moveto_config
+                        .as_ref()
+                        .is_some_and(|config| config.break_on_summon)
+            }
+            _ => false,
+        }
+    }
+
+    fn moveto_target_sample(
+        &self,
+        nearby: &[SpawnData],
+        fallback: Option<&TargetSample>,
+    ) -> Option<TargetSample> {
+        let target_id = self.moveto_config.as_ref()?.target_id?;
+        if let Some(spawn) = nearby.iter().find(|spawn| spawn.spawn_id == target_id) {
+            return Some(TargetSample {
+                id: spawn.spawn_id,
+                position: Waypoint::new(spawn.x, spawn.y, spawn.z),
+            });
+        }
+
+        fallback
+            .filter(|sample| sample.id == target_id)
+            .map(|sample| TargetSample {
+                id: sample.id,
+                position: sample.position,
+            })
+    }
+
+    fn current_tick_displacement(&self) -> Option<f32> {
+        self.prev_position
+            .map(|previous| self.controller.read_position().distance_2d(&previous))
     }
 
     /// One tick for player follow mode.
@@ -822,6 +960,37 @@ impl Navigator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn break_on_hit_triggers_on_hp_drop() {
+        let mut last_hp_current = Some(100);
+        assert!(break_on_hit_triggered(&mut last_hp_current, Some(90)));
+        assert_eq!(last_hp_current, Some(90));
+    }
+
+    #[test]
+    fn break_on_hit_ignores_stable_or_rising_hp() {
+        let mut last_hp_current = Some(100);
+        assert!(!break_on_hit_triggered(&mut last_hp_current, Some(100)));
+        assert_eq!(last_hp_current, Some(100));
+
+        assert!(!break_on_hit_triggered(&mut last_hp_current, Some(110)));
+        assert_eq!(last_hp_current, Some(110));
+    }
+
+    #[test]
+    fn break_on_hit_ignores_missing_hp_sample() {
+        let mut last_hp_current = Some(100);
+        assert!(!break_on_hit_triggered(&mut last_hp_current, None));
+        assert_eq!(last_hp_current, Some(100));
+    }
+
+    #[test]
+    fn break_on_hit_records_initial_sample_without_triggering() {
+        let mut last_hp_current = None;
+        assert!(!break_on_hit_triggered(&mut last_hp_current, Some(100)));
+        assert_eq!(last_hp_current, Some(100));
+    }
 
     #[test]
     fn pauses_and_resumes_on_warp() {
@@ -983,6 +1152,93 @@ mod tests {
             stand_state: 0,
             is_gm: true,
         }
+    }
+
+    fn hostile_spawn_at(x: f32, y: f32) -> SpawnData {
+        SpawnData {
+            spawn_id: 1111,
+            name: "a_goblin".into(),
+            displayed_name: "a goblin".into(),
+            spawn_type: 1,
+            level: 10,
+            class_id: 0,
+            x,
+            y,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 0,
+            endurance_max: 0,
+            speed_run: 1.0,
+            stand_state: 0,
+            is_gm: false,
+        }
+    }
+
+    fn player_hp_storage(hp: i64) -> Vec<u64> {
+        let word_count = (textquest_common::offsets::player_zone::HP_CURRENT
+            + std::mem::size_of::<i64>())
+            / std::mem::size_of::<u64>();
+        let mut storage = vec![0u64; word_count];
+        write_player_hp(&mut storage, hp);
+        storage
+    }
+
+    fn write_player_hp(storage: &mut [u64], hp: i64) {
+        let base = storage.as_mut_ptr() as usize;
+        // SAFETY: the backing buffer is sized so the HP_CURRENT offset lands within
+        // the allocation, and HP_CURRENT is 8-byte aligned.
+        unsafe {
+            std::ptr::write(
+                (base + textquest_common::offsets::player_zone::HP_CURRENT) as *mut i64,
+                hp,
+            );
+        }
+    }
+
+    #[test]
+    fn moveto_break_on_aggro_stops_navigation() {
+        let mut nav = Navigator::new(0, 1);
+        let mut config = MoveToConfig::to_position(100.0, 0.0, 0.0);
+        config.break_on_aggro = true;
+        nav.move_to_advanced(config);
+
+        nav.tick(None, &[hostile_spawn_at(10.0, 0.0)], None);
+
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn moveto_break_on_hit_stops_after_damage() {
+        let mut storage = player_hp_storage(100);
+        let mut nav = Navigator::new(storage.as_mut_ptr() as usize, 1);
+        let mut config = MoveToConfig::to_position(100.0, 0.0, 0.0);
+        config.break_on_hit = true;
+        nav.move_to_advanced(config);
+
+        nav.tick(None, &[], None);
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+
+        write_player_hp(&mut storage, 90);
+        nav.tick(None, &[], None);
+
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn moveto_without_break_on_hit_ignores_damage() {
+        let mut storage = player_hp_storage(100);
+        let mut nav = Navigator::new(storage.as_mut_ptr() as usize, 1);
+        let config = MoveToConfig::to_position(100.0, 0.0, 0.0);
+        nav.move_to_advanced(config);
+
+        write_player_hp(&mut storage, 90);
+        nav.tick(None, &[], None);
+
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
     }
 
     #[test]

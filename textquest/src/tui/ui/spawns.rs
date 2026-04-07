@@ -15,6 +15,19 @@ use super::widgets::{
 use crate::eq::structs::SpawnInfo;
 use crate::tui::app::{ActivePanel, App};
 
+fn current_spellset_lines(spells: &[crate::eq::structs::SpellSlot]) -> Vec<String> {
+    spells
+        .chunks(3)
+        .map(|chunk| {
+            chunk
+                .iter()
+                .map(|spell| format!("G{} {}", spell.slot + 1, spell.display_name()))
+                .collect::<Vec<_>>()
+                .join("  ")
+        })
+        .collect()
+}
+
 /// Draw the full spawns screen (spawn list + details).
 pub fn draw_spawns_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     draw_spawn_list(frame, area, app);
@@ -612,23 +625,29 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         }
     }
 
-    if player.learned_spell_count() > 0 {
+    if !player.memorized_spells.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("Spellset", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("  {} gems", player.memorized_spells.len()),
+                Style::default().fg(t.text_accent),
+            ),
+        ]));
+        for spellset_line in current_spellset_lines(&player.memorized_spells) {
+            lines.push(Line::from(vec![
+                Span::styled("         ", Style::default().fg(t.text_muted)),
+                Span::styled(spellset_line, Style::default().fg(t.text_normal)),
+            ]));
+        }
+    }
+
+    if !player.spellbook.is_empty() {
         lines.push(Line::from(vec![
             Span::styled("Book ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{} spells", player.learned_spell_count()),
-                Style::default().fg(t.text_normal),
+                format!("{} spells scribed", player.spellbook.len()),
+                Style::default().fg(t.text_server),
             ),
-        ]));
-    }
-
-    for (index, spellset_line) in player.current_spellset_lines(3).into_iter().enumerate() {
-        lines.push(Line::from(vec![
-            Span::styled(
-                if index == 0 { "Set  " } else { "     " },
-                Style::default().fg(t.text_muted),
-            ),
-            Span::styled(spellset_line, Style::default().fg(t.text_accent)),
         ]));
     }
 
@@ -641,4 +660,54 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     }
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::current_spellset_lines;
+    use crate::eq::structs::SpellSlot;
+
+    #[test]
+    fn current_spellset_lines_groups_spells_by_three_slots() {
+        let lines = current_spellset_lines(&[
+            SpellSlot {
+                slot: 0,
+                spell_id: 1,
+                spell_name: Some("Complete Heal".into()),
+            },
+            SpellSlot {
+                slot: 1,
+                spell_id: 2,
+                spell_name: Some("Celestial Remedy".into()),
+            },
+            SpellSlot {
+                slot: 2,
+                spell_id: 3,
+                spell_name: Some("Yaulp".into()),
+            },
+            SpellSlot {
+                slot: 3,
+                spell_id: 4,
+                spell_name: Some("Symbol".into()),
+            },
+        ]);
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(
+            lines[0],
+            "G1 Complete Heal  G2 Celestial Remedy  G3 Yaulp"
+        );
+        assert_eq!(lines[1], "G4 Symbol");
+    }
+
+    #[test]
+    fn current_spellset_lines_uses_spell_id_fallback_when_name_missing() {
+        let lines = current_spellset_lines(&[SpellSlot {
+            slot: 6,
+            spell_id: 789,
+            spell_name: None,
+        }]);
+
+        assert_eq!(lines, vec!["G7 Spell 789"]);
+    }
 }

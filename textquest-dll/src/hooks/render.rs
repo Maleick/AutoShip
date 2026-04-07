@@ -44,6 +44,7 @@ pub fn set_mode(mode: RenderMode) {
         RenderMode::NullRender => 2,
     };
     RENDER_MODE.store(encoded, Ordering::Release);
+    super::dx11_null::sync_suppress_draws();
     tracing::info!(%mode, "Render mode changed");
 }
 
@@ -132,6 +133,24 @@ mod inner {
 #[allow(unused_imports)]
 pub use inner::{install, remove};
 
+#[cfg(test)]
+pub(crate) fn test_state_lock() -> std::sync::MutexGuard<'static, ()> {
+    use std::sync::{Mutex, OnceLock};
+
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("render test state lock poisoned")
+}
+
+#[cfg(test)]
+pub(crate) fn reset_test_state() {
+    RENDER_TICK.store(0, Ordering::Relaxed);
+    RENDER_MODE.store(0, Ordering::Relaxed);
+    CAPTURE_REQUESTED.store(false, Ordering::Relaxed);
+    CAPTURE_ACTIVE.store(false, Ordering::Relaxed);
+}
+
 /// Request a single-frame capture. Sets the capture flag so the next
 /// `should_render()` returns true even in NullRender mode.
 pub fn request_capture() {
@@ -155,7 +174,8 @@ pub fn is_capture_active() -> bool {
 /// - `Normal` + foreground → always render.
 /// - `Normal` + background → strobe (automatic fallback).
 /// - `Strobe` → render every `STROBE_INTERVAL` ticks.
-/// - `NullRender` → never render.
+/// - `NullRender` → wait for DX11 Present hook activation, then render once so
+///   draw-call suppression can take over.
 fn should_render() -> bool {
     // One-shot override: if a capture was requested, force-render this frame.
     if CAPTURE_REQUESTED.swap(false, Ordering::AcqRel) {
@@ -164,7 +184,10 @@ fn should_render() -> bool {
     }
 
     match mode() {
-        RenderMode::NullRender => false,
+        // Keep NullRender alive long enough for Present hooks to initialize draw
+        // suppression; once Present is active we can render one frame to install
+        // context hooks.
+        RenderMode::NullRender => super::dx11_null::present_hook_installed(),
         RenderMode::Strobe => {
             let tick = RENDER_TICK.fetch_add(1, Ordering::Relaxed);
             tick.is_multiple_of(STROBE_INTERVAL)
@@ -187,11 +210,18 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn strobe_interval_is_nonzero() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
         assert!(STROBE_INTERVAL > 0);
     }
 
     #[test]
     fn should_render_strobes_when_background() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
+
         // Reset state for deterministic test.
         RENDER_TICK.store(0, Ordering::Relaxed);
         RENDER_MODE.store(1, Ordering::Relaxed); // Strobe mode
@@ -209,20 +239,27 @@ mod tests {
     }
 
     #[test]
-    fn null_render_never_renders() {
-        // Test the mode encoding/decoding directly to avoid races
-        // with other tests that share the global RENDER_MODE atomic.
+    fn null_render_requires_dx11_present_hook() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
+
         RENDER_MODE.store(2, Ordering::Relaxed); // NullRender
         assert_eq!(mode(), RenderMode::NullRender);
-        // In NullRender mode, should_render always returns false.
-        // We test a small number of iterations to avoid tick counter races.
-        for _ in 0..5 {
-            assert!(!should_render());
-        }
+        // In NullRender mode, wait for Present hook activation.
+        assert!(!should_render());
+
+        super::super::dx11_null::set_present_hook_installed_for_test(true);
+        assert!(should_render());
+        super::super::dx11_null::set_present_hook_installed_for_test(false);
     }
 
     #[test]
     fn mode_round_trip() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
+
         // Use direct atomic store to avoid races with other tests
         // that share the global RENDER_MODE atomic.
         RENDER_MODE.store(0, Ordering::Relaxed); // Normal
@@ -237,6 +274,10 @@ mod tests {
 
     #[test]
     fn stub_install_remove_are_safe() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
+
         // On non-Windows, install/remove are stubs that should not panic.
         #[cfg(not(windows))]
         {
@@ -247,6 +288,10 @@ mod tests {
 
     #[test]
     fn capture_flag_forces_render_in_null_mode() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
+
         RENDER_MODE.store(2, Ordering::Relaxed); // NullRender
         CAPTURE_REQUESTED.store(false, Ordering::Relaxed);
         CAPTURE_ACTIVE.store(false, Ordering::Relaxed);
@@ -266,6 +311,10 @@ mod tests {
 
     #[test]
     fn take_capture_active_clears_flag() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
+
         CAPTURE_ACTIVE.store(true, Ordering::Relaxed);
         assert!(take_capture_active());
         assert!(!take_capture_active());
@@ -273,6 +322,10 @@ mod tests {
 
     #[test]
     fn capture_does_not_interfere_with_normal_mode() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        super::super::dx11_null::reset_test_state();
+
         RENDER_MODE.store(0, Ordering::Relaxed); // Normal
         CAPTURE_REQUESTED.store(false, Ordering::Relaxed);
         CAPTURE_ACTIVE.store(false, Ordering::Relaxed);

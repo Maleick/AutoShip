@@ -298,7 +298,7 @@ mod tests {
             race_id: 1,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),
-            current_spellset: Vec::new(),
+            memorized_spells: Vec::new(),
             cast_state: None,
         }
     }

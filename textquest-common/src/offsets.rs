@@ -574,6 +574,26 @@ pub mod profile {
 
     /// `BaseProfile::Buffs` (`SoeUtil::Array<EQ_Affect>`) at +0x0098.
     pub const BUFFS_ARRAY: usize = 0x0098;
+    /// `BaseProfile::SpellBook` (`int[1280]`) at +0x00b0.
+    pub const SPELL_BOOK: usize = 0x00b0;
+    /// `BaseProfile::MemorizedSpells` (`int[18]`) at +0x14b0.
+    pub const MEMORIZED_SPELLS: usize = 0x14b0;
+    /// Number of spellbook slots between `SpellBook` and `MemorizedSpells`.
+    pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
+    /// Visible spell-gem slots used by the live client UI.
+    pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
+
+    /// `BaseProfile::SpellBook` (`SPELL[1280]`) at +0x00b0.
+    pub const SPELL_BOOK: usize = 0x00b0;
+
+    /// `BaseProfile::MemorizedSpells` (`SPELL[15]`) at +0x14b0.
+    pub const MEMORIZED_SPELLS: usize = 0x14b0;
+
+    /// Total spell-book slots in `BaseProfile::SpellBook`.
+    pub const SPELL_BOOK_SLOTS: usize = 1280;
+
+    /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells`.
+    pub const MEMORIZED_SPELL_GEMS: usize = 15;
 
     /// `BaseProfile::SpellBook` (`int[1280]`) at +0x00b0.
     pub const SPELL_BOOK: usize = 0x00b0;
@@ -1095,6 +1115,10 @@ mod tests {
     fn profile_offsets_consistent() {
         const _: () = assert!(profile::PROFILE_MANAGER > 0);
         assert_eq!(profile::BUFFS_ARRAY, 0x0098);
+        assert_eq!(profile::SPELL_BOOK, 0x00b0);
+        assert_eq!(profile::MEMORIZED_SPELLS, 0x14b0);
+        assert_eq!(profile::SPELL_BOOK_SLOT_COUNT, 1280);
+        assert_eq!(profile::MEMORIZED_SPELL_GEM_COUNT, 15);
         assert_eq!(profile::ARRAY_DATA_PTR, 0x08);
         assert_eq!(profile::ARRAY_SIZE, 0x10);
         assert_eq!(profile::BUFF_IDS, 0x068);

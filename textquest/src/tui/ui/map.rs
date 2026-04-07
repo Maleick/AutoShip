@@ -1,6 +1,6 @@
 //! Map screen — zone map renderer, spawn position list, named tracker panel.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use std::time::Instant;
 
@@ -228,7 +228,7 @@ where
 
     if key.show_spawns {
         // Build set of connected client character names for group member detection.
-        let group_names: std::collections::HashSet<&str> = app
+        let group_names: HashSet<&str> = app
             .clients
             .iter()
             .filter_map(|c| c.local_player.as_ref().map(|p| p.displayed_name.as_str()))
@@ -254,38 +254,7 @@ where
 
             // Determine spawn glyph with visual hierarchy:
             // selected (◍) > group (⊕) > named (!) > PC (@) > NPC (·) > corpse (.)
-            let glyph = if Some(spawn.spawn_id) == selected_spawn_id {
-                ('◍', app.theme.text_highlight)
-            } else {
-                match spawn.spawn_type {
-                    SpawnType::Player => {
-                        if group_names.contains(spawn.displayed_name.as_str()) {
-                            ('⊕', app.theme.map_group)
-                        } else {
-                            ('@', app.theme.map_pc)
-                        }
-                    }
-                    SpawnType::Npc => {
-                        let is_named = !spawn.displayed_name.starts_with("a ")
-                            && !spawn.displayed_name.starts_with("an ");
-                        let base_color = if is_named {
-                            app.theme.map_named
-                        } else {
-                            app.theme.map_npc
-                        };
-                        let marker = if is_named { '!' } else { '·' };
-                        // HP-based status: dim color if damaged.
-                        let color = if spawn.hp_max > 0 && spawn.hp_current < spawn.hp_max / 2 {
-                            Color::DarkGray
-                        } else {
-                            base_color
-                        };
-                        (marker, color)
-                    }
-                    SpawnType::Corpse => ('.', app.theme.map_corpse),
-                    SpawnType::Unknown(_) => ('?', app.theme.spawn_unknown),
-                }
-            };
+            let glyph = spawn_marker_glyph(app, spawn, &group_names, selected_spawn_id);
 
             if Some(spawn.spawn_id) == selected_spawn_id {
                 entry.selected_glyph = Some(glyph);
@@ -335,6 +304,45 @@ where
     }
 
     true
+}
+
+fn spawn_marker_glyph(
+    app: &App,
+    spawn: &crate::eq::structs::SpawnInfo,
+    group_names: &HashSet<&str>,
+    selected_spawn_id: Option<u32>,
+) -> (char, Color) {
+    if Some(spawn.spawn_id) == selected_spawn_id {
+        ('◍', app.theme.text_highlight)
+    } else {
+        match spawn.spawn_type {
+            SpawnType::Player => {
+                if group_names.contains(spawn.displayed_name.as_str()) {
+                    ('⊕', app.theme.map_group)
+                } else {
+                    ('@', app.theme.map_pc)
+                }
+            }
+            SpawnType::Npc => {
+                let is_named = !spawn.displayed_name.starts_with("a ")
+                    && !spawn.displayed_name.starts_with("an ");
+                let base_color = if is_named {
+                    app.theme.map_named
+                } else {
+                    app.theme.map_npc
+                };
+                let marker = if is_named { '!' } else { '·' };
+                let color = if spawn.hp_max > 0 && spawn.hp_current < spawn.hp_max / 2 {
+                    Color::DarkGray
+                } else {
+                    base_color
+                };
+                (marker, color)
+            }
+            SpawnType::Corpse => ('.', app.theme.map_corpse),
+            SpawnType::Unknown(_) => ('?', app.theme.spawn_unknown),
+        }
+    }
 }
 
 fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
@@ -791,23 +799,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         }
 
         // ─── Radius circle overlays ─────────────────────────────────────────
-        for overlay in app
-            .map_state
-            .cast_radius
-            .iter()
-            .chain(app.map_state.spell_radius.iter())
-        {
-            draw_radius_circle(
-                &to_grid,
-                player.x,
-                player.y,
-                overlay.radius,
-                overlay.color,
-                w as u16,
-                h as u16,
-                &mut grid,
-            );
-        }
+        draw_radius_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
     }
 
     // ─── Loc marker overlay ──────────────────────────────────────────────
@@ -908,7 +900,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                     ]);
                 }
 
-                if app.target.is_some() && app.map_state.show_nav_paths {
+                if app.target.is_some() && app.map_state.show_target_line {
                     spans.extend([
                         Span::raw(" │ "),
                         Span::styled("✚ ", Style::default().fg(t.text_highlight)),
@@ -1309,13 +1301,40 @@ fn draw_minimap_widget(
     {
         mini_grid[row][col] = ('◆', t.map_you);
     }
+
+    if app.map_state.show_spawns {
+        let group_names: HashSet<&str> = app
+            .clients
+            .iter()
+            .filter_map(|c| c.local_player.as_ref().map(|p| p.displayed_name.as_str()))
+            .collect();
+        let player_z = app.local_player.as_ref().map(|player| player.z);
+        let selected_spawn_id = selected_spawn.map(|(_, _, spawn_id)| spawn_id);
+        let z_range = app.map_state.z_filter_range;
+
+        for spawn in &app.spawns {
+            if !app.map_state.filters.allows_spawn(spawn) {
+                continue;
+            }
+            if let Some(pz) = player_z
+                && (spawn.z - pz).abs() > z_range
+            {
+                continue;
+            }
+            if let Some((col, row)) = to_mini(-spawn.y, -spawn.x) {
+                mini_grid[row][col] =
+                    spawn_marker_glyph(app, spawn, &group_names, selected_spawn_id);
+            }
+        }
+    }
+
     if let Some((spawn_x, spawn_y, _spawn_id)) = selected_spawn
         && let Some((col, row)) = to_mini(spawn_x, spawn_y)
     {
         mini_grid[row][col] = ('◎', t.text_highlight);
     }
 
-    if app.map_state.show_nav_paths
+    if app.map_state.show_target_line
         && let (Some(player), Some(target)) = (&app.local_player, &app.target)
         && let (Some((pc, pr)), Some((tc, tr))) =
             (to_mini(-player.y, -player.x), to_mini(-target.y, -target.x))
@@ -1991,11 +2010,47 @@ fn draw_radius_circle(
     }
 }
 
+fn draw_radius_overlays(
+    app: &App,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: u16,
+    h: u16,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let Some(player) = app.local_player.as_ref() else {
+        return;
+    };
+
+    for (center_x, center_y) in std::iter::once((player.x, player.y))
+        .chain(app.target.iter().map(|target| (target.x, target.y)))
+    {
+        for overlay in app
+            .map_state
+            .cast_radius
+            .iter()
+            .chain(app.map_state.spell_radius.iter())
+        {
+            draw_radius_circle(
+                to_grid,
+                center_x,
+                center_y,
+                overlay.radius,
+                overlay.color,
+                w,
+                h,
+                grid,
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
     use crate::tui::app::ClientState;
+    use crate::tui::state::MapRadiusOverlay;
+    use ratatui::style::Color;
 
     fn test_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnInfo {
         SpawnInfo {
@@ -2022,7 +2077,7 @@ mod tests {
             race_id: 1,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),
-            current_spellset: Vec::new(),
+            memorized_spells: Vec::new(),
             cast_state: None,
         }
     }
@@ -2055,6 +2110,48 @@ mod tests {
             scale_y: 1.0,
             using_local_view: false,
         }
+    }
+
+    fn minimap_text(app: &App, selected_spawn: Option<(f32, f32, u32)>) -> String {
+        let bounds = ViewBounds {
+            min_x: -10.0,
+            max_x: 10.0,
+            min_y: -10.0,
+            max_y: 10.0,
+        };
+        let (_, lines) = draw_minimap_widget(
+            &bounds,
+            Rect::new(0, 0, 20, 10),
+            app,
+            selected_spawn,
+            &test_transform(),
+        );
+        lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn render_map_view_text(mut app: App, width: u16, height: u16) -> String {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal");
+        terminal
+            .draw(|frame| draw_map_view(frame, Rect::new(0, 0, width, height), &mut app))
+            .expect("render map view");
+        (0..height)
+            .map(|y| {
+                (0..width)
+                    .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     #[test]
@@ -2194,6 +2291,61 @@ mod tests {
         assert_eq!(without_named, 1);
     }
 
+    #[test]
+    fn minimap_renders_spawn_markers_for_visible_spawns() {
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        client.spawns = vec![
+            spawn_with_type(1, "Emperor Crush", -4.0, -4.0, SpawnType::Npc),
+            spawn_with_type(2, "Wanderer", 4.0, 4.0, SpawnType::Player),
+        ];
+        client.local_player = Some(spawn_with_type(99, "You", 0.0, 0.0, SpawnType::Player));
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        let rendered = minimap_text(&app, None);
+
+        assert!(rendered.contains('!'));
+        assert!(rendered.contains('@'));
+        assert!(rendered.contains('◆'));
+    }
+
+    #[test]
+    fn minimap_target_marker_uses_target_line_instead_of_nav_paths() {
+        let mut app = test_app_with_spawns();
+        // Keep nav paths disabled to prove the target marker follows show_target_line directly.
+        app.map_state.show_nav_paths = false;
+        app.map_state.show_target_line = true;
+        app.target = Some(test_spawn(77, "target", 6.0, 0.0));
+
+        let with_target = minimap_text(&app, None);
+        assert!(with_target.contains('✚'));
+
+        app.map_state.show_target_line = false;
+        let without_target = minimap_text(&app, None);
+        assert!(!without_target.contains('✚'));
+    }
+
+    #[test]
+    fn map_legend_target_entry_uses_target_line_instead_of_nav_paths() {
+        let mut app = test_app_with_spawns();
+        // Keep nav paths disabled to prove the legend entry follows show_target_line directly.
+        app.map_state.show_nav_paths = false;
+        app.map_state.show_target_line = true;
+        app.target = Some(test_spawn(77, "target", 6.0, 0.0));
+
+        let with_target = render_map_view_text(app, 80, 16);
+        assert!(with_target.contains("Target"));
+
+        let mut without_target_line = test_app_with_spawns();
+        without_target_line.map_state.show_nav_paths = false;
+        without_target_line.map_state.show_target_line = false;
+        without_target_line.target = Some(test_spawn(77, "target", 6.0, 0.0));
+        let without_target = render_map_view_text(without_target_line, 80, 16);
+        assert!(!without_target.contains("Target"));
+    }
+
     // ── clip_line_z tests ──────────────────────────────────────────────
 
     #[test]
@@ -2263,5 +2415,24 @@ mod tests {
         // equal z endpoints gracefully (dz ≈ 0, both inside)
         let result = clip_line_z(10.0, 20.0, 50.0, 30.0, 40.0, 50.0, 50.0, 10.0);
         assert_eq!(result, Some((10.0, 20.0, 30.0, 40.0)));
+    }
+
+    #[test]
+    fn radius_overlays_render_around_player_and_target() {
+        let mut app = test_app_with_spawns();
+        app.map_state.cast_radius = Some(MapRadiusOverlay {
+            radius: 3.0,
+            color: Color::Cyan,
+            label: String::from("Cast 3"),
+        });
+        app.target = Some(test_spawn(500, "target", 20.0, 10.0));
+
+        let mut grid = vec![vec![(' ', Color::Reset); 32]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_radius_overlays(&app, &to_grid, 32, 24, &mut grid);
+
+        assert_eq!(grid[0][3], ('·', Color::Cyan));
+        assert_eq!(grid[10][23], ('·', Color::Cyan));
     }
 }

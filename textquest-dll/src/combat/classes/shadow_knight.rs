@@ -1,6 +1,6 @@
 use textquest_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{self, ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext, PetAction};
 
 /// Shadow Knight strategy: off-tank with lifetap DPS, disease/poison `DoTs`, snare.
 /// EQ class ID: 5
@@ -72,6 +72,10 @@ impl ClassStrategy for ShadowKnightStrategy {
 
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
         false // SK tanks, doesn't assist
+    }
+
+    fn pet_action(&self, ctx: &CombatContext) -> Option<PetAction> {
+        strategy::pet_attack_action(ctx)
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {

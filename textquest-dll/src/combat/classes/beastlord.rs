@@ -1,6 +1,6 @@
 use textquest_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{self, ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext, PetAction};
 
 /// Beastlord strategy: pet class with melee DPS and slow.
 ///
@@ -39,6 +39,10 @@ impl ClassStrategy for BeastlordStrategy {
 
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
         true
+    }
+
+    fn pet_action(&self, ctx: &CombatContext) -> Option<PetAction> {
+        strategy::pet_attack_action(ctx)
     }
 
     fn on_engage(&mut self, ctx: &CombatContext) {

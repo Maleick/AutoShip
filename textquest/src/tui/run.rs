@@ -1110,7 +1110,7 @@ fn load_demo_data(app: &mut App) {
             race_id,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),
-            current_spellset: Vec::new(),
+            memorized_spells: Vec::new(),
             cast_state: None,
         });
         client.character_name = name.to_string();

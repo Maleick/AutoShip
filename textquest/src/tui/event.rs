@@ -1,10 +1,97 @@
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::time::Duration;
 
 use super::app::{ActivePanel, ActiveScreen, App};
 use crate::orchestrator::Orchestrator;
+use crate::tui::state::MapFilterKind;
 use crate::tui::ui::ch_chain::ChPanelFocus;
+
+fn toggle_tactical_map_layer(app: &mut App, layer: u8) {
+    let status = app.map_state.toggle_layer(layer);
+    app.status_message = status.to_string();
+    app.active_screen = ActiveScreen::Tactical;
+    app.active_panel = ActivePanel::TacticalMap;
+}
+
+fn toggle_tactical_map_filter(app: &mut App, kind: MapFilterKind) {
+    app.status_message = app.map_state.toggle_filter(kind);
+    app.active_screen = ActiveScreen::Tactical;
+    app.active_panel = ActivePanel::TacticalMap;
+}
+
+fn handle_tactical_map_global_shortcut(app: &mut App, key: KeyEvent) -> bool {
+    if app.active_screen != ActiveScreen::Tactical || !key.modifiers.contains(KeyModifiers::ALT) {
+        return false;
+    }
+
+    match key.code {
+        KeyCode::Char('1' | '2' | '3' | '4' | '5' | '6') => {
+            let layer = match key.code {
+                KeyCode::Char('1') => 1,
+                KeyCode::Char('2') => 2,
+                KeyCode::Char('3') => 3,
+                KeyCode::Char('4') => 4,
+                KeyCode::Char('5') => 5,
+                KeyCode::Char('6') => 6,
+                _ => unreachable!(),
+            };
+            toggle_tactical_map_layer(app, layer);
+            true
+        }
+        KeyCode::Char('n' | 'N') => {
+            toggle_tactical_map_filter(app, MapFilterKind::Npc);
+            true
+        }
+        KeyCode::Char('p' | 'P') => {
+            toggle_tactical_map_filter(app, MapFilterKind::Pc);
+            true
+        }
+        KeyCode::Char('c' | 'C') => {
+            toggle_tactical_map_filter(app, MapFilterKind::Corpse);
+            true
+        }
+        KeyCode::Char('g' | 'G') => {
+            toggle_tactical_map_filter(app, MapFilterKind::Ground);
+            true
+        }
+        KeyCode::Char('t' | 'T') => {
+            toggle_tactical_map_filter(app, MapFilterKind::Pet);
+            true
+        }
+        KeyCode::Char('r' | 'R') => {
+            toggle_tactical_map_filter(app, MapFilterKind::Named);
+            true
+        }
+        KeyCode::Char('u' | 'U') => {
+            toggle_tactical_map_filter(app, MapFilterKind::Untargetable);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn handle_tactical_map_panel_toggle(app: &mut App, key: KeyCode) -> bool {
+    match key {
+        // Layer toggles — Mac-friendly alternatives to Alt+1-6
+        KeyCode::Char('g') => toggle_tactical_map_layer(app, 1),
+        KeyCode::Char('s') => toggle_tactical_map_layer(app, 2),
+        KeyCode::Char('w') => toggle_tactical_map_layer(app, 3),
+        KeyCode::Char('x') => toggle_tactical_map_layer(app, 4),
+        KeyCode::Char('l') => toggle_tactical_map_layer(app, 5),
+        KeyCode::Char('a') => toggle_tactical_map_layer(app, 6),
+        KeyCode::Char('N') => toggle_tactical_map_filter(app, MapFilterKind::Npc),
+        KeyCode::Char('P') => toggle_tactical_map_filter(app, MapFilterKind::Pc),
+        KeyCode::Char('C') => toggle_tactical_map_filter(app, MapFilterKind::Corpse),
+        KeyCode::Char('G') => toggle_tactical_map_filter(app, MapFilterKind::Ground),
+        KeyCode::Char('T') => toggle_tactical_map_filter(app, MapFilterKind::Pet),
+        KeyCode::Char('R') => toggle_tactical_map_filter(app, MapFilterKind::Named),
+        KeyCode::Char('U') => toggle_tactical_map_filter(app, MapFilterKind::Untargetable),
+        _ => return false,
+    }
+
+    true
+}
 
 /// Poll for keyboard events and update app state.
 /// Returns true if an event was handled.
@@ -441,6 +528,10 @@ pub fn handle_events(
             }
         }
 
+        if handle_tactical_map_global_shortcut(app, key) {
+            return Ok(true);
+        }
+
         match (key.code, key.modifiers) {
             (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('q'), _) => {
                 app.running = false;
@@ -453,43 +544,6 @@ pub fn handle_events(
             }
             (KeyCode::Char('!'), _) => {
                 app.set_active_group(Some(0));
-                return Ok(true);
-            }
-            (KeyCode::Char('1' | '2' | '3' | '4'), mods)
-                if app.active_screen == ActiveScreen::Tactical
-                    && mods.contains(KeyModifiers::ALT) =>
-            {
-                let layer = match key.code {
-                    KeyCode::Char('1') => 1,
-                    KeyCode::Char('2') => 2,
-                    KeyCode::Char('3') => 3,
-                    KeyCode::Char('4') => 4,
-                    _ => 0,
-                };
-                let status = app.map_state.toggle_layer(layer);
-                app.status_message = status.to_string();
-                app.active_screen = ActiveScreen::Tactical;
-                app.active_panel = ActivePanel::TacticalMap;
-                return Ok(true);
-            }
-            (KeyCode::Char('5'), mods)
-                if app.active_screen == ActiveScreen::Tactical
-                    && mods.contains(KeyModifiers::ALT) =>
-            {
-                let status = app.map_state.toggle_layer(5);
-                app.status_message = status.to_string();
-                app.active_screen = ActiveScreen::Tactical;
-                app.active_panel = ActivePanel::TacticalMap;
-                return Ok(true);
-            }
-            (KeyCode::Char('6'), mods)
-                if app.active_screen == ActiveScreen::Tactical
-                    && mods.contains(KeyModifiers::ALT) =>
-            {
-                let status = app.map_state.toggle_layer(6);
-                app.status_message = status.to_string();
-                app.active_screen = ActiveScreen::Tactical;
-                app.active_panel = ActivePanel::TacticalMap;
                 return Ok(true);
             }
             (KeyCode::Char('@'), _) => {
@@ -744,30 +798,7 @@ pub fn handle_events(
                         format!("Navmesh overlay: {}", if enabled { "ON" } else { "OFF" });
                     return Ok(true);
                 }
-                // Layer toggles — Mac-friendly alternatives to Alt+1-6
-                KeyCode::Char('g') => {
-                    let status = app.map_state.toggle_layer(1);
-                    app.status_message = status.to_string();
-                    return Ok(true);
-                }
-                KeyCode::Char('s') => {
-                    let status = app.map_state.toggle_layer(2);
-                    app.status_message = status.to_string();
-                    return Ok(true);
-                }
-                KeyCode::Char('w') => {
-                    let status = app.map_state.toggle_layer(3);
-                    app.status_message = status.to_string();
-                    return Ok(true);
-                }
-                KeyCode::Char('x') => {
-                    let status = app.map_state.toggle_layer(4);
-                    app.status_message = status.to_string();
-                    return Ok(true);
-                }
-                KeyCode::Char('l') => {
-                    let status = app.map_state.toggle_layer(5);
-                    app.status_message = status.to_string();
+                key if handle_tactical_map_panel_toggle(app, key) => {
                     return Ok(true);
                 }
                 _ => {}
@@ -878,4 +909,43 @@ pub fn handle_events(
     }
 
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tactical_map_global_alt_filter_shortcut_toggles_npc_filter() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Tactical;
+        app.active_panel = ActivePanel::TacticalSpawns;
+
+        assert!(handle_tactical_map_global_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('n'), KeyModifiers::ALT),
+        ));
+        assert_eq!(app.active_panel, ActivePanel::TacticalMap);
+        assert_eq!(app.status_message, "NPC filter OFF");
+        assert!(!app.map_state.filters.show_npc);
+    }
+
+    #[test]
+    fn tactical_map_panel_toggle_supports_annotations_and_filters() {
+        let mut app = App::new();
+
+        assert!(handle_tactical_map_panel_toggle(
+            &mut app,
+            KeyCode::Char('a')
+        ));
+        assert!(app.map_state.show_annotations);
+        assert_eq!(app.status_message, "Annotations ON");
+
+        assert!(handle_tactical_map_panel_toggle(
+            &mut app,
+            KeyCode::Char('P')
+        ));
+        assert_eq!(app.status_message, "PC filter OFF");
+        assert!(!app.map_state.filters.show_pc);
+    }
 }

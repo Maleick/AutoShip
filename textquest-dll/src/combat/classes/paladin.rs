@@ -20,6 +20,13 @@ impl PaladinStrategy {
     pub fn new(class_id: u8) -> Self {
         Self { class_id }
     }
+
+    fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
+        ctx.group_members
+            .iter()
+            .find(|m| !m.is_dead && m.has_detrimental)
+            .map(|m| m.spawn_id)
+    }
 }
 
 fn is_cure_spell(s: &SpellEntry) -> bool {
@@ -43,8 +50,19 @@ impl ClassStrategy for PaladinStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
+        let lowest_hp_member = strategy::lowest_hp_member(ctx);
+        let needs_heal = lowest_hp_member.is_some_and(|(_, hp)| hp < 60.0);
+
+        if ctx.in_combat && !needs_heal && ctx.config.spells.iter().any(is_stun_spell) {
+            return strategy::assist_target(ctx);
+        }
+
+        if let Some(afflicted_id) = self.afflicted_member(ctx) {
+            return Some(afflicted_id);
+        }
+
         // If someone needs healing, target them
-        if let Some((heal_target, hp)) = strategy::lowest_hp_member(ctx)
+        if let Some((heal_target, hp)) = lowest_hp_member
             && hp < 60.0
         {
             return Some(heal_target);
@@ -385,5 +403,61 @@ mod tests {
         let spell = pal.select_spell(&ctx);
         assert!(spell.is_some());
         assert_eq!(spell.unwrap().name, "Holy Might");
+    }
+
+    #[test]
+    fn paladin_select_target_afflicted_member_when_curing() {
+        let pal = PaladinStrategy::new(3);
+        let config = test_config_with_spells();
+        let player = textquest_common::types::SpawnData::default();
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let members = vec![make_member(10, 90.0, true), make_member(11, 50.0, false)];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert_eq!(pal.select_target(&ctx), Some(10));
+    }
+
+    #[test]
+    fn paladin_select_target_keeps_enemy_for_stun_before_cure() {
+        let pal = PaladinStrategy::new(3);
+        let config = test_config_with_spells();
+        let player = textquest_common::types::SpawnData::default();
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let members = vec![make_member(10, 90.0, true)];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert_eq!(pal.select_target(&ctx), Some(99));
     }
 }
