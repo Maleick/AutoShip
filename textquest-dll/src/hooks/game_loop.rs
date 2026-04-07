@@ -1970,20 +1970,35 @@ fn set_window_title_for_pid(pid: u32, title: &str) {
 
 /// Dispatch a single IPC command received from the orchestrator.
 fn dispatch_command(cmd: textquest_common::ipc::Command) {
+    use std::borrow::Cow;
     use textquest_common::ipc::Command;
 
     match cmd {
         Command::SlashCommand { command } => {
-            // Intercept /cleartarget — not a real EQ command. Route to our
-            // ClearTarget handler which writes NULL to pinstTarget directly.
             let trimmed = command.trim();
-            if trimmed.eq_ignore_ascii_case("/cleartarget") {
-                tracing::info!("Intercepted /cleartarget slash command → ClearTarget");
-                dispatch_command(Command::ClearTarget);
-                return;
-            }
+            let slash_command = match intercept_custom_slash_command(trimmed) {
+                Some(InterceptedSlashCommand::ClearTarget) => {
+                    tracing::info!("Intercepted /cleartarget slash command → ClearTarget");
+                    dispatch_command(Command::ClearTarget);
+                    return;
+                }
+                Some(InterceptedSlashCommand::InteractTarget) => {
+                    tracing::info!(
+                        cmd = trimmed,
+                        "Intercepted /click ... target → InteractTarget"
+                    );
+                    interact_with_target();
+                    return;
+                }
+                Some(InterceptedSlashCommand::Rewrite(rewritten)) => {
+                    tracing::info!(from = trimmed, to = %rewritten, "Rewriting custom slash command");
+                    Cow::Owned(rewritten)
+                }
+                None => Cow::Borrowed(trimmed),
+            };
+            let slash_command = slash_command.as_ref();
 
-            if let Some(spell_set) = parse_spell_set_command(trimmed) {
+            if let Some(spell_set) = parse_spell_set_command(slash_command) {
                 match handle_spell_set_command(spell_set) {
                     Ok(Some(eq_command)) => {
                         tracing::info!(cmd = %eq_command, "Executing translated spell-set command");
@@ -2012,17 +2027,15 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             // When /target is issued while already targeting, EQ's InterpretCmd
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
-            if trimmed.len() > 7
-                && trimmed
-                    .get(..7)
-                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("/target"))
-                && trimmed.as_bytes().get(7).copied() == Some(b' ')
-            {
+            if should_preclear_target_for_slash(slash_command) {
                 let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
                 if eq_base != 0 {
                     let has_target = read_target_state(eq_base).is_some();
                     if has_target {
-                        tracing::debug!(cmd = %command, "Pre-clearing target before /target switch");
+                        tracing::debug!(
+                            cmd = %slash_command,
+                            "Pre-clearing target before target-switching slash command"
+                        );
                         let controller = super::targeting::TargetingController::new(eq_base);
                         if let Err(e) = controller.clear_target() {
                             tracing::warn!(error = %e, "Failed to pre-clear target");
@@ -2031,13 +2044,13 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 }
             }
 
-            tracing::info!(cmd = %command, "Executing slash command");
-            if let Some(active_bandolier) = parse_bandolier_activate_command(trimmed) {
+            tracing::info!(cmd = %slash_command, "Executing slash command");
+            if let Some(active_bandolier) = parse_bandolier_activate_command(slash_command) {
                 if let Ok(mut known_bandolier) = ACTIVE_BANDOLIER_SET.lock() {
                     *known_bandolier = Some(active_bandolier);
                 }
             }
-            execute_slash_command(&command);
+            execute_slash_command(slash_command);
         }
         Command::NavigateTo { waypoints } => {
             crate::nav::handle_command(crate::nav::NavCommand::Navigate(waypoints));
@@ -2401,6 +2414,66 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::debug!(?other, "Unhandled command");
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum InterceptedSlashCommand {
+    ClearTarget,
+    InteractTarget,
+    Rewrite(String),
+}
+
+fn intercept_custom_slash_command(command: &str) -> Option<InterceptedSlashCommand> {
+    if command.eq_ignore_ascii_case("/cleartarget") {
+        return Some(InterceptedSlashCommand::ClearTarget);
+    }
+
+    if is_click_right_target_command(command) {
+        return Some(InterceptedSlashCommand::InteractTarget);
+    }
+
+    rewrite_door_command(command).map(InterceptedSlashCommand::Rewrite)
+}
+
+fn rewrite_door_command(command: &str) -> Option<String> {
+    let mut parts = command.splitn(2, char::is_whitespace);
+    let head = parts.next().unwrap_or_default();
+    if !head.eq_ignore_ascii_case("/door") {
+        return None;
+    }
+
+    let rest = parts.next().map(str::trim).filter(|rest| !rest.is_empty());
+    Some(match rest {
+        Some(rest) => format!("/doortarget {rest}"),
+        None => "/doortarget".to_string(),
+    })
+}
+
+fn is_click_right_target_command(command: &str) -> bool {
+    let mut parts = command.split_whitespace();
+    let Some(head) = parts.next() else {
+        return false;
+    };
+    if !head.eq_ignore_ascii_case("/click") {
+        return false;
+    }
+
+    let Some(button) = parts.next() else {
+        return false;
+    };
+    if !button.eq_ignore_ascii_case("right") {
+        return false;
+    }
+
+    let Some(target) = parts.next() else {
+        return false;
+    };
+    target.eq_ignore_ascii_case("target") && parts.next().is_none()
+}
+
+fn should_preclear_target_for_slash(command: &str) -> bool {
+    let head = command.split_whitespace().next().unwrap_or_default();
+    head.eq_ignore_ascii_case("/target") || head.eq_ignore_ascii_case("/doortarget")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2784,6 +2857,59 @@ mod tests {
 
         assert_eq!(names, vec!["Cleric01_Teek.ini", "cleric01_Test.ini"]);
         let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn intercepts_cleartarget_slash_command() {
+        assert_eq!(
+            intercept_custom_slash_command("/cleartarget"),
+            Some(InterceptedSlashCommand::ClearTarget)
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/ClearTarget"),
+            Some(InterceptedSlashCommand::ClearTarget)
+        );
+    }
+
+    #[test]
+    fn intercepts_click_right_target_slash_command() {
+        assert_eq!(
+            intercept_custom_slash_command("/click right target"),
+            Some(InterceptedSlashCommand::InteractTarget)
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/CLICK RIGHT TARGET"),
+            Some(InterceptedSlashCommand::InteractTarget)
+        );
+        assert_eq!(intercept_custom_slash_command("/click left target"), None);
+        assert_eq!(intercept_custom_slash_command("/click right door"), None);
+    }
+
+    #[test]
+    fn rewrites_door_slash_command_to_doortarget() {
+        assert_eq!(
+            intercept_custom_slash_command("/door"),
+            Some(InterceptedSlashCommand::Rewrite("/doortarget".into()))
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/door id 7"),
+            Some(InterceptedSlashCommand::Rewrite("/doortarget id 7".into()))
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/DOOR   wooden gate"),
+            Some(InterceptedSlashCommand::Rewrite(
+                "/doortarget wooden gate".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn preclears_for_target_and_doortarget_commands() {
+        assert!(should_preclear_target_for_slash("/target Emperor Crush"));
+        assert!(should_preclear_target_for_slash("/doortarget"));
+        assert!(should_preclear_target_for_slash("/doortarget id 5"));
+        assert!(!should_preclear_target_for_slash("/nav target"));
+        assert!(!should_preclear_target_for_slash("/click right target"));
     }
 
     #[test]
