@@ -71,14 +71,15 @@ jobs:
 
       - name: Check for docs changes
         id: docs-check
-        shell: bash
         run: |
-          if git diff HEAD~1 --name-only | grep -qE '^docs/'; then
-            echo "docs_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "docs_changed=false" >> "$GITHUB_OUTPUT"
-            echo "No docs changes — skipping wiki sync"
-          fi
+          @echo off
+          setlocal EnableExtensions EnableDelayedExpansion
+          set "DOCS_CHANGED=false"
+          for /f "usebackq delims=" %%F in (`git diff --name-only HEAD~1`) do (
+            echo %%F| findstr /B /C:"docs/" >nul && set "DOCS_CHANGED=true"
+          )
+          echo docs_changed=%DOCS_CHANGED%>>"%GITHUB_OUTPUT%"
+          if /I "%DOCS_CHANGED%"=="false" echo No docs changes - skipping wiki sync
 
       - name: Setup verified Python
         if: steps.docs-check.outputs.docs_changed == 'true'

@@ -9,6 +9,8 @@
 //! Only 4 debug registers available -- prioritize the most critical hooks.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+#[cfg(test)]
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 pub const MAX_SLOTS: usize = 4;
 
@@ -398,6 +400,15 @@ fn clear_slot_state(slot: HwbpSlot) {
 }
 
 #[cfg(test)]
+pub(crate) fn test_guard() -> MutexGuard<'static, ()> {
+    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    TEST_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("HWBP test mutex poisoned")
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -423,6 +434,8 @@ mod tests {
 
     #[test]
     fn register_unregister_stub() {
+        let _guard = test_guard();
+        remove_all();
         #[cfg(not(windows))]
         {
             fn dummy_callback(_: *mut ()) -> bool {
@@ -435,15 +448,20 @@ mod tests {
             assert!(!is_active(HwbpSlot::Dr0));
             assert_eq!(get_address(HwbpSlot::Dr0), 0);
         }
+        remove_all();
     }
 
     #[test]
     fn remove_all_is_safe_when_empty() {
+        let _guard = test_guard();
+        remove_all();
         remove_all();
     }
 
     #[test]
     fn remove_all_clears_inactive_slot_metadata() {
+        let _guard = test_guard();
+        remove_all();
         fn dummy_callback(_: *mut ()) -> bool {
             true
         }
@@ -462,5 +480,6 @@ mod tests {
         assert_eq!(get_address(HwbpSlot::Dr0), 0);
         assert_eq!(CALLBACKS[HwbpSlot::Dr0 as usize].load(Ordering::Acquire), 0);
         assert!(!is_active(HwbpSlot::Dr0));
+        remove_all();
     }
 }
