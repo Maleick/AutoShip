@@ -20,6 +20,13 @@ impl ShamanStrategy {
             last_target_id: 0,
         }
     }
+
+    fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
+        ctx.group_members
+            .iter()
+            .find(|m| !m.is_dead && m.has_detrimental)
+            .map(|m| m.spawn_id)
+    }
 }
 
 impl ClassStrategy for ShamanStrategy {
@@ -28,6 +35,10 @@ impl ClassStrategy for ShamanStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
+        if let Some(afflicted_id) = self.afflicted_member(ctx) {
+            return Some(afflicted_id);
+        }
+
         // If someone needs healing, target them
         if let Some((heal_target, hp)) = strategy::lowest_hp_member(ctx)
             && hp < 70.0
@@ -399,6 +410,52 @@ mod tests {
             extended_targets: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(99));
+    }
+
+    #[test]
+    fn shaman_select_target_afflicted_member_before_heal_or_dps() {
+        let shaman = ShamanStrategy::new(10);
+        let config = CombatConfig::default();
+        let player = textquest_common::types::SpawnData::default();
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let group = vec![
+            GroupMemberState {
+                spawn_id: 42,
+                hp_pct: 85.0,
+                mana_pct: 100.0,
+                class_id: 1,
+                is_dead: false,
+                name: String::new(),
+                has_detrimental: true,
+            },
+            GroupMemberState {
+                spawn_id: 43,
+                hp_pct: 50.0,
+                mana_pct: 100.0,
+                class_id: 1,
+                is_dead: false,
+                name: String::new(),
+                has_detrimental: false,
+            },
+        ];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &group,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+        assert_eq!(shaman.select_target(&ctx), Some(42));
     }
 
     #[test]
