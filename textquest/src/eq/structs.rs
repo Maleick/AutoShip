@@ -274,6 +274,12 @@ pub struct SpellSlot {
 }
 
 impl SpellSlot {
+    /// Returns `true` when the slot is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.spell_id == 0
+    }
+
     /// Human-readable label for the spell in this slot.
     #[must_use]
     pub fn display_name(&self) -> String {
@@ -540,12 +546,12 @@ impl SpawnInfo {
             return Vec::new();
         }
 
-        self.current_spellset
+        self.memorized_spells
             .chunks(chunk_size)
             .map(|chunk| {
                 chunk
                     .iter()
-                    .map(|spell| format!("G{} {}", spell.gem, spell.display_name()))
+                    .map(|spell| format!("G{} {}", spell.slot + 1, spell.display_name()))
                     .collect::<Vec<_>>()
                     .join("  ")
             })
@@ -686,16 +692,18 @@ mod tests {
     #[test]
     fn spell_book_entry_empty_detection() {
         assert!(
-            SpellBookEntry {
+            SpellSlot {
                 slot: 0,
-                spell_id: -1,
+                spell_id: 0,
+                spell_name: None,
             }
             .is_empty()
         );
         assert!(
-            !SpellBookEntry {
+            !SpellSlot {
                 slot: 1,
                 spell_id: 123,
+                spell_name: None,
             }
             .is_empty()
         );
@@ -703,13 +711,13 @@ mod tests {
 
     #[test]
     fn memorized_spell_display_name_prefers_resolved_name() {
-        let named = MemorizedSpell {
-            gem: 1,
+        let named = SpellSlot {
+            slot: 0,
             spell_id: 123,
             spell_name: Some("Complete Heal".to_string()),
         };
-        let unnamed = MemorizedSpell {
-            gem: 2,
+        let unnamed = SpellSlot {
+            slot: 1,
             spell_id: 456,
             spell_name: None,
         };
@@ -890,28 +898,30 @@ mod tests {
     fn spawn_info_current_spellset_lines_chunk_and_label_spells() {
         let mut s = make_spawn_info(1);
         s.spellbook = vec![
-            SpellBookEntry {
+            SpellSlot {
                 slot: 0,
                 spell_id: 123,
+                spell_name: None,
             },
-            SpellBookEntry {
+            SpellSlot {
                 slot: 1,
-                spell_id: 456,
-            },
-        ];
-        s.current_spellset = vec![
-            MemorizedSpell {
-                gem: 1,
-                spell_id: 123,
-                spell_name: Some("Complete Heal".to_string()),
-            },
-            MemorizedSpell {
-                gem: 2,
                 spell_id: 456,
                 spell_name: None,
             },
-            MemorizedSpell {
-                gem: 3,
+        ];
+        s.memorized_spells = vec![
+            SpellSlot {
+                slot: 0,
+                spell_id: 123,
+                spell_name: Some("Complete Heal".to_string()),
+            },
+            SpellSlot {
+                slot: 1,
+                spell_id: 456,
+                spell_name: None,
+            },
+            SpellSlot {
+                slot: 2,
                 spell_id: 789,
                 spell_name: Some("Celestial Remedy".to_string()),
             },

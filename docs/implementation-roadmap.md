@@ -17,7 +17,7 @@ This document is the source of truth for roadmap order, milestone gates, evidenc
 | M6        | Web Dashboard           | **COMPLETE** | TUI enhancements, axum + React/Vite/Tailwind SPA, fleet metrics   |
 | M7–M11    | Future                  | Planned      | Zoning, Orchestrator, RL, Economy, Soul Engine                     |
 
-_Last updated: 2026-04-06. ~1001 commits, ~2584 tests across 4 crates._
+_Last updated: 2026-04-07. ~1001 commits, ~2584 tests across 4 crates._
 
 ## Historical Base
 
@@ -248,11 +248,48 @@ Objective:
 
 - convert stable control and orchestration into loot, vendor, banking, and economy execution loops — the self-sustaining Krono farm that funds hardware and accounts
 
+#### Implementation slices
+
+**P1 — Core execution loops (implement in order)**
+
+| Slice | Summary |
+| ----- | ------- |
+| Loot intake and distribution workflow | Turn corpse, item, and recipient selection into an explicit queue with operator-visible ownership, reserve, and handoff state |
+| Vendor cycle controller | Promote the existing sell-cycle primitives into a bounded vendor run with route state, keep/sell policy visibility, and abort/resume controls |
+| Banking cycle controller | Add deposit, withdrawal, and mule-transfer queues that reuse the same routing, inventory, and confirmation model as vendor runs |
+| Economy-facing TUI summaries and overrides | Surface the active queue, acting character, destination, cash/inventory deltas, and pause/skip/abort controls in the operator UI |
+
+**P2 — Sustaining-loop support**
+
+| Slice | Summary |
+| ----- | ------- |
+| Wishlist and reserve rules | Track keep/sell/bank/distribute intent per item class so loot and vendor loops stay deterministic instead of ad hoc |
+| Economy ledger and trend summaries | Record plat, item, and handoff outcomes so the operator can verify that the loop is productive and bounded |
+| Failure routing and recovery | Make overweight inventory, full bank, missing vendor, and unsafe-path failures visible with explicit fallback states instead of silent retries |
+
+#### Implementation order
+
+1. Start with loot intake/distribution because it defines the item-routing contract the later vendor and banking loops must obey.
+2. Layer vendor and banking cycles on top of that contract, keeping both flows on the existing authenticated control path instead of inventing a parallel economy channel.
+3. Keep every phase operator-visible with explicit summaries and overrides before claiming any self-sustaining farm loop.
+
 Initial slices:
 
 - loot and distribution workflow
 - vendor and banking cycles
 - economy-facing TUI summaries and operator overrides
+
+Entry gate:
+
+- `M8` orchestration routing and session/group visibility are stable enough to target a single toon, team, or session set intentionally
+- `M9` guardrails exist so economy automation can be measured without regressing the underlying control stack
+
+Exit gate:
+
+- loot, vendor, and banking execution loops are all bounded by explicit operator-visible queue/state surfaces
+- every economy loop exposes at least pause, skip, abort, and resume controls
+- TUI summaries make current actor, target destination, and recent cash/item outcomes visible without digging through logs
+- the self-sustaining farming loop is tracked as a validated automation surface, not inferred from disconnected subsystems
 
 ### `M11` Soul Engine + LLM
 

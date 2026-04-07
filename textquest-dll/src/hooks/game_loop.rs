@@ -335,6 +335,9 @@ enum FollowSlashCommand {
     Off,
 }
 
+const DEFAULT_FOLLOW_DISTANCE: f32 = 20.0;
+const DEFAULT_FOLLOW_LEASH_DISTANCE: f32 = 60.0;
+
 fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
     let tokens = match tokenize_slash_command(command) {
         Ok(tokens) => tokens,
@@ -419,6 +422,136 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
         require_not_invisible,
         bandolier_set,
     }))
+}
+
+fn parse_movement_slash_command(command: &str) -> Option<Result<MovementSlashCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if verb.eq_ignore_ascii_case("/stick") {
+        return Some(parse_stick_slash_command(args).map(MovementSlashCommand::Stick));
+    }
+    if verb.eq_ignore_ascii_case("/follow") {
+        return Some(parse_follow_slash_command(args).map(MovementSlashCommand::Follow));
+    }
+    None
+}
+
+fn parse_stick_slash_command(args: &[String]) -> Result<StickSlashCommand, String> {
+    if args.is_empty() {
+        return Ok(StickSlashCommand::Start(
+            textquest_common::nav::StickConfig::default(),
+        ));
+    }
+
+    if args.len() == 1 && args[0].eq_ignore_ascii_case("off") {
+        return Ok(StickSlashCommand::Off);
+    }
+
+    if args[0].eq_ignore_ascii_case("mod") {
+        let Some(delta) = args.get(1) else {
+            return Err("missing distance delta for /stick mod".to_string());
+        };
+        let delta = delta
+            .parse::<f32>()
+            .map_err(|_| format!("invalid /stick mod value: {delta}"))?;
+        return Ok(StickSlashCommand::Mod(delta));
+    }
+
+    let mut config = textquest_common::nav::StickConfig::default();
+    let mut idx = 0usize;
+    while let Some(token) = args.get(idx) {
+        if token.eq_ignore_ascii_case("hold") {
+            config.hold = true;
+        } else if token.eq_ignore_ascii_case("always") {
+            config.always = true;
+        } else if token.eq_ignore_ascii_case("moveback") {
+            config.moveback = true;
+        } else if token.eq_ignore_ascii_case("healer") {
+            config.healer = true;
+        } else if token.eq_ignore_ascii_case("autopause") {
+            config.autopause = true;
+        } else if token.eq_ignore_ascii_case("behind") {
+            config.mode = textquest_common::nav::StickMode::Behind;
+        } else if token.eq_ignore_ascii_case("!front") || token.eq_ignore_ascii_case("notfront") {
+            config.mode = textquest_common::nav::StickMode::NotFront;
+        } else if token.eq_ignore_ascii_case("pin") {
+            config.mode = textquest_common::nav::StickMode::Pin;
+        } else if token.eq_ignore_ascii_case("front") {
+            config.mode = textquest_common::nav::StickMode::Front;
+        } else if token.eq_ignore_ascii_case("snaproll") {
+            config.mode = textquest_common::nav::StickMode::SnapRoll;
+        } else if token.eq_ignore_ascii_case("id") {
+            let Some(raw_id) = args.get(idx + 1) else {
+                return Err("missing spawn id for /stick id".to_string());
+            };
+            config.id = Some(
+                raw_id
+                    .parse::<u32>()
+                    .map_err(|_| format!("invalid /stick id value: {raw_id}"))?,
+            );
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("behindarc") {
+            let Some(raw_arc) = args.get(idx + 1) else {
+                return Err("missing arc value for /stick behindarc".to_string());
+            };
+            config.behind_arc = raw_arc
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick behindarc value: {raw_arc}"))?;
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("!frontarc")
+            || token.eq_ignore_ascii_case("notfrontarc")
+        {
+            let Some(raw_arc) = args.get(idx + 1) else {
+                return Err("missing arc value for /stick !frontarc".to_string());
+            };
+            config.not_front_arc = raw_arc
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick !frontarc value: {raw_arc}"))?;
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("backupdist") {
+            let Some(raw_dist) = args.get(idx + 1) else {
+                return Err("missing distance for /stick backupdist".to_string());
+            };
+            config.backup_dist = raw_dist
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick backupdist value: {raw_dist}"))?;
+            idx += 1;
+        } else if let Some(percent) = token.strip_suffix('%') {
+            config.distance = textquest_common::nav::StickDistance::Percent(
+                percent
+                    .parse::<f32>()
+                    .map_err(|_| format!("invalid /stick distance percentage: {token}"))?,
+            );
+        } else if let Ok(distance) = token.parse::<f32>() {
+            config.distance = textquest_common::nav::StickDistance::Absolute(distance);
+        } else {
+            return Err(format!("unsupported /stick token: {token}"));
+        }
+
+        idx += 1;
+    }
+
+    Ok(StickSlashCommand::Start(config))
+}
+
+fn parse_follow_slash_command(args: &[String]) -> Result<FollowSlashCommand, String> {
+    if args.is_empty() {
+        return Ok(FollowSlashCommand::Start { leader_name: None });
+    }
+    if args.len() == 1 && args[0].eq_ignore_ascii_case("off") {
+        return Ok(FollowSlashCommand::Off);
+    }
+
+    let leader_name = args.join(" ").trim().to_string();
+    if leader_name.is_empty() {
+        return Err("missing leader name for /follow".to_string());
+    }
+    Ok(FollowSlashCommand::Start {
+        leader_name: Some(leader_name),
+    })
 }
 
 fn parse_pipe_option<'a>(token: &'a str, option: &str) -> Option<&'a str> {
@@ -542,9 +675,7 @@ fn next_bandolier_restore_command(
     current_tick: u64,
     observed_casting: Option<bool>,
 ) -> Option<String> {
-    let Some(state) = pending.as_mut() else {
-        return None;
-    };
+    let state = pending.as_mut()?;
 
     let is_currently_casting = observed_casting == Some(true);
     if is_currently_casting {
@@ -753,6 +884,102 @@ fn handle_casting_slash_command(command: &str) -> bool {
                 queue_slash_command(format!("/target id {target_id}"));
             }
             queue_slash_command(parsed.action.slash_command());
+            true
+        }
+    }
+}
+
+fn spawn_matches_name(spawn: &textquest_common::types::SpawnData, leader_name: &str) -> bool {
+    spawn.displayed_name.eq_ignore_ascii_case(leader_name)
+        || spawn.name.eq_ignore_ascii_case(leader_name)
+}
+
+fn resolve_follow_spawn<'a>(
+    current_target: Option<&'a textquest_common::types::SpawnData>,
+    nearby: &'a [textquest_common::types::SpawnData],
+    leader_name: Option<&str>,
+) -> Option<&'a textquest_common::types::SpawnData> {
+    let leader_name = leader_name.map(str::trim).filter(|value| !value.is_empty());
+    match leader_name {
+        None => current_target,
+        Some(leader_name) => current_target
+            .filter(|spawn| spawn_matches_name(spawn, leader_name))
+            .or_else(|| {
+                nearby
+                    .iter()
+                    .find(|spawn| spawn_matches_name(spawn, leader_name))
+            }),
+    }
+}
+
+fn handle_movement_slash_command(command: &str) -> bool {
+    match parse_movement_slash_command(command) {
+        None => false,
+        Some(Err(err)) => {
+            tracing::warn!(cmd = %command, %err, "Unsupported movement slash command");
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Off))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StickOff);
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Mod(delta)))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StickMod(delta));
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Start(config)))) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            let current_target_id = if eq_base != 0 {
+                read_target_state(eq_base).map(|target| target.spawn_id)
+            } else {
+                None
+            };
+            crate::nav::handle_command(crate::nav::NavCommand::StickTo {
+                config,
+                current_target_id,
+            });
+            true
+        }
+        Some(Ok(MovementSlashCommand::Follow(FollowSlashCommand::Off))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StopFollow);
+            true
+        }
+        Some(Ok(MovementSlashCommand::Follow(FollowSlashCommand::Start { leader_name }))) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base == 0 {
+                tracing::warn!(cmd = %command, "Ignoring /follow outside the world");
+                return true;
+            }
+
+            let current_target = read_target_state(eq_base);
+            let nearby_guard = CACHED_NEARBY_FOR_STICK
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let Some(leader) = resolve_follow_spawn(
+                current_target.as_ref(),
+                &nearby_guard,
+                leader_name.as_deref(),
+            ) else {
+                tracing::warn!(cmd = %command, "Could not resolve /follow leader");
+                return true;
+            };
+
+            let leader_display_name = if leader.displayed_name.trim().is_empty() {
+                leader.name.clone()
+            } else {
+                leader.displayed_name.clone()
+            };
+            let anchor = textquest_common::nav::Waypoint::new(leader.x, leader.y, leader.z);
+            drop(nearby_guard);
+
+            crate::nav::handle_command(crate::nav::NavCommand::FollowPlayer {
+                config: textquest_common::nav::FollowConfig::new(
+                    leader_display_name,
+                    DEFAULT_FOLLOW_DISTANCE,
+                    DEFAULT_FOLLOW_LEASH_DISTANCE,
+                ),
+                anchor,
+            });
             true
         }
     }
@@ -1774,6 +2001,11 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
 
             if handle_casting_slash_command(trimmed) {
                 tracing::info!(cmd = %command, "Queued translated /casting command");
+                return;
+            }
+
+            if handle_movement_slash_command(trimmed) {
+                tracing::info!(cmd = %command, "Handled movement slash command");
                 return;
             }
 

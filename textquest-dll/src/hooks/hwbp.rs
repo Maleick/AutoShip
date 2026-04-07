@@ -331,8 +331,13 @@ pub fn register(
     // The DLL init runs on a thread pool worker (PoolParty), so
     // GetCurrentThread() would target the wrong thread. We suspend EQ's
     // main thread, write the debug register, and resume.
-    platform::set_breakpoint_on_main_thread(slot, address)
-        .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+    if let Err(error) = platform::set_breakpoint_on_main_thread(slot, address) {
+        clear_slot_state(slot);
+        if active_count() == 0 {
+            platform::remove_veh();
+        }
+        return Err(error.into());
+    }
 
     SLOTS[idx].active.store(true, Ordering::Release);
     tracing::info!(
@@ -346,21 +351,26 @@ pub fn register(
 pub fn unregister(slot: HwbpSlot) -> Result<(), Box<dyn std::error::Error>> {
     let idx = slot as usize;
     SLOTS[idx].active.store(false, Ordering::Release);
-    platform::clear_breakpoint(slot).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-    SLOTS[idx].address.store(0, Ordering::Release);
-    CALLBACKS[idx].store(0, Ordering::Release);
+    let clear_result = platform::clear_breakpoint(slot);
+    clear_slot_state(slot);
+    clear_result.map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
     tracing::info!(slot = idx, "HWBP unregistered");
     Ok(())
 }
 
 pub fn remove_all() {
     for (i, slot_state) in SLOTS.iter().enumerate().take(MAX_SLOTS) {
-        if slot_state.active.load(Ordering::Acquire) {
-            if let Some(slot) = HwbpSlot::from_index(i) {
-                if let Err(e) = unregister(slot) {
-                    tracing::warn!(slot = i, error = %e, "Failed to unregister HWBP");
-                }
-            }
+        let Some(slot) = HwbpSlot::from_index(i) else {
+            continue;
+        };
+
+        if !slot_state.active.load(Ordering::Acquire) {
+            clear_slot_state(slot);
+            continue;
+        }
+
+        if let Err(e) = unregister(slot) {
+            tracing::warn!(slot = i, error = %e, "Failed to unregister HWBP");
         }
     }
     platform::remove_veh();
@@ -378,6 +388,13 @@ pub fn active_count() -> usize {
     (0..MAX_SLOTS)
         .filter(|i| SLOTS[*i].active.load(Ordering::Acquire))
         .count()
+}
+
+fn clear_slot_state(slot: HwbpSlot) {
+    let idx = slot as usize;
+    SLOTS[idx].active.store(false, Ordering::Release);
+    SLOTS[idx].address.store(0, Ordering::Release);
+    CALLBACKS[idx].store(0, Ordering::Release);
 }
 
 #[cfg(test)]
@@ -423,5 +440,27 @@ mod tests {
     #[test]
     fn remove_all_is_safe_when_empty() {
         remove_all();
+    }
+
+    #[test]
+    fn remove_all_clears_inactive_slot_metadata() {
+        fn dummy_callback(_: *mut ()) -> bool {
+            true
+        }
+
+        SLOTS[HwbpSlot::Dr0 as usize]
+            .address
+            .store(0x12345, Ordering::Release);
+        CALLBACKS[HwbpSlot::Dr0 as usize]
+            .store(dummy_callback as *const () as usize, Ordering::Release);
+        SLOTS[HwbpSlot::Dr0 as usize]
+            .active
+            .store(false, Ordering::Release);
+
+        remove_all();
+
+        assert_eq!(get_address(HwbpSlot::Dr0), 0);
+        assert_eq!(CALLBACKS[HwbpSlot::Dr0 as usize].load(Ordering::Acquire), 0);
+        assert!(!is_active(HwbpSlot::Dr0));
     }
 }

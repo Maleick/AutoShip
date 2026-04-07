@@ -108,6 +108,20 @@ The current follow-on implementation slices remain:
 - #152 for the addressable actor routing abstraction
 - #109 for launch profiles, session presets, and slot-health visibility
 
+## Current `M10` economy guidance
+
+The current economy pass stays intentionally bounded to operator-visible execution loops:
+
+- treat loot intake, distribution, vendor, and banking work as explicit queues and state machines, not as hidden background automation
+- reuse the existing authenticated routing and session/group scope model instead of inventing a separate economy control plane
+- ship pause/skip/abort/resume controls and economy-facing TUI summaries alongside each loop before claiming a self-sustaining farm workflow
+
+The current follow-on implementation slices are:
+
+- loot intake plus distribution ownership and reserve rules
+- vendor and banking route controllers with failure-state visibility
+- plat/item ledger summaries plus operator overrides
+
 ## Developer Guidance
 
 When writing docs, PRs, or GitHub Project mirror items:
