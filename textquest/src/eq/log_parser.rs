@@ -1,39 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
-/// EQ chat channel.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ChatChannel {
-    /// Local /say channel.
-    Say,
-    /// Incoming /tell (private message).
-    Tell,
-    /// Outgoing /tell sent by the player.
-    TellOut,
-    /// Group chat channel.
-    Group,
-    /// Guild chat channel.
-    Guild,
-    /// Raid chat channel.
-    Raid,
-    /// Zone-wide /shout channel.
-    Shout,
-    /// Out-of-character chat channel.
-    Ooc,
-    /// /auction channel.
-    Auction,
-}
-
-/// A parsed chat message.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChatEvent {
-    /// Which chat channel this message was on.
-    pub channel: ChatChannel,
-    /// Name of the sender (or "You" for outgoing).
-    pub sender: String,
-    /// The message text.
-    pub message: String,
-}
+// Re-export chat types from the shared crate so existing call-sites don't need updating.
+use textquest_common::chat::parse_stripped_chat_text;
+pub use textquest_common::chat::{ChatChannel, ChatEvent};
 
 /// Events parsed from EQ log lines.
 #[derive(Debug, Clone, PartialEq)]
@@ -177,73 +147,10 @@ pub fn parse_log_line(line: &str) -> Option<LogEvent> {
     }
 
     // Tell out: "You told Soandso, 'message'"
-    if let Some(rest) = text.strip_prefix("You told ")
-        && let Some(rest2) = rest.strip_suffix('\'')
-        && let Some((target, msg)) = rest2.split_once(", '")
-    {
-        return Some(LogEvent::Chat(ChatEvent {
-            channel: ChatChannel::TellOut,
-            sender: "You".to_string(),
-            message: format!("-> {target}: {msg}"),
-        }));
-    }
-
     // Chat channels: pattern "Sender <verb>, 'message'"
-    if let Some(rest) = text.strip_suffix('\'')
-        && let Some((lhs, msg)) = rest.split_once(", '")
-    {
-        let chat = if let Some(sender) = lhs.strip_suffix(" says") {
-            Some(ChatEvent {
-                channel: ChatChannel::Say,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        } else if let Some(sender) = lhs.strip_suffix(" tells you") {
-            Some(ChatEvent {
-                channel: ChatChannel::Tell,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        } else if let Some(sender) = lhs.strip_suffix(" tells the group") {
-            Some(ChatEvent {
-                channel: ChatChannel::Group,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        } else if let Some(sender) = lhs.strip_suffix(" says to your guild") {
-            Some(ChatEvent {
-                channel: ChatChannel::Guild,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        } else if let Some(sender) = lhs.strip_suffix(" tells the raid") {
-            Some(ChatEvent {
-                channel: ChatChannel::Raid,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        } else if let Some(sender) = lhs.strip_suffix(" shouts") {
-            Some(ChatEvent {
-                channel: ChatChannel::Shout,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        } else if let Some(sender) = lhs.strip_suffix(" says out of character") {
-            Some(ChatEvent {
-                channel: ChatChannel::Ooc,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        } else {
-            lhs.strip_suffix(" auctions").map(|sender| ChatEvent {
-                channel: ChatChannel::Auction,
-                sender: sender.to_string(),
-                message: msg.to_string(),
-            })
-        };
-        if let Some(event) = chat.map(LogEvent::Chat) {
-            return Some(event);
-        }
+    // Delegate to the shared parser in textquest-common.
+    if let Some(chat) = parse_stripped_chat_text(text) {
+        return Some(LogEvent::Chat(chat));
     }
 
     None
