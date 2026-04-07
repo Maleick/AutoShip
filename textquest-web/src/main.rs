@@ -5,6 +5,13 @@
 //! - WebSocket endpoint for live session monitoring
 //! - DZ lockout timers, reset queue, raid instance tracking
 //! - Shared types via textquest-common
+//!
+//! ## Credential storage
+//!
+//! Set `TEXTQUEST_MASTER_PASSWORD` in the environment to enable password
+//! management.  When set the server opens (or creates) `data/credentials.db`,
+//! derives a master key with Argon2id and stores per-account passwords using
+//! AES-256-GCM — the same schema used by the CLI orchestrator.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -16,6 +23,7 @@ use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 
+mod accounts;
 mod api;
 mod ws;
 
@@ -57,6 +65,7 @@ async fn main() {
         ServeDir::new(&spa_dir).not_found_service(ServeFile::new(spa_dir.join("index.html")));
 
     let app = Router::new()
+        // Health + sessions
         .route("/api/health", get(api::health))
         .route("/api/sessions", get(api::list_sessions))
         // Economy endpoints

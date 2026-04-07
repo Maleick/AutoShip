@@ -7,6 +7,8 @@ use axum::Json;
 use axum::extract::Path;
 use serde::{Deserialize, Serialize};
 
+// ─── Health ───────────────────────────────────────────────────────────────────
+
 #[derive(Serialize)]
 pub struct HealthResponse {
     pub status: &'static str,
@@ -20,6 +22,8 @@ pub async fn health() -> Json<HealthResponse> {
         version: env!("CARGO_PKG_VERSION"),
     })
 }
+
+// ─── Sessions ─────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct SessionInfo {
