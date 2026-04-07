@@ -757,12 +757,12 @@ fn push_point(waypoints: &mut Vec<[f32; 3]>, point: [f32; 3]) {
 fn expand_straight_path<F>(
     poly_path: &[u64],
     straight_path: &[StraightPathPoint],
-    mut off_mesh_endpoints: F,
+    mut endpoint_resolver: F,
 ) -> Result<Vec<[f32; 3]>>
 where
     F: FnMut(u64, u64) -> Result<([f32; 3], [f32; 3])>,
 {
-    let mut waypoints = Vec::with_capacity(straight_path.len().saturating_add(1));
+    let mut waypoints = Vec::with_capacity(straight_path.len().saturating_mul(2));
     let mut search_start = 0usize;
 
     for point in straight_path {
@@ -786,8 +786,11 @@ where
         }
 
         let prev_ref = poly_path[poly_index - 1];
-        let (start_pos, end_pos) = off_mesh_endpoints(prev_ref, point.poly_ref)?;
+        let (start_pos, end_pos) = endpoint_resolver(prev_ref, point.poly_ref)?;
         if let Some(last) = waypoints.last_mut() {
+            // Detour marks off-mesh links at the connection entry, so the waypoint we
+            // just appended represents the same logical step and should be replaced by
+            // the exact off-mesh start point returned by the navmesh.
             *last = start_pos;
         } else {
             waypoints.push(start_pos);
