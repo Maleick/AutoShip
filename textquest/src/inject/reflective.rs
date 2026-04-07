@@ -723,7 +723,7 @@ mod platform {
                             ) as usize;
 
                             // Check for forwarded export (RVA within export directory)
-                            if func_rva >= export_rva && func_rva < export_rva + export_size {
+                            if func_rva >= export_rva && func_rva < export_rva.saturating_add(export_size) {
                                 tracing::warn!(
                                     dll = %imp.dll_name,
                                     function = %name,
@@ -760,8 +760,7 @@ mod platform {
                         func_rvas[index * 4..(index + 1) * 4].try_into().unwrap(),
                     ) as usize;
 
-                    let export_dir_end = export_dir_rva.saturating_add(export_dir_size);
-                    if func_rva >= export_dir_rva && func_rva < export_dir_end {
+                    if func_rva >= export_rva && func_rva < export_rva.saturating_add(export_size) {
                         return Err(InjectError::ImportResolveFailed {
                             dll: imp.dll_name.clone(),
                             function: format!("#{ord}"),
