@@ -5,6 +5,7 @@
 //! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
 
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
 use textquest_common::combat::{
     CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
@@ -264,7 +265,48 @@ impl Combatant {
             self.tick_disciplines(player);
         }
 
-        // Build context snapshot for this tick.
+        let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
+        let extended_targets = if eq_base == 0 {
+            None
+        } else {
+            unsafe { super::xtarget::read_extended_targets(eq_base) }
+        };
+
+        let (current_target_id, pet_status, pet_action) = {
+            // Build context snapshot for this tick.
+            let ctx = CombatContext {
+                player,
+                target,
+                nearby_enemies: nearby,
+                group_members: &self.group_members,
+                config: &self.config,
+                tick: self.tick_count,
+                in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
+                ch_chain_slot: None,
+                active_buffs: &[],
+                buff_info: &[],
+                target_is_mezzed: false,
+                extended_targets: extended_targets.as_ref(),
+            };
+
+            // --- Call on_engage when first entering Engaging state ---
+            if self.needs_on_engage {
+                self.needs_on_engage = false;
+                self.strategy.on_engage(&ctx);
+            }
+
+            (
+                ctx.target.map(|current| current.spawn_id),
+                ctx.pet_status(),
+                self.strategy.pet_action(&ctx),
+            )
+        };
+        if let Some(action) = pet_action {
+            if self.execute_pet_action(current_target_id, pet_status, action) {
+                return;
+            }
+        }
+
         let ctx = CombatContext {
             player,
             target,
@@ -277,14 +319,8 @@ impl Combatant {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
-            extended_targets: None,
+            extended_targets: extended_targets.as_ref(),
         };
-
-        // --- Call on_engage when first entering Engaging state ---
-        if self.needs_on_engage {
-            self.needs_on_engage = false;
-            self.strategy.on_engage(&ctx);
-        }
 
         // --- HolyShit evaluation (always runs first) ---
         if let Some(action) = self.holyshit.evaluate(&ctx).cloned() {
@@ -851,6 +887,56 @@ impl Combatant {
 
             // Only one disc per tick
             return;
+        }
+    }
+
+    fn execute_pet_action(
+        &mut self,
+        current_target_id: Option<u32>,
+        pet_status: super::strategy::PetStatus,
+        action: PetAction,
+    ) -> bool {
+        match action {
+            PetAction::Attack => {
+                let Some(target_id) = current_target_id else {
+                    return false;
+                };
+                crate::eq::slash_command("/pet attack");
+                crate::eq::slash_command("/pet focus");
+                tracing::info!(target_id, "Sent /pet attack + /pet focus");
+                false
+            }
+            PetAction::Buff { spell } => {
+                let Some(pet_id) = pet_status.spawn_id else {
+                    return false;
+                };
+                let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                    tracing::warn!(
+                        slot = spell.slot,
+                        "Skipping pet buff with invalid spell slot"
+                    );
+                    return false;
+                };
+
+                let original_target = current_target_id;
+                if original_target != Some(pet_id) {
+                    crate::eq::slash_command(&format!("/target id {pet_id}"));
+                }
+                crate::eq::cast_spell(gem_id, spell.spell_id);
+                if let Some(original_target) = original_target
+                    && original_target != pet_id
+                {
+                    crate::eq::slash_command(&format!("/target id {original_target}"));
+                }
+
+                let cast_delay = u32::from(self.personality.next_cast_delay());
+                self.gcd.consume();
+                self.state = CombatState::Casting {
+                    spell_slot: gem_id,
+                    ticks_remaining: 20 + cast_delay,
+                };
+                true
+            }
         }
     }
 }
