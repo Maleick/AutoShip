@@ -316,6 +316,25 @@ struct ParsedCastingCommand {
     bandolier_set: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum MovementSlashCommand {
+    Stick(StickSlashCommand),
+    Follow(FollowSlashCommand),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum StickSlashCommand {
+    Start(textquest_common::nav::StickConfig),
+    Off,
+    Mod(f32),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum FollowSlashCommand {
+    Start { leader_name: Option<String> },
+    Off,
+}
+
 fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
     let tokens = match tokenize_slash_command(command) {
         Ok(tokens) => tokens,
@@ -2561,6 +2580,105 @@ mod tests {
         assert!(
             saw_spike,
             "Expected at least one hesitation spike > 10 in 10000 draws"
+        );
+    }
+
+    #[test]
+    fn parse_stick_slash_defaults_to_basic_start() {
+        let parsed = parse_movement_slash_command("/stick").unwrap().unwrap();
+        assert_eq!(
+            parsed,
+            MovementSlashCommand::Stick(StickSlashCommand::Start(
+                textquest_common::nav::StickConfig::default(),
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_stick_slash_supports_distance_mode_and_flags() {
+        let parsed = parse_movement_slash_command("/stick 18 behind hold moveback")
+            .unwrap()
+            .unwrap();
+        match parsed {
+            MovementSlashCommand::Stick(StickSlashCommand::Start(config)) => {
+                assert_eq!(
+                    config.distance,
+                    textquest_common::nav::StickDistance::Absolute(18.0)
+                );
+                assert_eq!(config.mode, textquest_common::nav::StickMode::Behind);
+                assert!(config.hold);
+                assert!(config.moveback);
+            }
+            other => panic!("expected stick start, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_stick_slash_supports_percent_and_mod() {
+        let percent = parse_movement_slash_command("/stick 80% !front")
+            .unwrap()
+            .unwrap();
+        match percent {
+            MovementSlashCommand::Stick(StickSlashCommand::Start(config)) => {
+                assert_eq!(
+                    config.distance,
+                    textquest_common::nav::StickDistance::Percent(80.0)
+                );
+                assert_eq!(config.mode, textquest_common::nav::StickMode::NotFront);
+            }
+            other => panic!("expected stick start, got {other:?}"),
+        }
+
+        let delta = parse_movement_slash_command("/stick mod -5")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            delta,
+            MovementSlashCommand::Stick(StickSlashCommand::Mod(-5.0))
+        );
+    }
+
+    #[test]
+    fn parse_follow_slash_supports_named_and_off_modes() {
+        let follow = parse_movement_slash_command(r#"/follow "Main Tank""#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            follow,
+            MovementSlashCommand::Follow(FollowSlashCommand::Start {
+                leader_name: Some("Main Tank".to_string()),
+            })
+        );
+
+        let off = parse_movement_slash_command("/follow off")
+            .unwrap()
+            .unwrap();
+        assert_eq!(off, MovementSlashCommand::Follow(FollowSlashCommand::Off));
+    }
+
+    #[test]
+    fn resolve_follow_spawn_prefers_current_target_then_nearby() {
+        let current = textquest_common::types::SpawnData {
+            spawn_id: 1,
+            name: "Camrene".into(),
+            displayed_name: "Camrene".into(),
+            ..Default::default()
+        };
+        let nearby = vec![textquest_common::types::SpawnData {
+            spawn_id: 2,
+            name: "Derakor".into(),
+            displayed_name: "Derakor".into(),
+            ..Default::default()
+        }];
+
+        assert_eq!(
+            resolve_follow_spawn(Some(&current), &nearby, None).map(|spawn| spawn.spawn_id),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_follow_spawn(Some(&current), &nearby, Some("Derakor"))
+                .map(|spawn| spawn.spawn_id),
+            Some(2)
         );
     }
 
