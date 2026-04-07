@@ -2274,6 +2274,17 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let anchor = textquest_common::nav::Waypoint::new(x, y, z);
             crate::nav::handle_command(crate::nav::NavCommand::UpdateFollowAnchor(anchor));
         }
+        Command::UpdateFollowConfig { config } => {
+            tracing::info!(
+                leader = %config.leader_name,
+                min_delay_ms = config.min_delay_ms,
+                max_delay_ms = config.max_delay_ms,
+                return_no_aggro = config.return_no_aggro,
+                return_not_looting = config.return_not_looting,
+                "UpdateFollowConfig received"
+            );
+            crate::nav::handle_command(crate::nav::NavCommand::UpdateFollowConfig(config));
+        }
         Command::StopFollow => {
             tracing::info!("StopFollow received");
             crate::nav::handle_command(crate::nav::NavCommand::StopFollow);

@@ -899,7 +899,8 @@ impl Navigator {
     /// One tick for player follow mode.
     ///
     /// Implements the leash/return logic:
-    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back.
+    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back,
+    ///   subject to return policy gates (`return_no_aggro`).
     /// - If currently returning and distance <= `follow_distance`: stop, hold position.
     fn tick_following(&mut self, nearby: &[SpawnData]) {
         if let State::Following {
@@ -913,7 +914,7 @@ impl Navigator {
         }
 
         // Extract values without holding a mutable borrow on self.state.
-        let (leash_distance, follow_distance, anchor, currently_returning) =
+        let (leash_distance, follow_distance, anchor, currently_returning, return_no_aggro) =
             if let State::Following {
                 ref config,
                 ref anchor,
@@ -925,6 +926,7 @@ impl Navigator {
                     config.follow_distance,
                     *anchor,
                     returning,
+                    config.return_no_aggro,
                 )
             } else {
                 return;
@@ -935,8 +937,19 @@ impl Navigator {
         self.cached_distance = dist;
 
         if dist > leash_distance {
-            // Beyond the leash — navigate back toward the anchor.
+            // Beyond the leash — check return policy gates before navigating back.
             if !currently_returning {
+                // #return_no_aggro: suppress return while hostile NPCs are nearby.
+                if return_no_aggro && has_hostile_nearby(nearby, &current_pos) {
+                    tracing::debug!(
+                        dist,
+                        leash = leash_distance,
+                        "Follow leash exceeded but return_no_aggro suppressing return"
+                    );
+                    self.controller.stop_forward();
+                    return;
+                }
+
                 tracing::debug!(
                     dist,
                     leash = leash_distance,
