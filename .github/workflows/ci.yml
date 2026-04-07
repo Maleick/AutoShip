@@ -97,6 +97,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.10"
+
       - name: Configure Git safe directories for runner account
         run: |
           setlocal EnableDelayedExpansion
@@ -106,7 +110,7 @@ jobs:
             set "GITHUB_WORKSPACE=%CD%"
           )
           echo [info] Using GITHUB_WORKSPACE as "!GITHUB_WORKSPACE!"
-          for %%D in ("!GITHUB_WORKSPACE!" "C:\actions-runner\_work\TextQuest\TextQuest" "C:\actions-runner\_work\TextQuest") do (
+          for %%D in ("!GITHUB_WORKSPACE!") do (
             git config --global --add safe.directory "%%~D" || (
               echo [fatal] Unable to add safe.directory for %%~D.
               exit /b 1
