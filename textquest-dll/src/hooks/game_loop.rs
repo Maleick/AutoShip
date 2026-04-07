@@ -293,6 +293,194 @@ pub fn queue_slash_command(command: String) {
     }
 }
 
+// ─── Casting Loop (kill / recast) ───
+//
+// When a `CastSpell` command arrives with `kill = true` or `recast > 0`, the
+// DLL starts a repeating cast loop driven by the game tick.
+//
+// `kill` mode:  keep casting until the target's HP drops to zero or the target
+//               disappears.  The loop self-cancels on target death or a
+//               `CancelCastLoop` command.
+//
+// `recast` mode: cast N+1 times total with exponential backoff between
+//                attempts.  The backoff starts at `CAST_LOOP_BASE_BACKOFF_TICKS`
+//                and doubles each attempt, capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
+
+/// Base backoff between recast attempts (~0.4 s at 20 ticks/sec).
+const CAST_LOOP_BASE_BACKOFF_TICKS: u64 = 8;
+
+/// Maximum backoff cap in ticks (~1.5 s at 20 ticks/sec).
+const CAST_LOOP_MAX_BACKOFF_TICKS: u64 = 30;
+
+#[derive(Debug, Clone)]
+enum CastLoopMode {
+    /// Keep casting until the target dies.  Stores the target spawn-ID so we
+    /// can detect when it changes (e.g. target was cleared between iterations).
+    Kill { target_id: u32 },
+    /// Cast `remaining` more times (including the current attempt).
+    Recast { remaining: u8 },
+}
+
+#[derive(Debug)]
+struct CastingLoop {
+    /// Gem slot to cast (1-based, 1-13).
+    spell_slot: u8,
+    /// Optional spawn ID to switch target to before each cast.
+    target_id: Option<u32>,
+    /// Whether the loop is active.
+    active: bool,
+    /// Control mode.
+    mode: CastLoopMode,
+    /// Tick at which the next cast attempt should fire.
+    next_cast_tick: u64,
+    /// Current backoff in ticks (doubles on each recast attempt, capped).
+    backoff_ticks: u64,
+}
+
+impl CastingLoop {
+    fn start_kill(spell_slot: u8, target_id: Option<u32>, current_tick: u64) -> Self {
+        let target = target_id.unwrap_or(0);
+        Self {
+            spell_slot,
+            target_id,
+            active: true,
+            mode: CastLoopMode::Kill { target_id: target },
+            next_cast_tick: current_tick,
+            backoff_ticks: CAST_LOOP_BASE_BACKOFF_TICKS,
+        }
+    }
+
+    fn start_recast(spell_slot: u8, target_id: Option<u32>, recast: u8, current_tick: u64) -> Self {
+        Self {
+            spell_slot,
+            target_id,
+            active: true,
+            mode: CastLoopMode::Recast {
+                remaining: recast.saturating_add(1), // include the first cast
+            },
+            next_cast_tick: current_tick,
+            backoff_ticks: CAST_LOOP_BASE_BACKOFF_TICKS,
+        }
+    }
+
+    fn cancel(&mut self) {
+        self.active = false;
+    }
+
+    /// Execute one tick of the loop.  Queues a cast slash command if appropriate.
+    /// Returns `false` when the loop should be stopped (target dead, casts exhausted).
+    fn tick(&mut self, current_tick: u64, eq_base: u64) -> bool {
+        if !self.active {
+            return false;
+        }
+        if current_tick < self.next_cast_tick {
+            return true; // waiting for backoff
+        }
+        if eq_base != 0 && cast_in_progress(eq_base) {
+            self.next_cast_tick = current_tick + 1;
+            return true;
+        }
+
+        match &mut self.mode {
+            CastLoopMode::Kill { target_id } => {
+                // Check if the target is still alive.  On non-Windows this always
+                // returns None (stub), so the loop runs until cancelled.
+                if eq_base != 0 {
+                    let target = read_target_state(eq_base);
+                    match target {
+                        None => {
+                            tracing::info!(
+                                spell_slot = self.spell_slot,
+                                "CastLoop(kill): target gone — stopping"
+                            );
+                            self.active = false;
+                            return false;
+                        }
+                        Some(ref t) if t.spawn_id != *target_id && *target_id != 0 => {
+                            tracing::info!(
+                                spell_slot = self.spell_slot,
+                                old_target = *target_id,
+                                new_target = t.spawn_id,
+                                "CastLoop(kill): target changed — stopping"
+                            );
+                            self.active = false;
+                            return false;
+                        }
+                        Some(ref t) if t.hp_current <= 0 => {
+                            tracing::info!(
+                                spell_slot = self.spell_slot,
+                                spawn_id = t.spawn_id,
+                                "CastLoop(kill): target HP <= 0 — stopping"
+                            );
+                            self.active = false;
+                            return false;
+                        }
+                        _ => {}
+                    }
+                }
+
+                issue_cast(self.spell_slot, self.target_id);
+                self.next_cast_tick = current_tick + self.backoff_ticks;
+                true
+            }
+            CastLoopMode::Recast { remaining } => {
+                if *remaining == 0 {
+                    tracing::info!(
+                        spell_slot = self.spell_slot,
+                        "CastLoop(recast): all casts complete — stopping"
+                    );
+                    self.active = false;
+                    return false;
+                }
+
+                tracing::info!(
+                    spell_slot = self.spell_slot,
+                    remaining = *remaining,
+                    "CastLoop(recast): firing cast"
+                );
+                issue_cast(self.spell_slot, self.target_id);
+                *remaining -= 1;
+
+                let current_delay = self.backoff_ticks;
+                self.next_cast_tick = current_tick + current_delay;
+                // Exponential backoff, capped.
+                self.backoff_ticks = (current_delay * 2).min(CAST_LOOP_MAX_BACKOFF_TICKS);
+                true
+            }
+        }
+    }
+}
+
+/// Issue the cast slash command(s) for one loop iteration.
+fn issue_cast(spell_slot: u8, target_id: Option<u32>) {
+    if let Some(tid) = target_id {
+        queue_slash_command(format!("/target id {tid}"));
+    }
+    queue_slash_command(format!("/cast {spell_slot}"));
+}
+
+fn cast_in_progress(eq_base: u64) -> bool {
+    super::casting::CastingController::new(eq_base)
+        .is_casting()
+        .unwrap_or(false)
+}
+
+static CAST_LOOP: Mutex<Option<CastingLoop>> = Mutex::new(None);
+
+/// Tick the active casting loop (if any) from the game loop thread.
+fn tick_cast_loop(current_tick: u64) {
+    let Ok(mut guard) = CAST_LOOP.lock() else {
+        return;
+    };
+    let Some(ref mut loop_state) = *guard else {
+        return;
+    };
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    if !loop_state.tick(current_tick, eq_base) {
+        *guard = None; // loop finished
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CastingAction {
     CastGem(u8),
@@ -1062,6 +1250,9 @@ fn on_game_tick() {
     // Execute commands whose scheduled tick has arrived.
     process_pending_commands(tick);
     process_pending_bandolier_restore(tick);
+
+    // Tick the active casting loop (kill / recast) every frame.
+    tick_cast_loop(tick);
 
     // Check for pending login button click (queued from IPC thread).
     let button_addr = PENDING_BUTTON_CLICK.swap(0, std::sync::atomic::Ordering::AcqRel);
@@ -2346,20 +2537,56 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::CastSpell {
             spell_slot,
             target_id,
+            kill,
+            recast,
         } => {
-            tracing::info!(spell_slot, ?target_id, "CastSpell received");
-            if let Some(tid) = target_id {
-                // Save → switch → cast → restore pattern (MQ2Cast style).
-                // Queue the target switch, cast, and restore as slash commands
-                // so they execute in order on successive game frames.
-                queue_slash_command(format!("/target id {tid}"));
-                queue_slash_command(format!("/cast {spell_slot}"));
-                // Note: target restore after cast completion is the orchestrator's
-                // responsibility — it knows who the original target was and can
-                // send a follow-up /target command when the cast finishes.
+            tracing::info!(spell_slot, ?target_id, kill, recast, "CastSpell received");
+            let tick = TICK_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+
+            if kill {
+                // `kill` mode: cast in a loop until the target dies.  A
+                // `CancelCastLoop` command or target death stops the loop.
+                tracing::info!(spell_slot, ?target_id, "CastSpell: starting kill-loop");
+                if let Ok(mut guard) = CAST_LOOP.lock() {
+                    *guard = Some(CastingLoop::start_kill(spell_slot, target_id, tick));
+                }
+            } else if recast > 0 {
+                // `recast` mode: cast `recast + 1` times with backoff.
+                tracing::info!(
+                    spell_slot,
+                    ?target_id,
+                    total = recast + 1,
+                    "CastSpell: starting recast-loop"
+                );
+                if let Ok(mut guard) = CAST_LOOP.lock() {
+                    *guard = Some(CastingLoop::start_recast(
+                        spell_slot, target_id, recast, tick,
+                    ));
+                }
             } else {
-                // Cast on current target, no swap needed.
-                queue_slash_command(format!("/cast {spell_slot}"));
+                // Plain single cast — original behavior.
+                if let Some(tid) = target_id {
+                    // Save → switch → cast → restore pattern (MQ2Cast style).
+                    // Queue the target switch, cast, and restore as slash commands
+                    // so they execute in order on successive game frames.
+                    queue_slash_command(format!("/target id {tid}"));
+                    queue_slash_command(format!("/cast {spell_slot}"));
+                    // Note: target restore after cast completion is the orchestrator's
+                    // responsibility — it knows who the original target was and can
+                    // send a follow-up /target command when the cast finishes.
+                } else {
+                    // Cast on current target, no swap needed.
+                    queue_slash_command(format!("/cast {spell_slot}"));
+                }
+            }
+        }
+        Command::CancelCastLoop => {
+            tracing::info!("CancelCastLoop received — stopping active cast loop");
+            if let Ok(mut guard) = CAST_LOOP.lock() {
+                if let Some(ref mut loop_state) = *guard {
+                    loop_state.cancel();
+                }
+                *guard = None;
             }
         }
         Command::InteractTarget => {
