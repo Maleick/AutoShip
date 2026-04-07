@@ -85,6 +85,9 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 :camp start|stop|list|status|next|prev  Camp loop control
 :camp add|remove        Add/remove camp config
 :nav <dest>              Navigate to camp, coords, or slash fallback
+:all /sss <name>         Save current spell set on focused clients
+:all /ssl <name>         Load a saved spell set on focused clients
+:all /ssd <name>         Delete a saved spell set from the character ini
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist
 :mt <name>               Set Main Tank

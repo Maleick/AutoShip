@@ -1278,6 +1278,22 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            if let Some(spell_set) = parse_spell_set_command(trimmed) {
+                match handle_spell_set_command(spell_set) {
+                    Ok(Some(eq_command)) => {
+                        tracing::info!(cmd = %eq_command, "Executing translated spell-set command");
+                        execute_slash_command(&eq_command);
+                    }
+                    Ok(None) => {
+                        tracing::info!(cmd = %command, "Completed custom spell-set command");
+                    }
+                    Err(error) => {
+                        tracing::warn!(cmd = %command, error = %error, "Spell-set command failed");
+                    }
+                }
+                return;
+            }
+
             // When /target is issued while already targeting, EQ's InterpretCmd
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
@@ -1642,6 +1658,170 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SpellSetCommand {
+    Save(String),
+    Load(String),
+    Delete(String),
+}
+
+fn parse_spell_set_command(command: &str) -> Option<SpellSetCommand> {
+    let trimmed = command.trim();
+    let body = trimmed.strip_prefix('/')?.trim_start();
+    let (verb, rest) = body.split_once(char::is_whitespace)?;
+    let name = rest.trim();
+    if name.is_empty() {
+        return None;
+    }
+
+    match verb.to_ascii_lowercase().as_str() {
+        "sss" => Some(SpellSetCommand::Save(name.to_string())),
+        "ssl" | "ssm" => Some(SpellSetCommand::Load(name.to_string())),
+        "ssd" | "deletespellset" => Some(SpellSetCommand::Delete(name.to_string())),
+        _ => None,
+    }
+}
+
+fn handle_spell_set_command(command: SpellSetCommand) -> Result<Option<String>, String> {
+    match command {
+        SpellSetCommand::Save(name) => Ok(Some(format!("/savespellset {name}"))),
+        SpellSetCommand::Load(name) => Ok(Some(format!("/memspellset {name}"))),
+        SpellSetCommand::Delete(name) => delete_spell_set(&name).map(|_| None),
+    }
+}
+
+fn delete_spell_set(name: &str) -> Result<usize, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        Err(String::from(
+            "Spell-set deletion is only available on Windows builds",
+        ))
+    }
+
+    #[cfg(windows)]
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            return Err(String::from("EQ base not resolved"));
+        }
+
+        let character_name = read_char_name(eq_base)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| String::from("Local character name unavailable"))?;
+        let current_dir = std::env::current_dir()
+            .map_err(|error| format!("Failed to resolve EQ working directory: {error}"))?;
+
+        let mut updated_files = 0usize;
+        for ini_path in spell_set_ini_candidates(&current_dir, &character_name) {
+            let content = match std::fs::read_to_string(&ini_path) {
+                Ok(content) => content,
+                Err(error) => {
+                    tracing::debug!(path = %ini_path.display(), error = %error, "Skipping unreadable spell-set ini");
+                    continue;
+                }
+            };
+
+            let Some(updated) = remove_spell_set_entries(&content, name) else {
+                continue;
+            };
+
+            std::fs::write(&ini_path, updated).map_err(|error| {
+                format!(
+                    "Failed to update spell-set file {}: {error}",
+                    ini_path.display()
+                )
+            })?;
+            updated_files += 1;
+        }
+
+        if updated_files == 0 {
+            Err(format!(
+                "Spell set '{name}' was not found in any {character_name}_*.ini file"
+            ))
+        } else {
+            Ok(updated_files)
+        }
+    }
+}
+
+fn spell_set_ini_candidates(
+    current_dir: &std::path::Path,
+    character_name: &str,
+) -> Vec<std::path::PathBuf> {
+    let prefix = format!("{character_name}_");
+    let read_dir = match std::fs::read_dir(current_dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            tracing::debug!(path = %current_dir.display(), error = %error, "Failed to enumerate spell-set ini candidates");
+            return Vec::new();
+        }
+    };
+
+    let mut matches = read_dir
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.len() > prefix.len() + 4
+                        && name[..prefix.len()].eq_ignore_ascii_case(&prefix)
+                        && name[name.len() - 4..].eq_ignore_ascii_case(".ini")
+                })
+        })
+        .collect::<Vec<_>>();
+    matches.sort();
+    matches
+}
+
+fn remove_spell_set_entries(content: &str, set_name: &str) -> Option<String> {
+    use std::collections::HashSet;
+
+    let target = set_name.trim();
+    if target.is_empty() {
+        return None;
+    }
+
+    let mut prefixes = HashSet::new();
+    for raw_line in content.split_inclusive('\n') {
+        let line = raw_line.trim_end_matches(['\r', '\n']);
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if !key.starts_with("SpellLoadout") || !key.ends_with(".name") {
+            continue;
+        }
+        if value.trim().eq_ignore_ascii_case(target) {
+            prefixes.insert(key.trim_end_matches(".name").to_ascii_lowercase());
+        }
+    }
+
+    if prefixes.is_empty() {
+        return None;
+    }
+
+    let mut updated = String::with_capacity(content.len());
+    for raw_line in content.split_inclusive('\n') {
+        let line = raw_line.trim_end_matches(['\r', '\n']);
+        let key = line
+            .split_once('=')
+            .map(|(key, _)| key.trim())
+            .unwrap_or(line.trim());
+        let remove = key
+            .split_once('.')
+            .map(|(prefix, _)| prefixes.contains(&prefix.to_ascii_lowercase()))
+            .unwrap_or(false);
+        if !remove {
+            updated.push_str(raw_line);
+        }
+    }
+
+    Some(updated)
+}
+
 /// Call `CEverQuest::RightClickedOnPlayer(target, 0)` to open NPC interaction windows.
 fn interact_with_target() {
     #[cfg(windows)]
@@ -1786,6 +1966,78 @@ fn execute_slash_command(command: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spell_set_command_parser_supports_shortcuts() {
+        assert_eq!(
+            parse_spell_set_command("/sss buffs"),
+            Some(SpellSetCommand::Save(String::from("buffs")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/ssl burn"),
+            Some(SpellSetCommand::Load(String::from("burn")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/ssm heal set"),
+            Some(SpellSetCommand::Load(String::from("heal set")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/ssd raid"),
+            Some(SpellSetCommand::Delete(String::from("raid")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/deletespellset raid"),
+            Some(SpellSetCommand::Delete(String::from("raid")))
+        );
+        assert_eq!(parse_spell_set_command("/sss   "), None);
+        assert_eq!(parse_spell_set_command("/sit"), None);
+    }
+
+    #[test]
+    fn spell_set_ini_candidates_match_character_prefix_case_insensitively() {
+        let temp = std::env::temp_dir().join(format!(
+            "textquest-spellset-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).expect("create temp dir");
+        std::fs::write(temp.join("Cleric01_Teek.ini"), "").expect("write ini");
+        std::fs::write(temp.join("cleric01_Test.ini"), "").expect("write ini");
+        std::fs::write(temp.join("Wizard01_Teek.ini"), "").expect("write ini");
+        std::fs::write(temp.join("Cleric01.txt"), "").expect("write txt");
+
+        let matches = spell_set_ini_candidates(&temp, "cleric01");
+        let names: Vec<String> = matches
+            .iter()
+            .filter_map(|path| path.file_name().and_then(|name| name.to_str()))
+            .map(ToOwned::to_owned)
+            .collect();
+
+        assert_eq!(names, vec!["Cleric01_Teek.ini", "cleric01_Test.ini"]);
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn remove_spell_set_entries_deletes_matching_loadout_block() {
+        let content = concat!(
+            "[SpellLoadouts]\r\n",
+            "SpellLoadout1.inuse=1\r\n",
+            "SpellLoadout1.name=Buffs\r\n",
+            "SpellLoadout1.slot1=123\r\n",
+            "SpellLoadout2.inuse=1\r\n",
+            "SpellLoadout2.name=Burn\r\n",
+            "SpellLoadout2.slot1=456\r\n",
+        );
+
+        let updated = remove_spell_set_entries(content, "buffs").expect("updated content");
+
+        assert!(!updated.contains("SpellLoadout1.inuse=1"));
+        assert!(!updated.contains("SpellLoadout1.name=Buffs"));
+        assert!(!updated.contains("SpellLoadout1.slot1=123"));
+        assert!(updated.contains("SpellLoadout2.name=Burn"));
+    }
 
     #[test]
     fn test_human_jitter_bounds() {
