@@ -1577,6 +1577,12 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            if is_object_interaction_command(trimmed) {
+                tracing::info!("Intercepted /door slash command → InteractTarget");
+                interact_with_target();
+                return;
+            }
+
             if let Some(spell_set) = parse_spell_set_command(trimmed) {
                 match handle_spell_set_command(spell_set) {
                     Ok(Some(eq_command)) => {
@@ -1970,6 +1976,10 @@ enum SpellSetCommand {
     Delete(String),
 }
 
+fn is_object_interaction_command(command: &str) -> bool {
+    command.eq_ignore_ascii_case("/door")
+}
+
 fn parse_spell_set_command(command: &str) -> Option<SpellSetCommand> {
     let trimmed = command.trim();
     let body = trimmed.strip_prefix('/')?.trim_start();
@@ -2296,6 +2306,14 @@ mod tests {
         );
         assert_eq!(parse_spell_set_command("/sss   "), None);
         assert_eq!(parse_spell_set_command("/sit"), None);
+    }
+
+    #[test]
+    fn object_interaction_command_parser_matches_door_alias() {
+        assert!(is_object_interaction_command("/door"));
+        assert!(is_object_interaction_command(" /DOOR "));
+        assert!(!is_object_interaction_command("/door open"));
+        assert!(!is_object_interaction_command("/doortarget"));
     }
 
     #[test]

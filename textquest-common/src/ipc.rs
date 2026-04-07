@@ -247,7 +247,7 @@ pub enum Command {
     },
     /// Clear the current target.
     ClearTarget,
-    /// Right-click interact with the current target (opens merchant, bank, quest windows).
+    /// Right-click interact with the current target (NPC, door, or object).
     InteractTarget,
     // Utility
     /// Sit down (mana/HP regen).
