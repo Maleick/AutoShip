@@ -134,6 +134,22 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "loot",
     },
     CommandEntry {
+        phrase: "door",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "door",
+        summary: "Target and open the nearest door or switch (MQ2 /click door equivalent).",
+        example: "door",
+    },
+    CommandEntry {
+        phrase: "click",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "click [door|item]",
+        summary: "Click nearest ground item (default) or door. Equivalent to MQ2 /click.",
+        example: "click door",
+    },
+    CommandEntry {
         phrase: "heal",
         aliases: &[],
         section: HelpSection::Combat,

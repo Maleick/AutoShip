@@ -2,20 +2,21 @@
 
 ## Current Operator Workflow
 
-TextQuest's default interface is a ratatui-based dashboard with four main screens:
+TextQuest's default interface is a ratatui-based dashboard with five main screens:
 
 | Screen | Key | Main purpose |
 | --- | --- | --- |
 | Characters | `1` | Roster, selected character state, group and scope panels |
-| Map | `2` | Zone geometry, spawn overlays, named tracking, nav path overlays |
-| Navigation | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue |
-| Debug | `4` | Spawn table, filters, live search, target detail, hex dump |
+| Map | `2` | Tactical map, spawn overlays, named tracking, tactical nav section, and viewport controls |
+| Navigation | `3` | Per-character route status, selected-route detail, blockers, recovery state, and command reference |
+| Debug | `4` | Raw spawn table, filters, target detail, hex dump, explorer, and EQ internals |
+| Packets | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation |
 
 ### Core keys
 
 | Key | Action |
 | --- | --- |
-| `1-4` | Switch screens |
+| `1-5` | Switch screens |
 | `Shift+1-6` | Focus group G1-G6 |
 | `Shift+0` | Clear group focus |
 | `Tab` | Cycle focused pane |
@@ -35,7 +36,7 @@ TextQuest's default interface is a ratatui-based dashboard with four main screen
 
 ### Themes and privacy
 
-- Themes currently cycle through Dark Modern, Dracula, and Classic.
+- Themes currently cycle through Dark Modern, Dracula, Classic, and Neriak Third Gate.
 - Privacy mode redacts your character names and server label for screenshots or streaming.
 
 ### Demo mode expectations
@@ -86,13 +87,23 @@ Use this for:
 - target details
 - raw hex dump of the selected spawn or demo payload
 
+### Packets
+
+Use this for:
+
+- live send/receive packet capture
+- pausing the packet stream without leaving the screen
+- opcode decode and filter inspection
+- comparing raw traffic while other screens stay focused on state
+
 ## Command and Overlay Surfaces
 
 - `:` opens the command bar defined in `textquest/src/tui/app.rs`.
-- `?` opens a context-sensitive help overlay.
+- `?` opens a context-sensitive, scrollable help overlay with command usage and jump targets.
 - `config` opens the interactive configuration panel.
 - `chui` opens the CH chain panel.
 - `wizard` opens the setup wizard shell.
+- Shared TUI surfaces include breadcrumbs, tab bars, the dropdown command menu bar, toast notifications, keybinding hint rows, badges, cast bars, sparklines, scrollable lists with scrollbar indicators, tooltips, popup selectors, the config tree editor, and the first-run wizard overlay.
 
 ## Internals
 
@@ -106,7 +117,7 @@ Use this for:
 
 ### Current behavior
 
-- The four-screen layout is real and current.
+- The five-screen layout is real and current.
 - Help, config, CH panel, command history, search, filters, themes, and privacy mode all exist in the codebase now.
 
 ### Roadmap or partial wiring

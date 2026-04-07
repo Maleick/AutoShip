@@ -4,6 +4,8 @@
 //! and common structures used by both the external orchestrator (`textquest`) and the
 //! injected DLL (`textquest-dll`).
 
+/// Chat channel types, STML stripping, and structured chat event parsing.
+pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
 /// SQLite-backed database for Ghidra binary analysis data.
@@ -20,6 +22,8 @@ pub mod offset_db;
 pub mod offsets;
 /// Packet capture types — opcode filtering, capture sessions, and disk persistence.
 pub mod packet;
+/// UDP multicast peer-discovery announcement types.
+pub mod peer_discovery;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
