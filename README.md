@@ -119,7 +119,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **Persistent memory** — SQLite-backed memory database for long-term character state
 - **Social dynamics** — Social graph tracking relationships between characters
 - **Idle behavior** — Personality-driven actions during downtime
-- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M10` in the canonical roadmap)
+- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M11` in the canonical roadmap)
 
 ### Login Automation
 
@@ -451,8 +451,8 @@ Canonical active roadmap order:
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
 - [ ] **M9** — Learning/RL
-- [ ] **M10** — Soul Engine + LLM
-- [ ] **M11** — Economy
+- [ ] **M10** — Economy
+- [ ] **M11** — Soul Engine + LLM
 
 Execution rules:
 

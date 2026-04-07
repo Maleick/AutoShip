@@ -103,6 +103,18 @@
         "Token file helpers reject symlink token paths"
       ],
       "notes": "Preparing for injection now validates source DLL metadata and destination staging directory/file safety before copy; token helper now validates token-directory and token-path symlink safety before writing or reading session tokens. Final injection step now also validates DLL path inputs, bounds-checks path allocation size, frees remote staging memory on write/timeout failures, and avoids the prior manual cleanup leak in timeout handling."
+    },
+    {
+      "id": "m10-economy-execution-surfaces",
+      "name": "M10 economy execution surfaces",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "Canonical roadmap mirrors keep `M10` = Economy and `M11` = Soul Engine + LLM",
+        "Economy tracking explicitly covers loot/distribution, vendor cycles, banking cycles, and operator-visible override surfaces",
+        "Economy dashboard placeholders remain available via `/api/economy/settings`, `/api/economy/vendor-routes`, and `/api/economy/wealth`",
+        "python3 -m unittest discover -s tests -p 'test_roadmap_m10_economy.py' -v"
+      ],
+      "notes": "The canonical roadmap now stays mirrored in README and wiki docs with Economy bounded to `M10` and Soul/LLM deferred to `M11`. This tracking slice keeps the self-sustaining farming loop operator-visible by explicitly following loot/distribution, vendor, banking, and dashboard-summary surfaces already scaffolded in the repo while deeper execution loops remain in progress."
     }
   ]
 }

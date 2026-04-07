@@ -76,5 +76,5 @@ TextQuest is a three-crate Rust workspace:
 ### Roadmap and validation notes
 
 - The current command/control boundary is still authenticated IPC into in-process DLL execution. Packet send-path seams remain research-backed candidates in `docs/external-research/packet-zoning-send-path-and-state-ledger.md`, not live repo capabilities.
-- Provider-backed Soul and LLM behavior now belongs to `M10` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, and learning work.
+- Provider-backed Soul and LLM behavior now belongs to `M11` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, learning, and economy work.
 - Some higher-level flows such as fully automated post-login group formation are present as structure and IPC types, but still need live validation and continued wiring.
