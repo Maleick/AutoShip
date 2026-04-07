@@ -4,7 +4,7 @@
 //! On non-Windows platforms this is a compile-only stub.
 
 use anyhow::Result;
-use textquest_common::ipc::{Command, Response, SessionToken};
+use textquest_common::ipc::{Command, IpcCommand, IpcResponse, SessionToken};
 #[cfg(windows)]
 use textquest_common::protocol;
 use textquest_common::types::ClientId;
@@ -101,7 +101,11 @@ impl CommandListener {
     ///
     /// If the read fails (orchestrator disconnected), the pipe is reset and the
     /// next call will wait for a new connection.
-    pub fn receive(&mut self) -> Result<Command> {
+    ///
+    /// The returned `IpcCommand` contains both the command payload and the
+    /// optional correlation ID sent by the orchestrator. Callers should echo the
+    /// correlation ID back in the corresponding `IpcResponse`.
+    pub fn receive(&mut self) -> Result<IpcCommand> {
         #[cfg(windows)]
         {
             use windows::Win32::Foundation::ERROR_PIPE_CONNECTED;
@@ -174,16 +178,16 @@ impl CommandListener {
                 return Err(e.into());
             }
 
-            let (cmd, _) =
-                protocol::decode::<Command>(&buf[..bytes_read as usize]).ok_or_else(|| {
+            let (ipc_cmd, _) = protocol::decode::<IpcCommand>(&buf[..bytes_read as usize])
+                .ok_or_else(|| {
                     anyhow::anyhow!("Failed to decode command for client {}", self.client_id)
                 })?;
 
-            if !validate_command(&cmd) {
+            if !validate_command(&ipc_cmd.command) {
                 anyhow::bail!("Command validation failed for client {}", self.client_id);
             }
 
-            Ok(cmd)
+            Ok(ipc_cmd)
         }
 
         #[cfg(not(windows))]
@@ -208,7 +212,7 @@ impl CommandListener {
     }
 
     /// Send a response back to the orchestrator.
-    pub fn respond(&self, response: &Response) -> Result<()> {
+    pub fn respond(&self, response: &IpcResponse) -> Result<()> {
         #[cfg(windows)]
         {
             use windows::Win32::Storage::FileSystem::WriteFile;
