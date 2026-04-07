@@ -791,23 +791,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         }
 
         // ─── Radius circle overlays ─────────────────────────────────────────
-        for overlay in app
-            .map_state
-            .cast_radius
-            .iter()
-            .chain(app.map_state.spell_radius.iter())
-        {
-            draw_radius_circle(
-                &to_grid,
-                player.x,
-                player.y,
-                overlay.radius,
-                overlay.color,
-                w as u16,
-                h as u16,
-                &mut grid,
-            );
-        }
+        draw_radius_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
     }
 
     // ─── Loc marker overlay ──────────────────────────────────────────────
@@ -1991,11 +1975,47 @@ fn draw_radius_circle(
     }
 }
 
+fn draw_radius_overlays(
+    app: &App,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: u16,
+    h: u16,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let Some(player) = app.local_player.as_ref() else {
+        return;
+    };
+
+    for (center_x, center_y) in std::iter::once((player.x, player.y))
+        .chain(app.target.iter().map(|target| (target.x, target.y)))
+    {
+        for overlay in app
+            .map_state
+            .cast_radius
+            .iter()
+            .chain(app.map_state.spell_radius.iter())
+        {
+            draw_radius_circle(
+                to_grid,
+                center_x,
+                center_y,
+                overlay.radius,
+                overlay.color,
+                w,
+                h,
+                grid,
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
     use crate::tui::app::ClientState;
+    use crate::tui::state::MapRadiusOverlay;
+    use ratatui::style::Color;
 
     fn test_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnInfo {
         SpawnInfo {
@@ -2021,6 +2041,8 @@ mod tests {
             is_gm: false,
             race_id: 1,
             buff_slots: Vec::new(),
+            spellbook: Vec::new(),
+            memorized_spells: Vec::new(),
             cast_state: None,
         }
     }
@@ -2261,5 +2283,24 @@ mod tests {
         // equal z endpoints gracefully (dz ≈ 0, both inside)
         let result = clip_line_z(10.0, 20.0, 50.0, 30.0, 40.0, 50.0, 50.0, 10.0);
         assert_eq!(result, Some((10.0, 20.0, 30.0, 40.0)));
+    }
+
+    #[test]
+    fn radius_overlays_render_around_player_and_target() {
+        let mut app = test_app_with_spawns();
+        app.map_state.cast_radius = Some(MapRadiusOverlay {
+            radius: 3.0,
+            color: Color::Cyan,
+            label: String::from("Cast 3"),
+        });
+        app.target = Some(test_spawn(500, "target", 20.0, 10.0));
+
+        let mut grid = vec![vec![(' ', Color::Reset); 32]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_radius_overlays(&app, &to_grid, 32, 24, &mut grid);
+
+        assert_eq!(grid[0][3], ('·', Color::Cyan));
+        assert_eq!(grid[10][23], ('·', Color::Cyan));
     }
 }

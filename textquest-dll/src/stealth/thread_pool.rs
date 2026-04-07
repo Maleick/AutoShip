@@ -69,7 +69,7 @@ mod tests {
         assert!(err.to_string().contains("test error"));
     }
 
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "windows-dangerous-tests"))]
     mod windows_tests {
         use super::*;
         use std::sync::atomic::{AtomicBool, Ordering};

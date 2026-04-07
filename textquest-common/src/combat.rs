@@ -574,34 +574,188 @@ impl std::fmt::Display for CastReadiness {
 pub enum CastResult {
     /// Spell landed successfully.
     Success,
-    /// Cast was interrupted (took damage, moved, etc.).
-    Interrupted,
     /// Spell fizzled (failed skill check).
     Fizzled,
-    /// Target was out of range.
-    OutOfRange,
-    /// Not enough mana to cast.
-    OutOfMana,
-    /// Target is immune to this spell.
-    Immune,
+    /// Spell or gate collapsed before completion.
+    Collapsed,
     /// Target resisted the spell.
     Resisted,
-    /// Caster was not ready (GCD, already casting, etc.).
+    /// Target is immune to this spell.
+    Immune,
+    /// Cast was interrupted (took damage, moved, etc.).
+    Interrupted,
+    /// Cast was manually aborted by the player/automation.
+    Aborted,
+    /// Spell or gem is not ready yet.
     NotReady,
+    /// Not enough mana to cast.
+    OutOfMana,
+    /// Target was out of range.
+    OutOfRange,
+    /// No line of sight to the target.
+    CannotSee,
+    /// No valid target is selected.
+    NoTarget,
+    /// Must stand before casting.
+    Standing,
+    /// Character is stunned and cannot cast.
+    Stunned,
+    /// Required spell components are missing.
+    Components,
+    /// Cast was cancelled before it completed.
+    Cancelled,
+    /// Casting was disrupted by distraction.
+    Distracted,
+    /// Character is invisible and cannot cast.
+    Invisible,
+    /// Spell can only be cast outdoors.
+    Outdoors,
+    /// A cast is already pending.
+    Pending,
+    /// Character is still in post-cast recovery.
+    Recovering,
+    /// Spell completed but did not take hold on the target.
+    TakeHold,
+    /// Outcome could not be classified.
+    Unknown,
 }
 
 impl std::fmt::Display for CastResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Success => write!(f, "Success"),
-            Self::Interrupted => write!(f, "Interrupted"),
             Self::Fizzled => write!(f, "Fizzled"),
-            Self::OutOfRange => write!(f, "Out of Range"),
-            Self::OutOfMana => write!(f, "Out of Mana"),
-            Self::Immune => write!(f, "Immune"),
+            Self::Collapsed => write!(f, "Collapsed"),
             Self::Resisted => write!(f, "Resisted"),
+            Self::Immune => write!(f, "Immune"),
+            Self::Interrupted => write!(f, "Interrupted"),
+            Self::Aborted => write!(f, "Aborted"),
             Self::NotReady => write!(f, "Not Ready"),
+            Self::OutOfMana => write!(f, "Out of Mana"),
+            Self::OutOfRange => write!(f, "Out of Range"),
+            Self::CannotSee => write!(f, "Cannot See"),
+            Self::NoTarget => write!(f, "No Target"),
+            Self::Standing => write!(f, "Standing"),
+            Self::Stunned => write!(f, "Stunned"),
+            Self::Components => write!(f, "Components"),
+            Self::Cancelled => write!(f, "Cancelled"),
+            Self::Distracted => write!(f, "Distracted"),
+            Self::Invisible => write!(f, "Invisible"),
+            Self::Outdoors => write!(f, "Outdoors"),
+            Self::Pending => write!(f, "Pending"),
+            Self::Recovering => write!(f, "Recovering"),
+            Self::TakeHold => write!(f, "Take Hold"),
+            Self::Unknown => write!(f, "Unknown"),
         }
+    }
+}
+
+impl CastResult {
+    /// Parse an EQ feedback/chat line into an MQ2Cast-style cast result.
+    pub fn from_feedback_message(text: &str) -> Option<Self> {
+        let normalized = text.trim().to_ascii_lowercase();
+
+        if normalized.is_empty() {
+            return None;
+        }
+
+        if normalized.contains("spell fizzles") {
+            return Some(Self::Fizzled);
+        }
+        if normalized.contains("collapses") {
+            return Some(Self::Collapsed);
+        }
+        if normalized.contains("resisted") {
+            return Some(Self::Resisted);
+        }
+        if normalized.contains("immune") {
+            return Some(Self::Immune);
+        }
+        if normalized.contains("interrupted") || normalized.contains("miss a note") {
+            return Some(Self::Interrupted);
+        }
+        if normalized.contains("aborted") {
+            return Some(Self::Aborted);
+        }
+        if normalized.contains("not ready") || normalized.contains("spell is not ready") {
+            return Some(Self::NotReady);
+        }
+        if normalized.contains("not enough mana") || normalized.contains("don't have enough mana") {
+            return Some(Self::OutOfMana);
+        }
+        if normalized.contains("out of range") {
+            return Some(Self::OutOfRange);
+        }
+        if normalized.contains("cannot see your target")
+            || normalized.contains("can't see your target")
+        {
+            return Some(Self::CannotSee);
+        }
+        if normalized.contains("must first select a target")
+            || normalized.contains("you need a target")
+        {
+            return Some(Self::NoTarget);
+        }
+        if normalized.contains("stand up first") {
+            return Some(Self::Standing);
+        }
+        if normalized.contains("stunned") {
+            return Some(Self::Stunned);
+        }
+        if normalized.contains("required components")
+            || normalized.contains("missing some components")
+        {
+            return Some(Self::Components);
+        }
+        if normalized.contains("spell is canceled")
+            || normalized.contains("spell has been cancelled")
+        {
+            return Some(Self::Cancelled);
+        }
+        if normalized.contains("distracted from your casting") {
+            return Some(Self::Distracted);
+        }
+        if normalized.contains("cannot cast while invisible") {
+            return Some(Self::Invisible);
+        }
+        if normalized.contains("only cast this spell in the outdoors") {
+            return Some(Self::Outdoors);
+        }
+        if normalized.contains("already have a spell pending") {
+            return Some(Self::Pending);
+        }
+        if normalized.contains("haven't recovered yet")
+            || normalized.contains("must wait to perform another action")
+        {
+            return Some(Self::Recovering);
+        }
+        if normalized.contains("did not take hold") {
+            return Some(Self::TakeHold);
+        }
+        if normalized.contains("spell cast") || normalized.contains("you begin casting") {
+            return Some(Self::Success);
+        }
+
+        None
+    }
+
+    /// Whether the cast finished in a way that should generally be retried.
+    pub fn is_retryable(self) -> bool {
+        matches!(
+            self,
+            Self::Fizzled
+                | Self::Collapsed
+                | Self::Interrupted
+                | Self::Distracted
+                | Self::Pending
+                | Self::Recovering
+                | Self::NotReady
+        )
+    }
+
+    /// Whether the spell actually landed on the target.
+    pub fn landed(self) -> bool {
+        matches!(self, Self::Success)
     }
 }
 
@@ -1230,46 +1384,177 @@ mod tests {
     fn cast_result_all_variants_constructible() {
         let variants = [
             CastResult::Success,
-            CastResult::Interrupted,
             CastResult::Fizzled,
-            CastResult::OutOfRange,
-            CastResult::OutOfMana,
-            CastResult::Immune,
+            CastResult::Collapsed,
             CastResult::Resisted,
+            CastResult::Immune,
+            CastResult::Interrupted,
+            CastResult::Aborted,
             CastResult::NotReady,
+            CastResult::OutOfMana,
+            CastResult::OutOfRange,
+            CastResult::CannotSee,
+            CastResult::NoTarget,
+            CastResult::Standing,
+            CastResult::Stunned,
+            CastResult::Components,
+            CastResult::Cancelled,
+            CastResult::Distracted,
+            CastResult::Invisible,
+            CastResult::Outdoors,
+            CastResult::Pending,
+            CastResult::Recovering,
+            CastResult::TakeHold,
+            CastResult::Unknown,
         ];
-        assert_eq!(variants.len(), 8);
+        assert_eq!(variants.len(), 23);
     }
 
     #[test]
     fn cast_result_display() {
         assert_eq!(CastResult::Success.to_string(), "Success");
-        assert_eq!(CastResult::Interrupted.to_string(), "Interrupted");
         assert_eq!(CastResult::Fizzled.to_string(), "Fizzled");
-        assert_eq!(CastResult::OutOfRange.to_string(), "Out of Range");
-        assert_eq!(CastResult::OutOfMana.to_string(), "Out of Mana");
-        assert_eq!(CastResult::Immune.to_string(), "Immune");
+        assert_eq!(CastResult::Collapsed.to_string(), "Collapsed");
         assert_eq!(CastResult::Resisted.to_string(), "Resisted");
+        assert_eq!(CastResult::Immune.to_string(), "Immune");
+        assert_eq!(CastResult::Interrupted.to_string(), "Interrupted");
+        assert_eq!(CastResult::Aborted.to_string(), "Aborted");
         assert_eq!(CastResult::NotReady.to_string(), "Not Ready");
+        assert_eq!(CastResult::OutOfMana.to_string(), "Out of Mana");
+        assert_eq!(CastResult::OutOfRange.to_string(), "Out of Range");
+        assert_eq!(CastResult::CannotSee.to_string(), "Cannot See");
+        assert_eq!(CastResult::NoTarget.to_string(), "No Target");
+        assert_eq!(CastResult::Standing.to_string(), "Standing");
+        assert_eq!(CastResult::Stunned.to_string(), "Stunned");
+        assert_eq!(CastResult::Components.to_string(), "Components");
+        assert_eq!(CastResult::Cancelled.to_string(), "Cancelled");
+        assert_eq!(CastResult::Distracted.to_string(), "Distracted");
+        assert_eq!(CastResult::Invisible.to_string(), "Invisible");
+        assert_eq!(CastResult::Outdoors.to_string(), "Outdoors");
+        assert_eq!(CastResult::Pending.to_string(), "Pending");
+        assert_eq!(CastResult::Recovering.to_string(), "Recovering");
+        assert_eq!(CastResult::TakeHold.to_string(), "Take Hold");
+        assert_eq!(CastResult::Unknown.to_string(), "Unknown");
     }
 
     #[test]
     fn cast_result_serialization_roundtrip() {
         let variants = [
             CastResult::Success,
-            CastResult::Interrupted,
             CastResult::Fizzled,
-            CastResult::OutOfRange,
-            CastResult::OutOfMana,
-            CastResult::Immune,
+            CastResult::Collapsed,
             CastResult::Resisted,
+            CastResult::Immune,
+            CastResult::Interrupted,
+            CastResult::Aborted,
             CastResult::NotReady,
+            CastResult::OutOfMana,
+            CastResult::OutOfRange,
+            CastResult::CannotSee,
+            CastResult::NoTarget,
+            CastResult::Standing,
+            CastResult::Stunned,
+            CastResult::Components,
+            CastResult::Cancelled,
+            CastResult::Distracted,
+            CastResult::Invisible,
+            CastResult::Outdoors,
+            CastResult::Pending,
+            CastResult::Recovering,
+            CastResult::TakeHold,
+            CastResult::Unknown,
         ];
         for variant in &variants {
             let json = serde_json::to_string(variant).expect("serialize");
             let restored: CastResult = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(*variant, restored);
         }
+    }
+
+    #[test]
+    fn cast_result_feedback_message_parsing() {
+        let cases = [
+            ("Your spell fizzles!", Some(CastResult::Fizzled)),
+            (
+                "Your gate is too unstable, and collapses.",
+                Some(CastResult::Collapsed),
+            ),
+            (
+                "Your target resisted the Ensnare spell.",
+                Some(CastResult::Resisted),
+            ),
+            (
+                "Your target is immune to changes in its attack speed.",
+                Some(CastResult::Immune),
+            ),
+            ("Your spell is interrupted.", Some(CastResult::Interrupted)),
+            ("Your spell is aborted.", Some(CastResult::Aborted)),
+            (
+                "Spell is not ready yet, please wait.",
+                Some(CastResult::NotReady),
+            ),
+            (
+                "You don't have enough mana to cast this spell.",
+                Some(CastResult::OutOfMana),
+            ),
+            (
+                "Your target is out of range, get closer!",
+                Some(CastResult::OutOfRange),
+            ),
+            ("You cannot see your target.", Some(CastResult::CannotSee)),
+            (
+                "You must first select a target for this spell!",
+                Some(CastResult::NoTarget),
+            ),
+            ("Stand up first!", Some(CastResult::Standing)),
+            ("You are stunned!", Some(CastResult::Stunned)),
+            (
+                "You are missing some components for this spell.",
+                Some(CastResult::Components),
+            ),
+            (
+                "Your spell has been cancelled.",
+                Some(CastResult::Cancelled),
+            ),
+            (
+                "You have been distracted from your casting.",
+                Some(CastResult::Distracted),
+            ),
+            (
+                "You cannot cast while invisible.",
+                Some(CastResult::Invisible),
+            ),
+            (
+                "You can only cast this spell in the outdoors.",
+                Some(CastResult::Outdoors),
+            ),
+            (
+                "You already have a spell pending.",
+                Some(CastResult::Pending),
+            ),
+            ("You haven't recovered yet...", Some(CastResult::Recovering)),
+            (
+                "Your spell did not take hold on your target.",
+                Some(CastResult::TakeHold),
+            ),
+            ("Completely unrelated text", None),
+        ];
+
+        for (message, expected) in cases {
+            assert_eq!(CastResult::from_feedback_message(message), expected);
+        }
+    }
+
+    #[test]
+    fn cast_result_retryable_and_landed_helpers() {
+        assert!(CastResult::Fizzled.is_retryable());
+        assert!(CastResult::Collapsed.is_retryable());
+        assert!(CastResult::Interrupted.is_retryable());
+        assert!(CastResult::NotReady.is_retryable());
+        assert!(!CastResult::Resisted.is_retryable());
+        assert!(!CastResult::OutOfMana.is_retryable());
+        assert!(CastResult::Success.landed());
+        assert!(!CastResult::TakeHold.landed());
     }
 
     #[test]
