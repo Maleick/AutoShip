@@ -25,6 +25,7 @@ use super::strategy::{
     ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
     pet_attack_focused, pet_back_off,
 };
+use super::toon_config;
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
@@ -254,6 +255,7 @@ pub struct Combatant {
     config: CombatConfig,
     pending_cast_result: Option<CastResult>,
     last_cast_result: Option<CastResult>,
+    toon_actions_loaded: bool,
 }
 
 impl Combatant {
@@ -303,6 +305,50 @@ impl Combatant {
             config,
             pending_cast_result: None,
             last_cast_result: None,
+            toon_actions_loaded: false,
+        }
+    }
+
+    fn try_load_toon_actions(&mut self, player: &SpawnData) {
+        if self.toon_actions_loaded {
+            return;
+        }
+
+        let toon_name = if player.name.trim().is_empty() {
+            player.displayed_name.trim()
+        } else {
+            player.name.trim()
+        };
+
+        if toon_name.is_empty() {
+            return;
+        }
+
+        self.toon_actions_loaded = true;
+
+        match toon_config::load_for_toon(toon_name) {
+            Ok(Some((path, toon_config))) => {
+                toon_config.apply_to(&mut self.config, &mut self.rotation_groups);
+                self.config
+                    .disciplines
+                    .sort_by_key(|discipline| discipline.priority);
+                self.holyshit = HolyShitEvaluator::new(self.config.holyshit_rules.clone());
+                tracing::info!(
+                    toon = toon_name,
+                    path = %path.display(),
+                    spells = self.config.spells.len(),
+                    disciplines = self.config.disciplines.len(),
+                    holyshit_rules = self.config.holyshit_rules.len(),
+                    rotation_groups = self.rotation_groups.as_ref().map_or(0, Vec::len),
+                    "Loaded per-toon combat actions"
+                );
+            }
+            Ok(None) => {
+                tracing::debug!(toon = toon_name, "No per-toon combat action config found");
+            }
+            Err(error) => {
+                tracing::warn!(toon = toon_name, error = %error, "Failed to load per-toon combat action config");
+            }
         }
     }
 
@@ -340,6 +386,7 @@ impl Combatant {
     /// Advance the combat FSM by one frame (~50ms, ~20/sec).
     /// Note: an EQ "game tick" is 6 seconds (~120 frames); this runs every frame.
     pub fn tick(&mut self, player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]) {
+        self.try_load_toon_actions(player);
         self.tick_count += 1;
         self.gcd.tick();
         self.skill_cooldowns.tick();
