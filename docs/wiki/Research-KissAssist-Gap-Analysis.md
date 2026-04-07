@@ -97,6 +97,20 @@ Keep the `:` command bar, but reduce the need to memorize everything by adding:
 - panel-driven overrides for selected scope
 - clearer scope display for character, group, and all-session routing
 
+## DMFT TUI Slice Translation
+
+Translate the KissAssist gaps into bounded, native TextQuest slices instead of a macro-UI clone:
+
+| Workflow gap | DMFT TUI slice | Native TextQuest fit | Follow-on tracking |
+| --- | --- | --- | --- |
+| assist and pull control | assist/pull strip with scoped overrides | show assist target, pull target, combat mode, and emergency stop on the existing command-routing surface | issue #152 for scoped routing; active `M8` checkpoint batch draft item for the assist/pull strip |
+| heal, buff, debuff, crowd-control, medding, and loot priority visibility | intent and blocker inspector | expose live priority rows and blocked reasons from existing combat and camp-loop state instead of copying KissAssist settings panes | active `M8` checkpoint batch draft item for the intent/blocker inspector |
+| per-toon and per-group behavior configuration | behavior profile drawer | keep config bounded to role, mode, thresholds, and assist or pull rules that already exist in TextQuest terminology | active `M8` checkpoint batch draft item for behavior profile editing |
+| camp loop, medding, buffing, looting, and emergency state inspection | camp-loop reason panel | surface current phase, next action, blockers, and recovery state from existing orchestrator and session models | issue #109 for slot-health or lifecycle visibility; active `M8` checkpoint batch draft item for camp-loop reasoning |
+| command shortcuts and scope clarity | command palette presets and scope badge | preserve the `:` command bar while adding discoverable engage, regroup, pause, and stop shortcuts for one-toon, group, and all-session scope | issue #152 for scope semantics; active `M8` checkpoint batch draft item for shortcut presets |
+
+Per the roadmap mirror rules, the checkpoint-batch draft items above should be promoted into GitHub issues once each slice has a concrete scope and checkpoint assignment.
+
 ## Milestone Slice Mapping
 
 ### `M8` Orchestrator

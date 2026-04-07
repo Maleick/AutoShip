@@ -90,7 +90,7 @@ Use:
 - `docs/external-research/packet-engine-send-receive-pipeline.md`
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
 - `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
-- `docs/external-research/kissassist-gap-and-tui-translation.md`
+- `docs/wiki/Research-KissAssist-Gap-Analysis.md`
 - `docs/external-research/jmb-session-and-relay-comparison.md`
 - `docs/external-research/daybreak-detection-digest.md`
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md`
