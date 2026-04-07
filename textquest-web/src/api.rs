@@ -1,5 +1,8 @@
 //! REST API handlers for the web dashboard.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use axum::Json;
 use axum::extract::Path;
 use serde::{Deserialize, Serialize};
@@ -239,6 +242,15 @@ pub async fn get_wealth() -> Json<WealthHistory> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::broadcast;
+
+    fn make_state() -> Arc<AppState> {
+        let (event_tx, _) = broadcast::channel(8);
+        Arc::new(AppState {
+            event_tx,
+            config_store: tokio::sync::RwLock::new(default_configs()),
+        })
+    }
 
     #[tokio::test]
     async fn health_returns_ok() {

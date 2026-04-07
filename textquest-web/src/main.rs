@@ -5,6 +5,7 @@
 //! - WebSocket endpoint for live session monitoring
 //! - Shared types via textquest-common
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -21,6 +22,8 @@ mod ws;
 pub struct AppState {
     /// Broadcast channel for real-time session events.
     pub event_tx: broadcast::Sender<String>,
+    /// In-memory per-character config store (mirrors TUI config panel values).
+    pub config_store: RwLock<HashMap<String, api::CharacterConfig>>,
 }
 
 #[tokio::main]
@@ -31,7 +34,10 @@ async fn main() {
 
     let (event_tx, _) = broadcast::channel::<String>(256);
 
-    let state = Arc::new(AppState { event_tx });
+    let state = Arc::new(AppState {
+        event_tx,
+        config_store: RwLock::new(api::default_configs()),
+    });
 
     // Serve the pre-built React SPA from web/dist/.
     // The fallback sends index.html for any unmatched path (SPA client-side routing).

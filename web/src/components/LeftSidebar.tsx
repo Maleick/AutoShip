@@ -109,3 +109,4 @@ export default function LeftSidebar({ activeView, onNavigate }: LeftSidebarProps
     </aside>
   );
 }
+
