@@ -30,6 +30,17 @@
       "notes": "Character-name targeting is now wired into the TUI command bar and Characters screen copy. The audit of MQ mesh loading/path queries is documented in the codebase. All automated checks (fmt, clippy, tests) are passing."
     },
     {
+      "id": "tui-dashboard-renderer-wiring-audit",
+      "name": "TUI dashboard renderer wiring audit",
+      "status": "complete",
+      "acceptance_tests": [
+        "ActiveScreen::Overview still dispatches through textquest/src/tui/ui/mod.rs to textquest/src/tui/ui/dashboard.rs",
+        "Overview-only render tests prove the Characters screen shows Ops Roster/Session chrome while Navigation keeps the route-specific renderer output",
+        "cargo test -p textquest tui::ui::tests::overview_screen_dispatches_to_dashboard_renderer"
+      ],
+      "notes": "Issue #581 is the verification tracker for the old PR #507 handoff claim. The current Characters screen wiring is intact, so the PR #507 'missing dashboard.rs renderer' note is historical evidence only and should not be reused as an active tracker."
+    },
+    {
       "id": "tactical-map-navmesh-overlay",
       "name": "Tactical map navmesh overlay and viewport controls",
       "status": "complete",

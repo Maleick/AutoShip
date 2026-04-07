@@ -107,9 +107,11 @@ Use this for:
 ### Current behavior
 
 - The four-screen layout is real and current.
+- The Characters screen is still rendered by `textquest/src/tui/ui/dashboard.rs` via the `ActiveScreen::Overview` dispatch in `textquest/src/tui/ui/mod.rs`; the old PR #507 handoff note about a missing dashboard renderer is historical only.
 - Help, config, CH panel, command history, search, filters, themes, and privacy mode all exist in the codebase now.
 
 ### Roadmap or partial wiring
 
+- If a new Characters-screen renderer regression appears, track it with a fresh issue against the current TUI surface instead of reusing the old PR #507 handoff note.
 - The TUI `:inject` command is still a placeholder instead of a full injection trigger.
 - Some map orientation and overlay behavior has comments in code noting that final live-client verification is still deferred in a few cases.
