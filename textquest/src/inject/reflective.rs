@@ -840,6 +840,13 @@ mod platform {
             }
         }
 
+        fn is_safe_import_name(dll_name: &str) -> bool {
+            !dll_name.is_empty()
+                && !dll_name.contains('\\')
+                && !dll_name.contains('/')
+                && !dll_name.contains(':')
+        }
+
         /// Execute the DLL's entry point via a small shellcode stub.
         ///
         /// DllMain expects `(HINSTANCE, DWORD fdwReason, LPVOID)` but
