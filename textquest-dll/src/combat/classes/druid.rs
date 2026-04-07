@@ -32,6 +32,13 @@ impl DruidStrategy {
         Self { class_id }
     }
 
+    fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
+        ctx.group_members
+            .iter()
+            .find(|m| !m.is_dead && m.has_detrimental)
+            .map(|m| m.spawn_id)
+    }
+
     fn dead_member<'a>(&self, ctx: &CombatContext<'a>) -> Option<&'a str> {
         ctx.group_members
             .iter()
@@ -65,6 +72,10 @@ impl ClassStrategy for DruidStrategy {
                 .is_some()
         {
             return None;
+        }
+
+        if let Some(afflicted_id) = self.afflicted_member(ctx) {
+            return Some(afflicted_id);
         }
 
         if let Some((heal_target, hp)) = strategy::lowest_hp_member(ctx)
@@ -286,5 +297,35 @@ mod tests {
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
         assert_eq!(id, 2);
         assert!((hp - 40.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn druid_select_target_afflicted_member_before_heal_or_dps() {
+        let druid = DruidStrategy::new(6);
+        let config = textquest_common::combat::CombatConfig::default();
+        let player = textquest_common::types::SpawnData::default();
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let mut afflicted = make_member(10, 90.0, false);
+        afflicted.has_detrimental = true;
+        let members = vec![afflicted, make_member(11, 50.0, false)];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert_eq!(druid.select_target(&ctx), Some(10));
     }
 }

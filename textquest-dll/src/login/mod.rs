@@ -1052,6 +1052,13 @@ impl LoginFsm {
 
     fn transition(&mut self, new_state: State) {
         tracing::info!(from = ?self.state, to = ?new_state, "Login FSM transition");
+        if matches!(new_state, State::InWorld) {
+            // Successful login/relog: clear retry metadata and cached relog credentials
+            // so account secrets are not retained in memory for the rest of the session.
+            self.relog_config = None;
+            self.relog_credentials = None;
+            self.relog_retry.reset();
+        }
         self.state = new_state;
         self.state_entered_at = Instant::now();
         self.retries = 0;
@@ -1492,5 +1499,26 @@ mod tests {
         let creds = fsm.relog_credentials.as_ref().unwrap();
         assert_eq!(creds.account_name, "myacc");
         assert_eq!(creds.server_name, "Teek");
+    }
+
+    #[test]
+    fn transition_to_inworld_clears_relog_sensitive_state() {
+        let mut fsm = LoginFsm::new();
+        fsm.start_relog(
+            "acc".into(),
+            "pass".into(),
+            "Teek".into(),
+            "Char".into(),
+            make_relog_config(3),
+        );
+        assert!(fsm.relog_config.is_some());
+        assert!(fsm.relog_credentials.is_some());
+
+        fsm.transition(State::InWorld);
+
+        assert!(fsm.relog_config.is_none());
+        assert!(fsm.relog_credentials.is_none());
+        assert_eq!(fsm.relog_retry.attempt_count, 0);
+        assert!(fsm.relog_retry.last_error.is_none());
     }
 }

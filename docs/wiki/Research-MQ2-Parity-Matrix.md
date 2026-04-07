@@ -230,7 +230,7 @@ TextQuest's `map_parser.rs` already handles both L and P line types with `MapLin
 | `-invis`                 | Don't cast if invisible            | **Missing**                                                       | No invis check                 | P2       | Low        |
 | `/interrupt`             | Interrupt current cast             | **Partial** — `combat/state.rs` has duck-to-interrupt for clerics | No general interrupt command   | P1       | Low        |
 | `/memorize`              | Mem spells to gems                 | **Missing**                                                       | No spell memorization          | P2       | Medium     |
-| `/sss / /ssm` spell sets | Save/load spell set configurations | **Missing**                                                       | No spell set management        | P2       | Medium     |
+| `/sss / /ssm` spell sets | Save/load spell set configurations | **Implemented** — `/sss` saves, `/ssl`/`/ssm` load, `/ssd` deletes via character ini cleanup | No long-form TUI wrapper yet | P2       | Medium     |
 
 ### 4.2 Cast State & Results
 

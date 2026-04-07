@@ -228,6 +228,12 @@ pub fn request_screenshot_frame() {
     tracing::debug!("Screenshot frame requested — draw calls enabled for next frame");
 }
 
+/// Sync the draw-suppression flag to the current render mode. Called when the
+/// render mode changes so the next frame respects NullRender immediately.
+pub fn sync_suppress_draws() {
+    update_suppress_draws();
+}
+
 /// Hooked `IDXGISwapChain::Present` — on first call, extracts the real
 /// `ID3D11Device*` and hooks `CreateTexture2D`, `CreateBuffer`, and context
 /// draw calls. Clears the screenshot-frame flag after each present.
@@ -752,6 +758,10 @@ mod inner {
             D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE,
             D3D11_TEXTURE2D_DESC as WinTexDesc, D3D11_USAGE_STAGING,
         };
+        use windows::Win32::Graphics::Dxgi::Common::{
+            DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+            DXGI_FORMAT_B8G8R8X8_UNORM, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,
+        };
         use windows::Win32::Graphics::Dxgi::IDXGISwapChain;
         use windows::core::Interface;
 
@@ -770,6 +780,19 @@ mod inner {
         unsafe { backbuffer.GetDesc(&mut desc) };
         let width = desc.Width;
         let height = desc.Height;
+        let bgra_compatible = matches!(
+            desc.Format,
+            DXGI_FORMAT_B8G8R8A8_UNORM
+                | DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
+                | DXGI_FORMAT_B8G8R8X8_UNORM
+                | DXGI_FORMAT_B8G8R8X8_UNORM_SRGB
+        );
+        if !bgra_compatible {
+            return Err(format!(
+                "Unsupported backbuffer format for BMP capture: {:?}",
+                desc.Format
+            ));
+        }
 
         // windows 0.54: GetDevice() returns Result<T>, no out-param.
         let device: windows::Win32::Graphics::Direct3D11::ID3D11Device = unsafe {
@@ -821,14 +844,7 @@ mod inner {
                 .map_err(|e| format!("Map failed: {e}"))?;
         }
 
-        let pid = std::process::id();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_millis() as u64);
-        let path = std::env::temp_dir()
-            .join("textquest")
-            .join(format!("screenshot_{}_{}.bmp", pid, timestamp));
-        let path = path.to_string_lossy().into_owned();
+        let path = create_screenshot_path()?;
 
         let write_result = unsafe {
             write_bmp(
@@ -840,7 +856,32 @@ mod inner {
             )
         };
         unsafe { context.Unmap(&staging, 0) };
-        write_result.map(|()| path)
+        write_result.map(|()| path.to_string_lossy().into_owned())
+    }
+
+    fn create_screenshot_path() -> Result<std::path::PathBuf, String> {
+        let dir = std::env::temp_dir().join("textquest");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("create screenshot dir: {e}"))?;
+
+        let pid = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64);
+
+        for _ in 0..8 {
+            let mut random = [0u8; 8];
+            getrandom::getrandom(&mut random).map_err(|e| format!("random filename: {e}"))?;
+            let suffix = random
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>();
+            let path = dir.join(format!("screenshot_{}_{}_{}.bmp", pid, timestamp, suffix));
+            if !path.exists() {
+                return Ok(path);
+            }
+        }
+
+        Err("failed to allocate unique screenshot filename".to_string())
     }
 
     /// Write BGRA pixel data to a 24-bit BMP file.
@@ -848,7 +889,7 @@ mod inner {
     /// # Safety
     /// `data` must point to a valid pixel buffer with at least `height * row_pitch` bytes.
     unsafe fn write_bmp(
-        path: &str,
+        path: &std::path::Path,
         width: u32,
         height: u32,
         row_pitch: u32,
@@ -856,13 +897,42 @@ mod inner {
     ) -> Result<(), String> {
         use std::io::Write;
 
-        let row_size = width * 3;
-        let padded_row = (row_size + 3) & !3;
-        let pixel_data_size = padded_row * height;
-        let file_size = 54 + pixel_data_size;
+        let width_usize =
+            usize::try_from(width).map_err(|_| "image width does not fit into usize")?;
+        let height_usize =
+            usize::try_from(height).map_err(|_| "image height does not fit into usize")?;
+        let row_pitch_usize =
+            usize::try_from(row_pitch).map_err(|_| "row pitch does not fit into usize")?;
+        let min_row_pitch = width
+            .checked_mul(4)
+            .ok_or("invalid image width for row pitch calculation")?;
+        if row_pitch < min_row_pitch {
+            return Err(format!(
+                "Invalid row pitch for BGRA data: {row_pitch} < {min_row_pitch}"
+            ));
+        }
+
+        let row_size = width
+            .checked_mul(3)
+            .ok_or("invalid image width for BMP row calculation")?;
+        let padded_row = row_size
+            .checked_add(3)
+            .map(|value| value & !3)
+            .ok_or("invalid padded BMP row size")?;
+        let pixel_data_size = padded_row
+            .checked_mul(height)
+            .ok_or("invalid BMP pixel data size")?;
+        let file_size = 54u32
+            .checked_add(pixel_data_size)
+            .ok_or("invalid BMP file size")?;
+        let pixel_stride = width_usize.checked_mul(4).ok_or("invalid BGRA row width")?;
 
         let mut file = std::io::BufWriter::new(
-            std::fs::File::create(path).map_err(|e| format!("create file: {e}"))?,
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .map_err(|e| format!("create file: {e}"))?,
         );
 
         file.write_all(b"BM").map_err(|e| format!("write: {e}"))?;
@@ -886,12 +956,23 @@ mod inner {
         file.write_all(&[0u8; 24])
             .map_err(|e| format!("write: {e}"))?;
 
-        let mut row_buf = vec![0u8; padded_row as usize];
-        for y in 0..height {
-            let src_row = unsafe { data.add((y * row_pitch) as usize) };
-            for x in 0..width {
-                let px = unsafe { src_row.add((x * 4) as usize) };
-                let idx = (x * 3) as usize;
+        let mut row_buf = vec![
+            0u8;
+            usize::try_from(padded_row)
+                .map_err(|_| "padded BMP row size does not fit into usize")?
+        ];
+        for y in 0..height_usize {
+            let row_offset = y
+                .checked_mul(row_pitch_usize)
+                .ok_or("source row offset overflow")?;
+            let src_row = unsafe { data.add(row_offset) };
+            for x in 0..width_usize {
+                let pixel_offset = x.checked_mul(4).ok_or("source pixel offset overflow")?;
+                debug_assert!(pixel_offset < pixel_stride);
+                let px = unsafe { src_row.add(pixel_offset) };
+                let idx = x
+                    .checked_mul(3)
+                    .ok_or("destination pixel offset overflow")?;
                 row_buf[idx] = unsafe { *px };
                 row_buf[idx + 1] = unsafe { *px.add(1) };
                 row_buf[idx + 2] = unsafe { *px.add(2) };
@@ -986,6 +1067,39 @@ pub fn draw_hooks_installed() -> bool {
     CONTEXT_HOOKED.load(Ordering::Acquire)
 }
 
+/// Returns true if the DX11 Present hook has been installed.
+pub fn present_hook_installed() -> bool {
+    PRESENT_HOOKED.load(Ordering::Acquire)
+}
+
+#[cfg(test)]
+pub(crate) fn set_draw_hooks_installed_for_test(installed: bool) {
+    CONTEXT_HOOKED.store(installed, Ordering::Release);
+}
+
+#[cfg(test)]
+pub(crate) fn set_present_hook_installed_for_test(installed: bool) {
+    PRESENT_HOOKED.store(installed, Ordering::Release);
+}
+
+#[cfg(test)]
+pub(crate) fn reset_test_state() {
+    ORIG_PRESENT.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_CREATE_TEXTURE2D.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_CREATE_BUFFER.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_INDEXED.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_INDEXED_INSTANCED.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_INSTANCED.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_AUTO.store(core::ptr::null_mut(), Ordering::Relaxed);
+    PRESENT_HOOKED.store(false, Ordering::Relaxed);
+    DEVICE_HOOKED.store(false, Ordering::Relaxed);
+    CONTEXT_HOOKED.store(false, Ordering::Relaxed);
+    SCREENSHOT_FRAME.store(false, Ordering::Relaxed);
+    SUPPRESS_DRAWS.store(false, Ordering::Relaxed);
+    CACHED_EQ_BASE.store(0, Ordering::Relaxed);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -997,21 +1111,33 @@ mod tests {
 
     #[test]
     fn should_suppress_draw_in_null_render() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(suppresses(RenderMode::NullRender, false));
     }
 
     #[test]
     fn should_not_suppress_draw_in_normal_mode() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(!suppresses(RenderMode::Normal, false));
     }
 
     #[test]
     fn should_not_suppress_draw_in_strobe_mode() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(!suppresses(RenderMode::Strobe, false));
     }
 
     #[test]
     fn screenshot_frame_overrides_null_render() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(
             !suppresses(RenderMode::NullRender, true),
             "screenshot frame should allow draw calls through"
@@ -1020,13 +1146,19 @@ mod tests {
 
     #[test]
     fn request_screenshot_frame_sets_flag() {
-        SCREENSHOT_FRAME.store(false, Ordering::Relaxed);
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
+        super::super::render::set_mode(RenderMode::NullRender);
         request_screenshot_frame();
         assert!(SCREENSHOT_FRAME.load(Ordering::Relaxed));
     }
 
     #[test]
     fn screenshot_frame_clears_on_swap() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         SCREENSHOT_FRAME.store(true, Ordering::Relaxed);
         let was_set = SCREENSHOT_FRAME.swap(false, Ordering::AcqRel);
         assert!(was_set, "flag should have been set before swap");
@@ -1038,12 +1170,17 @@ mod tests {
 
     #[test]
     fn draw_hooks_not_installed_by_default() {
-        CONTEXT_HOOKED.store(false, Ordering::Relaxed);
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(!draw_hooks_installed());
     }
 
     #[test]
     fn vtable_constants_are_distinct() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         let indices = [
             VTABLE_DRAW_INDEXED,
             VTABLE_DRAW,
@@ -1062,6 +1199,9 @@ mod tests {
 
     #[test]
     fn stub_install_remove_are_safe() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         #[cfg(not(windows))]
         {
             assert!(install(0x12345).is_ok());

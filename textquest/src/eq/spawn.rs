@@ -1,5 +1,6 @@
 use super::structs::{
-    BuffSlot, CastDurationSource, CastState, EqClass, GroupInfo, SpawnInfo, SpawnType, StandState,
+    BuffSlot, CastDurationSource, CastState, EqClass, GroupInfo, SpawnInfo, SpawnType, SpellSlot,
+    StandState,
 };
 use crate::process::memory::ProcessHandle;
 use anyhow::{Context, Result};
@@ -124,6 +125,8 @@ pub fn read_spawn(
         is_gm: gm_flag != 0,
         race_id,
         buff_slots: Vec::new(),
+        spellbook: Vec::new(),
+        memorized_spells: Vec::new(),
         cast_state,
     })
 }
@@ -155,6 +158,8 @@ pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo
     let mut spawn = read_spawn(proc, player_addr, eq_base, display_timestamp)
         .context("Failed to read local player spawn data")?;
     spawn.buff_slots = read_buff_slots(proc, eq_base);
+    spawn.spellbook = read_spellbook(proc, eq_base);
+    spawn.memorized_spells = read_memorized_spells(proc, eq_base);
     if let Some(local_cast_state) = read_cast_state(proc, eq_base) {
         spawn.cast_state = Some(local_cast_state);
     }
@@ -173,23 +178,8 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
     #[cfg(windows)]
     {
         use textquest_common::offsets::{buff_slots as bs, profile};
-        let Some(pc_ptr_addr) = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base) else {
+        let Some(profile_ptr) = read_local_profile_addr(proc, eq_base) else {
             return Vec::new();
-        };
-        let pc_addr = match proc.read_ptr(pc_ptr_addr) {
-            Ok(a) if a != 0 => a,
-            _ => return Vec::new(),
-        };
-
-        // Follow profile pointer chain: PcClient → ProfileManager → ProfileList → PcProfile
-        let profile_mgr = pc_addr + profile::PROFILE_MANAGER;
-        let profile_list_ptr = match proc.read_ptr(profile_mgr + profile::PROFILE_LIST_PTR) {
-            Ok(p) if p != 0 => p,
-            _ => return Vec::new(),
-        };
-        let profile_ptr = match proc.read_ptr(profile_list_ptr + profile::PROFILE_FIRST) {
-            Ok(p) if p != 0 => p,
-            _ => return Vec::new(),
         };
 
         // BaseProfile → Buffs (SoeUtil::Array<EQ_Affect>)
@@ -219,6 +209,56 @@ pub fn read_buff_slots(proc: &ProcessHandle, eq_base: u64) -> Vec<BuffSlot> {
             });
         }
         slots
+    }
+}
+
+/// Read spellbook entries for the local player.
+/// On non-Windows builds returns an empty vec (stub).
+#[must_use]
+pub fn read_spellbook(proc: &ProcessHandle, eq_base: u64) -> Vec<SpellSlot> {
+    #[cfg(not(windows))]
+    {
+        let _ = (proc, eq_base);
+        Vec::new()
+    }
+    #[cfg(windows)]
+    {
+        use textquest_common::offsets::profile;
+        let Some(profile_ptr) = read_local_profile_addr(proc, eq_base) else {
+            return Vec::new();
+        };
+
+        build_spell_slots(
+            read_spell_slot_ids(proc, profile_ptr + profile::SPELL_BOOK, profile::SPELL_BOOK_SLOT_COUNT),
+            |_| None,
+        )
+    }
+}
+
+/// Read the current memorized spell gems for the local player.
+/// On non-Windows builds returns an empty vec (stub).
+#[must_use]
+pub fn read_memorized_spells(proc: &ProcessHandle, eq_base: u64) -> Vec<SpellSlot> {
+    #[cfg(not(windows))]
+    {
+        let _ = (proc, eq_base);
+        Vec::new()
+    }
+    #[cfg(windows)]
+    {
+        use textquest_common::offsets::profile;
+        let Some(profile_ptr) = read_local_profile_addr(proc, eq_base) else {
+            return Vec::new();
+        };
+
+        build_spell_slots(
+            read_spell_slot_ids(
+                proc,
+                profile_ptr + profile::MEMORIZED_SPELLS,
+                profile::MEMORIZED_SPELL_GEM_COUNT,
+            ),
+            |spell_id| resolve_spell_name(proc, eq_base, spell_id),
+        )
     }
 }
 
@@ -355,6 +395,21 @@ fn read_local_player_addr_from_pc(proc: &ProcessHandle, eq_base: u64) -> Option<
         })
 }
 
+fn read_local_profile_addr(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
+    use textquest_common::offsets::profile;
+
+    let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
+    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
+    let profile_mgr = pc_addr + profile::PROFILE_MANAGER;
+    let profile_list_ptr = proc
+        .read_ptr(profile_mgr + profile::PROFILE_LIST_PTR)
+        .ok()
+        .filter(|&a| a != 0)?;
+    proc.read_ptr(profile_list_ptr + profile::PROFILE_FIRST)
+        .ok()
+        .filter(|&a| a != 0)
+}
+
 fn read_spell_gem_etas(proc: &ProcessHandle, player_addr: usize) -> [u32; 15] {
     let mut gem_etas = [0u32; 15];
     for (i, eta) in gem_etas.iter_mut().enumerate() {
@@ -453,6 +508,39 @@ fn build_cast_state(
     }
 }
 
+fn build_spell_slots<I, F>(slots: I, mut resolve_name: F) -> Vec<SpellSlot>
+where
+    I: IntoIterator<Item = (usize, i32)>,
+    F: FnMut(u32) -> Option<String>,
+{
+    slots.into_iter()
+        .filter_map(|(slot, spell_id)| {
+            let spell_id = u32::try_from(spell_id).ok().filter(|&id| id > 0)?;
+            Some(SpellSlot {
+                slot,
+                spell_id,
+                spell_name: resolve_name(spell_id),
+            })
+        })
+        .collect()
+}
+
+fn read_spell_slot_ids(proc: &ProcessHandle, base_addr: usize, slot_count: usize) -> Vec<(usize, i32)> {
+    let Ok(bytes) = proc.read_bytes(base_addr, slot_count * size_of::<i32>()) else {
+        return Vec::new();
+    };
+
+    bytes.chunks_exact(size_of::<i32>())
+        .enumerate()
+        .map(|(slot, chunk)| {
+            (
+                slot,
+                i32::from_le_bytes(chunk.try_into().expect("4-byte chunk from chunks_exact")),
+            )
+        })
+        .collect()
+}
+
 fn read_spell_cast_metadata(
     proc: &ProcessHandle,
     eq_base: u64,
@@ -521,6 +609,11 @@ fn read_spell_cast_metadata(
     }
 
     None
+}
+
+fn resolve_spell_name(proc: &ProcessHandle, eq_base: u64, spell_id: u32) -> Option<String> {
+    read_spell_cast_metadata(proc, eq_base, i32::try_from(spell_id).ok()?)
+        .and_then(|entry| entry.spell_name)
 }
 
 fn read_spawn_cast_state(
@@ -782,5 +875,57 @@ mod tests {
 
         assert_eq!(cast_state.remaining_ms, Some(0));
         assert_eq!(cast_state.cast_progress(), Some(1.0));
+    }
+
+    #[test]
+    fn build_spell_slots_skips_empty_and_invalid_entries() {
+        let slots = build_spell_slots([(0, 123), (1, 0), (2, -1), (3, 456)], |_| None);
+
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0].slot, 0);
+        assert_eq!(slots[0].spell_id, 123);
+        assert_eq!(slots[1].slot, 3);
+        assert_eq!(slots[1].spell_id, 456);
+    }
+
+    #[test]
+    fn build_spell_slots_preserves_slot_numbers_and_resolved_names() {
+        let slots = build_spell_slots([(4, 123), (7, 456)], |spell_id| match spell_id {
+            123 => Some("Complete Heal".to_string()),
+            456 => Some("Celestial Remedy".to_string()),
+            _ => None,
+        });
+
+        assert_eq!(slots[0].slot, 4);
+        assert_eq!(slots[0].spell_name.as_deref(), Some("Complete Heal"));
+        assert_eq!(slots[1].slot, 7);
+        assert_eq!(slots[1].spell_name.as_deref(), Some("Celestial Remedy"));
+    }
+
+    #[test]
+    fn read_spell_slot_ids_decodes_little_endian_i32_values() {
+        fn parse(bytes: &[u8]) -> Vec<(usize, i32)> {
+            bytes.chunks_exact(size_of::<i32>())
+                .enumerate()
+                .map(|(slot, chunk)| {
+                    (
+                        slot,
+                        i32::from_le_bytes(
+                            chunk.try_into().expect("4-byte chunk from chunks_exact"),
+                        ),
+                    )
+                })
+                .collect()
+        }
+
+        let bytes = [
+            123_i32.to_le_bytes(),
+            0_i32.to_le_bytes(),
+            (-1_i32).to_le_bytes(),
+            456_i32.to_le_bytes(),
+        ]
+        .concat();
+
+        assert_eq!(parse(&bytes), vec![(0, 123), (1, 0), (2, -1), (3, 456)]);
     }
 }

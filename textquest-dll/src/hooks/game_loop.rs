@@ -281,6 +281,305 @@ pub fn queue_slash_command(command: String) {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CastingAction {
+    CastGem(u8),
+    UseItem(String),
+}
+
+impl CastingAction {
+    fn slash_command(&self) -> String {
+        match self {
+            Self::CastGem(slot) => format!("/cast {slot}"),
+            Self::UseItem(selector) => format!("/useitem {selector}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedCastingCommand {
+    action: CastingAction,
+    target_id: Option<u32>,
+    require_not_invisible: bool,
+}
+
+fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if !verb.eq_ignore_ascii_case("/casting") {
+        return None;
+    }
+
+    let Some(subject) = args.first() else {
+        return Some(Err("missing spell or item selector".to_string()));
+    };
+
+    let mut cast_type: Option<&str> = None;
+    let mut target_id = None;
+    let mut require_not_invisible = false;
+
+    for token in &args[1..] {
+        if token.eq_ignore_ascii_case("-invis") {
+            require_not_invisible = true;
+            continue;
+        }
+
+        let lower = token.to_ascii_lowercase();
+        if let Some(value) = lower.strip_prefix("-targetid|") {
+            let parsed_target = value
+                .parse::<u32>()
+                .map_err(|_| format!("invalid -targetid value: {value}"));
+            match parsed_target {
+                Ok(parsed_target) => {
+                    target_id = Some(parsed_target);
+                    continue;
+                }
+                Err(err) => return Some(Err(err)),
+            }
+        }
+
+        if cast_type.replace(token.as_str()).is_some() {
+            return Some(Err(format!("multiple cast types specified: {token}")));
+        }
+    }
+
+    let Some(cast_type) = cast_type else {
+        return Some(Err(
+            "missing cast type (expected gem#, item, or an item slot)".to_string(),
+        ));
+    };
+
+    let cast_type_lower = cast_type.to_ascii_lowercase();
+    let action = if let Some(slot) = cast_type_lower.strip_prefix("gem") {
+        let slot = slot
+            .parse::<u8>()
+            .map_err(|_| format!("invalid gem selector: {cast_type}"));
+        match slot {
+            Ok(slot @ 1..=13) => CastingAction::CastGem(slot),
+            Ok(slot) => return Some(Err(format!("gem slot out of range: {slot}"))),
+            Err(err) => return Some(Err(err)),
+        }
+    } else if cast_type_lower == "item" {
+        CastingAction::UseItem(quote_for_eq(subject))
+    } else if is_item_slot_selector(&cast_type_lower) {
+        CastingAction::UseItem(cast_type_lower)
+    } else {
+        return Some(Err(format!("unsupported /casting type: {cast_type}")));
+    };
+
+    Some(Ok(ParsedCastingCommand {
+        action,
+        target_id,
+        require_not_invisible,
+    }))
+}
+
+fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut escaped = false;
+
+    for ch in input.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_quotes => escaped = true,
+            '"' => in_quotes = !in_quotes,
+            ch if ch.is_whitespace() && !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if in_quotes {
+        return Err("unterminated quote in slash command");
+    }
+    if escaped {
+        current.push('\\');
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    Ok(tokens)
+}
+
+fn quote_for_eq(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn is_item_slot_selector(selector: &str) -> bool {
+    selector.chars().all(|ch| ch.is_ascii_digit())
+        || matches!(
+            selector,
+            "charm"
+                | "leftear"
+                | "rightear"
+                | "head"
+                | "face"
+                | "neck"
+                | "shoulders"
+                | "arms"
+                | "back"
+                | "leftwrist"
+                | "rightwrist"
+                | "range"
+                | "hands"
+                | "primary"
+                | "secondary"
+                | "offhand"
+                | "mainhand"
+                | "leftfinger"
+                | "rightfinger"
+                | "chest"
+                | "legs"
+                | "feet"
+                | "waist"
+                | "ammo"
+                | "powersource"
+        )
+}
+
+fn spell_name_indicates_invisibility(name: &str) -> bool {
+    let lower = name.trim().to_ascii_lowercase();
+    if lower.is_empty() || lower.contains("see invis") || lower.contains("see invisible") {
+        return false;
+    }
+    if lower == "invisibility to animals" {
+        return false;
+    }
+
+    lower.starts_with("invis")
+        || lower.contains(" invisibility")
+        || lower.contains("camouflage")
+        || lower.contains("shroud of stealth")
+}
+
+#[cfg(windows)]
+fn player_is_invisible(eq_base: u64) -> bool {
+    crate::combat::buffs::read_active_buffs(eq_base)
+        .into_iter()
+        .filter_map(|buff| read_spell_name(eq_base, buff.spell_id))
+        .any(|name| spell_name_indicates_invisibility(&name))
+}
+
+#[cfg(not(windows))]
+fn player_is_invisible(_eq_base: u64) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn read_spell_name(eq_base: u64, spell_id: i32) -> Option<String> {
+    use textquest_common::offsets::{self, client_spell_manager, eq_spell, spell_hash_map};
+
+    let spell_id = u32::try_from(spell_id).ok()?;
+    let spell_mgr_ptr_addr = offsets::rebase(offsets::PINST_SPELL_MANAGER, eq_base)?;
+    let spell_mgr_addr = read_usize_field(spell_mgr_ptr_addr)?;
+    let max_spell_id = read_i32_field(spell_mgr_addr + client_spell_manager::MAX_SPELL_ID)?;
+    if max_spell_id <= 0 || spell_id >= max_spell_id as u32 {
+        return None;
+    }
+
+    let spells_map_addr = spell_mgr_addr + client_spell_manager::SPELLS;
+    let buckets_addr = read_usize_field(spells_map_addr + spell_hash_map::BUCKETS)?;
+    let dynamic_size = read_u64_field(spells_map_addr + spell_hash_map::DYNAMIC_SIZE)? as usize;
+    if dynamic_size == 0 || !dynamic_size.is_power_of_two() {
+        return None;
+    }
+
+    let bucket_index = spell_id as usize & (dynamic_size - 1);
+    let bucket_ptr_addr = buckets_addr + bucket_index * size_of::<usize>();
+    let mut node_addr = read_usize_field(bucket_ptr_addr)?;
+    let mut hops = 0usize;
+    const MAX_HASH_MAP_HOPS: usize = 128;
+
+    while node_addr != 0 && hops < MAX_HASH_MAP_HOPS {
+        let node_key = read_i32_field(node_addr + spell_hash_map::KEY)?;
+        if node_key == spell_id as i32 {
+            let spell_addr = node_addr + spell_hash_map::VALUE;
+            let stored_id = read_i32_field(spell_addr + eq_spell::ID)?;
+            if stored_id != node_key {
+                return None;
+            }
+            return read_string_field(spell_addr + eq_spell::NAME, 64);
+        }
+
+        node_addr = read_usize_field(node_addr + spell_hash_map::HASH_NEXT)?;
+        hops += 1;
+    }
+
+    None
+}
+
+#[cfg(windows)]
+fn read_usize_field(addr: usize) -> Option<usize> {
+    if !is_readable(addr, size_of::<usize>()) {
+        return None;
+    }
+    Some(unsafe { *(addr as *const usize) })
+}
+
+#[cfg(windows)]
+fn read_u64_field(addr: usize) -> Option<u64> {
+    if !is_readable(addr, size_of::<u64>()) {
+        return None;
+    }
+    Some(unsafe { *(addr as *const u64) })
+}
+
+#[cfg(windows)]
+fn read_i32_field(addr: usize) -> Option<i32> {
+    if !is_readable(addr, size_of::<i32>()) {
+        return None;
+    }
+    Some(unsafe { *(addr as *const i32) })
+}
+
+#[cfg(windows)]
+fn read_string_field(addr: usize, len: usize) -> Option<String> {
+    if !is_readable(addr, len) {
+        return None;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(addr as *const u8, len) };
+    let end = bytes.iter().position(|&byte| byte == 0).unwrap_or(len);
+    let text = String::from_utf8_lossy(&bytes[..end]).trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
+}
+
+fn handle_casting_slash_command(command: &str) -> bool {
+    match parse_casting_command(command) {
+        None => false,
+        Some(Err(err)) => {
+            tracing::warn!(cmd = %command, %err, "Unsupported /casting command");
+            true
+        }
+        Some(Ok(parsed)) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if parsed.require_not_invisible && eq_base != 0 && player_is_invisible(eq_base) {
+                tracing::info!(cmd = %command, "Skipping /casting because player is invisible");
+                return true;
+            }
+
+            if let Some(target_id) = parsed.target_id {
+                queue_slash_command(format!("/target id {target_id}"));
+            }
+            queue_slash_command(parsed.action.slash_command());
+            true
+        }
+    }
+}
+
 /// Enqueue a command with a human-like jitter delay.
 fn enqueue_command(cmd: textquest_common::ipc::Command, current_tick: u64) {
     let delay = JITTER_RNG
@@ -1278,11 +1577,29 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            if let Some(spell_set) = parse_spell_set_command(trimmed) {
+                match handle_spell_set_command(spell_set) {
+                    Ok(Some(eq_command)) => {
+                        tracing::info!(cmd = %eq_command, "Executing translated spell-set command");
+                        execute_slash_command(&eq_command);
+                    }
+                    Ok(None) => {
+                        tracing::info!(cmd = %command, "Completed custom spell-set command");
+                    }
+                    Err(error) => {
+                        tracing::warn!(cmd = %command, error = %error, "Spell-set command failed");
+                    }
+                }
+                return;
+            }
+
             // When /target is issued while already targeting, EQ's InterpretCmd
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
             if trimmed.len() > 7
-                && trimmed[..7].eq_ignore_ascii_case("/target")
+                && trimmed
+                    .get(..7)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("/target"))
                 && trimmed.as_bytes().get(7).copied() == Some(b' ')
             {
                 let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
@@ -1640,6 +1957,170 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SpellSetCommand {
+    Save(String),
+    Load(String),
+    Delete(String),
+}
+
+fn parse_spell_set_command(command: &str) -> Option<SpellSetCommand> {
+    let trimmed = command.trim();
+    let body = trimmed.strip_prefix('/')?.trim_start();
+    let (verb, rest) = body.split_once(char::is_whitespace)?;
+    let name = rest.trim();
+    if name.is_empty() {
+        return None;
+    }
+
+    match verb.to_ascii_lowercase().as_str() {
+        "sss" => Some(SpellSetCommand::Save(name.to_string())),
+        "ssl" | "ssm" => Some(SpellSetCommand::Load(name.to_string())),
+        "ssd" | "deletespellset" => Some(SpellSetCommand::Delete(name.to_string())),
+        _ => None,
+    }
+}
+
+fn handle_spell_set_command(command: SpellSetCommand) -> Result<Option<String>, String> {
+    match command {
+        SpellSetCommand::Save(name) => Ok(Some(format!("/savespellset {name}"))),
+        SpellSetCommand::Load(name) => Ok(Some(format!("/memspellset {name}"))),
+        SpellSetCommand::Delete(name) => delete_spell_set(&name).map(|_| None),
+    }
+}
+
+fn delete_spell_set(name: &str) -> Result<usize, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        Err(String::from(
+            "Spell-set deletion is only available on Windows builds",
+        ))
+    }
+
+    #[cfg(windows)]
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            return Err(String::from("EQ base not resolved"));
+        }
+
+        let character_name = read_char_name(eq_base)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| String::from("Local character name unavailable"))?;
+        let current_dir = std::env::current_dir()
+            .map_err(|error| format!("Failed to resolve EQ working directory: {error}"))?;
+
+        let mut updated_files = 0usize;
+        for ini_path in spell_set_ini_candidates(&current_dir, &character_name) {
+            let content = match std::fs::read_to_string(&ini_path) {
+                Ok(content) => content,
+                Err(error) => {
+                    tracing::debug!(path = %ini_path.display(), error = %error, "Skipping unreadable spell-set ini");
+                    continue;
+                }
+            };
+
+            let Some(updated) = remove_spell_set_entries(&content, name) else {
+                continue;
+            };
+
+            std::fs::write(&ini_path, updated).map_err(|error| {
+                format!(
+                    "Failed to update spell-set file {}: {error}",
+                    ini_path.display()
+                )
+            })?;
+            updated_files += 1;
+        }
+
+        if updated_files == 0 {
+            Err(format!(
+                "Spell set '{name}' was not found in any {character_name}_*.ini file"
+            ))
+        } else {
+            Ok(updated_files)
+        }
+    }
+}
+
+fn spell_set_ini_candidates(
+    current_dir: &std::path::Path,
+    character_name: &str,
+) -> Vec<std::path::PathBuf> {
+    let prefix = format!("{character_name}_");
+    let read_dir = match std::fs::read_dir(current_dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            tracing::debug!(path = %current_dir.display(), error = %error, "Failed to enumerate spell-set ini candidates");
+            return Vec::new();
+        }
+    };
+
+    let mut matches = read_dir
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.len() > prefix.len() + 4
+                        && name[..prefix.len()].eq_ignore_ascii_case(&prefix)
+                        && name[name.len() - 4..].eq_ignore_ascii_case(".ini")
+                })
+        })
+        .collect::<Vec<_>>();
+    matches.sort();
+    matches
+}
+
+fn remove_spell_set_entries(content: &str, set_name: &str) -> Option<String> {
+    use std::collections::HashSet;
+
+    let target = set_name.trim();
+    if target.is_empty() {
+        return None;
+    }
+
+    let mut prefixes = HashSet::new();
+    for raw_line in content.split_inclusive('\n') {
+        let line = raw_line.trim_end_matches(['\r', '\n']);
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if !key.starts_with("SpellLoadout") || !key.ends_with(".name") {
+            continue;
+        }
+        if value.trim().eq_ignore_ascii_case(target) {
+            prefixes.insert(key.trim_end_matches(".name").to_ascii_lowercase());
+        }
+    }
+
+    if prefixes.is_empty() {
+        return None;
+    }
+
+    let mut updated = String::with_capacity(content.len());
+    for raw_line in content.split_inclusive('\n') {
+        let line = raw_line.trim_end_matches(['\r', '\n']);
+        let key = line
+            .split_once('=')
+            .map(|(key, _)| key.trim())
+            .unwrap_or(line.trim());
+        let remove = key
+            .split_once('.')
+            .map(|(prefix, _)| prefixes.contains(&prefix.to_ascii_lowercase()))
+            .unwrap_or(false);
+        if !remove {
+            updated.push_str(raw_line);
+        }
+    }
+
+    Some(updated)
+}
+
 /// Call `CEverQuest::RightClickedOnPlayer(target, 0)` to open NPC interaction windows.
 fn interact_with_target() {
     #[cfg(windows)]
@@ -1786,6 +2267,78 @@ mod tests {
     use super::*;
 
     #[test]
+    fn spell_set_command_parser_supports_shortcuts() {
+        assert_eq!(
+            parse_spell_set_command("/sss buffs"),
+            Some(SpellSetCommand::Save(String::from("buffs")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/ssl burn"),
+            Some(SpellSetCommand::Load(String::from("burn")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/ssm heal set"),
+            Some(SpellSetCommand::Load(String::from("heal set")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/ssd raid"),
+            Some(SpellSetCommand::Delete(String::from("raid")))
+        );
+        assert_eq!(
+            parse_spell_set_command("/deletespellset raid"),
+            Some(SpellSetCommand::Delete(String::from("raid")))
+        );
+        assert_eq!(parse_spell_set_command("/sss   "), None);
+        assert_eq!(parse_spell_set_command("/sit"), None);
+    }
+
+    #[test]
+    fn spell_set_ini_candidates_match_character_prefix_case_insensitively() {
+        let temp = std::env::temp_dir().join(format!(
+            "textquest-spellset-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).expect("create temp dir");
+        std::fs::write(temp.join("Cleric01_Teek.ini"), "").expect("write ini");
+        std::fs::write(temp.join("cleric01_Test.ini"), "").expect("write ini");
+        std::fs::write(temp.join("Wizard01_Teek.ini"), "").expect("write ini");
+        std::fs::write(temp.join("Cleric01.txt"), "").expect("write txt");
+
+        let matches = spell_set_ini_candidates(&temp, "cleric01");
+        let names: Vec<String> = matches
+            .iter()
+            .filter_map(|path| path.file_name().and_then(|name| name.to_str()))
+            .map(ToOwned::to_owned)
+            .collect();
+
+        assert_eq!(names, vec!["Cleric01_Teek.ini", "cleric01_Test.ini"]);
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn remove_spell_set_entries_deletes_matching_loadout_block() {
+        let content = concat!(
+            "[SpellLoadouts]\r\n",
+            "SpellLoadout1.inuse=1\r\n",
+            "SpellLoadout1.name=Buffs\r\n",
+            "SpellLoadout1.slot1=123\r\n",
+            "SpellLoadout2.inuse=1\r\n",
+            "SpellLoadout2.name=Burn\r\n",
+            "SpellLoadout2.slot1=456\r\n",
+        );
+
+        let updated = remove_spell_set_entries(content, "buffs").expect("updated content");
+
+        assert!(!updated.contains("SpellLoadout1.inuse=1"));
+        assert!(!updated.contains("SpellLoadout1.name=Buffs"));
+        assert!(!updated.contains("SpellLoadout1.slot1=123"));
+        assert!(updated.contains("SpellLoadout2.name=Burn"));
+    }
+
+    #[test]
     fn test_human_jitter_bounds() {
         let mut rng = textquest_common::nav::Xorshift32::new(12345);
         for _ in 0..10_000 {
@@ -1833,5 +2386,97 @@ mod tests {
             saw_spike,
             "Expected at least one hesitation spike > 10 in 10000 draws"
         );
+    }
+
+    #[test]
+    fn parse_casting_spell_with_targetid_and_invis_guard() {
+        let parsed = parse_casting_command(r#"/casting "Complete Heal" gem1 -targetid|42 -invis"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::CastGem(1),
+                target_id: Some(42),
+                require_not_invisible: true,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_item_by_name() {
+        let parsed = parse_casting_command(r#"/casting "Fungi Tunic" item"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem(r#""Fungi Tunic""#.to_string()),
+                target_id: None,
+                require_not_invisible: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_item_by_slot_selector() {
+        let parsed = parse_casting_command(r#"/casting "Clicky" LeftEar -targetid|99"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem("leftear".to_string()),
+                target_id: Some(99),
+                require_not_invisible: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_numeric_slot_selector() {
+        let parsed = parse_casting_command(r#"/casting "Clicky" 13"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem("13".to_string()),
+                target_id: None,
+                require_not_invisible: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_rejects_invalid_targetid() {
+        let err = parse_casting_command(r#"/casting "Clicky" item -targetid|abc"#)
+            .unwrap()
+            .unwrap_err();
+        assert!(err.contains("invalid -targetid value"));
+    }
+
+    #[test]
+    fn parse_casting_rejects_unsupported_type() {
+        let err = parse_casting_command(r#"/casting "Harm Touch" alt"#)
+            .unwrap()
+            .unwrap_err();
+        assert!(err.contains("unsupported /casting type"));
+    }
+
+    #[test]
+    fn invisibility_matcher_ignores_see_invis_but_matches_camouflage() {
+        assert!(!spell_name_indicates_invisibility("See Invisible"));
+        assert!(!spell_name_indicates_invisibility(
+            "Invisibility to Animals"
+        ));
+        assert!(spell_name_indicates_invisibility("Camouflage"));
+        assert!(spell_name_indicates_invisibility("Improved Invisibility"));
+    }
+
+    #[test]
+    fn tokenize_slash_command_preserves_escaped_quotes_inside_quotes() {
+        let tokens = tokenize_slash_command(r#"/casting "Item \"Name\"" item"#).unwrap();
+        assert_eq!(tokens, vec!["/casting", r#"Item "Name""#, "item"]);
     }
 }

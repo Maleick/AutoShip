@@ -61,11 +61,7 @@ pub struct CharacterSoulConfig {
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmProviderKind {
-    /// Anthropic Claude API
-    Anthropic,
-    /// OpenAI ChatGPT API
-    Openai,
-    /// Local ollama instance
+    /// Local ollama instance or compatible operator-managed endpoint
     Ollama,
     /// No LLM — use template quip fallback only
     #[default]
@@ -78,16 +74,16 @@ pub enum LlmProviderKind {
 pub struct LlmConfig {
     /// Which LLM provider to use
     pub provider: LlmProviderKind,
-    /// API key (Anthropic or OpenAI). Not needed for ollama or none.
+    /// Optional auth token for operator-managed local endpoints. Unused for default ollama.
     #[serde(default)]
     pub api_key: String,
     /// Model name
     #[serde(default = "default_model")]
     pub model: String,
-    /// Base URL override (for ollama or proxied endpoints)
+    /// Base URL override for the local ollama-compatible endpoint
     #[serde(default)]
     pub base_url: String,
-    /// Max tokens per response (controls cost)
+    /// Max tokens per response
     #[serde(default = "default_max_tokens")]
     pub max_tokens: u32,
     /// Temperature (0.0 = deterministic, 1.0 = creative)
@@ -96,7 +92,7 @@ pub struct LlmConfig {
 }
 
 fn default_model() -> String {
-    "claude-haiku-4-5-20251001".into()
+    "gemma3:4b".into()
 }
 fn default_max_tokens() -> u32 {
     100
@@ -259,6 +255,8 @@ mod tests {
         assert!(config.player_chat_enabled);
         assert!(config.character.is_empty());
         assert!(config.relationship.is_empty());
+        assert_eq!(config.llm.provider, LlmProviderKind::None);
+        assert_eq!(config.llm.model, "gemma3:4b");
     }
 
     #[test]
@@ -426,6 +424,38 @@ mod tests {
         assert!(!config.enabled);
         assert_eq!(config.edginess, EdginessLevel::Moderate);
         assert_eq!(config.idle_tick_secs, 30);
+        assert_eq!(config.llm.provider, LlmProviderKind::None);
+        assert_eq!(config.llm.model, "gemma3:4b");
+    }
+
+    #[test]
+    fn llm_config_accepts_local_provider() {
+        let config: SoulConfig = toml::from_str(
+            r#"
+                [llm]
+                provider = "ollama"
+                model = "gemma3:12b"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.llm.provider, LlmProviderKind::Ollama);
+        assert_eq!(config.llm.model, "gemma3:12b");
+    }
+
+    #[test]
+    fn llm_config_rejects_remote_provider_strings() {
+        for provider in ["anthropic", "openai"] {
+            let toml_str = format!(
+                r#"
+                    [llm]
+                    provider = "{provider}"
+                "#
+            );
+
+            let err = toml::from_str::<SoulConfig>(&toml_str).unwrap_err();
+            assert!(err.to_string().contains(provider));
+        }
     }
 
     #[test]

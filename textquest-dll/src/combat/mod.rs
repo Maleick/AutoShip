@@ -19,7 +19,7 @@ pub mod xtarget;
 
 use std::sync::Mutex;
 
-use textquest_common::combat::{CombatConfig, CombatStatus};
+use textquest_common::combat::{CastResult, CombatConfig, CombatStatus};
 use textquest_common::types::SpawnData;
 
 use state::Combatant;
@@ -58,6 +58,15 @@ pub fn tick(player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]
     if let Some(combatant) = guard.as_mut() {
         combatant.tick(player, target, nearby);
     }
+}
+
+/// Feed a chat/system line into the combat FSM so active casts can resolve
+/// against real in-game feedback instead of timing out purely by duration.
+pub fn observe_chat_message(text: &str) -> Option<CastResult> {
+    let mut guard = COMBATANT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    guard.as_mut()?.observe_chat_message(text)
 }
 
 /// Get the current combat status for IPC reporting.
