@@ -22,6 +22,8 @@ pub mod offset_db;
 pub mod offsets;
 /// Packet capture types — opcode filtering, capture sessions, and disk persistence.
 pub mod packet;
+/// UDP multicast peer-discovery announcement types.
+pub mod peer_discovery;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).

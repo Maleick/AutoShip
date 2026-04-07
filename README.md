@@ -404,6 +404,24 @@ pull_mana_pct = 60
 
 - Optional `[[level_overrides]]` blocks gate alternate combat/buff/emergency/cc/debuff ability lists by level range; categories omitted inside an override fall back to the base class lists, and the base profile is used when no override matches.
 
+### Optional Peer Discovery (`[discovery]`)
+
+```toml
+[discovery]
+multicast_enabled = true
+bind_addr = "0.0.0.0"
+multicast_addr = "239.255.42.99"
+port = 35353
+announce_interval_ms = 1000
+peer_ttl_ms = 5000
+node_name = "raid-rig-a"
+multicast_ttl = 1
+```
+
+- Disabled by default.
+- When enabled, TextQuest announces locally tracked sessions over UDP multicast and keeps a time-limited cache of remote orchestrator peers.
+- `node_name` is optional; when omitted, TextQuest falls back to the machine hostname.
+
 ### HVT Watchlist (`config/hvt_watchlist.toml`)
 
 ```toml
