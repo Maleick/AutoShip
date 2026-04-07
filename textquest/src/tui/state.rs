@@ -684,6 +684,16 @@ impl MapScreenState {
         self.show_navmesh
     }
 
+    #[must_use]
+    pub fn toggle_filter(&mut self, kind: MapFilterKind) -> String {
+        let enabled = self.filters.toggle(kind);
+        format!(
+            "{} filter {}",
+            kind.label(),
+            if enabled { "ON" } else { "OFF" }
+        )
+    }
+
     /// Toggle a map layer by number:
     /// 1=geometry, 2=spawns, 3=nav paths, 4=mesh, 5=labels.
     pub fn toggle_layer(&mut self, layer: u8) -> &'static str {
@@ -1753,6 +1763,14 @@ mod tests {
         s.show_geometry = false;
         s.apply_visibility_preset(MapVisibilityPreset::All);
         assert!(s.show_geometry && s.show_spawns && s.show_labels);
+    }
+    #[test]
+    fn map_filter_toggle_reports_state() {
+        let mut s = MapScreenState::new();
+        assert_eq!(s.toggle_filter(MapFilterKind::Npc), "NPC filter OFF");
+        assert!(!s.filters.show_npc);
+        assert_eq!(s.toggle_filter(MapFilterKind::Npc), "NPC filter ON");
+        assert!(s.filters.show_npc);
     }
     #[test]
     fn map_preset_crud() {
