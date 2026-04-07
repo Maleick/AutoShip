@@ -36,10 +36,17 @@ fn chat_callback(exception_info: *mut ()) -> bool {
     let color = context.R8 as i32;
 
     if !text_ptr.is_null() {
-        // SAFETY: EQ passes a null-terminated C string. We bound the read to prevent runaway.
+        // SAFETY: We verify every byte address is readable before dereferencing.
         let text = unsafe {
             let mut len = 0usize;
-            while len < 4096 && *text_ptr.add(len) != 0 {
+            while len < 4096 {
+                let current = text_ptr.add(len);
+                if !super::game_loop::is_readable(current as usize, 1) {
+                    break;
+                }
+                if *current == 0 {
+                    break;
+                }
                 len += 1;
             }
             let slice = std::slice::from_raw_parts(text_ptr, len);

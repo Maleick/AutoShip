@@ -3273,14 +3273,21 @@ dependencies = [
 name = "textquest-web"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "argon2",
  "axum",
+ "chrono",
  "serde",
  "serde_json",
+ "tempfile",
  "textquest-common",
  "tokio",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+ "zeroize",
 ]
 
 [[package]]

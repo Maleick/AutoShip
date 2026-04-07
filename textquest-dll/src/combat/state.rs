@@ -5,6 +5,7 @@
 //! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
 
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
 use textquest_common::combat::{
     CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
@@ -20,7 +21,10 @@ use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
 use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
-use super::strategy::{ClassStrategy, CombatContext, GroupMemberState, build_strategy};
+use super::strategy::{
+    ClassStrategy, CombatContext, GroupMemberState, build_strategy, pet_attack_focused,
+    pet_back_off,
+};
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
@@ -44,6 +48,20 @@ enum CombatState {
     Recovering,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpellCastSource {
+    PreferredGem,
+    FallbackGem,
+    SpellIdDirect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlannedSpellCast {
+    gem_id: u8,
+    spell_id: i32,
+    source: SpellCastSource,
+}
+
 /// Normalize a user/config spell slot into a safe EQ gem index.
 ///
 /// Canonical FFI gem IDs are 0-based (0-12). For backward compatibility,
@@ -60,6 +78,41 @@ fn normalize_gem_id(slot: u8) -> Option<u8> {
         }
         _ => None,
     }
+}
+
+/// Build a safe `/useitem` slash command for an item name.
+///
+/// EQ item names commonly contain spaces, so they are quoted. Quotes and control
+/// characters are stripped to avoid malformed commands or command injection.
+fn use_item_command(item_name: &str) -> Option<String> {
+    let sanitized = item_name
+        .chars()
+        .filter(|ch| !ch.is_control() && *ch != '"')
+        .collect::<String>();
+    let trimmed = sanitized.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(format!("/useitem \"{trimmed}\""))
+    }
+}
+
+/// Stable key for tracking item-action retry windows in the ability cooldown map.
+///
+/// `ActionType::Item` currently carries only a display string, so the runtime
+/// needs a deterministic surrogate key to reuse the existing integer-keyed
+/// cooldown tracker. FNV-1a is tiny, stable across runs, and sufficient for
+/// best-effort retry throttling; a collision would only cause two clickies to
+/// share a retry window, which is acceptable until real item IDs are wired in.
+/// The sign bit is masked off so the result always fits the positive `i32`
+/// keyspace used elsewhere by the ability tracker.
+fn item_action_key(item_name: &str) -> i32 {
+    let mut hash = 0x811C_9DC5u32;
+    for byte in item_name.bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    (hash & 0x7FFF_FFFF) as i32
 }
 
 /// The main combat state machine for a single EQ character.
@@ -261,7 +314,48 @@ impl Combatant {
             self.tick_disciplines(player);
         }
 
-        // Build context snapshot for this tick.
+        let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
+        let extended_targets = if eq_base == 0 {
+            None
+        } else {
+            unsafe { super::xtarget::read_extended_targets(eq_base) }
+        };
+
+        let (current_target_id, pet_status, pet_action) = {
+            // Build context snapshot for this tick.
+            let ctx = CombatContext {
+                player,
+                target,
+                nearby_enemies: nearby,
+                group_members: &self.group_members,
+                config: &self.config,
+                tick: self.tick_count,
+                in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
+                ch_chain_slot: None,
+                active_buffs: &[],
+                buff_info: &[],
+                target_is_mezzed: false,
+                extended_targets: extended_targets.as_ref(),
+            };
+
+            // --- Call on_engage when first entering Engaging state ---
+            if self.needs_on_engage {
+                self.needs_on_engage = false;
+                self.strategy.on_engage(&ctx);
+            }
+
+            (
+                ctx.target.map(|current| current.spawn_id),
+                ctx.pet_status(),
+                self.strategy.pet_action(&ctx),
+            )
+        };
+        if let Some(action) = pet_action {
+            if self.execute_pet_action(current_target_id, pet_status, action) {
+                return;
+            }
+        }
+
         let ctx = CombatContext {
             player,
             target,
@@ -274,14 +368,8 @@ impl Combatant {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
-            extended_targets: None,
+            extended_targets: extended_targets.as_ref(),
         };
-
-        // --- Call on_engage when first entering Engaging state ---
-        if self.needs_on_engage {
-            self.needs_on_engage = false;
-            self.strategy.on_engage(&ctx);
-        }
 
         // --- HolyShit evaluation (always runs first) ---
         if let Some(action) = self.holyshit.evaluate(&ctx).cloned() {
@@ -454,7 +542,11 @@ impl Combatant {
                             target = action.target_id,
                             "Rotation engine selected action"
                         );
-                        crate::eq::cast_spell(0, spell_id);
+                        let memorized_spells = crate::eq::read_memorized_spells();
+                        let cast_plan = plan_spell_cast(None, spell_id, &memorized_spells).expect(
+                            "rotation spell planning without preferred slot should be valid",
+                        );
+                        crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
                         let cast_delay = u32::from(self.personality.next_cast_delay());
                         self.gcd.consume();
                         self.state = CombatState::Casting {
@@ -475,13 +567,38 @@ impl Combatant {
                         "Strategy selected spell"
                     );
 
-                    let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                    let memorized_spells = crate::eq::read_memorized_spells();
+                    let Some(cast_plan) =
+                        plan_spell_cast(Some(spell.slot), spell.spell_id, &memorized_spells)
+                    else {
                         tracing::warn!(slot = spell.slot, "Skipping cast with invalid spell slot");
                         return;
                     };
 
+                    if spell.spell_id > 0 {
+                        match cast_plan.source {
+                            SpellCastSource::PreferredGem => {}
+                            SpellCastSource::FallbackGem => {
+                                tracing::info!(
+                                    requested_slot = spell.slot,
+                                    fallback_gem = cast_plan.gem_id,
+                                    spell_id = spell.spell_id,
+                                    name = %spell.name,
+                                    "Configured gem missing spell, falling back to memorized gem"
+                                );
+                            }
+                            SpellCastSource::SpellIdDirect => {
+                                tracing::info!(
+                                    spell_id = spell.spell_id,
+                                    name = %spell.name,
+                                    "Spell not memorized in any gem, casting by spell_id for EQ auto-memorization"
+                                );
+                            }
+                        }
+                    }
+
                     // Call the real EQ CastSpell function via FFI
-                    crate::eq::cast_spell(gem_id, spell.spell_id);
+                    crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
 
                     // Apply humanization delay (cast_start_delay absorbed into cast time)
                     let cast_delay = u32::from(self.personality.next_cast_delay());
@@ -622,8 +739,7 @@ impl Combatant {
         // Pet classes: send pet to attack with /pet focus for single-target
         let class_id = self.strategy.class_id();
         if PET_CLASSES.contains(&class_id) {
-            crate::eq::slash_command("/pet attack");
-            crate::eq::slash_command("/pet focus");
+            pet_attack_focused();
             tracing::info!(class_id, "Sent /pet attack + /pet focus");
         }
 
@@ -673,7 +789,7 @@ impl Combatant {
         // Pet classes: call pet back on disengage so it doesn't pull adds
         let class_id = self.strategy.class_id();
         if PET_CLASSES.contains(&class_id) {
-            crate::eq::slash_command("/pet back");
+            pet_back_off();
             tracing::info!(class_id, "Sent /pet back on disengage");
         }
 
@@ -851,6 +967,56 @@ impl Combatant {
             return;
         }
     }
+
+    fn execute_pet_action(
+        &mut self,
+        current_target_id: Option<u32>,
+        pet_status: super::strategy::PetStatus,
+        action: PetAction,
+    ) -> bool {
+        match action {
+            PetAction::Attack => {
+                let Some(target_id) = current_target_id else {
+                    return false;
+                };
+                crate::eq::slash_command("/pet attack");
+                crate::eq::slash_command("/pet focus");
+                tracing::info!(target_id, "Sent /pet attack + /pet focus");
+                false
+            }
+            PetAction::Buff { spell } => {
+                let Some(pet_id) = pet_status.spawn_id else {
+                    return false;
+                };
+                let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                    tracing::warn!(
+                        slot = spell.slot,
+                        "Skipping pet buff with invalid spell slot"
+                    );
+                    return false;
+                };
+
+                let original_target = current_target_id;
+                if original_target != Some(pet_id) {
+                    crate::eq::slash_command(&format!("/target id {pet_id}"));
+                }
+                crate::eq::cast_spell(gem_id, spell.spell_id);
+                if let Some(original_target) = original_target
+                    && original_target != pet_id
+                {
+                    crate::eq::slash_command(&format!("/target id {original_target}"));
+                }
+
+                let cast_delay = u32::from(self.personality.next_cast_delay());
+                self.gcd.consume();
+                self.state = CombatState::Casting {
+                    spell_slot: gem_id,
+                    ticks_remaining: 20 + cast_delay,
+                };
+                true
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -858,6 +1024,7 @@ impl Combatant {
 mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
+    use crate::combat::rotation;
     use textquest_common::combat::CombatConfig;
 
     fn test_config() -> CombatConfig {
@@ -876,6 +1043,34 @@ mod tests {
         t.name = "TestMob".into();
         t.spawn_id = 100;
         t
+    }
+
+    fn item_rotation_group_with(
+        item_name: &str,
+        target_selector: textquest_common::combat::TargetSelector,
+        combat_state_req: textquest_common::combat::CombatStateReq,
+    ) -> RotationGroup {
+        RotationGroup {
+            name: "ItemTest".into(),
+            target_selector,
+            combat_state_req,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry(
+                "UseClicky",
+                ActionType::Item(item_name.to_string()),
+            )],
+            current_step: 0,
+        }
+    }
+
+    fn item_rotation_group(item_name: &str) -> RotationGroup {
+        item_rotation_group_with(
+            item_name,
+            textquest_common::combat::TargetSelector::SelfOnly,
+            textquest_common::combat::CombatStateReq::Combat,
+        )
     }
 
     #[test]
@@ -1146,6 +1341,63 @@ mod tests {
         let mut c = Combatant::new(1, 0, test_config());
         c.flee_requested = true;
         assert!(matches!(c.status(), CombatStatus::Fleeing));
+    }
+
+    #[test]
+    fn plan_spell_cast_prefers_configured_gem_when_spell_is_loaded() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 0, 0, 1500, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 3,
+                spell_id: 1500,
+                source: SpellCastSource::PreferredGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_falls_back_to_other_matching_gem() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 1500, 0, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 1,
+                spell_id: 1500,
+                source: SpellCastSource::FallbackGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_uses_spell_id_when_not_memorized_anywhere() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 0, 0, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 0,
+                spell_id: 1500,
+                source: SpellCastSource::SpellIdDirect,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_allows_rotation_spell_without_preferred_slot() {
+        let plan = plan_spell_cast(None, 1500, &[0, 0, 1500, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 2,
+                spell_id: 1500,
+                source: SpellCastSource::FallbackGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_rejects_invalid_preferred_slot() {
+        assert_eq!(plan_spell_cast(Some(99), 1500, &[0, 0, 0]), None);
     }
 
     #[test]

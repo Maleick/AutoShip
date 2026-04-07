@@ -191,6 +191,16 @@ impl ClassStrategy for EnchanterStrategy {
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
         if ctx.nearby_enemies.len() > 1 {
+            if let Some(add_target_id) = ctx.extended_targets.and_then(|xt| {
+                xt.cc_add_spawn_ids().into_iter().find(|spawn_id| {
+                    ctx.nearby_enemies
+                        .iter()
+                        .any(|enemy| enemy.spawn_id == *spawn_id)
+                })
+            }) {
+                return Some(add_target_id);
+            }
+
             // The main-assist target is typically the first enemy in the list.
             // Pick the first off-target that is NOT the current target (avoid
             // re-targeting something the group is already burning down).
@@ -253,7 +263,9 @@ impl ClassStrategy for EnchanterStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::CombatConfig;
+    use textquest_common::combat::{
+        CombatConfig, ExtendedTargetList, ExtendedTargetSlot, XTargetSlotStatus, XTargetType,
+    };
     use textquest_common::types::SpawnData;
 
     fn make_ctx<'a>(
@@ -382,6 +394,94 @@ mod tests {
         let config = CombatConfig::default();
         let ctx = make_ctx(&player, None, &enemies, &config);
         // No current target, so first off-target (index 1) won't match current_target_id (None)
+        assert_eq!(enc.select_target(&ctx), Some(2));
+    }
+
+    #[test]
+    fn select_target_prefers_xtarget_cc_add() {
+        let enc = EnchanterStrategy::new(14);
+        let player = SpawnData::default();
+        let primary = SpawnData {
+            spawn_id: 1,
+            ..SpawnData::default()
+        };
+        let add = SpawnData {
+            spawn_id: 2,
+            ..SpawnData::default()
+        };
+        let other = SpawnData {
+            spawn_id: 3,
+            ..SpawnData::default()
+        };
+        let enemies = vec![primary.clone(), other, add.clone()];
+        let config = CombatConfig::default();
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 1,
+                    name: "main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 1,
+                    name: "main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 2,
+                    name: "add".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+        let mut ctx = make_ctx(&player, Some(&primary), &enemies, &config);
+        ctx.extended_targets = Some(&xtargets);
+
+        assert_eq!(enc.select_target(&ctx), Some(2));
+    }
+
+    #[test]
+    fn select_target_falls_back_when_xtarget_add_missing_from_nearby_enemies() {
+        let enc = EnchanterStrategy::new(14);
+        let player = SpawnData::default();
+        let primary = SpawnData {
+            spawn_id: 1,
+            ..SpawnData::default()
+        };
+        let off1 = SpawnData {
+            spawn_id: 2,
+            ..SpawnData::default()
+        };
+        let off2 = SpawnData {
+            spawn_id: 3,
+            ..SpawnData::default()
+        };
+        let enemies = vec![primary.clone(), off1, off2];
+        let config = CombatConfig::default();
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 99,
+                    name: "missing".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 1,
+                    name: "main".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+        let mut ctx = make_ctx(&player, Some(&primary), &enemies, &config);
+        ctx.extended_targets = Some(&xtargets);
+
         assert_eq!(enc.select_target(&ctx), Some(2));
     }
 

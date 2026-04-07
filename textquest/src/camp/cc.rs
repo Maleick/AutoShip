@@ -9,6 +9,8 @@
 
 use std::collections::HashMap;
 
+use textquest_common::combat::HateTargetCategory;
+
 /// Types of crowd control, ordered by priority (lower discriminant = higher priority).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CcType {
@@ -81,6 +83,8 @@ pub struct CcTarget {
     pub assigned_to_pid: Option<u32>,
     /// Whether debuffs (Tash/Malo) have been applied.
     pub debuffed: bool,
+    /// How this off-target mob is classified for CC and kiting priority decisions.
+    pub category: HateTargetCategory,
 }
 
 /// A group member with CC capabilities.
@@ -121,7 +125,7 @@ impl CcTracker {
     ///   Add a single new CC target without pruning existing targets.
     ///   Used when an add spawns mid-fight — we don't want to lose
     ///   existing CC state on other mobs.
-    pub fn add_target(&mut self, spawn_id: u32, name: String) {
+    pub fn add_target(&mut self, spawn_id: u32, name: String, category: HateTargetCategory) {
         if !self.targets.iter().any(|t| t.spawn_id == spawn_id) {
             self.targets.push(CcTarget {
                 spawn_id,
@@ -130,11 +134,15 @@ impl CcTracker {
                 cc_expiry_tick: 0,
                 assigned_to_pid: None,
                 debuffed: false,
+                category,
             });
         }
     }
 
     /// Updates CC targets based on current spawns, expiring old CC and adding new mobs.
+    ///
+    /// New targets added via this method are categorized as [`HateTargetCategory::ActiveHater`]
+    /// by default. Use [`CcTracker::add_target`] directly when the category is known.
     pub fn update(
         &mut self,
         current_spawns: &[(u32, String)],
@@ -159,6 +167,7 @@ impl CcTracker {
                     cc_expiry_tick: 0,
                     assigned_to_pid: None,
                     debuffed: false,
+                    category: HateTargetCategory::default(),
                 });
             }
         }
@@ -187,14 +196,19 @@ impl CcTracker {
             }
         }
 
-        // Sort uncontrolled targets — unassigned first, then by spawn_id for determinism
-        let uncontrolled: Vec<usize> = self
+        // Sort uncontrolled targets — by hate-target category CC priority first,
+        // then by spawn_id for determinism within the same category.
+        let mut uncontrolled: Vec<usize> = self
             .targets
             .iter()
             .enumerate()
             .filter(|(_, t)| t.cc_applied.is_none())
             .map(|(i, _)| i)
             .collect();
+        uncontrolled.sort_by_key(|&i| {
+            let t = &self.targets[i];
+            (t.category.cc_priority(), t.spawn_id)
+        });
 
         for idx in uncontrolled {
             // Find best available member: lowest CC priority value, fewest existing assignments, off cooldown
@@ -421,6 +435,18 @@ impl CcTracker {
             .iter()
             .filter(|t| t.cc_applied.is_some())
             .count()
+    }
+
+    /// Returns spawn IDs sorted by kiting urgency (lowest `kite_priority()` first).
+    ///
+    /// Callers can use this list to decide which mob the kiter should run away from
+    /// or snare next. Mobs with equal kite priority are ordered by spawn ID for
+    /// determinism.
+    #[must_use]
+    pub fn kite_priority_order(&self) -> Vec<u32> {
+        let mut targets: Vec<&CcTarget> = self.targets.iter().collect();
+        targets.sort_by_key(|t| (t.category.kite_priority(), t.spawn_id));
+        targets.iter().map(|t| t.spawn_id).collect()
     }
 }
 
@@ -926,5 +952,112 @@ mod tests {
 
         tracker.needs_remez(18, 3, &mut members);
         assert_eq!(members[0].last_cast_tick, 18);
+    }
+
+    // -- HateTargetCategory tests --
+
+    #[test]
+    fn test_hate_target_category_cc_priority_ordering() {
+        assert!(
+            HateTargetCategory::ActiveHater.cc_priority()
+                < HateTargetCategory::CasterAdd.cc_priority()
+        );
+        assert!(
+            HateTargetCategory::CasterAdd.cc_priority()
+                < HateTargetCategory::Approaching.cc_priority()
+        );
+        assert!(
+            HateTargetCategory::Approaching.cc_priority()
+                < HateTargetCategory::MeleeAdd.cc_priority()
+        );
+        assert!(
+            HateTargetCategory::MeleeAdd.cc_priority() < HateTargetCategory::Roamer.cc_priority()
+        );
+    }
+
+    #[test]
+    fn test_hate_target_category_kite_priority_ordering() {
+        assert!(
+            HateTargetCategory::CasterAdd.kite_priority()
+                < HateTargetCategory::Approaching.kite_priority()
+        );
+        assert!(
+            HateTargetCategory::Approaching.kite_priority()
+                < HateTargetCategory::ActiveHater.kite_priority()
+        );
+        assert!(
+            HateTargetCategory::ActiveHater.kite_priority()
+                < HateTargetCategory::MeleeAdd.kite_priority()
+        );
+        assert!(
+            HateTargetCategory::MeleeAdd.kite_priority()
+                < HateTargetCategory::Roamer.kite_priority()
+        );
+    }
+
+    #[test]
+    fn test_hate_target_category_prefers_cc() {
+        assert!(HateTargetCategory::ActiveHater.prefers_cc());
+        assert!(HateTargetCategory::MeleeAdd.prefers_cc());
+        assert!(HateTargetCategory::CasterAdd.prefers_cc());
+        assert!(!HateTargetCategory::Approaching.prefers_cc());
+        assert!(!HateTargetCategory::Roamer.prefers_cc());
+    }
+
+    #[test]
+    fn test_hate_target_category_prefers_kite() {
+        assert!(HateTargetCategory::Approaching.prefers_kite());
+        assert!(HateTargetCategory::CasterAdd.prefers_kite());
+        assert!(!HateTargetCategory::ActiveHater.prefers_kite());
+        assert!(!HateTargetCategory::MeleeAdd.prefers_kite());
+        assert!(!HateTargetCategory::Roamer.prefers_kite());
+    }
+
+    #[test]
+    fn test_add_target_with_category() {
+        let mut tracker = CcTracker::new();
+        tracker.add_target(10, "orc caster".into(), HateTargetCategory::CasterAdd);
+        assert_eq!(tracker.targets.len(), 1);
+        assert_eq!(tracker.targets[0].category, HateTargetCategory::CasterAdd);
+    }
+
+    #[test]
+    fn test_update_defaults_to_active_hater() {
+        let mut tracker = CcTracker::new();
+        let spawns = vec![(10, "orc pawn".into())];
+        tracker.update(&spawns, None, 0);
+        assert_eq!(tracker.targets[0].category, HateTargetCategory::ActiveHater);
+    }
+
+    #[test]
+    fn test_assign_cc_respects_category_priority() {
+        let mut tracker = CcTracker::new();
+        // Add a Roamer (lower priority) and an ActiveHater (higher priority)
+        tracker.add_target(20, "roaming gnoll".into(), HateTargetCategory::Roamer);
+        tracker.add_target(10, "active hater".into(), HateTargetCategory::ActiveHater);
+
+        let mut members = vec![make_enchanter(100)];
+        // First CC cast should hit the ActiveHater (priority 1), not the Roamer (priority 5)
+        let cmds = tracker.assign_cc(&mut members, 10);
+        // Only one cast possible (cooldown prevents second)
+        assert!(!cmds.is_empty());
+        // First /target command should target spawn_id 10 (ActiveHater)
+        assert_eq!(cmds[0], (100, "/target id 10".into()));
+    }
+
+    #[test]
+    fn test_kite_priority_order_respects_category() {
+        let mut tracker = CcTracker::new();
+        tracker.add_target(30, "distant roamer".into(), HateTargetCategory::Roamer);
+        tracker.add_target(
+            10,
+            "approaching mob".into(),
+            HateTargetCategory::Approaching,
+        );
+        tracker.add_target(20, "caster mob".into(), HateTargetCategory::CasterAdd);
+
+        let order = tracker.kite_priority_order();
+        // CasterAdd (1) < Approaching (2) < Roamer (5)
+        assert_eq!(order, vec![20, 10, 30]);
     }
 }

@@ -1,6 +1,6 @@
 use textquest_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::strategy::{self, ClassStrategy, CombatContext, PetAction};
 
 /// Magician strategy: pet-based DPS + nukes. Pet management via /pet commands.
 /// EQ class ID: 13
@@ -35,6 +35,10 @@ impl ClassStrategy for MagicianStrategy {
 
     fn should_assist(&self, _ctx: &CombatContext) -> bool {
         true
+    }
+
+    fn pet_action(&self, ctx: &CombatContext) -> Option<PetAction> {
+        strategy::pet_attack_action(ctx)
     }
 
     fn aoe_threshold(&self) -> u8 {

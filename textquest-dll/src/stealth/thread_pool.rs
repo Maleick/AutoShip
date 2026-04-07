@@ -51,6 +51,31 @@ pub unsafe fn submit_to_thread_pool(
     Ok(())
 }
 
+#[cfg(all(test, windows))]
+unsafe fn submit_to_thread_pool_and_wait(
+    callback: unsafe extern "system" fn(
+        windows::Win32::System::Threading::PTP_CALLBACK_INSTANCE,
+        *mut core::ffi::c_void,
+        windows::Win32::System::Threading::PTP_WORK,
+    ),
+    context: Option<*mut core::ffi::c_void>,
+) -> Result<(), PoolPartyError> {
+    use windows::Win32::System::Threading::{
+        CloseThreadpoolWork, CreateThreadpoolWork, SubmitThreadpoolWork,
+        WaitForThreadpoolWorkCallbacks,
+    };
+    // Deterministic for tests: wait until the queued work item has run.
+    unsafe {
+        let work = CreateThreadpoolWork(Some(callback), context, None)
+            .map_err(|e| PoolPartyError::AllocFailed(format!("{e}")))?;
+        SubmitThreadpoolWork(work);
+        WaitForThreadpoolWorkCallbacks(work, false);
+        CloseThreadpoolWork(work);
+    }
+
+    Ok(())
+}
+
 /// Errors from PoolParty thread pool execution.
 #[derive(Debug, thiserror::Error)]
 pub enum PoolPartyError {
@@ -88,10 +113,8 @@ mod tests {
         fn submit_callback_executes() {
             CALLBACK_FIRED.store(false, Ordering::Release);
             unsafe {
-                submit_to_thread_pool(test_callback, None).expect("submit should succeed");
+                submit_to_thread_pool_and_wait(test_callback, None).expect("submit should succeed");
             }
-            // Give the worker thread a moment to fire.
-            std::thread::sleep(std::time::Duration::from_millis(100));
             assert!(
                 CALLBACK_FIRED.load(Ordering::Acquire),
                 "Callback should have fired on thread pool"

@@ -672,6 +672,15 @@ pub struct MoveToConfig {
     pub target_id: Option<u32>,
     /// Stop navigation if aggro is detected (nearby hostile NPC moving toward player).
     pub break_on_aggro: bool,
+    /// Stop navigation if the tracked target warps unexpectedly.
+    #[serde(default)]
+    pub break_on_warp: bool,
+    /// Pause navigation until the tracked target stabilizes after a warp.
+    #[serde(default)]
+    pub pause_on_warp: bool,
+    /// Stop navigation if the player is summoned or otherwise displaced unexpectedly.
+    #[serde(default)]
+    pub break_on_summon: bool,
     /// Stop navigation if the player takes damage.
     pub break_on_hit: bool,
     /// Use walk speed instead of run.
@@ -688,6 +697,9 @@ impl Default for MoveToConfig {
             destination: Waypoint::new(0.0, 0.0, 0.0),
             target_id: None,
             break_on_aggro: false,
+            break_on_warp: false,
+            pause_on_warp: false,
+            break_on_summon: false,
             break_on_hit: false,
             use_walk: false,
             use_back: false,
@@ -1719,6 +1731,9 @@ mod tests {
         let config = MoveToConfig::default();
         assert!(config.target_id.is_none());
         assert!(!config.break_on_aggro);
+        assert!(!config.break_on_warp);
+        assert!(!config.pause_on_warp);
+        assert!(!config.break_on_summon);
         assert!(!config.break_on_hit);
         assert!(!config.use_walk);
         assert!(!config.use_back);
@@ -1746,6 +1761,9 @@ mod tests {
             destination: Waypoint::new(50.0, 75.0, 10.0),
             target_id: Some(99),
             break_on_aggro: true,
+            break_on_warp: true,
+            pause_on_warp: false,
+            break_on_summon: true,
             break_on_hit: false,
             use_walk: true,
             use_back: false,

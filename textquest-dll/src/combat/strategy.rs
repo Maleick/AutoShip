@@ -48,6 +48,27 @@ pub struct CombatContext<'a> {
     pub extended_targets: Option<&'a ExtendedTargetList>,
 }
 
+impl CombatContext<'_> {
+    pub fn pet(&self) -> Option<&textquest_common::combat::ExtendedTargetSlot> {
+        self.extended_targets.and_then(ExtendedTargetList::pet)
+    }
+
+    pub fn pet_spawn_id(&self) -> Option<u32> {
+        self.extended_targets
+            .and_then(ExtendedTargetList::pet_spawn_id)
+    }
+
+    pub fn pet_target(&self) -> Option<&textquest_common::combat::ExtendedTargetSlot> {
+        self.extended_targets
+            .and_then(ExtendedTargetList::pet_target)
+    }
+
+    pub fn pet_target_id(&self) -> Option<u32> {
+        self.extended_targets
+            .and_then(ExtendedTargetList::pet_target_id)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GroupMemberState {
     pub spawn_id: u32,
@@ -79,6 +100,14 @@ pub trait ClassStrategy: Send {
 
     /// Whether this character should assist the main assist.
     fn should_assist(&self, ctx: &CombatContext) -> bool;
+
+    /// Optional pet-management action for this frame.
+    ///
+    /// Strategies can inspect `ctx.pet_status()` and request an explicit pet
+    /// command or pet-targeted buff without hardcoding pet logic in the combat FSM.
+    fn pet_action(&self, _ctx: &CombatContext) -> Option<PetAction> {
+        None
+    }
 
     /// Called when engaging a new target.
     /// Override to log engagement or toggle auto-attack.
@@ -163,6 +192,18 @@ pub fn assist_target(ctx: &CombatContext) -> Option<u32> {
     ctx.target.map(|t| t.spawn_id)
 }
 
+/// Common pet attack behavior: if we have a pet and it's not already attacking
+/// the current target, request `/pet attack`.
+#[inline]
+pub fn pet_attack_action(ctx: &CombatContext) -> Option<PetAction> {
+    let target_id = ctx.target?.spawn_id;
+    let pet = ctx.pet_status();
+    if !ctx.in_combat || !pet.has_pet() || pet.is_attacking(target_id) {
+        return None;
+    }
+    Some(PetAction::Attack)
+}
+
 /// Common `on_engage` for melee classes: log engagement and enable auto-attack.
 pub fn melee_on_engage(ctx: &CombatContext, class_label: &str) {
     if let Some(target) = ctx.target {
@@ -179,6 +220,27 @@ pub fn melee_on_engage(ctx: &CombatContext, class_label: &str) {
 /// Only call when `!ctx.in_combat` — mid-combat spell completions should NOT disable auto-attack.
 pub fn melee_on_disengage() {
     crate::eq::toggle_auto_attack(false);
+}
+
+/// Common pet attack helper for pet classes.
+pub fn pet_attack() {
+    crate::eq::slash_command("/pet attack");
+}
+
+/// Common pet single-target focus helper for pet classes.
+pub fn pet_focus() {
+    crate::eq::slash_command("/pet focus");
+}
+
+/// Common pet engage helper: attack the current target and focus it.
+pub fn pet_attack_focused() {
+    pet_attack();
+    pet_focus();
+}
+
+/// Common pet disengage helper: call the pet back to the owner.
+pub fn pet_back_off() {
+    crate::eq::slash_command("/pet back");
 }
 
 /// Find the group member with the lowest HP percentage (alive only).
@@ -388,6 +450,30 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
+    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus};
+
+    fn make_ctx_with_xtargets<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        config: &'a CombatConfig,
+        in_combat: bool,
+        extended_targets: Option<&'a ExtendedTargetList>,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets,
+        }
+    }
 
     #[test]
     fn build_strategy_all_16_classes() {
@@ -459,9 +545,42 @@ mod tests {
             ..SpawnData::default()
         };
         let config = CombatConfig::default();
+        let ctx = make_ctx_with_xtargets(&player, Some(&target), &config, false, None);
+        assert_eq!(assist_target(&ctx), Some(42));
+    }
+
+    #[test]
+    fn assist_target_none_without_target() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = make_ctx_with_xtargets(&player, None, &config, false, None);
+        assert!(assist_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn combat_context_pet_helpers_expose_pet_state() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                textquest_common::combat::ExtendedTargetSlot {
+                    slot_type: textquest_common::combat::XTargetType::MyPet,
+                    status: textquest_common::combat::XTargetSlotStatus::CurrentZone,
+                    spawn_id: 77,
+                    name: "Warder".into(),
+                },
+                textquest_common::combat::ExtendedTargetSlot {
+                    slot_type: textquest_common::combat::XTargetType::MyPetTarget,
+                    status: textquest_common::combat::XTargetSlotStatus::CurrentZone,
+                    spawn_id: 88,
+                    name: "A goblin".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
         let ctx = CombatContext {
             player: &player,
-            target: Some(&target),
+            target: None,
             nearby_enemies: &[],
             group_members: &[],
             config: &config,
@@ -471,13 +590,20 @@ mod tests {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
-            extended_targets: None,
+            extended_targets: Some(&xtargets),
         };
-        assert_eq!(assist_target(&ctx), Some(42));
+
+        assert_eq!(ctx.pet().map(|slot| slot.name.as_str()), Some("Warder"));
+        assert_eq!(ctx.pet_spawn_id(), Some(77));
+        assert_eq!(
+            ctx.pet_target().map(|slot| slot.name.as_str()),
+            Some("A goblin")
+        );
+        assert_eq!(ctx.pet_target_id(), Some(88));
     }
 
     #[test]
-    fn assist_target_none_without_target() {
+    fn combat_context_pet_helpers_handle_missing_xtargets() {
         let player = SpawnData::default();
         let config = CombatConfig::default();
         let ctx = CombatContext {
@@ -494,7 +620,19 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
         };
-        assert!(assist_target(&ctx).is_none());
+
+        assert!(ctx.pet().is_none());
+        assert_eq!(ctx.pet_spawn_id(), None);
+        assert!(ctx.pet_target().is_none());
+        assert_eq!(ctx.pet_target_id(), None);
+    }
+
+    #[test]
+    fn pet_command_helpers_noop_without_eq_base() {
+        pet_attack();
+        pet_focus();
+        pet_attack_focused();
+        pet_back_off();
     }
 
     #[test]
@@ -532,20 +670,7 @@ mod tests {
             ],
             ..CombatConfig::default()
         };
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: false,
-            ch_chain_slot: None,
-            active_buffs: &[],
-            buff_info: &[],
-            target_is_mezzed: false,
-            extended_targets: None,
-        };
+        let ctx = make_ctx_with_xtargets(&player, None, &config, false, None);
         let spell = best_spell_by_mana(&ctx).unwrap();
         assert_eq!(spell.name, "High"); // highest priority that we can afford
     }
@@ -554,20 +679,7 @@ mod tests {
     fn best_spell_by_mana_none_when_empty() {
         let player = SpawnData::default();
         let config = CombatConfig::default();
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: false,
-            ch_chain_slot: None,
-            active_buffs: &[],
-            buff_info: &[],
-            target_is_mezzed: false,
-            extended_targets: None,
-        };
+        let ctx = make_ctx_with_xtargets(&player, None, &config, false, None);
         assert!(best_spell_by_mana(&ctx).is_none());
     }
 
@@ -587,21 +699,91 @@ mod tests {
             }],
             ..CombatConfig::default()
         };
-        let ctx = CombatContext {
-            player: &player,
-            target: None,
-            nearby_enemies: &[],
-            group_members: &[],
-            config: &config,
-            tick: 0,
-            in_combat: false,
-            ch_chain_slot: None,
-            active_buffs: &[],
-            buff_info: &[],
-            target_is_mezzed: false,
-            extended_targets: None,
-        };
+        let ctx = make_ctx_with_xtargets(&player, None, &config, false, None);
         assert!(best_spell_by_mana(&ctx).is_none());
+    }
+
+    #[test]
+    fn pet_status_reads_my_pet_slots() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 77,
+                    name: "Bonewalker".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 99,
+                    name: "a skeleton".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+        let ctx = make_ctx_with_xtargets(&player, None, &config, false, Some(&xtargets));
+        assert_eq!(
+            ctx.pet_status(),
+            PetStatus {
+                spawn_id: Some(77),
+                target_id: Some(99),
+            }
+        );
+    }
+
+    #[test]
+    fn pet_strategy_requests_attack_when_pet_is_idle() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let target = SpawnData {
+            spawn_id: 99,
+            ..SpawnData::default()
+        };
+        let xtargets = ExtendedTargetList {
+            slots: vec![ExtendedTargetSlot {
+                slot_type: XTargetType::MyPet,
+                status: XTargetSlotStatus::CurrentZone,
+                spawn_id: 77,
+                name: "Warder".into(),
+            }],
+            auto_add_haters: false,
+        };
+        let ctx = make_ctx_with_xtargets(&player, Some(&target), &config, true, Some(&xtargets));
+        let mage = build_strategy(13, &config);
+        assert_eq!(mage.pet_action(&ctx), Some(PetAction::Attack));
+    }
+
+    #[test]
+    fn pet_strategy_skips_attack_when_pet_already_has_target() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let target = SpawnData {
+            spawn_id: 99,
+            ..SpawnData::default()
+        };
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 77,
+                    name: "Warder".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 99,
+                    name: "a skeleton".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+        let ctx = make_ctx_with_xtargets(&player, Some(&target), &config, true, Some(&xtargets));
+        let mage = build_strategy(13, &config);
+        assert_eq!(mage.pet_action(&ctx), None);
     }
 
     #[test]

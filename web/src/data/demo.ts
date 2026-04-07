@@ -154,6 +154,72 @@ export const navItems: NavItem[] = [
     label: "Security Wards",
     icon: "ShieldCheck",
   },
+  {
+    id: "economy",
+    label: "Economy Ledger",
+    icon: "Coins",
+  },
+];
+
+// ── Economy demo data ────────────────────────────────────────────────────────
+
+export const kronoSettings: KronoSettings = {
+  target_rate_per_day: 3,
+  min_sell_price: 800,
+  max_buy_price: 750,
+  restock_threshold: 5,
+  enabled: true,
+};
+
+export const vendorRoutes: VendorRoute[] = [
+  {
+    id: "vr-1",
+    zone: "East Commonlands",
+    npc_name: "Merchant Ooldi",
+    path_notes: "Near zone-in from West Commonlands, sells food/drink.",
+    item_categories: ["Food", "Drink", "Reagents"],
+    enabled: true,
+  },
+  {
+    id: "vr-2",
+    zone: "Neriak Commons",
+    npc_name: "Vira S`Lex",
+    path_notes: "Inside the Neriak armory building, sells weapons.",
+    item_categories: ["Weapons", "Armor"],
+    enabled: true,
+  },
+  {
+    id: "vr-3",
+    zone: "North Freeport",
+    npc_name: "Deldaon Sagelore",
+    path_notes: "Academy of Arcane Science, sells spell reagents.",
+    item_categories: ["Reagents", "Scrolls"],
+    enabled: false,
+  },
+];
+
+export const bankingRules: BankingRule[] = [
+  {
+    id: "br-1",
+    item_category: "Plat",
+    deposit_threshold: 5000,
+    keep_on_hand: 500,
+    auto_deposit: true,
+  },
+  {
+    id: "br-2",
+    item_category: "Krono",
+    deposit_threshold: 10,
+    keep_on_hand: 2,
+    auto_deposit: true,
+  },
+  {
+    id: "br-3",
+    item_category: "Tradeskill Mats",
+    deposit_threshold: 200,
+    keep_on_hand: 20,
+    auto_deposit: false,
+  },
 ];
 
 // ── Group Builder demo data ────────────────────────────────────────────────

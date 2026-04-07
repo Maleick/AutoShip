@@ -146,14 +146,161 @@ impl ExtendedTargetList {
             .count()
     }
 
+    /// Return active extended-target spawn IDs that represent the group's
+    /// current primary kill target(s), not CC adds.
+    pub fn primary_target_spawn_ids(&self) -> Vec<u32> {
+        self.slots
+            .iter()
+            .filter(|s| {
+                s.is_active()
+                    && matches!(
+                        s.slot_type,
+                        XTargetType::GroupTanksTarget
+                            | XTargetType::GroupAssistTarget
+                            | XTargetType::GroupPullerTarget
+                            | XTargetType::RaidAssist1Target
+                            | XTargetType::RaidAssist2Target
+                            | XTargetType::RaidAssist3Target
+                    )
+            })
+            .map(|s| s.spawn_id)
+            .collect()
+    }
+
+    /// Return active extended-target spawn IDs that look like CC adds.
+    ///
+    /// These are auto-haters that are not also referenced by the group's
+    /// primary-target slots, which keeps CC helpers from selecting the mob the
+    /// group is already burning down.
+    pub fn cc_add_spawn_ids(&self) -> Vec<u32> {
+        let primary_targets = self.primary_target_spawn_ids();
+        self.slots
+            .iter()
+            .filter(|s| {
+                s.is_active()
+                    && s.slot_type.is_auto_hater()
+                    && !primary_targets.contains(&s.spawn_id)
+            })
+            .map(|s| s.spawn_id)
+            .collect()
+    }
+
+    pub fn first_cc_add_spawn_id(&self) -> Option<u32> {
+        self.cc_add_spawn_ids().into_iter().next()
+    }
+
     pub fn get_by_type(&self, slot_type: XTargetType) -> Option<&ExtendedTargetSlot> {
         self.slots
             .iter()
             .find(|s| s.is_active() && s.slot_type == slot_type)
     }
 
+    pub fn pet(&self) -> Option<&ExtendedTargetSlot> {
+        self.get_by_type(XTargetType::MyPet)
+    }
+
+    pub fn pet_spawn_id(&self) -> Option<u32> {
+        self.pet().map(|slot| slot.spawn_id)
+    }
+
+    pub fn pet_target(&self) -> Option<&ExtendedTargetSlot> {
+        self.get_by_type(XTargetType::MyPetTarget)
+    }
+
+    pub fn pet_target_id(&self) -> Option<u32> {
+        self.pet_target().map(|slot| slot.spawn_id)
+    }
+
     pub fn active_slots(&self) -> Vec<&ExtendedTargetSlot> {
         self.slots.iter().filter(|s| s.is_active()).collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hate-target categories — classify off-target adds for CC / kiting decisions
+// ---------------------------------------------------------------------------
+
+/// Classifies an off-target mob for CC assignment and kiting priority decisions.
+///
+/// The category drives two independent priority axes:
+/// * **CC priority** — which add should be controlled first.
+/// * **Kite priority** — which add should be kited away from the group first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum HateTargetCategory {
+    /// Mob is on the XTarget auto-hater list — actively attacking a group member.
+    /// Highest default CC priority; must be controlled before it deals damage.
+    #[default]
+    ActiveHater,
+    /// Mob is a spellcaster (nuker, healer, or debuffer).
+    /// Snare/root preferred so it cannot kite away or continue casting.
+    CasterAdd,
+    /// Mob is a melee attacker that has joined the fight.
+    /// Mez/stun preferred for full lockdown.
+    MeleeAdd,
+    /// Mob is moving toward the group but has not yet engaged.
+    /// Good kite candidate before it fully joins the fight.
+    Approaching,
+    /// Mob is in the area but has not aggroed.
+    /// Lowest priority — handle only when all engaged adds are controlled.
+    Roamer,
+}
+
+impl HateTargetCategory {
+    /// CC assignment priority (lower = higher priority).
+    ///
+    /// Order: `ActiveHater` → `CasterAdd` → `Approaching` → `MeleeAdd` → `Roamer`.
+    #[must_use]
+    pub fn cc_priority(self) -> u8 {
+        match self {
+            Self::ActiveHater => 1,
+            Self::CasterAdd => 2,
+            Self::Approaching => 3,
+            Self::MeleeAdd => 4,
+            Self::Roamer => 5,
+        }
+    }
+
+    /// Kiting priority (lower = more urgent to kite away).
+    ///
+    /// Casters are kited first (prevent ranged damage), followed by approaching
+    /// mobs (intercept before melee contact), then active melee, then roamers.
+    #[must_use]
+    pub fn kite_priority(self) -> u8 {
+        match self {
+            Self::CasterAdd => 1,
+            Self::Approaching => 2,
+            Self::ActiveHater => 3,
+            Self::MeleeAdd => 4,
+            Self::Roamer => 5,
+        }
+    }
+
+    /// Returns `true` if this category should be handled with CC rather than kiting.
+    ///
+    /// [`CasterAdd`] appears in both `prefers_cc` and [`prefers_kite`] because casters
+    /// are dangerous at range: the group wants them either silenced via CC (ideal) or
+    /// kited far enough away that their spells land out of range (fallback when no CC
+    /// is available). Callers should prefer CC when a CC member is ready; fall back to
+    /// kiting only when no CC ability is off cooldown.
+    ///
+    /// [`CasterAdd`]: Self::CasterAdd
+    /// [`prefers_kite`]: Self::prefers_kite
+    #[must_use]
+    pub fn prefers_cc(self) -> bool {
+        matches!(self, Self::ActiveHater | Self::MeleeAdd | Self::CasterAdd)
+    }
+
+    /// Returns `true` if this category is a better kite candidate than CC target.
+    ///
+    /// [`CasterAdd`] is included here as a fallback strategy: when no CC ability is
+    /// available, kiting a caster is preferable to leaving it free-casting in melee
+    /// range. See [`prefers_cc`] for the primary strategy.
+    ///
+    /// [`CasterAdd`]: Self::CasterAdd
+    /// [`prefers_cc`]: Self::prefers_cc
+    #[must_use]
+    pub fn prefers_kite(self) -> bool {
+        matches!(self, Self::Approaching | Self::CasterAdd)
     }
 }
 
@@ -227,7 +374,7 @@ pub enum CombatStatus {
     },
     /// Casting a spell on a target.
     Casting {
-        /// Memorized spell slot (0-indexed).
+        /// Memorized spell slot (0-indexed), or `0xFF` for item-origin casts.
         spell_slot: u8,
         /// Spawn ID of the cast target.
         target_id: u32,
@@ -1009,6 +1156,83 @@ mod tests {
     }
 
     #[test]
+    fn primary_target_spawn_ids_filters_group_target_slots() {
+        let list = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "add".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 200,
+                    name: "main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::RaidAssist2Target,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 300,
+                    name: "raid_main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::SpecificNpc,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 400,
+                    name: "manual".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+
+        assert_eq!(list.primary_target_spawn_ids(), vec![200, 300]);
+    }
+
+    #[test]
+    fn cc_add_spawn_ids_exclude_primary_target_duplicates() {
+        let list = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "main_dup".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "main_dup".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 200,
+                    name: "add_1".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 300,
+                    name: "add_2".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::DifferentZone,
+                    spawn_id: 400,
+                    name: "remote".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+
+        assert_eq!(list.cc_add_spawn_ids(), vec![200, 300]);
+        assert_eq!(list.first_cc_add_spawn_id(), Some(200));
+    }
+
+    #[test]
     fn combat_status_engaging_carries_target() {
         let status = CombatStatus::Engaging { target_id: 42 };
         if let CombatStatus::Engaging { target_id } = status {
@@ -1090,6 +1314,64 @@ mod tests {
         let debug = format!("{:?}", expr);
         assert!(debug.contains("And"));
         assert!(debug.contains("Or"));
+    }
+
+    #[test]
+    fn extended_target_list_pet_helpers_use_pet_slots() {
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 1001,
+                    name: "Fluffy".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 2002,
+                    name: "A fire beetle".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+
+        assert_eq!(
+            xtargets.pet().map(|slot| slot.name.as_str()),
+            Some("Fluffy")
+        );
+        assert_eq!(xtargets.pet_spawn_id(), Some(1001));
+        assert_eq!(
+            xtargets.pet_target().map(|slot| slot.name.as_str()),
+            Some("A fire beetle")
+        );
+        assert_eq!(xtargets.pet_target_id(), Some(2002));
+    }
+
+    #[test]
+    fn extended_target_list_pet_helpers_ignore_inactive_pet_slots() {
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::DifferentZone,
+                    spawn_id: 1001,
+                    name: "Fluffy".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::Empty,
+                    spawn_id: 2002,
+                    name: "A fire beetle".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+
+        assert!(xtargets.pet().is_none());
+        assert_eq!(xtargets.pet_spawn_id(), None);
+        assert!(xtargets.pet_target().is_none());
+        assert_eq!(xtargets.pet_target_id(), None);
     }
 
     #[test]
@@ -1825,5 +2107,97 @@ mod tests {
         let result = resolve_abilities(&sets, &known, 55);
         let nuke = result.get("Nuke").expect("should resolve Nuke");
         assert_eq!(nuke.ability_name, "Frost");
+    }
+
+    // -- HateTargetCategory tests --
+
+    #[test]
+    fn hate_target_category_default_is_active_hater() {
+        assert_eq!(
+            HateTargetCategory::default(),
+            HateTargetCategory::ActiveHater
+        );
+    }
+
+    #[test]
+    fn hate_target_category_all_variants_constructible() {
+        let _ah = HateTargetCategory::ActiveHater;
+        let _ca = HateTargetCategory::CasterAdd;
+        let _ma = HateTargetCategory::MeleeAdd;
+        let _ap = HateTargetCategory::Approaching;
+        let _ro = HateTargetCategory::Roamer;
+    }
+
+    #[test]
+    fn hate_target_category_cc_priority_unique_and_ordered() {
+        let mut priorities: Vec<u8> = vec![
+            HateTargetCategory::ActiveHater.cc_priority(),
+            HateTargetCategory::CasterAdd.cc_priority(),
+            HateTargetCategory::Approaching.cc_priority(),
+            HateTargetCategory::MeleeAdd.cc_priority(),
+            HateTargetCategory::Roamer.cc_priority(),
+        ];
+        // All priorities distinct
+        priorities.sort_unstable();
+        let before_dedup = priorities.len();
+        priorities.dedup();
+        assert_eq!(
+            priorities.len(),
+            before_dedup,
+            "CC priorities should be unique"
+        );
+        // Monotonically increasing after sort
+        for i in 1..priorities.len() {
+            assert!(priorities[i] > priorities[i - 1]);
+        }
+    }
+
+    #[test]
+    fn hate_target_category_kite_priority_unique_and_ordered() {
+        let mut priorities: Vec<u8> = vec![
+            HateTargetCategory::CasterAdd.kite_priority(),
+            HateTargetCategory::Approaching.kite_priority(),
+            HateTargetCategory::ActiveHater.kite_priority(),
+            HateTargetCategory::MeleeAdd.kite_priority(),
+            HateTargetCategory::Roamer.kite_priority(),
+        ];
+        priorities.sort_unstable();
+        let before_dedup = priorities.len();
+        priorities.dedup();
+        assert_eq!(
+            priorities.len(),
+            before_dedup,
+            "Kite priorities should be unique"
+        );
+        for i in 1..priorities.len() {
+            assert!(priorities[i] > priorities[i - 1]);
+        }
+    }
+
+    #[test]
+    fn hate_target_category_prefers_cc_and_kite_consistent() {
+        use HateTargetCategory::*;
+        // prefers_cc and prefers_kite are not mutually exclusive (CasterAdd is both)
+        assert!(CasterAdd.prefers_cc());
+        assert!(CasterAdd.prefers_kite());
+        // Roamer prefers neither
+        assert!(!Roamer.prefers_cc());
+        assert!(!Roamer.prefers_kite());
+    }
+
+    #[test]
+    fn hate_target_category_serialization_roundtrip() {
+        let cats = [
+            HateTargetCategory::ActiveHater,
+            HateTargetCategory::CasterAdd,
+            HateTargetCategory::MeleeAdd,
+            HateTargetCategory::Approaching,
+            HateTargetCategory::Roamer,
+        ];
+        for cat in &cats {
+            let json = serde_json::to_string(cat).expect("serialize");
+            let back: HateTargetCategory = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, *cat);
+        }
     }
 }

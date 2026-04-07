@@ -811,6 +811,31 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
                 "l",
                 "Labels: text POI markers (zone connections, banks, NPCs)",
             );
+            push_kv(
+                &mut rows,
+                None,
+                "a",
+                "Annotations: Brewall layer-2 extras (compass roses, grid marks)",
+            );
+            rows.push(help_row(None, HelpCell::Text(String::new())));
+            push_heading(&mut rows, None, "Map Filters");
+            push_kv(&mut rows, None, "Shift+N", "Toggle NPC spawn markers");
+            push_kv(&mut rows, None, "Shift+P", "Toggle PC spawn markers");
+            push_kv(&mut rows, None, "Shift+C", "Toggle corpse markers");
+            push_kv(&mut rows, None, "Shift+G", "Toggle ground-spawn markers");
+            push_kv(&mut rows, None, "Shift+T", "Toggle pet markers");
+            push_kv(
+                &mut rows,
+                None,
+                "Shift+R",
+                "Toggle named (rare) NPC markers",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "Shift+U",
+                "Toggle untargetable spawn markers",
+            );
             rows.push(help_row(None, HelpCell::Text(String::new())));
             push_heading(&mut rows, None, "Spawn List");
             push_kv(&mut rows, None, "/", "Search spawns by name");

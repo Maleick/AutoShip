@@ -281,6 +281,305 @@ pub fn queue_slash_command(command: String) {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CastingAction {
+    CastGem(u8),
+    UseItem(String),
+}
+
+impl CastingAction {
+    fn slash_command(&self) -> String {
+        match self {
+            Self::CastGem(slot) => format!("/cast {slot}"),
+            Self::UseItem(selector) => format!("/useitem {selector}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedCastingCommand {
+    action: CastingAction,
+    target_id: Option<u32>,
+    require_not_invisible: bool,
+}
+
+fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if !verb.eq_ignore_ascii_case("/casting") {
+        return None;
+    }
+
+    let Some(subject) = args.first() else {
+        return Some(Err("missing spell or item selector".to_string()));
+    };
+
+    let mut cast_type: Option<&str> = None;
+    let mut target_id = None;
+    let mut require_not_invisible = false;
+
+    for token in &args[1..] {
+        if token.eq_ignore_ascii_case("-invis") {
+            require_not_invisible = true;
+            continue;
+        }
+
+        let lower = token.to_ascii_lowercase();
+        if let Some(value) = lower.strip_prefix("-targetid|") {
+            let parsed_target = value
+                .parse::<u32>()
+                .map_err(|_| format!("invalid -targetid value: {value}"));
+            match parsed_target {
+                Ok(parsed_target) => {
+                    target_id = Some(parsed_target);
+                    continue;
+                }
+                Err(err) => return Some(Err(err)),
+            }
+        }
+
+        if cast_type.replace(token.as_str()).is_some() {
+            return Some(Err(format!("multiple cast types specified: {token}")));
+        }
+    }
+
+    let Some(cast_type) = cast_type else {
+        return Some(Err(
+            "missing cast type (expected gem#, item, or an item slot)".to_string(),
+        ));
+    };
+
+    let cast_type_lower = cast_type.to_ascii_lowercase();
+    let action = if let Some(slot) = cast_type_lower.strip_prefix("gem") {
+        let slot = slot
+            .parse::<u8>()
+            .map_err(|_| format!("invalid gem selector: {cast_type}"));
+        match slot {
+            Ok(slot @ 1..=13) => CastingAction::CastGem(slot),
+            Ok(slot) => return Some(Err(format!("gem slot out of range: {slot}"))),
+            Err(err) => return Some(Err(err)),
+        }
+    } else if cast_type_lower == "item" {
+        CastingAction::UseItem(quote_for_eq(subject))
+    } else if is_item_slot_selector(&cast_type_lower) {
+        CastingAction::UseItem(cast_type_lower)
+    } else {
+        return Some(Err(format!("unsupported /casting type: {cast_type}")));
+    };
+
+    Some(Ok(ParsedCastingCommand {
+        action,
+        target_id,
+        require_not_invisible,
+    }))
+}
+
+fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut escaped = false;
+
+    for ch in input.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_quotes => escaped = true,
+            '"' => in_quotes = !in_quotes,
+            ch if ch.is_whitespace() && !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if in_quotes {
+        return Err("unterminated quote in slash command");
+    }
+    if escaped {
+        current.push('\\');
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    Ok(tokens)
+}
+
+fn quote_for_eq(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn is_item_slot_selector(selector: &str) -> bool {
+    selector.chars().all(|ch| ch.is_ascii_digit())
+        || matches!(
+            selector,
+            "charm"
+                | "leftear"
+                | "rightear"
+                | "head"
+                | "face"
+                | "neck"
+                | "shoulders"
+                | "arms"
+                | "back"
+                | "leftwrist"
+                | "rightwrist"
+                | "range"
+                | "hands"
+                | "primary"
+                | "secondary"
+                | "offhand"
+                | "mainhand"
+                | "leftfinger"
+                | "rightfinger"
+                | "chest"
+                | "legs"
+                | "feet"
+                | "waist"
+                | "ammo"
+                | "powersource"
+        )
+}
+
+fn spell_name_indicates_invisibility(name: &str) -> bool {
+    let lower = name.trim().to_ascii_lowercase();
+    if lower.is_empty() || lower.contains("see invis") || lower.contains("see invisible") {
+        return false;
+    }
+    if lower == "invisibility to animals" {
+        return false;
+    }
+
+    lower.starts_with("invis")
+        || lower.contains(" invisibility")
+        || lower.contains("camouflage")
+        || lower.contains("shroud of stealth")
+}
+
+#[cfg(windows)]
+fn player_is_invisible(eq_base: u64) -> bool {
+    crate::combat::buffs::read_active_buffs(eq_base)
+        .into_iter()
+        .filter_map(|buff| read_spell_name(eq_base, buff.spell_id))
+        .any(|name| spell_name_indicates_invisibility(&name))
+}
+
+#[cfg(not(windows))]
+fn player_is_invisible(_eq_base: u64) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn read_spell_name(eq_base: u64, spell_id: i32) -> Option<String> {
+    use textquest_common::offsets::{self, client_spell_manager, eq_spell, spell_hash_map};
+
+    let spell_id = u32::try_from(spell_id).ok()?;
+    let spell_mgr_ptr_addr = offsets::rebase(offsets::PINST_SPELL_MANAGER, eq_base)?;
+    let spell_mgr_addr = read_usize_field(spell_mgr_ptr_addr)?;
+    let max_spell_id = read_i32_field(spell_mgr_addr + client_spell_manager::MAX_SPELL_ID)?;
+    if max_spell_id <= 0 || spell_id >= max_spell_id as u32 {
+        return None;
+    }
+
+    let spells_map_addr = spell_mgr_addr + client_spell_manager::SPELLS;
+    let buckets_addr = read_usize_field(spells_map_addr + spell_hash_map::BUCKETS)?;
+    let dynamic_size = read_u64_field(spells_map_addr + spell_hash_map::DYNAMIC_SIZE)? as usize;
+    if dynamic_size == 0 || !dynamic_size.is_power_of_two() {
+        return None;
+    }
+
+    let bucket_index = spell_id as usize & (dynamic_size - 1);
+    let bucket_ptr_addr = buckets_addr + bucket_index * size_of::<usize>();
+    let mut node_addr = read_usize_field(bucket_ptr_addr)?;
+    let mut hops = 0usize;
+    const MAX_HASH_MAP_HOPS: usize = 128;
+
+    while node_addr != 0 && hops < MAX_HASH_MAP_HOPS {
+        let node_key = read_i32_field(node_addr + spell_hash_map::KEY)?;
+        if node_key == spell_id as i32 {
+            let spell_addr = node_addr + spell_hash_map::VALUE;
+            let stored_id = read_i32_field(spell_addr + eq_spell::ID)?;
+            if stored_id != node_key {
+                return None;
+            }
+            return read_string_field(spell_addr + eq_spell::NAME, 64);
+        }
+
+        node_addr = read_usize_field(node_addr + spell_hash_map::HASH_NEXT)?;
+        hops += 1;
+    }
+
+    None
+}
+
+#[cfg(windows)]
+fn read_usize_field(addr: usize) -> Option<usize> {
+    if !is_readable(addr, size_of::<usize>()) {
+        return None;
+    }
+    Some(unsafe { *(addr as *const usize) })
+}
+
+#[cfg(windows)]
+fn read_u64_field(addr: usize) -> Option<u64> {
+    if !is_readable(addr, size_of::<u64>()) {
+        return None;
+    }
+    Some(unsafe { *(addr as *const u64) })
+}
+
+#[cfg(windows)]
+fn read_i32_field(addr: usize) -> Option<i32> {
+    if !is_readable(addr, size_of::<i32>()) {
+        return None;
+    }
+    Some(unsafe { *(addr as *const i32) })
+}
+
+#[cfg(windows)]
+fn read_string_field(addr: usize, len: usize) -> Option<String> {
+    if !is_readable(addr, len) {
+        return None;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(addr as *const u8, len) };
+    let end = bytes.iter().position(|&byte| byte == 0).unwrap_or(len);
+    let text = String::from_utf8_lossy(&bytes[..end]).trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
+}
+
+fn handle_casting_slash_command(command: &str) -> bool {
+    match parse_casting_command(command) {
+        None => false,
+        Some(Err(err)) => {
+            tracing::warn!(cmd = %command, %err, "Unsupported /casting command");
+            true
+        }
+        Some(Ok(parsed)) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if parsed.require_not_invisible && eq_base != 0 && player_is_invisible(eq_base) {
+                tracing::info!(cmd = %command, "Skipping /casting because player is invisible");
+                return true;
+            }
+
+            if let Some(target_id) = parsed.target_id {
+                queue_slash_command(format!("/target id {target_id}"));
+            }
+            queue_slash_command(parsed.action.slash_command());
+            true
+        }
+    }
+}
+
 /// Enqueue a command with a human-like jitter delay.
 fn enqueue_command(cmd: textquest_common::ipc::Command, current_tick: u64) {
     let delay = JITTER_RNG
@@ -2087,5 +2386,97 @@ mod tests {
             saw_spike,
             "Expected at least one hesitation spike > 10 in 10000 draws"
         );
+    }
+
+    #[test]
+    fn parse_casting_spell_with_targetid_and_invis_guard() {
+        let parsed = parse_casting_command(r#"/casting "Complete Heal" gem1 -targetid|42 -invis"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::CastGem(1),
+                target_id: Some(42),
+                require_not_invisible: true,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_item_by_name() {
+        let parsed = parse_casting_command(r#"/casting "Fungi Tunic" item"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem(r#""Fungi Tunic""#.to_string()),
+                target_id: None,
+                require_not_invisible: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_item_by_slot_selector() {
+        let parsed = parse_casting_command(r#"/casting "Clicky" LeftEar -targetid|99"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem("leftear".to_string()),
+                target_id: Some(99),
+                require_not_invisible: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_numeric_slot_selector() {
+        let parsed = parse_casting_command(r#"/casting "Clicky" 13"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem("13".to_string()),
+                target_id: None,
+                require_not_invisible: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_rejects_invalid_targetid() {
+        let err = parse_casting_command(r#"/casting "Clicky" item -targetid|abc"#)
+            .unwrap()
+            .unwrap_err();
+        assert!(err.contains("invalid -targetid value"));
+    }
+
+    #[test]
+    fn parse_casting_rejects_unsupported_type() {
+        let err = parse_casting_command(r#"/casting "Harm Touch" alt"#)
+            .unwrap()
+            .unwrap_err();
+        assert!(err.contains("unsupported /casting type"));
+    }
+
+    #[test]
+    fn invisibility_matcher_ignores_see_invis_but_matches_camouflage() {
+        assert!(!spell_name_indicates_invisibility("See Invisible"));
+        assert!(!spell_name_indicates_invisibility(
+            "Invisibility to Animals"
+        ));
+        assert!(spell_name_indicates_invisibility("Camouflage"));
+        assert!(spell_name_indicates_invisibility("Improved Invisibility"));
+    }
+
+    #[test]
+    fn tokenize_slash_command_preserves_escaped_quotes_inside_quotes() {
+        let tokens = tokenize_slash_command(r#"/casting "Item \"Name\"" item"#).unwrap();
+        assert_eq!(tokens, vec!["/casting", r#"Item "Name""#, "item"]);
     }
 }
