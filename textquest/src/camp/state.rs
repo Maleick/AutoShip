@@ -29,6 +29,7 @@ use crate::camp::loot::{CorpseEntry, LootConfig, LootCycle};
 use crate::camp::personality::PersonalityProfile;
 use crate::camp::recovery::{RecoveryTracker, death_commands_with_roles};
 use std::collections::HashMap;
+use textquest_common::combat::HateTargetCategory;
 
 /// Events that can occur during the camp loop, triggering reactive behavior.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +45,8 @@ pub enum CampEvent {
         spawn_id: u32,
         /// Display name of the add.
         name: String,
+        /// How the add is classified for CC and kiting priority.
+        category: HateTargetCategory,
     },
     /// A CC effect is about to expire on a mob.
     CcExpiring {
@@ -320,8 +323,12 @@ impl CampLoop {
                 self.cc_tracker
                     .charm_break_response(spawn_id, &self.cc_members, self.tick),
             ),
-            CampEvent::AddSpawned { spawn_id, name } => {
-                self.cc_tracker.add_target(spawn_id, name);
+            CampEvent::AddSpawned {
+                spawn_id,
+                name,
+                category,
+            } => {
+                self.cc_tracker.add_target(spawn_id, name, category);
                 let mut cmds =
                     self.cc_tracker
                         .debuff_commands(spawn_id, &self.cc_members, self.tick);

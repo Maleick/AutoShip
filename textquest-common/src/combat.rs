@@ -201,6 +201,94 @@ impl ExtendedTargetList {
 }
 
 // ---------------------------------------------------------------------------
+// Hate-target categories — classify off-target adds for CC / kiting decisions
+// ---------------------------------------------------------------------------
+
+/// Classifies an off-target mob for CC assignment and kiting priority decisions.
+///
+/// The category drives two independent priority axes:
+/// * **CC priority** — which add should be controlled first.
+/// * **Kite priority** — which add should be kited away from the group first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum HateTargetCategory {
+    /// Mob is on the XTarget auto-hater list — actively attacking a group member.
+    /// Highest default CC priority; must be controlled before it deals damage.
+    #[default]
+    ActiveHater,
+    /// Mob is a spellcaster (nuker, healer, or debuffer).
+    /// Snare/root preferred so it cannot kite away or continue casting.
+    CasterAdd,
+    /// Mob is a melee attacker that has joined the fight.
+    /// Mez/stun preferred for full lockdown.
+    MeleeAdd,
+    /// Mob is moving toward the group but has not yet engaged.
+    /// Good kite candidate before it fully joins the fight.
+    Approaching,
+    /// Mob is in the area but has not aggroed.
+    /// Lowest priority — handle only when all engaged adds are controlled.
+    Roamer,
+}
+
+impl HateTargetCategory {
+    /// CC assignment priority (lower = higher priority).
+    ///
+    /// Order: `ActiveHater` → `CasterAdd` → `Approaching` → `MeleeAdd` → `Roamer`.
+    #[must_use]
+    pub fn cc_priority(self) -> u8 {
+        match self {
+            Self::ActiveHater => 1,
+            Self::CasterAdd => 2,
+            Self::Approaching => 3,
+            Self::MeleeAdd => 4,
+            Self::Roamer => 5,
+        }
+    }
+
+    /// Kiting priority (lower = more urgent to kite away).
+    ///
+    /// Casters are kited first (prevent ranged damage), followed by approaching
+    /// mobs (intercept before melee contact), then active melee, then roamers.
+    #[must_use]
+    pub fn kite_priority(self) -> u8 {
+        match self {
+            Self::CasterAdd => 1,
+            Self::Approaching => 2,
+            Self::ActiveHater => 3,
+            Self::MeleeAdd => 4,
+            Self::Roamer => 5,
+        }
+    }
+
+    /// Returns `true` if this category should be handled with CC rather than kiting.
+    ///
+    /// [`CasterAdd`] appears in both `prefers_cc` and [`prefers_kite`] because casters
+    /// are dangerous at range: the group wants them either silenced via CC (ideal) or
+    /// kited far enough away that their spells land out of range (fallback when no CC
+    /// is available). Callers should prefer CC when a CC member is ready; fall back to
+    /// kiting only when no CC ability is off cooldown.
+    ///
+    /// [`CasterAdd`]: Self::CasterAdd
+    /// [`prefers_kite`]: Self::prefers_kite
+    #[must_use]
+    pub fn prefers_cc(self) -> bool {
+        matches!(self, Self::ActiveHater | Self::MeleeAdd | Self::CasterAdd)
+    }
+
+    /// Returns `true` if this category is a better kite candidate than CC target.
+    ///
+    /// [`CasterAdd`] is included here as a fallback strategy: when no CC ability is
+    /// available, kiting a caster is preferable to leaving it free-casting in melee
+    /// range. See [`prefers_cc`] for the primary strategy.
+    ///
+    /// [`CasterAdd`]: Self::CasterAdd
+    /// [`prefers_cc`]: Self::prefers_cc
+    #[must_use]
+    pub fn prefers_kite(self) -> bool {
+        matches!(self, Self::Approaching | Self::CasterAdd)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Buff tracking
 // ---------------------------------------------------------------------------
 
@@ -1945,5 +2033,97 @@ mod tests {
         let result = resolve_abilities(&sets, &known, 55);
         let nuke = result.get("Nuke").expect("should resolve Nuke");
         assert_eq!(nuke.ability_name, "Frost");
+    }
+
+    // -- HateTargetCategory tests --
+
+    #[test]
+    fn hate_target_category_default_is_active_hater() {
+        assert_eq!(
+            HateTargetCategory::default(),
+            HateTargetCategory::ActiveHater
+        );
+    }
+
+    #[test]
+    fn hate_target_category_all_variants_constructible() {
+        let _ah = HateTargetCategory::ActiveHater;
+        let _ca = HateTargetCategory::CasterAdd;
+        let _ma = HateTargetCategory::MeleeAdd;
+        let _ap = HateTargetCategory::Approaching;
+        let _ro = HateTargetCategory::Roamer;
+    }
+
+    #[test]
+    fn hate_target_category_cc_priority_unique_and_ordered() {
+        let mut priorities: Vec<u8> = vec![
+            HateTargetCategory::ActiveHater.cc_priority(),
+            HateTargetCategory::CasterAdd.cc_priority(),
+            HateTargetCategory::Approaching.cc_priority(),
+            HateTargetCategory::MeleeAdd.cc_priority(),
+            HateTargetCategory::Roamer.cc_priority(),
+        ];
+        // All priorities distinct
+        priorities.sort_unstable();
+        let before_dedup = priorities.len();
+        priorities.dedup();
+        assert_eq!(
+            priorities.len(),
+            before_dedup,
+            "CC priorities should be unique"
+        );
+        // Monotonically increasing after sort
+        for i in 1..priorities.len() {
+            assert!(priorities[i] > priorities[i - 1]);
+        }
+    }
+
+    #[test]
+    fn hate_target_category_kite_priority_unique_and_ordered() {
+        let mut priorities: Vec<u8> = vec![
+            HateTargetCategory::CasterAdd.kite_priority(),
+            HateTargetCategory::Approaching.kite_priority(),
+            HateTargetCategory::ActiveHater.kite_priority(),
+            HateTargetCategory::MeleeAdd.kite_priority(),
+            HateTargetCategory::Roamer.kite_priority(),
+        ];
+        priorities.sort_unstable();
+        let before_dedup = priorities.len();
+        priorities.dedup();
+        assert_eq!(
+            priorities.len(),
+            before_dedup,
+            "Kite priorities should be unique"
+        );
+        for i in 1..priorities.len() {
+            assert!(priorities[i] > priorities[i - 1]);
+        }
+    }
+
+    #[test]
+    fn hate_target_category_prefers_cc_and_kite_consistent() {
+        use HateTargetCategory::*;
+        // prefers_cc and prefers_kite are not mutually exclusive (CasterAdd is both)
+        assert!(CasterAdd.prefers_cc());
+        assert!(CasterAdd.prefers_kite());
+        // Roamer prefers neither
+        assert!(!Roamer.prefers_cc());
+        assert!(!Roamer.prefers_kite());
+    }
+
+    #[test]
+    fn hate_target_category_serialization_roundtrip() {
+        let cats = [
+            HateTargetCategory::ActiveHater,
+            HateTargetCategory::CasterAdd,
+            HateTargetCategory::MeleeAdd,
+            HateTargetCategory::Approaching,
+            HateTargetCategory::Roamer,
+        ];
+        for cat in &cats {
+            let json = serde_json::to_string(cat).expect("serialize");
+            let back: HateTargetCategory = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, *cat);
+        }
     }
 }
