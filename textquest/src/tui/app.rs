@@ -3415,11 +3415,25 @@ impl App {
         scope: textquest_common::routing::RoutingScope,
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
-        let previous_scope = self.routing_scope.clone();
-        self.routing_scope = scope;
-        let result = f(self);
+        let previous_scope = std::mem::replace(&mut self.routing_scope, scope);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(self)));
         self.routing_scope = previous_scope;
-        result
+        match result {
+            Ok(result) => result,
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+
+    fn routed_pids_for_scope(
+        &mut self,
+        scope: &textquest_common::routing::RoutingScope,
+    ) -> Vec<u32> {
+        match scope {
+            textquest_common::routing::RoutingScope::AllSession => {
+                self.clients.iter().map(|client| client.pid).collect()
+            }
+            _ => self.with_temporary_routing_scope(scope.clone(), |app| app.focused_pids()),
+        }
     }
 
     fn dispatch_scoped_slash_command(
@@ -3427,12 +3441,7 @@ impl App {
         scope: textquest_common::routing::RoutingScope,
         slash_cmd: &str,
     ) {
-        let pids: Vec<u32> = match &scope {
-            textquest_common::routing::RoutingScope::AllSession => {
-                self.clients.iter().map(|client| client.pid).collect()
-            }
-            _ => self.with_temporary_routing_scope(scope.clone(), |app| app.focused_pids()),
-        };
+        let pids = self.routed_pids_for_scope(&scope);
 
         if pids.is_empty() {
             self.set_feedback(
@@ -6415,6 +6424,67 @@ mod tests {
 
         assert_eq!(app.focused_pids(), vec![2]);
         assert_eq!(app.focused_pid_count(), 1);
+    }
+
+    #[test]
+    fn parse_all_prefix_requires_a_separate_target_token() {
+        let app = App::new();
+
+        assert_eq!(
+            app.parse_all_prefix("all combat scope"),
+            Some("combat scope")
+        );
+        assert_eq!(
+            app.parse_all_prefix("all   combat scope"),
+            Some("combat scope")
+        );
+        assert_eq!(app.parse_all_prefix("all"), None);
+        assert_eq!(app.parse_all_prefix("allcombat"), None);
+    }
+
+    #[test]
+    fn temporary_routing_scope_restores_after_return_and_panic() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        let group_scope = RoutingScope::Group {
+            group_id: 1,
+            label: "Alpha".into(),
+        };
+
+        let label = app
+            .with_temporary_routing_scope(group_scope.clone(), |inner| inner.routing_scope.label());
+        assert_eq!(label, "G1 Alpha");
+        assert_eq!(app.routing_scope, RoutingScope::AllSession);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            app.with_temporary_routing_scope(group_scope, |_| panic!("boom"));
+        }));
+        assert!(result.is_err());
+        assert_eq!(app.routing_scope, RoutingScope::AllSession);
+    }
+
+    #[test]
+    fn routed_pids_for_all_scope_uses_all_clients_without_leaking_scope() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Toon01"));
+        app.clients.push(test_client(2, "Toon07"));
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Toon01".into(),
+        };
+
+        assert_eq!(
+            app.routed_pids_for_scope(&RoutingScope::AllSession),
+            vec![1, 2]
+        );
+        assert_eq!(
+            app.routing_scope,
+            RoutingScope::OneToon {
+                name: "Toon01".into()
+            }
+        );
     }
 
     #[test]
