@@ -195,6 +195,22 @@ impl ExtendedTargetList {
             .find(|s| s.is_active() && s.slot_type == slot_type)
     }
 
+    pub fn pet(&self) -> Option<&ExtendedTargetSlot> {
+        self.get_by_type(XTargetType::MyPet)
+    }
+
+    pub fn pet_spawn_id(&self) -> Option<u32> {
+        self.pet().map(|slot| slot.spawn_id)
+    }
+
+    pub fn pet_target(&self) -> Option<&ExtendedTargetSlot> {
+        self.get_by_type(XTargetType::MyPetTarget)
+    }
+
+    pub fn pet_target_id(&self) -> Option<u32> {
+        self.pet_target().map(|slot| slot.spawn_id)
+    }
+
     pub fn active_slots(&self) -> Vec<&ExtendedTargetSlot> {
         self.slots.iter().filter(|s| s.is_active()).collect()
     }
@@ -1298,6 +1314,64 @@ mod tests {
         let debug = format!("{:?}", expr);
         assert!(debug.contains("And"));
         assert!(debug.contains("Or"));
+    }
+
+    #[test]
+    fn extended_target_list_pet_helpers_use_pet_slots() {
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 1001,
+                    name: "Fluffy".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 2002,
+                    name: "A fire beetle".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+
+        assert_eq!(
+            xtargets.pet().map(|slot| slot.name.as_str()),
+            Some("Fluffy")
+        );
+        assert_eq!(xtargets.pet_spawn_id(), Some(1001));
+        assert_eq!(
+            xtargets.pet_target().map(|slot| slot.name.as_str()),
+            Some("A fire beetle")
+        );
+        assert_eq!(xtargets.pet_target_id(), Some(2002));
+    }
+
+    #[test]
+    fn extended_target_list_pet_helpers_ignore_inactive_pet_slots() {
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::DifferentZone,
+                    spawn_id: 1001,
+                    name: "Fluffy".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::Empty,
+                    spawn_id: 2002,
+                    name: "A fire beetle".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+
+        assert!(xtargets.pet().is_none());
+        assert_eq!(xtargets.pet_spawn_id(), None);
+        assert!(xtargets.pet_target().is_none());
+        assert_eq!(xtargets.pet_target_id(), None);
     }
 
     #[test]

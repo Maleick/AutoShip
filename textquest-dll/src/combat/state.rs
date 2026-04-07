@@ -20,7 +20,10 @@ use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
 use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
-use super::strategy::{ClassStrategy, CombatContext, GroupMemberState, build_strategy};
+use super::strategy::{
+    ClassStrategy, CombatContext, GroupMemberState, build_strategy, pet_attack_focused,
+    pet_back_off,
+};
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
@@ -622,8 +625,7 @@ impl Combatant {
         // Pet classes: send pet to attack with /pet focus for single-target
         let class_id = self.strategy.class_id();
         if PET_CLASSES.contains(&class_id) {
-            crate::eq::slash_command("/pet attack");
-            crate::eq::slash_command("/pet focus");
+            pet_attack_focused();
             tracing::info!(class_id, "Sent /pet attack + /pet focus");
         }
 
@@ -673,7 +675,7 @@ impl Combatant {
         // Pet classes: call pet back on disengage so it doesn't pull adds
         let class_id = self.strategy.class_id();
         if PET_CLASSES.contains(&class_id) {
-            crate::eq::slash_command("/pet back");
+            pet_back_off();
             tracing::info!(class_id, "Sent /pet back on disengage");
         }
 

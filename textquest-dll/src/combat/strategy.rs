@@ -48,6 +48,27 @@ pub struct CombatContext<'a> {
     pub extended_targets: Option<&'a ExtendedTargetList>,
 }
 
+impl CombatContext<'_> {
+    pub fn pet(&self) -> Option<&textquest_common::combat::ExtendedTargetSlot> {
+        self.extended_targets.and_then(ExtendedTargetList::pet)
+    }
+
+    pub fn pet_spawn_id(&self) -> Option<u32> {
+        self.extended_targets
+            .and_then(ExtendedTargetList::pet_spawn_id)
+    }
+
+    pub fn pet_target(&self) -> Option<&textquest_common::combat::ExtendedTargetSlot> {
+        self.extended_targets
+            .and_then(ExtendedTargetList::pet_target)
+    }
+
+    pub fn pet_target_id(&self) -> Option<u32> {
+        self.extended_targets
+            .and_then(ExtendedTargetList::pet_target_id)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GroupMemberState {
     pub spawn_id: u32,
@@ -179,6 +200,27 @@ pub fn melee_on_engage(ctx: &CombatContext, class_label: &str) {
 /// Only call when `!ctx.in_combat` — mid-combat spell completions should NOT disable auto-attack.
 pub fn melee_on_disengage() {
     crate::eq::toggle_auto_attack(false);
+}
+
+/// Common pet attack helper for pet classes.
+pub fn pet_attack() {
+    crate::eq::slash_command("/pet attack");
+}
+
+/// Common pet single-target focus helper for pet classes.
+pub fn pet_focus() {
+    crate::eq::slash_command("/pet focus");
+}
+
+/// Common pet engage helper: attack the current target and focus it.
+pub fn pet_attack_focused() {
+    pet_attack();
+    pet_focus();
+}
+
+/// Common pet disengage helper: call the pet back to the owner.
+pub fn pet_back_off() {
+    crate::eq::slash_command("/pet back");
 }
 
 /// Find the group member with the lowest HP percentage (alive only).
@@ -495,6 +537,84 @@ mod tests {
             extended_targets: None,
         };
         assert!(assist_target(&ctx).is_none());
+    }
+
+    #[test]
+    fn combat_context_pet_helpers_expose_pet_state() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                textquest_common::combat::ExtendedTargetSlot {
+                    slot_type: textquest_common::combat::XTargetType::MyPet,
+                    status: textquest_common::combat::XTargetSlotStatus::CurrentZone,
+                    spawn_id: 77,
+                    name: "Warder".into(),
+                },
+                textquest_common::combat::ExtendedTargetSlot {
+                    slot_type: textquest_common::combat::XTargetType::MyPetTarget,
+                    status: textquest_common::combat::XTargetSlotStatus::CurrentZone,
+                    spawn_id: 88,
+                    name: "A goblin".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: Some(&xtargets),
+        };
+
+        assert_eq!(ctx.pet().map(|slot| slot.name.as_str()), Some("Warder"));
+        assert_eq!(ctx.pet_spawn_id(), Some(77));
+        assert_eq!(
+            ctx.pet_target().map(|slot| slot.name.as_str()),
+            Some("A goblin")
+        );
+        assert_eq!(ctx.pet_target_id(), Some(88));
+    }
+
+    #[test]
+    fn combat_context_pet_helpers_handle_missing_xtargets() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert!(ctx.pet().is_none());
+        assert_eq!(ctx.pet_spawn_id(), None);
+        assert!(ctx.pet_target().is_none());
+        assert_eq!(ctx.pet_target_id(), None);
+    }
+
+    #[test]
+    fn pet_command_helpers_noop_without_eq_base() {
+        pet_attack();
+        pet_focus();
+        pet_attack_focused();
+        pet_back_off();
     }
 
     #[test]
