@@ -181,7 +181,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 tracing::info!("Routing StartLogin through main-thread GiveTime hook");
                 // Clone password before moving into queue_login — we need it
                 // for the WM_CHAR backup path on this (IPC) thread.
-                let pw_for_wm_char = (*password).clone();
+                let pw_for_wm_char = zeroize::Zeroizing::new((*password).clone());
                 crate::hooks::eqmain_hook::queue_login(
                     account_name,
                     password,
