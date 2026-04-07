@@ -3,8 +3,8 @@
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-113%2C387-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-2%2C584%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-116%2C566-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-2%2C655%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -85,6 +85,9 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 :camp start|stop|list|status|next|prev  Camp loop control
 :camp add|remove        Add/remove camp config
 :nav <dest>              Navigate to camp, coords, or slash fallback
+:all /sss <name>         Save current spell set on focused clients
+:all /ssl <name>         Load a saved spell set on focused clients
+:all /ssd <name>         Delete a saved spell set from the character ini
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist
 :mt <name>               Set Main Tank
@@ -346,6 +349,12 @@ target\release\textquest.exe --statusall
 
 # Send a slash command to a specific client
 target\release\textquest.exe --cmd <pid> "/sit"
+
+# Regenerate a cached navmesh for a zone
+target\release\textquest.exe navmesh reload gfaydark
+
+# Inspect cached navmesh + live navigator diagnostics for a client
+target\release\textquest.exe navmesh diagnostics --pid <pid>
 ```
 
 ### Log Files
@@ -355,7 +364,7 @@ target\release\textquest.exe --cmd <pid> "/sit"
 
 ## Testing
 
-Current workspace totals: 113,387 Rust lines and 2,584 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
+Current workspace totals: 116,566 Rust lines and 2,655 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |

@@ -189,17 +189,28 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     // 4.5. Initialize login FSM.
     login::init();
 
-    // 5. Start IPC listener.
-    let client_id = std::process::id();
-    let session_token = generate_session_token(client_id);
-    if let Err(e) = ipc::start(client_id, session_token) {
-        tracing::warn!("IPC startup failed (continuing without IPC): {}", e);
-    }
-
-    // 6. Sleep obfuscation — encrypts .text between game loop ticks.
-    // VEH handler (in .tq section) calls wake()/sleep() around callbacks.
+    // 5. Initialize sleep obfuscation (used by HWBP callbacks).
+    // NOTE: This is temporarily disabled whenever the IPC listener thread is
+    // running, because background threads can execute normal `.text` outside
+    // HWBP callback wake/sleep transitions.
     if let Err(e) = stealth::init() {
         tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
+    }
+
+    // 6. Start IPC listener.
+    let client_id = std::process::id();
+    let session_token = generate_session_token(client_id);
+    match ipc::start(client_id, session_token) {
+        Ok(()) => {
+            // IPC uses a long-lived background thread that executes regular
+            // Rust `.text` code. Keep obfuscation disabled while it runs to
+            // avoid re-encrypting executable code out from under that thread.
+            stealth::disable();
+            tracing::warn!("Sleep obfuscation disabled while IPC listener is active");
+        }
+        Err(e) => {
+            tracing::warn!("IPC startup failed (continuing without IPC): {}", e);
+        }
     }
 
     tracing::info!("TextQuest DLL initialized successfully");
