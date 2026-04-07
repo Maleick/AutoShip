@@ -1055,8 +1055,8 @@ fn on_game_tick() {
     }
 
     // Enqueue IPC commands with jitter delay for anti-detection.
-    for cmd in crate::ipc::poll_commands() {
-        enqueue_command(cmd, tick);
+    for ipc_cmd in crate::ipc::poll_commands() {
+        enqueue_command(ipc_cmd.command, tick);
     }
 
     // Execute commands whose scheduled tick has arrived.
