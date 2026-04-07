@@ -12,17 +12,7 @@ External process memory reader, DLL injector, and multibox controller for EverQu
 
 TextQuest reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
 
-If you plan to do offset, struct, or MacroQuest reference work, clone with submodules:
-
-```bash
-git clone --recurse-submodules https://github.com/Maleick/TextQuest.git
-cd TextQuest
-
-# Existing clone
-git submodule update --init --recursive
-```
-
-Routine `cargo build` / `cargo test` work does not require the reference trees, but `third_party/eqlib` and `third_party/macroquest` are the canonical local sources for reference work. See `third_party/README.md` for the layout.
+Routine `cargo build` / `cargo test` work does not require any vendored reference trees. When you need eqlib or MacroQuest source context for offset, struct, or login investigation, use the local `third_party/` paths when they are present in your workspace and treat them as optional reference material rather than required setup.
 
 ## Status
 
@@ -40,17 +30,17 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 ### TUI Dashboard (5 screens, 4 themes)
 
-| Screen         | Key | Description                                                                                                                           |
-| -------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Characters     | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels                                   |
-| Map            | `2` | Zone geometry (Brewall maps), group markers, HP status overlay, spawn overlay, named mob tracker with respawn timers, Z-slice control |
-| Navigation     | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue                                  |
-| Debug          | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), EQ Internals, hex dump with annotations, target detail              |
-| Packet Monitor | `5` | Opcode sniffer with live filtering, protocol decode, send/recv separation                                                             |
+| Screen     | Key | Description                                                                                                                                     |
+| ---------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Characters | `1` | Operator roster, selected character detail, group/scope panels, and side panels for combat, session, and priorities                            |
+| Map        | `2` | Tactical zone map with spawn list, named tracker, tactical navigation section, visibility overlays, viewport modes, and map interaction controls |
+| Navigation | `3` | Per-character route status table plus selected-route detail, blockers/recovery state, and navigation command reference                          |
+| Debug      | `4` | Raw spawn table, hex dump with field annotations, Ghidra-style explorer, EQ internals, and target inspection                                   |
+| Packets    | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation                                                    |
 
 **Themes:** Dark Modern (default), Dracula, Classic, Neriak Third Gate — cycle with `T`
 
-**Widget library:** Sparklines, gauge bars, scrollable lists, tooltips, badges, notification area, inline hints, multi-option selectors, and scrollbar indicators. Context-sensitive help overlay with per-screen keybinding hints, did-you-mean suggestions for commands, and a comprehensive scrollable reference.
+**Widget library:** Breadcrumbs, tab bars, a dropdown command menu bar, toast notifications, command-bar inline hints, keybinding hint rows, badges, cast/gauge bars, sparklines, scrollable lists with scrollbar indicators, tooltips, popup selectors (single and multi-option), the config tree editor, and the first-run wizard overlay. The help overlay is context-sensitive and scrollable, with per-screen keybinding hints, command usage suggestions, and jump targets for major command groups.
 
 ### TUI Controls
 
@@ -119,7 +109,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **Persistent memory** — SQLite-backed memory database for long-term character state
 - **Social dynamics** — Social graph tracking relationships between characters
 - **Idle behavior** — Personality-driven actions during downtime
-- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M10` in the canonical roadmap)
+- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M11` in the canonical roadmap)
 
 ### Login Automation
 
@@ -204,12 +194,12 @@ DLL executes InterpretCmd with human-like jitter delay
 ```bash
 python3 scripts/dev-preflight.py
 python3 scripts/dev-preflight.py --require-reference-trees
-python3 scripts/dev-preflight.py --init-submodules --require-reference-trees
 ```
 
 Use the default run for routine `cargo build` / `cargo test` work. Add
 `--require-reference-trees` when you plan to inspect or cite
-`third_party/eqlib` or `third_party/macroquest`. On Windows, use `py -3`
+`third_party/eqlib` or `third_party/macroquest` if those local reference trees
+are available in your workspace. On Windows, use `py -3`
 instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
 
 ### GitHub Actions Self-hosted Runner (Windows)
@@ -451,8 +441,8 @@ Canonical active roadmap order:
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
 - [ ] **M9** — Learning/RL
-- [ ] **M10** — Soul Engine + LLM
-- [ ] **M11** — Economy
+- [ ] **M10** — Economy
+- [ ] **M11** — Soul Engine + LLM
 
 Execution rules:
 
