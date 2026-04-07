@@ -791,8 +791,7 @@ impl Orchestrator {
             }
             Ok(None) => {}
             Err(error) => {
-                tracing::warn!(pid, name = %name, %command, %error, "Failed to handle local slash command");
-                return;
+                tracing::warn!(pid, name = %name, %command, %error, "Failed to handle local slash command; falling back to IPC");
             }
         }
 
