@@ -4,6 +4,8 @@
 //! and common structures used by both the external orchestrator (`textquest`) and the
 //! injected DLL (`textquest-dll`).
 
+/// Chat channel types, STML stripping, and structured chat event parsing.
+pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
 /// SQLite-backed database for Ghidra binary analysis data.
