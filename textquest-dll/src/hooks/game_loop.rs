@@ -1282,7 +1282,9 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
             if trimmed.len() > 7
-                && trimmed[..7].eq_ignore_ascii_case("/target")
+                && trimmed
+                    .get(..7)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("/target"))
                 && trimmed.as_bytes().get(7).copied() == Some(b' ')
             {
                 let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
