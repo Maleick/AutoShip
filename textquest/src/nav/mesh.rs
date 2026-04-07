@@ -832,7 +832,7 @@ fn detour_to_map(d: &[f32; 3]) -> (f32, f32, f32) {
     (-d[2], -d[0], d[1])
 }
 
-fn same_point(a: &[f32; 3], b: &[f32; 3]) -> bool {
+fn same_detour_point(a: &[f32; 3], b: &[f32; 3]) -> bool {
     a.iter()
         .zip(b.iter())
         .all(|(lhs, rhs)| (lhs - rhs).abs() <= WAYPOINT_DEDUP_EPSILON)
@@ -841,7 +841,7 @@ fn same_point(a: &[f32; 3], b: &[f32; 3]) -> bool {
 fn push_point(waypoints: &mut Vec<[f32; 3]>, point: [f32; 3]) {
     if waypoints
         .last()
-        .is_some_and(|last| same_point(last, &point))
+        .is_some_and(|last| same_detour_point(last, &point))
     {
         return;
     }
@@ -1539,7 +1539,6 @@ mod tests {
     use super::*;
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
-    use std::cell::RefCell;
     use std::io::Write;
 
     #[test]

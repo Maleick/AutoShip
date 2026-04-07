@@ -32,6 +32,7 @@ use super::ui::ch_chain::{CastState as ChPanelCastState, ChainCleric};
 use super::ui::draw;
 use crate::eq::structs::SpawnInfo;
 use crate::orchestrator::Orchestrator;
+#[cfg(any(windows, test))]
 use textquest_common::nav::{NavStatus, PauseReason};
 
 #[cfg(windows)]
@@ -906,6 +907,7 @@ fn read_live_nav_state(
     ))
 }
 
+#[cfg(windows)]
 fn resolve_live_zone_name(zone_long_name: String, zone_short_name: String) -> String {
     if zone_long_name.is_empty() {
         zone_short_name
@@ -914,6 +916,7 @@ fn resolve_live_zone_name(zone_long_name: String, zone_short_name: String) -> St
     }
 }
 
+#[cfg(any(windows, test))]
 fn build_live_nav_client_status(status: &NavStatus, zone_name: &str) -> NavClientStatus {
     NavClientStatus {
         destination: live_nav_destination(status),
@@ -937,6 +940,7 @@ fn build_live_nav_client_status(status: &NavStatus, zone_name: &str) -> NavClien
     }
 }
 
+#[cfg(any(windows, test))]
 fn live_nav_destination(status: &NavStatus) -> String {
     match status {
         NavStatus::Idle => String::new(),
@@ -949,6 +953,7 @@ fn live_nav_destination(status: &NavStatus) -> String {
     }
 }
 
+#[cfg(any(windows, test))]
 fn live_nav_route_state(status: &NavStatus) -> String {
     match status {
         NavStatus::Moving { .. } => String::from("Live route"),
@@ -961,6 +966,7 @@ fn live_nav_route_state(status: &NavStatus) -> String {
     }
 }
 
+#[cfg(any(windows, test))]
 fn live_nav_recovery_state(status: &NavStatus) -> Option<String> {
     match status {
         NavStatus::Paused { reason, .. } => Some(match reason {
@@ -977,6 +983,7 @@ fn live_nav_recovery_state(status: &NavStatus) -> Option<String> {
     }
 }
 
+#[cfg(any(windows, test))]
 fn live_nav_blockers(status: &NavStatus, zone_name: &str) -> Vec<String> {
     match status {
         NavStatus::Paused { reason, .. } => vec![match reason {
