@@ -119,6 +119,40 @@ impl MovementController {
         }
     }
 
+    /// Read current player HP from the local player struct.
+    pub fn read_hp_current(&self) -> Option<i64> {
+        #[cfg(windows)]
+        // SAFETY: player_base is a validated PlayerClient*. HP_CURRENT is a known
+        // i64 field offset within the local player zone data. Reads are naturally
+        // aligned and within committed EQ memory. Null-checked below.
+        unsafe {
+            if self.player_base == 0 {
+                return None;
+            }
+            Some(std::ptr::read(
+                (self.player_base + textquest_common::offsets::player_zone::HP_CURRENT)
+                    as *const i64,
+            ))
+        }
+        #[cfg(all(not(windows), test))]
+        // SAFETY: tests may supply a backing buffer large enough to cover the
+        // HP_CURRENT offset so moveto safety logic can be validated on non-Windows.
+        unsafe {
+            if self.player_base == 0 {
+                return None;
+            }
+            Some(std::ptr::read(
+                (self.player_base + textquest_common::offsets::player_zone::HP_CURRENT)
+                    as *const i64,
+            ))
+        }
+        #[cfg(all(not(windows), not(test)))]
+        {
+            tracing::trace!("read_hp_current (stub)");
+            None
+        }
+    }
+
     /// Press forward key (start walking).
     pub fn press_forward(&self) {
         self.execute_cmd(CMD_FORWARD, true);
