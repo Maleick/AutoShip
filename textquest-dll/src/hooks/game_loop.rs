@@ -240,6 +240,18 @@ struct PendingCommand {
 
 static PENDING_COMMANDS: Mutex<Vec<PendingCommand>> = Mutex::new(Vec::new());
 static JITTER_RNG: Mutex<Option<textquest_common::nav::Xorshift32>> = Mutex::new(None);
+static ACTIVE_BANDOLIER_SET: Mutex<Option<String>> = Mutex::new(None);
+static PENDING_BANDOLIER_RESTORE: Mutex<Option<PendingBandolierRestore>> = Mutex::new(None);
+
+const BANDOLIER_CAST_TIMEOUT_TICKS: u64 = 30;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingBandolierRestore {
+    requested_set: String,
+    restore_to: Option<String>,
+    deadline_tick: u64,
+    saw_casting: bool,
+}
 
 /// Initialize the jitter RNG with a seed derived from system time.
 /// Using time instead of PID avoids predictable sequences since PIDs
@@ -301,6 +313,7 @@ struct ParsedCastingCommand {
     action: CastingAction,
     target_id: Option<u32>,
     require_not_invisible: bool,
+    bandolier_set: Option<String>,
 }
 
 fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
@@ -320,6 +333,7 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
     let mut cast_type: Option<&str> = None;
     let mut target_id = None;
     let mut require_not_invisible = false;
+    let mut bandolier_set = None;
 
     for token in &args[1..] {
         if token.eq_ignore_ascii_case("-invis") {
@@ -327,8 +341,7 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
             continue;
         }
 
-        let lower = token.to_ascii_lowercase();
-        if let Some(value) = lower.strip_prefix("-targetid|") {
+        if let Some(value) = parse_pipe_option(token, "-targetid") {
             let parsed_target = value
                 .parse::<u32>()
                 .map_err(|_| format!("invalid -targetid value: {value}"));
@@ -339,6 +352,17 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
                 }
                 Err(err) => return Some(Err(err)),
             }
+        }
+
+        if let Some(value) = parse_pipe_option(token, "-bandolier") {
+            let value = value.trim();
+            if value.is_empty() {
+                return Some(Err("missing -bandolier value".to_string()));
+            }
+            if bandolier_set.replace(value.to_string()).is_some() {
+                return Some(Err("multiple -bandolier options specified".to_string()));
+            }
+            continue;
         }
 
         if cast_type.replace(token.as_str()).is_some() {
@@ -374,7 +398,15 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
         action,
         target_id,
         require_not_invisible,
+        bandolier_set,
     }))
+}
+
+fn parse_pipe_option<'a>(token: &'a str, option: &str) -> Option<&'a str> {
+    token
+        .split_once('|')
+        .filter(|(name, _)| name.eq_ignore_ascii_case(option))
+        .map(|(_, value)| value)
 }
 
 fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
@@ -417,6 +449,128 @@ fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
 
 fn quote_for_eq(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn bandolier_activate_command(set_name: &str) -> String {
+    let selector = if set_name.chars().all(|ch| ch.is_ascii_digit()) {
+        set_name.to_string()
+    } else {
+        quote_for_eq(set_name)
+    };
+    format!("/bandolier activate {selector}")
+}
+
+fn parse_bandolier_activate_command(command: &str) -> Option<String> {
+    let tokens = tokenize_slash_command(command).ok()?;
+    match tokens.as_slice() {
+        [verb, action, selector, ..]
+            if verb.eq_ignore_ascii_case("/bandolier")
+                && action.eq_ignore_ascii_case("activate") =>
+        {
+            let selector = selector.trim();
+            if selector.is_empty() {
+                None
+            } else {
+                Some(selector.to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn schedule_bandolier_swap(requested_set: &str, current_tick: u64) {
+    let requested_set = requested_set.trim();
+    if requested_set.is_empty() {
+        return;
+    }
+
+    let current_active = ACTIVE_BANDOLIER_SET
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone());
+    let should_swap = current_active
+        .as_deref()
+        .is_none_or(|current| !current.eq_ignore_ascii_case(requested_set));
+
+    let restore_to = if let Ok(mut pending) = PENDING_BANDOLIER_RESTORE.lock() {
+        let restore_to = pending
+            .as_ref()
+            .and_then(|state| state.restore_to.clone())
+            .or(current_active.clone())
+            .filter(|current| !current.eq_ignore_ascii_case(requested_set));
+
+        *pending = Some(PendingBandolierRestore {
+            requested_set: requested_set.to_string(),
+            restore_to: restore_to.clone(),
+            deadline_tick: current_tick + BANDOLIER_CAST_TIMEOUT_TICKS,
+            saw_casting: false,
+        });
+        restore_to
+    } else {
+        None
+    };
+
+    if should_swap {
+        tracing::info!(bandolier = %requested_set, "Queueing /casting bandolier swap");
+        queue_slash_command(bandolier_activate_command(requested_set));
+    } else if restore_to.is_none() {
+        tracing::debug!(bandolier = %requested_set, "Skipping redundant /casting bandolier swap");
+    }
+}
+
+fn next_bandolier_restore_command(
+    pending: &mut Option<PendingBandolierRestore>,
+    current_tick: u64,
+    observed_casting: Option<bool>,
+) -> Option<String> {
+    let Some(state) = pending.as_mut() else {
+        return None;
+    };
+
+    let is_currently_casting = observed_casting == Some(true);
+    if is_currently_casting {
+        state.saw_casting = true;
+        state.deadline_tick = current_tick + BANDOLIER_CAST_TIMEOUT_TICKS;
+        return None;
+    }
+
+    let should_restore = if state.saw_casting {
+        observed_casting == Some(false) || current_tick >= state.deadline_tick
+    } else {
+        current_tick >= state.deadline_tick
+    };
+
+    if !should_restore {
+        return None;
+    }
+
+    let state = pending.take()?;
+    state
+        .restore_to
+        .filter(|restore_to| !restore_to.eq_ignore_ascii_case(&state.requested_set))
+        .map(|restore_to| bandolier_activate_command(&restore_to))
+}
+
+fn process_pending_bandolier_restore(current_tick: u64) {
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    let observed_casting = if eq_base == 0 {
+        None
+    } else {
+        super::casting::CastingController::new(eq_base)
+            .is_casting()
+            .ok()
+    };
+
+    let restore_command = if let Ok(mut pending) = PENDING_BANDOLIER_RESTORE.lock() {
+        next_bandolier_restore_command(&mut pending, current_tick, observed_casting)
+    } else {
+        None
+    };
+
+    if let Some(command) = restore_command {
+        tracing::info!(cmd = %command, "Restoring bandolier after /casting");
+        queue_slash_command(command);
+    }
 }
 
 fn is_item_slot_selector(selector: &str) -> bool {
@@ -571,6 +725,11 @@ fn handle_casting_slash_command(command: &str) -> bool {
                 return true;
             }
 
+            if let Some(bandolier_set) = parsed.bandolier_set.as_deref() {
+                let current_tick = TICK_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+                schedule_bandolier_swap(bandolier_set, current_tick);
+            }
+
             if let Some(target_id) = parsed.target_id {
                 queue_slash_command(format!("/target id {target_id}"));
             }
@@ -656,6 +815,7 @@ fn on_game_tick() {
 
     // Execute commands whose scheduled tick has arrived.
     process_pending_commands(tick);
+    process_pending_bandolier_restore(tick);
 
     // Check for pending login button click (queued from IPC thread).
     let button_addr = PENDING_BUTTON_CLICK.swap(0, std::sync::atomic::Ordering::AcqRel);
@@ -1593,6 +1753,11 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            if handle_casting_slash_command(trimmed) {
+                tracing::info!(cmd = %command, "Queued translated /casting command");
+                return;
+            }
+
             // When /target is issued while already targeting, EQ's InterpretCmd
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
@@ -1616,6 +1781,11 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             }
 
             tracing::info!(cmd = %command, "Executing slash command");
+            if let Some(active_bandolier) = parse_bandolier_activate_command(trimmed) {
+                if let Ok(mut known_bandolier) = ACTIVE_BANDOLIER_SET.lock() {
+                    *known_bandolier = Some(active_bandolier);
+                }
+            }
             execute_slash_command(&command);
         }
         Command::NavigateTo { waypoints } => {
@@ -2405,6 +2575,7 @@ mod tests {
                 action: CastingAction::CastGem(1),
                 target_id: Some(42),
                 require_not_invisible: true,
+                bandolier_set: None,
             }
         );
     }
@@ -2420,6 +2591,7 @@ mod tests {
                 action: CastingAction::UseItem(r#""Fungi Tunic""#.to_string()),
                 target_id: None,
                 require_not_invisible: false,
+                bandolier_set: None,
             }
         );
     }
@@ -2435,6 +2607,7 @@ mod tests {
                 action: CastingAction::UseItem("leftear".to_string()),
                 target_id: Some(99),
                 require_not_invisible: false,
+                bandolier_set: None,
             }
         );
     }
@@ -2450,6 +2623,23 @@ mod tests {
                 action: CastingAction::UseItem("13".to_string()),
                 target_id: None,
                 require_not_invisible: false,
+                bandolier_set: None,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_bandolier_option_with_spaces() {
+        let parsed = parse_casting_command(r#"/casting "Fungi Tunic" item -bandolier|"Heal Set""#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem(r#""Fungi Tunic""#.to_string()),
+                target_id: None,
+                require_not_invisible: false,
+                bandolier_set: Some("Heal Set".to_string()),
             }
         );
     }
@@ -2484,5 +2674,54 @@ mod tests {
     fn tokenize_slash_command_preserves_escaped_quotes_inside_quotes() {
         let tokens = tokenize_slash_command(r#"/casting "Item \"Name\"" item"#).unwrap();
         assert_eq!(tokens, vec!["/casting", r#"Item "Name""#, "item"]);
+    }
+
+    #[test]
+    fn parse_bandolier_activate_command_preserves_named_sets() {
+        assert_eq!(
+            parse_bandolier_activate_command(r#"/bandolier activate "Heal Set""#),
+            Some("Heal Set".to_string())
+        );
+        assert_eq!(
+            parse_bandolier_activate_command("/bandolier activate 2"),
+            Some("2".to_string())
+        );
+    }
+
+    #[test]
+    fn next_bandolier_restore_command_waits_for_cast_completion() {
+        let mut pending = Some(PendingBandolierRestore {
+            requested_set: "Heal Set".to_string(),
+            restore_to: Some("Melee".to_string()),
+            deadline_tick: 30,
+            saw_casting: false,
+        });
+
+        assert_eq!(
+            next_bandolier_restore_command(&mut pending, 5, Some(true)),
+            None
+        );
+        assert!(pending.as_ref().is_some_and(|state| state.saw_casting));
+        assert_eq!(
+            next_bandolier_restore_command(&mut pending, 6, Some(false)),
+            Some(r#"/bandolier activate "Melee""#.to_string())
+        );
+        assert!(pending.is_none());
+    }
+
+    #[test]
+    fn next_bandolier_restore_command_rolls_back_after_timeout_without_cast() {
+        let mut pending = Some(PendingBandolierRestore {
+            requested_set: "Heal Set".to_string(),
+            restore_to: Some("Melee".to_string()),
+            deadline_tick: 10,
+            saw_casting: false,
+        });
+
+        assert_eq!(
+            next_bandolier_restore_command(&mut pending, 10, None),
+            Some(r#"/bandolier activate "Melee""#.to_string())
+        );
+        assert!(pending.is_none());
     }
 }

@@ -226,7 +226,7 @@ TextQuest's `map_parser.rs` already handles both L and P line types with `MapLin
 | `-kill`                  | Recast until target dies           | **Missing**                                                       | No kill-loop mode              | P1       | Low        |
 | `-recast\|#`             | Recast N times                     | **Missing**                                                       | No recast counter              | P1       | Low        |
 | `-maxtries\|#`           | Max attempt count                  | **Missing**                                                       | No max-tries guard             | P2       | Low        |
-| `-bandolier\|<#>`        | Equip bandolier set before cast    | **Missing**                                                       | No bandolier integration       | P2       | Medium     |
+| `-bandolier\|<#>`        | Equip bandolier set before cast    | **Partial** — `/casting` can swap to a named/numbered bandolier set and restore the last tracked set after the cast or rollback timeout | Restore relies on a previously tracked `/bandolier activate` state | P2       | Medium     |
 | `-invis`                 | Don't cast if invisible            | **Missing**                                                       | No invis check                 | P2       | Low        |
 | `/interrupt`             | Interrupt current cast             | **Partial** — `combat/state.rs` has duck-to-interrupt for clerics | No general interrupt command   | P1       | Low        |
 | `/memorize`              | Mem spells to gems                 | **Missing**                                                       | No spell memorization          | P2       | Medium     |

@@ -78,6 +78,7 @@ Routine `cargo build` / `cargo test` work does not require any vendored referenc
 :all /sss <name>         Save current spell set on focused clients
 :all /ssl <name>         Load a saved spell set on focused clients
 :all /ssd <name>         Delete a saved spell set from the character ini
+:all /casting "Clicky" item -bandolier|"Heal Set"  Swap to a cast set, click, then restore the tracked bandolier
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist
 :mt <name>               Set Main Tank
