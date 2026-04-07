@@ -96,6 +96,22 @@ if [[ "$USE_DEFAULT_PROTECT" -eq 1 ]]; then
   )
 fi
 
+detect_remote_default_branch() {
+  local remote_head=""
+
+  remote_head="$(
+    git remote show origin 2>/dev/null | sed -n 's/^[[:space:]]*HEAD branch: //p' | head -n 1
+  )"
+  if [[ -n "$remote_head" ]]; then
+    printf '%s\n' "$remote_head"
+    return 0
+  fi
+
+  git ls-remote --symref origin HEAD 2>/dev/null \
+    | sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]HEAD$#\1#p' \
+    | head -n 1
+}
+
 if [[ -z "$BASE_BRANCH" ]]; then
   if git show-ref --verify --quiet refs/heads/main; then
     BASE_BRANCH="main"
@@ -103,10 +119,17 @@ if [[ -z "$BASE_BRANCH" ]]; then
     BASE_BRANCH="master"
   elif git symbolic-ref --quiet --short refs/remotes/origin/HEAD >/dev/null 2>&1; then
     BASE_BRANCH="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD | sed 's|^origin/||')"
+  elif remote_default_branch="$(detect_remote_default_branch)"; [[ -n "$remote_default_branch" ]]; then
+    BASE_BRANCH="$remote_default_branch"
   else
     echo "Could not auto-detect base branch. Pass --base <branch>." >&2
     exit 1
   fi
+fi
+
+if ! git show-ref --verify --quiet "refs/heads/$BASE_BRANCH" \
+  && ! git show-ref --verify --quiet "refs/remotes/origin/$BASE_BRANCH"; then
+  git fetch origin "$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH" >/dev/null 2>&1 || true
 fi
 
 if git show-ref --verify --quiet "refs/heads/$BASE_BRANCH"; then
