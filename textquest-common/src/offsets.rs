@@ -116,6 +116,11 @@ pub const PINST_ACTIVE_CORPSE: u64 = 0x0001_40E8_E390;
 /// __ProcessGameEvents — game event processing (hook point for game loop)
 pub const PROCESS_GAME_EVENTS: u64 = 0x0001_4028_E0F0;
 
+/// `CEverQuest::dsp_chat` — chat message display function.
+/// Signature: `void dsp_chat(const char* text, int color, bool log, bool percent_convert)`
+/// Source: eqgame.h `CEverQuest__dsp_chat_x` (ChatManagerClient__DisplayChatText)
+pub const DSP_CHAT: u64 = 0x0001_4010_CFC0;
+
 /// `CDisplay::RealRender_World` — render loop (alternative hook point)
 pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
 
@@ -827,6 +832,7 @@ mod tests {
             EXECUTE_CMD,
             INTERPRET_CMD,
             PROCESS_GAME_EVENTS,
+            DSP_CHAT,
             CLICKED_PLAYER,
             ISSUE_PET_COMMAND,
             DO_LOOT,
@@ -939,6 +945,7 @@ mod tests {
             INV_SLOT_MGR_MOVE_ITEM,
             INV_SLOT_MGR_SELECT_SLOT,
             SPELL_BOOK_WND_MEMORIZE_SET,
+            DSP_CHAT,
         ];
         for addr in &funcs {
             assert!(
