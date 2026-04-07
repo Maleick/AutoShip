@@ -90,6 +90,9 @@ enum Commands {
         /// EQ password (same for all accounts). Also reads TEXTQUEST_PASSWORD env var.
         #[arg(long)]
         password: Option<String>,
+        /// Master password for encrypted credential store (or TEXTQUEST_MASTER_PASSWORD env var).
+        #[arg(long)]
+        master_password: Option<String>,
         /// Spawn new EQ processes (default: use existing eqgame.exe processes)
         #[arg(long)]
         spawn: bool,
@@ -280,9 +283,17 @@ fn main() -> Result<()> {
             account,
             group,
             password,
+            master_password,
             spawn,
             inject_delay,
-        }) => cli::run_autologin_mode(account, group, password, spawn, inject_delay),
+        }) => cli::run_autologin_mode(
+            account,
+            group,
+            password,
+            master_password,
+            spawn,
+            inject_delay,
+        ),
 
         // Client commands
         Some(Commands::Cmd { pid, command }) => cli::run_cmd_mode(pid, &command),

@@ -764,7 +764,8 @@ pub fn run_login_mode(
 /// End-to-end autologin: find/spawn EQ processes → inject DLL → send StartLogin.
 ///
 /// Reads `config/accounts.toml` for the account roster. Per-account passwords
-/// come from `config/.credentials` (TSV: account\tpassword). Falls back to:
+/// come from the encrypted credential store (`data/credentials.db`) when a
+/// master password is supplied. Falls back to:
 /// 1. `--password` CLI flag (shared for all)
 /// 2. `TEXTQUEST_PASSWORD` environment variable (shared for all)
 /// 3. Interactive prompt (shared for all)
@@ -776,6 +777,7 @@ pub fn run_autologin_mode(
     filter_account: Option<String>,
     filter_group: Option<u32>,
     password_flag: Option<String>,
+    master_password_flag: Option<String>,
     spawn_new: bool,
     inject_delay_secs: u64,
 ) -> Result<()> {
@@ -813,18 +815,23 @@ pub fn run_autologin_mode(
 
     println!("Autologin: {} account(s) to process", targets.len());
 
-    // 2. Load per-account passwords from config/.credentials (TSV)
-    let credentials_map = load_credentials_file();
+    // 2. Load per-account passwords from encrypted store (if master password provided)
+    let master_password = master_password_flag.map(Zeroizing::new).or_else(|| {
+        std::env::var("TEXTQUEST_MASTER_PASSWORD")
+            .ok()
+            .map(Zeroizing::new)
+    });
+    let credentials_map = load_credentials_store(master_password.as_ref().map(|pw| pw.as_str()))?;
     let has_per_account = !credentials_map.is_empty();
 
     if has_per_account {
         println!(
-            "Loaded {} per-account password(s) from config/.credentials",
+            "Loaded {} per-account password(s) from encrypted credential store",
             credentials_map.len()
         );
     }
 
-    // Shared password fallback (for accounts not in .credentials)
+    // Shared password fallback (for accounts not in the encrypted credential store)
     let shared_password = if !has_per_account {
         // Only prompt if we have no per-account passwords
         if let Some(pw) = password_flag {
@@ -972,7 +979,7 @@ pub fn run_autologin_mode(
 
         let Some(acct_pw) = acct_password else {
             println!(
-                "  SKIPPED: no password for '{}' (not in .credentials, no shared password)",
+                "  SKIPPED: no password for '{}' (not in credential store, no shared password)",
                 account.name
             );
             fail_count += 1;
@@ -1514,35 +1521,29 @@ pub fn run_config_show_mode() -> Result<()> {
 
 // ─── Credential management ──────────────────────────────────────────────────
 
-const CREDENTIALS_FILE_PATH: &str = "config/.credentials";
 const CREDENTIAL_DB_PATH: &str = "data/credentials.db";
 
-/// Load per-account passwords from `config/.credentials` (TSV: account\tpassword).
-/// Returns an empty map if the file doesn't exist or can't be read.
-/// Passwords are wrapped in `Zeroizing` to scrub from heap on drop.
-fn load_credentials_file() -> std::collections::HashMap<String, Zeroizing<String>> {
-    let path = Path::new(CREDENTIALS_FILE_PATH);
+/// Load decrypted account passwords from the encrypted credential store.
+///
+/// Returns an empty map if no master password is provided.
+fn load_credentials_store(
+    master_password: Option<&str>,
+) -> Result<std::collections::HashMap<String, Zeroizing<String>>> {
     let mut map = std::collections::HashMap::new();
 
-    let content = match std::fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return map,
+    let Some(master_password) = master_password else {
+        return Ok(map);
     };
 
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((account, password)) = line.split_once('\t') {
-            map.insert(
-                account.trim().to_string(),
-                Zeroizing::new(password.trim().to_string()),
-            );
-        }
+    let store = open_credential_store(master_password)?;
+    for account in store.list_accounts()? {
+        let password = store
+            .get_password(&account)
+            .with_context(|| format!("Failed to load credential for account '{account}'"))?;
+        map.insert(account, password);
     }
 
-    map
+    Ok(map)
 }
 
 /// Add or update an account credential.
