@@ -8,7 +8,7 @@
 //! Stuck detection and recovery are handled inline by `StuckDetector`
 //! rather than via a separate FSM state.
 
-use crate::hooks::movement::{self, MovementController, ARRIVAL_DISTANCE};
+use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
     CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals,
@@ -107,6 +107,24 @@ fn has_gm_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
             pos.distance_2d(&sp) < GM_CHECK_RADIUS
         }
     })
+}
+
+/// Detects an HP drop (break-on-hit trigger).
+///
+/// Updates `last_hp` with the new sample and returns `true` when:
+/// - A previous sample exists AND
+/// - The new sample is `Some` AND
+/// - The new HP value is strictly less than the last recorded value.
+///
+/// Returns `false` on the first call (no baseline), on HP recovery, or when
+/// the new sample is `None` (no data available).
+fn break_on_hit_triggered(last_hp: &mut Option<i64>, new_hp: Option<i64>) -> bool {
+    let Some(current) = new_hp else {
+        return false;
+    };
+    let triggered = last_hp.is_some_and(|prev| current < prev);
+    *last_hp = Some(current);
+    triggered
 }
 
 impl Navigator {
@@ -348,7 +366,6 @@ impl Navigator {
         self.warp.reset();
         self.last_moveto_hp = self.controller.read_hp_current();
         self.moveto_config = Some(config);
-        self.last_hp_current = self.controller.read_hp_current();
         self.state = State::MovingTo;
     }
 
@@ -475,7 +492,7 @@ impl Navigator {
             State::Arrived => self.tick_arrived(nearby),
             State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
-            State::Following { .. } => self.tick_following(),
+            State::Following { .. } => self.tick_following(nearby),
             State::Sticking => self.tick_sticking(current_target, nearby),
             State::MovingTo => self.tick_moveto(nearby),
         }
@@ -746,7 +763,7 @@ impl Navigator {
         }
 
         if config.break_on_hit
-            && break_on_hit_triggered(&mut self.last_hp_current, self.controller.read_hp_current())
+            && break_on_hit_triggered(&mut self.last_moveto_hp, self.controller.read_hp_current())
         {
             tracing::info!("MoveToAdvanced: break_on_hit triggered");
             self.stop_moveto();
@@ -872,11 +889,12 @@ impl Navigator {
     /// One tick for player follow mode.
     ///
     /// Implements the leash/return logic:
-    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back.
+    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back,
+    ///   subject to return policy gates (`return_no_aggro`).
     /// - If currently returning and distance <= `follow_distance`: stop, hold position.
-    fn tick_following(&mut self) {
+    fn tick_following(&mut self, nearby: &[SpawnData]) {
         // Extract values without holding a mutable borrow on self.state.
-        let (leash_distance, follow_distance, anchor, currently_returning) =
+        let (leash_distance, follow_distance, anchor, currently_returning, return_no_aggro) =
             if let State::Following {
                 ref config,
                 ref anchor,
@@ -888,6 +906,7 @@ impl Navigator {
                     config.follow_distance,
                     *anchor,
                     returning,
+                    config.return_no_aggro,
                 )
             } else {
                 return;
@@ -898,8 +917,19 @@ impl Navigator {
         self.cached_distance = dist;
 
         if dist > leash_distance {
-            // Beyond the leash — navigate back toward the anchor.
+            // Beyond the leash — check return policy gates before navigating back.
             if !currently_returning {
+                // #return_no_aggro: suppress return while hostile NPCs are nearby.
+                if return_no_aggro && has_hostile_nearby(nearby, &current_pos) {
+                    tracing::debug!(
+                        dist,
+                        leash = leash_distance,
+                        "Follow leash exceeded but return_no_aggro suppressing return"
+                    );
+                    self.controller.stop_forward();
+                    return;
+                }
+
                 tracing::debug!(
                     dist,
                     leash = leash_distance,
@@ -944,6 +974,42 @@ impl Navigator {
         } else {
             // Within acceptable range — ensure we're not still moving.
             self.controller.stop_forward();
+        }
+    }
+
+    /// Update the follow configuration of an active follow session without
+    /// restarting navigation.  Typically used to tune return-policy options
+    /// (`min_delay_ms`, `max_delay_ms`, `return_no_aggro`, `return_not_looting`)
+    /// at runtime via `/makecamp mindelay` / `returnnoaggro` etc.
+    ///
+    /// If not currently in follow mode this is a no-op (the caller should start
+    /// a new session with `follow_player` instead).
+    pub fn update_follow_config(&mut self, new_config: FollowConfig) {
+        if let State::Following { ref mut config, .. } = self.state {
+            tracing::info!(
+                leader = %new_config.leader_name,
+                follow_dist = new_config.follow_distance,
+                leash_dist = new_config.leash_distance,
+                min_delay_ms = new_config.min_delay_ms,
+                max_delay_ms = new_config.max_delay_ms,
+                return_no_aggro = new_config.return_no_aggro,
+                return_not_looting = new_config.return_not_looting,
+                "Updating follow config"
+            );
+            *config = new_config;
+        }
+    }
+
+    /// Apply a mutation to the return-policy fields of an active follow config.
+    ///
+    /// Allows individual fields to be changed without replacing the whole config.
+    /// If not currently in follow mode the closure is never called.
+    pub fn mutate_follow_config<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut FollowConfig),
+    {
+        if let State::Following { ref mut config, .. } = self.state {
+            f(config);
         }
     }
 

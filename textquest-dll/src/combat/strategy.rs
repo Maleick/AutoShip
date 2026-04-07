@@ -67,6 +67,52 @@ impl CombatContext<'_> {
         self.extended_targets
             .and_then(ExtendedTargetList::pet_target_id)
     }
+
+    /// Summarize pet state from extended target slots.
+    ///
+    /// Returns a `PetStatus` with the pet's spawn ID and its current target.
+    /// Class strategies use this to decide whether to issue pet commands.
+    pub fn pet_status(&self) -> PetStatus {
+        PetStatus {
+            spawn_id: self.pet_spawn_id(),
+            target_id: self.pet_target_id(),
+        }
+    }
+}
+
+/// Snapshot of the player's pet state derived from extended target slots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PetStatus {
+    /// Spawn ID of the player's pet, if one is present in the zone.
+    pub spawn_id: Option<u32>,
+    /// Spawn ID of the target the pet is currently attacking, if any.
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    /// Returns `true` if the player has a live pet in the zone.
+    #[must_use]
+    pub fn has_pet(&self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    /// Returns `true` if the pet is already attacking `target_id`.
+    #[must_use]
+    pub fn is_attacking(&self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
+
+/// Pet-management action returned by a class strategy's `pet_action()`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PetAction {
+    /// Send the pet to attack the current target.
+    Attack,
+    /// Cast a pet-targeted buff (e.g., Regrowth of the Grove).
+    Buff {
+        /// Spell entry describing the buff to cast.
+        spell: textquest_common::combat::SpellEntry,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -450,7 +496,7 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus};
+    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus, XTargetType};
 
     fn make_ctx_with_xtargets<'a>(
         player: &'a SpawnData,

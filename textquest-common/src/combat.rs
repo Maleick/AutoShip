@@ -441,7 +441,7 @@ pub enum AssistMode {
 }
 
 /// A memorized spell available for the combat rotation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpellEntry {
     /// Memorized spell slot (0-indexed gem number).
     pub slot: u8,

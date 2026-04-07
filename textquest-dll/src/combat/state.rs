@@ -22,7 +22,7 @@ use super::mana::ManaGovernor;
 use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
 use super::strategy::{
-    ClassStrategy, CombatContext, GroupMemberState, build_strategy, pet_attack_focused,
+    ClassStrategy, CombatContext, GroupMemberState, PetAction, build_strategy, pet_attack_focused,
     pet_back_off,
 };
 
@@ -78,6 +78,55 @@ fn normalize_gem_id(slot: u8) -> Option<u8> {
         }
         _ => None,
     }
+}
+
+/// Resolve which spell gem to use when casting `spell_id`.
+///
+/// Priority:
+/// 1. `preferred_gem` if valid AND the spell is loaded in that slot.
+/// 2. First gem that contains `spell_id` (fallback scan).
+/// 3. `gem_id = 0, spell_id = spell_id` — EQ will attempt to cast by ID directly.
+///
+/// Returns `None` when `preferred_gem` is `Some` but points to an invalid slot
+/// (out of range); the caller should skip the cast in that case.
+fn plan_spell_cast(
+    preferred_gem: Option<u8>,
+    spell_id: i32,
+    memorized_spells: &[i32],
+) -> Option<PlannedSpellCast> {
+    // Validate preferred gem slot before doing anything else.
+    if let Some(slot) = preferred_gem {
+        normalize_gem_id(slot)?;
+        // Check whether the spell is in the preferred gem.
+        if memorized_spells.get(slot as usize).copied() == Some(spell_id) {
+            return Some(PlannedSpellCast {
+                gem_id: slot,
+                spell_id,
+                source: SpellCastSource::PreferredGem,
+            });
+        }
+    }
+
+    // Scan for the spell in any memorized slot.
+    if let Some((idx, _)) = memorized_spells
+        .iter()
+        .enumerate()
+        .find(|(_, id)| **id == spell_id)
+    {
+        return Some(PlannedSpellCast {
+            gem_id: idx as u8,
+            spell_id,
+            source: SpellCastSource::FallbackGem,
+        });
+    }
+
+    // Spell is not memorized — try to cast by ID directly (gem 0 acts as the
+    // spell-ID path in the EQ cast API).
+    Some(PlannedSpellCast {
+        gem_id: 0,
+        spell_id,
+        source: SpellCastSource::SpellIdDirect,
+    })
 }
 
 /// Build a safe `/useitem` slash command for an item name.
@@ -604,7 +653,7 @@ impl Combatant {
                     let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
                     self.state = CombatState::Casting {
-                        spell_slot: gem_id,
+                        spell_slot: cast_plan.gem_id,
                         target_id: selected_spell_target
                             .or_else(|| target.map(|t| t.spawn_id))
                             .unwrap_or(0),
@@ -1011,6 +1060,7 @@ impl Combatant {
                 self.gcd.consume();
                 self.state = CombatState::Casting {
                     spell_slot: gem_id,
+                    target_id: original_target.unwrap_or(0),
                     ticks_remaining: 20 + cast_delay,
                 };
                 true
@@ -1025,7 +1075,7 @@ mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
     use crate::combat::rotation;
-    use textquest_common::combat::CombatConfig;
+    use textquest_common::combat::{ActionType, CombatConfig};
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

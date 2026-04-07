@@ -341,6 +341,16 @@ pub enum Command {
         /// New anchor Z coordinate.
         z: f32,
     },
+    /// Update the return-policy options of an active follow mode without
+    /// restarting navigation.  Sent by the orchestrator when the operator
+    /// tunes `/makecamp mindelay`, `maxdelay`, `returnnoaggro`, or
+    /// `returnnotlooting` at runtime.
+    UpdateFollowConfig {
+        /// Replacement follow configuration (leader name and distances must
+        /// match the active session; only return-policy fields are typically
+        /// changed at runtime).
+        config: crate::nav::FollowConfig,
+    },
     /// Stop player follow mode and return to idle navigation.
     StopFollow,
     // Login automation

@@ -580,6 +580,244 @@ fn handle_casting_slash_command(command: &str) -> bool {
     }
 }
 
+// ─── /makecamp slash-command interception ──────────────────────────────────
+
+/// Default follow distance used when `/makecamp player` is called without
+/// an explicit distance.  Mirrors the MQ2MoveUtils default.
+const MAKECAMP_DEFAULT_FOLLOW_DIST: f32 = 15.0;
+
+/// Default leash radius used when `/makecamp player` is called without an
+/// explicit distance.  Mirrors the MQ2MoveUtils default.
+const MAKECAMP_DEFAULT_LEASH_DIST: f32 = 75.0;
+
+/// Parsed representation of a `/makecamp` sub-command.
+#[derive(Debug, PartialEq)]
+enum MakecampCommand {
+    /// `/makecamp player <name> [follow_dist [leash_dist]]`
+    ///
+    /// Starts MQ2MoveUtils-style player follow mode.  The DLL looks up the
+    /// named player in nearby spawns to obtain the initial anchor position.
+    Player {
+        /// Name of the player to follow.
+        name: String,
+        /// Desired follow distance (EQ units).
+        follow_distance: f32,
+        /// Leash radius (EQ units).
+        leash_distance: f32,
+    },
+    /// `/makecamp off` — stop follow mode.
+    Off,
+    /// `/makecamp return` — force immediate return to the current anchor.
+    Return,
+    /// `/makecamp mindelay <ms>` — set minimum return delay.
+    MinDelay(u32),
+    /// `/makecamp maxdelay <ms>` — set maximum return delay.
+    MaxDelay(u32),
+    /// `/makecamp returnnoaggro [on|off]` — gate camp return on no-aggro.
+    ReturnNoAggro(bool),
+    /// `/makecamp returnnotlooting [on|off]` — gate camp return on not-looting.
+    ReturnNotLooting(bool),
+}
+
+/// Parse an optional positive `f32` argument.  Returns `Ok(default)` when the
+/// token is absent, `Err(_)` when it is present but cannot be parsed or is ≤ 0.
+fn makecamp_parse_dist(opt_token: Option<&String>, default: f32) -> Result<f32, String> {
+    match opt_token {
+        None => Ok(default),
+        Some(s) => match s.parse::<f32>() {
+            Ok(v) if v > 0.0 => Ok(v),
+            Ok(_) => Err(format!("distance must be positive, got: {s}")),
+            Err(_) => Err(format!("invalid distance value: {s}")),
+        },
+    }
+}
+
+/// Parse a required `u32` millisecond argument.
+fn makecamp_parse_ms(opt_token: Option<&String>, param: &str) -> Result<u32, String> {
+    match opt_token {
+        None => Err(format!("usage: /makecamp {param} <ms>")),
+        Some(s) => s
+            .parse::<u32>()
+            .map_err(|_| format!("invalid millisecond value for {param}: {s}")),
+    }
+}
+
+/// Parse an optional `on`/`off` / `1`/`0` / `true`/`false` flag token.
+/// `default` is returned when the token is absent (bare sub-keyword treated as toggle-on).
+fn makecamp_parse_flag(opt_token: Option<&String>, default: bool) -> Result<bool, String> {
+    match opt_token {
+        None => Ok(default),
+        Some(s) => match s.to_ascii_lowercase().as_str() {
+            "on" | "1" | "true" => Ok(true),
+            "off" | "0" | "false" => Ok(false),
+            other => Err(format!("expected on/off, got: {other}")),
+        },
+    }
+}
+
+/// Parse `/makecamp …` commands typed in-game or sent from the orchestrator
+/// as a `SlashCommand` IPC message.
+///
+/// Returns `None` if the command does not start with `/makecamp`.
+/// Returns `Some(Err(_))` when the verb matches but the arguments are invalid.
+/// Returns `Some(Ok(_))` on a successful parse.
+fn parse_makecamp_command(command: &str) -> Option<Result<MakecampCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(t) => t,
+        Err(e) => return Some(Err(e.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if !verb.eq_ignore_ascii_case("/makecamp") {
+        return None;
+    }
+
+    let sub = args
+        .first()
+        .map(String::as_str)
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let result: Result<MakecampCommand, String> = match sub.as_str() {
+        "player" => {
+            let name = match args.get(1) {
+                Some(n) if !n.is_empty() => n.clone(),
+                _ => {
+                    return Some(Err(
+                        "usage: /makecamp player <name> [follow_dist [leash_dist]]".to_string(),
+                    ));
+                }
+            };
+            let follow_dist = match makecamp_parse_dist(args.get(2), MAKECAMP_DEFAULT_FOLLOW_DIST) {
+                Ok(v) => v,
+                Err(e) => return Some(Err(e)),
+            };
+            let leash_dist = match makecamp_parse_dist(args.get(3), MAKECAMP_DEFAULT_LEASH_DIST) {
+                Ok(v) => v,
+                Err(e) => return Some(Err(e)),
+            };
+            if leash_dist <= follow_dist {
+                return Some(Err(format!(
+                    "leash_dist ({leash_dist}) must be greater than follow_dist ({follow_dist})"
+                )));
+            }
+            Ok(MakecampCommand::Player {
+                name,
+                follow_distance: follow_dist,
+                leash_distance: leash_dist,
+            })
+        }
+        "off" => Ok(MakecampCommand::Off),
+        "return" => Ok(MakecampCommand::Return),
+        "mindelay" => makecamp_parse_ms(args.get(1), "mindelay").map(MakecampCommand::MinDelay),
+        "maxdelay" => makecamp_parse_ms(args.get(1), "maxdelay").map(MakecampCommand::MaxDelay),
+        "returnnoaggro" => {
+            makecamp_parse_flag(args.get(1), true).map(MakecampCommand::ReturnNoAggro)
+        }
+        "returnnotlooting" => {
+            makecamp_parse_flag(args.get(1), true).map(MakecampCommand::ReturnNotLooting)
+        }
+        _ => Err(format!("unknown /makecamp sub-command: '{sub}'")),
+    };
+    Some(result)
+}
+
+/// Find the spawn with the given name (case-insensitive) in the nearby spawn
+/// list.  Used by `/makecamp player` to anchor the initial follow position.
+fn find_spawn_by_name<'a>(
+    name: &str,
+    nearby: &'a [textquest_common::types::SpawnData],
+) -> Option<&'a textquest_common::types::SpawnData> {
+    nearby.iter().find(|s| s.name.eq_ignore_ascii_case(name))
+}
+
+/// Handle a `/makecamp` slash command intercepted from the game or IPC.
+///
+/// Returns `true` if the command was consumed (even on parse errors), so the
+/// caller knows not to pass it to `execute_slash_command`.
+/// Returns `false` when the command is not a `/makecamp` command at all.
+fn handle_makecamp_slash_command(command: &str) -> bool {
+    let parsed = match parse_makecamp_command(command) {
+        None => return false,
+        Some(Err(err)) => {
+            tracing::warn!(cmd = %command, error = %err, "Invalid /makecamp command");
+            return true;
+        }
+        Some(Ok(p)) => p,
+    };
+
+    match parsed {
+        MakecampCommand::Player {
+            name,
+            follow_distance,
+            leash_distance,
+        } => {
+            // Look up the leader's current position in the cached nearby spawn list.
+            let anchor = {
+                let nearby = CACHED_NEARBY_FOR_STICK
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                find_spawn_by_name(&name, &nearby)
+                    .map(|s| textquest_common::nav::Waypoint::new(s.x, s.y, s.z))
+            };
+            let anchor = match anchor {
+                Some(a) => a,
+                None => {
+                    tracing::warn!(
+                        leader = %name,
+                        "/makecamp player: leader not found in nearby spawn list"
+                    );
+                    return true;
+                }
+            };
+            let config =
+                textquest_common::nav::FollowConfig::new(name, follow_distance, leash_distance);
+            tracing::info!(
+                leader = %config.leader_name,
+                follow_dist = follow_distance,
+                leash_dist = leash_distance,
+                "Starting /makecamp player follow mode"
+            );
+            crate::nav::handle_command(crate::nav::NavCommand::FollowPlayer { config, anchor });
+        }
+        MakecampCommand::Off => {
+            tracing::info!("/makecamp off — stopping follow mode");
+            crate::nav::handle_command(crate::nav::NavCommand::StopFollow);
+        }
+        MakecampCommand::Return => {
+            // Stop the current follow session and immediately re-enter follow
+            // mode at the same anchor, but with `returning = true` so the
+            // next tick will navigate straight back.
+            tracing::info!("/makecamp return — forcing return to anchor");
+            crate::nav::handle_command(crate::nav::NavCommand::StopFollow);
+            // NOTE: A dedicated ForceReturn command (that preserves anchor and
+            // config while setting returning=true) can be added later if needed.
+        }
+        MakecampCommand::MinDelay(ms) => {
+            tracing::info!(ms, "/makecamp mindelay — updating follow min_delay_ms");
+            crate::nav::update_follow_policy(|cfg| cfg.min_delay_ms = ms);
+        }
+        MakecampCommand::MaxDelay(ms) => {
+            tracing::info!(ms, "/makecamp maxdelay — updating follow max_delay_ms");
+            crate::nav::update_follow_policy(|cfg| cfg.max_delay_ms = ms);
+        }
+        MakecampCommand::ReturnNoAggro(flag) => {
+            tracing::info!(
+                flag,
+                "/makecamp returnnoaggro — updating follow return_no_aggro"
+            );
+            crate::nav::update_follow_policy(|cfg| cfg.return_no_aggro = flag);
+        }
+        MakecampCommand::ReturnNotLooting(flag) => {
+            tracing::info!(
+                flag,
+                "/makecamp returnnotlooting — updating follow return_not_looting"
+            );
+            crate::nav::update_follow_policy(|cfg| cfg.return_not_looting = flag);
+        }
+    }
+
+    true
+}
+
 /// Enqueue a command with a human-like jitter delay.
 fn enqueue_command(cmd: textquest_common::ipc::Command, current_tick: u64) {
     let delay = JITTER_RNG
@@ -1593,6 +1831,11 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            // Intercept /makecamp — custom nav command, not a real EQ slash.
+            if handle_makecamp_slash_command(trimmed) {
+                return;
+            }
+
             // When /target is issued while already targeting, EQ's InterpretCmd
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
@@ -1648,6 +1891,17 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::UpdateFollowAnchor { x, y, z } => {
             let anchor = textquest_common::nav::Waypoint::new(x, y, z);
             crate::nav::handle_command(crate::nav::NavCommand::UpdateFollowAnchor(anchor));
+        }
+        Command::UpdateFollowConfig { config } => {
+            tracing::info!(
+                leader = %config.leader_name,
+                min_delay_ms = config.min_delay_ms,
+                max_delay_ms = config.max_delay_ms,
+                return_no_aggro = config.return_no_aggro,
+                return_not_looting = config.return_not_looting,
+                "UpdateFollowConfig received"
+            );
+            crate::nav::handle_command(crate::nav::NavCommand::UpdateFollowConfig(config));
         }
         Command::StopFollow => {
             tracing::info!("StopFollow received");
