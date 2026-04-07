@@ -5942,6 +5942,12 @@ fn command_help_detail(command: &str) -> Option<&'static str> {
 /// Send a slash command to a specific PID via named pipe.
 fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
     use textquest_common::ipc::Command;
+
+    if let Some(message) = crate::nav::try_handle_local_slash_command(pid, command)? {
+        tracing::info!(pid, %message, "Handled local slash command");
+        return Ok(());
+    }
+
     send_ipc_command(
         pid,
         &Command::SlashCommand {
