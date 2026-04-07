@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   close-labeled-agent-prs:
-    runs-on: [self-hosted, Windows, X64, textquest]
+    runs-on: ubuntu-latest
     steps:
       - name: Close agent PRs marked for automation close
         uses: actions/github-script@v7

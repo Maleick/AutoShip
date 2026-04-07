@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   ensure-agent-ready:
-    runs-on: [self-hosted, Windows, X64, textquest]
+    runs-on: ubuntu-latest
     steps:
       - name: Ensure agent:ready label state
         uses: actions/github-script@v7

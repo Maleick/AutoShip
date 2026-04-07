@@ -15,7 +15,7 @@ permissions:
 jobs:
   dispatch-blocked-copilot-prs:
     name: Dispatch CI for blocked Copilot PRs
-    runs-on: [self-hosted, Windows, X64, textquest]
+    runs-on: ubuntu-latest
     steps:
       - name: Dispatch CI on same-repo Copilot PR heads
         uses: actions/github-script@v7
