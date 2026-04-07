@@ -183,14 +183,36 @@ jobs:
               ? "PR gate (trusted path)"
               : "PR gate (fork PR path)";
 
-            for (let attempt = 1; attempt <= 180; attempt += 1) {
-              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
+            // listJobsForWorkflowRunAttempt requires attempt_number and returns 404 in some
+            // PR contexts (e.g. when context.runAttempt is unavailable).  Fall back to
+            // listJobsForWorkflowRun, which is always available, to avoid hard failures.
+            async function listJobs() {
+              if (context.runAttempt) {
+                try {
+                  return await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
+                    owner,
+                    repo,
+                    run_id: context.runId,
+                    attempt_number: context.runAttempt,
+                    per_page: 100,
+                  });
+                } catch (e) {
+                  core.warning(
+                    `listJobsForWorkflowRunAttempt failed (${e.status ?? "unknown"}); ` +
+                    `falling back to listJobsForWorkflowRun`
+                  );
+                }
+              }
+              return await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
                 owner,
                 repo,
                 run_id: context.runId,
-                attempt_number: context.runAttempt,
                 per_page: 100,
               });
+            }
+
+            for (let attempt = 1; attempt <= 180; attempt += 1) {
+              const jobs = await listJobs();
 
               const target = jobs.find((job) => job.name === targetJobName);
               const other = jobs.find((job) => job.name === otherJobName);
