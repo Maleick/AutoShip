@@ -4,6 +4,8 @@
 use anyhow::{Context, Result, bail};
 use flate2::read::ZlibDecoder;
 use prost::Message;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use textquest_common::nav::{NavPathMetrics, Waypoint};
@@ -71,9 +73,33 @@ pub struct ProtoNavMeshTileSet {
     pub tiles: Vec<ProtoNavMeshTile>,
 }
 
+/// nav.Connection
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoConnection {
+    /// Connection ID.
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
+    /// Optional connection name.
+    #[prost(string, tag = "2")]
+    pub name: String,
+    /// Connection type (MQ2Nav `ConnectionType`).
+    #[prost(uint32, tag = "3")]
+    pub connection_type: u32,
+    /// Start point in EQ coordinates.
+    #[prost(message, optional, tag = "4")]
+    pub pos_from: Option<ProtoVector3>,
+    /// End point in EQ coordinates.
+    #[prost(message, optional, tag = "5")]
+    pub pos_to: Option<ProtoVector3>,
+    /// Area type for the connection.
+    #[prost(uint32, tag = "6")]
+    pub area_type: u32,
+    /// Whether the connection is one-way.
+    #[prost(bool, tag = "7")]
+    pub one_way: bool,
+}
+
 /// nav.NavMeshFile — top-level container.
-/// Fields 3-6 (`build_settings`, `convex_volumes`, areas, connections) exist in the
-/// proto but are not needed for pathfinding — prost silently skips unknown fields.
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoNavMeshFile {
     /// EQ zone short name (e.g., "gfaydark").
@@ -82,6 +108,9 @@ pub struct ProtoNavMeshFile {
     /// The navigation mesh tile set.
     #[prost(message, optional, tag = "2")]
     pub tile_set: Option<ProtoNavMeshTileSet>,
+    /// Off-mesh traversal links (doors, teleports, etc).
+    #[prost(message, repeated, tag = "6")]
+    pub connections: Vec<ProtoConnection>,
 }
 
 // ---------------------------------------------------------------------------
@@ -518,6 +547,38 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
 pub struct LoadedNavMesh {
     _nav_mesh: DetourNavMesh,
     query: DetourNavMeshQuery,
+    connections: Vec<OffMeshConnection>,
+}
+
+type EqPoint = (f32, f32, f32);
+
+#[derive(Debug, Clone)]
+struct OffMeshConnection {
+    id: u32,
+    name: String,
+    connection_type: u32,
+    area_type: u32,
+    one_way: bool,
+    pos_from: EqPoint,
+    pos_to: EqPoint,
+}
+
+impl OffMeshConnection {
+    fn from_proto(proto: &ProtoConnection) -> Self {
+        fn point_from_proto(vector: Option<&ProtoVector3>) -> EqPoint {
+            vector.map_or((0.0, 0.0, 0.0), |v| (v.x, v.y, v.z))
+        }
+
+        Self {
+            id: proto.id,
+            name: proto.name.clone(),
+            connection_type: proto.connection_type,
+            area_type: proto.area_type,
+            one_way: proto.one_way,
+            pos_from: point_from_proto(proto.pos_from.as_ref()),
+            pos_to: point_from_proto(proto.pos_to.as_ref()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -668,14 +729,21 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     tracing::info!(
         zone = %proto.zone_short_name,
         tiles = loaded_tiles,
+        off_mesh_connections = proto.connections.len(),
         "Loaded navmesh into Detour"
     );
 
     let query = DetourNavMeshQuery::new(&nav_mesh, NAVMESH_QUERY_MAX_NODES)?;
+    let connections = proto
+        .connections
+        .iter()
+        .map(OffMeshConnection::from_proto)
+        .collect();
 
     Ok(LoadedNavMesh {
         _nav_mesh: nav_mesh,
         query,
+        connections,
     })
 }
 
@@ -862,18 +930,39 @@ fn overlay_from_loaded(loaded: &LoadedNavMesh) -> Result<NavMeshOverlay> {
     Ok(overlay)
 }
 
-/// Find a path between two EQ positions using a loaded navmesh.
-/// Positions are in EQ coordinate space (x=east/west, y=north/south, z=up).
-/// Returns a list of EQ waypoint positions (x, y, z).
-///
-/// # Errors
-///
-/// Returns an error if the operation fails.
-pub fn find_path(
-    loaded: &LoadedNavMesh,
-    from: (f32, f32, f32),
-    to: (f32, f32, f32),
-) -> Result<Vec<(f32, f32, f32)>> {
+fn same_point(a: EqPoint, b: EqPoint) -> bool {
+    const EPSILON: f32 = 0.001;
+    (a.0 - b.0).abs() <= EPSILON && (a.1 - b.1).abs() <= EPSILON && (a.2 - b.2).abs() <= EPSILON
+}
+
+fn eq_path_length(waypoints: &[EqPoint]) -> Option<f32> {
+    if waypoints.is_empty() {
+        return None;
+    }
+
+    let mut total = 0.0f32;
+    for window in waypoints.windows(2) {
+        let a = Waypoint::new(window[0].0, window[0].1, window[0].2);
+        let b = Waypoint::new(window[1].0, window[1].1, window[1].2);
+        total += a.distance_3d(&b);
+    }
+
+    Some(total)
+}
+
+fn append_points(target: &mut Vec<EqPoint>, points: &[EqPoint]) {
+    for point in points {
+        if target.last().copied() != Some(*point) {
+            target.push(*point);
+        }
+    }
+}
+
+fn find_detour_path(loaded: &LoadedNavMesh, from: EqPoint, to: EqPoint) -> Result<Vec<EqPoint>> {
+    if same_point(from, to) {
+        return Ok(vec![from]);
+    }
+
     let filter = default_query_filter();
     // Search extents: how far from the given position to look for a polygon.
     // Y (Detour up-axis) needs a large extent to handle multi-level dungeons.
@@ -922,6 +1011,200 @@ pub fn find_path(
     let waypoints: Vec<(f32, f32, f32)> = straight.iter().map(detour_to_eq).collect();
 
     Ok(waypoints)
+}
+
+#[derive(Debug, Clone)]
+enum PathEdge {
+    Mesh(Vec<EqPoint>),
+    OffMesh(EqPoint),
+}
+
+#[derive(Debug, Clone)]
+struct QueueEntry {
+    cost: f32,
+    idx: usize,
+}
+
+impl PartialEq for QueueEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.idx == other.idx && self.cost.to_bits() == other.cost.to_bits()
+    }
+}
+
+impl Eq for QueueEntry {}
+
+impl PartialOrd for QueueEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for QueueEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .cost
+            .total_cmp(&self.cost)
+            .then_with(|| self.idx.cmp(&other.idx))
+    }
+}
+
+fn find_path_via_connections<F>(
+    from: EqPoint,
+    to: EqPoint,
+    connections: &[OffMeshConnection],
+    mut find_mesh_path: F,
+) -> Result<Vec<EqPoint>>
+where
+    F: FnMut(EqPoint, EqPoint) -> Result<Vec<EqPoint>>,
+{
+    if same_point(from, to) {
+        return Ok(vec![from]);
+    }
+
+    if connections.is_empty() {
+        bail!("No off-mesh connections available");
+    }
+
+    let mut points = Vec::with_capacity(2 + connections.len() * 2);
+    points.push(from);
+    points.push(to);
+    for connection in connections {
+        points.push(connection.pos_from);
+        points.push(connection.pos_to);
+    }
+
+    let mut off_mesh_edges: HashMap<usize, Vec<(usize, PathEdge)>> = HashMap::new();
+    for (idx, connection) in connections.iter().enumerate() {
+        let from_idx = 2 + idx * 2;
+        let to_idx = from_idx + 1;
+        if !same_point(connection.pos_from, connection.pos_to) {
+            off_mesh_edges
+                .entry(from_idx)
+                .or_default()
+                .push((to_idx, PathEdge::OffMesh(connection.pos_to)));
+            if !connection.one_way {
+                off_mesh_edges
+                    .entry(to_idx)
+                    .or_default()
+                    .push((from_idx, PathEdge::OffMesh(connection.pos_from)));
+            }
+        }
+    }
+
+    let destination_idx = 1usize;
+    let mut distances = vec![f32::INFINITY; points.len()];
+    let mut previous: Vec<Option<(usize, PathEdge)>> = vec![None; points.len()];
+    let mut mesh_cache: HashMap<(usize, usize), Option<Vec<EqPoint>>> = HashMap::new();
+    let mut heap = BinaryHeap::new();
+    distances[0] = 0.0;
+    heap.push(QueueEntry { cost: 0.0, idx: 0 });
+
+    while let Some(QueueEntry { cost, idx: current }) = heap.pop() {
+        if cost > distances[current] {
+            continue;
+        }
+        if current == destination_idx {
+            break;
+        }
+
+        if let Some(edges) = off_mesh_edges.get(&current) {
+            for (next, edge) in edges {
+                if cost < distances[*next] {
+                    distances[*next] = cost;
+                    previous[*next] = Some((current, edge.clone()));
+                    heap.push(QueueEntry { cost, idx: *next });
+                }
+            }
+        }
+
+        for next in 0..points.len() {
+            if next == current {
+                continue;
+            }
+
+            let route = mesh_cache
+                .entry((current, next))
+                .or_insert_with(|| {
+                    if same_point(points[current], points[next]) {
+                        Some(vec![points[current]])
+                    } else {
+                        find_mesh_path(points[current], points[next]).ok()
+                    }
+                })
+                .clone();
+
+            let Some(route) = route else {
+                continue;
+            };
+
+            let edge_cost = eq_path_length(&route).unwrap_or(0.0);
+            let candidate = cost + edge_cost;
+            if candidate < distances[next] {
+                distances[next] = candidate;
+                previous[next] = Some((current, PathEdge::Mesh(route)));
+                heap.push(QueueEntry {
+                    cost: candidate,
+                    idx: next,
+                });
+            }
+        }
+    }
+
+    if !distances[destination_idx].is_finite() {
+        bail!("No route found using off-mesh connections");
+    }
+
+    let mut steps = Vec::new();
+    let mut cursor = destination_idx;
+    while cursor != 0 {
+        let Some((prev_idx, edge)) = previous[cursor].clone() else {
+            bail!("Route reconstruction failed");
+        };
+        steps.push(edge);
+        cursor = prev_idx;
+    }
+    steps.reverse();
+
+    let mut route = Vec::new();
+    for step in steps {
+        match step {
+            PathEdge::Mesh(points) => append_points(&mut route, &points),
+            PathEdge::OffMesh(point) => append_points(&mut route, &[point]),
+        }
+    }
+
+    if route.is_empty() {
+        bail!("Off-mesh route produced no waypoints");
+    }
+
+    Ok(route)
+}
+
+/// Find a path between two EQ positions using a loaded navmesh.
+/// Positions are in EQ coordinate space (x=east/west, y=north/south, z=up).
+/// Returns a list of EQ waypoint positions (x, y, z).
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn find_path(loaded: &LoadedNavMesh, from: EqPoint, to: EqPoint) -> Result<Vec<EqPoint>> {
+    match find_detour_path(loaded, from, to) {
+        Ok(path) => Ok(path),
+        Err(error) => {
+            if loaded.connections.is_empty() {
+                return Err(error);
+            }
+
+            find_path_via_connections(from, to, &loaded.connections, |segment_from, segment_to| {
+                find_detour_path(loaded, segment_from, segment_to)
+            })
+            .map_err(|stitch_error| {
+                anyhow::anyhow!(
+                    "Direct navmesh path failed: {error}; off-mesh traversal failed: {stitch_error}"
+                )
+            })
+        }
+    }
 }
 
 /// End-to-end convenience: download (or load from cache), parse, and load a zone mesh.
@@ -1071,6 +1354,51 @@ mod tests {
     }
 
     #[test]
+    fn parse_preserves_off_mesh_connections() {
+        let proto = ProtoNavMeshFile {
+            zone_short_name: "poknowledge".into(),
+            tile_set: None,
+            connections: vec![ProtoConnection {
+                id: 7,
+                name: "library door".into(),
+                connection_type: 0,
+                pos_from: Some(ProtoVector3 {
+                    x: 10.0,
+                    y: 20.0,
+                    z: 30.0,
+                }),
+                pos_to: Some(ProtoVector3 {
+                    x: 40.0,
+                    y: 50.0,
+                    z: 60.0,
+                }),
+                area_type: 4,
+                one_way: true,
+            }],
+        };
+
+        let mut payload = Vec::new();
+        proto.encode(&mut payload).unwrap();
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&NAVMESH_FILE_MAGIC.to_le_bytes());
+        data.extend_from_slice(&4u16.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
+        data.extend_from_slice(&payload);
+
+        let parsed = parse_navmesh(&data).expect("expected parse to succeed");
+        assert_eq!(parsed.zone_short_name, "poknowledge");
+        assert_eq!(parsed.connections.len(), 1);
+        let connection = &parsed.connections[0];
+        assert_eq!(connection.id, 7);
+        assert_eq!(connection.name, "library door");
+        assert_eq!(connection.area_type, 4);
+        assert!(connection.one_way);
+        assert_eq!(connection.pos_from.as_ref().unwrap().x, 10.0);
+        assert_eq!(connection.pos_to.as_ref().unwrap().z, 60.0);
+    }
+
+    #[test]
     fn parse_rejects_oversized_compressed_payload() {
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
         encoder
@@ -1149,5 +1477,108 @@ mod tests {
         ];
         let len = path_length(&points).unwrap();
         assert!((len - 10.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn off_mesh_planner_stitches_one_way_connection() {
+        let start = (0.0, 0.0, 0.0);
+        let door_in = (1.0, 0.0, 0.0);
+        let door_out = (10.0, 0.0, 0.0);
+        let end = (11.0, 0.0, 0.0);
+        let connections = vec![OffMeshConnection {
+            id: 1,
+            name: "door".into(),
+            connection_type: 0,
+            area_type: 4,
+            one_way: true,
+            pos_from: door_in,
+            pos_to: door_out,
+        }];
+
+        let route =
+            find_path_via_connections(start, end, &connections, |from, to| match (from, to) {
+                (a, b) if same_point(a, b) => Ok(vec![a]),
+                (a, b) if same_point(a, start) && same_point(b, door_in) => {
+                    Ok(vec![start, door_in])
+                }
+                (a, b) if same_point(a, door_out) && same_point(b, end) => Ok(vec![door_out, end]),
+                _ => bail!("no mesh route"),
+            })
+            .expect("expected stitched route");
+
+        assert_eq!(route, vec![start, door_in, door_out, end]);
+    }
+
+    #[test]
+    fn off_mesh_planner_rejects_wrong_direction_on_one_way_connection() {
+        let start = (11.0, 0.0, 0.0);
+        let door_in = (1.0, 0.0, 0.0);
+        let door_out = (10.0, 0.0, 0.0);
+        let end = (0.0, 0.0, 0.0);
+        let connections = vec![OffMeshConnection {
+            id: 1,
+            name: "door".into(),
+            connection_type: 0,
+            area_type: 4,
+            one_way: true,
+            pos_from: door_in,
+            pos_to: door_out,
+        }];
+
+        let result = find_path_via_connections(start, end, &connections, |_from, _to| {
+            bail!("no mesh route")
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn off_mesh_planner_can_chain_multiple_connections() {
+        let start = (0.0, 0.0, 0.0);
+        let first_in = (1.0, 0.0, 0.0);
+        let first_out = (10.0, 0.0, 0.0);
+        let second_in = (11.0, 0.0, 0.0);
+        let second_out = (20.0, 0.0, 0.0);
+        let end = (21.0, 0.0, 0.0);
+        let connections = vec![
+            OffMeshConnection {
+                id: 1,
+                name: "door".into(),
+                connection_type: 0,
+                area_type: 4,
+                one_way: false,
+                pos_from: first_in,
+                pos_to: first_out,
+            },
+            OffMeshConnection {
+                id: 2,
+                name: "teleport".into(),
+                connection_type: 0,
+                area_type: 1,
+                one_way: false,
+                pos_from: second_in,
+                pos_to: second_out,
+            },
+        ];
+
+        let route =
+            find_path_via_connections(start, end, &connections, |from, to| match (from, to) {
+                (a, b) if same_point(a, b) => Ok(vec![a]),
+                (a, b) if same_point(a, start) && same_point(b, first_in) => {
+                    Ok(vec![start, first_in])
+                }
+                (a, b) if same_point(a, first_out) && same_point(b, second_in) => {
+                    Ok(vec![first_out, second_in])
+                }
+                (a, b) if same_point(a, second_out) && same_point(b, end) => {
+                    Ok(vec![second_out, end])
+                }
+                _ => bail!("no mesh route"),
+            })
+            .expect("expected chained route");
+
+        assert_eq!(
+            route,
+            vec![start, first_in, first_out, second_in, second_out, end]
+        );
     }
 }
