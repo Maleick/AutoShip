@@ -758,6 +758,10 @@ mod inner {
             D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE,
             D3D11_TEXTURE2D_DESC as WinTexDesc, D3D11_USAGE_STAGING,
         };
+        use windows::Win32::Graphics::Dxgi::Common::{
+            DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+            DXGI_FORMAT_B8G8R8X8_UNORM, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,
+        };
         use windows::Win32::Graphics::Dxgi::IDXGISwapChain;
         use windows::core::Interface;
 
@@ -776,6 +780,19 @@ mod inner {
         unsafe { backbuffer.GetDesc(&mut desc) };
         let width = desc.Width;
         let height = desc.Height;
+        let bgra_compatible = matches!(
+            desc.Format,
+            DXGI_FORMAT_B8G8R8A8_UNORM
+                | DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
+                | DXGI_FORMAT_B8G8R8X8_UNORM
+                | DXGI_FORMAT_B8G8R8X8_UNORM_SRGB
+        );
+        if !bgra_compatible {
+            return Err(format!(
+                "Unsupported backbuffer format for BMP capture: {:?}",
+                desc.Format
+            ));
+        }
 
         // windows 0.54: GetDevice() returns Result<T>, no out-param.
         let device: windows::Win32::Graphics::Direct3D11::ID3D11Device = unsafe {
@@ -862,10 +879,35 @@ mod inner {
     ) -> Result<(), String> {
         use std::io::Write;
 
-        let row_size = width * 3;
-        let padded_row = (row_size + 3) & !3;
-        let pixel_data_size = padded_row * height;
-        let file_size = 54 + pixel_data_size;
+        let width_usize =
+            usize::try_from(width).map_err(|_| "image width does not fit into usize")?;
+        let height_usize =
+            usize::try_from(height).map_err(|_| "image height does not fit into usize")?;
+        let row_pitch_usize =
+            usize::try_from(row_pitch).map_err(|_| "row pitch does not fit into usize")?;
+        let min_row_pitch = width
+            .checked_mul(4)
+            .ok_or("invalid image width for row pitch calculation")?;
+        if row_pitch < min_row_pitch {
+            return Err(format!(
+                "Invalid row pitch for BGRA data: {row_pitch} < {min_row_pitch}"
+            ));
+        }
+
+        let row_size = width
+            .checked_mul(3)
+            .ok_or("invalid image width for BMP row calculation")?;
+        let padded_row = row_size
+            .checked_add(3)
+            .map(|value| value & !3)
+            .ok_or("invalid padded BMP row size")?;
+        let pixel_data_size = padded_row
+            .checked_mul(height)
+            .ok_or("invalid BMP pixel data size")?;
+        let file_size = 54u32
+            .checked_add(pixel_data_size)
+            .ok_or("invalid BMP file size")?;
+        let pixel_stride = width_usize.checked_mul(4).ok_or("invalid BGRA row width")?;
 
         let mut file = std::io::BufWriter::new(
             std::fs::File::create(path).map_err(|e| format!("create file: {e}"))?,
@@ -892,12 +934,23 @@ mod inner {
         file.write_all(&[0u8; 24])
             .map_err(|e| format!("write: {e}"))?;
 
-        let mut row_buf = vec![0u8; padded_row as usize];
-        for y in 0..height {
-            let src_row = unsafe { data.add((y * row_pitch) as usize) };
-            for x in 0..width {
-                let px = unsafe { src_row.add((x * 4) as usize) };
-                let idx = (x * 3) as usize;
+        let mut row_buf = vec![
+            0u8;
+            usize::try_from(padded_row)
+                .map_err(|_| "padded BMP row size does not fit into usize")?
+        ];
+        for y in 0..height_usize {
+            let row_offset = y
+                .checked_mul(row_pitch_usize)
+                .ok_or("source row offset overflow")?;
+            let src_row = unsafe { data.add(row_offset) };
+            for x in 0..width_usize {
+                let pixel_offset = x.checked_mul(4).ok_or("source pixel offset overflow")?;
+                debug_assert!(pixel_offset < pixel_stride);
+                let px = unsafe { src_row.add(pixel_offset) };
+                let idx = x
+                    .checked_mul(3)
+                    .ok_or("destination pixel offset overflow")?;
                 row_buf[idx] = unsafe { *px };
                 row_buf[idx + 1] = unsafe { *px.add(1) };
                 row_buf[idx + 2] = unsafe { *px.add(2) };
