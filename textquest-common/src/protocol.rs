@@ -84,16 +84,22 @@ mod tests {
         let cmd = Command::CastSpell {
             spell_slot: 3,
             target_id: Some(12345),
+            kill: false,
+            recast: 0,
         };
         let encoded = encode(&cmd).expect("encode failed");
         let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
         if let Command::CastSpell {
             spell_slot,
             target_id,
+            kill,
+            recast,
         } = decoded
         {
             assert_eq!(spell_slot, 3);
             assert_eq!(target_id, Some(12345));
+            assert!(!kill);
+            assert_eq!(recast, 0);
         } else {
             panic!("expected CastSpell, got {decoded:?}");
         }
