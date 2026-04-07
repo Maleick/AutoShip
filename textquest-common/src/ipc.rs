@@ -770,12 +770,16 @@ pub enum Response {
     },
     /// An intercepted chat message from the game's `dsp_chat` function.
     ChatMessage {
-        /// The chat text content.
+        /// The chat text content (may contain STML markup tags).
         text: String,
         /// EQ chat color code (e.g., 273 = default, 269 = system).
         color: i32,
         /// Timestamp in milliseconds when the message was captured.
         timestamp_ms: u64,
+        /// Structured chat event extracted from `text` after stripping STML markup.
+        /// `None` when the text does not match a recognised EQ chat verb pattern
+        /// (e.g. system messages, spell feedback, or unknown formats).
+        parsed: Option<crate::chat::ChatEvent>,
     },
 }
 
@@ -1251,6 +1255,7 @@ mod tests {
                 text: "You say, 'Hello'".into(),
                 color: 273,
                 timestamp_ms: 1234567890,
+                parsed: None,
             },
         ];
         for resp in &responses {
