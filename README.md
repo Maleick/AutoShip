@@ -228,8 +228,8 @@ CI and nightly automation:
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`
 - `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
-- the self-hosted Windows gate now reclaims stray Chrome/Edge/Chromium processes before Rust work starts, so Cargo can run with its normal parallelism instead of forcing `-j 1`
 - self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
+- the self-hosted Windows gate now reclaims stray Chrome/Edge/Chromium processes before Rust work starts, so Cargo can run with its normal parallelism instead of forcing `-j 1`
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using the workflow-provided `GH_TOKEN` (`secrets.GITHUB_TOKEN`) for `gh`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
 - lightweight repository-control workflows such as auto-merge, agent-ready labeling, agent PR cleanup, Copilot CI dispatch, and post-merge issue cleanup now run on GitHub-hosted Linux so the Windows runner stays focused on CI, releases, and wiki publishing
