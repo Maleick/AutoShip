@@ -2496,6 +2496,90 @@ enum SpellSetCommand {
     Delete(String),
 }
 
+fn parse_nav_destination_command(
+    command: &str,
+) -> Option<Result<textquest_common::ipc::Command, String>> {
+    use textquest_common::ipc::Command;
+
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if !verb.eq_ignore_ascii_case("/nav") {
+        return None;
+    }
+
+    let args = if args
+        .first()
+        .is_some_and(|token| token.eq_ignore_ascii_case("to"))
+    {
+        &args[1..]
+    } else {
+        args
+    };
+    let (mode, rest) = args.split_first()?;
+
+    if mode.eq_ignore_ascii_case("target") {
+        return if rest.is_empty() {
+            Some(Ok(Command::NavTarget))
+        } else {
+            Some(Err(
+                "target navigation does not accept extra arguments".to_string()
+            ))
+        };
+    }
+
+    if mode.eq_ignore_ascii_case("loc") {
+        if rest.len() != 3 {
+            return Some(Err(
+                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string(),
+            ));
+        }
+
+        let parse_coord = |value: &str, axis: &str| {
+            value
+                .parse::<f32>()
+                .map_err(|_| format!("invalid {axis} coordinate: {value}"))
+        };
+
+        let y = match parse_coord(&rest[0], "Y") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+        let x = match parse_coord(&rest[1], "X") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+        let z = match parse_coord(&rest[2], "Z") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+
+        return Some(Ok(Command::NavLoc { x, y, z }));
+    }
+
+    if mode.eq_ignore_ascii_case("door") {
+        let valid = rest.is_empty() || (rest.len() == 1 && rest[0].eq_ignore_ascii_case("click"));
+        return if valid {
+            Some(Ok(Command::NavDoor))
+        } else {
+            None
+        };
+    }
+
+    if mode.eq_ignore_ascii_case("item") {
+        let valid = rest.is_empty() || (rest.len() == 1 && rest[0].eq_ignore_ascii_case("click"));
+        return if valid {
+            Some(Ok(Command::NavItem))
+        } else {
+            None
+        };
+    }
+
+    None
+}
+
 fn parse_spell_set_command(command: &str) -> Option<SpellSetCommand> {
     let trimmed = command.trim();
     let body = trimmed.strip_prefix('/')?.trim_start();
@@ -2844,6 +2928,79 @@ mod tests {
         );
         assert_eq!(parse_spell_set_command("/sss   "), None);
         assert_eq!(parse_spell_set_command("/sit"), None);
+    }
+
+    #[test]
+    fn nav_destination_parser_supports_target_and_object_modes() {
+        assert_eq!(
+            parse_nav_destination_command("/nav target"),
+            Some(Ok(textquest_common::ipc::Command::NavTarget))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to target"),
+            Some(Ok(textquest_common::ipc::Command::NavTarget))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav door"),
+            Some(Ok(textquest_common::ipc::Command::NavDoor))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to door click"),
+            Some(Ok(textquest_common::ipc::Command::NavDoor))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav item"),
+            Some(Ok(textquest_common::ipc::Command::NavItem))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to item click"),
+            Some(Ok(textquest_common::ipc::Command::NavItem))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_supports_mq2_loc_order() {
+        assert_eq!(
+            parse_nav_destination_command("/nav loc 200 100 10"),
+            Some(Ok(textquest_common::ipc::Command::NavLoc {
+                x: 100.0,
+                y: 200.0,
+                z: 10.0,
+            }))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to loc -25.5 13.25 7"),
+            Some(Ok(textquest_common::ipc::Command::NavLoc {
+                x: 13.25,
+                y: -25.5,
+                z: 7.0,
+            }))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_rejects_bad_loc_inputs() {
+        assert_eq!(
+            parse_nav_destination_command("/nav loc 100 200"),
+            Some(Err(
+                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string()
+            ))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to loc 100 nope 30"),
+            Some(Err("invalid X coordinate: nope".to_string()))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_ignores_non_destination_nav_commands() {
+        assert_eq!(parse_nav_destination_command("/nav reload"), None);
+        assert_eq!(
+            parse_nav_destination_command("/nav waypoint save camp"),
+            None
+        );
+        assert_eq!(parse_nav_destination_command("/nav to guildlobby"), None);
+        assert_eq!(parse_nav_destination_command("/follow tank"), None);
     }
 
     #[test]
