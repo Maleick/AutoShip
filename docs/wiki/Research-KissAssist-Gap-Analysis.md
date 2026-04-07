@@ -115,7 +115,7 @@ Supporting slices:
 - route-state visibility during travel and regroup
 - clearer explanation of zoning blockers and recovery state
 
-### `M7` Anti-Cheat
+### `M5` Anti-Cheat
 
 Supporting slices:
 
