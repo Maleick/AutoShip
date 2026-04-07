@@ -203,6 +203,30 @@ pub struct ContainerSlotInfo {
     pub item: Option<ContainerSlotItemInfo>,
 }
 
+/// A single item in a `CContextMenu` popup.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ContextMenuItem {
+    /// Zero-based index of this item within its parent menu.
+    pub item_index: u32,
+    /// Display label shown in the popup.
+    pub label: String,
+    /// Whether the item is currently selectable.
+    pub enabled: bool,
+    /// Whether the item has a checkmark.
+    pub checked: bool,
+    /// Whether this row is a separator (no label).
+    pub is_separator: bool,
+}
+
+/// Snapshot of one `CContextMenu` popup (a CListWnd with items).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ContextMenuInfo {
+    /// Zero-based index of this menu within `CContextMenuManager`.
+    pub menu_index: u32,
+    /// Items (rows) in this menu.
+    pub items: Vec<ContextMenuItem>,
+}
+
 /// Commands sent from the manager to an injected DLL
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
@@ -561,6 +585,24 @@ pub enum Command {
     /// after Present, saves to a temp file, and restores the previous render mode.
     /// Returns `ScreenshotCaptured` with the file path on success.
     CaptureScreenshot,
+    // Context menus
+    /// Query all currently visible context menus from `CContextMenuManager`.
+    ///
+    /// Returns `Response::ContextMenuState` with a snapshot of every menu currently
+    /// registered in the manager, including item labels and enabled/checked state.
+    /// If no menus are open the response list will be empty.
+    QueryContextMenu,
+    /// Activate a specific item in a specific `CContextMenu`.
+    ///
+    /// Calls `CContextMenuManager::HandleMenu(menu_index, item_index, point)` on the
+    /// game loop thread. The point is set to `(0, 0)` which is correct for
+    /// programmatic activation (EQ ignores the coordinates for most menu items).
+    ActivateContextMenuItem {
+        /// Zero-based index of the menu within `CContextMenuManager`.
+        menu_index: u32,
+        /// Zero-based index of the item within that menu.
+        item_index: u32,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -776,6 +818,24 @@ pub enum Response {
         color: i32,
         /// Timestamp in milliseconds when the message was captured.
         timestamp_ms: u64,
+    },
+    /// Snapshot of all menus visible in `CContextMenuManager`.
+    ///
+    /// Returned in response to `Command::QueryContextMenu`.
+    /// An empty `menus` list means no context menus are currently open.
+    ContextMenuState {
+        /// All menus currently registered in `CContextMenuManager`.
+        menus: Vec<ContextMenuInfo>,
+    },
+    /// Confirmation that `ActivateContextMenuItem` was dispatched.
+    ///
+    /// `success` is `false` if the menu/item indices were out of range or the
+    /// `CContextMenuManager` instance was unavailable.
+    ContextMenuActivated {
+        /// Whether `HandleMenu` was called successfully.
+        success: bool,
+        /// Human-readable status message.
+        message: String,
     },
 }
 
@@ -1827,6 +1887,97 @@ mod tests {
             assert_eq!(diagnostics.waypoint_count, 5);
         } else {
             panic!("expected NavDiagnosticsResult");
+        }
+    }
+
+    #[test]
+    fn query_context_menu_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::QueryContextMenu;
+        let encoded = encode(&cmd).expect("encode QueryContextMenu");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode QueryContextMenu");
+        assert_eq!(decoded, Command::QueryContextMenu);
+    }
+
+    #[test]
+    fn activate_context_menu_item_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::ActivateContextMenuItem {
+            menu_index: 0,
+            item_index: 3,
+        };
+        let encoded = encode(&cmd).expect("encode ActivateContextMenuItem");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode ActivateContextMenuItem");
+        if let Command::ActivateContextMenuItem {
+            menu_index,
+            item_index,
+        } = decoded
+        {
+            assert_eq!(menu_index, 0);
+            assert_eq!(item_index, 3);
+        } else {
+            panic!("expected ActivateContextMenuItem");
+        }
+    }
+
+    #[test]
+    fn context_menu_state_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let resp = Response::ContextMenuState {
+            menus: vec![ContextMenuInfo {
+                menu_index: 0,
+                items: vec![
+                    ContextMenuItem {
+                        item_index: 0,
+                        label: "Attack".to_string(),
+                        enabled: true,
+                        checked: false,
+                        is_separator: false,
+                    },
+                    ContextMenuItem {
+                        item_index: 1,
+                        label: String::new(),
+                        enabled: false,
+                        checked: false,
+                        is_separator: true,
+                    },
+                    ContextMenuItem {
+                        item_index: 2,
+                        label: "Inspect".to_string(),
+                        enabled: true,
+                        checked: false,
+                        is_separator: false,
+                    },
+                ],
+            }],
+        };
+        let encoded = encode(&resp).expect("encode ContextMenuState");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode ContextMenuState");
+        if let Response::ContextMenuState { menus } = decoded {
+            assert_eq!(menus.len(), 1);
+            assert_eq!(menus[0].items.len(), 3);
+            assert_eq!(menus[0].items[0].label, "Attack");
+            assert!(menus[0].items[1].is_separator);
+            assert_eq!(menus[0].items[2].label, "Inspect");
+        } else {
+            panic!("expected ContextMenuState");
+        }
+    }
+
+    #[test]
+    fn context_menu_activated_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let resp = Response::ContextMenuActivated {
+            success: true,
+            message: "HandleMenu dispatched".to_string(),
+        };
+        let encoded = encode(&resp).expect("encode ContextMenuActivated");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode ContextMenuActivated");
+        if let Response::ContextMenuActivated { success, message } = decoded {
+            assert!(success);
+            assert_eq!(message, "HandleMenu dispatched");
+        } else {
+            panic!("expected ContextMenuActivated");
         }
     }
 }
