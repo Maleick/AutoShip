@@ -32,12 +32,17 @@ pub enum StealthError {
     VirtualProtect(String),
     #[error("failed to generate encryption key")]
     KeyGeneration,
+    #[error("sleep obfuscation is incompatible with active IPC background threads")]
+    IncompatibleWithIpc,
 }
 
 /// Initialize per-frame sleep obfuscation.
 pub fn init() -> Result<(), StealthError> {
     if SLEEP_INITIALIZED.load(Ordering::Acquire) {
         return Ok(());
+    }
+    if crate::ipc::is_running() {
+        return Err(StealthError::IncompatibleWithIpc);
     }
     text_encrypt::init()?;
     SLEEP_INITIALIZED.store(true, Ordering::Release);
