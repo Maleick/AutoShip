@@ -260,6 +260,29 @@ impl BuffSlot {
     }
 }
 
+/// A spell stored in a local-player spell slot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpellSlot {
+    /// Slot index in the backing EQ array.
+    ///
+    /// Spell gems use zero-based slot indices; spellbook entries use book-slot indices.
+    pub slot: usize,
+    /// Spell ID stored in this slot.
+    pub spell_id: u32,
+    /// Spell name resolved from the live spell database, when available.
+    pub spell_name: Option<String>,
+}
+
+impl SpellSlot {
+    /// Human-readable label for the spell in this slot.
+    #[must_use]
+    pub fn display_name(&self) -> String {
+        self.spell_name
+            .clone()
+            .unwrap_or_else(|| format!("Spell {}", self.spell_id))
+    }
+}
+
 /// Active spell cast state for a spawn.
 /// Backed by `PlayerZoneClient::CastingData`; local spawns may also include gem timers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -440,6 +463,10 @@ pub struct SpawnInfo {
     pub race_id: u32,
     /// Active buff slots (populated only for local player via `read_buff_slots`).
     pub buff_slots: Vec<BuffSlot>,
+    /// Scribed spellbook entries (populated only for the local player).
+    pub spellbook: Vec<SpellSlot>,
+    /// Currently memorized spell gems (populated only for the local player).
+    pub memorized_spells: Vec<SpellSlot>,
     /// Cast state for this spawn. Local player snapshots also include gem recast timers.
     pub cast_state: Option<CastState>,
 }
@@ -519,7 +546,20 @@ impl fmt::Display for SpawnInfo {
             self.y,
             self.x,
             self.z,
-        )
+        )?;
+        if !self.memorized_spells.is_empty() {
+            let spellset = self
+                .memorized_spells
+                .iter()
+                .map(|spell| format!("G{} {}", spell.slot + 1, spell.display_name()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            write!(f, " Gems:[{spellset}]")?;
+        }
+        if !self.spellbook.is_empty() {
+            write!(f, " Spellbook:{}", self.spellbook.len())?;
+        }
+        Ok(())
     }
 }
 
@@ -562,6 +602,28 @@ mod tests {
             caster_level: 60,
         };
         assert!(!active.is_empty());
+    }
+
+    #[test]
+    fn spell_slot_display_name_prefers_resolved_name() {
+        let slot = SpellSlot {
+            slot: 3,
+            spell_id: 123,
+            spell_name: Some("Complete Heal".to_string()),
+        };
+
+        assert_eq!(slot.display_name(), "Complete Heal");
+    }
+
+    #[test]
+    fn spell_slot_display_name_falls_back_to_spell_id() {
+        let slot = SpellSlot {
+            slot: 7,
+            spell_id: 456,
+            spell_name: None,
+        };
+
+        assert_eq!(slot.display_name(), "Spell 456");
     }
 
     #[test]
@@ -745,6 +807,8 @@ mod tests {
             is_gm: false,
             race_id: 1,
             buff_slots: Vec::new(),
+            spellbook: Vec::new(),
+            memorized_spells: Vec::new(),
             cast_state: None,
         }
     }

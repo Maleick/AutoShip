@@ -106,7 +106,7 @@ jobs:
             set "GITHUB_WORKSPACE=%CD%"
           )
           echo [info] Using GITHUB_WORKSPACE as "!GITHUB_WORKSPACE!"
-          for %%D in ("!GITHUB_WORKSPACE!" "C:\actions-runner\_work\TextQuest\TextQuest" "C:\actions-runner\_work\TextQuest") do (
+          for %%D in ("!GITHUB_WORKSPACE!") do (
             git config --global --add safe.directory "%%~D" || (
               echo [fatal] Unable to add safe.directory for %%~D.
               exit /b 1
@@ -225,7 +225,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@v3.94.2
+        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b # v3.94.2
         with:
           extra_args: --only-verified
 

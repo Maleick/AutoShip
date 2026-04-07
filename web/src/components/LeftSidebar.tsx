@@ -4,7 +4,9 @@ import {
   UsersThree,
   Globe,
   ShieldWarning,
+  Coins,
 } from "@phosphor-icons/react";
+import type { ViewId } from "../App";
 
 export type ActiveView = "engagements" | "formations" | "map" | "security";
 
@@ -108,3 +110,4 @@ export default function LeftSidebar({ activeView, onNavigate }: LeftSidebarProps
     </aside>
   );
 }
+

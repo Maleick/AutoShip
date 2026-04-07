@@ -279,12 +279,11 @@ fn resolve_server_id(name: &str) -> Option<i32> {
 fn try_join_server_api(eqmain_base: u64) -> bool {
     use textquest_common::offsets::eqmain as off;
 
-    let Some(api_ptr) = crate::login::eqmain::resolve_login_server_api(eqmain_base) else {
+    let Some(api) = crate::login::eqmain::resolve_login_server_api(eqmain_base) else {
         tracing::warn!("JoinServer: LoginServerAPI not resolved");
         return false;
     };
 
-    let api = unsafe { *(api_ptr as *const usize) };
     if api == 0 {
         tracing::warn!("JoinServer: LoginServerAPI is null");
         return false;

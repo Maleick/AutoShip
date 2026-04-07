@@ -29,6 +29,11 @@ static PENDING_COMMANDS: OnceLock<Mutex<Vec<Command>>> = OnceLock::new();
 /// Flag checked by the listener thread to know when to exit.
 static IPC_RUNNING: AtomicBool = AtomicBool::new(false);
 
+/// True when the IPC listener thread is active.
+pub fn is_running() -> bool {
+    IPC_RUNNING.load(Ordering::SeqCst)
+}
+
 /// Start IPC: shared memory writer + command listener thread.
 ///
 /// `client_id` identifies this EQ client instance. `token` is the session token
@@ -176,7 +181,7 @@ fn handle_immediate_command(cmd: &Command) -> bool {
                 tracing::info!("Routing StartLogin through main-thread GiveTime hook");
                 // Clone password before moving into queue_login — we need it
                 // for the WM_CHAR backup path on this (IPC) thread.
-                let pw_for_wm_char = (*password).clone();
+                let pw_for_wm_char = zeroize::Zeroizing::new((*password).clone());
                 crate::hooks::eqmain_hook::queue_login(
                     account_name,
                     password,

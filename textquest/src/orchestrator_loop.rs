@@ -208,7 +208,7 @@ impl OrchestratorLoop {
                     if let Some(session) = self.client_manager.get_mut(client_id) {
                         let pid = session.pid;
                         session.slot_lifecycle = SlotLifecycle::Live;
-                        let token = self.orchestrator.register_client(pid);
+                        self.orchestrator.register_client(pid);
 
                         // Store the session token for the DLL
                         if let Some(name) = &session.character_name {
@@ -218,8 +218,7 @@ impl OrchestratorLoop {
                         tracing::info!(
                             client_id,
                             pid,
-                            "Client ready — registered with orchestrator (token: {:?})",
-                            &token[..4]
+                            "Client ready — registered with orchestrator"
                         );
                         events.push(LoopEvent::ClientRegistered { pid });
                     }

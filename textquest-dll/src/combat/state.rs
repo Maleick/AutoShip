@@ -5,9 +5,10 @@
 //! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
 
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
 use textquest_common::combat::{
-    CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
+    CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
 };
 use textquest_common::nav::Waypoint;
 use textquest_common::types::SpawnData;
@@ -20,7 +21,10 @@ use super::humanize::CombatPersonality;
 use super::mana::ManaGovernor;
 use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
-use super::strategy::{ClassStrategy, CombatContext, GroupMemberState, build_strategy};
+use super::strategy::{
+    ClassStrategy, CombatContext, GroupMemberState, build_strategy, pet_attack_focused,
+    pet_back_off,
+};
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
@@ -37,10 +41,25 @@ enum CombatState {
     },
     Casting {
         spell_slot: u8,
+        target_id: u32,
         ticks_remaining: u32,
     },
     OnGcd,
     Recovering,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpellCastSource {
+    PreferredGem,
+    FallbackGem,
+    SpellIdDirect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlannedSpellCast {
+    gem_id: u8,
+    spell_id: i32,
+    source: SpellCastSource,
 }
 
 /// Normalize a user/config spell slot into a safe EQ gem index.
@@ -59,6 +78,41 @@ fn normalize_gem_id(slot: u8) -> Option<u8> {
         }
         _ => None,
     }
+}
+
+/// Build a safe `/useitem` slash command for an item name.
+///
+/// EQ item names commonly contain spaces, so they are quoted. Quotes and control
+/// characters are stripped to avoid malformed commands or command injection.
+fn use_item_command(item_name: &str) -> Option<String> {
+    let sanitized = item_name
+        .chars()
+        .filter(|ch| !ch.is_control() && *ch != '"')
+        .collect::<String>();
+    let trimmed = sanitized.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(format!("/useitem \"{trimmed}\""))
+    }
+}
+
+/// Stable key for tracking item-action retry windows in the ability cooldown map.
+///
+/// `ActionType::Item` currently carries only a display string, so the runtime
+/// needs a deterministic surrogate key to reuse the existing integer-keyed
+/// cooldown tracker. FNV-1a is tiny, stable across runs, and sufficient for
+/// best-effort retry throttling; a collision would only cause two clickies to
+/// share a retry window, which is acceptable until real item IDs are wired in.
+/// The sign bit is masked off so the result always fits the positive `i32`
+/// keyspace used elsewhere by the ability tracker.
+fn item_action_key(item_name: &str) -> i32 {
+    let mut hash = 0x811C_9DC5u32;
+    for byte in item_name.bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    (hash & 0x7FFF_FFFF) as i32
 }
 
 /// The main combat state machine for a single EQ character.
@@ -93,6 +147,8 @@ pub struct Combatant {
     tick_count: u32,
     client_id: u32,
     config: CombatConfig,
+    pending_cast_result: Option<CastResult>,
+    last_cast_result: Option<CastResult>,
 }
 
 impl Combatant {
@@ -140,6 +196,8 @@ impl Combatant {
             tick_count: 0,
             client_id,
             config,
+            pending_cast_result: None,
+            last_cast_result: None,
         }
     }
 
@@ -202,25 +260,41 @@ impl Combatant {
         ) && target.is_none()
         {
             tracing::warn!("Combat target lost (zone/despawn/disconnect) — auto-disengaging");
-            let cleanup_ctx = CombatContext {
-                player,
-                target: None,
-                nearby_enemies: nearby,
-                group_members: &self.group_members,
-                config: &self.config,
-                tick: self.tick_count,
-                in_combat: false,
-                ch_chain_slot: None,
-                active_buffs: &[],
-                buff_info: &[],
-                target_is_mezzed: false,
-                extended_targets: None,
-            };
             // If we were mid-cast, notify the strategy this was an interrupt (not completion)
-            if let CombatState::Casting { spell_slot, .. } = &self.state {
-                self.strategy.on_cast_interrupted(&cleanup_ctx, *spell_slot);
+            if let CombatState::Casting {
+                spell_slot,
+                target_id,
+                ..
+            } = &self.state
+            {
+                self.finish_cast(
+                    player,
+                    None,
+                    nearby,
+                    false,
+                    *spell_slot,
+                    *target_id,
+                    CastResult::Interrupted,
+                );
+            } else {
+                let group_members = std::mem::take(&mut self.group_members);
+                let cleanup_ctx = CombatContext {
+                    player,
+                    target: None,
+                    nearby_enemies: nearby,
+                    group_members: &group_members,
+                    config: &self.config,
+                    tick: self.tick_count,
+                    in_combat: false,
+                    ch_chain_slot: None,
+                    active_buffs: &[],
+                    buff_info: &[],
+                    target_is_mezzed: false,
+                    extended_targets: None,
+                };
+                self.strategy.on_action_complete(&cleanup_ctx);
+                self.group_members = group_members;
             }
-            self.strategy.on_action_complete(&cleanup_ctx);
             crate::eq::toggle_auto_attack(false);
             // Clear DoT tracking — target is gone (zone/despawn/disconnect).
             if let CombatState::Engaging { target_id } = &self.state {
@@ -240,7 +314,48 @@ impl Combatant {
             self.tick_disciplines(player);
         }
 
-        // Build context snapshot for this tick.
+        let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
+        let extended_targets = if eq_base == 0 {
+            None
+        } else {
+            unsafe { super::xtarget::read_extended_targets(eq_base) }
+        };
+
+        let (current_target_id, pet_status, pet_action) = {
+            // Build context snapshot for this tick.
+            let ctx = CombatContext {
+                player,
+                target,
+                nearby_enemies: nearby,
+                group_members: &self.group_members,
+                config: &self.config,
+                tick: self.tick_count,
+                in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
+                ch_chain_slot: None,
+                active_buffs: &[],
+                buff_info: &[],
+                target_is_mezzed: false,
+                extended_targets: extended_targets.as_ref(),
+            };
+
+            // --- Call on_engage when first entering Engaging state ---
+            if self.needs_on_engage {
+                self.needs_on_engage = false;
+                self.strategy.on_engage(&ctx);
+            }
+
+            (
+                ctx.target.map(|current| current.spawn_id),
+                ctx.pet_status(),
+                self.strategy.pet_action(&ctx),
+            )
+        };
+        if let Some(action) = pet_action {
+            if self.execute_pet_action(current_target_id, pet_status, action) {
+                return;
+            }
+        }
+
         let ctx = CombatContext {
             player,
             target,
@@ -253,28 +368,34 @@ impl Combatant {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
-            extended_targets: None,
+            extended_targets: extended_targets.as_ref(),
         };
 
-        // --- Call on_engage when first entering Engaging state ---
-        if self.needs_on_engage {
-            self.needs_on_engage = false;
-            self.strategy.on_engage(&ctx);
-        }
-
         // --- HolyShit evaluation (always runs first) ---
-        if let Some(action) = self.holyshit.evaluate(&ctx) {
+        if let Some(action) = self.holyshit.evaluate(&ctx).cloned() {
             // If HolyShit fires while we're mid-cast, notify the strategy that
             // the current cast was interrupted so class-specific state gets cleaned
             // up (e.g., bard melody index, cleric rez_pending).
-            if let CombatState::Casting { spell_slot, .. } = &self.state {
-                self.strategy.on_cast_interrupted(&ctx, *spell_slot);
-                self.strategy.on_action_complete(&ctx);
+            if let CombatState::Casting {
+                spell_slot,
+                target_id,
+                ..
+            } = &self.state
+            {
+                self.finish_cast(
+                    player,
+                    target,
+                    nearby,
+                    true,
+                    *spell_slot,
+                    *target_id,
+                    CastResult::Interrupted,
+                );
             }
 
             match action {
                 HolyShitAction::CastSpell(slot) => {
-                    let Some(gem_id) = normalize_gem_id(*slot) else {
+                    let Some(gem_id) = normalize_gem_id(slot) else {
                         tracing::warn!(slot, "HolyShit: skipping cast with invalid spell slot");
                         return;
                     };
@@ -284,6 +405,7 @@ impl Combatant {
                     self.gcd.consume();
                     self.state = CombatState::Casting {
                         spell_slot: gem_id,
+                        target_id: target.map(|t| t.spawn_id).unwrap_or(0),
                         ticks_remaining: 20,
                     };
                     return;
@@ -291,7 +413,7 @@ impl Combatant {
                 HolyShitAction::UseAbility(ability_id) => {
                     if !self
                         .ability_cooldowns
-                        .can_use(*ability_id as i32, self.tick_count)
+                        .can_use(ability_id as i32, self.tick_count)
                     {
                         tracing::debug!(
                             ability_id,
@@ -300,9 +422,9 @@ impl Combatant {
                         return;
                     }
                     tracing::warn!(ability_id, "HolyShit: using emergency ability");
-                    crate::eq::do_combat_ability(*ability_id as i32, true);
+                    crate::eq::do_combat_ability(ability_id as i32, true);
                     self.ability_cooldowns
-                        .consume(*ability_id as i32, None, self.tick_count);
+                        .consume(ability_id as i32, None, self.tick_count);
                     self.gcd.consume();
                     self.state = CombatState::OnGcd;
                     return;
@@ -361,11 +483,13 @@ impl Combatant {
                     return;
                 }
 
+                let selected_spell_target = self.strategy.select_target(&ctx);
+
                 // Ask strategy for a spell target (may differ from assist target).
                 // Healers target lowest-HP group member, enchanters target off-mobs
                 // for mez, etc. This only influences spell targeting — it does NOT
                 // override the assist target for auto-attack.
-                if let Some(spell_target) = self.strategy.select_target(&ctx)
+                if let Some(spell_target) = selected_spell_target
                     && target.is_none_or(|t| t.spawn_id != spell_target)
                 {
                     tracing::debug!(
@@ -418,11 +542,16 @@ impl Combatant {
                             target = action.target_id,
                             "Rotation engine selected action"
                         );
-                        crate::eq::cast_spell(0, spell_id);
+                        let memorized_spells = crate::eq::read_memorized_spells();
+                        let cast_plan = plan_spell_cast(None, spell_id, &memorized_spells).expect(
+                            "rotation spell planning without preferred slot should be valid",
+                        );
+                        crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
                         let cast_delay = u32::from(self.personality.next_cast_delay());
                         self.gcd.consume();
                         self.state = CombatState::Casting {
                             spell_slot: 0,
+                            target_id: action.target_id,
                             ticks_remaining: 20 + cast_delay,
                         };
                     }
@@ -438,19 +567,47 @@ impl Combatant {
                         "Strategy selected spell"
                     );
 
-                    let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                    let memorized_spells = crate::eq::read_memorized_spells();
+                    let Some(cast_plan) =
+                        plan_spell_cast(Some(spell.slot), spell.spell_id, &memorized_spells)
+                    else {
                         tracing::warn!(slot = spell.slot, "Skipping cast with invalid spell slot");
                         return;
                     };
 
+                    if spell.spell_id > 0 {
+                        match cast_plan.source {
+                            SpellCastSource::PreferredGem => {}
+                            SpellCastSource::FallbackGem => {
+                                tracing::info!(
+                                    requested_slot = spell.slot,
+                                    fallback_gem = cast_plan.gem_id,
+                                    spell_id = spell.spell_id,
+                                    name = %spell.name,
+                                    "Configured gem missing spell, falling back to memorized gem"
+                                );
+                            }
+                            SpellCastSource::SpellIdDirect => {
+                                tracing::info!(
+                                    spell_id = spell.spell_id,
+                                    name = %spell.name,
+                                    "Spell not memorized in any gem, casting by spell_id for EQ auto-memorization"
+                                );
+                            }
+                        }
+                    }
+
                     // Call the real EQ CastSpell function via FFI
-                    crate::eq::cast_spell(gem_id, spell.spell_id);
+                    crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
 
                     // Apply humanization delay (cast_start_delay absorbed into cast time)
                     let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
                     self.state = CombatState::Casting {
                         spell_slot: gem_id,
+                        target_id: selected_spell_target
+                            .or_else(|| target.map(|t| t.spawn_id))
+                            .unwrap_or(0),
                         ticks_remaining: 20 + cast_delay, // base ~1s + jitter
                     };
                 }
@@ -458,7 +615,9 @@ impl Combatant {
             }
 
             CombatState::Casting {
-                ticks_remaining, ..
+                spell_slot,
+                target_id,
+                ticks_remaining,
             } => {
                 // Healer heal-cancel: if lowest HP member recovered above 85%,
                 // duck to interrupt the heal and save mana.
@@ -472,31 +631,42 @@ impl Combatant {
                         tracing::info!("Healer: canceling heal — group HP recovered above 85%");
                         // Duck to interrupt cast (write STANDSTATE=4 briefly)
                         crate::eq::slash_command("/duck");
-                        self.state = CombatState::OnGcd;
-                        self.gcd.consume();
+                        self.finish_cast(
+                            player,
+                            target,
+                            nearby,
+                            true,
+                            *spell_slot,
+                            *target_id,
+                            CastResult::Aborted,
+                        );
                         return;
                     }
                 }
 
-                if *ticks_remaining == 0 {
-                    tracing::trace!("Cast complete, transitioning to OnGcd");
-                    // Notify strategy that a cast/action completed (e.g., bard twist advance)
-                    let ctx = CombatContext {
+                if let Some(result) = self.pending_cast_result.take() {
+                    self.finish_cast(
                         player,
                         target,
-                        nearby_enemies: nearby,
-                        group_members: &self.group_members,
-                        config: &self.config,
-                        tick: self.tick_count,
-                        in_combat: true,
-                        ch_chain_slot: None,
-                        active_buffs: &[],
-                        buff_info: &[],
-                        target_is_mezzed: false,
-                        extended_targets: None,
-                    };
-                    self.strategy.on_action_complete(&ctx);
-                    self.state = CombatState::OnGcd;
+                        nearby,
+                        true,
+                        *spell_slot,
+                        *target_id,
+                        result,
+                    );
+                    return;
+                }
+
+                if *ticks_remaining == 0 {
+                    self.finish_cast(
+                        player,
+                        target,
+                        nearby,
+                        true,
+                        *spell_slot,
+                        *target_id,
+                        CastResult::Success,
+                    );
                 }
             }
 
@@ -540,14 +710,12 @@ impl Combatant {
             },
             CombatState::Casting {
                 spell_slot,
+                target_id,
                 ticks_remaining: _,
-            } => {
-                let tid = self.assist_target.unwrap_or(0);
-                CombatStatus::Casting {
-                    spell_slot: *spell_slot,
-                    target_id: tid,
-                }
-            }
+            } => CombatStatus::Casting {
+                spell_slot: *spell_slot,
+                target_id: *target_id,
+            },
             CombatState::OnGcd => CombatStatus::OnGcd,
             CombatState::Recovering => CombatStatus::Recovering,
         }
@@ -571,8 +739,7 @@ impl Combatant {
         // Pet classes: send pet to attack with /pet focus for single-target
         let class_id = self.strategy.class_id();
         if PET_CLASSES.contains(&class_id) {
-            crate::eq::slash_command("/pet attack");
-            crate::eq::slash_command("/pet focus");
+            pet_attack_focused();
             tracing::info!(class_id, "Sent /pet attack + /pet focus");
         }
 
@@ -622,7 +789,7 @@ impl Combatant {
         // Pet classes: call pet back on disengage so it doesn't pull adds
         let class_id = self.strategy.class_id();
         if PET_CLASSES.contains(&class_id) {
-            crate::eq::slash_command("/pet back");
+            pet_back_off();
             tracing::info!(class_id, "Sent /pet back on disengage");
         }
 
@@ -645,6 +812,59 @@ impl Combatant {
     /// Clear the flee flag after the orchestrator has dispatched a flee waypoint.
     pub fn clear_flee_requested(&mut self) {
         self.flee_requested = false;
+    }
+
+    /// Queue a cast outcome parsed from chat/system feedback for the current cast.
+    pub fn observe_chat_message(&mut self, text: &str) -> Option<CastResult> {
+        let result = CastResult::from_feedback_message(text)?;
+        if matches!(self.state, CombatState::Casting { .. }) {
+            self.pending_cast_result = Some(result);
+        }
+        Some(result)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn finish_cast(
+        &mut self,
+        player: &SpawnData,
+        target: Option<&SpawnData>,
+        nearby: &[SpawnData],
+        in_combat: bool,
+        spell_slot: u8,
+        target_id: u32,
+        result: CastResult,
+    ) {
+        let group_members = std::mem::take(&mut self.group_members);
+        let ctx = CombatContext {
+            player,
+            target,
+            nearby_enemies: nearby,
+            group_members: &group_members,
+            config: &self.config,
+            tick: self.tick_count,
+            in_combat,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        self.pending_cast_result = None;
+        self.last_cast_result = Some(result);
+        self.strategy.on_cast_outcome(&ctx, spell_slot, result);
+        self.strategy.on_action_complete(&ctx);
+
+        tracing::debug!(spell_slot, target_id, result = %result, "Cast resolved");
+
+        self.state = match result {
+            CastResult::OutOfMana => CombatState::Recovering,
+            CastResult::NotReady | CastResult::Pending | CastResult::Recovering => {
+                CombatState::Engaging { target_id }
+            }
+            _ => CombatState::OnGcd,
+        };
+        self.group_members = group_members;
     }
 
     /// Fire class-appropriate melee skills (kick, bash, taunt, backstab, etc.)
@@ -747,6 +967,56 @@ impl Combatant {
             return;
         }
     }
+
+    fn execute_pet_action(
+        &mut self,
+        current_target_id: Option<u32>,
+        pet_status: super::strategy::PetStatus,
+        action: PetAction,
+    ) -> bool {
+        match action {
+            PetAction::Attack => {
+                let Some(target_id) = current_target_id else {
+                    return false;
+                };
+                crate::eq::slash_command("/pet attack");
+                crate::eq::slash_command("/pet focus");
+                tracing::info!(target_id, "Sent /pet attack + /pet focus");
+                false
+            }
+            PetAction::Buff { spell } => {
+                let Some(pet_id) = pet_status.spawn_id else {
+                    return false;
+                };
+                let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                    tracing::warn!(
+                        slot = spell.slot,
+                        "Skipping pet buff with invalid spell slot"
+                    );
+                    return false;
+                };
+
+                let original_target = current_target_id;
+                if original_target != Some(pet_id) {
+                    crate::eq::slash_command(&format!("/target id {pet_id}"));
+                }
+                crate::eq::cast_spell(gem_id, spell.spell_id);
+                if let Some(original_target) = original_target
+                    && original_target != pet_id
+                {
+                    crate::eq::slash_command(&format!("/target id {original_target}"));
+                }
+
+                let cast_delay = u32::from(self.personality.next_cast_delay());
+                self.gcd.consume();
+                self.state = CombatState::Casting {
+                    spell_slot: gem_id,
+                    ticks_remaining: 20 + cast_delay,
+                };
+                true
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -754,6 +1024,7 @@ impl Combatant {
 mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
+    use crate::combat::rotation;
     use textquest_common::combat::CombatConfig;
 
     fn test_config() -> CombatConfig {
@@ -772,6 +1043,34 @@ mod tests {
         t.name = "TestMob".into();
         t.spawn_id = 100;
         t
+    }
+
+    fn item_rotation_group_with(
+        item_name: &str,
+        target_selector: textquest_common::combat::TargetSelector,
+        combat_state_req: textquest_common::combat::CombatStateReq,
+    ) -> RotationGroup {
+        RotationGroup {
+            name: "ItemTest".into(),
+            target_selector,
+            combat_state_req,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry(
+                "UseClicky",
+                ActionType::Item(item_name.to_string()),
+            )],
+            current_step: 0,
+        }
+    }
+
+    fn item_rotation_group(item_name: &str) -> RotationGroup {
+        item_rotation_group_with(
+            item_name,
+            textquest_common::combat::TargetSelector::SelfOnly,
+            textquest_common::combat::CombatStateReq::Combat,
+        )
     }
 
     #[test]
@@ -805,6 +1104,7 @@ mod tests {
         // Force into Casting state
         c.state = CombatState::Casting {
             spell_slot: 1,
+            target_id: 100,
             ticks_remaining: 10,
         };
 
@@ -1044,6 +1344,63 @@ mod tests {
     }
 
     #[test]
+    fn plan_spell_cast_prefers_configured_gem_when_spell_is_loaded() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 0, 0, 1500, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 3,
+                spell_id: 1500,
+                source: SpellCastSource::PreferredGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_falls_back_to_other_matching_gem() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 1500, 0, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 1,
+                spell_id: 1500,
+                source: SpellCastSource::FallbackGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_uses_spell_id_when_not_memorized_anywhere() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 0, 0, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 0,
+                spell_id: 1500,
+                source: SpellCastSource::SpellIdDirect,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_allows_rotation_spell_without_preferred_slot() {
+        let plan = plan_spell_cast(None, 1500, &[0, 0, 1500, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 2,
+                spell_id: 1500,
+                source: SpellCastSource::FallbackGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_rejects_invalid_preferred_slot() {
+        assert_eq!(plan_spell_cast(Some(99), 1500, &[0, 0, 0]), None);
+    }
+
+    #[test]
     fn clear_flee_requested_restores_idle() {
         let mut c = Combatant::new(1, 0, test_config());
         c.flee_requested = true;
@@ -1141,6 +1498,7 @@ mod tests {
         let mut c = Combatant::new(1, 0, test_config());
         c.state = CombatState::Casting {
             spell_slot: 3,
+            target_id: 42,
             ticks_remaining: 10,
         };
         if let CombatStatus::Casting { spell_slot, .. } = c.status() {
@@ -1148,6 +1506,69 @@ mod tests {
         } else {
             panic!("expected Casting status");
         }
+    }
+
+    #[test]
+    fn chat_feedback_resolves_fizzle_cast_outcome() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Casting {
+            spell_slot: 2,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+        };
+        assert_eq!(
+            c.observe_chat_message("Your spell fizzles!"),
+            Some(CastResult::Fizzled)
+        );
+
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(c.last_cast_result, Some(CastResult::Fizzled));
+        assert!(matches!(c.status(), CombatStatus::OnGcd));
+    }
+
+    #[test]
+    fn chat_feedback_out_of_mana_moves_to_recovering() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Casting {
+            spell_slot: 2,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+        };
+        c.observe_chat_message("You don't have enough mana to cast this spell.");
+
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(c.last_cast_result, Some(CastResult::OutOfMana));
+        assert!(matches!(c.status(), CombatStatus::Recovering));
+    }
+
+    #[test]
+    fn chat_feedback_not_ready_returns_to_engaging() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Casting {
+            spell_slot: 4,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+        };
+        c.observe_chat_message("Spell is not ready yet, please wait.");
+
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(c.last_cast_result, Some(CastResult::NotReady));
+        assert!(matches!(
+            c.status(),
+            CombatStatus::Engaging { target_id: 100 }
+        ));
     }
 
     #[test]

@@ -146,14 +146,161 @@ impl ExtendedTargetList {
             .count()
     }
 
+    /// Return active extended-target spawn IDs that represent the group's
+    /// current primary kill target(s), not CC adds.
+    pub fn primary_target_spawn_ids(&self) -> Vec<u32> {
+        self.slots
+            .iter()
+            .filter(|s| {
+                s.is_active()
+                    && matches!(
+                        s.slot_type,
+                        XTargetType::GroupTanksTarget
+                            | XTargetType::GroupAssistTarget
+                            | XTargetType::GroupPullerTarget
+                            | XTargetType::RaidAssist1Target
+                            | XTargetType::RaidAssist2Target
+                            | XTargetType::RaidAssist3Target
+                    )
+            })
+            .map(|s| s.spawn_id)
+            .collect()
+    }
+
+    /// Return active extended-target spawn IDs that look like CC adds.
+    ///
+    /// These are auto-haters that are not also referenced by the group's
+    /// primary-target slots, which keeps CC helpers from selecting the mob the
+    /// group is already burning down.
+    pub fn cc_add_spawn_ids(&self) -> Vec<u32> {
+        let primary_targets = self.primary_target_spawn_ids();
+        self.slots
+            .iter()
+            .filter(|s| {
+                s.is_active()
+                    && s.slot_type.is_auto_hater()
+                    && !primary_targets.contains(&s.spawn_id)
+            })
+            .map(|s| s.spawn_id)
+            .collect()
+    }
+
+    pub fn first_cc_add_spawn_id(&self) -> Option<u32> {
+        self.cc_add_spawn_ids().into_iter().next()
+    }
+
     pub fn get_by_type(&self, slot_type: XTargetType) -> Option<&ExtendedTargetSlot> {
         self.slots
             .iter()
             .find(|s| s.is_active() && s.slot_type == slot_type)
     }
 
+    pub fn pet(&self) -> Option<&ExtendedTargetSlot> {
+        self.get_by_type(XTargetType::MyPet)
+    }
+
+    pub fn pet_spawn_id(&self) -> Option<u32> {
+        self.pet().map(|slot| slot.spawn_id)
+    }
+
+    pub fn pet_target(&self) -> Option<&ExtendedTargetSlot> {
+        self.get_by_type(XTargetType::MyPetTarget)
+    }
+
+    pub fn pet_target_id(&self) -> Option<u32> {
+        self.pet_target().map(|slot| slot.spawn_id)
+    }
+
     pub fn active_slots(&self) -> Vec<&ExtendedTargetSlot> {
         self.slots.iter().filter(|s| s.is_active()).collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hate-target categories — classify off-target adds for CC / kiting decisions
+// ---------------------------------------------------------------------------
+
+/// Classifies an off-target mob for CC assignment and kiting priority decisions.
+///
+/// The category drives two independent priority axes:
+/// * **CC priority** — which add should be controlled first.
+/// * **Kite priority** — which add should be kited away from the group first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum HateTargetCategory {
+    /// Mob is on the XTarget auto-hater list — actively attacking a group member.
+    /// Highest default CC priority; must be controlled before it deals damage.
+    #[default]
+    ActiveHater,
+    /// Mob is a spellcaster (nuker, healer, or debuffer).
+    /// Snare/root preferred so it cannot kite away or continue casting.
+    CasterAdd,
+    /// Mob is a melee attacker that has joined the fight.
+    /// Mez/stun preferred for full lockdown.
+    MeleeAdd,
+    /// Mob is moving toward the group but has not yet engaged.
+    /// Good kite candidate before it fully joins the fight.
+    Approaching,
+    /// Mob is in the area but has not aggroed.
+    /// Lowest priority — handle only when all engaged adds are controlled.
+    Roamer,
+}
+
+impl HateTargetCategory {
+    /// CC assignment priority (lower = higher priority).
+    ///
+    /// Order: `ActiveHater` → `CasterAdd` → `Approaching` → `MeleeAdd` → `Roamer`.
+    #[must_use]
+    pub fn cc_priority(self) -> u8 {
+        match self {
+            Self::ActiveHater => 1,
+            Self::CasterAdd => 2,
+            Self::Approaching => 3,
+            Self::MeleeAdd => 4,
+            Self::Roamer => 5,
+        }
+    }
+
+    /// Kiting priority (lower = more urgent to kite away).
+    ///
+    /// Casters are kited first (prevent ranged damage), followed by approaching
+    /// mobs (intercept before melee contact), then active melee, then roamers.
+    #[must_use]
+    pub fn kite_priority(self) -> u8 {
+        match self {
+            Self::CasterAdd => 1,
+            Self::Approaching => 2,
+            Self::ActiveHater => 3,
+            Self::MeleeAdd => 4,
+            Self::Roamer => 5,
+        }
+    }
+
+    /// Returns `true` if this category should be handled with CC rather than kiting.
+    ///
+    /// [`CasterAdd`] appears in both `prefers_cc` and [`prefers_kite`] because casters
+    /// are dangerous at range: the group wants them either silenced via CC (ideal) or
+    /// kited far enough away that their spells land out of range (fallback when no CC
+    /// is available). Callers should prefer CC when a CC member is ready; fall back to
+    /// kiting only when no CC ability is off cooldown.
+    ///
+    /// [`CasterAdd`]: Self::CasterAdd
+    /// [`prefers_kite`]: Self::prefers_kite
+    #[must_use]
+    pub fn prefers_cc(self) -> bool {
+        matches!(self, Self::ActiveHater | Self::MeleeAdd | Self::CasterAdd)
+    }
+
+    /// Returns `true` if this category is a better kite candidate than CC target.
+    ///
+    /// [`CasterAdd`] is included here as a fallback strategy: when no CC ability is
+    /// available, kiting a caster is preferable to leaving it free-casting in melee
+    /// range. See [`prefers_cc`] for the primary strategy.
+    ///
+    /// [`CasterAdd`]: Self::CasterAdd
+    /// [`prefers_cc`]: Self::prefers_cc
+    #[must_use]
+    pub fn prefers_kite(self) -> bool {
+        matches!(self, Self::Approaching | Self::CasterAdd)
     }
 }
 
@@ -227,7 +374,7 @@ pub enum CombatStatus {
     },
     /// Casting a spell on a target.
     Casting {
-        /// Memorized spell slot (0-indexed).
+        /// Memorized spell slot (0-indexed), or `0xFF` for item-origin casts.
         spell_slot: u8,
         /// Spawn ID of the cast target.
         target_id: u32,
@@ -531,34 +678,188 @@ impl std::fmt::Display for CastReadiness {
 pub enum CastResult {
     /// Spell landed successfully.
     Success,
-    /// Cast was interrupted (took damage, moved, etc.).
-    Interrupted,
     /// Spell fizzled (failed skill check).
     Fizzled,
-    /// Target was out of range.
-    OutOfRange,
-    /// Not enough mana to cast.
-    OutOfMana,
-    /// Target is immune to this spell.
-    Immune,
+    /// Spell or gate collapsed before completion.
+    Collapsed,
     /// Target resisted the spell.
     Resisted,
-    /// Caster was not ready (GCD, already casting, etc.).
+    /// Target is immune to this spell.
+    Immune,
+    /// Cast was interrupted (took damage, moved, etc.).
+    Interrupted,
+    /// Cast was manually aborted by the player/automation.
+    Aborted,
+    /// Spell or gem is not ready yet.
     NotReady,
+    /// Not enough mana to cast.
+    OutOfMana,
+    /// Target was out of range.
+    OutOfRange,
+    /// No line of sight to the target.
+    CannotSee,
+    /// No valid target is selected.
+    NoTarget,
+    /// Must stand before casting.
+    Standing,
+    /// Character is stunned and cannot cast.
+    Stunned,
+    /// Required spell components are missing.
+    Components,
+    /// Cast was cancelled before it completed.
+    Cancelled,
+    /// Casting was disrupted by distraction.
+    Distracted,
+    /// Character is invisible and cannot cast.
+    Invisible,
+    /// Spell can only be cast outdoors.
+    Outdoors,
+    /// A cast is already pending.
+    Pending,
+    /// Character is still in post-cast recovery.
+    Recovering,
+    /// Spell completed but did not take hold on the target.
+    TakeHold,
+    /// Outcome could not be classified.
+    Unknown,
 }
 
 impl std::fmt::Display for CastResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Success => write!(f, "Success"),
-            Self::Interrupted => write!(f, "Interrupted"),
             Self::Fizzled => write!(f, "Fizzled"),
-            Self::OutOfRange => write!(f, "Out of Range"),
-            Self::OutOfMana => write!(f, "Out of Mana"),
-            Self::Immune => write!(f, "Immune"),
+            Self::Collapsed => write!(f, "Collapsed"),
             Self::Resisted => write!(f, "Resisted"),
+            Self::Immune => write!(f, "Immune"),
+            Self::Interrupted => write!(f, "Interrupted"),
+            Self::Aborted => write!(f, "Aborted"),
             Self::NotReady => write!(f, "Not Ready"),
+            Self::OutOfMana => write!(f, "Out of Mana"),
+            Self::OutOfRange => write!(f, "Out of Range"),
+            Self::CannotSee => write!(f, "Cannot See"),
+            Self::NoTarget => write!(f, "No Target"),
+            Self::Standing => write!(f, "Standing"),
+            Self::Stunned => write!(f, "Stunned"),
+            Self::Components => write!(f, "Components"),
+            Self::Cancelled => write!(f, "Cancelled"),
+            Self::Distracted => write!(f, "Distracted"),
+            Self::Invisible => write!(f, "Invisible"),
+            Self::Outdoors => write!(f, "Outdoors"),
+            Self::Pending => write!(f, "Pending"),
+            Self::Recovering => write!(f, "Recovering"),
+            Self::TakeHold => write!(f, "Take Hold"),
+            Self::Unknown => write!(f, "Unknown"),
         }
+    }
+}
+
+impl CastResult {
+    /// Parse an EQ feedback/chat line into an MQ2Cast-style cast result.
+    pub fn from_feedback_message(text: &str) -> Option<Self> {
+        let normalized = text.trim().to_ascii_lowercase();
+
+        if normalized.is_empty() {
+            return None;
+        }
+
+        if normalized.contains("spell fizzles") {
+            return Some(Self::Fizzled);
+        }
+        if normalized.contains("collapses") {
+            return Some(Self::Collapsed);
+        }
+        if normalized.contains("resisted") {
+            return Some(Self::Resisted);
+        }
+        if normalized.contains("immune") {
+            return Some(Self::Immune);
+        }
+        if normalized.contains("interrupted") || normalized.contains("miss a note") {
+            return Some(Self::Interrupted);
+        }
+        if normalized.contains("aborted") {
+            return Some(Self::Aborted);
+        }
+        if normalized.contains("not ready") || normalized.contains("spell is not ready") {
+            return Some(Self::NotReady);
+        }
+        if normalized.contains("not enough mana") || normalized.contains("don't have enough mana") {
+            return Some(Self::OutOfMana);
+        }
+        if normalized.contains("out of range") {
+            return Some(Self::OutOfRange);
+        }
+        if normalized.contains("cannot see your target")
+            || normalized.contains("can't see your target")
+        {
+            return Some(Self::CannotSee);
+        }
+        if normalized.contains("must first select a target")
+            || normalized.contains("you need a target")
+        {
+            return Some(Self::NoTarget);
+        }
+        if normalized.contains("stand up first") {
+            return Some(Self::Standing);
+        }
+        if normalized.contains("stunned") {
+            return Some(Self::Stunned);
+        }
+        if normalized.contains("required components")
+            || normalized.contains("missing some components")
+        {
+            return Some(Self::Components);
+        }
+        if normalized.contains("spell is canceled")
+            || normalized.contains("spell has been cancelled")
+        {
+            return Some(Self::Cancelled);
+        }
+        if normalized.contains("distracted from your casting") {
+            return Some(Self::Distracted);
+        }
+        if normalized.contains("cannot cast while invisible") {
+            return Some(Self::Invisible);
+        }
+        if normalized.contains("only cast this spell in the outdoors") {
+            return Some(Self::Outdoors);
+        }
+        if normalized.contains("already have a spell pending") {
+            return Some(Self::Pending);
+        }
+        if normalized.contains("haven't recovered yet")
+            || normalized.contains("must wait to perform another action")
+        {
+            return Some(Self::Recovering);
+        }
+        if normalized.contains("did not take hold") {
+            return Some(Self::TakeHold);
+        }
+        if normalized.contains("spell cast") || normalized.contains("you begin casting") {
+            return Some(Self::Success);
+        }
+
+        None
+    }
+
+    /// Whether the cast finished in a way that should generally be retried.
+    pub fn is_retryable(self) -> bool {
+        matches!(
+            self,
+            Self::Fizzled
+                | Self::Collapsed
+                | Self::Interrupted
+                | Self::Distracted
+                | Self::Pending
+                | Self::Recovering
+                | Self::NotReady
+        )
+    }
+
+    /// Whether the spell actually landed on the target.
+    pub fn landed(self) -> bool {
+        matches!(self, Self::Success)
     }
 }
 
@@ -855,6 +1156,83 @@ mod tests {
     }
 
     #[test]
+    fn primary_target_spawn_ids_filters_group_target_slots() {
+        let list = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "add".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 200,
+                    name: "main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::RaidAssist2Target,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 300,
+                    name: "raid_main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::SpecificNpc,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 400,
+                    name: "manual".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+
+        assert_eq!(list.primary_target_spawn_ids(), vec![200, 300]);
+    }
+
+    #[test]
+    fn cc_add_spawn_ids_exclude_primary_target_duplicates() {
+        let list = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "main_dup".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "main_dup".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 200,
+                    name: "add_1".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 300,
+                    name: "add_2".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::DifferentZone,
+                    spawn_id: 400,
+                    name: "remote".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+
+        assert_eq!(list.cc_add_spawn_ids(), vec![200, 300]);
+        assert_eq!(list.first_cc_add_spawn_id(), Some(200));
+    }
+
+    #[test]
     fn combat_status_engaging_carries_target() {
         let status = CombatStatus::Engaging { target_id: 42 };
         if let CombatStatus::Engaging { target_id } = status {
@@ -936,6 +1314,64 @@ mod tests {
         let debug = format!("{:?}", expr);
         assert!(debug.contains("And"));
         assert!(debug.contains("Or"));
+    }
+
+    #[test]
+    fn extended_target_list_pet_helpers_use_pet_slots() {
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 1001,
+                    name: "Fluffy".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 2002,
+                    name: "A fire beetle".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+
+        assert_eq!(
+            xtargets.pet().map(|slot| slot.name.as_str()),
+            Some("Fluffy")
+        );
+        assert_eq!(xtargets.pet_spawn_id(), Some(1001));
+        assert_eq!(
+            xtargets.pet_target().map(|slot| slot.name.as_str()),
+            Some("A fire beetle")
+        );
+        assert_eq!(xtargets.pet_target_id(), Some(2002));
+    }
+
+    #[test]
+    fn extended_target_list_pet_helpers_ignore_inactive_pet_slots() {
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::DifferentZone,
+                    spawn_id: 1001,
+                    name: "Fluffy".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::Empty,
+                    spawn_id: 2002,
+                    name: "A fire beetle".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+
+        assert!(xtargets.pet().is_none());
+        assert_eq!(xtargets.pet_spawn_id(), None);
+        assert!(xtargets.pet_target().is_none());
+        assert_eq!(xtargets.pet_target_id(), None);
     }
 
     #[test]
@@ -1110,46 +1546,177 @@ mod tests {
     fn cast_result_all_variants_constructible() {
         let variants = [
             CastResult::Success,
-            CastResult::Interrupted,
             CastResult::Fizzled,
-            CastResult::OutOfRange,
-            CastResult::OutOfMana,
-            CastResult::Immune,
+            CastResult::Collapsed,
             CastResult::Resisted,
+            CastResult::Immune,
+            CastResult::Interrupted,
+            CastResult::Aborted,
             CastResult::NotReady,
+            CastResult::OutOfMana,
+            CastResult::OutOfRange,
+            CastResult::CannotSee,
+            CastResult::NoTarget,
+            CastResult::Standing,
+            CastResult::Stunned,
+            CastResult::Components,
+            CastResult::Cancelled,
+            CastResult::Distracted,
+            CastResult::Invisible,
+            CastResult::Outdoors,
+            CastResult::Pending,
+            CastResult::Recovering,
+            CastResult::TakeHold,
+            CastResult::Unknown,
         ];
-        assert_eq!(variants.len(), 8);
+        assert_eq!(variants.len(), 23);
     }
 
     #[test]
     fn cast_result_display() {
         assert_eq!(CastResult::Success.to_string(), "Success");
-        assert_eq!(CastResult::Interrupted.to_string(), "Interrupted");
         assert_eq!(CastResult::Fizzled.to_string(), "Fizzled");
-        assert_eq!(CastResult::OutOfRange.to_string(), "Out of Range");
-        assert_eq!(CastResult::OutOfMana.to_string(), "Out of Mana");
-        assert_eq!(CastResult::Immune.to_string(), "Immune");
+        assert_eq!(CastResult::Collapsed.to_string(), "Collapsed");
         assert_eq!(CastResult::Resisted.to_string(), "Resisted");
+        assert_eq!(CastResult::Immune.to_string(), "Immune");
+        assert_eq!(CastResult::Interrupted.to_string(), "Interrupted");
+        assert_eq!(CastResult::Aborted.to_string(), "Aborted");
         assert_eq!(CastResult::NotReady.to_string(), "Not Ready");
+        assert_eq!(CastResult::OutOfMana.to_string(), "Out of Mana");
+        assert_eq!(CastResult::OutOfRange.to_string(), "Out of Range");
+        assert_eq!(CastResult::CannotSee.to_string(), "Cannot See");
+        assert_eq!(CastResult::NoTarget.to_string(), "No Target");
+        assert_eq!(CastResult::Standing.to_string(), "Standing");
+        assert_eq!(CastResult::Stunned.to_string(), "Stunned");
+        assert_eq!(CastResult::Components.to_string(), "Components");
+        assert_eq!(CastResult::Cancelled.to_string(), "Cancelled");
+        assert_eq!(CastResult::Distracted.to_string(), "Distracted");
+        assert_eq!(CastResult::Invisible.to_string(), "Invisible");
+        assert_eq!(CastResult::Outdoors.to_string(), "Outdoors");
+        assert_eq!(CastResult::Pending.to_string(), "Pending");
+        assert_eq!(CastResult::Recovering.to_string(), "Recovering");
+        assert_eq!(CastResult::TakeHold.to_string(), "Take Hold");
+        assert_eq!(CastResult::Unknown.to_string(), "Unknown");
     }
 
     #[test]
     fn cast_result_serialization_roundtrip() {
         let variants = [
             CastResult::Success,
-            CastResult::Interrupted,
             CastResult::Fizzled,
-            CastResult::OutOfRange,
-            CastResult::OutOfMana,
-            CastResult::Immune,
+            CastResult::Collapsed,
             CastResult::Resisted,
+            CastResult::Immune,
+            CastResult::Interrupted,
+            CastResult::Aborted,
             CastResult::NotReady,
+            CastResult::OutOfMana,
+            CastResult::OutOfRange,
+            CastResult::CannotSee,
+            CastResult::NoTarget,
+            CastResult::Standing,
+            CastResult::Stunned,
+            CastResult::Components,
+            CastResult::Cancelled,
+            CastResult::Distracted,
+            CastResult::Invisible,
+            CastResult::Outdoors,
+            CastResult::Pending,
+            CastResult::Recovering,
+            CastResult::TakeHold,
+            CastResult::Unknown,
         ];
         for variant in &variants {
             let json = serde_json::to_string(variant).expect("serialize");
             let restored: CastResult = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(*variant, restored);
         }
+    }
+
+    #[test]
+    fn cast_result_feedback_message_parsing() {
+        let cases = [
+            ("Your spell fizzles!", Some(CastResult::Fizzled)),
+            (
+                "Your gate is too unstable, and collapses.",
+                Some(CastResult::Collapsed),
+            ),
+            (
+                "Your target resisted the Ensnare spell.",
+                Some(CastResult::Resisted),
+            ),
+            (
+                "Your target is immune to changes in its attack speed.",
+                Some(CastResult::Immune),
+            ),
+            ("Your spell is interrupted.", Some(CastResult::Interrupted)),
+            ("Your spell is aborted.", Some(CastResult::Aborted)),
+            (
+                "Spell is not ready yet, please wait.",
+                Some(CastResult::NotReady),
+            ),
+            (
+                "You don't have enough mana to cast this spell.",
+                Some(CastResult::OutOfMana),
+            ),
+            (
+                "Your target is out of range, get closer!",
+                Some(CastResult::OutOfRange),
+            ),
+            ("You cannot see your target.", Some(CastResult::CannotSee)),
+            (
+                "You must first select a target for this spell!",
+                Some(CastResult::NoTarget),
+            ),
+            ("Stand up first!", Some(CastResult::Standing)),
+            ("You are stunned!", Some(CastResult::Stunned)),
+            (
+                "You are missing some components for this spell.",
+                Some(CastResult::Components),
+            ),
+            (
+                "Your spell has been cancelled.",
+                Some(CastResult::Cancelled),
+            ),
+            (
+                "You have been distracted from your casting.",
+                Some(CastResult::Distracted),
+            ),
+            (
+                "You cannot cast while invisible.",
+                Some(CastResult::Invisible),
+            ),
+            (
+                "You can only cast this spell in the outdoors.",
+                Some(CastResult::Outdoors),
+            ),
+            (
+                "You already have a spell pending.",
+                Some(CastResult::Pending),
+            ),
+            ("You haven't recovered yet...", Some(CastResult::Recovering)),
+            (
+                "Your spell did not take hold on your target.",
+                Some(CastResult::TakeHold),
+            ),
+            ("Completely unrelated text", None),
+        ];
+
+        for (message, expected) in cases {
+            assert_eq!(CastResult::from_feedback_message(message), expected);
+        }
+    }
+
+    #[test]
+    fn cast_result_retryable_and_landed_helpers() {
+        assert!(CastResult::Fizzled.is_retryable());
+        assert!(CastResult::Collapsed.is_retryable());
+        assert!(CastResult::Interrupted.is_retryable());
+        assert!(CastResult::NotReady.is_retryable());
+        assert!(!CastResult::Resisted.is_retryable());
+        assert!(!CastResult::OutOfMana.is_retryable());
+        assert!(CastResult::Success.landed());
+        assert!(!CastResult::TakeHold.landed());
     }
 
     #[test]
@@ -1540,5 +2107,97 @@ mod tests {
         let result = resolve_abilities(&sets, &known, 55);
         let nuke = result.get("Nuke").expect("should resolve Nuke");
         assert_eq!(nuke.ability_name, "Frost");
+    }
+
+    // -- HateTargetCategory tests --
+
+    #[test]
+    fn hate_target_category_default_is_active_hater() {
+        assert_eq!(
+            HateTargetCategory::default(),
+            HateTargetCategory::ActiveHater
+        );
+    }
+
+    #[test]
+    fn hate_target_category_all_variants_constructible() {
+        let _ah = HateTargetCategory::ActiveHater;
+        let _ca = HateTargetCategory::CasterAdd;
+        let _ma = HateTargetCategory::MeleeAdd;
+        let _ap = HateTargetCategory::Approaching;
+        let _ro = HateTargetCategory::Roamer;
+    }
+
+    #[test]
+    fn hate_target_category_cc_priority_unique_and_ordered() {
+        let mut priorities: Vec<u8> = vec![
+            HateTargetCategory::ActiveHater.cc_priority(),
+            HateTargetCategory::CasterAdd.cc_priority(),
+            HateTargetCategory::Approaching.cc_priority(),
+            HateTargetCategory::MeleeAdd.cc_priority(),
+            HateTargetCategory::Roamer.cc_priority(),
+        ];
+        // All priorities distinct
+        priorities.sort_unstable();
+        let before_dedup = priorities.len();
+        priorities.dedup();
+        assert_eq!(
+            priorities.len(),
+            before_dedup,
+            "CC priorities should be unique"
+        );
+        // Monotonically increasing after sort
+        for i in 1..priorities.len() {
+            assert!(priorities[i] > priorities[i - 1]);
+        }
+    }
+
+    #[test]
+    fn hate_target_category_kite_priority_unique_and_ordered() {
+        let mut priorities: Vec<u8> = vec![
+            HateTargetCategory::CasterAdd.kite_priority(),
+            HateTargetCategory::Approaching.kite_priority(),
+            HateTargetCategory::ActiveHater.kite_priority(),
+            HateTargetCategory::MeleeAdd.kite_priority(),
+            HateTargetCategory::Roamer.kite_priority(),
+        ];
+        priorities.sort_unstable();
+        let before_dedup = priorities.len();
+        priorities.dedup();
+        assert_eq!(
+            priorities.len(),
+            before_dedup,
+            "Kite priorities should be unique"
+        );
+        for i in 1..priorities.len() {
+            assert!(priorities[i] > priorities[i - 1]);
+        }
+    }
+
+    #[test]
+    fn hate_target_category_prefers_cc_and_kite_consistent() {
+        use HateTargetCategory::*;
+        // prefers_cc and prefers_kite are not mutually exclusive (CasterAdd is both)
+        assert!(CasterAdd.prefers_cc());
+        assert!(CasterAdd.prefers_kite());
+        // Roamer prefers neither
+        assert!(!Roamer.prefers_cc());
+        assert!(!Roamer.prefers_kite());
+    }
+
+    #[test]
+    fn hate_target_category_serialization_roundtrip() {
+        let cats = [
+            HateTargetCategory::ActiveHater,
+            HateTargetCategory::CasterAdd,
+            HateTargetCategory::MeleeAdd,
+            HateTargetCategory::Approaching,
+            HateTargetCategory::Roamer,
+        ];
+        for cat in &cats {
+            let json = serde_json::to_string(cat).expect("serialize");
+            let back: HateTargetCategory = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, *cat);
+        }
     }
 }

@@ -1,8 +1,0 @@
-[submodule "third_party/eqlib"]
-	path = third_party/eqlib
-	url = https://github.com/macroquest/eqlib
-	branch = live
-[submodule "third_party/macroquest"]
-	path = third_party/macroquest
-	url = https://github.com/macroquest/macroquest
-	branch = master

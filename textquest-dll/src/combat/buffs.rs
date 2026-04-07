@@ -69,7 +69,14 @@ fn read_active_buffs_windows(eq_base: u64) -> Vec<BuffInfo> {
         _ => return Vec::new(),
     };
     let count = read_i32_safe(buffs_array_base + profile::ARRAY_SIZE).unwrap_or(0);
-    let count = (count as usize).min(buff_slots::MAX_TOTAL_BUFFS);
+    let count = normalize_buff_count(count);
+    let span_len = match count.checked_mul(buff_slots::EQ_AFFECT_SIZE) {
+        Some(len) => len,
+        None => return Vec::new(),
+    };
+    if !crate::hooks::game_loop::is_readable(data_ptr, span_len) {
+        return Vec::new();
+    }
 
     let mut buffs = Vec::new();
     for i in 0..count {
@@ -104,6 +111,13 @@ fn read_active_buffs_windows(eq_base: u64) -> Vec<BuffInfo> {
     }
 
     buffs
+}
+
+#[cfg(windows)]
+fn normalize_buff_count(count: i32) -> usize {
+    usize::try_from(count)
+        .ok()
+        .map_or(0, |n| n.min(buff_slots::MAX_TOTAL_BUFFS))
 }
 
 #[cfg(windows)]
@@ -257,5 +271,20 @@ mod tests {
     fn read_active_buffs_stub_on_non_windows() {
         let buffs = read_active_buffs(0x140000000);
         assert!(buffs.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_buff_count_rejects_negative_values() {
+        assert_eq!(normalize_buff_count(-1), 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_buff_count_caps_to_max_slots() {
+        assert_eq!(
+            normalize_buff_count(i32::MAX),
+            textquest_common::offsets::buff_slots::MAX_TOTAL_BUFFS
+        );
     }
 }
