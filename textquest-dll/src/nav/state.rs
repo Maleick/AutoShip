@@ -8,7 +8,7 @@
 //! Stuck detection and recovery are handled inline by `StuckDetector`
 //! rather than via a separate FSM state.
 
-use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
+use crate::hooks::movement::{self, MovementController, ARRIVAL_DISTANCE};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
     CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals,
@@ -83,6 +83,8 @@ pub struct Navigator {
 
 /// Radius for hostile NPC proximity checks (aggro detection), in EQ world units.
 const AGGRO_CHECK_RADIUS: f32 = 50.0;
+/// Distance delta that counts as an unexpected player displacement (e.g. summon).
+const SUMMON_DISTANCE_THRESHOLD: f32 = 60.0;
 
 /// Radius for GM proximity check (break-on-GM detection), in EQ world units.
 const GM_CHECK_RADIUS: f32 = 500.0;
@@ -375,27 +377,61 @@ impl Navigator {
         nearby: &[SpawnData],
         target_sample: Option<&TargetSample>,
     ) {
+        let summon_displacement = if self.should_break_moveto_on_summon() {
+            self.current_tick_displacement()
+        } else {
+            None
+        };
+
         // Only update velocity when actively navigating (skip Idle/Arrived).
         if !matches!(self.state, State::Idle | State::Arrived) {
             self.update_velocity();
         }
 
-        let warp_action = match self.state {
-            State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
-            _ => self.warp.update(target_sample),
+        if summon_displacement.is_some_and(|distance| distance > SUMMON_DISTANCE_THRESHOLD) {
+            tracing::info!(
+                displacement = summon_displacement,
+                "MoveToAdvanced: break_on_summon triggered"
+            );
+            self.stop_moveto();
+            return;
+        }
+
+        let moveto_target_sample = self.moveto_target_sample(nearby, target_sample);
+        let warp_action = if self.should_track_moveto_warp() {
+            self.warp.update(moveto_target_sample.as_ref())
+        } else {
+            match self.state {
+                State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
+                _ => self.warp.update(target_sample),
+            }
         };
 
         match warp_action {
             WarpAction::Pause => {
+                if self.should_break_moveto_on_warp() {
+                    tracing::info!("MoveToAdvanced: break_on_warp triggered");
+                    self.stop_moveto();
+                    return;
+                }
+                if matches!(
+                    self.state,
+                    State::Paused(PauseReason::UserPause | PauseReason::UserInput)
+                ) {
+                    return;
+                }
                 self.controller.stop_forward();
-                self.state = State::Paused(PauseReason::Warp);
+                self.controller.stop_back();
+                let old_state =
+                    std::mem::replace(&mut self.state, State::Paused(PauseReason::Warp));
+                self.pre_pause_state = Some(old_state);
                 return;
             }
             WarpAction::Resume => {
                 // Only auto-resume from warp pauses, not user-initiated pauses.
                 if matches!(self.state, State::Paused(PauseReason::Warp)) {
                     tracing::info!("Warp pause cleared — resuming navigation");
-                    self.state = State::Moving;
+                    self.state = self.pre_pause_state.take().unwrap_or(State::Moving);
                     self.stuck.reset();
                 }
             }
@@ -760,7 +796,77 @@ impl Navigator {
         self.moveto_config = None;
         self.last_moveto_hp = None;
         self.stuck.reset();
+        self.warp.reset();
+        self.pre_pause_state = None;
         self.state = State::Idle;
+    }
+
+    fn should_track_moveto_warp(&self) -> bool {
+        match self.state {
+            State::MovingTo => {
+                self.should_break_moveto_on_warp() || self.should_pause_moveto_on_warp()
+            }
+            State::Paused(PauseReason::Warp) => {
+                matches!(self.pre_pause_state, Some(State::MovingTo))
+                    && (self.should_break_moveto_on_warp() || self.should_pause_moveto_on_warp())
+            }
+            _ => false,
+        }
+    }
+
+    fn should_break_moveto_on_warp(&self) -> bool {
+        self.moveto_config
+            .as_ref()
+            .is_some_and(|config| config.break_on_warp)
+    }
+
+    fn should_pause_moveto_on_warp(&self) -> bool {
+        self.moveto_config
+            .as_ref()
+            .is_some_and(|config| config.pause_on_warp)
+    }
+
+    fn should_break_moveto_on_summon(&self) -> bool {
+        match self.state {
+            State::MovingTo => self
+                .moveto_config
+                .as_ref()
+                .is_some_and(|config| config.break_on_summon),
+            State::Paused(PauseReason::Warp) => {
+                matches!(self.pre_pause_state, Some(State::MovingTo))
+                    && self
+                        .moveto_config
+                        .as_ref()
+                        .is_some_and(|config| config.break_on_summon)
+            }
+            _ => false,
+        }
+    }
+
+    fn moveto_target_sample(
+        &self,
+        nearby: &[SpawnData],
+        fallback: Option<&TargetSample>,
+    ) -> Option<TargetSample> {
+        let target_id = self.moveto_config.as_ref()?.target_id?;
+        if let Some(spawn) = nearby.iter().find(|spawn| spawn.spawn_id == target_id) {
+            return Some(TargetSample {
+                id: spawn.spawn_id,
+                position: Waypoint::new(spawn.x, spawn.y, spawn.z),
+            });
+        }
+
+        fallback
+            .filter(|sample| sample.id == target_id)
+            .map(|sample| TargetSample {
+                id: sample.id,
+                position: sample.position,
+            })
+    }
+
+    fn current_tick_displacement(&self) -> Option<f32> {
+        self.prev_position
+            .map(|previous| self.controller.read_position().distance_2d(&previous))
     }
 
     /// One tick for player follow mode.
