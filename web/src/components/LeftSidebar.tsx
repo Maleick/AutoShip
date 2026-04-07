@@ -6,6 +6,7 @@ import {
   ShieldWarning,
   Coins,
 } from "@phosphor-icons/react";
+import type { ViewId } from "../App";
 
 export type ActiveView = "engagements" | "formations" | "map" | "security";
 

@@ -1,7 +1,7 @@
 //! TextQuest Web Dashboard — Axum backend for the M6 configuration & monitoring UI.
 //!
 //! Serves a React SPA and provides:
-//! - REST API for credentials, group config, loot tables
+//! - REST API for credentials, group config, loot tables, raid configuration
 //! - WebSocket endpoint for live session monitoring
 //! - Shared types via textquest-common
 
