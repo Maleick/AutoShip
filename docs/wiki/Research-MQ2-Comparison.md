@@ -86,7 +86,7 @@ MQ2: Navigation is via MQ2Nav/MQ2MoveUtils (external plugins — **not in refere
 | Zone routing            | MQ2Nav zone connections            | TravelPlan FSM: WalkTo, ZoneTo, PortTo, StaggerWait                        | 🔥     | Multi-zone travel planning with porter awareness                     |
 | Zone stagger            | Not built-in                       | Deterministic per-client zone entry delays (anti-detection)                | 🔥     | Prevents simultaneous zone entries                                   |
 | Heading control         | MQ2MoveUtils /face                 | EQ heading 0-512 with wobble jitter                                        | ✅     |                                                                      |
-| Door/object interaction | MQ2 /door, /click                  | Not implemented                                                            | ❌     |                                                                      |
+| Door/object interaction | MQ2 /door, /click                  | `InteractDoor` (`/doortarget` + `/click left door`), `ClickObject` (`/click left item`); TUI `:door` / `:click` | ✅     | Navigation to door position (M7 DoorsManager) still pending  |
 
 ---
 

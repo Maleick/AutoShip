@@ -1908,11 +1908,22 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 }
             }
         }
-        Command::NavDoor | Command::NavItem => {
-            // Door and item navigation require spawn list traversal to find nearest.
-            // For now, log and respond with an error — full implementation requires
-            // spawn type filtering which is an M7 feature.
-            tracing::info!("NavDoor/NavItem received (not yet implemented)");
+        Command::NavDoor => {
+            // Navigate to nearest door: use /doortarget to select it, then navigate to target.
+            // Full DoorsManager-based position lookup is an M7 feature requiring
+            // additional offsets for EQSwitch/DoorsManager memory layout.
+            tracing::info!("NavDoor received — queuing /doortarget for nearest door");
+            queue_slash_command("/doortarget".to_string());
+            // After /doortarget, the door becomes the active door target (not PINST_TARGET),
+            // so NavTarget-style coordinate navigation is not directly available here.
+            // For now, issue InteractDoor to open the nearest door in place.
+            interact_with_door();
+        }
+        Command::NavItem => {
+            // Navigate to nearest ground item — requires ground spawn list traversal.
+            // Full implementation requires ground spawn type filtering (M7 feature).
+            tracing::info!("NavItem received — clicking nearest ground item");
+            click_nearest_object();
         }
         Command::NavReload => {
             tracing::warn!("NavReload: stub — actual mesh loading is an M7 feature");
@@ -2109,6 +2120,14 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::InteractTarget => {
             tracing::info!("InteractTarget received — right-clicking current target");
             interact_with_target();
+        }
+        Command::InteractDoor => {
+            tracing::info!("InteractDoor received — targeting and opening nearest door");
+            interact_with_door();
+        }
+        Command::ClickObject => {
+            tracing::info!("ClickObject received — clicking nearest ground item");
+            click_nearest_object();
         }
         Command::Relog {
             account_name,
@@ -2361,6 +2380,28 @@ fn interact_with_target() {
     }
     #[cfg(not(windows))]
     tracing::trace!("InteractTarget (stub)");
+}
+
+/// Interact with the nearest door or switch by queuing `/doortarget` and `/click left door`.
+///
+/// This replicates MQ2's `/click door` behaviour:
+/// 1. `/doortarget` selects the nearest `EQSwitch` in the zone.
+/// 2. `/click left door` activates (opens/toggles) the selected door.
+///
+/// Both commands are queued so they execute on successive game-loop ticks.
+fn interact_with_door() {
+    tracing::info!("interact_with_door: queuing /doortarget + /click left door");
+    queue_slash_command("/doortarget".to_string());
+    queue_slash_command("/click left door".to_string());
+}
+
+/// Click the nearest ground item or world object by queuing `/click left item`.
+///
+/// This replicates MQ2's `/click item` behaviour, which activates the nearest
+/// ground spawn (loose item lying in the world).
+fn click_nearest_object() {
+    tracing::info!("click_nearest_object: queuing /click left item");
+    queue_slash_command("/click left item".to_string());
 }
 
 /// Call EQ's `InterpretCmd` to execute a slash command string.

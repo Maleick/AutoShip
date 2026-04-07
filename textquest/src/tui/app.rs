@@ -3658,6 +3658,48 @@ impl App {
                     );
                 }
             }
+            "door" => {
+                let ok = self.send_ipc_to_focused(&textquest_common::ipc::Command::InteractDoor);
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        "Door: no clients received command. Check connection with :status",
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Door interact → sent to {ok} clients"),
+                        false,
+                    );
+                }
+            }
+            "click" => {
+                let sub = parts.get(1).map(|s| s.to_ascii_lowercase());
+                let cmd = match sub.as_deref() {
+                    Some("door") => textquest_common::ipc::Command::InteractDoor,
+                    _ => textquest_common::ipc::Command::ClickObject,
+                };
+                let label = if matches!(sub.as_deref(), Some("door")) {
+                    "door"
+                } else {
+                    "item"
+                };
+                let ok = self.send_ipc_to_focused(&cmd);
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("Click {label}: no clients received command. Check connection with :status"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Click {label} → sent to {ok} clients"),
+                        false,
+                    );
+                }
+            }
             "status" => {
                 let client_count = self.clients.len();
                 let visible_count = self.visible_clients().len();
@@ -5843,6 +5885,8 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "camp"
             | "nav"
             | "loot"
+            | "door"
+            | "click"
             | "status"
             | "login"
             | "launch"
@@ -6129,6 +6173,8 @@ mod tests {
             "camp",
             "nav",
             "loot",
+            "door",
+            "click",
             "login",
             "launch",
             "profile",

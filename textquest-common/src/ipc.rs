@@ -249,6 +249,14 @@ pub enum Command {
     ClearTarget,
     /// Right-click interact with the current target (opens merchant, bank, quest windows).
     InteractTarget,
+    /// Target and activate the nearest door or switch (`/doortarget` + `/click left door`).
+    ///
+    /// Equivalent to MQ2's `/click door` — selects the nearest EQ switch and opens it.
+    InteractDoor,
+    /// Click the nearest ground item or world object (`/click left item`).
+    ///
+    /// Equivalent to MQ2's `/click item` — interacts with the nearest ground spawn.
+    ClickObject,
     // Utility
     /// Sit down (mana/HP regen).
     Sit,
@@ -1193,6 +1201,8 @@ mod tests {
             Command::CombatDisengage,
             Command::LootCorpse,
             Command::LootAll,
+            Command::InteractDoor,
+            Command::ClickObject,
             Command::QueryZoneGraph,
             Command::SetRenderMode {
                 mode: RenderMode::NullRender,
