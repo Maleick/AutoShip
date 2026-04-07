@@ -66,6 +66,41 @@ fn normalize_gem_id(slot: u8) -> Option<u8> {
     }
 }
 
+/// Build a safe `/useitem` slash command for an item name.
+///
+/// EQ item names commonly contain spaces, so they are quoted. Quotes and control
+/// characters are stripped to avoid malformed commands or command injection.
+fn use_item_command(item_name: &str) -> Option<String> {
+    let sanitized = item_name
+        .chars()
+        .filter(|ch| !ch.is_control() && *ch != '"')
+        .collect::<String>();
+    let trimmed = sanitized.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(format!("/useitem \"{trimmed}\""))
+    }
+}
+
+/// Stable key for tracking item-action retry windows in the ability cooldown map.
+///
+/// `ActionType::Item` currently carries only a display string, so the runtime
+/// needs a deterministic surrogate key to reuse the existing integer-keyed
+/// cooldown tracker. FNV-1a is tiny, stable across runs, and sufficient for
+/// best-effort retry throttling; a collision would only cause two clickies to
+/// share a retry window, which is acceptable until real item IDs are wired in.
+/// The sign bit is masked off so the result always fits the positive `i32`
+/// keyspace used elsewhere by the ability tracker.
+fn item_action_key(item_name: &str) -> i32 {
+    let mut hash = 0x811C_9DC5u32;
+    for byte in item_name.bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    (hash & 0x7FFF_FFFF) as i32
+}
+
 /// The main combat state machine for a single EQ character.
 pub struct Combatant {
     state: CombatState,
@@ -946,6 +981,7 @@ impl Combatant {
 mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
+    use crate::combat::rotation;
     use textquest_common::combat::CombatConfig;
 
     fn test_config() -> CombatConfig {
@@ -964,6 +1000,34 @@ mod tests {
         t.name = "TestMob".into();
         t.spawn_id = 100;
         t
+    }
+
+    fn item_rotation_group_with(
+        item_name: &str,
+        target_selector: textquest_common::combat::TargetSelector,
+        combat_state_req: textquest_common::combat::CombatStateReq,
+    ) -> RotationGroup {
+        RotationGroup {
+            name: "ItemTest".into(),
+            target_selector,
+            combat_state_req,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry(
+                "UseClicky",
+                ActionType::Item(item_name.to_string()),
+            )],
+            current_step: 0,
+        }
+    }
+
+    fn item_rotation_group(item_name: &str) -> RotationGroup {
+        item_rotation_group_with(
+            item_name,
+            textquest_common::combat::TargetSelector::SelfOnly,
+            textquest_common::combat::CombatStateReq::Combat,
+        )
     }
 
     #[test]

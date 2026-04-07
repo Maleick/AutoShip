@@ -374,7 +374,7 @@ pub enum CombatStatus {
     },
     /// Casting a spell on a target.
     Casting {
-        /// Memorized spell slot (0-indexed).
+        /// Memorized spell slot (0-indexed), or `0xFF` for item-origin casts.
         spell_slot: u8,
         /// Spawn ID of the cast target.
         target_id: u32,
