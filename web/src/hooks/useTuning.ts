@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
+import type { CharacterConfig } from "../types";
 
-type CharacterConfig = {
-  character_name: string;
-  [key: string]: unknown;
-};
 /** Fetch the full list of character configs and expose a save function. */
 export function useCharacterConfigs() {
   const [configs, setConfigs] = useState<CharacterConfig[]>([]);

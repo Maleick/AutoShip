@@ -3,8 +3,8 @@
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-116%2C566-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-2%2C655%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-128%2C050-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-2%2C944%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -12,17 +12,7 @@ External process memory reader, DLL injector, and multibox controller for EverQu
 
 TextQuest reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
 
-If you plan to do offset, struct, or MacroQuest reference work, clone with submodules:
-
-```bash
-git clone --recurse-submodules https://github.com/Maleick/TextQuest.git
-cd TextQuest
-
-# Existing clone
-git submodule update --init --recursive
-```
-
-Routine `cargo build` / `cargo test` work does not require the reference trees, but `third_party/eqlib` and `third_party/macroquest` are the canonical local sources for reference work. See `third_party/README.md` for the layout.
+Routine `cargo build` / `cargo test` work does not require any vendored reference trees. When you need eqlib or MacroQuest source context for offset, struct, or login investigation, use the local `third_party/` paths when they are present in your workspace and treat them as optional reference material rather than required setup.
 
 ## Status
 
@@ -40,17 +30,17 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 
 ### TUI Dashboard (5 screens, 4 themes)
 
-| Screen         | Key | Description                                                                                                                           |
-| -------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Characters     | `1` | Operator roster, selected character detail with class emblem sprites, toggleable group/scope panels                                   |
-| Map            | `2` | Zone geometry (Brewall maps), group markers, HP status overlay, spawn overlay, named mob tracker with respawn timers, Z-slice control |
-| Navigation     | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue                                  |
-| Debug          | `4` | Full spawn list with live search, type filter (All/PC/NPC/Named), EQ Internals, hex dump with annotations, target detail              |
-| Packet Monitor | `5` | Opcode sniffer with live filtering, protocol decode, send/recv separation                                                             |
+| Screen     | Key | Description                                                                                                                                     |
+| ---------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Characters | `1` | Operator roster, selected character detail, group/scope panels, and side panels for combat, session, and priorities                            |
+| Map        | `2` | Tactical zone map with spawn list, named tracker, tactical navigation section, visibility overlays, viewport modes, and map interaction controls |
+| Navigation | `3` | Per-character route status table plus selected-route detail, blockers/recovery state, and navigation command reference                          |
+| Debug      | `4` | Raw spawn table, hex dump with field annotations, Ghidra-style explorer, EQ internals, and target inspection                                   |
+| Packets    | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation                                                    |
 
 **Themes:** Dark Modern (default), Dracula, Classic, Neriak Third Gate — cycle with `T`
 
-**Widget library:** Sparklines, gauge bars, scrollable lists, tooltips, badges, notification area, inline hints, multi-option selectors, and scrollbar indicators. Context-sensitive help overlay with per-screen keybinding hints, did-you-mean suggestions for commands, and a comprehensive scrollable reference.
+**Widget library:** Breadcrumbs, tab bars, a dropdown command menu bar, toast notifications, command-bar inline hints, keybinding hint rows, badges, cast/gauge bars, sparklines, scrollable lists with scrollbar indicators, tooltips, popup selectors (single and multi-option), the config tree editor, and the first-run wizard overlay. The help overlay is context-sensitive and scrollable, with per-screen keybinding hints, command usage suggestions, and jump targets for major command groups.
 
 ### TUI Controls
 
@@ -88,6 +78,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 :all /sss <name>         Save current spell set on focused clients
 :all /ssl <name>         Load a saved spell set on focused clients
 :all /ssd <name>         Delete a saved spell set from the character ini
+:all /casting "Clicky" item -bandolier|"Heal Set"  Swap to a cast set, click, then restore the tracked bandolier
 :track <name>            Track a spawn
 :ma <name>               Set Main Assist
 :mt <name>               Set Main Tank
@@ -119,7 +110,7 @@ Routine `cargo build` / `cargo test` work does not require the reference trees, 
 - **Persistent memory** — SQLite-backed memory database for long-term character state
 - **Social dynamics** — Social graph tracking relationships between characters
 - **Idle behavior** — Personality-driven actions during downtime
-- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M10` in the canonical roadmap)
+- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M11` in the canonical roadmap)
 
 ### Login Automation
 
@@ -204,12 +195,12 @@ DLL executes InterpretCmd with human-like jitter delay
 ```bash
 python3 scripts/dev-preflight.py
 python3 scripts/dev-preflight.py --require-reference-trees
-python3 scripts/dev-preflight.py --init-submodules --require-reference-trees
 ```
 
 Use the default run for routine `cargo build` / `cargo test` work. Add
 `--require-reference-trees` when you plan to inspect or cite
-`third_party/eqlib` or `third_party/macroquest`. On Windows, use `py -3`
+`third_party/eqlib` or `third_party/macroquest` if those local reference trees
+are available in your workspace. On Windows, use `py -3`
 instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
 
 ### GitHub Actions Self-hosted Runner (Windows)
@@ -364,7 +355,7 @@ target\release\textquest.exe navmesh diagnostics --pid <pid>
 
 ## Testing
 
-Current workspace totals: 116,566 Rust lines and 2,655 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
+Current workspace totals: 128,050 Rust lines and 2,944 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -413,6 +404,24 @@ pull_mana_pct = 60
 
 - Optional `[[level_overrides]]` blocks gate alternate combat/buff/emergency/cc/debuff ability lists by level range; categories omitted inside an override fall back to the base class lists, and the base profile is used when no override matches.
 
+### Optional Peer Discovery (`[discovery]`)
+
+```toml
+[discovery]
+multicast_enabled = true
+bind_addr = "0.0.0.0"
+multicast_addr = "239.255.42.99"
+port = 35353
+announce_interval_ms = 1000
+peer_ttl_ms = 5000
+node_name = "raid-rig-a"
+multicast_ttl = 1
+```
+
+- Disabled by default.
+- When enabled, TextQuest announces locally tracked sessions over UDP multicast and keeps a time-limited cache of remote orchestrator peers.
+- `node_name` is optional; when omitted, TextQuest falls back to the machine hostname.
+
 ### HVT Watchlist (`config/hvt_watchlist.toml`)
 
 ```toml
@@ -450,7 +459,7 @@ Canonical active roadmap order:
 - [x] **M6** (complete) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme shipped; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
 - [ ] **M7** — Zoning/Movement
 - [ ] **M8** — Orchestrator
-- [ ] **M9** — Learning/RL — metrics-backed tuning loops with explicit regression budgets, canary/shadow rollout, and rollback paths
+- [ ] **M9** — Learning/RL
 - [ ] **M10** — Economy
 - [ ] **M11** — Soul Engine + LLM
 
@@ -465,7 +474,7 @@ Execution rules:
 - `docs/implementation-roadmap.md` — canonical roadmap, evidence model, milestone gates
 - `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md` — curated `M5`/`M6` control-path ledger that separates in-process defaults from packet candidates and blocked protocol gaps
-- `docs/external-research/kissassist-gap-and-tui-translation.md` — KissAssist capability audit and native TextQuest TUI translation targets
+- `docs/wiki/Research-KissAssist-Gap-Analysis.md` — KissAssist capability audit and native TextQuest TUI translation targets
 - `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors, `M5`-`M8` risk gates, and operator hygiene inputs
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md` — curated `M6` checkpoint note for queue flush, timeout, and safe-coordinate recovery
 - `docs/research-imports/2026-04-02-packet-zoning/` — raw packet and zoning evidence archive

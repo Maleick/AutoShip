@@ -90,7 +90,7 @@ Use:
 - `docs/external-research/packet-engine-send-receive-pipeline.md`
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
 - `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
-- `docs/external-research/kissassist-gap-and-tui-translation.md`
+- `docs/wiki/Research-KissAssist-Gap-Analysis.md`
 - `docs/external-research/jmb-session-and-relay-comparison.md`
 - `docs/external-research/daybreak-detection-digest.md`
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md`
@@ -108,15 +108,19 @@ The current follow-on implementation slices remain:
 - #152 for the addressable actor routing abstraction
 - #109 for launch profiles, session presets, and slot-health visibility
 
-## Current `M9` learning guidance
+## Current `M10` economy guidance
 
-`M9` remains a tuning layer on top of stable orchestration and metrics rather than a license to widen runtime authority.
+The current economy pass stays intentionally bounded to operator-visible execution loops:
 
-- optimize only operator-visible scorecards such as encounter throughput, recovery success, command latency, and resource efficiency
-- require a named baseline, success metric, regression budget, and rollback path before a training-driven candidate can leave draft status
-- evaluate candidate changes in replay, shadow, or canary mode before wider live rollout
-- keep packet, zoning, anti-cheat, and authenticated IPC boundaries unchanged unless a separate gated milestone explicitly reopens them
-- treat training-driven changes as operator-opt-in until live validation proves they do not regress current behavior
+- treat loot intake, distribution, vendor, and banking work as explicit queues and state machines, not as hidden background automation
+- reuse the existing authenticated routing and session/group scope model instead of inventing a separate economy control plane
+- ship pause/skip/abort/resume controls and economy-facing TUI summaries alongside each loop before claiming a self-sustaining farm workflow
+
+The current follow-on implementation slices are:
+
+- loot intake plus distribution ownership and reserve rules
+- vendor and banking route controllers with failure-state visibility
+- plat/item ledger summaries plus operator overrides
 
 ## Developer Guidance
 

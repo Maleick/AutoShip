@@ -229,7 +229,11 @@ pub fn read_spellbook(proc: &ProcessHandle, eq_base: u64) -> Vec<SpellSlot> {
         };
 
         build_spell_slots(
-            read_spell_slot_ids(proc, profile_ptr + profile::SPELL_BOOK, profile::SPELL_BOOK_SLOT_COUNT),
+            read_spell_slot_ids(
+                proc,
+                profile_ptr + profile::SPELL_BOOK,
+                profile::SPELL_BOOK_SLOT_COUNT,
+            ),
             |_| None,
         )
     }
@@ -383,49 +387,6 @@ fn read_display_timestamp(proc: &ProcessHandle, eq_base: u64) -> Option<u32> {
     proc.read::<u32>(display_addr + display::TIME_STAMP).ok()
 }
 
-fn read_local_profile_addr(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
-    let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
-    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
-
-    use textquest_common::offsets::profile;
-    let profile_mgr = pc_addr + profile::PROFILE_MANAGER;
-    let profile_list_ptr = proc
-        .read_ptr(profile_mgr + profile::PROFILE_LIST_PTR)
-        .ok()
-        .filter(|&p| p != 0)?;
-    proc.read_ptr(profile_list_ptr + profile::PROFILE_FIRST)
-        .ok()
-        .filter(|&p| p != 0)
-}
-
-fn build_spellbook_entries(spell_ids: &[i32]) -> Vec<SpellBookEntry> {
-    spell_ids
-        .iter()
-        .enumerate()
-        .filter(|&(_, &spell_id)| spell_id > 0)
-        .map(|(slot, &spell_id)| SpellBookEntry { slot, spell_id })
-        .collect()
-}
-
-fn build_current_spellset<F>(spell_ids: &[i32], mut resolve_metadata: F) -> Vec<MemorizedSpell>
-where
-    F: FnMut(i32) -> Option<SpellCastMetadata>,
-{
-    spell_ids
-        .iter()
-        .enumerate()
-        .filter(|&(_, &spell_id)| spell_id > 0)
-        .map(|(slot, &spell_id)| {
-            let metadata = resolve_metadata(spell_id);
-            MemorizedSpell {
-                gem: slot as u8 + 1,
-                spell_id,
-                spell_name: metadata.and_then(|entry| entry.spell_name),
-            }
-        })
-        .collect()
-}
-
 fn read_local_player_addr_from_pc(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
     let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
     let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
@@ -556,7 +517,8 @@ where
     I: IntoIterator<Item = (usize, i32)>,
     F: FnMut(u32) -> Option<String>,
 {
-    slots.into_iter()
+    slots
+        .into_iter()
         .filter_map(|(slot, spell_id)| {
             let spell_id = u32::try_from(spell_id).ok().filter(|&id| id > 0)?;
             Some(SpellSlot {
@@ -568,12 +530,17 @@ where
         .collect()
 }
 
-fn read_spell_slot_ids(proc: &ProcessHandle, base_addr: usize, slot_count: usize) -> Vec<(usize, i32)> {
+fn read_spell_slot_ids(
+    proc: &ProcessHandle,
+    base_addr: usize,
+    slot_count: usize,
+) -> Vec<(usize, i32)> {
     let Ok(bytes) = proc.read_bytes(base_addr, slot_count * size_of::<i32>()) else {
         return Vec::new();
     };
 
-    bytes.chunks_exact(size_of::<i32>())
+    bytes
+        .chunks_exact(size_of::<i32>())
         .enumerate()
         .map(|(slot, chunk)| {
             (
@@ -948,7 +915,8 @@ mod tests {
     #[test]
     fn read_spell_slot_ids_decodes_little_endian_i32_values() {
         fn parse(bytes: &[u8]) -> Vec<(usize, i32)> {
-            bytes.chunks_exact(size_of::<i32>())
+            bytes
+                .chunks_exact(size_of::<i32>())
                 .enumerate()
                 .map(|(slot, chunk)| {
                     (

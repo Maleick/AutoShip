@@ -773,8 +773,7 @@ mod platform {
                             )?;
                             let mut func_rva_buf = [0u8; 4];
                             read_remote(func_entry_addr, &mut func_rva_buf)?;
-                            let func_rva =
-                                u32::from_le_bytes(func_rva_buf.try_into().unwrap()) as usize;
+                            let func_rva = u32::from_le_bytes(func_rva_buf) as usize;
 
                             // Check for forwarded export (RVA within export directory)
                             if func_rva >= export_rva
@@ -827,7 +826,7 @@ mod platform {
                     let mut func_rva_buf = [0u8; 4];
                     read_remote(func_entry_addr, &mut func_rva_buf)?;
 
-                    let func_rva = u32::from_le_bytes(func_rva_buf.try_into().unwrap()) as usize;
+                    let func_rva = u32::from_le_bytes(func_rva_buf) as usize;
 
                     if func_rva >= export_rva && func_rva < export_rva.saturating_add(export_size) {
                         return Err(InjectError::ImportResolveFailed {
@@ -838,13 +837,6 @@ mod platform {
                     Ok(base_addr + func_rva)
                 }
             }
-        }
-
-        fn is_safe_import_name(dll_name: &str) -> bool {
-            !dll_name.is_empty()
-                && !dll_name.contains('\\')
-                && !dll_name.contains('/')
-                && !dll_name.contains(':')
         }
 
         /// Execute the DLL's entry point via a small shellcode stub.
