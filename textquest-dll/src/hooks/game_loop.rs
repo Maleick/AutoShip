@@ -429,9 +429,10 @@ impl CastingLoop {
                 issue_cast(self.spell_slot, self.target_id);
                 *remaining -= 1;
 
-                self.next_cast_tick = current_tick + self.backoff_ticks;
+                let current_delay = self.backoff_ticks;
+                self.next_cast_tick = current_tick + current_delay;
                 // Exponential backoff, capped.
-                self.backoff_ticks = (self.backoff_ticks * 2).min(CAST_LOOP_MAX_BACKOFF_TICKS);
+                self.backoff_ticks = (current_delay * 2).min(CAST_LOOP_MAX_BACKOFF_TICKS);
                 true
             }
         }
@@ -2720,10 +2721,37 @@ mod tests {
         }
 
         assert!(loop_state.tick(100, 0));
+        if let Ok(queue) = PENDING_COMMANDS.lock() {
+            let queued: Vec<String> = queue
+                .iter()
+                .filter_map(|pending| match &pending.command {
+                    textquest_common::ipc::Command::SlashCommand { command } => {
+                        Some(command.clone())
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(queued, vec!["/target id 77", "/cast 4"]);
+        }
         assert_eq!(loop_state.next_cast_tick, 108);
         assert_eq!(loop_state.backoff_ticks, 16);
 
+        if let Ok(mut queue) = PENDING_COMMANDS.lock() {
+            queue.clear();
+        }
         assert!(loop_state.tick(108, 0));
+        if let Ok(queue) = PENDING_COMMANDS.lock() {
+            let queued: Vec<String> = queue
+                .iter()
+                .filter_map(|pending| match &pending.command {
+                    textquest_common::ipc::Command::SlashCommand { command } => {
+                        Some(command.clone())
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(queued, vec!["/target id 77", "/cast 4"]);
+        }
         assert_eq!(loop_state.next_cast_tick, 124);
         assert_eq!(loop_state.backoff_ticks, 30);
 
