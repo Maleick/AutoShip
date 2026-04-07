@@ -928,8 +928,7 @@ fn build_live_nav_client_status(status: &NavStatus, zone_name: &str) -> NavClien
             NavStatus::Moving { .. }
                 | NavStatus::Paused { .. }
                 | NavStatus::Stuck { .. }
-                | NavStatus::Following { .. }
-                | NavStatus::Sticking { .. }
+                | NavStatus::Arrived
         ),
         path_length: None,
         failure_reason: None,
