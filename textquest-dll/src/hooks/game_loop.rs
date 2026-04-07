@@ -2405,6 +2405,29 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let slots = crate::eq::inventory::query_open_container_slots(eq_base, &filter);
             crate::ipc::send_response(textquest_common::ipc::Response::ContainerSlots { slots });
         }
+        Command::QueryContextMenu => {
+            tracing::info!("QueryContextMenu received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let menus = crate::eq::context_menu::read_context_menus(eq_base);
+            crate::ipc::send_response(textquest_common::ipc::Response::ContextMenuState { menus });
+        }
+        Command::ActivateContextMenuItem {
+            menu_index,
+            item_index,
+        } => {
+            tracing::info!(menu_index, item_index, "ActivateContextMenuItem received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let (success, message) = match crate::eq::context_menu::activate_context_menu_item(
+                eq_base, menu_index, item_index,
+            ) {
+                Ok(()) => (true, "HandleMenu dispatched".into()),
+                Err(msg) => (false, msg),
+            };
+            crate::ipc::send_response(textquest_common::ipc::Response::ContextMenuActivated {
+                success,
+                message,
+            });
+        }
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
