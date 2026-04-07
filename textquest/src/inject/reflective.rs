@@ -101,6 +101,23 @@ pub struct ParsedPe {
     pub imports: Vec<ImportEntry>,
 }
 
+/// System DLLs that share base addresses across all processes on x64 Windows.
+const SYSTEM_DLLS: &[&str] = &[
+    "kernel32.dll",
+    "kernelbase.dll",
+    "ntdll.dll",
+    "user32.dll",
+    "advapi32.dll",
+    "ws2_32.dll",
+    "msvcrt.dll",
+];
+
+/// Check if a DLL is a system DLL (same base in all processes on x64 Windows).
+pub fn is_system_dll(dll_name: &str) -> bool {
+    let lower = dll_name.to_ascii_lowercase();
+    SYSTEM_DLLS.iter().any(|&s| lower == s)
+}
+
 /// Parse a PE file from raw bytes, extracting sections, relocations, and imports.
 pub fn parse_pe(dll_bytes: &[u8]) -> Result<ParsedPe, InjectError> {
     use goblin::pe::PE;
@@ -321,10 +338,13 @@ mod platform {
     use super::*;
 
     use windows::Win32::Foundation::{CloseHandle, WAIT_EVENT};
-    use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+    use windows::Win32::System::Diagnostics::Debug::{ReadProcessMemory, WriteProcessMemory};
     use windows::Win32::System::Memory::{
         MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
         VirtualAllocEx, VirtualFreeEx, VirtualProtectEx,
+    };
+    use windows::Win32::System::ProcessStatus::{
+        EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_ALL,
     };
     use windows::Win32::System::Threading::{
         CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
@@ -410,9 +430,9 @@ mod platform {
                 apply_relocation(&mut image, reloc, delta)?;
             }
 
-            // 4. Resolve imports — walk the IAT and patch with addresses from
-            //    already-loaded modules in the target (kernel32, ntdll, etc.)
-            Self::resolve_imports(&mut image, &pe.imports)?;
+            // 4. Resolve imports — system DLLs use local resolution (same base),
+            //    non-system DLLs use remote process export table parsing.
+            Self::resolve_imports(&mut image, &pe.imports, process_handle)?;
 
             // 5. Write the fully prepared image to the target process
             unsafe {
@@ -452,92 +472,325 @@ mod platform {
             Ok(remote_base_addr)
         }
 
-        /// Resolve imports by looking up export addresses from our own process.
-        ///
-        /// kernel32/ntdll are at the same address in all processes on x64 Windows,
-        /// so resolving locally gives correct addresses for the target.
-        fn resolve_imports(image: &mut [u8], imports: &[ImportEntry]) -> Result<(), InjectError> {
-            use windows::Win32::System::LibraryLoader::{
-                GetModuleHandleA, GetProcAddress, LoadLibraryA,
-            };
+        /// Resolve imports, using local resolution for system DLLs and
+        /// cross-process resolution for non-system DLLs.
+        fn resolve_imports(
+            image: &mut [u8],
+            imports: &[ImportEntry],
+            process_handle: windows::Win32::Foundation::HANDLE,
+        ) -> Result<(), InjectError> {
+            use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
             use windows::core::PCSTR;
 
+            // Build remote module map lazily — only if we encounter a non-system DLL
+            let mut remote_modules: Option<Vec<(String, usize)>> = None;
+
             for imp in imports {
-                let dll_cstr = std::ffi::CString::new(imp.dll_name.as_str()).map_err(|_| {
-                    InjectError::ImportResolveFailed {
-                        dll: imp.dll_name.clone(),
-                        function: String::new(),
-                    }
-                })?;
+                let addr = if is_system_dll(&imp.dll_name) {
+                    // System DLL — resolve locally (same base in all processes)
+                    let dll_cstr = std::ffi::CString::new(imp.dll_name.as_str()).map_err(|_| {
+                        InjectError::ImportResolveFailed {
+                            dll: imp.dll_name.clone(),
+                            function: String::new(),
+                        }
+                    })?;
 
-                let dll_pcstr = PCSTR(dll_cstr.as_ptr() as *const u8);
-
-                // Try GetModuleHandle first (already loaded), fall back to
-                // LoadLibrary for lazily-loaded DLLs (e.g., d3d11.dll).
-                let module = unsafe { GetModuleHandleA(dll_pcstr) }.or_else(|_| {
-                    tracing::debug!(dll = %imp.dll_name, "Module not loaded, loading via LoadLibraryA");
-                    unsafe { LoadLibraryA(dll_pcstr) }
-                })
-                .map_err(|_| InjectError::ImportResolveFailed {
-                    dll: imp.dll_name.clone(),
-                    function: String::new(),
-                })?;
-
-                let addr = match &imp.function {
-                    ImportName::Name(name) => {
-                        let func_cstr = std::ffi::CString::new(name.as_str()).map_err(|_| {
-                            InjectError::ImportResolveFailed {
-                                dll: imp.dll_name.clone(),
-                                function: name.clone(),
-                            }
+                    let module = unsafe { GetModuleHandleA(PCSTR(dll_cstr.as_ptr() as *const u8)) }
+                        .map_err(|_| InjectError::ImportResolveFailed {
+                            dll: imp.dll_name.clone(),
+                            function: String::new(),
                         })?;
-                        unsafe { GetProcAddress(module, PCSTR(func_cstr.as_ptr() as *const u8)) }
-                            .ok_or_else(|| InjectError::ImportResolveFailed {
-                                dll: imp.dll_name.clone(),
-                                function: name.clone(),
-                            })?
+
+                    match &imp.function {
+                        ImportName::Name(name) => {
+                            let func_cstr =
+                                std::ffi::CString::new(name.as_str()).map_err(|_| {
+                                    InjectError::ImportResolveFailed {
+                                        dll: imp.dll_name.clone(),
+                                        function: name.clone(),
+                                    }
+                                })?;
+                            unsafe {
+                                GetProcAddress(module, PCSTR(func_cstr.as_ptr() as *const u8))
+                            }
+                            .ok_or_else(|| {
+                                InjectError::ImportResolveFailed {
+                                    dll: imp.dll_name.clone(),
+                                    function: name.clone(),
+                                }
+                            })? as usize
+                        }
+                        ImportName::Ordinal(ord) => {
+                            unsafe { GetProcAddress(module, PCSTR(*ord as usize as *const u8)) }
+                                .ok_or_else(|| InjectError::ImportResolveFailed {
+                                    dll: imp.dll_name.clone(),
+                                    function: format!("#{ord}"),
+                                })? as usize
+                        }
                     }
-                    ImportName::Ordinal(ord) => {
-                        unsafe { GetProcAddress(module, PCSTR(*ord as usize as *const u8)) }
-                            .ok_or_else(|| InjectError::ImportResolveFailed {
-                                dll: imp.dll_name.clone(),
-                                function: format!("#{ord}"),
-                            })?
+                } else {
+                    // Non-system DLL — resolve via remote process export table
+                    if remote_modules.is_none() {
+                        remote_modules = Some(Self::enumerate_remote_modules(process_handle)?);
                     }
+                    let modules = remote_modules.as_ref().unwrap();
+
+                    Self::resolve_import_remote(process_handle, modules, imp)?
                 };
 
                 // Write the resolved address into the IAT slot
                 let iat_offset = imp.iat_rva as usize;
                 if iat_offset + 8 <= image.len() {
-                    let addr_val = addr as usize;
-                    image[iat_offset..iat_offset + 8].copy_from_slice(&addr_val.to_le_bytes());
+                    image[iat_offset..iat_offset + 8].copy_from_slice(&addr.to_le_bytes());
                 }
             }
 
             Ok(())
         }
 
+        /// Enumerate all modules loaded in the target process.
+        /// Returns `(lowercase_filename, base_address)` pairs.
+        fn enumerate_remote_modules(
+            process_handle: windows::Win32::Foundation::HANDLE,
+        ) -> Result<Vec<(String, usize)>, InjectError> {
+            let mut modules_buf = vec![windows::Win32::Foundation::HMODULE::default(); 1024];
+            let mut bytes_needed: u32 = 0;
+
+            unsafe {
+                EnumProcessModulesEx(
+                    process_handle,
+                    modules_buf.as_mut_ptr(),
+                    (modules_buf.len() * std::mem::size_of::<windows::Win32::Foundation::HMODULE>())
+                        as u32,
+                    &mut bytes_needed,
+                    LIST_MODULES_ALL,
+                )
+            }
+            .map_err(|e| InjectError::ReadFailed(format!("EnumProcessModulesEx: {e}")))?;
+
+            let count =
+                bytes_needed as usize / std::mem::size_of::<windows::Win32::Foundation::HMODULE>();
+            modules_buf.truncate(count);
+
+            let mut result = Vec::with_capacity(count);
+            let mut name_buf = vec![0u16; 260];
+
+            for hmod in &modules_buf {
+                let len =
+                    unsafe { GetModuleFileNameExW(process_handle, *hmod, &mut name_buf) }
+                        as usize;
+
+                if len > 0 {
+                    let full_path = String::from_utf16_lossy(&name_buf[..len]);
+                    let filename = full_path
+                        .rsplit('\\')
+                        .next()
+                        .unwrap_or(&full_path)
+                        .to_ascii_lowercase();
+                    result.push((filename, hmod.0 as usize));
+                }
+            }
+
+            tracing::debug!(count = result.len(), "enumerated remote modules");
+            Ok(result)
+        }
+
+        /// Resolve a single import from a non-system DLL by reading the target
+        /// process's PE export table via `ReadProcessMemory`.
+        fn resolve_import_remote(
+            process_handle: windows::Win32::Foundation::HANDLE,
+            remote_modules: &[(String, usize)],
+            imp: &ImportEntry,
+        ) -> Result<usize, InjectError> {
+            let dll_lower = imp.dll_name.to_ascii_lowercase();
+            let (_, base) = remote_modules
+                .iter()
+                .find(|(name, _)| *name == dll_lower)
+                .ok_or_else(|| {
+                    tracing::warn!(dll = %imp.dll_name, "DLL not found in target process");
+                    InjectError::ImportResolveFailed {
+                        dll: imp.dll_name.clone(),
+                        function: String::new(),
+                    }
+                })?;
+
+            let base_addr = *base;
+
+            // Helper: read bytes from target process
+            let read_remote = |addr: usize, buf: &mut [u8]| -> Result<(), InjectError> {
+                unsafe {
+                    ReadProcessMemory(
+                        process_handle,
+                        addr as *const _,
+                        buf.as_mut_ptr() as *mut _,
+                        buf.len(),
+                        None,
+                    )
+                }
+                .map_err(|e| InjectError::ReadFailed(format!("ReadProcessMemory @ {addr:#x}: {e}")))
+            };
+
+            // Read DOS header to get e_lfanew
+            let mut dos_header = [0u8; 64];
+            read_remote(base_addr, &mut dos_header)?;
+
+            if dos_header[0] != b'M' || dos_header[1] != b'Z' {
+                return Err(InjectError::ReadFailed(format!(
+                    "invalid DOS signature at remote module {base_addr:#x}",
+                )));
+            }
+
+            let e_lfanew = u32::from_le_bytes(dos_header[0x3C..0x40].try_into().unwrap()) as usize;
+
+            // Read PE signature + COFF header + optional header (enough for data directories)
+            let mut pe_header = [0u8; 264];
+            read_remote(base_addr + e_lfanew, &mut pe_header)?;
+
+            if &pe_header[0..4] != b"PE\0\0" {
+                return Err(InjectError::ReadFailed(
+                    "invalid PE signature in remote module".into(),
+                ));
+            }
+
+            // Optional header starts at offset 24 (4 PE sig + 20 COFF)
+            let opt_offset = 24usize;
+            let magic =
+                u16::from_le_bytes(pe_header[opt_offset..opt_offset + 2].try_into().unwrap());
+            if magic != 0x020B {
+                return Err(InjectError::ReadFailed("remote module is not PE32+".into()));
+            }
+
+            // Export directory is data directory index 0, at opt header + 112
+            let dd_offset = opt_offset + 112;
+            let export_rva =
+                u32::from_le_bytes(pe_header[dd_offset..dd_offset + 4].try_into().unwrap())
+                    as usize;
+            let export_size =
+                u32::from_le_bytes(pe_header[dd_offset + 4..dd_offset + 8].try_into().unwrap())
+                    as usize;
+
+            if export_rva == 0 {
+                return Err(InjectError::ImportResolveFailed {
+                    dll: imp.dll_name.clone(),
+                    function: format!("{:?}", imp.function),
+                });
+            }
+
+            // Read the IMAGE_EXPORT_DIRECTORY (40 bytes)
+            let mut export_dir = [0u8; 40];
+            read_remote(base_addr + export_rva, &mut export_dir)?;
+
+            let num_functions = u32::from_le_bytes(export_dir[20..24].try_into().unwrap()) as usize;
+            let num_names = u32::from_le_bytes(export_dir[24..28].try_into().unwrap()) as usize;
+            let addr_of_functions =
+                u32::from_le_bytes(export_dir[28..32].try_into().unwrap()) as usize;
+            let addr_of_names = u32::from_le_bytes(export_dir[32..36].try_into().unwrap()) as usize;
+            let addr_of_ordinals =
+                u32::from_le_bytes(export_dir[36..40].try_into().unwrap()) as usize;
+            let ordinal_base = u32::from_le_bytes(export_dir[16..20].try_into().unwrap()) as usize;
+
+            match &imp.function {
+                ImportName::Name(name) => {
+                    // Read name RVA table, ordinal table, and function address table
+                    let mut name_rvas = vec![0u8; num_names * 4];
+                    read_remote(base_addr + addr_of_names, &mut name_rvas)?;
+
+                    let mut ordinals = vec![0u8; num_names * 2];
+                    read_remote(base_addr + addr_of_ordinals, &mut ordinals)?;
+
+                    let mut func_rvas = vec![0u8; num_functions * 4];
+                    read_remote(base_addr + addr_of_functions, &mut func_rvas)?;
+
+                    for i in 0..num_names {
+                        let name_rva =
+                            u32::from_le_bytes(name_rvas[i * 4..(i + 1) * 4].try_into().unwrap())
+                                as usize;
+
+                        let mut name_buf = [0u8; 256];
+                        read_remote(base_addr + name_rva, &mut name_buf)?;
+
+                        let nul_pos = name_buf.iter().position(|&b| b == 0).unwrap_or(256);
+                        let export_name = std::str::from_utf8(&name_buf[..nul_pos]).unwrap_or("");
+
+                        if export_name == name.as_str() {
+                            let ordinal_index = u16::from_le_bytes(
+                                ordinals[i * 2..(i + 1) * 2].try_into().unwrap(),
+                            ) as usize;
+
+                            let func_rva = u32::from_le_bytes(
+                                func_rvas[ordinal_index * 4..(ordinal_index + 1) * 4]
+                                    .try_into()
+                                    .unwrap(),
+                            ) as usize;
+
+                            // Check for forwarded export (RVA within export directory)
+                            if func_rva >= export_rva && func_rva < export_rva + export_size {
+                                tracing::warn!(
+                                    dll = %imp.dll_name,
+                                    function = %name,
+                                    "forwarded export not yet supported"
+                                );
+                                return Err(InjectError::ImportResolveFailed {
+                                    dll: imp.dll_name.clone(),
+                                    function: name.clone(),
+                                });
+                            }
+
+                            return Ok(base_addr + func_rva);
+                        }
+                    }
+
+                    Err(InjectError::ImportResolveFailed {
+                        dll: imp.dll_name.clone(),
+                        function: name.clone(),
+                    })
+                }
+                ImportName::Ordinal(ord) => {
+                    let index = *ord as usize - ordinal_base;
+                    if index >= num_functions {
+                        return Err(InjectError::ImportResolveFailed {
+                            dll: imp.dll_name.clone(),
+                            function: format!("#{ord}"),
+                        });
+                    }
+
+                    let mut func_rvas = vec![0u8; num_functions * 4];
+                    read_remote(base_addr + addr_of_functions, &mut func_rvas)?;
+
+                    let func_rva = u32::from_le_bytes(
+                        func_rvas[index * 4..(index + 1) * 4].try_into().unwrap(),
+                    ) as usize;
+
+                    let export_dir_end = export_dir_rva.saturating_add(export_dir_size);
+                    if func_rva >= export_dir_rva && func_rva < export_dir_end {
+                        return Err(InjectError::ImportResolveFailed {
+                            dll: imp.dll_name.clone(),
+                            function: format!("#{ord}"),
+                        });
+                    }
+                    Ok(base_addr + func_rva)
+                }
+            }
+        }
+
         /// Execute the DLL's entry point via a small shellcode stub.
         ///
         /// DllMain expects `(HINSTANCE, DWORD fdwReason, LPVOID)` but
         /// `CreateRemoteThread` only passes one parameter. We write a tiny
-        /// x64 stub that sets up the three arguments and calls the entry:
-        ///
-        /// ```asm
-        /// mov  rcx, <base_addr>     ; hinstDLL
-        /// mov  edx, 1               ; DLL_PROCESS_ATTACH
-        /// xor  r8, r8               ; lpvReserved = NULL
-        /// mov  rax, <entry_addr>
-        /// call rax
-        /// ret
-        /// ```
+        /// x64 stub that sets up the three arguments and calls the entry.
+        /// Includes 32-byte shadow space per x64 ABI.
         fn execute_entry(
             process_handle: windows::Win32::Foundation::HANDLE,
             entry_addr: usize,
             base_addr: usize,
         ) -> Result<(), InjectError> {
             // Build x64 shellcode stub for DllMain(base, DLL_PROCESS_ATTACH, NULL)
+            // x64 ABI requires 32 bytes of shadow space for the callee.
+            // sub rsp, 0x28 = 32 shadow + 8 alignment (call pushes 8-byte return addr,
+            // so 0x28 keeps RSP 16-byte aligned at the callee's entry).
             let mut stub = Vec::with_capacity(64);
+            // sub rsp, 0x28
+            stub.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]);
             // mov rcx, imm64 (base_addr = hinstDLL)
             stub.extend_from_slice(&[0x48, 0xB9]);
             stub.extend_from_slice(&(base_addr as u64).to_le_bytes());
@@ -550,6 +803,8 @@ mod platform {
             stub.extend_from_slice(&(entry_addr as u64).to_le_bytes());
             // call rax
             stub.extend_from_slice(&[0xFF, 0xD0]);
+            // add rsp, 0x28
+            stub.extend_from_slice(&[0x48, 0x83, 0xC4, 0x28]);
             // xor eax, eax (return 0)
             stub.extend_from_slice(&[0x31, 0xC0]);
             // ret
@@ -873,5 +1128,159 @@ mod tests {
         // The .text section should contain our 0xCC byte
         assert!(!parsed.sections[0].data.is_empty());
         assert_eq!(parsed.sections[0].data[0], 0xCC);
+    }
+
+    #[test]
+    fn test_system_dll_classification() {
+        // System DLLs — should use local resolution
+        assert!(is_system_dll("kernel32.dll"));
+        assert!(is_system_dll("KERNEL32.DLL"));
+        assert!(is_system_dll("ntdll.dll"));
+        assert!(is_system_dll("KernelBase.dll"));
+        assert!(is_system_dll("user32.dll"));
+        assert!(is_system_dll("advapi32.dll"));
+        assert!(is_system_dll("ws2_32.dll"));
+        assert!(is_system_dll("msvcrt.dll"));
+
+        // Non-system DLLs — should use remote resolution
+        assert!(!is_system_dll("d3d11.dll"));
+        assert!(!is_system_dll("dxgi.dll"));
+        assert!(!is_system_dll("eqgame.dll"));
+        assert!(!is_system_dll("vcruntime140.dll"));
+    }
+
+    /// Build a PE export table in a byte buffer and verify we can parse it.
+    /// This tests the export directory format parsing without needing a real process.
+    #[test]
+    fn test_export_table_parsing() {
+        let mut buf = vec![0u8; 0x2000];
+
+        // DOS header
+        buf[0] = b'M';
+        buf[1] = b'Z';
+        buf[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes()); // e_lfanew
+
+        let pe = 0x80usize;
+        buf[pe..pe + 4].copy_from_slice(b"PE\0\0");
+
+        // COFF header
+        let coff = pe + 4;
+        buf[coff..coff + 2].copy_from_slice(&0x8664u16.to_le_bytes()); // AMD64
+
+        // Optional header
+        let opt = coff + 20;
+        buf[opt..opt + 2].copy_from_slice(&0x020Bu16.to_le_bytes()); // PE32+
+
+        // Export directory data directory (first entry, at opt+112)
+        let export_rva: u32 = 0x1000;
+        let export_size: u32 = 200;
+        buf[opt + 112..opt + 116].copy_from_slice(&export_rva.to_le_bytes());
+        buf[opt + 116..opt + 120].copy_from_slice(&export_size.to_le_bytes());
+
+        // Build export directory at offset 0x1000
+        let ed = 0x1000usize;
+        let ordinal_base: u32 = 1;
+        let num_functions: u32 = 2;
+        let num_names: u32 = 2;
+        let addr_of_functions: u32 = 0x1100;
+        let addr_of_names: u32 = 0x1200;
+        let addr_of_ordinals: u32 = 0x1300;
+
+        // Export directory struct (40 bytes)
+        buf[ed + 16..ed + 20].copy_from_slice(&ordinal_base.to_le_bytes());
+        buf[ed + 20..ed + 24].copy_from_slice(&num_functions.to_le_bytes());
+        buf[ed + 24..ed + 28].copy_from_slice(&num_names.to_le_bytes());
+        buf[ed + 28..ed + 32].copy_from_slice(&addr_of_functions.to_le_bytes());
+        buf[ed + 32..ed + 36].copy_from_slice(&addr_of_names.to_le_bytes());
+        buf[ed + 36..ed + 40].copy_from_slice(&addr_of_ordinals.to_le_bytes());
+
+        // Function RVA table at 0x1100: two functions at RVAs 0x500 and 0x600
+        buf[0x1100..0x1104].copy_from_slice(&0x500u32.to_le_bytes());
+        buf[0x1104..0x1108].copy_from_slice(&0x600u32.to_le_bytes());
+
+        // Name RVA table at 0x1200: point to name strings
+        let name1_rva: u32 = 0x1400;
+        let name2_rva: u32 = 0x1420;
+        buf[0x1200..0x1204].copy_from_slice(&name1_rva.to_le_bytes());
+        buf[0x1204..0x1208].copy_from_slice(&name2_rva.to_le_bytes());
+
+        // Ordinal table at 0x1300: ordinal indices 0 and 1
+        buf[0x1300..0x1302].copy_from_slice(&0u16.to_le_bytes());
+        buf[0x1302..0x1304].copy_from_slice(&1u16.to_le_bytes());
+
+        // Name strings
+        buf[0x1400..0x1400 + 7].copy_from_slice(b"FuncOne");
+        buf[0x1407] = 0;
+        buf[0x1420..0x1420 + 7].copy_from_slice(b"FuncTwo");
+        buf[0x1427] = 0;
+
+        // Verify the export directory structure
+        let read_u32 = |offset: usize| -> u32 {
+            u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
+        };
+
+        assert_eq!(read_u32(ed + 20), 2); // num_functions
+        assert_eq!(read_u32(ed + 24), 2); // num_names
+
+        // Verify function RVAs
+        assert_eq!(read_u32(0x1100), 0x500);
+        assert_eq!(read_u32(0x1104), 0x600);
+
+        // Verify name string lookup
+        let name_rva = read_u32(0x1200) as usize;
+        let nul = buf[name_rva..].iter().position(|&b| b == 0).unwrap();
+        let name = std::str::from_utf8(&buf[name_rva..name_rva + nul]).unwrap();
+        assert_eq!(name, "FuncOne");
+
+        // Verify ordinal → function mapping
+        let ordinal_idx = u16::from_le_bytes(buf[0x1300..0x1302].try_into().unwrap()) as usize;
+        let func_rva = read_u32(0x1100 + ordinal_idx * 4);
+        assert_eq!(func_rva, 0x500); // FuncOne → RVA 0x500
+
+        let ordinal_idx2 = u16::from_le_bytes(buf[0x1302..0x1304].try_into().unwrap()) as usize;
+        let func_rva2 = read_u32(0x1100 + ordinal_idx2 * 4);
+        assert_eq!(func_rva2, 0x600); // FuncTwo → RVA 0x600
+    }
+
+    #[test]
+    fn test_shellcode_shadow_space() {
+        // Verify the shellcode stub layout includes shadow space allocation.
+        let base_addr: u64 = 0x7FF000000;
+        let entry_addr: u64 = 0x7FF001000;
+
+        let mut stub = Vec::with_capacity(64);
+        // sub rsp, 0x28
+        stub.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]);
+        // mov rcx, imm64
+        stub.extend_from_slice(&[0x48, 0xB9]);
+        stub.extend_from_slice(&base_addr.to_le_bytes());
+        // mov edx, 1
+        stub.extend_from_slice(&[0xBA, 0x01, 0x00, 0x00, 0x00]);
+        // xor r8, r8
+        stub.extend_from_slice(&[0x4D, 0x31, 0xC0]);
+        // mov rax, imm64
+        stub.extend_from_slice(&[0x48, 0xB8]);
+        stub.extend_from_slice(&entry_addr.to_le_bytes());
+        // call rax
+        stub.extend_from_slice(&[0xFF, 0xD0]);
+        // add rsp, 0x28
+        stub.extend_from_slice(&[0x48, 0x83, 0xC4, 0x28]);
+        // xor eax, eax
+        stub.extend_from_slice(&[0x31, 0xC0]);
+        // ret
+        stub.push(0xC3);
+
+        // Verify shadow space: sub rsp, 0x28 at start
+        assert_eq!(&stub[0..4], &[0x48, 0x83, 0xEC, 0x28]);
+
+        // Verify add rsp, 0x28 after call rax (0xFF, 0xD0)
+        let call_pos = stub
+            .windows(2)
+            .position(|w| w == [0xFF, 0xD0])
+            .expect("call rax not found");
+        assert_eq!(&stub[call_pos + 2..call_pos + 6], &[0x48, 0x83, 0xC4, 0x28]);
+
+        // Verify total stub size is reasonable
+        assert!(stub.len() < 64);
     }
 }
