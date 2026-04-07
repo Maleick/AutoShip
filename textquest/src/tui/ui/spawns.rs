@@ -693,10 +693,7 @@ mod tests {
         ]);
 
         assert_eq!(lines.len(), 2);
-        assert_eq!(
-            lines[0],
-            "G1 Complete Heal  G2 Celestial Remedy  G3 Yaulp"
-        );
+        assert_eq!(lines[0], "G1 Complete Heal  G2 Celestial Remedy  G3 Yaulp");
         assert_eq!(lines[1], "G4 Symbol");
     }
 

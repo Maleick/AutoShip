@@ -170,4 +170,4 @@ This inventory contributes to the M5 exit gate as follows:
 - `#60` (`ability-packet-coverage-and-targetability-validation.md`): per-ability targetability, range, and live-proof rules
 - `#50` (zoning): zone request state machine, failure codes, and receive-side zone acknowledgment (feed from `ProcessZonePacket`)
 - `M7` anti-cheat: counter tracking, opcode scrambler integration, and hook exposure review
-- Future receive-side work: `ProcessChannelMessagePacket` hook candidate for Soul Engine chat ingest (`M10`)
+- Future receive-side work: `ProcessChannelMessagePacket` hook candidate for Soul Engine chat ingest (`M11`)
