@@ -8,6 +8,7 @@ textquest-common = { path = "../textquest-common" }
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
+chrono = { version = "0.4", features = ["serde"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
