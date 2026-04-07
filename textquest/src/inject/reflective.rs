@@ -577,8 +577,7 @@ mod platform {
 
             for hmod in &modules_buf {
                 let len =
-                    unsafe { GetModuleFileNameExW(process_handle, *hmod, &mut name_buf) }
-                        as usize;
+                    unsafe { GetModuleFileNameExW(process_handle, *hmod, &mut name_buf) } as usize;
 
                 if len > 0 {
                     let full_path = String::from_utf16_lossy(&name_buf[..len]);
