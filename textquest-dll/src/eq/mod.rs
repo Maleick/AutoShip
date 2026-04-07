@@ -26,6 +26,10 @@ pub const SET_TARGET_OFFSET: usize = 0x0; // placeholder
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 
+/// Maximum spell gems exposed by the local profile's memorized spell array.
+pub const MAX_MEMORIZED_SPELL_GEMS: usize =
+    textquest_common::offsets::profile::MEMORIZED_SPELL_GEMS;
+
 /// Resolve the EQ base address from the global atomic.
 /// Returns `None` if the base hasn't been set yet.
 fn get_eq_base() -> Option<u64> {
@@ -143,6 +147,74 @@ fn get_local_player(eq_base: u64) -> Option<*mut c_void> {
     {
         let _ = addr;
         None
+    }
+}
+
+/// Read the local character's memorized spell IDs from the current profile.
+///
+/// Returns a fixed-size array of spell IDs indexed by gem slot (0-based).
+/// Zero or negative values mean the gem is empty / unavailable.
+#[must_use]
+pub fn read_memorized_spells() -> [i32; MAX_MEMORIZED_SPELL_GEMS] {
+    #[cfg(windows)]
+    {
+        use textquest_common::offsets::profile;
+
+        let mut spells = [0; MAX_MEMORIZED_SPELL_GEMS];
+
+        let Some(eq_base) = get_eq_base() else {
+            return spells;
+        };
+        let Some(player) = get_local_player(eq_base) else {
+            return spells;
+        };
+
+        let player_ptr = player as usize;
+        if !crate::hooks::game_loop::is_readable(
+            player_ptr + profile::PROFILE_MANAGER,
+            std::mem::size_of::<usize>(),
+        ) {
+            return spells;
+        }
+        let profile_manager = unsafe { *((player_ptr + profile::PROFILE_MANAGER) as *const usize) };
+        if profile_manager == 0
+            || !crate::hooks::game_loop::is_readable(
+                profile_manager + profile::PROFILE_LIST_PTR,
+                std::mem::size_of::<usize>(),
+            )
+        {
+            return spells;
+        }
+
+        let profile_list =
+            unsafe { *((profile_manager + profile::PROFILE_LIST_PTR) as *const usize) };
+        if profile_list == 0
+            || !crate::hooks::game_loop::is_readable(
+                profile_list + profile::PROFILE_FIRST,
+                std::mem::size_of::<usize>(),
+            )
+        {
+            return spells;
+        }
+
+        let base_profile = unsafe { *((profile_list + profile::PROFILE_FIRST) as *const usize) };
+        if base_profile == 0 {
+            return spells;
+        }
+
+        for (idx, spell_id) in spells.iter_mut().enumerate() {
+            let addr = base_profile + profile::MEMORIZED_SPELLS + idx * std::mem::size_of::<i32>();
+            if crate::hooks::game_loop::is_readable(addr, std::mem::size_of::<i32>()) {
+                *spell_id = unsafe { *(addr as *const i32) };
+            }
+        }
+
+        spells
+    }
+
+    #[cfg(not(windows))]
+    {
+        [0; MAX_MEMORIZED_SPELL_GEMS]
     }
 }
 
@@ -527,6 +599,11 @@ mod tests {
     fn test_cast_spell_noop_without_eq_base() {
         // Should not panic when EQ_BASE is 0 (non-windows: logs warning)
         cast_spell(0, 100);
+    }
+
+    #[test]
+    fn test_read_memorized_spells_without_eq_base_returns_empty() {
+        assert_eq!(read_memorized_spells(), [0; MAX_MEMORIZED_SPELL_GEMS]);
     }
 
     #[test]

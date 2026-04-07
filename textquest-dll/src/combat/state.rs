@@ -48,6 +48,20 @@ enum CombatState {
     Recovering,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpellCastSource {
+    PreferredGem,
+    FallbackGem,
+    SpellIdDirect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlannedSpellCast {
+    gem_id: u8,
+    spell_id: i32,
+    source: SpellCastSource,
+}
+
 /// Normalize a user/config spell slot into a safe EQ gem index.
 ///
 /// Canonical FFI gem IDs are 0-based (0-12). For backward compatibility,
@@ -528,7 +542,11 @@ impl Combatant {
                             target = action.target_id,
                             "Rotation engine selected action"
                         );
-                        crate::eq::cast_spell(0, spell_id);
+                        let memorized_spells = crate::eq::read_memorized_spells();
+                        let cast_plan = plan_spell_cast(None, spell_id, &memorized_spells).expect(
+                            "rotation spell planning without preferred slot should be valid",
+                        );
+                        crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
                         let cast_delay = u32::from(self.personality.next_cast_delay());
                         self.gcd.consume();
                         self.state = CombatState::Casting {
@@ -549,13 +567,38 @@ impl Combatant {
                         "Strategy selected spell"
                     );
 
-                    let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                    let memorized_spells = crate::eq::read_memorized_spells();
+                    let Some(cast_plan) =
+                        plan_spell_cast(Some(spell.slot), spell.spell_id, &memorized_spells)
+                    else {
                         tracing::warn!(slot = spell.slot, "Skipping cast with invalid spell slot");
                         return;
                     };
 
+                    if spell.spell_id > 0 {
+                        match cast_plan.source {
+                            SpellCastSource::PreferredGem => {}
+                            SpellCastSource::FallbackGem => {
+                                tracing::info!(
+                                    requested_slot = spell.slot,
+                                    fallback_gem = cast_plan.gem_id,
+                                    spell_id = spell.spell_id,
+                                    name = %spell.name,
+                                    "Configured gem missing spell, falling back to memorized gem"
+                                );
+                            }
+                            SpellCastSource::SpellIdDirect => {
+                                tracing::info!(
+                                    spell_id = spell.spell_id,
+                                    name = %spell.name,
+                                    "Spell not memorized in any gem, casting by spell_id for EQ auto-memorization"
+                                );
+                            }
+                        }
+                    }
+
                     // Call the real EQ CastSpell function via FFI
-                    crate::eq::cast_spell(gem_id, spell.spell_id);
+                    crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
 
                     // Apply humanization delay (cast_start_delay absorbed into cast time)
                     let cast_delay = u32::from(self.personality.next_cast_delay());
@@ -1298,6 +1341,63 @@ mod tests {
         let mut c = Combatant::new(1, 0, test_config());
         c.flee_requested = true;
         assert!(matches!(c.status(), CombatStatus::Fleeing));
+    }
+
+    #[test]
+    fn plan_spell_cast_prefers_configured_gem_when_spell_is_loaded() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 0, 0, 1500, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 3,
+                spell_id: 1500,
+                source: SpellCastSource::PreferredGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_falls_back_to_other_matching_gem() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 1500, 0, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 1,
+                spell_id: 1500,
+                source: SpellCastSource::FallbackGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_uses_spell_id_when_not_memorized_anywhere() {
+        let plan = plan_spell_cast(Some(3), 1500, &[0, 0, 0, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 0,
+                spell_id: 1500,
+                source: SpellCastSource::SpellIdDirect,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_allows_rotation_spell_without_preferred_slot() {
+        let plan = plan_spell_cast(None, 1500, &[0, 0, 1500, 0, 0]);
+        assert_eq!(
+            plan,
+            Some(PlannedSpellCast {
+                gem_id: 2,
+                spell_id: 1500,
+                source: SpellCastSource::FallbackGem,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_spell_cast_rejects_invalid_preferred_slot() {
+        assert_eq!(plan_spell_cast(Some(99), 1500, &[0, 0, 0]), None);
     }
 
     #[test]
