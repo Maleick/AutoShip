@@ -2291,8 +2291,9 @@ mod tests {
     }
 
     #[test]
-    fn minimap_target_marker_respects_target_line_toggle() {
+    fn minimap_target_marker_uses_target_line_instead_of_nav_paths() {
         let mut app = test_app_with_spawns();
+        // Keep nav paths disabled to prove the target marker follows show_target_line directly.
         app.map_state.show_nav_paths = false;
         app.map_state.show_target_line = true;
         app.target = Some(test_spawn(77, "target", 6.0, 0.0));
@@ -2306,8 +2307,9 @@ mod tests {
     }
 
     #[test]
-    fn map_legend_target_entry_uses_target_line_toggle() {
+    fn map_legend_target_entry_uses_target_line_instead_of_nav_paths() {
         let mut app = test_app_with_spawns();
+        // Keep nav paths disabled to prove the legend entry follows show_target_line directly.
         app.map_state.show_nav_paths = false;
         app.map_state.show_target_line = true;
         app.target = Some(test_spawn(77, "target", 6.0, 0.0));
