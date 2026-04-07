@@ -63,6 +63,18 @@ int shim_dtNavMesh_getMaxTiles(const dtNavMesh* nav)
     return nav ? nav->getMaxTiles() : 0;
 }
 
+dtStatus shim_dtNavMesh_getOffMeshConnectionPolyEndPoints(
+    const dtNavMesh* nav,
+    dtPolyRef prevRef,
+    dtPolyRef polyRef,
+    float* startPos,
+    float* endPos)
+{
+    return nav
+        ? nav->getOffMeshConnectionPolyEndPoints(prevRef, polyRef, startPos, endPos)
+        : DT_FAILURE | DT_INVALID_PARAM;
+}
+
 const dtMeshTile* shim_dtNavMesh_getTile(const dtNavMesh* nav, int index)
 {
     return nav ? nav->getTile(index) : nullptr;

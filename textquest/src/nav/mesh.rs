@@ -150,6 +150,14 @@ unsafe extern "C" {
 
     fn shim_dtNavMesh_getMaxTiles(nav: *const recastnavigation_sys::dtNavMesh) -> i32;
 
+    fn shim_dtNavMesh_getOffMeshConnectionPolyEndPoints(
+        nav: *const recastnavigation_sys::dtNavMesh,
+        prev_ref: recastnavigation_sys::dtPolyRef,
+        poly_ref: recastnavigation_sys::dtPolyRef,
+        start_pos: *mut f32,
+        end_pos: *mut f32,
+    ) -> recastnavigation_sys::dtStatus;
+
     fn shim_dtNavMesh_getTile(
         nav: *const recastnavigation_sys::dtNavMesh,
         index: i32,
@@ -162,6 +170,9 @@ unsafe extern "C" {
 
 /// `DT_TILE_FREE_DATA` flag — tells Detour to free tile data when removing.
 const DT_TILE_FREE_DATA: i32 = 0x01;
+const DT_STRAIGHTPATH_START: u8 = 0x01;
+const DT_STRAIGHTPATH_OFFMESH_CONNECTION: u8 = 0x04;
+const WAYPOINT_DEDUP_EPSILON: f32 = 1.0e-4;
 
 /// Check if a Detour status indicates success.
 fn dt_success(status: u32) -> bool {
@@ -210,6 +221,30 @@ impl DetourNavMesh {
             // Detour now owns this allocation. Prevent Rust from dropping it.
             std::mem::forget(data);
             Ok(tile_ref)
+        }
+    }
+
+    fn off_mesh_connection_endpoints(
+        &self,
+        prev_ref: u64,
+        poly_ref: u64,
+    ) -> Result<([f32; 3], [f32; 3])> {
+        unsafe {
+            let mut start_pos = [0.0f32; 3];
+            let mut end_pos = [0.0f32; 3];
+            let status = shim_dtNavMesh_getOffMeshConnectionPolyEndPoints(
+                self.ptr,
+                prev_ref,
+                poly_ref,
+                start_pos.as_mut_ptr(),
+                end_pos.as_mut_ptr(),
+            );
+            if !dt_success(status) {
+                bail!(
+                    "getOffMeshConnectionPolyEndPoints failed for prev_ref={prev_ref}, poly_ref={poly_ref}: status=0x{status:08X}"
+                );
+            }
+            Ok((start_pos, end_pos))
         }
     }
 }
@@ -304,7 +339,7 @@ impl DetourNavMeshQuery {
         end_pos: &[f32; 3],
         poly_path: &[u64],
         max_straight_path: i32,
-    ) -> Result<Vec<[f32; 3]>> {
+    ) -> Result<Vec<StraightPathPoint>> {
         unsafe {
             let mut straight_path = vec![0.0f32; max_straight_path as usize * 3];
             let mut straight_flags = vec![0u8; max_straight_path as usize];
@@ -326,13 +361,15 @@ impl DetourNavMeshQuery {
             if !dt_success(status) {
                 bail!("findStraightPath failed: status=0x{status:08X}");
             }
-            let result: Vec<[f32; 3]> = (0..straight_count as usize)
-                .map(|i| {
-                    [
+            let result: Vec<StraightPathPoint> = (0..straight_count as usize)
+                .map(|i| StraightPathPoint {
+                    position: [
                         straight_path[i * 3],
                         straight_path[i * 3 + 1],
                         straight_path[i * 3 + 2],
-                    ]
+                    ],
+                    flags: straight_flags[i],
+                    poly_ref: straight_refs[i],
                 })
                 .collect();
             Ok(result)
@@ -521,6 +558,13 @@ pub struct LoadedNavMesh {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct StraightPathPoint {
+    position: [f32; 3],
+    flags: u8,
+    poly_ref: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct NavMeshSegment {
     pub x1: f32,
     pub y1: f32,
@@ -692,6 +736,67 @@ fn detour_to_eq(d: &[f32; 3]) -> (f32, f32, f32) {
 
 fn detour_to_map(d: &[f32; 3]) -> (f32, f32, f32) {
     (-d[2], -d[0], d[1])
+}
+
+fn same_point(a: &[f32; 3], b: &[f32; 3]) -> bool {
+    a.iter()
+        .zip(b.iter())
+        .all(|(lhs, rhs)| (lhs - rhs).abs() <= WAYPOINT_DEDUP_EPSILON)
+}
+
+fn push_point(waypoints: &mut Vec<[f32; 3]>, point: [f32; 3]) {
+    if waypoints
+        .last()
+        .is_some_and(|last| same_point(last, &point))
+    {
+        return;
+    }
+    waypoints.push(point);
+}
+
+fn expand_straight_path<F>(
+    poly_path: &[u64],
+    straight_path: &[StraightPathPoint],
+    mut off_mesh_endpoints: F,
+) -> Result<Vec<[f32; 3]>>
+where
+    F: FnMut(u64, u64) -> Result<([f32; 3], [f32; 3])>,
+{
+    let mut waypoints = Vec::with_capacity(straight_path.len().saturating_add(1));
+    let mut search_start = 0usize;
+
+    for point in straight_path {
+        push_point(&mut waypoints, point.position);
+
+        if (point.flags & DT_STRAIGHTPATH_OFFMESH_CONNECTION) == 0 {
+            continue;
+        }
+
+        if point.poly_ref == 0 {
+            bail!("Off-mesh straight-path point missing polygon reference");
+        }
+
+        let rel_index = poly_path[search_start..]
+            .iter()
+            .position(|&poly_ref| poly_ref == point.poly_ref)
+            .context("Off-mesh straight-path polygon not found in path corridor")?;
+        let poly_index = search_start + rel_index;
+        if poly_index == 0 {
+            bail!("Off-mesh connection polygon missing previous polygon");
+        }
+
+        let prev_ref = poly_path[poly_index - 1];
+        let (start_pos, end_pos) = off_mesh_endpoints(prev_ref, point.poly_ref)?;
+        if let Some(last) = waypoints.last_mut() {
+            *last = start_pos;
+        } else {
+            waypoints.push(start_pos);
+        }
+        push_point(&mut waypoints, end_pos);
+        search_start = poly_index + 1;
+    }
+
+    Ok(waypoints)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -918,8 +1023,12 @@ pub fn find_path(
         loaded
             .query
             .find_straight_path(&start_nearest, &end_nearest, &poly_path, 2048)?;
-
-    let waypoints: Vec<(f32, f32, f32)> = straight.iter().map(detour_to_eq).collect();
+    let expanded = expand_straight_path(&poly_path, &straight, |prev_ref, poly_ref| {
+        loaded
+            ._nav_mesh
+            .off_mesh_connection_endpoints(prev_ref, poly_ref)
+    })?;
+    let waypoints: Vec<(f32, f32, f32)> = expanded.iter().map(detour_to_eq).collect();
 
     Ok(waypoints)
 }
@@ -1032,6 +1141,7 @@ mod tests {
     use super::*;
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
+    use std::cell::RefCell;
     use std::io::Write;
 
     #[test]
@@ -1149,5 +1259,95 @@ mod tests {
         ];
         let len = path_length(&points).unwrap();
         assert!((len - 10.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn expand_straight_path_inserts_off_mesh_exit_waypoint() {
+        let callback_args = RefCell::new(Vec::new());
+        let straight = [
+            StraightPathPoint {
+                position: [0.0, 0.0, 0.0],
+                flags: DT_STRAIGHTPATH_START,
+                poly_ref: 11,
+            },
+            StraightPathPoint {
+                position: [1.0, 2.0, 3.0],
+                flags: DT_STRAIGHTPATH_OFFMESH_CONNECTION,
+                poly_ref: 22,
+            },
+            StraightPathPoint {
+                position: [20.0, 30.0, 40.0],
+                flags: 0,
+                poly_ref: 33,
+            },
+        ];
+
+        let expanded = expand_straight_path(&[11, 22, 33], &straight, |prev_ref, poly_ref| {
+            callback_args.borrow_mut().push((prev_ref, poly_ref));
+            Ok(([1.5, 2.5, 3.5], [10.0, 20.0, 30.0]))
+        })
+        .unwrap();
+
+        assert_eq!(callback_args.into_inner(), vec![(11, 22)]);
+        assert_eq!(
+            expanded,
+            vec![
+                [0.0, 0.0, 0.0],
+                [1.5, 2.5, 3.5],
+                [10.0, 20.0, 30.0],
+                [20.0, 30.0, 40.0]
+            ]
+        );
+    }
+
+    #[test]
+    fn expand_straight_path_deduplicates_off_mesh_exit_matches_next_waypoint() {
+        let straight = [
+            StraightPathPoint {
+                position: [0.0, 0.0, 0.0],
+                flags: DT_STRAIGHTPATH_START,
+                poly_ref: 11,
+            },
+            StraightPathPoint {
+                position: [1.0, 1.0, 1.0],
+                flags: DT_STRAIGHTPATH_OFFMESH_CONNECTION,
+                poly_ref: 22,
+            },
+            StraightPathPoint {
+                position: [9.0, 9.0, 9.0],
+                flags: 0,
+                poly_ref: 33,
+            },
+        ];
+
+        let expanded = expand_straight_path(&[11, 22, 33], &straight, |_prev_ref, _poly_ref| {
+            Ok(([1.0, 1.0, 1.0], [9.0, 9.0, 9.0]))
+        })
+        .unwrap();
+
+        assert_eq!(
+            expanded,
+            vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [9.0, 9.0, 9.0]]
+        );
+    }
+
+    #[test]
+    fn expand_straight_path_rejects_off_mesh_point_without_polygon_ref() {
+        let straight = [StraightPathPoint {
+            position: [1.0, 2.0, 3.0],
+            flags: DT_STRAIGHTPATH_OFFMESH_CONNECTION,
+            poly_ref: 0,
+        }];
+
+        let error = expand_straight_path(&[11, 22], &straight, |_prev_ref, _poly_ref| {
+            Ok(([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]))
+        })
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Off-mesh straight-path point missing polygon reference")
+        );
     }
 }
