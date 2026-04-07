@@ -116,31 +116,35 @@ mod tests {
 
     #[test]
     fn install_remove_roundtrip() {
-        // This test manipulates HW breakpoints / VEH and is not safe to run in CI
-        // or without a real target process — doing so causes STATUS_ACCESS_VIOLATION.
-        // Opt-in locally with: TQ_RUN_HWBP_TESTS=1 cargo test -p textquest-dll
-        if std::env::var_os("TQ_RUN_HWBP_TESTS").is_none() {
-            eprintln!("skipping install_remove_roundtrip (set TQ_RUN_HWBP_TESTS=1 to enable)");
-            return;
-        }
         let dummy_addr = 0xDEAD_BEEF;
-        if std::env::var("CI").is_ok() {
-            // CI runners do not run the EverQuest main thread, so the real
-            // HWBP install path cannot resolve an EQ thread target.
-            match install(dummy_addr) {
-                Ok(_) => {
-                    remove();
-                }
-                Err(err) => {
-                    tracing::warn!(
-                        error = %err,
-                        "Skipping chat hook install/remove roundtrip check on CI"
-                    );
-                }
-            }
+
+        if std::env::var_os("TEXTQUEST_RUN_HWBP_TESTS").is_none() {
+            tracing::warn!(
+                "Skipping chat hook install/remove roundtrip check; \
+                 set TEXTQUEST_RUN_HWBP_TESTS=1 to opt in"
+            );
             return;
         }
 
+        #[cfg(windows)]
+        match install(dummy_addr) {
+            Ok(()) => {}
+            Err(err)
+                if err.to_string().contains("EverQuest window not found")
+                    || err
+                        .to_string()
+                        .contains("GetWindowThreadProcessId returned 0") =>
+            {
+                tracing::warn!(
+                    error = %err,
+                    "Skipping chat hook install/remove roundtrip check without an EQ window"
+                );
+                return;
+            }
+            Err(err) => panic!("install(dummy_addr) failed: {err}"),
+        }
+
+        #[cfg(not(windows))]
         assert!(install(dummy_addr).is_ok());
         assert!(hwbp::is_active(HwbpSlot::Dr1));
         remove();
