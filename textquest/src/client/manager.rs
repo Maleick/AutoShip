@@ -93,9 +93,10 @@ impl ClientManager {
                     .insert(client_id, EqSession::new(client_id, pid));
                 self.sessions_by_pid.insert(pid, client_id);
             }
-        } else if !self.sessions.contains_key(&client_id) {
-            self.sessions
-                .insert(client_id, EqSession::new(client_id, pid));
+        } else if let std::collections::hash_map::Entry::Vacant(entry) =
+            self.sessions.entry(client_id)
+        {
+            entry.insert(EqSession::new(client_id, pid));
             self.sessions_by_pid.insert(pid, client_id);
         }
 
