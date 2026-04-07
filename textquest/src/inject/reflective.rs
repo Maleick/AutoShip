@@ -118,6 +118,26 @@ pub fn is_system_dll(dll_name: &str) -> bool {
     SYSTEM_DLLS.iter().any(|&s| lower == s)
 }
 
+const MAX_REMOTE_EXPORT_ENTRIES: usize = 65_536;
+
+fn checked_remote_export_table_len(
+    count: usize,
+    entry_size: usize,
+    table_name: &str,
+) -> Result<usize, InjectError> {
+    if count > MAX_REMOTE_EXPORT_ENTRIES {
+        return Err(InjectError::ReadFailed(format!(
+            "remote export {table_name} count too large: {count}"
+        )));
+    }
+
+    count.checked_mul(entry_size).ok_or_else(|| {
+        InjectError::ReadFailed(format!(
+            "remote export {table_name} size overflow: count={count}, entry_size={entry_size}",
+        ))
+    })
+}
+
 /// Parse a PE file from raw bytes, extracting sections, relocations, and imports.
 pub fn parse_pe(dll_bytes: &[u8]) -> Result<ParsedPe, InjectError> {
     use goblin::pe::PE;
@@ -628,6 +648,13 @@ mod platform {
                 }
                 .map_err(|e| InjectError::ReadFailed(format!("ReadProcessMemory @ {addr:#x}: {e}")))
             };
+            let remote_addr = |rva: usize, table_name: &str| -> Result<usize, InjectError> {
+                base_addr.checked_add(rva).ok_or_else(|| {
+                    InjectError::ReadFailed(format!(
+                        "{table_name} RVA overflow: base={base_addr:#x} rva={rva:#x}",
+                    ))
+                })
+            };
 
             // Read DOS header to get e_lfanew
             let mut dos_header = [0u8; 64];
@@ -643,7 +670,7 @@ mod platform {
 
             // Read PE signature + COFF header + optional header (enough for data directories)
             let mut pe_header = [0u8; 264];
-            read_remote(base_addr + e_lfanew, &mut pe_header)?;
+            read_remote(remote_addr(e_lfanew, "PE header")?, &mut pe_header)?;
 
             if &pe_header[0..4] != b"PE\0\0" {
                 return Err(InjectError::ReadFailed(
@@ -668,7 +695,7 @@ mod platform {
                 u32::from_le_bytes(pe_header[dd_offset + 4..dd_offset + 8].try_into().unwrap())
                     as usize;
 
-            if export_rva == 0 {
+            if export_rva == 0 || export_size < 40 {
                 return Err(InjectError::ImportResolveFailed {
                     dll: imp.dll_name.clone(),
                     function: format!("{:?}", imp.function),
@@ -677,7 +704,10 @@ mod platform {
 
             // Read the IMAGE_EXPORT_DIRECTORY (40 bytes)
             let mut export_dir = [0u8; 40];
-            read_remote(base_addr + export_rva, &mut export_dir)?;
+            read_remote(
+                remote_addr(export_rva, "export directory")?,
+                &mut export_dir,
+            )?;
 
             let num_functions = u32::from_le_bytes(export_dir[20..24].try_into().unwrap()) as usize;
             let num_names = u32::from_le_bytes(export_dir[24..28].try_into().unwrap()) as usize;
@@ -691,14 +721,19 @@ mod platform {
             match &imp.function {
                 ImportName::Name(name) => {
                     // Read name RVA table, ordinal table, and function address table
-                    let mut name_rvas = vec![0u8; num_names * 4];
-                    read_remote(base_addr + addr_of_names, &mut name_rvas)?;
+                    let name_rvas_len = checked_remote_export_table_len(num_names, 4, "name RVA")?;
+                    let mut name_rvas = vec![0u8; name_rvas_len];
+                    read_remote(
+                        remote_addr(addr_of_names, "name RVA table")?,
+                        &mut name_rvas,
+                    )?;
 
-                    let mut ordinals = vec![0u8; num_names * 2];
-                    read_remote(base_addr + addr_of_ordinals, &mut ordinals)?;
-
-                    let mut func_rvas = vec![0u8; num_functions * 4];
-                    read_remote(base_addr + addr_of_functions, &mut func_rvas)?;
+                    let ordinals_len = checked_remote_export_table_len(num_names, 2, "ordinal")?;
+                    let mut ordinals = vec![0u8; ordinals_len];
+                    read_remote(
+                        remote_addr(addr_of_ordinals, "ordinal table")?,
+                        &mut ordinals,
+                    )?;
 
                     for i in 0..num_names {
                         let name_rva =
@@ -706,7 +741,7 @@ mod platform {
                                 as usize;
 
                         let mut name_buf = [0u8; 256];
-                        read_remote(base_addr + name_rva, &mut name_buf)?;
+                        read_remote(remote_addr(name_rva, "export name string")?, &mut name_buf)?;
 
                         let nul_pos = name_buf.iter().position(|&b| b == 0).unwrap_or(256);
                         let export_name = std::str::from_utf8(&name_buf[..nul_pos]).unwrap_or("");
@@ -715,12 +750,31 @@ mod platform {
                             let ordinal_index = u16::from_le_bytes(
                                 ordinals[i * 2..(i + 1) * 2].try_into().unwrap(),
                             ) as usize;
+                            if ordinal_index >= num_functions {
+                                return Err(InjectError::ReadFailed(format!(
+                                    "invalid export ordinal index: {ordinal_index} >= {num_functions}",
+                                )));
+                            }
 
-                            let func_rva = u32::from_le_bytes(
-                                func_rvas[ordinal_index * 4..(ordinal_index + 1) * 4]
-                                    .try_into()
-                                    .unwrap(),
-                            ) as usize;
+                            let func_entry_offset = checked_remote_export_table_len(
+                                ordinal_index,
+                                4,
+                                "function RVA index",
+                            )?;
+                            let func_entry_addr = remote_addr(
+                                addr_of_functions
+                                    .checked_add(func_entry_offset)
+                                    .ok_or_else(|| {
+                                        InjectError::ReadFailed(format!(
+                                            "function RVA table offset overflow: base={addr_of_functions:#x} offset={func_entry_offset:#x}",
+                                        ))
+                                    })?,
+                                "function RVA entry",
+                            )?;
+                            let mut func_rva_buf = [0u8; 4];
+                            read_remote(func_entry_addr, &mut func_rva_buf)?;
+                            let func_rva =
+                                u32::from_le_bytes(func_rva_buf.try_into().unwrap()) as usize;
 
                             // Check for forwarded export (RVA within export directory)
                             if func_rva >= export_rva
@@ -755,12 +809,25 @@ mod platform {
                         });
                     }
 
-                    let mut func_rvas = vec![0u8; num_functions * 4];
-                    read_remote(base_addr + addr_of_functions, &mut func_rvas)?;
+                    let func_rvas_len =
+                        checked_remote_export_table_len(num_functions, 4, "function RVA")?;
+                    let func_entry_offset =
+                        checked_remote_export_table_len(index, 4, "function RVA index")?;
+                    debug_assert!(func_entry_offset < func_rvas_len);
+                    let func_entry_addr = remote_addr(
+                        addr_of_functions
+                            .checked_add(func_entry_offset)
+                            .ok_or_else(|| {
+                                InjectError::ReadFailed(format!(
+                                    "function RVA table offset overflow: base={addr_of_functions:#x} offset={func_entry_offset:#x}",
+                                ))
+                            })?,
+                        "function RVA entry",
+                    )?;
+                    let mut func_rva_buf = [0u8; 4];
+                    read_remote(func_entry_addr, &mut func_rva_buf)?;
 
-                    let func_rva = u32::from_le_bytes(
-                        func_rvas[index * 4..(index + 1) * 4].try_into().unwrap(),
-                    ) as usize;
+                    let func_rva = u32::from_le_bytes(func_rva_buf.try_into().unwrap()) as usize;
 
                     if func_rva >= export_rva && func_rva < export_rva.saturating_add(export_size) {
                         return Err(InjectError::ImportResolveFailed {
@@ -1282,5 +1349,18 @@ mod tests {
 
         // Verify total stub size is reasonable
         assert!(stub.len() < 64);
+    }
+
+    #[test]
+    fn test_checked_remote_export_table_len_rejects_large_count() {
+        let result =
+            checked_remote_export_table_len(MAX_REMOTE_EXPORT_ENTRIES + 1, 4, "function RVA");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_checked_remote_export_table_len_handles_overflow() {
+        let result = checked_remote_export_table_len(2, usize::MAX, "ordinal");
+        assert!(result.is_err());
     }
 }
