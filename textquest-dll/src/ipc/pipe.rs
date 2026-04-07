@@ -235,18 +235,19 @@ impl CommandListener {
 /// Validate that command parameters are within acceptable bounds.
 pub fn validate_command(cmd: &Command) -> bool {
     match cmd {
-        Command::CastSpell {
-            spell_slot,
-            kill,
-            recast,
-            ..
-        } => {
-            // slot must be 1-13; kill and recast are mutually exclusive (kill
-            // overrides recast, but both true is not harmful — just note it);
-            // recast count is bounded at 255 by the u8 type, but 0 is a no-op
-            // repetition which is allowed (treated as single cast).
-            // `kill` and `recast > 0` together: kill takes priority; valid.
-            *spell_slot >= 1 && *spell_slot <= 13 && !(*kill && *recast > 0)
+        Command::CastSpell { spell_slot, .. } => {
+            // Slot must be 1-13. `recast` is already bounded by u8; 0 means
+            // single-cast, non-zero enables the recast loop.
+            *spell_slot >= 1
+                && *spell_slot <= 13
+                && !matches!(
+                    cmd,
+                    Command::CastSpell {
+                        kill: true,
+                        recast: 1..,
+                        ..
+                    }
+                )
         }
         Command::MoveTo { x, y, z } => x.is_finite() && y.is_finite() && z.is_finite(),
         Command::NavigateTo { waypoints } => waypoints.len() <= 1000,

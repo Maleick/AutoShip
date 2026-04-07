@@ -231,8 +231,9 @@ pub enum Command {
     ///   The loop is cancelled automatically when the target dies or disappears,
     ///   or when a `CancelCastLoop` command is received.
     /// - `recast`: repeat the cast up to `recast` times (1-255) with deterministic
-    ///   exponential backoff between attempts (base 2 ticks, cap 30 ticks).
+    ///   exponential backoff between attempts (base 8 ticks, cap 30 ticks).
     ///   Setting `recast` to 0 is treated as a single cast (no repetition).
+    ///   Validation rejects combining `kill` and `recast` in the same command.
     CastSpell {
         /// Memorized spell slot (1-indexed gem number, 1-13).
         spell_slot: u8,
@@ -245,7 +246,7 @@ pub enum Command {
         kill: bool,
         /// Number of times to repeat the cast (0 = cast once, 1-255 = repeat N
         /// more times for a total of N+1 casts).  Mirrors MQ2Cast `-recast`.
-        /// Ignored when `kill` is `true`.
+        /// Must be 0 when `kill` is `true`.
         #[serde(default)]
         recast: u8,
     },

@@ -326,17 +326,6 @@ struct CastingLoop {
 }
 
 impl CastingLoop {
-    fn idle() -> Self {
-        Self {
-            spell_slot: 0,
-            target_id: None,
-            active: false,
-            mode: CastLoopMode::Recast { remaining: 0 },
-            next_cast_tick: 0,
-            backoff_ticks: CAST_LOOP_BASE_BACKOFF_TICKS,
-        }
-    }
-
     fn start_kill(spell_slot: u8, target_id: Option<u32>, current_tick: u64) -> Self {
         let target = target_id.unwrap_or(0);
         Self {
@@ -374,6 +363,10 @@ impl CastingLoop {
         }
         if current_tick < self.next_cast_tick {
             return true; // waiting for backoff
+        }
+        if eq_base != 0 && cast_in_progress(eq_base) {
+            self.next_cast_tick = current_tick + 1;
+            return true;
         }
 
         match &mut self.mode {
@@ -436,9 +429,9 @@ impl CastingLoop {
                 issue_cast(self.spell_slot, self.target_id);
                 *remaining -= 1;
 
+                self.next_cast_tick = current_tick + self.backoff_ticks;
                 // Exponential backoff, capped.
                 self.backoff_ticks = (self.backoff_ticks * 2).min(CAST_LOOP_MAX_BACKOFF_TICKS);
-                self.next_cast_tick = current_tick + self.backoff_ticks;
                 true
             }
         }
@@ -451,6 +444,12 @@ fn issue_cast(spell_slot: u8, target_id: Option<u32>) {
         queue_slash_command(format!("/target id {tid}"));
     }
     queue_slash_command(format!("/cast {spell_slot}"));
+}
+
+fn cast_in_progress(eq_base: u64) -> bool {
+    super::casting::CastingController::new(eq_base)
+        .is_casting()
+        .unwrap_or(false)
 }
 
 static CAST_LOOP: Mutex<Option<CastingLoop>> = Mutex::new(None);
@@ -2711,5 +2710,25 @@ mod tests {
     fn tokenize_slash_command_preserves_escaped_quotes_inside_quotes() {
         let tokens = tokenize_slash_command(r#"/casting "Item \"Name\"" item"#).unwrap();
         assert_eq!(tokens, vec!["/casting", r#"Item "Name""#, "item"]);
+    }
+
+    #[test]
+    fn recast_loop_uses_base_backoff_before_exponential_growth() {
+        let mut loop_state = CastingLoop::start_recast(4, Some(77), 2, 100);
+        if let Ok(mut queue) = PENDING_COMMANDS.lock() {
+            queue.clear();
+        }
+
+        assert!(loop_state.tick(100, 0));
+        assert_eq!(loop_state.next_cast_tick, 108);
+        assert_eq!(loop_state.backoff_ticks, 16);
+
+        assert!(loop_state.tick(108, 0));
+        assert_eq!(loop_state.next_cast_tick, 124);
+        assert_eq!(loop_state.backoff_ticks, 30);
+
+        if let Ok(mut queue) = PENDING_COMMANDS.lock() {
+            queue.clear();
+        }
     }
 }
