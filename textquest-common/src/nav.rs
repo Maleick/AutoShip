@@ -150,6 +150,90 @@ pub enum StickMode {
     SnapRoll,
 }
 
+/// Rotation direction for `/circle` kiting mode.
+///
+/// Maps the MQ2MoveUtils `/circle` modifier syntax:
+/// - `clockwise` / `cw`         → `CircleMode::Cw` (default)
+/// - `counterclockwise` / `ccw` → `CircleMode::Ccw`
+/// - `drunken`                  → `CircleMode::Drunken`
+/// - `backward`                 → `CircleMode::Backward`
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum CircleMode {
+    /// Clockwise rotation around the center point (default).
+    #[default]
+    Cw,
+    /// Counter-clockwise rotation around the center point.
+    Ccw,
+    /// Random direction changes at a configurable interval (drunken kiting).
+    Drunken,
+    /// Move backward while circling (character faces toward center).
+    Backward,
+}
+
+/// Configuration for a `/circle` kiting session.
+///
+/// Mirrors the MQ2MoveUtils `/circle` command surface:
+/// - `/circle on [radius]`           → start with optional radius
+/// - `/circle off`                    → stop circling
+/// - `/circle loc Y X`               → circle around specified coordinates
+/// - `clockwise` / `cw`              → `mode = CircleMode::Cw`
+/// - `counterclockwise` / `ccw`      → `mode = CircleMode::Ccw`
+/// - `drunken`                        → `mode = CircleMode::Drunken`
+/// - `backward`                       → `mode = CircleMode::Backward`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CircleConfig {
+    /// Orbit radius in EQ world units (default: 20.0).
+    pub radius: f32,
+    /// Rotation direction / style.
+    pub mode: CircleMode,
+    /// Optional explicit center point.
+    ///
+    /// When `None`, the player's position at the time `/circle on` is issued
+    /// becomes the center.  When `Some`, the character circles that fixed point.
+    pub center: Option<Waypoint>,
+    /// Optional spawn ID to orbit around.
+    ///
+    /// When set, the center tracks the target's live position each tick,
+    /// enabling active kiting of a moving mob.
+    pub target_id: Option<u32>,
+    /// Ticks between direction reversals in `Drunken` mode (default: 20).
+    pub drunken_interval: u32,
+}
+
+impl Default for CircleConfig {
+    fn default() -> Self {
+        Self {
+            radius: 20.0,
+            mode: CircleMode::Cw,
+            center: None,
+            target_id: None,
+            drunken_interval: 20,
+        }
+    }
+}
+
+impl CircleConfig {
+    /// Create a default config that starts circling the player's current
+    /// position at the given radius.
+    #[must_use]
+    pub fn with_radius(radius: f32) -> Self {
+        Self {
+            radius,
+            ..Self::default()
+        }
+    }
+
+    /// Create a config that circles a fixed map location.
+    #[must_use]
+    pub fn at_loc(y: f32, x: f32, z: f32, radius: f32) -> Self {
+        Self {
+            radius,
+            center: Some(Waypoint::new(x, y, z)),
+            ..Self::default()
+        }
+    }
+}
+
 /// Configuration for a `/stick` session (MQ2MoveUtils compatible).
 ///
 /// Maps the MQ2MoveUtils command surface:
@@ -267,6 +351,15 @@ pub enum NavStatus {
         /// `true` when within the desired stick range.
         in_range: bool,
     },
+    /// Circle-kiting around a fixed or mob-tracked center point.
+    Circling {
+        /// Orbit radius in EQ world units.
+        radius: f32,
+        /// Current angle in radians (0 = north, increases clockwise).
+        angle: f32,
+        /// The active rotation mode.
+        mode: CircleMode,
+    },
 }
 
 impl NavStatus {
@@ -281,6 +374,7 @@ impl NavStatus {
             Self::Arrived => "Arrived",
             Self::Following { .. } => "Following",
             Self::Sticking { .. } => "Sticking",
+            Self::Circling { .. } => "Circling",
         }
     }
 
@@ -318,6 +412,12 @@ impl NavStatus {
     #[must_use]
     pub fn is_sticking(&self) -> bool {
         matches!(self, Self::Sticking { .. })
+    }
+
+    /// Returns true if circle-kiting mode is active.
+    #[must_use]
+    pub fn is_circling(&self) -> bool {
+        matches!(self, Self::Circling { .. })
     }
 }
 

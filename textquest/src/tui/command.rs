@@ -214,6 +214,14 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "nav gfay",
     },
     CommandEntry {
+        phrase: "circle",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "circle on [radius] [cw|ccw|drunken|backward] | circle off | circle loc Y X [radius]",
+        summary: "Start or stop circle-kiting mode (MQ2MoveUtils /circle equivalent).",
+        example: "circle on 30 ccw",
+    },
+    CommandEntry {
         phrase: "mapfilter",
         aliases: &[],
         section: HelpSection::Navigation,

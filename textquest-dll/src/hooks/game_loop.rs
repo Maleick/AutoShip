@@ -1577,6 +1577,17 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            // Intercept /circle — MQ2MoveUtils-style circle-kiting.
+            // Syntax:
+            //   /circle on [radius] [cw|ccw|clockwise|counterclockwise|drunken|backward]
+            //   /circle off
+            //   /circle loc Y X [radius]
+            if let Some(circle_cmd) = parse_circle_command(trimmed) {
+                tracing::info!(cmd = %trimmed, "Intercepted /circle slash command");
+                dispatch_command(circle_cmd);
+                return;
+            }
+
             if let Some(spell_set) = parse_spell_set_command(trimmed) {
                 match handle_spell_set_command(spell_set) {
                     Ok(Some(eq_command)) => {
@@ -1695,6 +1706,22 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::StickMod { delta } => {
             tracing::info!(delta, "StickMod received");
             crate::nav::handle_command(crate::nav::NavCommand::StickMod(delta));
+        }
+        Command::CircleKite { config } => {
+            tracing::info!(
+                radius = config.radius,
+                mode = ?config.mode,
+                target_id = config.target_id,
+                "CircleKite received"
+            );
+            // Resolve the center: use config.center when specified, otherwise None
+            // (the navigator will read the current player position on start).
+            let center = config.center;
+            crate::nav::handle_command(crate::nav::NavCommand::CircleKite { config, center });
+        }
+        Command::CircleOff => {
+            tracing::info!("CircleOff received");
+            crate::nav::handle_command(crate::nav::NavCommand::CircleOff);
         }
         Command::NavPause => {
             tracing::info!("NavPause received");
@@ -1993,6 +2020,84 @@ fn handle_spell_set_command(command: SpellSetCommand) -> Result<Option<String>, 
         SpellSetCommand::Load(name) => Ok(Some(format!("/memspellset {name}"))),
         SpellSetCommand::Delete(name) => delete_spell_set(&name).map(|_| None),
     }
+}
+
+/// Parse a `/circle` slash command and return the corresponding IPC `Command`.
+///
+/// Supported syntax (case-insensitive):
+/// ```text
+/// /circle on [radius] [cw|ccw|clockwise|counterclockwise|drunken|backward]
+/// /circle off
+/// /circle loc Y X [radius]
+/// ```
+fn parse_circle_command(command: &str) -> Option<textquest_common::ipc::Command> {
+    use textquest_common::nav::{CircleConfig, CircleMode, Waypoint};
+
+    let body = command.trim().strip_prefix('/')?.trim_start();
+    let (verb, rest) = body
+        .split_once(char::is_whitespace)
+        .map(|(v, r)| (v, r.trim()))
+        .unwrap_or((body, ""));
+
+    if !verb.eq_ignore_ascii_case("circle") {
+        return None;
+    }
+
+    // /circle off
+    if rest.eq_ignore_ascii_case("off") || rest.is_empty() && verb.eq_ignore_ascii_case("circle") {
+        if rest.eq_ignore_ascii_case("off") {
+            return Some(textquest_common::ipc::Command::CircleOff);
+        }
+    }
+
+    let mut tokens = rest.split_whitespace();
+    let first = tokens.next().unwrap_or("");
+
+    // /circle off
+    if first.eq_ignore_ascii_case("off") {
+        return Some(textquest_common::ipc::Command::CircleOff);
+    }
+
+    let mut config = CircleConfig::default();
+
+    // /circle loc Y X [radius]
+    if first.eq_ignore_ascii_case("loc") {
+        let y: f32 = tokens.next()?.parse().ok()?;
+        let x: f32 = tokens.next()?.parse().ok()?;
+        if let Some(r_str) = tokens.next() {
+            if let Ok(r) = r_str.parse::<f32>() {
+                config.radius = r;
+            }
+        }
+        config.center = Some(Waypoint::new(x, y, 0.0));
+        return Some(textquest_common::ipc::Command::CircleKite { config });
+    }
+
+    // /circle on [radius] [mode]
+    if first.eq_ignore_ascii_case("on") {
+        // Consume optional radius
+        let mut remaining: Vec<&str> = tokens.collect();
+        // Check if first remaining token is a number (radius)
+        if let Some(&first_r) = remaining.first() {
+            if let Ok(r) = first_r.parse::<f32>() {
+                config.radius = r;
+                remaining.remove(0);
+            }
+        }
+        // Parse mode tokens
+        for token in &remaining {
+            match token.to_ascii_lowercase().as_str() {
+                "cw" | "clockwise" => config.mode = CircleMode::Cw,
+                "ccw" | "counterclockwise" => config.mode = CircleMode::Ccw,
+                "drunken" => config.mode = CircleMode::Drunken,
+                "backward" => config.mode = CircleMode::Backward,
+                _ => {}
+            }
+        }
+        return Some(textquest_common::ipc::Command::CircleKite { config });
+    }
+
+    None
 }
 
 fn delete_spell_set(name: &str) -> Result<usize, String> {

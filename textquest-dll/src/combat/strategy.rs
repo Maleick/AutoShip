@@ -67,6 +67,47 @@ impl CombatContext<'_> {
         self.extended_targets
             .and_then(ExtendedTargetList::pet_target_id)
     }
+
+    /// Snapshot of the pet's current status from the extended target list.
+    pub fn pet_status(&self) -> PetStatus {
+        PetStatus {
+            spawn_id: self.pet_spawn_id(),
+            target_id: self.pet_target_id(),
+        }
+    }
+}
+
+/// Snapshot of a pet's current status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PetStatus {
+    /// Spawn ID of this character's active pet, if any.
+    pub spawn_id: Option<u32>,
+    /// Spawn ID of the target the pet is currently attacking, if any.
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    /// Returns `true` if this character has an active pet.
+    pub fn has_pet(&self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    /// Returns `true` if the pet is already attacking the given target.
+    pub fn is_attacking(&self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
+
+/// Pet management action requested by a class strategy.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PetAction {
+    /// Command the pet to attack the current combat target.
+    Attack,
+    /// Cast a pet-targeted buff using the given spell entry.
+    Buff {
+        /// Spell to cast on the pet.
+        spell: SpellEntry,
+    },
 }
 
 #[derive(Debug, Clone)]

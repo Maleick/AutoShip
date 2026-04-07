@@ -697,24 +697,10 @@ pub mod profile {
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
     /// Visible spell-gem slots used by the live client UI.
     pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
-
-    /// `BaseProfile::SpellBook` (`SPELL[1280]`) at +0x00b0.
-    pub const SPELL_BOOK: usize = 0x00b0;
-
-    /// `BaseProfile::MemorizedSpells` (`SPELL[15]`) at +0x14b0.
-    pub const MEMORIZED_SPELLS: usize = 0x14b0;
-
-    /// Total spell-book slots in `BaseProfile::SpellBook`.
-    pub const SPELL_BOOK_SLOTS: usize = 1280;
-
-    /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells`.
-    pub const MEMORIZED_SPELL_GEMS: usize = 15;
-
-    /// `BaseProfile::SpellBook` (`int[1280]`) at +0x00b0.
-    pub const SPELL_BOOK: usize = 0x00b0;
-
-    /// `BaseProfile::MemorizedSpells` (`int[15]`) at +0x14b0.
-    pub const MEMORIZED_SPELLS: usize = 0x14b0;
+    /// Alias for `MEMORIZED_SPELL_GEM_COUNT` — number of visible memorized spell gems.
+    pub const MEMORIZED_SPELL_GEMS: usize = MEMORIZED_SPELL_GEM_COUNT;
+    /// Alias for `SPELL_BOOK_SLOT_COUNT` — total spellbook slots.
+    pub const SPELL_BOOK_SLOTS: usize = SPELL_BOOK_SLOT_COUNT;
 
     /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
     pub const ARRAY_DATA_PTR: usize = 0x08;
@@ -725,12 +711,6 @@ pub mod profile {
     /// `PcClient::BuffIDs` — flat array of `i32[62]` spell IDs for long buffs.
     /// Faster than the full profile chain when only spell IDs are needed.
     pub const BUFF_IDS: usize = 0x068;
-
-    /// Total spellbook slots stored in `BaseProfile::SpellBook`.
-    pub const SPELL_BOOK_SLOTS: usize = 1280;
-
-    /// Visible memorized spell gems stored in `BaseProfile::MemorizedSpells`.
-    pub const MEMORIZED_SPELL_GEMS: usize = 15;
 }
 
 /// Offsets within `CDisplay`.

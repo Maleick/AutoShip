@@ -368,6 +368,8 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         (":camp stop ", "Stop camp"),
         (":camp next ", "Next waypoint"),
         (":camp prev ", "Prev waypoint"),
+        (":circle on  ", "Start circle kite"),
+        (":circle off ", "Stop circle kite"),
     ] {
         lines.push(Line::from(vec![
             Span::styled(*cmd, cmd_s),

@@ -477,6 +477,21 @@ pub enum Command {
         /// Delta to add to the current distance modifier (may be negative).
         delta: f32,
     },
+    /// Start circle-kiting mode — MQ2MoveUtils `/circle` equivalent.
+    ///
+    /// Supported modifiers (via `CircleConfig`):
+    /// - `/circle on [radius]`           → start with optional radius
+    /// - `/circle loc Y X`               → circle around specified coordinates
+    /// - `clockwise` / `cw`              → `config.mode = CircleMode::Cw`
+    /// - `counterclockwise` / `ccw`      → `config.mode = CircleMode::Ccw`
+    /// - `drunken`                        → `config.mode = CircleMode::Drunken`
+    /// - `backward`                       → `config.mode = CircleMode::Backward`
+    CircleKite {
+        /// Circle kiting configuration.
+        config: crate::nav::CircleConfig,
+    },
+    /// Stop circle-kiting — `/circle off`.
+    CircleOff,
     /// Execute a slash command as if typed in the chat window.
     /// Uses EQ's `InterpretCmd` internally (e.g. "/target Camrene", "/follow").
     SlashCommand {
@@ -1420,6 +1435,42 @@ mod tests {
         } else {
             panic!("expected StickMod");
         }
+    }
+
+    #[test]
+    fn command_circle_kite_roundtrip() {
+        use crate::nav::{CircleConfig, CircleMode, Waypoint};
+        use crate::protocol::{decode, encode};
+        let config = CircleConfig {
+            radius: 30.0,
+            mode: CircleMode::Ccw,
+            center: Some(Waypoint::new(100.0, 200.0, 10.0)),
+            target_id: Some(55),
+            drunken_interval: 15,
+        };
+        let cmd = Command::CircleKite { config };
+        let encoded = encode(&cmd).expect("encode CircleKite");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode CircleKite");
+        if let Command::CircleKite {
+            config: decoded_config,
+        } = decoded
+        {
+            assert!((decoded_config.radius - 30.0).abs() < f32::EPSILON);
+            assert_eq!(decoded_config.mode, CircleMode::Ccw);
+            assert_eq!(decoded_config.target_id, Some(55));
+            assert_eq!(decoded_config.drunken_interval, 15);
+        } else {
+            panic!("expected CircleKite");
+        }
+    }
+
+    #[test]
+    fn command_circle_off_roundtrip() {
+        use crate::protocol::{decode, encode};
+        let cmd = Command::CircleOff;
+        let encoded = encode(&cmd).expect("encode CircleOff");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode CircleOff");
+        assert!(matches!(decoded, Command::CircleOff));
     }
 
     #[test]
