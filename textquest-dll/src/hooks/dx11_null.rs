@@ -228,6 +228,12 @@ pub fn request_screenshot_frame() {
     tracing::debug!("Screenshot frame requested — draw calls enabled for next frame");
 }
 
+/// Sync the draw-suppression flag to the current render mode. Called when the
+/// render mode changes so the next frame respects NullRender immediately.
+pub fn sync_suppress_draws() {
+    update_suppress_draws();
+}
+
 /// Hooked `IDXGISwapChain::Present` — on first call, extracts the real
 /// `ID3D11Device*` and hooks `CreateTexture2D`, `CreateBuffer`, and context
 /// draw calls. Clears the screenshot-frame flag after each present.
@@ -986,6 +992,39 @@ pub fn draw_hooks_installed() -> bool {
     CONTEXT_HOOKED.load(Ordering::Acquire)
 }
 
+/// Returns true if the DX11 Present hook has been installed.
+pub fn present_hook_installed() -> bool {
+    PRESENT_HOOKED.load(Ordering::Acquire)
+}
+
+#[cfg(test)]
+pub(crate) fn set_draw_hooks_installed_for_test(installed: bool) {
+    CONTEXT_HOOKED.store(installed, Ordering::Release);
+}
+
+#[cfg(test)]
+pub(crate) fn set_present_hook_installed_for_test(installed: bool) {
+    PRESENT_HOOKED.store(installed, Ordering::Release);
+}
+
+#[cfg(test)]
+pub(crate) fn reset_test_state() {
+    ORIG_PRESENT.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_CREATE_TEXTURE2D.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_CREATE_BUFFER.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_INDEXED.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_INDEXED_INSTANCED.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_INSTANCED.store(core::ptr::null_mut(), Ordering::Relaxed);
+    ORIG_DRAW_AUTO.store(core::ptr::null_mut(), Ordering::Relaxed);
+    PRESENT_HOOKED.store(false, Ordering::Relaxed);
+    DEVICE_HOOKED.store(false, Ordering::Relaxed);
+    CONTEXT_HOOKED.store(false, Ordering::Relaxed);
+    SCREENSHOT_FRAME.store(false, Ordering::Relaxed);
+    SUPPRESS_DRAWS.store(false, Ordering::Relaxed);
+    CACHED_EQ_BASE.store(0, Ordering::Relaxed);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -997,21 +1036,33 @@ mod tests {
 
     #[test]
     fn should_suppress_draw_in_null_render() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(suppresses(RenderMode::NullRender, false));
     }
 
     #[test]
     fn should_not_suppress_draw_in_normal_mode() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(!suppresses(RenderMode::Normal, false));
     }
 
     #[test]
     fn should_not_suppress_draw_in_strobe_mode() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(!suppresses(RenderMode::Strobe, false));
     }
 
     #[test]
     fn screenshot_frame_overrides_null_render() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(
             !suppresses(RenderMode::NullRender, true),
             "screenshot frame should allow draw calls through"
@@ -1020,13 +1071,19 @@ mod tests {
 
     #[test]
     fn request_screenshot_frame_sets_flag() {
-        SCREENSHOT_FRAME.store(false, Ordering::Relaxed);
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
+        super::super::render::set_mode(RenderMode::NullRender);
         request_screenshot_frame();
         assert!(SCREENSHOT_FRAME.load(Ordering::Relaxed));
     }
 
     #[test]
     fn screenshot_frame_clears_on_swap() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         SCREENSHOT_FRAME.store(true, Ordering::Relaxed);
         let was_set = SCREENSHOT_FRAME.swap(false, Ordering::AcqRel);
         assert!(was_set, "flag should have been set before swap");
@@ -1038,12 +1095,17 @@ mod tests {
 
     #[test]
     fn draw_hooks_not_installed_by_default() {
-        CONTEXT_HOOKED.store(false, Ordering::Relaxed);
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         assert!(!draw_hooks_installed());
     }
 
     #[test]
     fn vtable_constants_are_distinct() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         let indices = [
             VTABLE_DRAW_INDEXED,
             VTABLE_DRAW,
@@ -1062,6 +1124,9 @@ mod tests {
 
     #[test]
     fn stub_install_remove_are_safe() {
+        let _guard = super::super::render::test_state_lock();
+        super::super::render::reset_test_state();
+        reset_test_state();
         #[cfg(not(windows))]
         {
             assert!(install(0x12345).is_ok());
