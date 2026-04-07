@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt};
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(
     author,
     version,
@@ -28,7 +28,7 @@ struct Args {
     inject: bool,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 enum Commands {
     // ── Daemon lifecycle ──────────────────────────────────────────────
     /// Start the TextQuest daemon (TUI + background services)
@@ -168,6 +168,11 @@ enum Commands {
         /// Target PID
         pid: u32,
     },
+    /// Inspect or refresh cached navmesh data
+    Navmesh {
+        #[command(subcommand)]
+        action: NavMeshAction,
+    },
     /// Calibrate login addresses for all processes
     Calibrate,
 
@@ -190,7 +195,27 @@ enum Commands {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
+enum NavMeshAction {
+    /// Redownload and validate the zone navmesh cache
+    Reload {
+        /// Zone short name (for example `gfaydark`). Omit with `--pid` to use the live client's zone.
+        zone: Option<String>,
+        /// Resolve the zone from a live injected client
+        #[arg(long)]
+        pid: Option<u32>,
+    },
+    /// Print cache and live navigator diagnostics for a zone
+    Diagnostics {
+        /// Zone short name (for example `gfaydark`). Omit with `--pid` to use the live client's zone.
+        zone: Option<String>,
+        /// Resolve the zone from a live injected client and query its navigator state
+        #[arg(long)]
+        pid: Option<u32>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum ConfigAction {
     /// Validate the TOML configuration file
     Check {
@@ -202,7 +227,7 @@ enum ConfigAction {
     Show,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 enum CredentialAction {
     /// Add or update an account credential
     Add {
@@ -320,6 +345,14 @@ fn main() -> Result<()> {
         Some(Commands::ClientStatus { pid }) => cli::run_status_mode(pid),
         Some(Commands::ClientStatusAll) => cli::run_statusall_mode(),
         Some(Commands::Zones { pid }) => cli::run_zones_mode(pid),
+        Some(Commands::Navmesh { action }) => match action {
+            NavMeshAction::Reload { zone, pid } => {
+                cli::run_navmesh_reload_mode(zone.as_deref(), pid)
+            }
+            NavMeshAction::Diagnostics { zone, pid } => {
+                cli::run_navmesh_diagnostics_mode(zone.as_deref(), pid)
+            }
+        },
         Some(Commands::Calibrate) => cli::run_calibrate_mode(),
 
         // Orchestration
@@ -374,6 +407,40 @@ fn main() -> Result<()> {
             } else {
                 cli::run_tui_mode()
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Args, Commands, NavMeshAction};
+    use clap::Parser;
+
+    #[test]
+    fn parses_navmesh_reload_with_zone() {
+        let args = Args::parse_from(["textquest", "navmesh", "reload", "gfaydark"]);
+        match args.command {
+            Some(Commands::Navmesh {
+                action: NavMeshAction::Reload { zone, pid },
+            }) => {
+                assert_eq!(zone.as_deref(), Some("gfaydark"));
+                assert_eq!(pid, None);
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_navmesh_diagnostics_with_pid() {
+        let args = Args::parse_from(["textquest", "navmesh", "diagnostics", "--pid", "12345"]);
+        match args.command {
+            Some(Commands::Navmesh {
+                action: NavMeshAction::Diagnostics { zone, pid },
+            }) => {
+                assert_eq!(zone, None);
+                assert_eq!(pid, Some(12_345));
+            }
+            other => panic!("unexpected command: {other:?}"),
         }
     }
 }

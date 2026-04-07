@@ -653,6 +653,32 @@ impl NavMeshOverlay {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ZoneMeshDiagnostics {
+    pub zone_short_name: String,
+    pub cache_path: PathBuf,
+    pub cache_exists: bool,
+    pub cache_bytes: Option<u64>,
+    pub load_error: Option<String>,
+    pub overlay_segment_count: Option<usize>,
+}
+
+impl ZoneMeshDiagnostics {
+    #[must_use]
+    pub fn loadable(&self) -> bool {
+        self.load_error.is_none()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ZoneMeshReload {
+    pub zone_short_name: String,
+    pub cache_path: PathBuf,
+    pub replaced_cached_file: bool,
+    pub cache_bytes: usize,
+    pub overlay_segment_count: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteSource {
     /// Route computed via Detour navmesh pathfinding.
@@ -1229,6 +1255,68 @@ pub fn has_cached_zone_mesh(zone_short_name: &str) -> bool {
         .unwrap_or(false)
 }
 
+pub fn cached_zone_mesh_diagnostics(zone_short_name: &str) -> Result<ZoneMeshDiagnostics> {
+    let zone_short_name = sanitize_zone_short_name(zone_short_name)?;
+    let cache_path = mesh_cache_path(zone_short_name);
+    let cache_exists = cache_path.exists();
+    let cache_bytes = if cache_exists {
+        Some(
+            std::fs::metadata(&cache_path)
+                .with_context(|| format!("Failed to stat cached mesh: {}", cache_path.display()))?
+                .len(),
+        )
+    } else {
+        None
+    };
+
+    let (load_error, overlay_segment_count) = if cache_exists {
+        match load_cached_zone_mesh(zone_short_name) {
+            Ok(loaded) => match overlay_from_loaded(&loaded) {
+                Ok(overlay) => (None, Some(overlay.segment_count())),
+                Err(error) => (Some(error.to_string()), None),
+            },
+            Err(error) => (Some(error.to_string()), None),
+        }
+    } else {
+        (
+            Some(format!("No cached navmesh for zone '{zone_short_name}'")),
+            None,
+        )
+    };
+
+    Ok(ZoneMeshDiagnostics {
+        zone_short_name: zone_short_name.to_string(),
+        cache_path,
+        cache_exists,
+        cache_bytes,
+        load_error,
+        overlay_segment_count,
+    })
+}
+
+pub fn reload_zone_mesh(zone_short_name: &str) -> Result<ZoneMeshReload> {
+    let zone_short_name = sanitize_zone_short_name(zone_short_name)?;
+    let cache_path = mesh_cache_path(zone_short_name);
+    let replaced_cached_file = cache_path.exists();
+    if replaced_cached_file {
+        std::fs::remove_file(&cache_path)
+            .with_context(|| format!("Failed to remove cached mesh: {}", cache_path.display()))?;
+    }
+
+    let data = download_zone_mesh(zone_short_name)?;
+    let proto = parse_navmesh(&data)?;
+    let loaded = load_navmesh(&proto)?;
+    let overlay = overlay_from_loaded(&loaded)?;
+
+    Ok(ZoneMeshReload {
+        zone_short_name: zone_short_name.to_string(),
+        cache_path,
+        replaced_cached_file,
+        cache_bytes: data.len(),
+        overlay_segment_count: overlay.segment_count(),
+    })
+}
+
 /// Plan a navigation route between two points in a zone using the navmesh.
 pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f32)) -> RoutePlan {
     let mesh_cached = has_cached_zone_mesh(zone_short_name);
@@ -1293,6 +1381,30 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
 
 fn mesh_cache_path(zone_short_name: &str) -> PathBuf {
     Path::new(MESH_CACHE_DIR).join(format!("{zone_short_name}.navmesh"))
+}
+
+fn load_cached_zone_mesh(zone_short_name: &str) -> Result<LoadedNavMesh> {
+    let zone_short_name = sanitize_zone_short_name(zone_short_name)?;
+    let cache_path = mesh_cache_path(zone_short_name);
+    if !cache_path.exists() {
+        bail!("No cached navmesh for zone '{zone_short_name}'");
+    }
+
+    let cached_len = std::fs::metadata(&cache_path)
+        .with_context(|| format!("Failed to stat cached mesh: {}", cache_path.display()))?
+        .len();
+    if cached_len > MAX_MESH_DOWNLOAD_BYTES as u64 {
+        bail!(
+            "Cached navmesh too large ({} bytes, max {})",
+            cached_len,
+            MAX_MESH_DOWNLOAD_BYTES
+        );
+    }
+
+    let data = std::fs::read(&cache_path)
+        .with_context(|| format!("Failed to read cached mesh: {}", cache_path.display()))?;
+    let proto = parse_navmesh(&data)?;
+    load_navmesh(&proto)
 }
 
 fn sanitize_zone_short_name(zone_short_name: &str) -> Result<&str> {
@@ -1438,6 +1550,51 @@ mod tests {
     fn sanitize_zone_short_name_accepts_expected_chars() {
         let result = sanitize_zone_short_name("qeynos2_test-zone");
         assert_eq!(result.expect("expected valid zone"), "qeynos2_test-zone");
+    }
+
+    #[test]
+    fn cached_zone_mesh_diagnostics_reports_missing_cache() {
+        let zone = "copilot_missing_mesh_diag";
+        let cache_path = mesh_cache_path(zone);
+        let _ = std::fs::remove_file(&cache_path);
+
+        let diagnostics = cached_zone_mesh_diagnostics(zone).expect("diagnostics");
+        assert_eq!(diagnostics.zone_short_name, zone);
+        assert_eq!(diagnostics.cache_path, cache_path);
+        assert!(!diagnostics.cache_exists);
+        assert_eq!(diagnostics.cache_bytes, None);
+        assert!(!diagnostics.loadable());
+        assert!(
+            diagnostics
+                .load_error
+                .as_deref()
+                .is_some_and(|error| error.contains("No cached navmesh"))
+        );
+        assert_eq!(diagnostics.overlay_segment_count, None);
+    }
+
+    #[test]
+    fn cached_zone_mesh_diagnostics_reports_invalid_cache() {
+        let zone = "copilot_invalid_mesh_diag";
+        let cache_path = mesh_cache_path(zone);
+        if let Some(parent) = cache_path.parent() {
+            std::fs::create_dir_all(parent).expect("mesh cache dir");
+        }
+        std::fs::write(&cache_path, [0u8; 8]).expect("write invalid cache");
+
+        let diagnostics = cached_zone_mesh_diagnostics(zone).expect("diagnostics");
+        assert!(diagnostics.cache_exists);
+        assert_eq!(diagnostics.cache_bytes, Some(8));
+        assert!(!diagnostics.loadable());
+        assert!(
+            diagnostics
+                .load_error
+                .as_deref()
+                .is_some_and(|error| error.contains("Invalid navmesh magic"))
+        );
+        assert_eq!(diagnostics.overlay_segment_count, None);
+
+        let _ = std::fs::remove_file(cache_path);
     }
 
     #[test]

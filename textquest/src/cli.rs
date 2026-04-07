@@ -57,6 +57,43 @@ fn shared_state_reader_for_pid(pid: u32) -> Result<ipc::shared::SharedStateReade
         .with_context(|| format!("Cannot open shared memory for PID {pid} — is the DLL injected?"))
 }
 
+fn resolve_navmesh_zone(zone: Option<&str>, pid: Option<u32>) -> Result<String> {
+    if let Some(zone) = zone {
+        return Ok(zone.to_string());
+    }
+
+    let pid = pid.ok_or_else(|| anyhow::anyhow!("Provide a zone name or --pid to resolve it"))?;
+    let mut reader = shared_state_reader_for_pid(pid)?;
+    let state = read_shared_state_with_retry(&mut reader, Duration::from_millis(1200))
+        .ok_or_else(|| anyhow::anyhow!("No shared memory data available for PID {pid}"))?;
+    if state.zone_short_name.is_empty() {
+        anyhow::bail!("PID {pid} is not in a zone yet; no zone short name is available");
+    }
+    Ok(state.zone_short_name)
+}
+
+fn query_nav_signals(pid: u32) -> Result<textquest_common::nav::NavStateSignals> {
+    use textquest_common::ipc::{Command, Response};
+
+    let pipe = connect_authenticated_pipe(pid)?;
+    match pipe.send(&Command::NavSignalsQuery)? {
+        Response::NavSignals { signals } => Ok(signals),
+        Response::Error { message } => anyhow::bail!("DLL returned error: {message}"),
+        other => anyhow::bail!("Unexpected nav signals response: {other:?}"),
+    }
+}
+
+fn query_nav_diagnostics(pid: u32) -> Result<textquest_common::nav::NavDiagnostics> {
+    use textquest_common::ipc::{Command, Response};
+
+    let pipe = connect_authenticated_pipe(pid)?;
+    match pipe.send(&Command::NavDiagnosticsQuery)? {
+        Response::NavDiagnosticsResult { diagnostics } => Ok(diagnostics),
+        Response::Error { message } => anyhow::bail!("DLL returned error: {message}"),
+        other => anyhow::bail!("Unexpected nav diagnostics response: {other:?}"),
+    }
+}
+
 fn resolve_built_dll_path() -> Result<PathBuf> {
     let exe_dir = std::env::current_exe()
         .context("Failed to resolve current executable path")?
@@ -317,6 +354,96 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
         other => {
             anyhow::bail!("Unexpected response: {other:?}");
         }
+    }
+
+    Ok(())
+}
+
+/// Navmesh reload mode — discard the cached zone mesh, redownload it, and verify it loads.
+pub fn run_navmesh_reload_mode(zone: Option<&str>, pid: Option<u32>) -> Result<()> {
+    let zone = resolve_navmesh_zone(zone, pid)?;
+    println!("Reloading navmesh for zone '{zone}'...");
+
+    let reload = nav::mesh::reload_zone_mesh(&zone)?;
+    println!(
+        "Reloaded navmesh for '{}': {}",
+        reload.zone_short_name,
+        if reload.replaced_cached_file {
+            "replaced cached file"
+        } else {
+            "downloaded fresh cache"
+        }
+    );
+    println!("Cache path: {}", reload.cache_path.display());
+    println!("Bytes: {}", reload.cache_bytes);
+    println!("Overlay segments: {}", reload.overlay_segment_count);
+
+    Ok(())
+}
+
+/// Navmesh diagnostics mode — inspect the cached zone mesh and, optionally, the live DLL nav state.
+pub fn run_navmesh_diagnostics_mode(zone: Option<&str>, pid: Option<u32>) -> Result<()> {
+    let zone = resolve_navmesh_zone(zone, pid)?;
+    let diagnostics = nav::mesh::cached_zone_mesh_diagnostics(&zone)?;
+
+    println!(
+        "Navmesh diagnostics for zone '{}':",
+        diagnostics.zone_short_name
+    );
+    println!("  Cache path: {}", diagnostics.cache_path.display());
+    println!(
+        "  Cache file: {}",
+        if diagnostics.cache_exists {
+            "present"
+        } else {
+            "missing"
+        }
+    );
+    println!(
+        "  Cache bytes: {}",
+        diagnostics
+            .cache_bytes
+            .map_or_else(|| String::from("n/a"), |bytes| bytes.to_string())
+    );
+    println!(
+        "  Load status: {}",
+        diagnostics
+            .load_error
+            .as_deref()
+            .map_or("ok", |error| error)
+    );
+    println!(
+        "  Overlay segments: {}",
+        diagnostics
+            .overlay_segment_count
+            .map_or_else(|| String::from("n/a"), |count| count.to_string())
+    );
+
+    if let Some(pid) = pid {
+        let signals = query_nav_signals(pid)?;
+        let nav_diagnostics = query_nav_diagnostics(pid)?;
+        println!();
+        println!("Live navigator diagnostics for PID {pid}:");
+        println!("  State: {}", nav_diagnostics.state);
+        println!("  Active: {}", signals.active);
+        println!("  Paused: {}", signals.paused);
+        println!("  Mesh loaded: {}", signals.mesh_loaded);
+        println!("  Path exists: {}", nav_diagnostics.path_exists);
+        println!(
+            "  Path length: {}",
+            nav_diagnostics
+                .path_length
+                .map_or_else(|| String::from("n/a"), |length| format!("{length:.1}"))
+        );
+        println!("  Velocity: {:.1}", nav_diagnostics.velocity);
+        println!(
+            "  Waypoints: {}/{}",
+            nav_diagnostics.waypoint_index, nav_diagnostics.waypoint_count
+        );
+        println!(
+            "  Distance remaining: {:.1}",
+            nav_diagnostics.distance_remaining
+        );
     }
 
     Ok(())
@@ -1978,7 +2105,7 @@ pub fn load_config() -> Result<config::AppConfig> {
 
 #[cfg(test)]
 mod tests {
-    use super::load_pid_session;
+    use super::{load_pid_session, resolve_navmesh_zone};
 
     #[test]
     fn load_pid_session_errors_without_token_file() {
@@ -2009,5 +2136,11 @@ mod tests {
 
         let _ = std::fs::remove_file(token_path);
         let _ = std::fs::remove_file(login_token_path);
+    }
+
+    #[test]
+    fn resolve_navmesh_zone_returns_explicit_zone_without_pid() {
+        let zone = resolve_navmesh_zone(Some("gfaydark"), None).expect("explicit zone");
+        assert_eq!(zone, "gfaydark");
     }
 }

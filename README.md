@@ -346,6 +346,12 @@ target\release\textquest.exe --statusall
 
 # Send a slash command to a specific client
 target\release\textquest.exe --cmd <pid> "/sit"
+
+# Regenerate a cached navmesh for a zone
+target\release\textquest.exe navmesh reload gfaydark
+
+# Inspect cached navmesh + live navigator diagnostics for a client
+target\release\textquest.exe navmesh diagnostics --pid <pid>
 ```
 
 ### Log Files
