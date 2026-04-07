@@ -937,6 +937,7 @@ mod tests {
                 endurance_max: 100,
                 speed_run: 0.0,
                 stand_state: 0,
+                is_gm: false,
             }
         }
 
@@ -1027,6 +1028,7 @@ mod tests {
                 endurance_max: 100,
                 speed_run: 0.0,
                 stand_state: 0,
+                is_gm: false,
             }
         }
 
@@ -1310,6 +1312,7 @@ mod tests {
             endurance_max: 100,
             speed_run: 0.0,
             stand_state: 0,
+            is_gm: false,
         };
         orch.game_states.insert(
             100,
@@ -1334,6 +1337,7 @@ mod tests {
                     endurance_max: 100,
                     speed_run: 0.0,
                     stand_state: 0,
+                    is_gm: false,
                 }),
                 target: None,
                 nearby_spawns: vec![new_npc],

@@ -75,10 +75,15 @@ pub struct Navigator {
     moveto_config: Option<MoveToConfig>,
     /// Global autopause flag (#164).
     autopause: bool,
+    /// Break-on-GM flag — pause navigation when a GM is detected nearby.
+    break_on_gm: bool,
 }
 
-/// Radius for hostile NPC proximity checks (aggro detection).
+/// Radius for hostile NPC proximity checks (aggro detection), in EQ world units.
 const AGGRO_CHECK_RADIUS: f32 = 50.0;
+
+/// Radius for GM proximity check (break-on-GM detection), in EQ world units.
+const GM_CHECK_RADIUS: f32 = 500.0;
 
 /// Returns true if any hostile NPC (type=1, moving) is within aggro radius.
 fn has_hostile_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
@@ -86,6 +91,16 @@ fn has_hostile_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
         s.spawn_type == 1 && s.speed_run > 0.0 && {
             let sp = Waypoint::new(s.x, s.y, s.z);
             pos.distance_2d(&sp) < AGGRO_CHECK_RADIUS
+        }
+    })
+}
+
+/// Returns true if any GM-flagged spawn is within the GM check radius.
+fn has_gm_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
+    nearby.iter().any(|s| {
+        s.is_gm && {
+            let sp = Waypoint::new(s.x, s.y, s.z);
+            pos.distance_2d(&sp) < GM_CHECK_RADIUS
         }
     })
 }
@@ -111,6 +126,7 @@ impl Navigator {
             mesh_loaded: false,
             moveto_config: None,
             autopause: false,
+            break_on_gm: false,
         }
     }
 
@@ -331,6 +347,15 @@ impl Navigator {
         tracing::info!(enabled, "Autopause set");
     }
 
+    /// Enable or disable break-on-GM safety halt.
+    ///
+    /// When enabled, navigation pauses (path retained) whenever a GM-flagged
+    /// spawn is detected within GM_CHECK_RADIUS, mirroring MQ2MoveUtils breakongm.
+    pub fn set_break_on_gm(&mut self, enabled: bool) {
+        self.break_on_gm = enabled;
+        tracing::info!(enabled, "BreakOnGm set");
+    }
+
     /// Run one tick of the navigation state machine. Call from on_game_tick().
     ///
     /// `current_target` and `nearby` are used by the stick engine.
@@ -366,6 +391,38 @@ impl Navigator {
                 }
             }
             WarpAction::None => {}
+        }
+
+        // Break-on-GM: pause all movement when a GM-flagged spawn is detected nearby.
+        if self.break_on_gm {
+            let current_pos = self.controller.read_position();
+            let gm_present = has_gm_nearby(nearby, &current_pos);
+
+            if gm_present
+                && matches!(
+                    self.state,
+                    State::Moving | State::Following { .. } | State::Sticking | State::MovingTo
+                )
+            {
+                tracing::warn!("GM detected nearby — pausing navigation (break_on_gm)");
+                self.controller.stop_forward();
+                self.controller.stop_back();
+                let old_state = std::mem::replace(&mut self.state, State::Idle);
+                self.pre_pause_state = Some(old_state);
+                self.state = State::Paused(PauseReason::GmNearby);
+                return;
+            }
+
+            // Auto-resume from a GM pause once the GM is no longer nearby.
+            if !gm_present && matches!(self.state, State::Paused(PauseReason::GmNearby)) {
+                tracing::info!("GM no longer nearby — resuming navigation");
+                if let Some(saved) = self.pre_pause_state.take() {
+                    self.state = saved;
+                } else {
+                    self.state = State::Moving;
+                }
+                self.stuck.reset();
+            }
         }
 
         match self.state {
@@ -901,5 +958,117 @@ mod tests {
         assert!(!nav.signals().mesh_loaded);
         nav.set_mesh_loaded(true);
         assert!(nav.signals().mesh_loaded);
+    }
+
+    /// Build a nearby-spawn list with a single GM spawn at the given position.
+    fn gm_spawn_at(x: f32, y: f32) -> SpawnData {
+        SpawnData {
+            spawn_id: 9999,
+            name: "GM_Zordak".into(),
+            displayed_name: "GM Zordak".into(),
+            spawn_type: 0, // player
+            level: 255,
+            class_id: 0,
+            x,
+            y,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 0,
+            endurance_max: 0,
+            speed_run: 0.0,
+            stand_state: 0,
+            is_gm: true,
+        }
+    }
+
+    #[test]
+    fn break_on_gm_pauses_navigation_when_gm_nearby() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        nav.set_break_on_gm(true);
+
+        // No GM nearby — should remain Moving.
+        nav.tick(None, &[], None);
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+
+        // GM within check radius (player is at origin, GM at 10,0).
+        let gm = gm_spawn_at(10.0, 0.0);
+        nav.tick(None, &[gm], None);
+        assert!(matches!(
+            nav.status(),
+            NavStatus::Paused {
+                reason: PauseReason::GmNearby,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn break_on_gm_auto_resumes_when_gm_leaves() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        nav.set_break_on_gm(true);
+
+        // Trigger pause with a nearby GM.
+        let gm = gm_spawn_at(10.0, 0.0);
+        nav.tick(None, &[gm], None);
+        assert!(matches!(
+            nav.status(),
+            NavStatus::Paused {
+                reason: PauseReason::GmNearby,
+                ..
+            }
+        ));
+
+        // GM leaves — auto-resume expected.
+        nav.tick(None, &[], None);
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+    }
+
+    #[test]
+    fn break_on_gm_disabled_does_not_pause() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        // break_on_gm is false by default.
+
+        let gm = gm_spawn_at(10.0, 0.0);
+        nav.tick(None, &[gm], None);
+        // Should still be moving — break_on_gm is off.
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+    }
+
+    #[test]
+    fn break_on_gm_far_gm_does_not_pause() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        nav.set_break_on_gm(true);
+
+        // GM is beyond GM_CHECK_RADIUS (600 EQ world units away; radius is 500).
+        let gm = gm_spawn_at(600.0, 0.0);
+        nav.tick(None, &[gm], None);
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+    }
+
+    #[test]
+    fn break_on_gm_does_not_override_user_pause() {
+        let mut nav = Navigator::new(0, 1);
+        nav.navigate(vec![Waypoint::new(100.0, 0.0, 0.0)]);
+        nav.set_break_on_gm(true);
+        nav.pause(); // user-initiated pause
+
+        let gm = gm_spawn_at(10.0, 0.0);
+        nav.tick(None, &[gm], None);
+        // Still user-paused, not overwritten by GM detection.
+        assert!(matches!(
+            nav.status(),
+            NavStatus::Paused {
+                reason: PauseReason::UserPause,
+                ..
+            }
+        ));
     }
 }

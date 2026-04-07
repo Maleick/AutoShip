@@ -67,6 +67,7 @@ mod tests {
             endurance_max: 100,
             speed_run: 0.0,
             stand_state: 0,
+            is_gm: false,
         }
     }
 
@@ -90,6 +91,7 @@ mod tests {
             endurance_max: 0,
             speed_run: 0.0,
             stand_state: 0,
+            is_gm: false,
         }
     }
 

@@ -383,6 +383,14 @@ pub enum Command {
         /// Whether autopause should be active.
         enabled: bool,
     },
+    /// Enable or disable break-on-GM safety halt for navigation and combat movement.
+    ///
+    /// When enabled, navigation pauses (path retained) whenever a GM-flagged spawn
+    /// is detected in the nearby spawn list, mirroring MQ2MoveUtils breakongm behavior.
+    SetBreakOnGm {
+        /// Whether break-on-GM should be active.
+        enabled: bool,
+    },
     StickTo {
         /// Stick configuration including distance, hold, always, and id options.
         config: crate::nav::StickConfig,

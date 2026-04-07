@@ -47,6 +47,8 @@ pub enum PauseReason {
     UserPause,
     /// Player keyboard input detected — autopause engaged (#164).
     UserInput,
+    /// GM detected nearby — break-on-GM safety halt.
+    GmNearby,
 }
 
 /// A single point in 3D space with optional metadata.
@@ -1795,6 +1797,14 @@ mod tests {
     #[test]
     fn pause_reason_user_input_serde() {
         let reason = PauseReason::UserInput;
+        let json = serde_json::to_string(&reason).expect("serialize");
+        let restored: PauseReason = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(reason, restored);
+    }
+
+    #[test]
+    fn pause_reason_gm_nearby_serde() {
+        let reason = PauseReason::GmNearby;
         let json = serde_json::to_string(&reason).expect("serialize");
         let restored: PauseReason = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(reason, restored);

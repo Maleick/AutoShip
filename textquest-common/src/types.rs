@@ -130,6 +130,8 @@ pub struct SpawnData {
     /// Stand state: 0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking,
     /// 110=feigned, 111=dead. Only 0 (standing) allows spell casting.
     pub stand_state: u8,
+    /// Whether this spawn is flagged as a GM (Game Master).
+    pub is_gm: bool,
 }
 
 impl SpawnData {
@@ -308,6 +310,7 @@ mod tests {
             endurance_max: 100,
             speed_run: 0.0,
             stand_state: 0,
+            is_gm: false,
         }
     }
 

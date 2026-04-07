@@ -891,6 +891,11 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> textquest_common::types::SpawnDat
     let endurance_max = unsafe { *((spawn_ptr + player_zone::ENDURANCE_MAX) as *const u32) };
     let speed_run = unsafe { *((spawn_ptr + player_base::SPEED_RUN) as *const f32) };
     let stand_state = unsafe { *((spawn_ptr + player_zone::STANDSTATE) as *const u8) };
+    let is_gm = if is_readable(spawn_ptr + player_zone::GM, size_of::<u8>()) {
+        unsafe { *((spawn_ptr + player_zone::GM) as *const u8) != 0 }
+    } else {
+        false
+    };
 
     textquest_common::types::SpawnData {
         spawn_id,
@@ -911,6 +916,7 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> textquest_common::types::SpawnDat
         endurance_max,
         speed_run,
         stand_state,
+        is_gm,
     }
 }
 
@@ -1337,6 +1343,10 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::SetAutopause { enabled } => {
             tracing::info!(enabled, "SetAutopause received");
             crate::nav::handle_command(crate::nav::NavCommand::SetAutopause(enabled));
+        }
+        Command::SetBreakOnGm { enabled } => {
+            tracing::info!(enabled, "SetBreakOnGm received");
+            crate::nav::handle_command(crate::nav::NavCommand::SetBreakOnGm(enabled));
         }
         Command::StickTo { config } => {
             tracing::info!(

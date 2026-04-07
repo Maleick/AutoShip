@@ -598,6 +598,7 @@ impl NavClientStatus {
                     textquest_common::nav::PauseReason::Warp => "warp",
                     textquest_common::nav::PauseReason::UserPause => "paused",
                     textquest_common::nav::PauseReason::UserInput => "user input",
+                    textquest_common::nav::PauseReason::GmNearby => "GM nearby",
                 };
                 format!(
                     "Paused ({reason_label}) • WP {}/{} • {:.0}u remaining",

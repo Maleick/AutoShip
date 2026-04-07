@@ -723,7 +723,9 @@ mod platform {
                             ) as usize;
 
                             // Check for forwarded export (RVA within export directory)
-                            if func_rva >= export_rva && func_rva < export_rva.saturating_add(export_size) {
+                            if func_rva >= export_rva
+                                && func_rva < export_rva.saturating_add(export_size)
+                            {
                                 tracing::warn!(
                                     dll = %imp.dll_name,
                                     function = %name,

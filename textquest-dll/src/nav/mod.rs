@@ -85,6 +85,7 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::SetMeshLoaded(loaded) => nav.set_mesh_loaded(loaded),
             NavCommand::MoveToAdvanced(config) => nav.move_to_advanced(config),
             NavCommand::SetAutopause(enabled) => nav.set_autopause(enabled),
+            NavCommand::SetBreakOnGm(enabled) => nav.set_break_on_gm(enabled),
         }
     }
 }
@@ -144,4 +145,6 @@ pub enum NavCommand {
     MoveToAdvanced(MoveToConfig),
     /// Enable or disable autopause globally (#164).
     SetAutopause(bool),
+    /// Enable or disable break-on-GM safety halt.
+    SetBreakOnGm(bool),
 }

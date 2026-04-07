@@ -234,6 +234,7 @@ mod tests {
             endurance_max: 25,
             speed_run: 0.0,
             stand_state: 0,
+            is_gm: false,
         }
     }
 
