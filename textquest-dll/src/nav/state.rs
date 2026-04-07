@@ -428,9 +428,10 @@ impl Navigator {
                 State::Following { ref config, .. } => self
                     .warp
                     .update(find_follow_target_sample(nearby, &config.leader_name).as_ref()),
-                State::Sticking => self
-                    .warp
-                    .update(self.stick.target_sample(current_target, nearby).as_ref()),
+                State::Sticking => {
+                    let stick_sample = self.stick.target_sample(current_target, nearby);
+                    self.warp.update(target_sample.or(stick_sample.as_ref()))
+                }
                 _ => self.warp.update(target_sample),
             }
         };

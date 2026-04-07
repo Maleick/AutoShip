@@ -335,6 +335,138 @@ enum FollowSlashCommand {
     Off,
 }
 
+fn parse_movement_slash_command(command: &str) -> Option<Result<MovementSlashCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+
+    if verb.eq_ignore_ascii_case("/stick") {
+        if args.len() == 2 && args[0].eq_ignore_ascii_case("mod") {
+            return Some(
+                args[1]
+                    .parse::<f32>()
+                    .map(|delta| MovementSlashCommand::Stick(StickSlashCommand::Mod(delta)))
+                    .map_err(|_| format!("invalid /stick mod value: {}", args[1])),
+            );
+        }
+
+        if args.len() == 1 && args[0].eq_ignore_ascii_case("off") {
+            return Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Off)));
+        }
+
+        let mut config = textquest_common::nav::StickConfig::default();
+        let mut expect_spawn_id = false;
+
+        for arg in args {
+            if expect_spawn_id {
+                let spawn_id = arg
+                    .parse::<u32>()
+                    .map_err(|_| format!("invalid /stick id value: {arg}"));
+                match spawn_id {
+                    Ok(spawn_id) => {
+                        config.id = Some(spawn_id);
+                        expect_spawn_id = false;
+                        continue;
+                    }
+                    Err(err) => return Some(Err(err)),
+                }
+            }
+
+            match arg.to_ascii_lowercase().as_str() {
+                "behind" => config.mode = textquest_common::nav::StickMode::Behind,
+                "!front" | "notfront" => config.mode = textquest_common::nav::StickMode::NotFront,
+                "front" => config.mode = textquest_common::nav::StickMode::Front,
+                "pin" => config.mode = textquest_common::nav::StickMode::Pin,
+                "snaproll" => config.mode = textquest_common::nav::StickMode::SnapRoll,
+                "hold" => config.hold = true,
+                "always" => config.always = true,
+                "moveback" => config.moveback = true,
+                "healer" => config.healer = true,
+                "id" => expect_spawn_id = true,
+                _ => {
+                    if let Some(value) = arg.strip_suffix('%') {
+                        let percent = value
+                            .parse::<f32>()
+                            .map_err(|_| format!("invalid /stick percent distance: {arg}"));
+                        match percent {
+                            Ok(percent) => {
+                                config.distance =
+                                    textquest_common::nav::StickDistance::Percent(percent);
+                                continue;
+                            }
+                            Err(err) => return Some(Err(err)),
+                        }
+                    }
+
+                    let absolute = arg
+                        .parse::<f32>()
+                        .map_err(|_| format!("unsupported /stick option: {arg}"));
+                    match absolute {
+                        Ok(distance) => {
+                            config.distance =
+                                textquest_common::nav::StickDistance::Absolute(distance);
+                        }
+                        Err(err) => return Some(Err(err)),
+                    }
+                }
+            }
+        }
+
+        if expect_spawn_id {
+            return Some(Err("missing /stick id value".to_string()));
+        }
+
+        return Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Start(
+            config,
+        ))));
+    }
+
+    if verb.eq_ignore_ascii_case("/follow") {
+        return match args {
+            [] => Some(Ok(MovementSlashCommand::Follow(
+                FollowSlashCommand::Start { leader_name: None },
+            ))),
+            [arg] if arg.eq_ignore_ascii_case("off") => {
+                Some(Ok(MovementSlashCommand::Follow(FollowSlashCommand::Off)))
+            }
+            _ => Some(Ok(MovementSlashCommand::Follow(
+                FollowSlashCommand::Start {
+                    leader_name: Some(args.join(" ")),
+                },
+            ))),
+        };
+    }
+
+    None
+}
+
+fn resolve_follow_spawn<'a>(
+    current_target: Option<&'a textquest_common::types::SpawnData>,
+    nearby: &'a [textquest_common::types::SpawnData],
+    leader_name: Option<&str>,
+) -> Option<&'a textquest_common::types::SpawnData> {
+    let leader_name = leader_name.map(str::trim).filter(|name| !name.is_empty());
+    if let Some(leader_name) = leader_name {
+        if let Some(current_target) = current_target
+            && (current_target.name.eq_ignore_ascii_case(leader_name)
+                || current_target
+                    .displayed_name
+                    .eq_ignore_ascii_case(leader_name))
+        {
+            return Some(current_target);
+        }
+
+        nearby.iter().find(|spawn| {
+            spawn.name.eq_ignore_ascii_case(leader_name)
+                || spawn.displayed_name.eq_ignore_ascii_case(leader_name)
+        })
+    } else {
+        current_target.or_else(|| nearby.first())
+    }
+}
+
 fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
     let tokens = match tokenize_slash_command(command) {
         Ok(tokens) => tokens,

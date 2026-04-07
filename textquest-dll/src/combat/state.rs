@@ -22,8 +22,8 @@ use super::mana::ManaGovernor;
 use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
 use super::strategy::{
-    ClassStrategy, CombatContext, GroupMemberState, build_strategy, pet_attack_focused,
-    pet_back_off,
+    ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
+    pet_attack_focused, pet_back_off,
 };
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
@@ -78,6 +78,54 @@ fn normalize_gem_id(slot: u8) -> Option<u8> {
         }
         _ => None,
     }
+}
+
+fn plan_spell_cast(
+    preferred_slot: Option<u8>,
+    spell_id: i32,
+    memorized_spells: &[i32],
+) -> Option<PlannedSpellCast> {
+    let preferred_gem = match preferred_slot {
+        Some(slot) => Some(normalize_gem_id(slot)?),
+        None => None,
+    };
+    if let Some(gem_id) = preferred_gem {
+        if memorized_spells
+            .get(gem_id as usize)
+            .copied()
+            .unwrap_or_default()
+            == spell_id
+        {
+            return Some(PlannedSpellCast {
+                gem_id,
+                spell_id,
+                source: SpellCastSource::PreferredGem,
+            });
+        }
+    }
+
+    if spell_id > 0
+        && let Some((gem_id, _)) = memorized_spells
+            .iter()
+            .enumerate()
+            .find(|(_, memorized_spell_id)| **memorized_spell_id == spell_id)
+    {
+        return Some(PlannedSpellCast {
+            gem_id: gem_id as u8,
+            spell_id,
+            source: SpellCastSource::FallbackGem,
+        });
+    }
+
+    Some(PlannedSpellCast {
+        gem_id: 0,
+        spell_id,
+        source: if spell_id <= 0 && preferred_gem.is_some() {
+            SpellCastSource::PreferredGem
+        } else {
+            SpellCastSource::SpellIdDirect
+        },
+    })
 }
 
 /// Build a safe `/useitem` slash command for an item name.
@@ -604,7 +652,7 @@ impl Combatant {
                     let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
                     self.state = CombatState::Casting {
-                        spell_slot: gem_id,
+                        spell_slot: cast_plan.gem_id,
                         target_id: selected_spell_target
                             .or_else(|| target.map(|t| t.spawn_id))
                             .unwrap_or(0),
@@ -971,7 +1019,7 @@ impl Combatant {
     fn execute_pet_action(
         &mut self,
         current_target_id: Option<u32>,
-        pet_status: super::strategy::PetStatus,
+        pet_status: PetStatus,
         action: PetAction,
     ) -> bool {
         match action {
@@ -1011,6 +1059,7 @@ impl Combatant {
                 self.gcd.consume();
                 self.state = CombatState::Casting {
                     spell_slot: gem_id,
+                    target_id: pet_id,
                     ticks_remaining: 20 + cast_delay,
                 };
                 true
@@ -1025,7 +1074,7 @@ mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
     use crate::combat::rotation;
-    use textquest_common::combat::CombatConfig;
+    use textquest_common::combat::{ActionType, CombatConfig};
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

@@ -24,6 +24,45 @@ use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PetStatus {
+    pub spawn_id: Option<u32>,
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    pub fn has_pet(self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    pub fn is_attacking(self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PetAction {
+    Attack,
+    Buff { spell: SpellEntry },
+}
+
+impl PartialEq for PetAction {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Attack, Self::Attack) => true,
+            (Self::Buff { spell: lhs }, Self::Buff { spell: rhs }) => {
+                lhs.slot == rhs.slot
+                    && lhs.spell_id == rhs.spell_id
+                    && lhs.name == rhs.name
+                    && (lhs.min_mana_pct - rhs.min_mana_pct).abs() < f32::EPSILON
+                    && lhs.priority == rhs.priority
+                    && lhs.is_aoe == rhs.is_aoe
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
 pub struct CombatContext<'a> {
     pub player: &'a SpawnData,
@@ -66,6 +105,13 @@ impl CombatContext<'_> {
     pub fn pet_target_id(&self) -> Option<u32> {
         self.extended_targets
             .and_then(ExtendedTargetList::pet_target_id)
+    }
+
+    pub fn pet_status(&self) -> PetStatus {
+        PetStatus {
+            spawn_id: self.pet_spawn_id(),
+            target_id: self.pet_target_id(),
+        }
     }
 }
 
@@ -450,7 +496,7 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus};
+    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus, XTargetType};
 
     fn make_ctx_with_xtargets<'a>(
         player: &'a SpawnData,
