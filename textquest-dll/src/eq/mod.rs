@@ -2,6 +2,7 @@
 //! These are offsets from the eqgame.exe base address.
 //! Derived from MQ2 source headers.
 
+pub mod inventory;
 pub mod widgets;
 
 /// `CEverQuest::MainLoop` offset from EQ base.
@@ -46,7 +47,7 @@ fn get_eq_base() -> Option<u64> {
 ///
 /// Returns `true` if the address looks valid, `false` otherwise (with a warning log).
 #[cfg(windows)]
-fn validate_fn_ptr(addr: usize, name: &str) -> bool {
+pub(crate) fn validate_fn_ptr(addr: usize, name: &str) -> bool {
     use windows::Win32::System::Memory::{
         MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
         PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, VirtualQuery,
@@ -122,7 +123,7 @@ fn validate_fn_ptr(addr: usize, name: &str) -> bool {
 }
 
 #[cfg(not(windows))]
-fn validate_fn_ptr(_addr: usize, _name: &str) -> bool {
+pub(crate) fn validate_fn_ptr(_addr: usize, _name: &str) -> bool {
     // Non-Windows builds never actually call these function pointers,
     // so validation is a no-op.
     true

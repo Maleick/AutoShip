@@ -242,6 +242,18 @@ pub fn validate_command(cmd: &Command) -> bool {
         Command::NavWaypointSave { name }
         | Command::NavWaypointRecall { name }
         | Command::NavWaypointDelete { name } => !name.is_empty() && name.len() <= 64,
+        Command::QueryContainerSlots { filter } => {
+            filter
+                .location
+                .as_ref()
+                .is_none_or(|value| value.len() <= 32)
+                && filter.top_slot.is_none_or(|slot| slot >= -1)
+                && filter.bag_slot.is_none_or(|slot| slot >= -1)
+                && filter
+                    .item_name_contains
+                    .as_ref()
+                    .is_none_or(|value| !value.is_empty() && value.len() <= 128)
+        }
         Command::StartLogin {
             account_name,
             password,

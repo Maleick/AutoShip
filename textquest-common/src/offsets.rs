@@ -263,6 +263,10 @@ pub const INV_SLOT_MGR_MOVE_ITEM: u64 = 0x0001_4042_1C90;
 /// Signature: void SelectSlot(CInvSlot* pSlot, bool)
 pub const INV_SLOT_MGR_SELECT_SLOT: u64 = 0x0001_4042_3FC0;
 
+/// `CInvSlot::GetItemBase` — resolve the raw item pointer for a slot.
+/// Signature: void GetItemBase(PCONTENTS*)
+pub const INV_SLOT_GET_ITEM_BASE: u64 = 0x0001_4041_9520;
+
 // ─── CSpellBookWnd function addresses ───
 // Source: eqgame.h, client date 20260310
 
@@ -448,6 +452,117 @@ pub mod eqgame {
     pub const SLISTWNDCELL_SIZE: usize = 0x28;
     /// `SListWndCell::Text` (`CXStr` at +0x08)
     pub const SLISTWNDCELL_TEXT: usize = 0x08;
+}
+
+/// Offsets within `CInvSlotMgr`.
+/// Source: mq2-eqlib/include/eqlib/game/UI.h
+pub mod inv_slot_mgr {
+    /// `CInvSlot* SlotArray[4000]`
+    pub const SLOT_ARRAY: usize = 0x0008;
+    /// `int TotalSlots`
+    pub const TOTAL_SLOTS: usize = 0x7d08;
+}
+
+/// Offsets within `CInvSlot`.
+/// Source: mq2-eqlib/include/eqlib/game/UI.h
+pub mod inv_slot {
+    /// `CInvSlotWnd* pInvSlotWnd`
+    pub const WINDOW: usize = 0x08;
+    /// `int Index`
+    pub const INDEX: usize = 0x18;
+    /// `bool bEnabled`
+    pub const ENABLED: usize = 0x1c;
+}
+
+/// Offsets within `CInvSlotWnd`.
+/// Source: mq2-eqlib/include/eqlib/game/UI.h
+pub mod inv_slot_wnd {
+    /// `ItemGlobalIndex ItemLocation`
+    pub const ITEM_LOCATION: usize = 0x3f8;
+    /// `int Quantity`
+    pub const QUANTITY: usize = 0x428;
+    /// `bool bSelected`
+    pub const SELECTED: usize = 0x42c;
+    /// `bool bFindSelected`
+    pub const FIND_SELECTED: usize = 0x42d;
+    /// `int RecastLeft`
+    pub const RECAST_LEFT: usize = 0x430;
+    /// `bool bHotButton`
+    pub const HOT_BUTTON: usize = 0x434;
+    /// `bool bInventorySlotLinked`
+    pub const LINKED: usize = 0x435;
+    /// `CInvSlot* pInvSlot`
+    pub const INV_SLOT: usize = 0x438;
+}
+
+/// Offsets within `CContainerWnd`.
+/// Source: mq2-eqlib/include/eqlib/game/UI.h
+pub mod container_wnd {
+    /// `ItemPtr Container`
+    pub const CONTAINER: usize = 0x2d0;
+    /// `ItemGlobalIndex Location`
+    pub const LOCATION: usize = 0x2e0;
+    /// `VeArray<CInvSlotWnd*> InvSlotWnds`
+    pub const INV_SLOT_WNDS: usize = 0x2f0;
+    /// `CLabel* ContainerLabel`
+    pub const LABEL: usize = 0x348;
+    /// `int ContainerType`
+    pub const CONTAINER_TYPE: usize = 0x384;
+}
+
+/// Offsets within `ItemGlobalIndex`.
+/// Source: mq2-eqlib/include/eqlib/game/Items.h
+pub mod item_global_index {
+    /// `ItemContainerInstance Location`
+    pub const LOCATION: usize = 0x00;
+    /// `short Slot1`
+    pub const SLOT1: usize = 0x04;
+    /// `short Slot2`
+    pub const SLOT2: usize = 0x06;
+    /// `short Slot3`
+    pub const SLOT3: usize = 0x08;
+    /// `sizeof(ItemGlobalIndex)`
+    pub const SIZE: usize = 0x0c;
+}
+
+/// Offsets within `ItemBase`.
+/// Source: mq2-eqlib/include/eqlib/game/Items.h
+pub mod item_base {
+    /// `ItemDefinition* ItemDef`
+    pub const ITEM_DEF: usize = 0x068;
+    /// `int Charges`
+    pub const CHARGES: usize = 0x0b0;
+    /// `int ID`
+    pub const ID: usize = 0x0b4;
+    /// `int StackCount`
+    pub const STACK_COUNT: usize = 0x0bc;
+    /// `int Open`
+    pub const OPEN: usize = 0x0d8;
+    /// `ItemGlobalIndex GlobalIndex`
+    pub const GLOBAL_INDEX: usize = 0x100;
+}
+
+/// Offsets within `ItemDefinition`.
+/// Source: mq2-eqlib/include/eqlib/game/Items.h
+pub mod item_definition {
+    /// `char Name[64]`
+    pub const NAME: usize = 0x000;
+    /// `int ItemNumber`
+    pub const ITEM_NUMBER: usize = 0x0b8;
+    /// `int IconNumber`
+    pub const ICON_NUMBER: usize = 0x0c4;
+    /// `uint8_t Size`
+    pub const SIZE: usize = 0x0e8;
+    /// `uint8_t Type`
+    pub const TYPE: usize = 0x0e9;
+    /// `uint8_t ItemClass`
+    pub const ITEM_CLASS: usize = 0x190;
+    /// `uint8_t Slots`
+    pub const CONTAINER_SLOTS: usize = 0x53d;
+    /// `uint8_t SizeCapacity`
+    pub const SIZE_CAPACITY: usize = 0x53e;
+    /// `int StackSize`
+    pub const STACK_SIZE: usize = 0x590;
 }
 
 // ─── Character select offsets (eqgame.exe) ───
@@ -1249,6 +1364,7 @@ mod tests {
         assert_eq!(INV_SLOT_MGR_FIND_SLOT, 0x0001_4042_1100);
         assert_eq!(INV_SLOT_MGR_MOVE_ITEM, 0x0001_4042_1C90);
         assert_eq!(INV_SLOT_MGR_SELECT_SLOT, 0x0001_4042_3FC0);
+        assert_eq!(INV_SLOT_GET_ITEM_BASE, 0x0001_4041_9520);
     }
 
     #[test]

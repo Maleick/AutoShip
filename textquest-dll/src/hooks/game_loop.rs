@@ -1763,6 +1763,12 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 diagnostics,
             });
         }
+        Command::QueryContainerSlots { filter } => {
+            tracing::info!(?filter, "QueryContainerSlots received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let slots = crate::eq::inventory::query_open_container_slots(eq_base, &filter);
+            crate::ipc::send_response(textquest_common::ipc::Response::ContainerSlots { slots });
+        }
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);

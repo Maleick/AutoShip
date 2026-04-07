@@ -130,6 +130,79 @@ impl std::fmt::Display for RenderMode {
     }
 }
 
+/// Filter for querying open inventory container slots from the injected client.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ContainerSlotQuery {
+    /// Restrict results to a specific container backing store (e.g. "possessions", "bank").
+    pub location: Option<String>,
+    /// Restrict results to a specific top-level slot number.
+    pub top_slot: Option<i16>,
+    /// Restrict results to a specific slot number within the container window.
+    pub bag_slot: Option<i16>,
+    /// Case-insensitive substring filter on the item name.
+    pub item_name_contains: Option<String>,
+    /// When false, omit empty container slots.
+    pub include_empty: bool,
+}
+
+/// Snapshot of the item shown in an open container slot.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ContainerSlotItemInfo {
+    /// EQ item ID.
+    pub id: i32,
+    /// Display name from the item definition.
+    pub name: String,
+    /// Icon asset number.
+    pub icon_id: i32,
+    /// Remaining charges (`-1` means unlimited).
+    pub charges: i32,
+    /// Stack count in this slot.
+    pub stack_count: i32,
+    /// Max stack size from the item definition.
+    pub stack_size: i32,
+    /// EQ item `Type` field.
+    pub item_type: u8,
+    /// EQ item `ItemClass` field.
+    pub item_class: u8,
+    /// Whether the item itself is a container.
+    pub is_container: bool,
+}
+
+/// Snapshot of an open inventory slot that belongs to a container window.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ContainerSlotInfo {
+    /// Inventory location backing this slot.
+    pub location: i32,
+    /// Human-readable container instance name.
+    pub location_name: String,
+    /// Top-level slot containing the container.
+    pub top_slot: i16,
+    /// Slot index within the container.
+    pub bag_slot: i16,
+    /// Nested slot / augment slot when applicable.
+    pub aug_slot: i16,
+    /// `CInvSlotMgr` slot index for debugging.
+    pub manager_slot_index: i32,
+    /// Whether the slot is currently selected.
+    pub is_selected: bool,
+    /// Whether the slot is selected by EQ's find-item highlighting.
+    pub is_find_selected: bool,
+    /// Quantity shown on the slot widget.
+    pub quantity: i32,
+    /// Remaining recast on the slot widget.
+    pub recast_left: i32,
+    /// Whether the slot is linked to another inventory surface.
+    pub is_linked: bool,
+    /// Whether the slot currently has an item.
+    pub is_empty: bool,
+    /// Top-level container item name, when known.
+    pub container_name: Option<String>,
+    /// Top-level container item ID, when known.
+    pub container_item_id: Option<i32>,
+    /// Item currently occupying the slot, if any.
+    pub item: Option<ContainerSlotItemInfo>,
+}
+
 /// Commands sent from the manager to an injected DLL
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
@@ -417,6 +490,11 @@ pub enum Command {
     /// Poll for accumulated captured packet events.
     /// The DLL drains its pending packet buffer and responds with `PacketBatch`.
     PollPackets,
+    /// Query slot metadata and visible item info for open container windows.
+    QueryContainerSlots {
+        /// Filters applied before returning slot snapshots.
+        filter: ContainerSlotQuery,
+    },
     // System
     /// Heartbeat ping — expects a Pong response.
     Ping,
@@ -622,6 +700,11 @@ pub enum Response {
     PacketBatch {
         /// Accumulated packet events since last poll.
         events: Vec<PacketEventInfo>,
+    },
+    /// Slot metadata and item info for currently open container windows.
+    ContainerSlots {
+        /// Matching open container slots.
+        slots: Vec<ContainerSlotInfo>,
     },
     /// Zone adjacency graph from `ZoneGuideManagerClient`.
     /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).
