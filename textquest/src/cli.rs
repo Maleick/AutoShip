@@ -57,6 +57,43 @@ fn shared_state_reader_for_pid(pid: u32) -> Result<ipc::shared::SharedStateReade
         .with_context(|| format!("Cannot open shared memory for PID {pid} — is the DLL injected?"))
 }
 
+fn resolve_navmesh_zone(zone: Option<&str>, pid: Option<u32>) -> Result<String> {
+    if let Some(zone) = zone {
+        return Ok(zone.to_string());
+    }
+
+    let pid = pid.ok_or_else(|| anyhow::anyhow!("Provide a zone name or --pid to resolve it"))?;
+    let mut reader = shared_state_reader_for_pid(pid)?;
+    let state = read_shared_state_with_retry(&mut reader, Duration::from_millis(1200))
+        .ok_or_else(|| anyhow::anyhow!("No shared memory data available for PID {pid}"))?;
+    if state.zone_short_name.is_empty() {
+        anyhow::bail!("PID {pid} is not in a zone yet; no zone short name is available");
+    }
+    Ok(state.zone_short_name)
+}
+
+fn query_nav_signals(pid: u32) -> Result<textquest_common::nav::NavStateSignals> {
+    use textquest_common::ipc::{Command, Response};
+
+    let pipe = connect_authenticated_pipe(pid)?;
+    match pipe.send(&Command::NavSignalsQuery)? {
+        Response::NavSignals { signals } => Ok(signals),
+        Response::Error { message } => anyhow::bail!("DLL returned error: {message}"),
+        other => anyhow::bail!("Unexpected nav signals response: {other:?}"),
+    }
+}
+
+fn query_nav_diagnostics(pid: u32) -> Result<textquest_common::nav::NavDiagnostics> {
+    use textquest_common::ipc::{Command, Response};
+
+    let pipe = connect_authenticated_pipe(pid)?;
+    match pipe.send(&Command::NavDiagnosticsQuery)? {
+        Response::NavDiagnosticsResult { diagnostics } => Ok(diagnostics),
+        Response::Error { message } => anyhow::bail!("DLL returned error: {message}"),
+        other => anyhow::bail!("Unexpected nav diagnostics response: {other:?}"),
+    }
+}
+
 fn resolve_built_dll_path() -> Result<PathBuf> {
     let exe_dir = std::env::current_exe()
         .context("Failed to resolve current executable path")?
@@ -193,8 +230,8 @@ pub fn run_inject_mode() -> Result<()> {
     // Stage the DLL (copies with randomized name).
     // TODO: Switch to reflective loader once d3d11.dll cross-process import
     // resolution is fixed (addresses differ per-process due to ASLR).
-    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
-    println!("Staged DLL: {}", staged_dll.display());
+    let staged_dll = inject::dll_prep::prepare_dll_locked(&source_dll)?;
+    println!("Staged DLL: {}", staged_dll.path().display());
 
     let mut success = 0u32;
     let mut failed = 0u32;
@@ -208,7 +245,7 @@ pub fn run_inject_mode() -> Result<()> {
             failed += 1;
             continue;
         }
-        match inject::loader::inject_dll(pid, &staged_dll) {
+        match inject::loader::inject_dll(pid, staged_dll.path()) {
             Ok(()) => {
                 println!("OK");
                 info!(pid, "Injection succeeded");
@@ -317,6 +354,96 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
         other => {
             anyhow::bail!("Unexpected response: {other:?}");
         }
+    }
+
+    Ok(())
+}
+
+/// Navmesh reload mode — discard the cached zone mesh, redownload it, and verify it loads.
+pub fn run_navmesh_reload_mode(zone: Option<&str>, pid: Option<u32>) -> Result<()> {
+    let zone = resolve_navmesh_zone(zone, pid)?;
+    println!("Reloading navmesh for zone '{zone}'...");
+
+    let reload = nav::mesh::reload_zone_mesh(&zone)?;
+    println!(
+        "Reloaded navmesh for '{}': {}",
+        reload.zone_short_name,
+        if reload.replaced_cached_file {
+            "replaced cached file"
+        } else {
+            "downloaded fresh cache"
+        }
+    );
+    println!("Cache path: {}", reload.cache_path.display());
+    println!("Bytes: {}", reload.cache_bytes);
+    println!("Overlay segments: {}", reload.overlay_segment_count);
+
+    Ok(())
+}
+
+/// Navmesh diagnostics mode — inspect the cached zone mesh and, optionally, the live DLL nav state.
+pub fn run_navmesh_diagnostics_mode(zone: Option<&str>, pid: Option<u32>) -> Result<()> {
+    let zone = resolve_navmesh_zone(zone, pid)?;
+    let diagnostics = nav::mesh::cached_zone_mesh_diagnostics(&zone)?;
+
+    println!(
+        "Navmesh diagnostics for zone '{}':",
+        diagnostics.zone_short_name
+    );
+    println!("  Cache path: {}", diagnostics.cache_path.display());
+    println!(
+        "  Cache file: {}",
+        if diagnostics.cache_exists {
+            "present"
+        } else {
+            "missing"
+        }
+    );
+    println!(
+        "  Cache bytes: {}",
+        diagnostics
+            .cache_bytes
+            .map_or_else(|| String::from("n/a"), |bytes| bytes.to_string())
+    );
+    println!(
+        "  Load status: {}",
+        diagnostics
+            .load_error
+            .as_deref()
+            .map_or("ok", |error| error)
+    );
+    println!(
+        "  Overlay segments: {}",
+        diagnostics
+            .overlay_segment_count
+            .map_or_else(|| String::from("n/a"), |count| count.to_string())
+    );
+
+    if let Some(pid) = pid {
+        let signals = query_nav_signals(pid)?;
+        let nav_diagnostics = query_nav_diagnostics(pid)?;
+        println!();
+        println!("Live navigator diagnostics for PID {pid}:");
+        println!("  State: {}", nav_diagnostics.state);
+        println!("  Active: {}", signals.active);
+        println!("  Paused: {}", signals.paused);
+        println!("  Mesh loaded: {}", signals.mesh_loaded);
+        println!("  Path exists: {}", nav_diagnostics.path_exists);
+        println!(
+            "  Path length: {}",
+            nav_diagnostics
+                .path_length
+                .map_or_else(|| String::from("n/a"), |length| format!("{length:.1}"))
+        );
+        println!("  Velocity: {:.1}", nav_diagnostics.velocity);
+        println!(
+            "  Waypoints: {}/{}",
+            nav_diagnostics.waypoint_index, nav_diagnostics.waypoint_count
+        );
+        println!(
+            "  Distance remaining: {:.1}",
+            nav_diagnostics.distance_remaining
+        );
     }
 
     Ok(())
@@ -668,10 +795,10 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     ipc::write_session_token_file(pid)?;
 
     // TODO: Switch to reflective loader once cross-process import resolution is fixed.
-    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
+    let staged_dll = inject::dll_prep::prepare_dll_locked(&source_dll)?;
     println!("Injecting into PID {pid}...");
 
-    inject::loader::inject_dll(pid, &staged_dll)?;
+    inject::loader::inject_dll(pid, staged_dll.path())?;
     println!("OK — DLL injected into PID {pid}");
     Ok(())
 }
@@ -764,7 +891,8 @@ pub fn run_login_mode(
 /// End-to-end autologin: find/spawn EQ processes → inject DLL → send StartLogin.
 ///
 /// Reads `config/accounts.toml` for the account roster. Per-account passwords
-/// come from `config/.credentials` (TSV: account\tpassword). Falls back to:
+/// come from the encrypted credential store (`data/credentials.db`) when a
+/// master password is supplied. Falls back to:
 /// 1. `--password` CLI flag (shared for all)
 /// 2. `TEXTQUEST_PASSWORD` environment variable (shared for all)
 /// 3. Interactive prompt (shared for all)
@@ -776,6 +904,7 @@ pub fn run_autologin_mode(
     filter_account: Option<String>,
     filter_group: Option<u32>,
     password_flag: Option<String>,
+    master_password_flag: Option<String>,
     spawn_new: bool,
     inject_delay_secs: u64,
 ) -> Result<()> {
@@ -813,18 +942,23 @@ pub fn run_autologin_mode(
 
     println!("Autologin: {} account(s) to process", targets.len());
 
-    // 2. Load per-account passwords from config/.credentials (TSV)
-    let credentials_map = load_credentials_file();
+    // 2. Load per-account passwords from encrypted store (if master password provided)
+    let master_password = master_password_flag.map(Zeroizing::new).or_else(|| {
+        std::env::var("TEXTQUEST_MASTER_PASSWORD")
+            .ok()
+            .map(Zeroizing::new)
+    });
+    let credentials_map = load_credentials_store(master_password.as_ref().map(|pw| pw.as_str()))?;
     let has_per_account = !credentials_map.is_empty();
 
     if has_per_account {
         println!(
-            "Loaded {} per-account password(s) from config/.credentials",
+            "Loaded {} per-account password(s) from encrypted credential store",
             credentials_map.len()
         );
     }
 
-    // Shared password fallback (for accounts not in .credentials)
+    // Shared password fallback (for accounts not in the encrypted credential store)
     let shared_password = if !has_per_account {
         // Only prompt if we have no per-account passwords
         if let Some(pw) = password_flag {
@@ -907,8 +1041,6 @@ pub fn run_autologin_mode(
 
     // 5. Inject + Login for each process
     let source_dll = resolve_built_dll_path()?;
-    let staged_dll = inject::dll_prep::prepare_dll(&source_dll)?;
-
     let mut success_count = 0u32;
     let mut fail_count = 0u32;
 
@@ -950,7 +1082,15 @@ pub fn run_autologin_mode(
             }
 
             println!("  Injecting DLL...");
-            match inject::loader::inject_dll(*pid, &staged_dll) {
+            let staged_dll = match inject::dll_prep::prepare_dll_locked(&source_dll) {
+                Ok(staged) => staged,
+                Err(e) => {
+                    println!("  FAILED: staging DLL: {e}");
+                    fail_count += 1;
+                    continue;
+                }
+            };
+            match inject::loader::inject_dll(*pid, staged_dll.path()) {
                 Ok(()) => println!("  DLL injected successfully"),
                 Err(e) => {
                     println!("  FAILED: injection: {e}");
@@ -972,7 +1112,7 @@ pub fn run_autologin_mode(
 
         let Some(acct_pw) = acct_password else {
             println!(
-                "  SKIPPED: no password for '{}' (not in .credentials, no shared password)",
+                "  SKIPPED: no password for '{}' (not in credential store, no shared password)",
                 account.name
             );
             fail_count += 1;
@@ -1514,35 +1654,29 @@ pub fn run_config_show_mode() -> Result<()> {
 
 // ─── Credential management ──────────────────────────────────────────────────
 
-const CREDENTIALS_FILE_PATH: &str = "config/.credentials";
 const CREDENTIAL_DB_PATH: &str = "data/credentials.db";
 
-/// Load per-account passwords from `config/.credentials` (TSV: account\tpassword).
-/// Returns an empty map if the file doesn't exist or can't be read.
-/// Passwords are wrapped in `Zeroizing` to scrub from heap on drop.
-fn load_credentials_file() -> std::collections::HashMap<String, Zeroizing<String>> {
-    let path = Path::new(CREDENTIALS_FILE_PATH);
+/// Load decrypted account passwords from the encrypted credential store.
+///
+/// Returns an empty map if no master password is provided.
+fn load_credentials_store(
+    master_password: Option<&str>,
+) -> Result<std::collections::HashMap<String, Zeroizing<String>>> {
     let mut map = std::collections::HashMap::new();
 
-    let content = match std::fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return map,
+    let Some(master_password) = master_password else {
+        return Ok(map);
     };
 
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((account, password)) = line.split_once('\t') {
-            map.insert(
-                account.trim().to_string(),
-                Zeroizing::new(password.trim().to_string()),
-            );
-        }
+    let store = open_credential_store(master_password)?;
+    for account in store.list_accounts()? {
+        let password = store
+            .get_password(&account)
+            .with_context(|| format!("Failed to load credential for account '{account}'"))?;
+        map.insert(account, password);
     }
 
-    map
+    Ok(map)
 }
 
 /// Add or update an account credential.
@@ -1971,7 +2105,7 @@ pub fn load_config() -> Result<config::AppConfig> {
 
 #[cfg(test)]
 mod tests {
-    use super::load_pid_session;
+    use super::{load_pid_session, resolve_navmesh_zone};
 
     #[test]
     fn load_pid_session_errors_without_token_file() {
@@ -2002,5 +2136,11 @@ mod tests {
 
         let _ = std::fs::remove_file(token_path);
         let _ = std::fs::remove_file(login_token_path);
+    }
+
+    #[test]
+    fn resolve_navmesh_zone_returns_explicit_zone_without_pid() {
+        let zone = resolve_navmesh_zone(Some("gfaydark"), None).expect("explicit zone");
+        assert_eq!(zone, "gfaydark");
     }
 }

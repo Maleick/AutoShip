@@ -15,6 +15,8 @@ Defined in `textquest/src/main.rs` and implemented in `textquest/src/cli.rs`.
 | `textquest.exe nav <pid> <x> <y> <z>` | Navigate one client to coordinates |
 | `textquest.exe nav-all <x> <y> <z>` | Navigate all connected clients |
 | `textquest.exe nav-path <zone> <x1> <y1> <z1> <x2> <y2> <z2>` | Compute or test a route in one zone |
+| `textquest.exe navmesh reload [<zone>] [--pid <pid>]` | Redownload and validate a cached zone navmesh |
+| `textquest.exe navmesh diagnostics [<zone>] [--pid <pid>]` | Print cache health and optional live navigator diagnostics |
 | `textquest.exe status <pid>` | Print one client's live state |
 | `textquest.exe status-all` | Print a summary table for all clients |
 | `textquest.exe zones <pid>` | Query the live zone graph from an injected client |
@@ -25,6 +27,8 @@ Example:
 
 ```powershell
 target\release\textquest.exe cmd 12345 "/sit"
+target\release\textquest.exe navmesh reload gfaydark
+target\release\textquest.exe navmesh diagnostics --pid 12345
 target\release\textquest.exe status-all
 target\release\textquest.exe zones 12345
 ```

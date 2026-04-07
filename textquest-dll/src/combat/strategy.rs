@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilitySet, BuffInfo, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
+    AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
     NamedPreference, SpellEntry, TargetScanConfig,
 };
 use textquest_common::types::SpawnData;
@@ -93,6 +93,19 @@ pub trait ClassStrategy: Send {
     /// `gem` is the spell slot that was being cast when the interrupt occurred.
     /// Default is a no-op; bards override this to re-queue the interrupted song.
     fn on_cast_interrupted(&mut self, _ctx: &CombatContext, _gem: u8) {}
+
+    /// Called when a cast attempt resolves to a concrete MQ2Cast-style outcome.
+    ///
+    /// Default behavior preserves the older interrupt-only hook for strategies
+    /// that only care about interrupted casts.
+    fn on_cast_outcome(&mut self, ctx: &CombatContext, gem: u8, result: CastResult) {
+        if matches!(
+            result,
+            CastResult::Interrupted | CastResult::Aborted | CastResult::Cancelled
+        ) {
+            self.on_cast_interrupted(ctx, gem);
+        }
+    }
 
     /// Minimum enemy count before switching to `AoE` rotation.
     fn aoe_threshold(&self) -> u8;

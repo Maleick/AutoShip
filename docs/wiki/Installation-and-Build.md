@@ -84,6 +84,7 @@ cargo run -- --dump
 - `cargo run` launches the real app entrypoint and will attach to live EQ processes if found.
 - `textquest.exe inject` stages and injects `textquest_dll.dll`.
 - `textquest.exe cmd`, `status`, `status-all`, `nav`, and `zones` all expect live injected clients.
+- `textquest.exe navmesh reload <zone>` refreshes the cached orchestrator navmesh for a zone, and `textquest.exe navmesh diagnostics --pid <pid>` can resolve the zone from a live client while printing its current navigator state.
 - CI currently validates the Windows build on nightly, so contributors should match that toolchain when reproducing Windows build issues.
 
 ## Important Files and Paths

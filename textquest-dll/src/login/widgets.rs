@@ -1137,8 +1137,9 @@ pub fn classify_dialog_error(text: &str) -> LoginError {
             text = text,
             "Unrecognized error dialog text — treating as timeout"
         );
+        let phase_preview: String = text.chars().take(80).collect();
         LoginError::Timeout {
-            phase: format!("unknown_dialog: {}", &text[..text.len().min(80)]),
+            phase: format!("unknown_dialog: {}", phase_preview),
         }
     }
 }
@@ -1754,6 +1755,17 @@ mod tests {
         assert!(matches!(result, LoginError::Timeout { .. }));
         if let LoginError::Timeout { phase } = result {
             assert!(phase.starts_with("unknown_dialog:"));
+        }
+    }
+
+    #[test]
+    fn classify_unknown_handles_multibyte_text_without_panicking() {
+        let input = "é".repeat(81);
+        let result = classify_dialog_error(&input);
+        if let LoginError::Timeout { phase } = result {
+            assert_eq!(phase, format!("unknown_dialog: {}", "é".repeat(80)));
+        } else {
+            panic!("expected timeout for unknown dialog text");
         }
     }
 

@@ -73,6 +73,8 @@ pub struct Navigator {
     mesh_loaded: bool,
     /// Active moveto configuration (#184).
     moveto_config: Option<MoveToConfig>,
+    /// Last observed HP while running moveto break-on-hit checks.
+    last_moveto_hp: Option<i64>,
     /// Global autopause flag (#164).
     autopause: bool,
     /// Break-on-GM flag — pause navigation when a GM is detected nearby.
@@ -125,6 +127,7 @@ impl Navigator {
             cached_velocity: 0.0,
             mesh_loaded: false,
             moveto_config: None,
+            last_moveto_hp: None,
             autopause: false,
             break_on_gm: false,
         }
@@ -174,12 +177,15 @@ impl Navigator {
     /// Stop navigation immediately.
     pub fn stop(&mut self) {
         self.controller.stop_forward();
+        self.controller.stop_back();
         self.queue.clear();
         self.camp = None;
         self.camp_config = None;
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
+        self.moveto_config = None;
+        self.last_moveto_hp = None;
         self.pre_pause_state = None;
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
@@ -328,6 +334,7 @@ impl Navigator {
             use_walk = config.use_walk,
             use_back = config.use_back,
             break_on_aggro = config.break_on_aggro,
+            break_on_hit = config.break_on_hit,
             "Starting advanced moveto"
         );
         self.controller.stop_forward();
@@ -337,6 +344,7 @@ impl Navigator {
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
+        self.last_moveto_hp = self.controller.read_hp_current();
         self.moveto_config = Some(config);
         self.state = State::MovingTo;
     }
@@ -679,6 +687,20 @@ impl Navigator {
         let dist = current_pos.distance_2d(&destination);
         self.cached_distance = dist;
 
+        if config.break_on_hit {
+            if let Some(current_hp) = self.controller.read_hp_current() {
+                let took_damage = self
+                    .last_moveto_hp
+                    .is_some_and(|previous_hp| current_hp < previous_hp);
+                self.last_moveto_hp = Some(current_hp);
+                if took_damage {
+                    tracing::info!(current_hp, "MoveToAdvanced: break_on_hit triggered");
+                    self.stop_moveto();
+                    return;
+                }
+            }
+        }
+
         // Break-on-aggro: hostile NPC moving toward player within aggro radius.
         if config.break_on_aggro && has_hostile_nearby(nearby, &current_pos) {
             tracing::info!("MoveToAdvanced: break_on_aggro triggered");
@@ -727,6 +749,7 @@ impl Navigator {
         self.controller.stop_forward();
         self.controller.stop_back();
         self.moveto_config = None;
+        self.last_moveto_hp = None;
         self.stuck.reset();
         self.state = State::Idle;
     }
@@ -983,6 +1006,93 @@ mod tests {
             stand_state: 0,
             is_gm: true,
         }
+    }
+
+    fn hostile_spawn_at(x: f32, y: f32) -> SpawnData {
+        SpawnData {
+            spawn_id: 1111,
+            name: "a_goblin".into(),
+            displayed_name: "a goblin".into(),
+            spawn_type: 1,
+            level: 10,
+            class_id: 0,
+            x,
+            y,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 0,
+            endurance_max: 0,
+            speed_run: 1.0,
+            stand_state: 0,
+            is_gm: false,
+        }
+    }
+
+    fn player_hp_storage(hp: i64) -> Vec<u64> {
+        let word_count = (textquest_common::offsets::player_zone::HP_CURRENT
+            + std::mem::size_of::<i64>())
+            / std::mem::size_of::<u64>();
+        let mut storage = vec![0u64; word_count];
+        write_player_hp(&mut storage, hp);
+        storage
+    }
+
+    fn write_player_hp(storage: &mut [u64], hp: i64) {
+        let base = storage.as_mut_ptr() as usize;
+        // SAFETY: the backing buffer is sized so the HP_CURRENT offset lands within
+        // the allocation, and HP_CURRENT is 8-byte aligned.
+        unsafe {
+            std::ptr::write(
+                (base + textquest_common::offsets::player_zone::HP_CURRENT) as *mut i64,
+                hp,
+            );
+        }
+    }
+
+    #[test]
+    fn moveto_break_on_aggro_stops_navigation() {
+        let mut nav = Navigator::new(0, 1);
+        let mut config = MoveToConfig::to_position(100.0, 0.0, 0.0);
+        config.break_on_aggro = true;
+        nav.move_to_advanced(config);
+
+        nav.tick(None, &[hostile_spawn_at(10.0, 0.0)], None);
+
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn moveto_break_on_hit_stops_after_damage() {
+        let mut storage = player_hp_storage(100);
+        let mut nav = Navigator::new(storage.as_mut_ptr() as usize, 1);
+        let mut config = MoveToConfig::to_position(100.0, 0.0, 0.0);
+        config.break_on_hit = true;
+        nav.move_to_advanced(config);
+
+        nav.tick(None, &[], None);
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
+
+        write_player_hp(&mut storage, 90);
+        nav.tick(None, &[], None);
+
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn moveto_without_break_on_hit_ignores_damage() {
+        let mut storage = player_hp_storage(100);
+        let mut nav = Navigator::new(storage.as_mut_ptr() as usize, 1);
+        let config = MoveToConfig::to_position(100.0, 0.0, 0.0);
+        nav.move_to_advanced(config);
+
+        write_player_hp(&mut storage, 90);
+        nav.tick(None, &[], None);
+
+        assert!(matches!(nav.status(), NavStatus::Moving { .. }));
     }
 
     #[test]
