@@ -731,7 +731,7 @@ impl Navigator {
 
         if config.use_back {
             // Move backward: face away from destination, press back.
-            let reverse = wobbled + std::f32::consts::PI;
+            let reverse = (wobbled + 256.0) % 512.0;
             self.controller.write_heading(reverse);
             self.controller.write_speed_heading(reverse);
             self.controller.stop_forward();
