@@ -228,11 +228,11 @@ CI and nightly automation:
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`
 - `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
+- the self-hosted Windows gate now reclaims stray Chrome/Edge/Chromium processes before Rust work starts, so Cargo can run with its normal parallelism instead of forcing `-j 1`
 - self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
 - `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using the workflow-provided `GH_TOKEN` (`secrets.GITHUB_TOKEN`) for `gh`
 - `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
-- `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
-- self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
+- lightweight repository-control workflows such as auto-merge, agent-ready labeling, agent PR cleanup, Copilot CI dispatch, and post-merge issue cleanup now run on GitHub-hosted Linux so the Windows runner stays focused on CI, releases, and wiki publishing
 - `.github/workflows/copilot-ci-dispatch.yml` runs on GitHub-hosted Linux from `master`, dispatches `CI` on same-repo Copilot PR heads when GitHub leaves the PR-triggered run in `action_required`, and skips PRs that edit workflow files so approval-sensitive changes still require manual review
 
 If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
@@ -280,6 +280,8 @@ TextQuest-specific notes:
 
 - The required merge blocker remains `PR gate (fmt + clippy + test + python)`.
 - Same-repo PRs, pushes to `master`, and manual `CI` dispatches run that gate on runner labels `self-hosted`, `Windows`, `X64`, and `textquest`.
+- That self-hosted gate now reclaims leaked Chrome/Edge/Chromium processes before the Rust steps so the runner can keep normal Cargo parallelism instead of pinning builds/tests to `-j 1`.
+- GitHub-script control-plane workflows now run on GitHub-hosted Linux so the Windows runner is reserved for Windows-specific CI, release, and wiki work.
 - Fork or otherwise untrusted PRs run the same visible gate name on GitHub-hosted `windows-latest` instead of the self-hosted runner.
 - The GitHub-hosted fork path uses `actions/setup-python@v6`; the self-hosted path stays cmd-safe and verifies any fallback Python ZIP before extraction.
 - That Windows gate currently boots the nightly MSVC Rust toolchain, because the Windows hook stack still depends on nightly-only `retour`.

@@ -83,8 +83,8 @@ jobs:
       - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
       - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
       - run: cargo fmt --all --check
-      - run: cargo clippy -j 1 --all-targets --all-features -- -D warnings
-      - run: cargo test -j 1
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test
 
   pr_gate_trusted:
     name: PR gate (fmt + clippy + test + python)
@@ -114,6 +114,22 @@ jobs:
           )
           echo [info] Active safe.directory values:
           git config --global --get-all safe.directory
+
+      - name: Reclaim leaked browser processes on self-hosted runner
+        shell: pwsh
+        run: |
+          $browserNames = @("chrome", "msedge", "chromium")
+          $browserProcesses = @(Get-Process -Name $browserNames -ErrorAction SilentlyContinue)
+          if ($browserProcesses.Count -gt 0) {
+            Write-Warning ("Stopping {0} leaked browser process(es) before the PR gate on the dedicated Windows runner." -f $browserProcesses.Count)
+            $browserProcesses | Stop-Process -Force
+          } else {
+            Write-Host "No leaked Chrome/Edge/Chromium processes detected before the PR gate."
+          }
+          $os = Get-CimInstance Win32_OperatingSystem
+          $freeGiB = [math]::Round(($os.FreePhysicalMemory * 1KB) / 1GB, 2)
+          $totalGiB = [math]::Round(($os.TotalVisibleMemorySize * 1KB) / 1GB, 2)
+          Write-Host ("Available physical memory before build: {0} GiB / {1} GiB" -f $freeGiB, $totalGiB)
 
       - name: Locate or provision verified Python
         env:
@@ -196,8 +212,8 @@ jobs:
       - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
       - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
       - run: cargo fmt --all --check
-      - run: cargo clippy -j 1 --all-targets --all-features -- -D warnings
-      - run: cargo test -j 1 -- --nocapture
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test -- --nocapture
 
   secrets_scan:
     name: Secret scan (TruffleHog)
@@ -242,6 +258,22 @@ jobs:
           )
           echo [info] Active safe.directory values:
           git config --global --get-all safe.directory
+
+      - name: Reclaim leaked browser processes on self-hosted runner
+        shell: pwsh
+        run: |
+          $browserNames = @("chrome", "msedge", "chromium")
+          $browserProcesses = @(Get-Process -Name $browserNames -ErrorAction SilentlyContinue)
+          if ($browserProcesses.Count -gt 0) {
+            Write-Warning ("Stopping {0} leaked browser process(es) before the manual Windows build." -f $browserProcesses.Count)
+            $browserProcesses | Stop-Process -Force
+          } else {
+            Write-Host "No leaked Chrome/Edge/Chromium processes detected before the manual Windows build."
+          }
+          $os = Get-CimInstance Win32_OperatingSystem
+          $freeGiB = [math]::Round(($os.FreePhysicalMemory * 1KB) / 1GB, 2)
+          $totalGiB = [math]::Round(($os.TotalVisibleMemorySize * 1KB) / 1GB, 2)
+          Write-Host ("Available physical memory before build: {0} GiB / {1} GiB" -f $freeGiB, $totalGiB)
 
       - name: Provision nightly toolchain via rustup
         env:
