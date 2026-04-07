@@ -260,6 +260,44 @@ impl BuffSlot {
     }
 }
 
+/// A learned spell in the local player's spellbook.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpellBookEntry {
+    /// Zero-based spellbook slot.
+    pub slot: usize,
+    /// EQ spell ID stored in the slot.
+    pub spell_id: i32,
+}
+
+impl SpellBookEntry {
+    /// Returns `true` if the slot does not contain a learned spell.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.spell_id <= 0
+    }
+}
+
+/// A memorized spell currently loaded into a visible spell gem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemorizedSpell {
+    /// One-based gem number.
+    pub gem: u8,
+    /// EQ spell ID stored in the gem.
+    pub spell_id: i32,
+    /// Spell name resolved from the live spell database, if available.
+    pub spell_name: Option<String>,
+}
+
+impl MemorizedSpell {
+    /// Human-readable spell label for UI surfaces.
+    #[must_use]
+    pub fn display_name(&self) -> String {
+        self.spell_name
+            .clone()
+            .unwrap_or_else(|| format!("Spell {}", self.spell_id))
+    }
+}
+
 /// Active spell cast state for a spawn.
 /// Backed by `PlayerZoneClient::CastingData`; local spawns may also include gem timers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -440,6 +478,10 @@ pub struct SpawnInfo {
     pub race_id: u32,
     /// Active buff slots (populated only for local player via `read_buff_slots`).
     pub buff_slots: Vec<BuffSlot>,
+    /// Learned spellbook entries for the local player.
+    pub spellbook: Vec<SpellBookEntry>,
+    /// Currently memorized visible spell gems for the local player.
+    pub current_spellset: Vec<MemorizedSpell>,
     /// Cast state for this spawn. Local player snapshots also include gem recast timers.
     pub cast_state: Option<CastState>,
 }
@@ -498,6 +540,31 @@ impl SpawnInfo {
             0 => "Unknown".to_string(),
             id => format!("R{id}"),
         }
+    }
+
+    /// Total learned spell count for the local player snapshot.
+    #[must_use]
+    pub fn learned_spell_count(&self) -> usize {
+        self.spellbook.len()
+    }
+
+    /// Chunk the active spellset into compact UI lines.
+    #[must_use]
+    pub fn current_spellset_lines(&self, chunk_size: usize) -> Vec<String> {
+        if chunk_size == 0 {
+            return Vec::new();
+        }
+
+        self.current_spellset
+            .chunks(chunk_size)
+            .map(|chunk| {
+                chunk
+                    .iter()
+                    .map(|spell| format!("G{} {}", spell.gem, spell.display_name()))
+                    .collect::<Vec<_>>()
+                    .join("  ")
+            })
+            .collect()
     }
 }
 
@@ -594,6 +661,41 @@ mod tests {
             caster_level: 60,
         };
         assert_eq!(b.duration_str(), "18s");
+    }
+
+    #[test]
+    fn spell_book_entry_empty_detection() {
+        assert!(
+            SpellBookEntry {
+                slot: 0,
+                spell_id: -1,
+            }
+            .is_empty()
+        );
+        assert!(
+            !SpellBookEntry {
+                slot: 1,
+                spell_id: 123,
+            }
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn memorized_spell_display_name_prefers_resolved_name() {
+        let named = MemorizedSpell {
+            gem: 1,
+            spell_id: 123,
+            spell_name: Some("Complete Heal".to_string()),
+        };
+        let unnamed = MemorizedSpell {
+            gem: 2,
+            spell_id: 456,
+            spell_name: None,
+        };
+
+        assert_eq!(named.display_name(), "Complete Heal");
+        assert_eq!(unnamed.display_name(), "Spell 456");
     }
 
     #[test]
@@ -745,6 +847,8 @@ mod tests {
             is_gm: false,
             race_id: 1,
             buff_slots: Vec::new(),
+            spellbook: Vec::new(),
+            current_spellset: Vec::new(),
             cast_state: None,
         }
     }
@@ -760,6 +864,47 @@ mod tests {
         let mut s = make_spawn_info(1);
         s.hp_max = 0;
         assert!((s.hp_pct() - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn spawn_info_current_spellset_lines_chunk_and_label_spells() {
+        let mut s = make_spawn_info(1);
+        s.spellbook = vec![
+            SpellBookEntry {
+                slot: 0,
+                spell_id: 123,
+            },
+            SpellBookEntry {
+                slot: 1,
+                spell_id: 456,
+            },
+        ];
+        s.current_spellset = vec![
+            MemorizedSpell {
+                gem: 1,
+                spell_id: 123,
+                spell_name: Some("Complete Heal".to_string()),
+            },
+            MemorizedSpell {
+                gem: 2,
+                spell_id: 456,
+                spell_name: None,
+            },
+            MemorizedSpell {
+                gem: 3,
+                spell_id: 789,
+                spell_name: Some("Celestial Remedy".to_string()),
+            },
+        ];
+
+        assert_eq!(s.learned_spell_count(), 2);
+        assert_eq!(
+            s.current_spellset_lines(2),
+            vec![
+                String::from("G1 Complete Heal  G2 Spell 456"),
+                String::from("G3 Celestial Remedy"),
+            ]
+        );
     }
 
     #[test]

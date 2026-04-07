@@ -612,6 +612,26 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
         }
     }
 
+    if player.learned_spell_count() > 0 {
+        lines.push(Line::from(vec![
+            Span::styled("Book ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{} spells", player.learned_spell_count()),
+                Style::default().fg(t.text_normal),
+            ),
+        ]));
+    }
+
+    for (index, spellset_line) in player.current_spellset_lines(3).into_iter().enumerate() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                if index == 0 { "Set  " } else { "     " },
+                Style::default().fg(t.text_muted),
+            ),
+            Span::styled(spellset_line, Style::default().fg(t.text_accent)),
+        ]));
+    }
+
     lines.push(Line::from(""));
 
     for sprite_line in

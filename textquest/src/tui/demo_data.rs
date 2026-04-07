@@ -1685,6 +1685,8 @@ fn make_demo_spawns(zone: &str, data: &[SpawnDef<'_>]) -> Vec<SpawnInfo> {
                 is_gm: false,
                 race_id: 1,
                 buff_slots: Vec::new(),
+                spellbook: Vec::new(),
+                current_spellset: Vec::new(),
                 cast_state: None,
             }
         })
