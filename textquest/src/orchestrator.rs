@@ -784,6 +784,18 @@ impl Orchestrator {
             .map_or("?", std::string::String::as_str)
             .to_string();
 
+        match crate::nav::try_handle_local_slash_command(pid, command) {
+            Ok(Some(message)) => {
+                tracing::info!(pid, name = %name, %command, %message, "Handled local slash command");
+                return;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(pid, name = %name, %command, %error, "Failed to handle local slash command");
+                return;
+            }
+        }
+
         let Some(pipe) = self.get_pipe(pid) else {
             return;
         };

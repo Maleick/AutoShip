@@ -149,7 +149,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 | `/nav recordwaypoint <name> <desc>` | Save waypoint at current position     | **Missing**                                                             | No waypoint persistence                | P1       | Medium     |
 | `/nav pause`                        | Toggle pause                          | **Done** — `State::Paused(PauseReason)`                                 | None                                   | —        | —          |
 | `/nav stop`                         | Halt navigation                       | **Done** — Navigator FSM stop                                           | None                                   | —        | —          |
-| `/nav reload`                       | Force navmesh reload                  | **Missing**                                                             | No runtime navmesh reload              | P2       | Medium     |
+| `/nav reload`                       | Force navmesh reload                  | **Done** — orchestrator refreshes the current-zone navmesh cache on demand | No in-DLL navmesh loader              | —        | —          |
 | `/nav ui`                           | Toggle debug overlay                  | **Missing**                                                             | No in-game overlay (TUI has map panel) | P2       | High       |
 | `/nav save / load`                  | Persist settings                      | **Missing**                                                             | No nav config persistence              | P2       | Low        |
 
