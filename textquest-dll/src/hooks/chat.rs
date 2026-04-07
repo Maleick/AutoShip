@@ -47,6 +47,8 @@ fn chat_callback(exception_info: *mut ()) -> bool {
         };
 
         if !text.is_empty() {
+            let _ = crate::combat::observe_chat_message(&text);
+
             let timestamp_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
