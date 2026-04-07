@@ -342,7 +342,7 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
         }
 
         if cast_type.replace(token.as_str()).is_some() {
-            return Some(Err(format!("unsupported /casting token: {token}")));
+            return Some(Err(format!("multiple cast types specified: {token}")));
         }
     }
 
@@ -381,9 +381,17 @@ fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut in_quotes = false;
+    let mut escaped = false;
 
     for ch in input.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+
         match ch {
+            '\\' if in_quotes => escaped = true,
             '"' => in_quotes = !in_quotes,
             ch if ch.is_whitespace() && !in_quotes => {
                 if !current.is_empty() {
@@ -397,6 +405,9 @@ fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
     if in_quotes {
         return Err("unterminated quote in slash command");
     }
+    if escaped {
+        current.push('\\');
+    }
     if !current.is_empty() {
         tokens.push(current);
     }
@@ -405,7 +416,7 @@ fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
 }
 
 fn quote_for_eq(value: &str) -> String {
-    format!("\"{}\"", value.replace('"', "\\\""))
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 fn is_item_slot_selector(selector: &str) -> bool {
@@ -442,11 +453,10 @@ fn is_item_slot_selector(selector: &str) -> bool {
 
 fn spell_name_indicates_invisibility(name: &str) -> bool {
     let lower = name.trim().to_ascii_lowercase();
-    if lower.is_empty()
-        || lower.contains("see invis")
-        || lower.contains("see invisible")
-        || lower.contains("invisibility to animals")
-    {
+    if lower.is_empty() || lower.contains("see invis") || lower.contains("see invisible") {
+        return false;
+    }
+    if lower == "invisibility to animals" {
         return false;
     }
 
@@ -473,7 +483,7 @@ fn player_is_invisible(_eq_base: u64) -> bool {
 fn read_spell_name(eq_base: u64, spell_id: i32) -> Option<String> {
     use textquest_common::offsets::{self, client_spell_manager, eq_spell, spell_hash_map};
 
-    let spell_id = u32::try_from(spell_id).ok().filter(|&id| id > 0)?;
+    let spell_id = u32::try_from(spell_id).ok()?;
     let spell_mgr_ptr_addr = offsets::rebase(offsets::PINST_SPELL_MANAGER, eq_base)?;
     let spell_mgr_addr = read_usize_field(spell_mgr_ptr_addr)?;
     let max_spell_id = read_i32_field(spell_mgr_addr + client_spell_manager::MAX_SPELL_ID)?;
@@ -2174,6 +2184,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_casting_numeric_slot_selector() {
+        let parsed = parse_casting_command(r#"/casting "Clicky" 13"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem("13".to_string()),
+                target_id: None,
+                require_not_invisible: false,
+            }
+        );
+    }
+
+    #[test]
     fn parse_casting_rejects_invalid_targetid() {
         let err = parse_casting_command(r#"/casting "Clicky" item -targetid|abc"#)
             .unwrap()
@@ -2192,7 +2217,16 @@ mod tests {
     #[test]
     fn invisibility_matcher_ignores_see_invis_but_matches_camouflage() {
         assert!(!spell_name_indicates_invisibility("See Invisible"));
+        assert!(!spell_name_indicates_invisibility(
+            "Invisibility to Animals"
+        ));
         assert!(spell_name_indicates_invisibility("Camouflage"));
         assert!(spell_name_indicates_invisibility("Improved Invisibility"));
+    }
+
+    #[test]
+    fn tokenize_slash_command_preserves_escaped_quotes_inside_quotes() {
+        let tokens = tokenize_slash_command(r#"/casting "Item \"Name\"" item"#).unwrap();
+        assert_eq!(tokens, vec!["/casting", r#"Item "Name""#, "item"]);
     }
 }
