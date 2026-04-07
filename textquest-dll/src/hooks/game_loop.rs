@@ -2472,8 +2472,21 @@ fn is_click_right_target_command(command: &str) -> bool {
 }
 
 fn should_preclear_target_for_slash(command: &str) -> bool {
-    let head = command.split_whitespace().next().unwrap_or_default();
-    head.eq_ignore_ascii_case("/target") || head.eq_ignore_ascii_case("/doortarget")
+    let mut parts = command.splitn(2, char::is_whitespace);
+    let head = parts.next().unwrap_or_default();
+
+    if head.eq_ignore_ascii_case("/doortarget") {
+        return true;
+    }
+
+    if !head.eq_ignore_ascii_case("/target") {
+        return false;
+    }
+
+    parts
+        .next()
+        .map(str::trim)
+        .is_some_and(|rest| !rest.is_empty())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2906,6 +2919,7 @@ mod tests {
     #[test]
     fn preclears_for_target_and_doortarget_commands() {
         assert!(should_preclear_target_for_slash("/target Emperor Crush"));
+        assert!(!should_preclear_target_for_slash("/target"));
         assert!(should_preclear_target_for_slash("/doortarget"));
         assert!(should_preclear_target_for_slash("/doortarget id 5"));
         assert!(!should_preclear_target_for_slash("/nav target"));
