@@ -48,6 +48,28 @@ async fn main() {
     let serve_spa =
         ServeDir::new(&spa_dir).not_found_service(ServeFile::new(spa_dir.join("index.html")));
 
+    // Loot state is independent of the main AppState so it can be extracted
+    // directly in each handler via its own Arc<LootState>.
+    let loot_state = api::loot::LootState::new_demo();
+
+    let loot_router = Router::new()
+        .route(
+            "/rules",
+            get(api::loot::get_rules).put(api::loot::put_rules),
+        )
+        .route("/filters", get(api::loot::get_filters))
+        .route("/filters/:character", put(api::loot::put_filter))
+        .route(
+            "/master-looter",
+            get(api::loot::get_master_looter).put(api::loot::put_master_looter),
+        )
+        .route(
+            "/distribution",
+            get(api::loot::get_distribution).put(api::loot::put_distribution),
+        )
+        .route("/history", get(api::loot::get_history))
+        .with_state(loot_state);
+
     let app = Router::new()
         // Health + sessions
         .route("/api/health", get(api::health))
@@ -66,6 +88,7 @@ async fn main() {
             put(api::update_vendor_route).delete(api::delete_vendor_route),
         )
         .route("/api/economy/wealth", get(api::get_wealth))
+        .nest("/api/loot", loot_router)
         .route("/ws", get(ws::ws_handler))
         .fallback_service(serve_spa)
         .layer(CorsLayer::permissive())

@@ -1,5 +1,6 @@
 //! REST API handlers for the web dashboard.
 
+pub mod loot;
 use axum::Json;
 use axum::extract::Path;
 use serde::{Deserialize, Serialize};
