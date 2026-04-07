@@ -2054,6 +2054,7 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::layout::Rect;
     use ratatui::style::Color;
+    use ratatui::{Terminal, backend::TestBackend};
 
     fn test_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnInfo {
         SpawnInfo {
