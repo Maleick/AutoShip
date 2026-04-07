@@ -142,11 +142,11 @@ jobs:
             echo [fatal] Verified Python download checksum mismatch.
             echo [fatal] Expected: %PYTHON_EMBED_SHA256%
             echo [fatal] Actual:   !PYTHON_EMBED_ACTUAL_SHA256!
-            del /f /q ".ci-python\python-embed.zip" 2>nul
+            del /f /q ".ci-python\python-embed.zip" 2>nul || echo [warn] Failed to delete corrupt python-embed.zip.
             exit /b 1
           )
           tar -xf .ci-python\python-embed.zip -C .ci-python
-          del /f /q ".ci-python\python-embed.zip" 2>nul
+          del /f /q ".ci-python\python-embed.zip" 2>nul || echo [warn] Failed to delete python-embed.zip after extraction.
           if not exist .ci-python\python.exe (
             echo [fatal] Extracted python.exe not found after verified download.
             exit /b 1
