@@ -1194,6 +1194,8 @@ mod tests {
                 duration_ticks: 0,
                 caster_level: 0,
             }],
+            spellbook: Vec::new(),
+            memorized_spells: Vec::new(),
             cast_state,
         }
     }
@@ -1222,6 +1224,8 @@ mod tests {
             is_gm: false,
             race_id: 1,
             buff_slots: Vec::new(),
+            spellbook: Vec::new(),
+            memorized_spells: Vec::new(),
             cast_state: None,
         }
     }
