@@ -2,7 +2,7 @@
 
 ## Current Operator Workflow
 
-TextQuest's default interface is a ratatui-based dashboard with four main screens:
+TextQuest's default interface is a ratatui-based dashboard with five main screens:
 
 | Screen | Key | Main purpose |
 | --- | --- | --- |
@@ -10,12 +10,13 @@ TextQuest's default interface is a ratatui-based dashboard with four main screen
 | Map | `2` | Zone geometry, spawn overlays, named tracking, nav path overlays |
 | Navigation | `3` | Per-character Zone, Status, and Destination, with route progress, recovery state, and waypoint queue |
 | Debug | `4` | Spawn table, filters, live search, target detail, hex dump |
+| Packets | `5` | Live packet/opcode monitor for capture and protocol debugging |
 
 ### Core keys
 
 | Key | Action |
 | --- | --- |
-| `1-4` | Switch screens |
+| `1-5` | Switch screens |
 | `Shift+1-6` | Focus group G1-G6 |
 | `Shift+0` | Clear group focus |
 | `Tab` | Cycle focused pane |
@@ -106,7 +107,7 @@ Use this for:
 
 ### Current behavior
 
-- The four-screen layout is real and current.
+- The five-screen layout is real and current.
 - The Characters screen is still rendered by `textquest/src/tui/ui/dashboard.rs` via the `ActiveScreen::Overview` dispatch in `textquest/src/tui/ui/mod.rs`; the old PR #507 handoff note about a missing dashboard renderer is historical only.
 - Help, config, CH panel, command history, search, filters, themes, and privacy mode all exist in the codebase now.
 
