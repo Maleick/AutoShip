@@ -13,7 +13,7 @@ from urllib.parse import quote
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 README_PATH = REPO_ROOT / "README.md"
 RUNNING_TESTS_RE = re.compile(r"^running (\d+) tests?$", re.MULTILINE)
-TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(tokio::)?test(\]|#\[[^\]]*\]\()")
+TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(tokio::)?test[\]\(]")
 
 
 def tracked_rust_files() -> list[pathlib.Path]:
