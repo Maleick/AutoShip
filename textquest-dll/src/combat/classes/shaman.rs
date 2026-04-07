@@ -24,7 +24,7 @@ impl ShamanStrategy {
     fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
         ctx.group_members
             .iter()
-            .find(|m| m.has_detrimental && !m.is_dead)
+            .find(|m| !m.is_dead && m.has_detrimental)
             .map(|m| m.spawn_id)
     }
 }

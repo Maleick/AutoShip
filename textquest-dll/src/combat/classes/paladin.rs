@@ -50,7 +50,8 @@ impl ClassStrategy for PaladinStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        let needs_heal = strategy::lowest_hp_member(ctx).is_some_and(|(_, hp)| hp < 60.0);
+        let lowest_hp_member = strategy::lowest_hp_member(ctx);
+        let needs_heal = lowest_hp_member.is_some_and(|(_, hp)| hp < 60.0);
 
         if ctx.in_combat && !needs_heal && ctx.config.spells.iter().any(is_stun_spell) {
             return strategy::assist_target(ctx);
@@ -61,7 +62,7 @@ impl ClassStrategy for PaladinStrategy {
         }
 
         // If someone needs healing, target them
-        if let Some((heal_target, hp)) = strategy::lowest_hp_member(ctx)
+        if let Some((heal_target, hp)) = lowest_hp_member
             && hp < 60.0
         {
             return Some(heal_target);
