@@ -335,6 +335,9 @@ enum FollowSlashCommand {
     Off,
 }
 
+const DEFAULT_FOLLOW_DISTANCE: f32 = 20.0;
+const DEFAULT_FOLLOW_LEASH_DISTANCE: f32 = 60.0;
+
 fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
     let tokens = match tokenize_slash_command(command) {
         Ok(tokens) => tokens,
@@ -419,6 +422,136 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
         require_not_invisible,
         bandolier_set,
     }))
+}
+
+fn parse_movement_slash_command(command: &str) -> Option<Result<MovementSlashCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if verb.eq_ignore_ascii_case("/stick") {
+        return Some(parse_stick_slash_command(args).map(MovementSlashCommand::Stick));
+    }
+    if verb.eq_ignore_ascii_case("/follow") {
+        return Some(parse_follow_slash_command(args).map(MovementSlashCommand::Follow));
+    }
+    None
+}
+
+fn parse_stick_slash_command(args: &[String]) -> Result<StickSlashCommand, String> {
+    if args.is_empty() {
+        return Ok(StickSlashCommand::Start(
+            textquest_common::nav::StickConfig::default(),
+        ));
+    }
+
+    if args.len() == 1 && args[0].eq_ignore_ascii_case("off") {
+        return Ok(StickSlashCommand::Off);
+    }
+
+    if args[0].eq_ignore_ascii_case("mod") {
+        let Some(delta) = args.get(1) else {
+            return Err("missing distance delta for /stick mod".to_string());
+        };
+        let delta = delta
+            .parse::<f32>()
+            .map_err(|_| format!("invalid /stick mod value: {delta}"))?;
+        return Ok(StickSlashCommand::Mod(delta));
+    }
+
+    let mut config = textquest_common::nav::StickConfig::default();
+    let mut idx = 0usize;
+    while let Some(token) = args.get(idx) {
+        if token.eq_ignore_ascii_case("hold") {
+            config.hold = true;
+        } else if token.eq_ignore_ascii_case("always") {
+            config.always = true;
+        } else if token.eq_ignore_ascii_case("moveback") {
+            config.moveback = true;
+        } else if token.eq_ignore_ascii_case("healer") {
+            config.healer = true;
+        } else if token.eq_ignore_ascii_case("autopause") {
+            config.autopause = true;
+        } else if token.eq_ignore_ascii_case("behind") {
+            config.mode = textquest_common::nav::StickMode::Behind;
+        } else if token.eq_ignore_ascii_case("!front") || token.eq_ignore_ascii_case("notfront") {
+            config.mode = textquest_common::nav::StickMode::NotFront;
+        } else if token.eq_ignore_ascii_case("pin") {
+            config.mode = textquest_common::nav::StickMode::Pin;
+        } else if token.eq_ignore_ascii_case("front") {
+            config.mode = textquest_common::nav::StickMode::Front;
+        } else if token.eq_ignore_ascii_case("snaproll") {
+            config.mode = textquest_common::nav::StickMode::SnapRoll;
+        } else if token.eq_ignore_ascii_case("id") {
+            let Some(raw_id) = args.get(idx + 1) else {
+                return Err("missing spawn id for /stick id".to_string());
+            };
+            config.id = Some(
+                raw_id
+                    .parse::<u32>()
+                    .map_err(|_| format!("invalid /stick id value: {raw_id}"))?,
+            );
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("behindarc") {
+            let Some(raw_arc) = args.get(idx + 1) else {
+                return Err("missing arc value for /stick behindarc".to_string());
+            };
+            config.behind_arc = raw_arc
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick behindarc value: {raw_arc}"))?;
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("!frontarc")
+            || token.eq_ignore_ascii_case("notfrontarc")
+        {
+            let Some(raw_arc) = args.get(idx + 1) else {
+                return Err("missing arc value for /stick !frontarc".to_string());
+            };
+            config.not_front_arc = raw_arc
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick !frontarc value: {raw_arc}"))?;
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("backupdist") {
+            let Some(raw_dist) = args.get(idx + 1) else {
+                return Err("missing distance for /stick backupdist".to_string());
+            };
+            config.backup_dist = raw_dist
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick backupdist value: {raw_dist}"))?;
+            idx += 1;
+        } else if let Some(percent) = token.strip_suffix('%') {
+            config.distance = textquest_common::nav::StickDistance::Percent(
+                percent
+                    .parse::<f32>()
+                    .map_err(|_| format!("invalid /stick distance percentage: {token}"))?,
+            );
+        } else if let Ok(distance) = token.parse::<f32>() {
+            config.distance = textquest_common::nav::StickDistance::Absolute(distance);
+        } else {
+            return Err(format!("unsupported /stick token: {token}"));
+        }
+
+        idx += 1;
+    }
+
+    Ok(StickSlashCommand::Start(config))
+}
+
+fn parse_follow_slash_command(args: &[String]) -> Result<FollowSlashCommand, String> {
+    if args.is_empty() {
+        return Ok(FollowSlashCommand::Start { leader_name: None });
+    }
+    if args.len() == 1 && args[0].eq_ignore_ascii_case("off") {
+        return Ok(FollowSlashCommand::Off);
+    }
+
+    let leader_name = args.join(" ").trim().to_string();
+    if leader_name.is_empty() {
+        return Err("missing leader name for /follow".to_string());
+    }
+    Ok(FollowSlashCommand::Start {
+        leader_name: Some(leader_name),
+    })
 }
 
 fn parse_pipe_option<'a>(token: &'a str, option: &str) -> Option<&'a str> {
@@ -542,9 +675,7 @@ fn next_bandolier_restore_command(
     current_tick: u64,
     observed_casting: Option<bool>,
 ) -> Option<String> {
-    let Some(state) = pending.as_mut() else {
-        return None;
-    };
+    let state = pending.as_mut()?;
 
     let is_currently_casting = observed_casting == Some(true);
     if is_currently_casting {
@@ -758,6 +889,102 @@ fn handle_casting_slash_command(command: &str) -> bool {
     }
 }
 
+fn spawn_matches_name(spawn: &textquest_common::types::SpawnData, leader_name: &str) -> bool {
+    spawn.displayed_name.eq_ignore_ascii_case(leader_name)
+        || spawn.name.eq_ignore_ascii_case(leader_name)
+}
+
+fn resolve_follow_spawn<'a>(
+    current_target: Option<&'a textquest_common::types::SpawnData>,
+    nearby: &'a [textquest_common::types::SpawnData],
+    leader_name: Option<&str>,
+) -> Option<&'a textquest_common::types::SpawnData> {
+    let leader_name = leader_name.map(str::trim).filter(|value| !value.is_empty());
+    match leader_name {
+        None => current_target,
+        Some(leader_name) => current_target
+            .filter(|spawn| spawn_matches_name(spawn, leader_name))
+            .or_else(|| {
+                nearby
+                    .iter()
+                    .find(|spawn| spawn_matches_name(spawn, leader_name))
+            }),
+    }
+}
+
+fn handle_movement_slash_command(command: &str) -> bool {
+    match parse_movement_slash_command(command) {
+        None => false,
+        Some(Err(err)) => {
+            tracing::warn!(cmd = %command, %err, "Unsupported movement slash command");
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Off))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StickOff);
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Mod(delta)))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StickMod(delta));
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Start(config)))) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            let current_target_id = if eq_base != 0 {
+                read_target_state(eq_base).map(|target| target.spawn_id)
+            } else {
+                None
+            };
+            crate::nav::handle_command(crate::nav::NavCommand::StickTo {
+                config,
+                current_target_id,
+            });
+            true
+        }
+        Some(Ok(MovementSlashCommand::Follow(FollowSlashCommand::Off))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StopFollow);
+            true
+        }
+        Some(Ok(MovementSlashCommand::Follow(FollowSlashCommand::Start { leader_name }))) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base == 0 {
+                tracing::warn!(cmd = %command, "Ignoring /follow outside the world");
+                return true;
+            }
+
+            let current_target = read_target_state(eq_base);
+            let nearby_guard = CACHED_NEARBY_FOR_STICK
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let Some(leader) = resolve_follow_spawn(
+                current_target.as_ref(),
+                &nearby_guard,
+                leader_name.as_deref(),
+            ) else {
+                tracing::warn!(cmd = %command, "Could not resolve /follow leader");
+                return true;
+            };
+
+            let leader_display_name = if leader.displayed_name.trim().is_empty() {
+                leader.name.clone()
+            } else {
+                leader.displayed_name.clone()
+            };
+            let anchor = textquest_common::nav::Waypoint::new(leader.x, leader.y, leader.z);
+            drop(nearby_guard);
+
+            crate::nav::handle_command(crate::nav::NavCommand::FollowPlayer {
+                config: textquest_common::nav::FollowConfig::new(
+                    leader_display_name,
+                    DEFAULT_FOLLOW_DISTANCE,
+                    DEFAULT_FOLLOW_LEASH_DISTANCE,
+                ),
+                anchor,
+            });
+            true
+        }
+    }
+}
+
 /// Enqueue a command with a human-like jitter delay.
 fn enqueue_command(cmd: textquest_common::ipc::Command, current_tick: u64) {
     let delay = JITTER_RNG
@@ -828,8 +1055,8 @@ fn on_game_tick() {
     }
 
     // Enqueue IPC commands with jitter delay for anti-detection.
-    for cmd in crate::ipc::poll_commands() {
-        enqueue_command(cmd, tick);
+    for ipc_cmd in crate::ipc::poll_commands() {
+        enqueue_command(ipc_cmd.command, tick);
     }
 
     // Execute commands whose scheduled tick has arrived.
@@ -1743,20 +1970,35 @@ fn set_window_title_for_pid(pid: u32, title: &str) {
 
 /// Dispatch a single IPC command received from the orchestrator.
 fn dispatch_command(cmd: textquest_common::ipc::Command) {
+    use std::borrow::Cow;
     use textquest_common::ipc::Command;
 
     match cmd {
         Command::SlashCommand { command } => {
-            // Intercept /cleartarget — not a real EQ command. Route to our
-            // ClearTarget handler which writes NULL to pinstTarget directly.
             let trimmed = command.trim();
-            if trimmed.eq_ignore_ascii_case("/cleartarget") {
-                tracing::info!("Intercepted /cleartarget slash command → ClearTarget");
-                dispatch_command(Command::ClearTarget);
-                return;
-            }
+            let slash_command = match intercept_custom_slash_command(trimmed) {
+                Some(InterceptedSlashCommand::ClearTarget) => {
+                    tracing::info!("Intercepted /cleartarget slash command → ClearTarget");
+                    dispatch_command(Command::ClearTarget);
+                    return;
+                }
+                Some(InterceptedSlashCommand::InteractTarget) => {
+                    tracing::info!(
+                        cmd = trimmed,
+                        "Intercepted /click ... target → InteractTarget"
+                    );
+                    interact_with_target();
+                    return;
+                }
+                Some(InterceptedSlashCommand::Rewrite(rewritten)) => {
+                    tracing::info!(from = trimmed, to = %rewritten, "Rewriting custom slash command");
+                    Cow::Owned(rewritten)
+                }
+                None => Cow::Borrowed(trimmed),
+            };
+            let slash_command = slash_command.as_ref();
 
-            if let Some(spell_set) = parse_spell_set_command(trimmed) {
+            if let Some(spell_set) = parse_spell_set_command(slash_command) {
                 match handle_spell_set_command(spell_set) {
                     Ok(Some(eq_command)) => {
                         tracing::info!(cmd = %eq_command, "Executing translated spell-set command");
@@ -1777,20 +2019,23 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            if handle_movement_slash_command(trimmed) {
+                tracing::info!(cmd = %command, "Handled movement slash command");
+                return;
+            }
+
             // When /target is issued while already targeting, EQ's InterpretCmd
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
-            if trimmed.len() > 7
-                && trimmed
-                    .get(..7)
-                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("/target"))
-                && trimmed.as_bytes().get(7).copied() == Some(b' ')
-            {
+            if should_preclear_target_for_slash(slash_command) {
                 let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
                 if eq_base != 0 {
                     let has_target = read_target_state(eq_base).is_some();
                     if has_target {
-                        tracing::debug!(cmd = %command, "Pre-clearing target before /target switch");
+                        tracing::debug!(
+                            cmd = %slash_command,
+                            "Pre-clearing target before target-switching slash command"
+                        );
                         let controller = super::targeting::TargetingController::new(eq_base);
                         if let Err(e) = controller.clear_target() {
                             tracing::warn!(error = %e, "Failed to pre-clear target");
@@ -1799,13 +2044,13 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 }
             }
 
-            tracing::info!(cmd = %command, "Executing slash command");
-            if let Some(active_bandolier) = parse_bandolier_activate_command(trimmed) {
+            tracing::info!(cmd = %slash_command, "Executing slash command");
+            if let Some(active_bandolier) = parse_bandolier_activate_command(slash_command) {
                 if let Ok(mut known_bandolier) = ACTIVE_BANDOLIER_SET.lock() {
                     *known_bandolier = Some(active_bandolier);
                 }
             }
-            execute_slash_command(&command);
+            execute_slash_command(slash_command);
         }
         Command::NavigateTo { waypoints } => {
             crate::nav::handle_command(crate::nav::NavCommand::Navigate(waypoints));
@@ -2172,10 +2417,167 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum InterceptedSlashCommand {
+    ClearTarget,
+    InteractTarget,
+    Rewrite(String),
+}
+
+fn intercept_custom_slash_command(command: &str) -> Option<InterceptedSlashCommand> {
+    if command.eq_ignore_ascii_case("/cleartarget") {
+        return Some(InterceptedSlashCommand::ClearTarget);
+    }
+
+    if is_click_right_target_command(command) {
+        return Some(InterceptedSlashCommand::InteractTarget);
+    }
+
+    rewrite_door_command(command).map(InterceptedSlashCommand::Rewrite)
+}
+
+fn rewrite_door_command(command: &str) -> Option<String> {
+    let mut parts = command.splitn(2, char::is_whitespace);
+    let head = parts.next().unwrap_or_default();
+    if !head.eq_ignore_ascii_case("/door") {
+        return None;
+    }
+
+    let rest = parts.next().map(str::trim).filter(|rest| !rest.is_empty());
+    Some(match rest {
+        Some(rest) => format!("/doortarget {rest}"),
+        None => "/doortarget".to_string(),
+    })
+}
+
+fn is_click_right_target_command(command: &str) -> bool {
+    let mut parts = command.split_whitespace();
+    let Some(head) = parts.next() else {
+        return false;
+    };
+    if !head.eq_ignore_ascii_case("/click") {
+        return false;
+    }
+
+    let Some(button) = parts.next() else {
+        return false;
+    };
+    if !button.eq_ignore_ascii_case("right") {
+        return false;
+    }
+
+    let Some(target) = parts.next() else {
+        return false;
+    };
+    target.eq_ignore_ascii_case("target") && parts.next().is_none()
+}
+
+fn should_preclear_target_for_slash(command: &str) -> bool {
+    let mut parts = command.splitn(2, char::is_whitespace);
+    let head = parts.next().unwrap_or_default();
+
+    if head.eq_ignore_ascii_case("/doortarget") {
+        return true;
+    }
+
+    if !head.eq_ignore_ascii_case("/target") {
+        return false;
+    }
+
+    parts
+        .next()
+        .map(str::trim)
+        .is_some_and(|rest| !rest.is_empty())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum SpellSetCommand {
     Save(String),
     Load(String),
     Delete(String),
+}
+
+fn parse_nav_destination_command(
+    command: &str,
+) -> Option<Result<textquest_common::ipc::Command, String>> {
+    use textquest_common::ipc::Command;
+
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if !verb.eq_ignore_ascii_case("/nav") {
+        return None;
+    }
+
+    let args = if args
+        .first()
+        .is_some_and(|token| token.eq_ignore_ascii_case("to"))
+    {
+        &args[1..]
+    } else {
+        args
+    };
+    let (mode, rest) = args.split_first()?;
+
+    if mode.eq_ignore_ascii_case("target") {
+        return if rest.is_empty() {
+            Some(Ok(Command::NavTarget))
+        } else {
+            Some(Err(
+                "target navigation does not accept extra arguments".to_string()
+            ))
+        };
+    }
+
+    if mode.eq_ignore_ascii_case("loc") {
+        if rest.len() != 3 {
+            return Some(Err(
+                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string(),
+            ));
+        }
+
+        let parse_coord = |value: &str, axis: &str| {
+            value
+                .parse::<f32>()
+                .map_err(|_| format!("invalid {axis} coordinate: {value}"))
+        };
+
+        let y = match parse_coord(&rest[0], "Y") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+        let x = match parse_coord(&rest[1], "X") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+        let z = match parse_coord(&rest[2], "Z") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+
+        return Some(Ok(Command::NavLoc { x, y, z }));
+    }
+
+    if mode.eq_ignore_ascii_case("door") {
+        let valid = rest.is_empty() || (rest.len() == 1 && rest[0].eq_ignore_ascii_case("click"));
+        return if valid {
+            Some(Ok(Command::NavDoor))
+        } else {
+            None
+        };
+    }
+
+    if mode.eq_ignore_ascii_case("item") {
+        let valid = rest.is_empty() || (rest.len() == 1 && rest[0].eq_ignore_ascii_case("click"));
+        return if valid {
+            Some(Ok(Command::NavItem))
+        } else {
+            None
+        };
+    }
+
+    None
 }
 
 fn parse_spell_set_command(command: &str) -> Option<SpellSetCommand> {
@@ -2529,6 +2931,79 @@ mod tests {
     }
 
     #[test]
+    fn nav_destination_parser_supports_target_and_object_modes() {
+        assert_eq!(
+            parse_nav_destination_command("/nav target"),
+            Some(Ok(textquest_common::ipc::Command::NavTarget))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to target"),
+            Some(Ok(textquest_common::ipc::Command::NavTarget))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav door"),
+            Some(Ok(textquest_common::ipc::Command::NavDoor))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to door click"),
+            Some(Ok(textquest_common::ipc::Command::NavDoor))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav item"),
+            Some(Ok(textquest_common::ipc::Command::NavItem))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to item click"),
+            Some(Ok(textquest_common::ipc::Command::NavItem))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_supports_mq2_loc_order() {
+        assert_eq!(
+            parse_nav_destination_command("/nav loc 200 100 10"),
+            Some(Ok(textquest_common::ipc::Command::NavLoc {
+                x: 100.0,
+                y: 200.0,
+                z: 10.0,
+            }))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to loc -25.5 13.25 7"),
+            Some(Ok(textquest_common::ipc::Command::NavLoc {
+                x: 13.25,
+                y: -25.5,
+                z: 7.0,
+            }))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_rejects_bad_loc_inputs() {
+        assert_eq!(
+            parse_nav_destination_command("/nav loc 100 200"),
+            Some(Err(
+                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string()
+            ))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to loc 100 nope 30"),
+            Some(Err("invalid X coordinate: nope".to_string()))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_ignores_non_destination_nav_commands() {
+        assert_eq!(parse_nav_destination_command("/nav reload"), None);
+        assert_eq!(
+            parse_nav_destination_command("/nav waypoint save camp"),
+            None
+        );
+        assert_eq!(parse_nav_destination_command("/nav to guildlobby"), None);
+        assert_eq!(parse_nav_destination_command("/follow tank"), None);
+    }
+
+    #[test]
     fn spell_set_ini_candidates_match_character_prefix_case_insensitively() {
         let temp = std::env::temp_dir().join(format!(
             "textquest-spellset-test-{}",
@@ -2552,6 +3027,60 @@ mod tests {
 
         assert_eq!(names, vec!["Cleric01_Teek.ini", "cleric01_Test.ini"]);
         let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn intercepts_cleartarget_slash_command() {
+        assert_eq!(
+            intercept_custom_slash_command("/cleartarget"),
+            Some(InterceptedSlashCommand::ClearTarget)
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/ClearTarget"),
+            Some(InterceptedSlashCommand::ClearTarget)
+        );
+    }
+
+    #[test]
+    fn intercepts_click_right_target_slash_command() {
+        assert_eq!(
+            intercept_custom_slash_command("/click right target"),
+            Some(InterceptedSlashCommand::InteractTarget)
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/CLICK RIGHT TARGET"),
+            Some(InterceptedSlashCommand::InteractTarget)
+        );
+        assert_eq!(intercept_custom_slash_command("/click left target"), None);
+        assert_eq!(intercept_custom_slash_command("/click right door"), None);
+    }
+
+    #[test]
+    fn rewrites_door_slash_command_to_doortarget() {
+        assert_eq!(
+            intercept_custom_slash_command("/door"),
+            Some(InterceptedSlashCommand::Rewrite("/doortarget".into()))
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/door id 7"),
+            Some(InterceptedSlashCommand::Rewrite("/doortarget id 7".into()))
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/DOOR   wooden gate"),
+            Some(InterceptedSlashCommand::Rewrite(
+                "/doortarget wooden gate".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn preclears_for_target_and_doortarget_commands() {
+        assert!(should_preclear_target_for_slash("/target Emperor Crush"));
+        assert!(!should_preclear_target_for_slash("/target"));
+        assert!(should_preclear_target_for_slash("/doortarget"));
+        assert!(should_preclear_target_for_slash("/doortarget id 5"));
+        assert!(!should_preclear_target_for_slash("/nav target"));
+        assert!(!should_preclear_target_for_slash("/click right target"));
     }
 
     #[test]

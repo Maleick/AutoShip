@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use textquest_common::nav::{NavPathMetrics, Waypoint};
+use textquest_common::nav::{NavPathFailureKind, NavPathMetrics, Waypoint};
 
 // ---------------------------------------------------------------------------
 // Protobuf types (hand-written to match MQ2Nav's NavMeshFile.proto)
@@ -729,6 +729,8 @@ pub enum RouteSource {
     NavMesh,
     /// Straight line from A to B (navmesh unavailable).
     StraightLineFallback,
+    /// Navmesh data exists, but no safe route could be planned.
+    NavMeshBlocked,
 }
 
 /// A planned navigation route with waypoints and metadata.
@@ -755,6 +757,43 @@ fn path_length(waypoints: &[Waypoint]) -> Option<f32> {
     }
 
     Some(total)
+}
+
+fn classify_query_failure(error: &anyhow::Error) -> NavPathFailureKind {
+    let message = error.to_string().to_ascii_lowercase();
+    if message.contains("not on navmesh") {
+        NavPathFailureKind::DataGap
+    } else {
+        NavPathFailureKind::TransientBlockage
+    }
+}
+
+fn straight_line_fallback_plan(
+    destination: Waypoint,
+    mesh_cached: bool,
+    failure_reason: String,
+    failure_kind: NavPathFailureKind,
+    fallback_length: Option<f32>,
+) -> RoutePlan {
+    RoutePlan {
+        waypoints: vec![destination],
+        source: RouteSource::StraightLineFallback,
+        mesh_cached,
+        metrics: NavPathMetrics::failure(failure_reason, failure_kind, fallback_length, false),
+    }
+}
+
+fn blocked_navmesh_plan(
+    mesh_cached: bool,
+    failure_reason: String,
+    failure_kind: NavPathFailureKind,
+) -> RoutePlan {
+    RoutePlan {
+        waypoints: Vec::new(),
+        source: RouteSource::NavMeshBlocked,
+        mesh_cached,
+        metrics: NavPathMetrics::failure(failure_reason, failure_kind, None, true),
+    }
 }
 
 /// Load a parsed navmesh into Detour, returning a query-ready object.
@@ -1434,6 +1473,7 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
     let mesh_cached = has_cached_zone_mesh(zone_short_name);
     let origin = Waypoint::new(from.0, from.1, from.2);
     let destination = Waypoint::new(to.0, to.1, to.2);
+    let fallback_length = path_length(&[origin, destination]);
 
     match load_zone(zone_short_name) {
         Ok(loaded) => match find_path(&loaded, from, to) {
@@ -1452,37 +1492,42 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
                 }
             }
             Err(error) => {
+                let failure_reason = format!("Navmesh path query failed: {error}");
+                let failure_kind = classify_query_failure(&error);
                 tracing::warn!(
                     zone = zone_short_name,
+                    failure_kind = failure_kind.label(),
                     %error,
-                    "Navmesh path query failed; falling back to straight-line route"
+                    "Navmesh path query failed"
                 );
-                RoutePlan {
-                    waypoints: vec![destination],
-                    source: RouteSource::StraightLineFallback,
-                    mesh_cached,
-                    metrics: NavPathMetrics::failure(
-                        format!("Navmesh path query failed: {error}"),
-                        path_length(&[origin, destination]),
+                match failure_kind {
+                    NavPathFailureKind::DataGap => straight_line_fallback_plan(
+                        destination,
+                        mesh_cached,
+                        failure_reason,
+                        failure_kind,
+                        fallback_length,
                     ),
+                    NavPathFailureKind::TransientBlockage => {
+                        blocked_navmesh_plan(mesh_cached, failure_reason, failure_kind)
+                    }
                 }
             }
         },
         Err(error) => {
+            let failure_reason = format!("Navmesh load failed: {error}");
             tracing::warn!(
                 zone = zone_short_name,
                 %error,
                 "Navmesh load failed; falling back to straight-line route"
             );
-            RoutePlan {
-                waypoints: vec![destination],
-                source: RouteSource::StraightLineFallback,
+            straight_line_fallback_plan(
+                destination,
                 mesh_cached,
-                metrics: NavPathMetrics::failure(
-                    format!("Navmesh load failed: {error}"),
-                    path_length(&[origin, destination]),
-                ),
-            }
+                failure_reason,
+                NavPathFailureKind::DataGap,
+                fallback_length,
+            )
         }
     }
 }
@@ -1746,6 +1791,57 @@ mod tests {
         ];
         let len = path_length(&points).unwrap();
         assert!((len - 10.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn classify_query_failure_treats_navmesh_coverage_as_data_gap() {
+        let error = anyhow::anyhow!("Start position (1, 2, 3) not on navmesh");
+        assert_eq!(classify_query_failure(&error), NavPathFailureKind::DataGap);
+    }
+
+    #[test]
+    fn classify_query_failure_treats_missing_corridor_as_transient_blockage() {
+        let error = anyhow::anyhow!("No path found between start and end");
+        assert_eq!(
+            classify_query_failure(&error),
+            NavPathFailureKind::TransientBlockage
+        );
+    }
+
+    #[test]
+    fn straight_line_fallback_plan_records_data_gap_metrics() {
+        let destination = Waypoint::new(25.0, 0.0, 0.0);
+        let plan = straight_line_fallback_plan(
+            destination,
+            false,
+            String::from("Navmesh load failed: zone mesh unavailable"),
+            NavPathFailureKind::DataGap,
+            Some(25.0),
+        );
+
+        assert_eq!(plan.source, RouteSource::StraightLineFallback);
+        assert_eq!(plan.waypoints, vec![destination]);
+        assert_eq!(plan.metrics.failure_kind, Some(NavPathFailureKind::DataGap));
+        assert!(!plan.metrics.replan_recommended);
+        assert_eq!(plan.metrics.path_length, Some(25.0));
+    }
+
+    #[test]
+    fn blocked_navmesh_plan_avoids_straight_line_shortcuts() {
+        let plan = blocked_navmesh_plan(
+            true,
+            String::from("Navmesh path query failed: No path found between start and end"),
+            NavPathFailureKind::TransientBlockage,
+        );
+
+        assert_eq!(plan.source, RouteSource::NavMeshBlocked);
+        assert!(plan.waypoints.is_empty());
+        assert_eq!(
+            plan.metrics.failure_kind,
+            Some(NavPathFailureKind::TransientBlockage)
+        );
+        assert!(plan.metrics.replan_recommended);
+        assert_eq!(plan.metrics.path_length, None);
     }
 
     #[test]

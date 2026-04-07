@@ -2050,6 +2050,8 @@ mod tests {
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
     use crate::tui::app::ClientState;
     use crate::tui::state::MapRadiusOverlay;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use ratatui::layout::Rect;
     use ratatui::style::Color;
     use ratatui::{Terminal, backend::TestBackend};

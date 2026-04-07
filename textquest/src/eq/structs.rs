@@ -274,6 +274,12 @@ pub struct SpellSlot {
 }
 
 impl SpellSlot {
+    /// Returns `true` when the slot is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.spell_id == 0
+    }
+
     /// Human-readable label for the spell in this slot.
     #[must_use]
     pub fn display_name(&self) -> String {
@@ -684,20 +690,37 @@ mod tests {
     }
 
     #[test]
-    fn current_spellset_lines_use_one_based_gem_labels() {
-        let mut spawn = make_spawn_info(1);
-        spawn.memorized_spells = vec![
+    fn spell_book_entry_empty_detection() {
+        assert!(
             SpellSlot {
                 slot: 0,
-                spell_id: 123,
-                spell_name: Some("Complete Heal".to_string()),
-            },
-            SpellSlot {
-                slot: 1,
-                spell_id: 456,
+                spell_id: 0,
                 spell_name: None,
-            },
-        ];
+            }
+            .is_empty()
+        );
+        assert!(
+            !SpellSlot {
+                slot: 1,
+                spell_id: 123,
+                spell_name: None,
+            }
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn memorized_spell_display_name_prefers_resolved_name() {
+        let named = SpellSlot {
+            slot: 0,
+            spell_id: 123,
+            spell_name: Some("Complete Heal".to_string()),
+        };
+        let unnamed = SpellSlot {
+            slot: 1,
+            spell_id: 456,
+            spell_name: None,
+        };
 
         assert_eq!(
             spawn.current_spellset_lines(2),
@@ -880,12 +903,12 @@ mod tests {
             SpellSlot {
                 slot: 0,
                 spell_id: 123,
-                spell_name: Some("Complete Heal".to_string()),
+                spell_name: None,
             },
             SpellSlot {
                 slot: 1,
                 spell_id: 456,
-                spell_name: Some("Celestial Remedy".to_string()),
+                spell_name: None,
             },
         ];
         s.memorized_spells = vec![
