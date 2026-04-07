@@ -1545,7 +1545,7 @@ impl App {
     /// Summarize the current combat context for operator feedback.
     pub fn combat_status_summary(&self) -> String {
         let mode = format!("{}", self.operating_mode);
-        let scope = self.group_focus_label();
+        let scope = self.routing_scope.label();
         let focused = self.focused_pids().len();
         let visible = self.visible_clients().len();
         let ma = self.main_assist.as_deref().unwrap_or("—");
@@ -1627,14 +1627,28 @@ impl App {
         }
     }
 
-    /// Get PIDs of clients in the focused group (or all if aggregate).
+    /// Get clients targeted by the current routing scope.
+    pub fn routed_clients(&self) -> Vec<&ClientState> {
+        use textquest_common::routing::RoutingScope;
+
+        match &self.routing_scope {
+            RoutingScope::AllSession => self.clients.iter().collect(),
+            RoutingScope::Group { group_id, .. } => {
+                let idx = usize::from(group_id.saturating_sub(1));
+                self.clients_in_group_idx(idx)
+            }
+            RoutingScope::OneToon { name } => self.find_client_by_name(name).into_iter().collect(),
+        }
+    }
+
+    /// Get PIDs of clients targeted by the current routing scope.
     pub fn focused_pids(&self) -> Vec<u32> {
-        self.visible_clients().iter().map(|c| c.pid).collect()
+        self.routed_clients().iter().map(|c| c.pid).collect()
     }
 
     /// Return the number of focused clients without allocating a Vec.
     pub fn focused_pid_count(&self) -> usize {
-        self.visible_clients().len()
+        self.routed_clients().len()
     }
 
     /// Send an IPC command to all focused clients, returning the success count.
@@ -3189,7 +3203,7 @@ impl App {
         zone_hint: Option<&str>,
     ) {
         let focused_clients: Vec<FocusedNavClient> = self
-            .visible_clients()
+            .routed_clients()
             .into_iter()
             .filter_map(|client| {
                 client.local_player.as_ref().map(|player| FocusedNavClient {
@@ -3213,6 +3227,7 @@ impl App {
 
         let mut mesh_routes = 0usize;
         let mut fallback_routes = 0usize;
+        let mut blocked_routes = 0usize;
         let mut sent = 0usize;
         let mut previews = 0usize;
         let mut skipped = 0usize;
@@ -3257,9 +3272,12 @@ impl App {
             match route.source {
                 crate::nav::mesh::RouteSource::NavMesh => mesh_routes += 1,
                 crate::nav::mesh::RouteSource::StraightLineFallback => fallback_routes += 1,
+                crate::nav::mesh::RouteSource::NavMeshBlocked => blocked_routes += 1,
             }
 
-            let delivered = if focused_client.is_demo {
+            let delivered = if route.waypoints.is_empty() {
+                false
+            } else if focused_client.is_demo {
                 previews += 1;
                 true
             } else {
@@ -3284,7 +3302,8 @@ impl App {
                 }
             };
 
-            if delivered {
+            if delivered || matches!(route.source, crate::nav::mesh::RouteSource::NavMeshBlocked) {
+                let failure_kind = route.metrics.failure_kind;
                 let from = textquest_common::nav::Waypoint::new(
                     focused_client.position.0,
                     focused_client.position.1,
@@ -3292,13 +3311,52 @@ impl App {
                 );
                 let distance_remaining = from.distance_3d(&target);
                 let waypoint_count = route.waypoints.len().max(1);
-                let status = if distance_remaining <= 5.0 {
-                    textquest_common::nav::NavStatus::Arrived
+                let status =
+                    if matches!(route.source, crate::nav::mesh::RouteSource::NavMeshBlocked) {
+                        textquest_common::nav::NavStatus::Idle
+                    } else if distance_remaining <= 5.0 {
+                        textquest_common::nav::NavStatus::Arrived
+                    } else {
+                        textquest_common::nav::NavStatus::Moving {
+                            waypoint_index: 0,
+                            waypoint_count,
+                            distance_remaining,
+                        }
+                    };
+                let route_state = match route.source {
+                    crate::nav::mesh::RouteSource::NavMesh => String::from("Navmesh route"),
+                    crate::nav::mesh::RouteSource::StraightLineFallback => {
+                        String::from("Fallback route")
+                    }
+                    crate::nav::mesh::RouteSource::NavMeshBlocked => String::from("Replan blocked"),
+                };
+                let recovery_state = if route.metrics.replan_recommended {
+                    Some(String::from("Replan recommended"))
                 } else {
-                    textquest_common::nav::NavStatus::Moving {
-                        waypoint_index: 0,
-                        waypoint_count,
-                        distance_remaining,
+                    None
+                };
+                let blockers = match route.source {
+                    crate::nav::mesh::RouteSource::NavMesh => Vec::new(),
+                    crate::nav::mesh::RouteSource::StraightLineFallback => {
+                        let failure_label =
+                            failure_kind.map(|kind| kind.label()).unwrap_or("data gap");
+                        vec![format!(
+                            "Navmesh {failure_label} for {}; using deterministic straight-line fallback.",
+                            focused_client.zone_short
+                        )]
+                    }
+                    crate::nav::mesh::RouteSource::NavMeshBlocked => {
+                        let failure_label = failure_kind
+                            .map(|kind| kind.label())
+                            .unwrap_or("transient blockage");
+                        let mut blockers = vec![format!(
+                            "Navmesh {failure_label} for {}; holding position instead of taking a straight-line shortcut.",
+                            focused_client.zone_short
+                        )];
+                        if let Some(reason) = route.metrics.failure_reason.as_ref() {
+                            blockers.push(reason.clone());
+                        }
+                        blockers
                     }
                 };
 
@@ -3312,29 +3370,9 @@ impl App {
                         path_exists: route.metrics.path_exists,
                         path_length: route.metrics.path_length,
                         failure_reason: route.metrics.failure_reason.clone(),
-                        route_state: match route.source {
-                            crate::nav::mesh::RouteSource::NavMesh => String::from("Navmesh route"),
-                            crate::nav::mesh::RouteSource::StraightLineFallback => {
-                                String::from("Fallback route")
-                            }
-                        },
-                        recovery_state: None,
-                        blockers: match route.source {
-                            crate::nav::mesh::RouteSource::NavMesh => Vec::new(),
-                            crate::nav::mesh::RouteSource::StraightLineFallback => {
-                                if route.mesh_cached {
-                                    vec![format!(
-                                        "Mesh exists for {} but path query fell back to a straight line.",
-                                        focused_client.zone_short
-                                    )]
-                                } else {
-                                    vec![format!(
-                                        "No cached navmesh for {}; using straight-line fallback.",
-                                        focused_client.zone_short
-                                    )]
-                                }
-                            }
-                        },
+                        route_state,
+                        recovery_state,
+                        blockers,
                         is_demo_scripted: false,
                     },
                 );
@@ -3347,6 +3385,9 @@ impl App {
         }
         if fallback_routes > 0 {
             details.push(format!("{} fallback", fallback_routes));
+        }
+        if blocked_routes > 0 {
+            details.push(format!("{} blocked", blocked_routes));
         }
         if sent > 0 {
             details.push(format!("{} sent", sent));
@@ -3362,7 +3403,7 @@ impl App {
         }
 
         self.set_feedback(
-            if failed > 0 || (sent == 0 && previews == 0) {
+            if failed > 0 || blocked_routes > 0 || (sent == 0 && previews == 0) {
                 ToastLevel::Warning
             } else {
                 ToastLevel::Success
@@ -3387,12 +3428,78 @@ impl App {
         }
     }
 
-    /// Get PIDs for a specific group index (0-based).
-    fn pids_for_group(&self, group_idx: usize) -> Vec<u32> {
-        self.clients_in_group_idx(group_idx)
-            .iter()
-            .map(|c| c.pid)
-            .collect()
+    fn parse_all_prefix<'a>(&self, input: &'a str) -> Option<&'a str> {
+        let trimmed = input.trim();
+        let rest = trimmed.strip_prefix("all")?;
+        if rest.is_empty() || !rest.starts_with(char::is_whitespace) {
+            return None;
+        }
+        Some(rest.trim())
+    }
+
+    fn with_temporary_routing_scope<T>(
+        &mut self,
+        scope: textquest_common::routing::RoutingScope,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let previous_scope = std::mem::replace(&mut self.routing_scope, scope);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(self)));
+        self.routing_scope = previous_scope;
+        match result {
+            Ok(result) => result,
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+
+    fn routed_pids_for_scope(
+        &mut self,
+        scope: &textquest_common::routing::RoutingScope,
+    ) -> Vec<u32> {
+        match scope {
+            textquest_common::routing::RoutingScope::AllSession => {
+                self.clients.iter().map(|client| client.pid).collect()
+            }
+            _ => self.with_temporary_routing_scope(scope.clone(), |app| app.focused_pids()),
+        }
+    }
+
+    fn dispatch_scoped_slash_command(
+        &mut self,
+        scope: textquest_common::routing::RoutingScope,
+        slash_cmd: &str,
+    ) {
+        let pids = self.routed_pids_for_scope(&scope);
+
+        if pids.is_empty() {
+            self.set_feedback(
+                ToastLevel::Warning,
+                format!("{}: no online members.", scope.label()),
+                true,
+            );
+            return;
+        }
+
+        let mut ok = 0usize;
+        let mut fail = 0usize;
+        for pid in &pids {
+            match send_slash_command(*pid, slash_cmd) {
+                Ok(()) => ok += 1,
+                Err(_) => fail += 1,
+            }
+        }
+
+        self.set_feedback(
+            if fail > 0 {
+                ToastLevel::Warning
+            } else {
+                ToastLevel::Success
+            },
+            format!(
+                "{} {slash_cmd} → sent to {ok}, failed {fail}",
+                scope.label()
+            ),
+            fail > 0 || ok > 0,
+        );
     }
 
     fn split_command<'a>(&self, input: &'a str) -> (&'a str, &'a str) {
@@ -3459,66 +3566,65 @@ impl App {
             tracing::debug!(error = %e, "Failed to persist command history");
         }
 
-        // Check for group prefix: :G1 /sit, :G2 camp start, etc.
+        self.execute_normalized_command(&input, orchestrator);
+    }
+
+    fn execute_normalized_command(&mut self, input: &str, orchestrator: &mut Orchestrator) {
+        let input = command::normalize_command_alias(input);
+
         if let Some((group_idx, rest)) = self.parse_group_prefix(&input) {
+            let Some(group) = self.groups.get(group_idx) else {
+                self.usage_feedback(
+                    "scope",
+                    format!("Group G{} not found. Use :scope G1..G6.", group_idx + 1),
+                );
+                return;
+            };
+
+            let scope = textquest_common::routing::RoutingScope::Group {
+                group_id: group.id,
+                label: group.name.clone(),
+            };
+
             if rest.is_empty() {
-                // Just ":G1" with nothing after — focus on that group
+                self.routing_scope = scope;
                 self.set_active_group(Some(group_idx));
                 self.set_feedback(
                     ToastLevel::Info,
                     format!("Scope changed to G{}", group_idx + 1),
                     false,
                 );
-                return;
+            } else if rest.starts_with('/') {
+                self.dispatch_scoped_slash_command(scope, rest);
+            } else {
+                self.with_temporary_routing_scope(scope, |app| {
+                    app.execute_normalized_command(rest, orchestrator);
+                });
             }
-            if !rest.starts_with('/') {
-                self.set_feedback(
-                    ToastLevel::Warning,
-                    format!(
-                        "Group targets expect a slash command. Example: :G{} /follow {}",
-                        group_idx + 1,
-                        self.main_assist.as_deref().unwrap_or("<name>")
-                    ),
-                    true,
-                );
-                return;
+            return;
+        }
+
+        if let Some(rest) = self.parse_all_prefix(&input) {
+            let scope = textquest_common::routing::RoutingScope::AllSession;
+            if rest.starts_with('/') {
+                self.dispatch_scoped_slash_command(scope, rest);
+            } else {
+                self.with_temporary_routing_scope(scope, |app| {
+                    app.execute_normalized_command(rest, orchestrator);
+                });
             }
-            let g = &self.groups[group_idx];
-            let group_name = format!("G{} {}", g.id, g.name);
-            let pids = self.pids_for_group(group_idx);
-            if pids.is_empty() {
-                self.set_feedback(
-                    ToastLevel::Warning,
-                    format!("{group_name}: no online members. Example: :G{} /sit", g.id),
-                    true,
-                );
-                return;
-            }
-            let slash_cmd = rest;
-            let mut ok = 0usize;
-            let mut fail = 0usize;
-            for pid in &pids {
-                match send_slash_command(*pid, slash_cmd) {
-                    Ok(()) => ok += 1,
-                    Err(_) => fail += 1,
-                }
-            }
-            let message = format!("{group_name} {slash_cmd} → sent to {ok}, failed {fail}");
-            self.set_feedback(
-                if fail > 0 {
-                    ToastLevel::Warning
-                } else {
-                    ToastLevel::Success
-                },
-                message,
-                fail > 0 || ok > 0,
-            );
             return;
         }
 
         if let Some((client_idx, rest)) = self.parse_client_prefix(&input) {
             let target_name = self.client_command_target(&self.clients[client_idx]);
+            let scope = textquest_common::routing::RoutingScope::OneToon {
+                name: target_name.clone(),
+            };
+
             if rest.is_empty() {
+                self.routing_scope = scope;
+                self.active_group = None;
                 self.select_client_idx(client_idx);
                 self.expand_selected_character();
                 self.set_feedback(
@@ -3526,34 +3632,13 @@ impl App {
                     format!("Focused client: {target_name}"),
                     false,
                 );
-                return;
-            }
-            if !rest.starts_with('/') {
-                self.set_feedback(
-                    ToastLevel::Warning,
-                    format!(
-                        "Character targets expect a slash command. Example: :{} /assist {}",
-                        target_name,
-                        self.main_assist.as_deref().unwrap_or("<name>")
-                    ),
-                    true,
-                );
-                return;
-            }
-
-            let pid = self.clients[client_idx].pid;
-            self.select_client_idx(client_idx);
-            match send_slash_command(pid, rest) {
-                Ok(()) => {
-                    self.set_feedback(ToastLevel::Success, format!("{target_name} → {rest}"), true);
-                }
-                Err(e) => {
-                    self.set_feedback(
-                        ToastLevel::Error,
-                        format!("Error sending to {target_name}: {e}"),
-                        true,
-                    );
-                }
+            } else if rest.starts_with('/') {
+                self.select_client_idx(client_idx);
+                self.dispatch_scoped_slash_command(scope, rest);
+            } else {
+                self.with_temporary_routing_scope(scope, |app| {
+                    app.execute_normalized_command(rest, orchestrator);
+                });
             }
             return;
         }
@@ -3654,6 +3739,48 @@ impl App {
                     self.set_feedback(
                         ToastLevel::Info,
                         format!("Loot → sent to {ok} clients"),
+                        false,
+                    );
+                }
+            }
+            "door" => {
+                let ok = self.send_ipc_to_focused(&textquest_common::ipc::Command::InteractDoor);
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        "Door: no clients received command. Check connection with :status",
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Door interact → sent to {ok} clients"),
+                        false,
+                    );
+                }
+            }
+            "click" => {
+                let sub = parts.get(1).map(|s| s.to_ascii_lowercase());
+                let cmd = match sub.as_deref() {
+                    Some("door") => textquest_common::ipc::Command::InteractDoor,
+                    _ => textquest_common::ipc::Command::ClickObject,
+                };
+                let label = if matches!(sub.as_deref(), Some("door")) {
+                    "door"
+                } else {
+                    "item"
+                };
+                let ok = self.send_ipc_to_focused(&cmd);
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        format!("Click {label}: no clients received command. Check connection with :status"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Click {label} → sent to {ok} clients"),
                         false,
                     );
                 }
@@ -3797,7 +3924,7 @@ impl App {
                         ToastLevel::Info,
                         format!(
                             "Combat scope: {} | focused {} clients",
-                            self.group_focus_label(),
+                            self.routing_scope.label(),
                             self.focused_pids().len()
                         ),
                         false,
@@ -5843,6 +5970,8 @@ fn is_reserved_command_name(name: &str) -> bool {
             | "camp"
             | "nav"
             | "loot"
+            | "door"
+            | "click"
             | "status"
             | "login"
             | "launch"
@@ -6129,6 +6258,8 @@ mod tests {
             "camp",
             "nav",
             "loot",
+            "door",
+            "click",
             "login",
             "launch",
             "profile",
@@ -6350,6 +6481,142 @@ mod tests {
         app.execute_scope_command(&["NonExistentToon"]);
         // Feedback should mention the unknown name
         assert!(app.status_message.contains("NonExistentToon") || !app.status_message.is_empty());
+    }
+
+    #[test]
+    fn focused_pids_follow_routing_scope_not_ui_group_filter() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Toon01"));
+        app.clients.push(test_client(2, "Toon07"));
+        app.active_group = Some(0);
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Toon07".into(),
+        };
+
+        assert_eq!(app.focused_pids(), vec![2]);
+        assert_eq!(app.focused_pid_count(), 1);
+    }
+
+    #[test]
+    fn parse_all_prefix_requires_a_separate_target_token() {
+        let app = App::new();
+
+        assert_eq!(
+            app.parse_all_prefix("all combat scope"),
+            Some("combat scope")
+        );
+        assert_eq!(
+            app.parse_all_prefix("all   combat scope"),
+            Some("combat scope")
+        );
+        assert_eq!(app.parse_all_prefix("all"), None);
+        assert_eq!(app.parse_all_prefix("allcombat"), None);
+    }
+
+    #[test]
+    fn temporary_routing_scope_restores_after_return_and_panic() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        let group_scope = RoutingScope::Group {
+            group_id: 1,
+            label: "Alpha".into(),
+        };
+
+        let label = app
+            .with_temporary_routing_scope(group_scope.clone(), |inner| inner.routing_scope.label());
+        assert_eq!(label, "G1 Alpha");
+        assert_eq!(app.routing_scope, RoutingScope::AllSession);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            app.with_temporary_routing_scope(group_scope, |_| panic!("boom"));
+        }));
+        assert!(result.is_err());
+        assert_eq!(app.routing_scope, RoutingScope::AllSession);
+    }
+
+    #[test]
+    fn routed_pids_for_all_scope_uses_all_clients_without_leaking_scope() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Toon01"));
+        app.clients.push(test_client(2, "Toon07"));
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Toon01".into(),
+        };
+
+        assert_eq!(
+            app.routed_pids_for_scope(&RoutingScope::AllSession),
+            vec![1, 2]
+        );
+        assert_eq!(
+            app.routing_scope,
+            RoutingScope::OneToon {
+                name: "Toon01".into()
+            }
+        );
+    }
+
+    #[test]
+    fn group_prefix_routes_non_slash_commands_through_temporary_scope() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.clients.push(test_client(1, "Toon01"));
+        app.clients.push(test_client(2, "Toon07"));
+        app.cmd_state.command_buffer = String::from("G1 combat scope");
+
+        app.execute_command(&mut orchestrator);
+
+        assert!(app.status_message.contains("Combat scope: G1"));
+        assert!(app.status_message.contains("focused 1 clients"));
+        assert_eq!(app.routing_scope, RoutingScope::AllSession);
+    }
+
+    #[test]
+    fn all_prefix_routes_non_slash_commands_through_temporary_scope() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.clients.push(test_client(1, "Toon01"));
+        app.clients.push(test_client(2, "Toon07"));
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Toon01".into(),
+        };
+        app.cmd_state.command_buffer = String::from("all combat scope");
+
+        app.execute_command(&mut orchestrator);
+
+        assert!(app.status_message.contains("Combat scope: All"));
+        assert!(app.status_message.contains("focused 2 clients"));
+        assert_eq!(
+            app.routing_scope,
+            RoutingScope::OneToon {
+                name: "Toon01".into()
+            }
+        );
+    }
+
+    #[test]
+    fn toon_prefix_routes_non_slash_commands_through_temporary_scope() {
+        use textquest_common::routing::RoutingScope;
+
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.clients.push(test_client(1, "Toon01"));
+        app.clients.push(test_client(2, "Toon07"));
+        app.cmd_state.command_buffer = String::from("Toon07 combat scope");
+
+        app.execute_command(&mut orchestrator);
+
+        assert!(app.status_message.contains("Combat scope: @Toon07"));
+        assert!(app.status_message.contains("focused 1 clients"));
+        assert_eq!(app.routing_scope, RoutingScope::AllSession);
     }
 
     #[test]
