@@ -9,6 +9,7 @@ import type {
   Player,
   CombatLogEntry,
   Alert,
+  AutoLootFilter,
   NavItem,
   Character,
   GroupTemplate,
