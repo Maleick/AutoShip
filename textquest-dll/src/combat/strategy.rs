@@ -67,6 +67,59 @@ impl CombatContext<'_> {
         self.extended_targets
             .and_then(ExtendedTargetList::pet_target_id)
     }
+
+    /// Build a [`PetStatus`] snapshot from the extended target list.
+    pub fn pet_status(&self) -> PetStatus {
+        PetStatus {
+            spawn_id: self.pet_spawn_id(),
+            target_id: self.pet_target_id(),
+        }
+    }
+}
+
+/// Snapshot of the local player's pet state, derived from the extended target list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PetStatus {
+    /// Spawn ID of the player's pet, or `None` if no pet is registered.
+    pub spawn_id: Option<u32>,
+    /// Spawn ID the pet is currently attacking, or `None` if the pet is idle.
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    /// Returns `true` if the player has an active pet.
+    pub fn has_pet(&self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    /// Returns `true` if the pet is already attacking `target_id`.
+    pub fn is_attacking(&self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
+
+/// Per-frame pet command requested by a [`ClassStrategy`].
+#[derive(Debug, Clone)]
+pub enum PetAction {
+    /// Send `/pet attack` + `/pet focus` on the current target.
+    Attack,
+    /// Target the pet and cast the given buff spell, then restore the original target.
+    Buff {
+        /// Spell to cast on the pet.
+        spell: SpellEntry,
+    },
+}
+
+impl PartialEq for PetAction {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Attack, Self::Attack) => true,
+            (Self::Buff { spell: a }, Self::Buff { spell: b }) => {
+                a.slot == b.slot && a.spell_id == b.spell_id
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -450,7 +503,7 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus};
+    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus, XTargetType};
 
     fn make_ctx_with_xtargets<'a>(
         player: &'a SpawnData,

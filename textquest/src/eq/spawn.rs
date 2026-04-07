@@ -229,7 +229,11 @@ pub fn read_spellbook(proc: &ProcessHandle, eq_base: u64) -> Vec<SpellSlot> {
         };
 
         build_spell_slots(
-            read_spell_slot_ids(proc, profile_ptr + profile::SPELL_BOOK, profile::SPELL_BOOK_SLOT_COUNT),
+            read_spell_slot_ids(
+                proc,
+                profile_ptr + profile::SPELL_BOOK,
+                profile::SPELL_BOOK_SLOT_COUNT,
+            ),
             |_| None,
         )
     }
@@ -556,7 +560,8 @@ where
     I: IntoIterator<Item = (usize, i32)>,
     F: FnMut(u32) -> Option<String>,
 {
-    slots.into_iter()
+    slots
+        .into_iter()
         .filter_map(|(slot, spell_id)| {
             let spell_id = u32::try_from(spell_id).ok().filter(|&id| id > 0)?;
             Some(SpellSlot {
@@ -568,12 +573,17 @@ where
         .collect()
 }
 
-fn read_spell_slot_ids(proc: &ProcessHandle, base_addr: usize, slot_count: usize) -> Vec<(usize, i32)> {
+fn read_spell_slot_ids(
+    proc: &ProcessHandle,
+    base_addr: usize,
+    slot_count: usize,
+) -> Vec<(usize, i32)> {
     let Ok(bytes) = proc.read_bytes(base_addr, slot_count * size_of::<i32>()) else {
         return Vec::new();
     };
 
-    bytes.chunks_exact(size_of::<i32>())
+    bytes
+        .chunks_exact(size_of::<i32>())
         .enumerate()
         .map(|(slot, chunk)| {
             (
@@ -948,7 +958,8 @@ mod tests {
     #[test]
     fn read_spell_slot_ids_decodes_little_endian_i32_values() {
         fn parse(bytes: &[u8]) -> Vec<(usize, i32)> {
-            bytes.chunks_exact(size_of::<i32>())
+            bytes
+                .chunks_exact(size_of::<i32>())
                 .enumerate()
                 .map(|(slot, chunk)| {
                     (

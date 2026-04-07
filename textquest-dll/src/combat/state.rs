@@ -22,7 +22,7 @@ use super::mana::ManaGovernor;
 use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
 use super::strategy::{
-    ClassStrategy, CombatContext, GroupMemberState, build_strategy, pet_attack_focused,
+    ClassStrategy, CombatContext, GroupMemberState, PetAction, build_strategy, pet_attack_focused,
     pet_back_off,
 };
 
@@ -113,6 +113,64 @@ fn item_action_key(item_name: &str) -> i32 {
         hash = hash.wrapping_mul(0x0100_0193);
     }
     (hash & 0x7FFF_FFFF) as i32
+}
+
+/// Plan a spell cast, resolving the gem slot to use given memorised spells.
+///
+/// - `preferred_slot`: the zero-based gem slot from the config/rotation entry,
+///   or `None` for rotation actions that don't specify a slot.
+/// - `spell_id`: the spell to cast (from `SpellEntry::spell_id`).
+/// - `memorized_spells`: slice of spell IDs currently loaded in gem slots
+///   (index 0 = gem 0).
+///
+/// Returns `None` only if `preferred_slot` is `Some` and the slot index is
+/// invalid (i.e. `normalize_gem_id` returns `None`).  In all other cases
+/// returns a valid `PlannedSpellCast`.
+fn plan_spell_cast(
+    preferred_slot: Option<u8>,
+    spell_id: i32,
+    memorized_spells: &[i32],
+) -> Option<PlannedSpellCast> {
+    if let Some(slot) = preferred_slot {
+        let gem = normalize_gem_id(slot)?;
+        let gem_idx = gem as usize;
+        // Check whether the spell is already in the preferred gem.
+        if memorized_spells.get(gem_idx).copied() == Some(spell_id) {
+            return Some(PlannedSpellCast {
+                gem_id: gem,
+                spell_id,
+                source: SpellCastSource::PreferredGem,
+            });
+        }
+        // Fall back to any other gem that has the spell.
+        if let Some(fallback) = memorized_spells.iter().position(|&id| id == spell_id) {
+            return Some(PlannedSpellCast {
+                gem_id: fallback as u8,
+                spell_id,
+                source: SpellCastSource::FallbackGem,
+            });
+        }
+        // Not memorised anywhere — cast by spell ID directly.
+        return Some(PlannedSpellCast {
+            gem_id: 0,
+            spell_id,
+            source: SpellCastSource::SpellIdDirect,
+        });
+    }
+    // No preferred slot: find the spell in any gem.
+    if let Some(fallback) = memorized_spells.iter().position(|&id| id == spell_id) {
+        return Some(PlannedSpellCast {
+            gem_id: fallback as u8,
+            spell_id,
+            source: SpellCastSource::FallbackGem,
+        });
+    }
+    // Not memorised — cast by spell ID.
+    Some(PlannedSpellCast {
+        gem_id: 0,
+        spell_id,
+        source: SpellCastSource::SpellIdDirect,
+    })
 }
 
 /// The main combat state machine for a single EQ character.
@@ -604,7 +662,7 @@ impl Combatant {
                     let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
                     self.state = CombatState::Casting {
-                        spell_slot: gem_id,
+                        spell_slot: cast_plan.gem_id,
                         target_id: selected_spell_target
                             .or_else(|| target.map(|t| t.spawn_id))
                             .unwrap_or(0),
@@ -1011,6 +1069,7 @@ impl Combatant {
                 self.gcd.consume();
                 self.state = CombatState::Casting {
                     spell_slot: gem_id,
+                    target_id: current_target_id.unwrap_or(0),
                     ticks_remaining: 20 + cast_delay,
                 };
                 true
@@ -1025,7 +1084,7 @@ mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
     use crate::combat::rotation;
-    use textquest_common::combat::CombatConfig;
+    use textquest_common::combat::{ActionType, CombatConfig};
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

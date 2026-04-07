@@ -1665,6 +1665,10 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(enabled, "SetBreakOnGm received");
             crate::nav::handle_command(crate::nav::NavCommand::SetBreakOnGm(enabled));
         }
+        Command::SetHeadingMode { mode } => {
+            tracing::info!(?mode, "SetHeadingMode received");
+            crate::nav::handle_command(crate::nav::NavCommand::SetHeadingMode(mode));
+        }
         Command::StickTo { config } => {
             tracing::info!(
                 hold = config.hold,

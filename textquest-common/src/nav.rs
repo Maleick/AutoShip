@@ -51,6 +51,33 @@ pub enum PauseReason {
     GmNearby,
 }
 
+/// Controls how the navigator writes heading updates to the player.
+///
+/// Mirrors the MQ2MoveUtils `/nav headsetting` surface:
+/// - `True`  — instant memory write to the heading field only.
+/// - `Loose` — smooth interpolation toward the target heading, capped to a
+///   maximum turn rate per game tick (most human-looking).
+/// - `Fast`  — instant memory write to both heading and speed-heading fields
+///   (current default; fastest alignment, most responsive).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum HeadingMode {
+    /// Instant heading snap — writes only the facing field.
+    True,
+    /// Smooth interpolated turn, capped at [`LOOSE_MAX_TURN_PER_TICK`] EQ
+    /// heading units per game tick.
+    Loose,
+    /// Instant heading snap — writes both the facing and speed-heading fields.
+    #[default]
+    Fast,
+}
+
+/// Maximum per-tick heading change applied in [`HeadingMode::Loose`].
+///
+/// EQ uses a 0–512 heading scale (512 units = 360°).  This constant limits
+/// the turn to ≈ 11.25° per tick, giving a visually smooth rotation while
+/// still converging within a few ticks for most angles.
+pub const LOOSE_MAX_TURN_PER_TICK: f32 = 16.0;
+
 /// A single point in 3D space with optional metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Waypoint {

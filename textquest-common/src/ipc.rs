@@ -464,6 +464,16 @@ pub enum Command {
         /// Whether break-on-GM should be active.
         enabled: bool,
     },
+    /// Set the heading update mode used during navigation.
+    ///
+    /// Mirrors MQ2MoveUtils `/nav headsetting true|loose|fast`:
+    /// - `True`  — instant snap (heading field only).
+    /// - `Loose` — smooth interpolated turn (most human-looking).
+    /// - `Fast`  — instant snap to both heading and speed-heading (default).
+    SetHeadingMode {
+        /// Heading mode to apply.
+        mode: crate::nav::HeadingMode,
+    },
     StickTo {
         /// Stick configuration including distance, hold, always, and id options.
         config: crate::nav::StickConfig,

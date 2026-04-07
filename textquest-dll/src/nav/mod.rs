@@ -14,7 +14,8 @@ use warp::TargetSample;
 use std::sync::Mutex;
 
 use textquest_common::nav::{
-    CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavStatus, StickConfig, Waypoint,
+    CampSpot, FollowConfig, HeadingMode, MoveToConfig, NavCampConfig, NavStatus, StickConfig,
+    Waypoint,
 };
 use textquest_common::types::SpawnData;
 
@@ -86,6 +87,7 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::MoveToAdvanced(config) => nav.move_to_advanced(config),
             NavCommand::SetAutopause(enabled) => nav.set_autopause(enabled),
             NavCommand::SetBreakOnGm(enabled) => nav.set_break_on_gm(enabled),
+            NavCommand::SetHeadingMode(mode) => nav.set_heading_mode(mode),
         }
     }
 }
@@ -147,4 +149,6 @@ pub enum NavCommand {
     SetAutopause(bool),
     /// Enable or disable break-on-GM safety halt.
     SetBreakOnGm(bool),
+    /// Set the heading update mode (true / loose / fast).
+    SetHeadingMode(HeadingMode),
 }
