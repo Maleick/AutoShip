@@ -146,6 +146,49 @@ impl ExtendedTargetList {
             .count()
     }
 
+    /// Return active extended-target spawn IDs that represent the group's
+    /// current primary kill target(s), not CC adds.
+    pub fn primary_target_spawn_ids(&self) -> Vec<u32> {
+        self.slots
+            .iter()
+            .filter(|s| {
+                s.is_active()
+                    && matches!(
+                        s.slot_type,
+                        XTargetType::GroupTanksTarget
+                            | XTargetType::GroupAssistTarget
+                            | XTargetType::GroupPullerTarget
+                            | XTargetType::RaidAssist1Target
+                            | XTargetType::RaidAssist2Target
+                            | XTargetType::RaidAssist3Target
+                    )
+            })
+            .map(|s| s.spawn_id)
+            .collect()
+    }
+
+    /// Return active extended-target spawn IDs that look like CC adds.
+    ///
+    /// These are auto-haters that are not also referenced by the group's
+    /// primary-target slots, which keeps CC helpers from selecting the mob the
+    /// group is already burning down.
+    pub fn cc_add_spawn_ids(&self) -> Vec<u32> {
+        let primary_targets = self.primary_target_spawn_ids();
+        self.slots
+            .iter()
+            .filter(|s| {
+                s.is_active()
+                    && s.slot_type.is_auto_hater()
+                    && !primary_targets.contains(&s.spawn_id)
+            })
+            .map(|s| s.spawn_id)
+            .collect()
+    }
+
+    pub fn first_cc_add_spawn_id(&self) -> Option<u32> {
+        self.cc_add_spawn_ids().into_iter().next()
+    }
+
     pub fn get_by_type(&self, slot_type: XTargetType) -> Option<&ExtendedTargetSlot> {
         self.slots
             .iter()
@@ -852,6 +895,83 @@ mod tests {
     fn combat_status_idle_variant() {
         let status = CombatStatus::Idle;
         assert!(matches!(status, CombatStatus::Idle));
+    }
+
+    #[test]
+    fn primary_target_spawn_ids_filters_group_target_slots() {
+        let list = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "add".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 200,
+                    name: "main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::RaidAssist2Target,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 300,
+                    name: "raid_main".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::SpecificNpc,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 400,
+                    name: "manual".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+
+        assert_eq!(list.primary_target_spawn_ids(), vec![200, 300]);
+    }
+
+    #[test]
+    fn cc_add_spawn_ids_exclude_primary_target_duplicates() {
+        let list = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "main_dup".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupAssistTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 100,
+                    name: "main_dup".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 200,
+                    name: "add_1".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 300,
+                    name: "add_2".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::DifferentZone,
+                    spawn_id: 400,
+                    name: "remote".into(),
+                },
+            ],
+            auto_add_haters: true,
+        };
+
+        assert_eq!(list.cc_add_spawn_ids(), vec![200, 300]);
+        assert_eq!(list.first_cc_add_spawn_id(), Some(200));
     }
 
     #[test]
