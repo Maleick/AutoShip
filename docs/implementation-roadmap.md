@@ -17,7 +17,7 @@ This document is the source of truth for roadmap order, milestone gates, evidenc
 | M6        | Web Dashboard           | **COMPLETE** | TUI enhancements, axum + React/Vite/Tailwind SPA, fleet metrics   |
 | M7–M11    | Future                  | Planned      | Zoning, Orchestrator, RL, Economy, Soul Engine                     |
 
-_Last updated: 2026-04-07. ~1001 commits, ~2584 tests across 4 crates._
+_Last updated: 2026-04-07. ~1284 commits, ~2944 tests across 4 crates._
 
 ## Historical Base
 
