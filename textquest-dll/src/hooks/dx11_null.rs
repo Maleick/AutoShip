@@ -844,14 +844,7 @@ mod inner {
                 .map_err(|e| format!("Map failed: {e}"))?;
         }
 
-        let pid = std::process::id();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_millis() as u64);
-        let path = std::env::temp_dir()
-            .join("textquest")
-            .join(format!("screenshot_{}_{}.bmp", pid, timestamp));
-        let path = path.to_string_lossy().into_owned();
+        let path = create_screenshot_path()?;
 
         let write_result = unsafe {
             write_bmp(
@@ -863,7 +856,32 @@ mod inner {
             )
         };
         unsafe { context.Unmap(&staging, 0) };
-        write_result.map(|()| path)
+        write_result.map(|()| path.to_string_lossy().into_owned())
+    }
+
+    fn create_screenshot_path() -> Result<std::path::PathBuf, String> {
+        let dir = std::env::temp_dir().join("textquest");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("create screenshot dir: {e}"))?;
+
+        let pid = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64);
+
+        for _ in 0..8 {
+            let mut random = [0u8; 8];
+            getrandom::getrandom(&mut random).map_err(|e| format!("random filename: {e}"))?;
+            let suffix = random
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>();
+            let path = dir.join(format!("screenshot_{}_{}_{}.bmp", pid, timestamp, suffix));
+            if !path.exists() {
+                return Ok(path);
+            }
+        }
+
+        Err("failed to allocate unique screenshot filename".to_string())
     }
 
     /// Write BGRA pixel data to a 24-bit BMP file.
@@ -871,7 +889,7 @@ mod inner {
     /// # Safety
     /// `data` must point to a valid pixel buffer with at least `height * row_pitch` bytes.
     unsafe fn write_bmp(
-        path: &str,
+        path: &std::path::Path,
         width: u32,
         height: u32,
         row_pitch: u32,
@@ -910,7 +928,11 @@ mod inner {
         let pixel_stride = width_usize.checked_mul(4).ok_or("invalid BGRA row width")?;
 
         let mut file = std::io::BufWriter::new(
-            std::fs::File::create(path).map_err(|e| format!("create file: {e}"))?,
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .map_err(|e| format!("create file: {e}"))?,
         );
 
         file.write_all(b"BM").map_err(|e| format!("write: {e}"))?;
