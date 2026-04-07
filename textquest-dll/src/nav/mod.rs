@@ -6,6 +6,7 @@ pub mod stick;
 pub mod stuck;
 pub mod warp;
 pub mod waypoint;
+pub mod waypoint_store;
 pub mod zone_graph;
 
 pub use state::Navigator;
