@@ -118,6 +118,8 @@ impl CombatCoordinator {
                     Command::CastSpell {
                         spell_slot,
                         target_id: Some(target_id),
+                        kill: false,
+                        recast: 0,
                     },
                 ));
             }
@@ -505,9 +507,13 @@ mod tests {
             Command::CastSpell {
                 spell_slot,
                 target_id,
+                kill,
+                recast,
             } => {
                 assert_eq!(*spell_slot, 8);
                 assert_eq!(*target_id, Some(99));
+                assert!(!kill);
+                assert_eq!(*recast, 0);
             }
             _ => panic!("Expected CastSpell, got {:?}", cmds[1].1),
         }

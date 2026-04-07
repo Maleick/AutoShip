@@ -85,7 +85,8 @@ That makes it useful for UI validation, but it does not prove live movement corr
 ### Current behavior
 
 - MQ2Nav-style navmesh support and Detour integration are part of the repo today.
-- Straight-line fallback is deliberate and should be expected when mesh or live state data is unavailable.
+- Straight-line fallback is deliberate only for navmesh data gaps or unavailable mesh data.
+- If a mesh exists but no safe corridor can be planned, TextQuest now reports a blocked route and recommends replanning instead of taking a direct shortcut through walls.
 
 ### Validation notes
 

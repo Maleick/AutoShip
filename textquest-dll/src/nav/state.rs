@@ -109,22 +109,13 @@ fn has_gm_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
     })
 }
 
-/// Detects an HP drop (break-on-hit trigger).
-///
-/// Updates `last_hp` with the new sample and returns `true` when:
-/// - A previous sample exists AND
-/// - The new sample is `Some` AND
-/// - The new HP value is strictly less than the last recorded value.
-///
-/// Returns `false` on the first call (no baseline), on HP recovery, or when
-/// the new sample is `None` (no data available).
-fn break_on_hit_triggered(last_hp: &mut Option<i64>, new_hp: Option<i64>) -> bool {
-    let Some(current) = new_hp else {
+fn break_on_hit_triggered(last_hp_current: &mut Option<i64>, current_hp: Option<i64>) -> bool {
+    let Some(current_hp) = current_hp else {
         return false;
     };
-    let triggered = last_hp.is_some_and(|prev| current < prev);
-    *last_hp = Some(current);
-    triggered
+    let took_damage = last_hp_current.is_some_and(|previous_hp| current_hp < previous_hp);
+    *last_hp_current = Some(current_hp);
+    took_damage
 }
 
 impl Navigator {
@@ -394,7 +385,7 @@ impl Navigator {
         nearby: &[SpawnData],
         target_sample: Option<&TargetSample>,
     ) {
-        let summon_displacement = if self.should_break_moveto_on_summon() {
+        let summon_displacement = if self.should_break_on_summon() {
             self.current_tick_displacement()
         } else {
             None
@@ -406,11 +397,25 @@ impl Navigator {
         }
 
         if summon_displacement.is_some_and(|distance| distance > SUMMON_DISTANCE_THRESHOLD) {
-            tracing::info!(
-                displacement = summon_displacement,
-                "MoveToAdvanced: break_on_summon triggered"
-            );
-            self.stop_moveto();
+            match self.state {
+                State::Following { .. } => {
+                    self.disengage_follow(
+                        "Follow disengaged — summon/warp guard triggered on local player",
+                    );
+                }
+                State::Sticking => {
+                    self.disengage_stick(
+                        "Stick disengaged — summon/warp guard triggered on local player",
+                    );
+                }
+                _ => {
+                    tracing::info!(
+                        displacement = summon_displacement,
+                        "MoveToAdvanced: break_on_summon triggered"
+                    );
+                    self.stop_moveto();
+                }
+            }
             return;
         }
 
@@ -420,12 +425,27 @@ impl Navigator {
         } else {
             match self.state {
                 State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
+                State::Following { ref config, .. } => self
+                    .warp
+                    .update(find_follow_target_sample(nearby, &config.leader_name).as_ref()),
+                State::Sticking => {
+                    let stick_sample = self.stick.target_sample(current_target, nearby);
+                    self.warp.update(target_sample.or(stick_sample.as_ref()))
+                }
                 _ => self.warp.update(target_sample),
             }
         };
 
         match warp_action {
             WarpAction::Pause => {
+                if matches!(self.state, State::Following { .. }) {
+                    self.disengage_follow("Follow disengaged — warp guard triggered");
+                    return;
+                }
+                if matches!(self.state, State::Sticking) {
+                    self.disengage_stick("Stick disengaged — warp guard triggered");
+                    return;
+                }
                 if self.should_break_moveto_on_warp() {
                     tracing::info!("MoveToAdvanced: break_on_warp triggered");
                     self.stop_moveto();
@@ -619,12 +639,12 @@ impl Navigator {
                 self.state = State::Idle;
             }
             StickTickResult::TargetLost => {
-                // `always` mode: stay armed, stop movement.
                 self.controller.stop_forward();
                 self.controller.stop_back();
-                // Keep cached values from last known contact.
-                if !self.stick.is_active() {
-                    self.state = State::Idle;
+                if self.stick.keep_armed_on_target_loss() {
+                    tracing::debug!("Stick target lost — waiting for next valid target");
+                } else {
+                    self.disengage_stick("Stick disengaged — target lost");
                 }
             }
             StickTickResult::InRange {
@@ -741,31 +761,17 @@ impl Navigator {
         let dist = current_pos.distance_2d(&destination);
         self.cached_distance = dist;
 
-        if config.break_on_hit {
-            if let Some(current_hp) = self.controller.read_hp_current() {
-                let took_damage = self
-                    .last_moveto_hp
-                    .is_some_and(|previous_hp| current_hp < previous_hp);
-                self.last_moveto_hp = Some(current_hp);
-                if took_damage {
-                    tracing::info!(current_hp, "MoveToAdvanced: break_on_hit triggered");
-                    self.stop_moveto();
-                    return;
-                }
-            }
+        if config.break_on_hit
+            && break_on_hit_triggered(&mut self.last_moveto_hp, self.controller.read_hp_current())
+        {
+            tracing::info!("MoveToAdvanced: break_on_hit triggered");
+            self.stop_moveto();
+            return;
         }
 
         // Break-on-aggro: hostile NPC moving toward player within aggro radius.
         if config.break_on_aggro && has_hostile_nearby(nearby, &current_pos) {
             tracing::info!("MoveToAdvanced: break_on_aggro triggered");
-            self.stop_moveto();
-            return;
-        }
-
-        if config.break_on_hit
-            && break_on_hit_triggered(&mut self.last_moveto_hp, self.controller.read_hp_current())
-        {
-            tracing::info!("MoveToAdvanced: break_on_hit triggered");
             self.stop_moveto();
             return;
         }
@@ -843,18 +849,22 @@ impl Navigator {
             .is_some_and(|config| config.pause_on_warp)
     }
 
-    fn should_break_moveto_on_summon(&self) -> bool {
+    fn should_break_on_summon(&self) -> bool {
         match self.state {
+            State::Following { .. } | State::Sticking => true,
             State::MovingTo => self
                 .moveto_config
                 .as_ref()
                 .is_some_and(|config| config.break_on_summon),
             State::Paused(PauseReason::Warp) => {
-                matches!(self.pre_pause_state, Some(State::MovingTo))
+                matches!(
+                    self.pre_pause_state,
+                    Some(State::Following { .. } | State::Sticking)
+                ) || (matches!(self.pre_pause_state, Some(State::MovingTo))
                     && self
                         .moveto_config
                         .as_ref()
-                        .is_some_and(|config| config.break_on_summon)
+                        .is_some_and(|config| config.break_on_summon))
             }
             _ => false,
         }
@@ -893,6 +903,16 @@ impl Navigator {
     ///   subject to return policy gates (`return_no_aggro`).
     /// - If currently returning and distance <= `follow_distance`: stop, hold position.
     fn tick_following(&mut self, nearby: &[SpawnData]) {
+        if let State::Following {
+            ref config,
+            ref mut anchor,
+            ..
+        } = self.state
+            && let Some(sample) = find_follow_target_sample(nearby, &config.leader_name)
+        {
+            *anchor = sample.position;
+        }
+
         // Extract values without holding a mutable borrow on self.state.
         let (leash_distance, follow_distance, anchor, currently_returning, return_no_aggro) =
             if let State::Following {
@@ -977,40 +997,33 @@ impl Navigator {
         }
     }
 
-    /// Update the follow configuration of an active follow session without
-    /// restarting navigation.  Typically used to tune return-policy options
-    /// (`min_delay_ms`, `max_delay_ms`, `return_no_aggro`, `return_not_looting`)
-    /// at runtime via `/makecamp mindelay` / `returnnoaggro` etc.
-    ///
-    /// If not currently in follow mode this is a no-op (the caller should start
-    /// a new session with `follow_player` instead).
-    pub fn update_follow_config(&mut self, new_config: FollowConfig) {
-        if let State::Following { ref mut config, .. } = self.state {
-            tracing::info!(
-                leader = %new_config.leader_name,
-                follow_dist = new_config.follow_distance,
-                leash_dist = new_config.leash_distance,
-                min_delay_ms = new_config.min_delay_ms,
-                max_delay_ms = new_config.max_delay_ms,
-                return_no_aggro = new_config.return_no_aggro,
-                return_not_looting = new_config.return_not_looting,
-                "Updating follow config"
-            );
-            *config = new_config;
-        }
+    fn disengage_follow(&mut self, message: &str) {
+        self.controller.stop_forward();
+        self.controller.stop_back();
+        self.queue.clear();
+        self.stuck.reset();
+        self.warp.reset();
+        self.pre_pause_state = None;
+        self.state = State::Idle;
+        tracing::warn!(%message);
+        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+            success: false,
+            message: message.to_string(),
+        });
     }
 
-    /// Apply a mutation to the return-policy fields of an active follow config.
-    ///
-    /// Allows individual fields to be changed without replacing the whole config.
-    /// If not currently in follow mode the closure is never called.
-    pub fn mutate_follow_config<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut FollowConfig),
-    {
-        if let State::Following { ref mut config, .. } = self.state {
-            f(config);
-        }
+    fn disengage_stick(&mut self, message: &str) {
+        self.controller.stop_forward();
+        self.controller.stop_back();
+        self.stick.stop();
+        self.warp.reset();
+        self.pre_pause_state = None;
+        self.state = State::Idle;
+        tracing::warn!(%message);
+        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+            success: false,
+            message: message.to_string(),
+        });
     }
 
     /// Update velocity cache based on position delta.
@@ -1023,9 +1036,34 @@ impl Navigator {
     }
 }
 
+fn find_follow_target_sample(nearby: &[SpawnData], leader_name: &str) -> Option<TargetSample> {
+    nearby
+        .iter()
+        .find(|spawn| {
+            spawn.displayed_name.eq_ignore_ascii_case(leader_name)
+                || spawn.name.eq_ignore_ascii_case(leader_name)
+        })
+        .map(|spawn| TargetSample {
+            id: spawn.spawn_id,
+            position: Waypoint::new(spawn.x, spawn.y, spawn.z),
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use textquest_common::nav::StickConfig;
+
+    fn follow_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnData {
+        SpawnData {
+            spawn_id: id,
+            name: name.to_string(),
+            displayed_name: name.to_string(),
+            x,
+            y,
+            ..SpawnData::default()
+        }
+    }
 
     #[test]
     fn break_on_hit_triggers_on_hp_drop() {
@@ -1056,6 +1094,87 @@ mod tests {
         let mut last_hp_current = None;
         assert!(!break_on_hit_triggered(&mut last_hp_current, Some(100)));
         assert_eq!(last_hp_current, Some(100));
+    }
+
+    #[test]
+    fn stick_target_loss_disengages_without_always() {
+        let mut nav = Navigator::new(0, 1);
+        nav.stick_to(StickConfig::default(), Some(42));
+
+        nav.tick(None, &[], None);
+
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn stick_target_loss_stays_active_with_always() {
+        let mut nav = Navigator::new(0, 1);
+        let config = StickConfig {
+            always: true,
+            ..StickConfig::default()
+        };
+        nav.stick_to(config, Some(42));
+
+        nav.tick(None, &[], None);
+
+        assert!(matches!(nav.status(), NavStatus::Sticking { .. }));
+    }
+
+    #[test]
+    fn follow_updates_anchor_from_matching_spawn() {
+        let mut nav = Navigator::new(0, 1);
+        nav.follow_player(
+            FollowConfig::new("Leader", 20.0, 60.0),
+            Waypoint::new(0.0, 0.0, 0.0),
+        );
+
+        nav.tick(None, &[follow_spawn(7, "Leader", 25.0, 0.0)], None);
+
+        match nav.status() {
+            NavStatus::Following {
+                distance_to_anchor, ..
+            } => assert!((distance_to_anchor - 25.0).abs() < f32::EPSILON),
+            other => panic!("expected Following status, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stick_disengages_on_warp_guard() {
+        let mut nav = Navigator::new(0, 1);
+        let target = follow_spawn(9, "a_mob", 10.0, 0.0);
+        nav.stick_to(StickConfig::default(), Some(target.spawn_id));
+
+        let stable = TargetSample {
+            id: target.spawn_id,
+            position: Waypoint::new(10.0, 0.0, 0.0),
+        };
+        nav.tick(Some(&target), std::slice::from_ref(&target), Some(&stable));
+        assert!(matches!(nav.status(), NavStatus::Sticking { .. }));
+
+        let warped_target = follow_spawn(9, "a_mob", 200.0, 0.0);
+        let warped = TargetSample {
+            id: warped_target.spawn_id,
+            position: Waypoint::new(200.0, 0.0, 0.0),
+        };
+        nav.tick(
+            Some(&warped_target),
+            std::slice::from_ref(&warped_target),
+            Some(&warped),
+        );
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn follow_disengages_on_summon_guard() {
+        let mut nav = Navigator::new(0, 1);
+        nav.follow_player(
+            FollowConfig::new("Leader", 20.0, 60.0),
+            Waypoint::new(0.0, 0.0, 0.0),
+        );
+        nav.prev_position = Some(Waypoint::new(100.0, 0.0, 0.0));
+        nav.tick(None, &[], None);
+
+        assert!(matches!(nav.status(), NavStatus::Idle));
     }
 
     #[test]

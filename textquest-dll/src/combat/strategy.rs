@@ -24,6 +24,45 @@ use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PetStatus {
+    pub spawn_id: Option<u32>,
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    pub fn has_pet(self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    pub fn is_attacking(self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PetAction {
+    Attack,
+    Buff { spell: SpellEntry },
+}
+
+impl PartialEq for PetAction {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Attack, Self::Attack) => true,
+            (Self::Buff { spell: lhs }, Self::Buff { spell: rhs }) => {
+                lhs.slot == rhs.slot
+                    && lhs.spell_id == rhs.spell_id
+                    && lhs.name == rhs.name
+                    && (lhs.min_mana_pct - rhs.min_mana_pct).abs() < f32::EPSILON
+                    && lhs.priority == rhs.priority
+                    && lhs.is_aoe == rhs.is_aoe
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
 pub struct CombatContext<'a> {
     pub player: &'a SpawnData,
@@ -68,10 +107,6 @@ impl CombatContext<'_> {
             .and_then(ExtendedTargetList::pet_target_id)
     }
 
-    /// Summarize pet state from extended target slots.
-    ///
-    /// Returns a `PetStatus` with the pet's spawn ID and its current target.
-    /// Class strategies use this to decide whether to issue pet commands.
     pub fn pet_status(&self) -> PetStatus {
         PetStatus {
             spawn_id: self.pet_spawn_id(),
@@ -80,39 +115,26 @@ impl CombatContext<'_> {
     }
 }
 
-/// Snapshot of the player's pet state derived from extended target slots.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PetStatus {
-    /// Spawn ID of the player's pet, if one is present in the zone.
     pub spawn_id: Option<u32>,
-    /// Spawn ID of the target the pet is currently attacking, if any.
     pub target_id: Option<u32>,
 }
 
 impl PetStatus {
-    /// Returns `true` if the player has a live pet in the zone.
-    #[must_use]
-    pub fn has_pet(&self) -> bool {
+    pub fn has_pet(self) -> bool {
         self.spawn_id.is_some()
     }
 
-    /// Returns `true` if the pet is already attacking `target_id`.
-    #[must_use]
-    pub fn is_attacking(&self, target_id: u32) -> bool {
+    pub fn is_attacking(self, target_id: u32) -> bool {
         self.target_id == Some(target_id)
     }
 }
 
-/// Pet-management action returned by a class strategy's `pet_action()`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PetAction {
-    /// Send the pet to attack the current target.
     Attack,
-    /// Cast a pet-targeted buff (e.g., Regrowth of the Grove).
-    Buff {
-        /// Spell entry describing the buff to cast.
-        spell: textquest_common::combat::SpellEntry,
-    },
+    Buff { spell: SpellEntry },
 }
 
 #[derive(Debug, Clone)]

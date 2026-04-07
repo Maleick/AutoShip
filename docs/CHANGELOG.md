@@ -11,6 +11,7 @@ All notable changes to TextQuest are documented in this file.
 - **`click_button_for_phase()` helper** — Phase-aware button clicking that selects direct vtable click (eqmain) vs game loop queue (eqgame) based on context, preventing the recurring "queued click never drains" bug class.
 - **Screen-state tracing** — Login phases log which SIDL windows are visible (connect, serverselect, yesnodialog, okdialog) for diagnostic purposes.
 - **InteractTarget command** — `CEverQuest::RightClickedOnPlayer` for NPC interaction via IPC.
+- **MQ2-style `/door` and `/click right target` slash handling** — rewrites `/door` to `/doortarget` and routes `/click right target` through the DLL interaction path.
 - **Accounts groups 3-6** — 24 placeholder accounts in `accounts.toml` for 36-box setup.
 
 ### Fixed
