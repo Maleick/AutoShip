@@ -816,6 +816,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         }
     }
 
+    // ─── Named persistent markers ────────────────────────────────────────
+    draw_named_markers(app, &to_grid, w as i32, h as i32, &mut grid);
+
     // ─── Spawn highlights overlay ────────────────────────────────────────
     if !app.map_state.highlights.is_empty() {
         for spawn in &app.spawns {
@@ -913,6 +916,14 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                         Span::raw(" │ "),
                         Span::styled("▦ ", Style::default().fg(t.text_secondary)),
                         Span::styled("Mesh", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
+                if !app.map_state.named_markers.is_empty() {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("◆ ", Style::default().fg(Color::Cyan)),
+                        Span::styled("Mkr", Style::default().fg(t.text_muted)),
                     ]);
                 }
 
@@ -2010,6 +2021,29 @@ fn draw_radius_circle(
     }
 }
 
+fn draw_named_markers(
+    app: &App,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: i32,
+    h: i32,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    for marker in &app.map_state.named_markers {
+        let (mc, mr) = to_grid(-marker.y, -marker.x);
+        if mc < 0 || mc >= w || mr < 0 || mr >= h {
+            continue;
+        }
+        grid[mr as usize][mc as usize] = ('◆', Color::Cyan);
+        let label = marker.display_label();
+        for (i, ch) in label.chars().take(12).enumerate() {
+            let col = mc + 2 + i as i32;
+            if col >= 0 && col < w {
+                grid[mr as usize][col as usize] = (ch, Color::Cyan);
+            }
+        }
+    }
+}
+
 fn draw_radius_overlays(
     app: &App,
     to_grid: &impl Fn(f32, f32) -> (i32, i32),
@@ -2068,8 +2102,11 @@ mod tests {
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
     use crate::tui::app::ClientState;
     use crate::tui::state::MapRadiusOverlay;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::layout::Rect;
     use ratatui::style::Color;
-    use ratatui::{Terminal, backend::TestBackend, layout::Rect};
+    use ratatui::{Terminal, backend::TestBackend};
 
     fn test_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnInfo {
         SpawnInfo {

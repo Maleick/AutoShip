@@ -274,6 +274,12 @@ pub struct SpellSlot {
 }
 
 impl SpellSlot {
+    /// Returns `true` when the slot is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.spell_id == 0
+    }
+
     /// Human-readable label for the spell in this slot.
     #[must_use]
     pub fn display_name(&self) -> String {
@@ -684,23 +690,27 @@ mod tests {
     }
 
     #[test]
-    fn spell_slot_empty_when_spell_id_zero() {
-        let empty = SpellSlot {
-            slot: 0,
-            spell_id: 0,
-            spell_name: None,
-        };
-        let active = SpellSlot {
-            slot: 1,
-            spell_id: 123,
-            spell_name: None,
-        };
-        assert_eq!(empty.spell_id, 0);
-        assert_ne!(active.spell_id, 0);
+    fn spell_book_entry_empty_detection() {
+        assert!(
+            SpellSlot {
+                slot: 0,
+                spell_id: 0,
+                spell_name: None,
+            }
+            .is_empty()
+        );
+        assert!(
+            !SpellSlot {
+                slot: 1,
+                spell_id: 123,
+                spell_name: None,
+            }
+            .is_empty()
+        );
     }
 
     #[test]
-    fn spell_slot_display_name_prefers_resolved_name_for_memorized_spell() {
+    fn memorized_spell_display_name_prefers_resolved_name() {
         let named = SpellSlot {
             slot: 0,
             spell_id: 123,
@@ -712,8 +722,10 @@ mod tests {
             spell_name: None,
         };
 
-        assert_eq!(named.display_name(), "Complete Heal");
-        assert_eq!(unnamed.display_name(), "Spell 456");
+        assert_eq!(
+            spawn.current_spellset_lines(2),
+            vec![String::from("G1 Complete Heal  G2 Spell 456")]
+        );
     }
 
     #[test]
