@@ -113,11 +113,18 @@ All items in this document are **Research-backed** (see `Research-JMB-Relay-Comp
 | `:scope` command | Done | `textquest/src/tui/app.rs` |
 | `:session` command | Done | `textquest/src/tui/app.rs` |
 | Cross-client control model doc | Done | this file |
+| Slot lifecycle badges in TUI overview | Done | `textquest/src/tui/ui/dashboard.rs` |
+| Launch profiles and session presets | Done | `textquest/src/tui/client.rs`, `dashboard.rs`, `app.rs` |
+| `focused_pids()` honours `OneToon` scope | Done | `textquest/src/tui/app.rs` |
+| `routing_scope` + `scope_pids` in Orchestrator | Done | `textquest/src/orchestrator.rs` |
+| Camp-loop dispatch filtered by routing scope | Done | `textquest/src/orchestrator.rs` |
+| Scope synced App → Orchestrator each tick | Done | `textquest/src/tui/run.rs` |
 
 ## Follow-on Slices
 
-These are research-backed candidates for the next M8 checkpoint batch:
+M8 initial slices are complete.  Research-backed candidates for future M8 or M9 work:
 
-- Expose slot lifecycle states in the TUI overview panel (per-slot `SlotLifecycle` badge).
-- Add launch profiles and session presets to the launcher and TUI (see JMB comparison section "Session-shell concepts worth translating").
-- Promote `routing_scope` into the Orchestrator so camp-loop commands respect the same scope abstraction as TUI commands.
+- Surface `routing_scope` label in the TUI status bar so the operator always sees the active dispatch target.
+- Add `:scope` tab-completion for connected character names.
+- Wire `scope_pids` into the Orchestrator's sell-cycle and vendor dispatches for full scope coverage.
+- Evaluate whether `SlotLifecycle` state should gate camp-loop dispatch (e.g., skip `Recovering` or `Blocked` slots).
