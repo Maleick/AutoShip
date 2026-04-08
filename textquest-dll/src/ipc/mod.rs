@@ -117,6 +117,12 @@ pub fn publish_state(frame: &SharedStateFrame) {
 /// Buffered responses to send back to the orchestrator on the next pipe write.
 static PENDING_RESPONSES: OnceLock<Mutex<Vec<Response>>> = OnceLock::new();
 
+/// Dedicated buffer for chat messages captured by the `dsp_chat` HWBP hook.
+///
+/// Kept separate from `PENDING_RESPONSES` so that `PollPackets` does not consume
+/// chat messages and `PollChat` does not consume packet events.
+static PENDING_CHAT: OnceLock<Mutex<Vec<textquest_common::ipc::ChatMessageInfo>>> = OnceLock::new();
+
 /// Enqueue a response to be sent to the orchestrator.
 /// Called from the game loop thread (e.g., login FSM phase updates).
 pub fn send_response(response: Response) {
@@ -126,9 +132,72 @@ pub fn send_response(response: Response) {
     }
 }
 
+/// Enqueue a captured chat message into the dedicated chat buffer.
+///
+/// Called from the `dsp_chat` HWBP callback on every in-game chat event.
+/// Messages stored here are returned by `Command::PollChat` / `Response::ChatBatch`.
+pub fn push_chat_message(text: String, color: i32, timestamp_ms: u64) {
+    let pending = PENDING_CHAT.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(mut queue) = pending.lock() {
+        queue.push(textquest_common::ipc::ChatMessageInfo {
+            text,
+            color,
+            timestamp_ms,
+        });
+    }
+}
+
 /// Drain pending responses. Called by the IPC listener thread.
 pub fn drain_responses() -> Vec<Response> {
     let Some(pending) = PENDING_RESPONSES.get() else {
+        return Vec::new();
+    };
+    let Ok(mut queue) = pending.lock() else {
+        return Vec::new();
+    };
+    std::mem::take(&mut *queue)
+}
+
+/// Drain only `PacketEvent` responses from `PENDING_RESPONSES`, leaving all other
+/// response variants (e.g. `NavSignals`, `ContainerSlots`) intact in the queue.
+///
+/// This prevents `PollPackets` from silently discarding unrelated queued responses.
+pub fn drain_packet_responses() -> Vec<textquest_common::ipc::PacketEventInfo> {
+    let Some(pending) = PENDING_RESPONSES.get() else {
+        return Vec::new();
+    };
+    let Ok(mut queue) = pending.lock() else {
+        return Vec::new();
+    };
+    let mut packet_events = Vec::new();
+    let mut remaining = Vec::new();
+    for response in std::mem::take(&mut *queue) {
+        match response {
+            Response::PacketEvent {
+                client_id,
+                opcode,
+                direction,
+                timestamp_ms,
+                payload_size,
+            } => {
+                packet_events.push(textquest_common::ipc::PacketEventInfo {
+                    client_id,
+                    opcode,
+                    direction,
+                    timestamp_ms,
+                    payload_size,
+                });
+            }
+            _ => remaining.push(response),
+        }
+    }
+    *queue = remaining;
+    packet_events
+}
+
+/// Drain pending chat messages. Called by the IPC listener for `Command::PollChat`.
+pub fn drain_chat_messages() -> Vec<textquest_common::ipc::ChatMessageInfo> {
+    let Some(pending) = PENDING_CHAT.get() else {
         return Vec::new();
     };
     let Ok(mut queue) = pending.lock() else {
@@ -277,30 +346,23 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     continue;
                 }
 
-                // Respond to PollPackets inline — drain accumulated packet events.
+                // Respond to PollPackets inline — drain only packet events.
+                // Uses drain_packet_responses() so other queued responses are preserved.
                 if matches!(&cmd, Command::PollPackets) {
-                    let pending = drain_responses();
-                    let events: Vec<textquest_common::ipc::PacketEventInfo> = pending
-                        .into_iter()
-                        .filter_map(|r| match r {
-                            Response::PacketEvent {
-                                client_id,
-                                opcode,
-                                direction,
-                                timestamp_ms,
-                                payload_size,
-                            } => Some(textquest_common::ipc::PacketEventInfo {
-                                client_id,
-                                opcode,
-                                direction,
-                                timestamp_ms,
-                                payload_size,
-                            }),
-                            _ => None,
-                        })
-                        .collect();
+                    let events = drain_packet_responses();
                     let _ = listener.respond(&IpcResponse::echo(
                         Response::PacketBatch { events },
+                        correlation_id,
+                    ));
+                    listener.disconnect();
+                    continue;
+                }
+
+                // Respond to PollChat inline — drain accumulated chat messages.
+                if matches!(&cmd, Command::PollChat) {
+                    let messages = drain_chat_messages();
+                    let _ = listener.respond(&IpcResponse::echo(
+                        Response::ChatBatch { messages },
                         correlation_id,
                     ));
                     listener.disconnect();
