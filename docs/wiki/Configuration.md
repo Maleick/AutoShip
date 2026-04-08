@@ -8,6 +8,7 @@
 | `config/accounts.toml` | Account and group-launch metadata |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
 | `config/classes/*.toml` | Per-class combat and ability config |
+| `config/toons/*.toml` | Per-toon combat action overrides for the injected DLL |
 | `config/hvt_watchlist.toml` | High-value target watchlist |
 | `config/named_mobs/*.toml` | Named spawn definitions by zone |
 | `config/maps/*.txt` | Brewall-style zone map data |
@@ -88,6 +89,19 @@ Current repo coverage includes classes such as:
 - shaman
 - warrior
 - wizard
+
+## Per-Toon Combat Configs
+
+`config/toons/<toon>.toml` can override the injected DLL combat action tables for one specific character.
+
+Supported sections are:
+
+- `[[spells]]`
+- `[[disciplines]]`
+- `[[holyshit_rules]]`
+- `[[rotation_groups]]` with nested `[[rotation_groups.entries]]`
+
+These files are optional. When no per-toon file exists, TextQuest keeps using the existing built-in class strategy and any already-supplied combat config data.
 
 ## Maps and Offsets
 

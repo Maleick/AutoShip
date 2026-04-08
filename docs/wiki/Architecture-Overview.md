@@ -26,11 +26,12 @@ TextQuest is a three-crate Rust workspace:
 ## High-Level Data Flow
 
 1. `textquest` discovers or launches EQ clients.
-2. `textquest` stages a session token and injects `textquest_dll.dll`.
-3. `textquest-dll` hooks into the game, reads internal state, and exposes control surfaces.
-4. `textquest-dll` publishes `GameState` snapshots over shared memory.
-5. `textquest` reads those snapshots, renders the TUI, and makes orchestration decisions.
-6. Operator commands or orchestrator decisions are serialized as IPC commands and sent back to the DLL over authenticated named pipes.
+2. If enabled, `textquest` also advertises its current local-session roster over UDP multicast and listens for remote orchestrator peers.
+3. `textquest` stages a session token and injects `textquest_dll.dll`.
+4. `textquest-dll` hooks into the game, reads internal state, and exposes control surfaces.
+5. `textquest-dll` publishes `GameState` snapshots over shared memory.
+6. `textquest` reads those snapshots, renders the TUI, and makes orchestration decisions.
+7. Operator commands or orchestrator decisions are serialized as IPC commands and sent back to the DLL over authenticated named pipes.
 
 ## Key Module Boundaries
 
@@ -42,6 +43,7 @@ TextQuest is a three-crate Rust workspace:
 - `inject/`: DLL staging and remote-thread injection
 - `ipc/`: named pipe client and shared-memory reader
 - `client/`: per-client sessions and monitors
+- `client/discovery.rs`: optional UDP multicast peer-discovery transport for orchestrator instances
 - `nav/`: orchestrator-side route planning and mesh loading
 - `camp/`: camp loop phases, buffs, positioning, hunt logic
 - `combat/`: assist coordination and CH chain logic

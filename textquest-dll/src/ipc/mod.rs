@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
-use textquest_common::ipc::{Command, Response, SessionToken};
+use textquest_common::ipc::{Command, IpcCommand, IpcResponse, Response, SessionToken};
 use textquest_common::types::{ClientId, SharedStateFrame};
 
 use self::pipe::CommandListener;
@@ -24,7 +24,7 @@ use self::shared::SharedStateWriter;
 static SHARED_WRITER: OnceLock<Mutex<SharedStateWriter>> = OnceLock::new();
 
 /// Buffered commands received from the orchestrator pipe.
-static PENDING_COMMANDS: OnceLock<Mutex<Vec<Command>>> = OnceLock::new();
+static PENDING_COMMANDS: OnceLock<Mutex<Vec<IpcCommand>>> = OnceLock::new();
 
 /// Flag checked by the listener thread to know when to exit.
 static IPC_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -88,7 +88,7 @@ pub fn stop() {
 
 /// Drain any commands received since the last call. Intended to be called once
 /// per game tick from the hook thread.
-pub fn poll_commands() -> Vec<Command> {
+pub fn poll_commands() -> Vec<IpcCommand> {
     let Some(pending) = PENDING_COMMANDS.get() else {
         return Vec::new();
     };
@@ -242,28 +242,37 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
 
     while IPC_RUNNING.load(Ordering::SeqCst) && !crate::SHUTTING_DOWN.load(Ordering::SeqCst) {
         match listener.receive() {
-            Ok(cmd) => {
+            Ok(ipc_cmd) => {
                 consecutive_errors = 0;
-                tracing::debug!(client_id, ?cmd, "Received command");
+                tracing::debug!(client_id, ?ipc_cmd, "Received command");
+
+                let correlation_id = ipc_cmd.correlation_id;
+                let cmd = ipc_cmd.command;
 
                 if handle_immediate_command(&cmd) {
                     // Immediate commands get an Ack response.
-                    let _ = listener.respond(&Response::CommandResult {
-                        success: true,
-                        message: "handled".into(),
-                    });
+                    let _ = listener.respond(&IpcResponse::echo(
+                        Response::CommandResult {
+                            success: true,
+                            message: "handled".into(),
+                        },
+                        correlation_id,
+                    ));
                     listener.disconnect();
                     continue;
                 }
 
                 // Respond to Ping inline — no need to queue.
                 if matches!(&cmd, Command::Ping) {
-                    let _ = listener.respond(&Response::Pong {
-                        client_id,
-                        timestamp_ms: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .map_or(0, |d| d.as_millis() as u64),
-                    });
+                    let _ = listener.respond(&IpcResponse::echo(
+                        Response::Pong {
+                            client_id,
+                            timestamp_ms: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map_or(0, |d| d.as_millis() as u64),
+                        },
+                        correlation_id,
+                    ));
                     listener.disconnect();
                     continue;
                 }
@@ -290,7 +299,10 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                             _ => None,
                         })
                         .collect();
-                    let _ = listener.respond(&Response::PacketBatch { events });
+                    let _ = listener.respond(&IpcResponse::echo(
+                        Response::PacketBatch { events },
+                        correlation_id,
+                    ));
                     listener.disconnect();
                     continue;
                 }
@@ -302,7 +314,10 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     && let Ok(mut queue) = pending.lock()
                 {
                     if queue.len() < MAX_PENDING {
-                        queue.push(cmd);
+                        queue.push(IpcCommand {
+                            command: cmd,
+                            correlation_id,
+                        });
                         true
                     } else {
                         tracing::warn!(
@@ -316,10 +331,13 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                 };
 
                 // Send Ack so the orchestrator isn't left waiting.
-                let _ = listener.respond(&Response::CommandResult {
-                    success: queued,
-                    message: if queued { "queued" } else { "queue full" }.into(),
-                });
+                let _ = listener.respond(&IpcResponse::echo(
+                    Response::CommandResult {
+                        success: queued,
+                        message: if queued { "queued" } else { "queue full" }.into(),
+                    },
+                    correlation_id,
+                ));
 
                 // Reset pipe for next connection. The orchestrator uses
                 // fire-and-forget (connect → token → command → close), so the

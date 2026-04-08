@@ -8,13 +8,9 @@
 - No `.env` file is required for normal build, test, or runtime work
 - `.cargo/config.toml` already sets `CMAKE_POLICY_VERSION_MINIMUM=3.5` for normal Cargo commands
 
-### Optional reference-only submodules
+### Optional local reference trees
 
-Sync these only when doing offset, struct, eqlib, or MacroQuest research:
-
-```bash
-git submodule update --init --recursive
-```
+`third_party/eqlib` and `third_party/macroquest` are optional local reference paths for offset, struct, eqlib, and MacroQuest research when those trees are present in your workspace. They are not required for normal build, test, or runtime work.
 
 ### Windows production builds
 
@@ -84,7 +80,6 @@ cargo run -- --dump
 - `cargo run` launches the real app entrypoint and will attach to live EQ processes if found.
 - `textquest.exe inject` stages and injects `textquest_dll.dll`.
 - `textquest.exe cmd`, `status`, `status-all`, `nav`, and `zones` all expect live injected clients.
-- `textquest.exe navmesh reload <zone>` refreshes the cached orchestrator navmesh for a zone, and `textquest.exe navmesh diagnostics --pid <pid>` can resolve the zone from a live client while printing its current navigator state.
 - CI currently validates the Windows build on nightly, so contributors should match that toolchain when reproducing Windows build issues.
 
 ## Important Files and Paths
@@ -117,7 +112,7 @@ cargo run -- --dump
 ### Current behavior
 
 - Cross-platform compilation is deliberate; the repo is structured so UI and logic work on non-Windows even when live control cannot.
-- Submodule-backed reference trees are available for offset and struct investigations, but they are not required for normal build, test, or runtime work.
+- Local reference trees under `third_party/` are optional for offset and struct investigations, but they are not required for normal build, test, or runtime work.
 
 ### Gaps and caveats
 
