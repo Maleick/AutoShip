@@ -35,10 +35,10 @@ This wiki is the long-lived operator and developer reference for the current rep
 
 - The production target is Windows with live EverQuest clients.
 - Demo mode is the normal experience on macOS/Linux and also on Windows when no live EQ client is attached.
-- The TUI currently exposes four main screens: Characters, Map, Navigation, and Debug.
+- The TUI currently exposes five main screens: Characters, Map, Navigation, Debug, and Packets.
 - Login automation, DLL injection, navigation, CH chain management, and the Soul Engine are all present in the repository today.
-- MacroQuest reference code is tracked as git submodules under `third_party/eqlib` and `third_party/macroquest`, but those trees are reference-only and not required for normal build, test, or runtime work.
-- `third_party/eqlib` is the canonical local eqlib reference path for offsets and struct work in this repo.
+- `third_party/eqlib` and `third_party/macroquest` are optional local reference paths for offset, struct, login, and upstream behavior research when those trees are present in your workspace.
+- `third_party/eqlib` remains the canonical local eqlib citation path for offsets and struct work in this repo.
 
 ## Source of Truth
 
@@ -79,4 +79,4 @@ Repository rules that matter for documentation:
 - Update the matching page in `docs/wiki/` in the same PR that changes behavior.
 - Prefer current code and generated docs over older narrative research notes.
 - When behavior is not revalidated on live EQ, say so explicitly instead of presenting it as confirmed.
-- When citing eqlib headers or offsets, prefer `third_party/eqlib`; treat `third_party/macroquest/src/eqlib` as upstream-vendored context only.
+- When citing eqlib headers or offsets, prefer `third_party/eqlib` when that local reference tree is available; treat `third_party/macroquest/src/eqlib` as upstream-vendored context only.
