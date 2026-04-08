@@ -705,7 +705,7 @@ pub mod profile {
     pub const BUFFS_ARRAY: usize = 0x0098;
     /// `BaseProfile::SpellBook` (`int[1280]`) at +0x00b0.
     pub const SPELL_BOOK: usize = 0x00b0;
-    /// `BaseProfile::MemorizedSpells` (`int[18]`) at +0x14b0.
+    /// `BaseProfile::MemorizedSpells` (`int[15]`) at +0x14b0.
     pub const MEMORIZED_SPELLS: usize = 0x14b0;
     /// Number of spellbook slots between `SpellBook` and `MemorizedSpells`.
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
@@ -718,10 +718,8 @@ pub mod profile {
 
     /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
     pub const ARRAY_DATA_PTR: usize = 0x08;
-
     /// `SoeUtil::Array::m_size` (i32 element count) at +0x10 within the array.
     pub const ARRAY_SIZE: usize = 0x10;
-
     /// `PcClient::BuffIDs` — flat array of `i32[62]` spell IDs for long buffs.
     /// Faster than the full profile chain when only spell IDs are needed.
     pub const BUFF_IDS: usize = 0x068;

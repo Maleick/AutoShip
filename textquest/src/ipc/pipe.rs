@@ -5,7 +5,9 @@
 //! compile-only stub.
 
 use anyhow::Result;
-use textquest_common::ipc::{Command, CorrelationIdGenerator, IpcCommand, IpcResponse, Response};
+#[cfg(windows)]
+use textquest_common::ipc::IpcResponse;
+use textquest_common::ipc::{Command, CorrelationIdGenerator, IpcCommand, Response};
 #[cfg(windows)]
 use textquest_common::protocol;
 use textquest_common::types::ClientId;

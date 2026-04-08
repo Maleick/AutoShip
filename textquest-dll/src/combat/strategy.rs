@@ -1,10 +1,42 @@
 use textquest_common::combat::{
     AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
-    NamedPreference, SpellEntry, TargetScanConfig,
+    NamedPreference, SpellEntry, TargetScanConfig, XTargetType,
 };
 use textquest_common::types::SpawnData;
 
 use super::rotation::RotationGroup;
+
+// ─── Pet action / status types ────────────────────────────────────────────────
+
+/// An explicit pet command requested by a class strategy for the current frame.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PetAction {
+    /// Order pet to attack the current combat target.
+    Attack,
+    /// Cast a buff on the pet using the given spell entry.
+    Buff { spell: SpellEntry },
+}
+
+/// Snapshot of the pet's state, derived from the extended target list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PetStatus {
+    /// Spawn ID of the local player's pet, or `None` if no pet is active.
+    pub spawn_id: Option<u32>,
+    /// Spawn ID of whatever the pet is currently attacking, or `None` if idle.
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    /// Returns `true` if the player currently has an active pet.
+    pub fn has_pet(&self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    /// Returns `true` if the pet is currently attacking `target_id`.
+    pub fn is_attacking(&self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
 
 use super::classes::bard::BardStrategy;
 use super::classes::beastlord::BeastlordStrategy;
