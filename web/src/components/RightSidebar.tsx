@@ -42,6 +42,8 @@ function PlayerRow({ player }: { player: Player }) {
 }
 
 export default function RightSidebar() {
+  const [unsafeHacksEnabled, setUnsafeHacksEnabled] = useState(false);
+
   return (
     <aside className="stone-pillar w-[380px] h-full flex flex-col relative z-20 overflow-hidden bg-void/80 backdrop-blur-sm">
       {/* Soul Tethers */}
@@ -66,6 +68,26 @@ export default function RightSidebar() {
           {players.map((p) => (
             <PlayerRow key={p.name} player={p} />
           ))}
+        </div>
+      </div>
+
+      {/* Unsafe Interventions (Active Hacks) */}
+      <div className="p-4 border-b border-white/10 bg-red-950/20">
+        <h4 className="font-archaic text-xs text-red-400 uppercase tracking-widest flex items-center gap-2 mb-2">
+          <Warning weight="fill" className="text-red-500" /> Unsafe Interventions
+        </h4>
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] text-white/50 font-rune leading-tight w-2/3">
+            Enable risky active hacks (Warp, Living Shield). Warning: High risk of detection.
+          </p>
+          <button
+            onClick={() => setUnsafeHacksEnabled(!unsafeHacksEnabled)}
+            className={`w-10 h-5 rounded-full relative transition-colors ${unsafeHacksEnabled ? "bg-red-500" : "bg-white/10"}`}
+          >
+            <div
+              className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${unsafeHacksEnabled ? "translate-x-5" : "translate-x-1"}`}
+            />
+          </button>
         </div>
       </div>
 

@@ -115,23 +115,20 @@ mod tests {
     }
 
     #[test]
-    fn wake_sleep_noop_when_disabled() {
-        SLEEP_ENABLED.store(false, Ordering::Release);
-        wake();
-        sleep();
-    }
-
-    #[test]
     fn enable_disable_lifecycle() {
-        // Combined test to avoid races on shared global atomics.
-        // Phase 1: enable is a no-op when not initialized.
+        // Single test to avoid races on shared global atomics.
+        // Phase 1: wake/sleep are no-ops when disabled.
         SLEEP_INITIALIZED.store(false, Ordering::Release);
         SLEEP_ENABLED.store(false, Ordering::Release);
         CODE_ENCRYPTED.store(false, Ordering::Release);
+        wake();
+        sleep();
+
+        // Phase 2: enable is a no-op when not initialized.
         enable();
         assert!(!is_enabled());
 
-        // Phase 2: enable/disable work when initialized.
+        // Phase 3: enable/disable work when initialized.
         SLEEP_INITIALIZED.store(true, Ordering::Release);
         enable();
         assert!(is_enabled());

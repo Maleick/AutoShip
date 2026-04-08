@@ -11,8 +11,8 @@
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-128%2C050-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-2%2C944%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-134%2C497-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-3%2C049%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -38,13 +38,13 @@ Routine `cargo build` / `cargo test` work does not require any vendored referenc
 
 ### TUI Dashboard (5 screens, 4 themes)
 
-| Screen     | Key | Description                                                                                                                                     |
-| ---------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Characters | `1` | Operator roster, selected character detail, group/scope panels, and side panels for combat, session, and priorities                            |
+| Screen     | Key | Description                                                                                                                                      |
+| ---------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Characters | `1` | Operator roster, selected character detail, group/scope panels, and side panels for combat, session, and priorities                              |
 | Map        | `2` | Tactical zone map with spawn list, named tracker, tactical navigation section, visibility overlays, viewport modes, and map interaction controls |
-| Navigation | `3` | Per-character route status table plus selected-route detail, blockers/recovery state, and navigation command reference                          |
-| Debug      | `4` | Raw spawn table, hex dump with field annotations, Ghidra-style explorer, EQ internals, and target inspection                                   |
-| Packets    | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation                                                    |
+| Navigation | `3` | Per-character route status table plus selected-route detail, blockers/recovery state, and navigation command reference                           |
+| Debug      | `4` | Raw spawn table, hex dump with field annotations, Ghidra-style explorer, EQ internals, and target inspection                                     |
+| Packets    | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation                                                      |
 
 **Themes:** Dark Modern (default), Dracula, Classic, Neriak Third Gate — cycle with `T`
 
@@ -173,7 +173,7 @@ Routine `cargo build` / `cargo test` work does not require any vendored referenc
 ## Architecture
 
 ```text
-TextQuest Workspace (4 crates, ~113K lines of Rust)
+TextQuest Workspace (4 crates, ~134K lines of Rust)
 ├── textquest/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
 ├── textquest-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
 ├── textquest-common/    — Shared types: IPC, offsets, combat/nav/soul types
@@ -227,15 +227,16 @@ is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1
 
 CI and nightly automation:
 
-- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using runner-local `gh auth`
-- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`
-- `.github/workflows/ci.yml` keeps the required `PR gate (fmt + clippy + test + python)` on the self-hosted runner for same-repo PRs, pushes to `master`, and manual dispatches; fork PRs use GitHub-hosted Windows instead
-- self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check before extraction
-- the self-hosted Windows gate now reclaims stray Chrome/Edge/Chromium processes before Rust work starts, so Cargo can run with its normal parallelism instead of forcing `-j 1`
-- `.github/workflows/wiki-nightly.yml` validates `docs/wiki/` and publishes the GitHub wiki at 3 AM America/Chicago using the workflow-provided `GH_TOKEN` (`secrets.GITHUB_TOKEN`) for `gh`
-- `.github/workflows/nightly-release.yml` builds a rolling nightly prerelease containing `textquest.exe` and `textquest_dll.dll`; `wiki-nightly` follows that run against the same built commit SHA
-- lightweight repository-control workflows such as auto-merge, agent-ready labeling, agent PR cleanup, Copilot CI dispatch, and post-merge issue cleanup now run on GitHub-hosted Linux so the Windows runner stays focused on CI, releases, and wiki publishing
-- `.github/workflows/copilot-ci-dispatch.yml` runs on GitHub-hosted Linux from `master`, dispatches `CI` on same-repo Copilot PR heads when GitHub leaves the PR-triggered run in `action_required`, and skips PRs that edit workflow files so approval-sensitive changes still require manual review
+- **`ci.yml`** — Required `PR gate (fmt + clippy + test + python)` + TruffleHog secret scan. Self-hosted Windows runner for same-repo PRs; GitHub-hosted Windows for forks
+- **`nightly-release.yml`** — Rolling nightly prerelease (`textquest.exe` + `textquest_dll.dll`) at 3 AM CT, with a local-time gate
+- **`wiki-nightly.yml`** — Publishes GitHub wiki from `docs/wiki/` after each successful nightly release
+- **`readme-metrics.yml`** — Auto-updates README badges (test count, LOC) on push to master via PR
+- **`automation.yml`** — Agent labeling (`agent:ready`), auto-merge on `merge:auto` PRs, agent PR cleanup, post-merge label sync, and wiki sync on docs changes
+- **`release.yml`** — Tag-triggered Windows release build
+- **`copilot-ci-dispatch.yml`** — Dispatches CI for blocked Copilot PRs on push to master (manual dispatch available)
+- **`claude-agent.yml`** — Runs Claude on `worker:claude`-labeled issues and `@claude` PR comments
+- Self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check
+- The self-hosted Windows gate reclaims stray Chrome/Edge/Chromium processes before Rust work starts
 
 If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
 
@@ -280,25 +281,12 @@ age-only pruning.
 
 TextQuest-specific notes:
 
-- The required merge blocker remains `PR gate (fmt + clippy + test + python)`.
-- Same-repo PRs, pushes to `master`, and manual `CI` dispatches run that gate on runner labels `self-hosted`, `Windows`, `X64`, and `textquest`.
-- That self-hosted gate now reclaims leaked Chrome/Edge/Chromium processes before the Rust steps so the runner can keep normal Cargo parallelism instead of pinning builds/tests to `-j 1`.
-- GitHub-script control-plane workflows now run on GitHub-hosted Linux so the Windows runner is reserved for Windows-specific CI, release, and wiki work.
-- Fork or otherwise untrusted PRs run the same visible gate name on GitHub-hosted `windows-latest` instead of the self-hosted runner.
-- The GitHub-hosted fork path uses `actions/setup-python@v6`; the self-hosted path stays cmd-safe and verifies any fallback Python ZIP before extraction.
-- That Windows gate currently boots the nightly MSVC Rust toolchain, because the Windows hook stack still depends on nightly-only `retour`.
-- The scheduled `TextQuest PR manager` Codex cloud automation is expected to open missing PRs, address straightforward review feedback, and merge eligible branches into `master`.
-- Manual `CI` workflow dispatch is the place to get the heavier `Windows release build (manual)` validation on a topic branch before merge.
-- Trusted agent PRs should carry `merge:auto` by default unless the PR or linked issue is labeled `human:required`, `risk:high`, or `agent:blocked`.
-- The scheduled `TextQuest issue executor` opens trusted agent PRs into `master`, adds automation labels, and should default `merge:auto` on those PRs when the linked issue is not explicitly blocked from unattended merge.
-- The scheduled `TextQuest PR manager` Codex cloud automation is expected to address straightforward review feedback, resolve clearly addressed bot review threads, merge eligible agent-authored PRs into `master`, and close stale or superseded agent-authored PRs when the queue has moved on.
-- `.github/workflows/agent-ready.yml` keeps the `agent:ready` and `agent:skip-ready` labels aligned on issue events plus an hourly sweep, suppresses `agent:ready` while an issue already has an open linked PR or active `agent:working` / `agent:blocked` state, and treats roadmap-container titles that start with `M<number>` or `Mx` as skip-ready epics.
-- `scripts/reconcile-agent-queue.sh` plus the scheduled TextQuest issue-queue reconciler automation add missing open issues to the `TextQuest Roadmap` project, set `Agent Status`, strip stale `agent:ready` / `agent:working` labels from non-ready items, and promote every other open non-epic issue to `Ready for Agent`.
-- The `agent:close` label lets repo automation close only agent-authored PRs (`codex/*`, `claude/*`, or PRs carrying the `codex-automation` label) without touching unrelated human PRs.
-- Manual `CI` workflow dispatch can opt into the heavier `Windows release build (manual)` validation on a topic branch before merge.
+- Required merge blocker: `PR gate (fmt + clippy + test + python)` + `Secret scan (TruffleHog)`.
+- Same-repo PRs run on 4 self-hosted Windows runners (`self-hosted`, `Windows`, `X64`, `textquest`). Fork PRs use GitHub-hosted `windows-latest`.
+- Nightly toolchain required on Windows (retour dependency).
+- `automation.yml` handles agent labeling (`agent:ready`), auto-merge on `merge:auto` PRs, agent PR cleanup (`agent:close`), and post-merge label sync.
+- Trusted agent PRs carry `merge:auto` by default unless labeled `human:required`, `risk:high`, or `agent:blocked`.
 - `Release`, `Nightly Release`, `README Metrics`, and `Wiki Nightly` are not required merge gates.
-- `README Metrics` should now be run on a topic branch and merged via PR instead of pushing directly into `master`.
-- If the single Windows runner starts queueing behind nightly or release work, add a second runner with the same labels instead of redesigning the workflow.
 
 ### Development (any platform — demo mode)
 
@@ -363,7 +351,7 @@ target\release\textquest.exe navmesh diagnostics --pid <pid>
 
 ## Testing
 
-Current workspace totals: 128,050 Rust lines and 2,944 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
+Current workspace totals: 134,497 Rust lines and 3,049 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -463,10 +451,10 @@ Historical milestones already implemented in the repository:
 
 Canonical active roadmap order:
 
-- [x] **M5** (complete) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator). #355 closed (launchpad bypassed via /patchme)
-- [x] **M6** (complete) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme shipped; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
-- [ ] **M7** — Zoning/Movement
-- [ ] **M8** — Orchestrator
+- [x] **M5** (complete) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator)
+- [x] **M6** (complete) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
+- [x] **M7** (complete) — Zoning/Movement — MQ2Nav parity (waypoints, reload, state signals, /nav ui), map markers, heading/circle/makecamp controls, radius overlays
+- [x] **M8** (complete) — Orchestrator — IPC correlation IDs, actor routing, peer discovery, context menu dispatch, UI notifications, KissAssist parity, nav reload wiring
 - [ ] **M9** — Learning/RL — metrics-backed tuning loops with explicit regression budgets, canary/shadow rollout, and rollback paths
 - [ ] **M10** — Economy
 - [ ] **M11** — Soul Engine + LLM

@@ -1,6 +1,6 @@
 use textquest_common::combat::{
     AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
-    NamedPreference, SpellEntry, TargetScanConfig, XTargetType,
+    NamedPreference, SpellEntry, TargetScanConfig,
 };
 use textquest_common::types::SpawnData;
 

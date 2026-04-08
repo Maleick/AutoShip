@@ -4,9 +4,6 @@ on:
   workflow_run:
     workflows: ["Nightly Release"]
     types: [completed]
-  schedule:
-    - cron: "0 8 * * *"
-    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       publish:
@@ -47,7 +44,7 @@ jobs:
         uses: ./.github/actions/setup-verified-python
 
       - name: Validate wiki sources
-        run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
+        run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
 
       - name: Publish wiki
-        run: '%PYTHON_CMD% scripts/sync_wiki.py --push'
+        run: "%PYTHON_CMD% scripts/sync_wiki.py --push"

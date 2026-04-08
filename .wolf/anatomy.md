@@ -1,7 +1,21 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-04-03T21:48:21.812Z
-> Files: 569 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-04-08T06:38:29.779Z
+> Files: 531 tracked | Anatomy hits: 0 | Misses: 0
+
+## ../../.claude/projects/-Users-maleick-Projects-TextQuest/memory/
+
+- `MEMORY.md` — User Profile (~1748 tok)
+- `project_autonomy_gaps.md` — Resolved (~376 tok)
+- `project_burndown_progress.md` (~227 tok)
+- `project_eq_patch_april.md` (~248 tok)
+- `project_github_ci_copilot.md` (~358 tok)
+- `project_launch_chain_gaps.md` — Status: CLI Working, Orchestration Pending (as of 2026-04-05) (~297 tok)
+- `project_session_20260406.md` — Session 2026-04-06 (three sub-sessions) (~411 tok)
+- `project_session_20260408.md` — Session 2026-04-08 (~391 tok)
+- `project_session_timeline.md` — Declares and (~1202 tok)
+- `project_soul_engine.md` — Declares strategies (~372 tok)
+- `project_sprint_20260404.md` — Sprint 2026-04-04 — 6-Agent Team Output (~334 tok)
 
 ## ./
 
@@ -59,12 +73,12 @@
 - `auto-merge.yml` — CI: Auto-merge labeled PRs (~466 tok)
 - `ci.yml` — CI: CI (~4707 tok)
 - `claude-agent.yml` — CI: Claude agent (~585 tok)
-- `copilot-ci-dispatch.yml` — CI: Copilot CI dispatch (~1310 tok)
+- `copilot-ci-dispatch.yml` — CI: Copilot CI dispatch (~1242 tok)
 - `nightly-release.yml` — CI: Nightly Release (~2300 tok)
 - `post-merge-sync.yml` — CI: Post-merge project sync (~421 tok)
 - `readme-metrics.yml` — CI: README Metrics (~1436 tok)
 - `release.yml` — CI: Release (~1642 tok)
-- `wiki-nightly.yml` — CI: Wiki Nightly (~894 tok)
+- `wiki-nightly.yml` — CI: Wiki Nightly (~404 tok)
 
 ## .playwright-mcp/
 
@@ -571,3 +585,35 @@
 
 - `syscall-evasion-and-ntdll-unhooking.md` — Syscall Evasion and NTDLL Unhooking Research (~6856 tok)
 - `syscall-evasion-hellsgate-halosgate.md` — Syscall Evasion: HellsGate, HalosGate, and TartarusGate (~5254 tok)
+
+## textquest-dll/
+
+- `Cargo.toml` — Rust package manifest (~331 tok)
+
+## textquest-dll/src/combat/
+
+- `strategy.rs` — PetStatus: has_pet, is_attacking, pet, pet_spawn_id (~11907 tok)
+
+## textquest-dll/src/eq/
+
+- `context_menu.rs` — `CContextMenuManager` — read active popup menus and dispatch item activation. (~2813 tok)
+
+## textquest-dll/src/hooks/
+
+- `game_loop.rs` — Game loop hook -- intercepts `CEverQuest::MainLoop`. (~42121 tok)
+
+## textquest-dll/src/stealth/
+
+- `thread_pool.rs` — PoolParty-style thread pool execution. (~1136 tok)
+
+## textquest/src/
+
+- `config.rs` — A single account entry from config/accounts.toml. (~7864 tok)
+
+## textquest/src/eq/
+
+- `log_parser.rs` — Events parsed from EQ log lines. (~5715 tok)
+
+## textquest/src/tui/
+
+- `app.rs` — TrackedSpawn: label, next, label, next (~74992 tok)

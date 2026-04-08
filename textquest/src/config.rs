@@ -425,6 +425,11 @@ fn default_max_spawns() -> usize {
     2048
 }
 
+#[allow(dead_code)]
+fn default_enable_unsafe_hacks() -> bool {
+    false
+}
+
 impl AppConfig {
     /// Load application configuration from a TOML file.
     ///

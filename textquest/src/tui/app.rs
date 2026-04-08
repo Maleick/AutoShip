@@ -3484,6 +3484,7 @@ impl App {
     }
 
     /// Get PIDs for a specific group index (0-based).
+    #[allow(dead_code)]
     fn pids_for_group(&self, group_idx: usize) -> Vec<u32> {
         self.clients_in_group_idx(group_idx)
             .iter()
@@ -3797,6 +3798,8 @@ impl App {
                 let destination = rest.to_string();
                 if destination.is_empty() {
                     self.usage_feedback("nav", "Missing navigation target.");
+                } else if parts.get(1).copied() == Some("reload") {
+                    self.execute_nav_reload_command();
                 } else if parts.get(1).copied() == Some("ui") {
                     self.handle_nav_ui_command();
                 } else if let Some((label, target, zone_hint)) =
@@ -6775,7 +6778,6 @@ mod tests {
             "status",
             "camp",
             "nav",
-            "nav reload",
             "loot",
             "door",
             "click",

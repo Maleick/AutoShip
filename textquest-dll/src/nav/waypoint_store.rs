@@ -214,10 +214,7 @@ mod tests {
 
     #[test]
     fn normalize_enforces_length_and_trim() {
-        assert_eq!(
-            normalize_name("  Camp1  ").unwrap(),
-            String::from("camp1")
-        );
+        assert_eq!(normalize_name("  Camp1  ").unwrap(), String::from("camp1"));
         assert!(normalize_name("").is_err());
         assert!(normalize_name("   ").is_err());
         let long_name = "a".repeat(65);

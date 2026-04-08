@@ -241,7 +241,19 @@ mod tests {
         .unwrap();
 
         let loaded = load_from_dir(temp_dir.path(), "Camrene").unwrap().unwrap();
-        assert_eq!(loaded.0, path);
+        // On case-insensitive filesystems (macOS), the first candidate
+        // ("Camrene.toml") matches the lowercase file, so compare
+        // case-insensitively.
+        assert_eq!(
+            loaded
+                .0
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_lowercase(),
+            "camrene.toml"
+        );
         assert_eq!(loaded.1.spells.unwrap()[0].slot, 2);
     }
 

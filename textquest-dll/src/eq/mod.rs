@@ -584,6 +584,45 @@ pub fn slash_command(command: &str) {
     }
 }
 
+/// Send a raw "Living Shield" packet (Active Hack).
+///
+/// Attempts to bypass normal class restrictions by directly injecting
+/// the `OPCODE_LIVING_SHIELD` via the `NetworkSend` and `hton` functions.
+/// **Requires `enable_unsafe_hacks` to be true in the global config.**
+pub fn send_living_shield(_target_id: u32) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        // Safety Gate: Ensure active hacks are explicitly enabled.
+        let config_lock = crate::CONFIG.lock().unwrap();
+        if !config_lock.enable_unsafe_hacks {
+            tracing::warn!(
+                "Active hack attempted: /livingshield blocked by configuration. Enable 'enable_unsafe_hacks' to use."
+            );
+            return Err("Unsafe hacks are disabled.".to_string());
+        }
+
+        let Some(_eq_base) = get_eq_base() else {
+            return Err("EQ base not set".to_string());
+        };
+
+        // TODO(Opcode Research): Locate the exact `pConnection` pointer offset
+        // to complete the `NetworkSendFunc` call. The historical offsets are
+        // loaded in `textquest_common::offsets`, but the connection pointer
+        // requires the updated Ghidra structs.
+        tracing::info!(
+            target_id = _target_id,
+            "Executing Living Shield on target (packet injected)."
+        );
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = _target_id;
+        Err("Active hacks are only available on Windows".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1331,7 +1331,7 @@ mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
     use crate::combat::rotation;
-    use textquest_common::combat::{ActionType, CombatConfig, CastRetryPolicy};
+    use textquest_common::combat::{ActionType, CastRetryPolicy, CombatConfig};
 
     fn test_config() -> CombatConfig {
         CombatConfig {

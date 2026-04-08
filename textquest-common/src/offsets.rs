@@ -41,6 +41,14 @@ pub const PINST_CCHAT_WINDOW_MANAGER: u64 = 0x0001_40F2_2B20;
 /// Source: eqgame.h `pinstCInvSlotMgr_x`
 pub const PINST_CINV_SLOT_MGR: u64 = 0x0001_40DD_D5F0;
 
+// ─── Active Hacks Offsets (Pending verification for 20260310) ───
+// These are offsets from the eqgame.exe base address, currently reflecting January 2025.
+pub const OFFSET_PACKET_SCRAMBLER: usize = 0x00dc_6340;
+pub const OFFSET_HTON: usize = 0x0068_2e50;
+pub const OFFSET_NETWORK_SEND: usize = 0x0055_7090;
+
+pub const OPCODE_LIVING_SHIELD: u16 = 0x3A44;
+
 // ─── EQ Internal Function Addresses ───
 // These are preferred-base addresses for EQ's internal functions.
 // Used for calling game functions directly from the injected DLL.

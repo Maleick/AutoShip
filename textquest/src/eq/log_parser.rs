@@ -249,7 +249,7 @@ impl LootDatabase {
     #[must_use]
     pub fn xp_rate_windowed(&self, window: std::time::Duration) -> f64 {
         let now = Instant::now();
-        let count = match now.checked_sub(window) {
+        let _count = match now.checked_sub(window) {
             Some(cutoff) => self.xp_event_times.iter().filter(|t| **t >= cutoff).count(),
             // Window exceeds OS uptime; all recorded events are within the window.
             None => self.xp_event_times.len(),

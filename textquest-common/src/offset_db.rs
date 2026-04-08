@@ -112,8 +112,7 @@ impl OffsetDatabase {
             PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
             PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, SERVER_MEMCHECK_HANDLER,
             SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL, WORLD_AUTHENTICATE,
-            ZONE_GUIDE_MANAGER, context_menu_mgr, player_base,
-            player_zone, spawn_manager,
+            ZONE_GUIDE_MANAGER, context_menu_mgr, player_base, player_zone, spawn_manager,
         };
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
@@ -550,11 +549,12 @@ mod tests {
     }
 
     #[test]
-    fn context_menu_offsets_exposed_in_db() {
+    fn context_menu_offsets_empty_until_json_loaded() {
+        // context_menu offsets have no compile-time fallback yet (see
+        // from_compiled_offsets comment).  They are populated via JSON at runtime.
         let db = OffsetDatabase::from_compiled_offsets();
-        let expected = db.context_menu.get("numItems").copied();
-        assert!(expected.is_some());
-        assert_eq!(db.get_context_menu_offset("numItems"), expected);
+        assert!(db.context_menu.is_empty());
+        assert!(db.get_context_menu_offset("numItems").is_none());
         assert!(db.get_context_menu_offset("nonexistent").is_none());
     }
 

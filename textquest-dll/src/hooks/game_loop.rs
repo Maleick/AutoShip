@@ -2265,6 +2265,25 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                     interact_with_target();
                     return;
                 }
+                Some(InterceptedSlashCommand::LivingShield(target_str)) => {
+                    tracing::info!("Intercepted /livingshield slash command");
+                    let target_id = if target_str.is_empty() {
+                        read_target_state(crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire))
+                            .map(|p| p.spawn_id)
+                            .unwrap_or(0)
+                    } else {
+                        target_str.parse::<u32>().unwrap_or_default()
+                    };
+
+                    if target_id != 0 {
+                        if let Err(e) = crate::eq::send_living_shield(target_id) {
+                            tracing::error!("Living shield failed: {}", e);
+                        }
+                    } else {
+                        tracing::warn!("Invalid target for /livingshield");
+                    }
+                    return;
+                }
                 Some(InterceptedSlashCommand::Rewrite(rewritten)) => {
                     tracing::info!(from = trimmed, to = %rewritten, "Rewriting custom slash command");
                     Cow::Owned(rewritten)
@@ -2275,52 +2294,48 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
 
             if let Some(nav_waypoint_cmd) = parse_nav_waypoint_command(trimmed) {
                 match nav_waypoint_cmd {
-                    Ok(NavWaypointCommand::Save(name)) => {
-                        match save_nav_waypoint(&name) {
-                            Ok(saved) => {
-                                crate::ipc::send_response(
-                                    textquest_common::ipc::Response::CommandResult {
-                                        success: true,
-                                        message: format!(
-                                            "Saved waypoint '{}' in {}",
-                                            saved.name, saved.zone
-                                        ),
-                                    },
-                                );
-                            }
-                            Err(error) => {
-                                crate::ipc::send_response(
-                                    textquest_common::ipc::Response::CommandResult {
-                                        success: false,
-                                        message: error,
-                                    },
-                                );
-                            }
+                    Ok(NavWaypointCommand::Save(name)) => match save_nav_waypoint(&name) {
+                        Ok(saved) => {
+                            crate::ipc::send_response(
+                                textquest_common::ipc::Response::CommandResult {
+                                    success: true,
+                                    message: format!(
+                                        "Saved waypoint '{}' in {}",
+                                        saved.name, saved.zone
+                                    ),
+                                },
+                            );
                         }
-                    }
-                    Ok(NavWaypointCommand::Recall(name)) => {
-                        match recall_nav_waypoint(&name) {
-                            Ok(saved) => {
-                                crate::ipc::send_response(
-                                    textquest_common::ipc::Response::CommandResult {
-                                        success: true,
-                                        message: format!(
-                                            "Navigating to waypoint '{}' in {}",
-                                            saved.name, saved.zone
-                                        ),
-                                    },
-                                );
-                            }
-                            Err(error) => {
-                                crate::ipc::send_response(
-                                    textquest_common::ipc::Response::CommandResult {
-                                        success: false,
-                                        message: error,
-                                    },
-                                );
-                            }
+                        Err(error) => {
+                            crate::ipc::send_response(
+                                textquest_common::ipc::Response::CommandResult {
+                                    success: false,
+                                    message: error,
+                                },
+                            );
                         }
-                    }
+                    },
+                    Ok(NavWaypointCommand::Recall(name)) => match recall_nav_waypoint(&name) {
+                        Ok(saved) => {
+                            crate::ipc::send_response(
+                                textquest_common::ipc::Response::CommandResult {
+                                    success: true,
+                                    message: format!(
+                                        "Navigating to waypoint '{}' in {}",
+                                        saved.name, saved.zone
+                                    ),
+                                },
+                            );
+                        }
+                        Err(error) => {
+                            crate::ipc::send_response(
+                                textquest_common::ipc::Response::CommandResult {
+                                    success: false,
+                                    message: error,
+                                },
+                            );
+                        }
+                    },
                     Ok(NavWaypointCommand::Delete(name)) => {
                         match crate::nav::waypoint_store::delete(&name) {
                             Ok(true) => {
@@ -2356,12 +2371,10 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                         );
                     }
                     Err(error) => {
-                        crate::ipc::send_response(
-                            textquest_common::ipc::Response::CommandResult {
-                                success: false,
-                                message: error,
-                            },
-                        );
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success: false,
+                            message: error,
+                        });
                     }
                 }
                 return;
@@ -2579,10 +2592,7 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 Ok(saved) => {
                     crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
                         success: true,
-                        message: format!(
-                            "Saved waypoint '{}' in {}",
-                            saved.name, saved.zone
-                        ),
+                        message: format!("Saved waypoint '{}' in {}", saved.name, saved.zone),
                     });
                 }
                 Err(error) => {
@@ -2924,6 +2934,7 @@ enum InterceptedSlashCommand {
     ClearTarget,
     InteractTarget,
     Rewrite(String),
+    LivingShield(String),
 }
 
 fn intercept_custom_slash_command(command: &str) -> Option<InterceptedSlashCommand> {
@@ -2933,6 +2944,15 @@ fn intercept_custom_slash_command(command: &str) -> Option<InterceptedSlashComma
 
     if is_click_right_target_command(command) {
         return Some(InterceptedSlashCommand::InteractTarget);
+    }
+
+    if let Some(rest) = command
+        .strip_prefix("/livingshield")
+        .or_else(|| command.strip_prefix("/LivingShield"))
+    {
+        return Some(InterceptedSlashCommand::LivingShield(
+            rest.trim().to_string(),
+        ));
     }
 
     rewrite_door_command(command).map(InterceptedSlashCommand::Rewrite)
@@ -4006,10 +4026,7 @@ mod tests {
         let record = parse_nav_waypoint_command("/nav recordwaypoint pull_spot tag")
             .unwrap()
             .unwrap();
-        assert_eq!(
-            record,
-            NavWaypointCommand::Save(String::from("pull_spot"))
-        );
+        assert_eq!(record, NavWaypointCommand::Save(String::from("pull_spot")));
     }
 
     #[test]
@@ -4022,7 +4039,9 @@ mod tests {
             .unwrap();
         assert_eq!(delete, NavWaypointCommand::Delete(String::from("camp1")));
 
-        let missing = parse_nav_waypoint_command("/nav waypoint").unwrap().unwrap_err();
+        let missing = parse_nav_waypoint_command("/nav waypoint")
+            .unwrap()
+            .unwrap_err();
         assert!(missing.contains("Waypoint name is required"));
     }
 
