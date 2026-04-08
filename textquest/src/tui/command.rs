@@ -230,6 +230,14 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "nav gfay",
     },
     CommandEntry {
+        phrase: "nav ui",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "nav ui",
+        summary: "Toggle the nav debug diagnostics overlay on the Navigation screen.",
+        example: "nav ui",
+    },
+    CommandEntry {
         phrase: "mapfilter",
         aliases: &[],
         section: HelpSection::Navigation,
