@@ -2,8 +2,13 @@
 
 pub mod loot;
 use axum::Json;
-use axum::extract::Path;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use crate::AppState;
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +51,186 @@ pub async fn list_sessions() -> Json<Vec<SessionInfo>> {
         mana_pct: 85.0,
         status: "idle".into(),
     }])
+}
+
+// ─── Strategy tuning ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RotationEntry {
+    pub id: String,
+    pub name: String,
+    pub priority: u32,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClassParams {
+    pub ch_chain_timing_ms: Option<u32>,
+    pub dot_overlap_pct: Option<u8>,
+    pub burn_at_hp_pct: Option<u8>,
+    pub slow_at_hp_pct: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterConfig {
+    pub character_name: String,
+    pub class: String,
+    pub role: String,
+    pub heal_at_pct: u8,
+    pub mana_sit_pct: u8,
+    pub nuke_at_pct: u8,
+    pub rotation: Vec<RotationEntry>,
+    pub class_params: ClassParams,
+    pub group_override: bool,
+    pub group_name: Option<String>,
+}
+
+pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
+    let mut configs = HashMap::new();
+    for cfg in [
+        CharacterConfig {
+            character_name: "Frostreaver".into(),
+            class: "Cleric".into(),
+            role: "Healer".into(),
+            heal_at_pct: 70,
+            mana_sit_pct: 25,
+            nuke_at_pct: 90,
+            rotation: vec![
+                RotationEntry {
+                    id: "complete_heal".into(),
+                    name: "Complete Heal".into(),
+                    priority: 1,
+                    enabled: true,
+                },
+                RotationEntry {
+                    id: "celestial_healing".into(),
+                    name: "Celestial Healing".into(),
+                    priority: 2,
+                    enabled: true,
+                },
+            ],
+            class_params: ClassParams {
+                ch_chain_timing_ms: Some(2500),
+                ..ClassParams::default()
+            },
+            group_override: false,
+            group_name: Some("Group 1".into()),
+        },
+        CharacterConfig {
+            character_name: "Noxus".into(),
+            class: "Warrior".into(),
+            role: "Tank".into(),
+            heal_at_pct: 35,
+            mana_sit_pct: 0,
+            nuke_at_pct: 100,
+            rotation: vec![RotationEntry {
+                id: "taunt".into(),
+                name: "Taunt".into(),
+                priority: 1,
+                enabled: true,
+            }],
+            class_params: ClassParams::default(),
+            group_override: false,
+            group_name: Some("Group 1".into()),
+        },
+        CharacterConfig {
+            character_name: "Aelrindel".into(),
+            class: "Wizard".into(),
+            role: "DPS".into(),
+            heal_at_pct: 45,
+            mana_sit_pct: 20,
+            nuke_at_pct: 80,
+            rotation: vec![RotationEntry {
+                id: "ice_comet".into(),
+                name: "Ice Comet".into(),
+                priority: 1,
+                enabled: true,
+            }],
+            class_params: ClassParams {
+                burn_at_hp_pct: Some(30),
+                ..ClassParams::default()
+            },
+            group_override: false,
+            group_name: Some("Group 2".into()),
+        },
+        CharacterConfig {
+            character_name: "Grok".into(),
+            class: "Shaman".into(),
+            role: "Support".into(),
+            heal_at_pct: 60,
+            mana_sit_pct: 30,
+            nuke_at_pct: 85,
+            rotation: vec![RotationEntry {
+                id: "turgurs_insects".into(),
+                name: "Turgur's Insects".into(),
+                priority: 1,
+                enabled: true,
+            }],
+            class_params: ClassParams {
+                slow_at_hp_pct: Some(95),
+                ..ClassParams::default()
+            },
+            group_override: false,
+            group_name: Some("Group 2".into()),
+        },
+        CharacterConfig {
+            character_name: "Valerius".into(),
+            class: "Necromancer".into(),
+            role: "DPS".into(),
+            heal_at_pct: 40,
+            mana_sit_pct: 15,
+            nuke_at_pct: 75,
+            rotation: vec![RotationEntry {
+                id: "ignite_blood".into(),
+                name: "Ignite Blood".into(),
+                priority: 1,
+                enabled: true,
+            }],
+            class_params: ClassParams {
+                dot_overlap_pct: Some(10),
+                ..ClassParams::default()
+            },
+            group_override: false,
+            group_name: Some("Group 3".into()),
+        },
+    ] {
+        configs.insert(cfg.character_name.clone(), cfg);
+    }
+    configs
+}
+
+/// GET /api/config/characters — list all character tuning configs.
+pub async fn list_character_configs(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<CharacterConfig>>, StatusCode> {
+    let configs_map = state.character_configs.read().map_err(|_|
+        // It's good practice to log this error for observability.
+        StatusCode::INTERNAL_SERVER_ERROR
+    )?;
+    let mut configs = configs_map
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
+    configs.sort_by(|a, b| a.character_name.cmp(&b.character_name));
+    Ok(Json(configs))
+}
+
+/// PUT /api/config/characters/:name — upsert per-character tuning config.
+pub async fn put_character_config(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(mut config): Json<CharacterConfig>,
+) -> Result<Json<CharacterConfig>, StatusCode> {
+    if name.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    config.character_name = name;
+    let mut configs_map = state
+        .character_configs
+        .write()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    configs_map.insert(config.character_name.clone(), config.clone());
+    Ok(Json(config))
 }
 
 // ── Economy types ─────────────────────────────────────────────────────────────
@@ -343,5 +528,48 @@ mod tests {
         let Json(returned) = create_vendor_route(Json(route)).await;
         assert_eq!(returned.id, "vr-test");
         assert_eq!(returned.zone, "Test Zone");
+    }
+
+    #[tokio::test]
+    async fn character_configs_returns_demo_data() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+        });
+        let Json(configs) = list_character_configs(State(state)).await;
+        assert!(!configs.is_empty());
+        assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
+    }
+
+    #[tokio::test]
+    async fn put_character_config_upserts() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+        });
+        let input = CharacterConfig {
+            character_name: "IgnoredName".into(),
+            class: "Wizard".into(),
+            role: "DPS".into(),
+            heal_at_pct: 50,
+            mana_sit_pct: 15,
+            nuke_at_pct: 70,
+            rotation: vec![],
+            class_params: ClassParams::default(),
+            group_override: false,
+            group_name: None,
+        };
+        let Json(saved) =
+            put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))
+                .await
+                .expect("put character config should succeed");
+        assert_eq!(saved.character_name, "Aelrindel");
+
+        let Json(configs) = list_character_configs(State(state)).await;
+        let updated = configs
+            .into_iter()
+            .find(|c| c.character_name == "Aelrindel")
+            .expect("updated config should exist");
+        assert_eq!(updated.heal_at_pct, 50);
     }
 }

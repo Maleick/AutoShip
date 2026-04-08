@@ -13,6 +13,7 @@
 //! derives a master key with Argon2id and stores per-account passwords using
 //! AES-256-GCM — the same schema used by the CLI orchestrator.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -31,6 +32,8 @@ mod ws;
 pub struct AppState {
     /// Broadcast channel for real-time session events.
     pub event_tx: broadcast::Sender<String>,
+    /// In-memory character tuning config store for the strategy tuning panel.
+    pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
 }
 
 #[tokio::main]
@@ -41,7 +44,10 @@ async fn main() {
 
     let (event_tx, _) = broadcast::channel::<String>(256);
 
-    let state = Arc::new(AppState { event_tx });
+    let state = Arc::new(AppState {
+        event_tx,
+        character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
+    });
 
     // Serve the pre-built React SPA from web/dist/.
     // The fallback sends index.html for any unmatched path (SPA client-side routing).
@@ -91,6 +97,11 @@ async fn main() {
         // Health + sessions
         .route("/api/health", get(api::health))
         .route("/api/sessions", get(api::list_sessions))
+        .route("/api/config/characters", get(api::list_character_configs))
+        .route(
+            "/api/config/characters/{name}",
+            put(api::put_character_config),
+        )
         // Economy endpoints
         .route(
             "/api/economy/settings",
