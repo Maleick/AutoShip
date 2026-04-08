@@ -112,8 +112,8 @@ impl OffsetDatabase {
             PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
             PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, SERVER_MEMCHECK_HANDLER,
             SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL, WORLD_AUTHENTICATE,
-            ZONE_GUIDE_MANAGER, context_menu, context_menu_manager, player_base, player_zone,
-            spawn_manager,
+            ZONE_GUIDE_MANAGER, context_menu_mgr as context_menu_manager, player_base,
+            player_zone, spawn_manager,
         };
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
