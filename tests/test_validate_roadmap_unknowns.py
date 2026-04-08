@@ -161,10 +161,17 @@ class RoadmapValidatorTests(unittest.TestCase):
         roadmap = (REPO_ROOT / "docs" / "implementation-roadmap.md").read_text(
             encoding="utf-8"
         )
-        m9_section = roadmap.split("### `M9` Learning/RL", maxsplit=1)[1].split(
-            "### `M10` Economy", maxsplit=1
-        )[0]
+        m9_marker = "### `M9` Learning/RL"
+        m10_marker = "### `M10` Economy"
 
+        self.assertIn(m9_marker, roadmap, f"expected roadmap section header {m9_marker!r}")
+        _, _, after_m9 = roadmap.partition(m9_marker)
+        self.assertIn(
+            m10_marker,
+            after_m9,
+            f"expected following roadmap section header {m10_marker!r} after {m9_marker!r}",
+        )
+        m9_section, _, _ = after_m9.partition(m10_marker)
         self.assertIn("behavior optimization targets", m9_section)
         self.assertIn("measurable tuning loops", m9_section)
         self.assertIn("guardrails that prevent regressions from training-driven changes", m9_section)
