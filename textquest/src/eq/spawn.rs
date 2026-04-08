@@ -387,6 +387,21 @@ fn read_display_timestamp(proc: &ProcessHandle, eq_base: u64) -> Option<u32> {
     proc.read::<u32>(display_addr + display::TIME_STAMP).ok()
 }
 
+fn read_local_profile_addr(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
+    let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
+    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
+
+    use textquest_common::offsets::profile;
+    let profile_mgr = pc_addr + profile::PROFILE_MANAGER;
+    let profile_list_ptr = proc
+        .read_ptr(profile_mgr + profile::PROFILE_LIST_PTR)
+        .ok()
+        .filter(|&p| p != 0)?;
+    proc.read_ptr(profile_list_ptr + profile::PROFILE_FIRST)
+        .ok()
+        .filter(|&p| p != 0)
+}
+
 fn read_local_player_addr_from_pc(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
     let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
     let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
@@ -397,21 +412,6 @@ fn read_local_player_addr_from_pc(proc: &ProcessHandle, eq_base: u64) -> Option<
             let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)?;
             proc.read_ptr(player_ptr_addr).ok().filter(|&a| a != 0)
         })
-}
-
-fn read_local_profile_addr(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
-    use textquest_common::offsets::profile;
-
-    let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
-    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
-    let profile_mgr = pc_addr + profile::PROFILE_MANAGER;
-    let profile_list_ptr = proc
-        .read_ptr(profile_mgr + profile::PROFILE_LIST_PTR)
-        .ok()
-        .filter(|&a| a != 0)?;
-    proc.read_ptr(profile_list_ptr + profile::PROFILE_FIRST)
-        .ok()
-        .filter(|&a| a != 0)
 }
 
 fn read_spell_gem_etas(proc: &ProcessHandle, player_addr: usize) -> [u32; 15] {

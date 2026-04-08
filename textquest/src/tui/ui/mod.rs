@@ -853,6 +853,12 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             );
             push_kv(&mut rows, None, "Enter", "Jump back to the map panel");
             push_kv(&mut rows, None, ":nav <dest>", "Send a navigation command");
+            push_kv(
+                &mut rows,
+                None,
+                ":nav reload",
+                "Refresh the active zone navmesh",
+            );
         }
         ActiveScreen::Debug => {
             push_heading(&mut rows, None, "Debug Controls");
@@ -1031,9 +1037,27 @@ mod tests {
     }
 
     #[test]
+    fn overview_screen_dispatches_to_dashboard_renderer() {
+        let overview = render_app(sample_app(), 150, 36);
+
+        let mut navigation_app = sample_app();
+        navigation_app.set_active_screen(ActiveScreen::Navigation);
+        navigation_app.selected_client = 2;
+        navigation_app.sync_from_selected_client();
+        let navigation = render_app(navigation_app, 150, 36);
+
+        assert!(overview.contains("Ops Roster"));
+        assert!(overview.contains("Session"));
+        assert!(!overview.contains("Selected Route"));
+
+        assert!(navigation.contains("Selected Route"));
+        assert!(!navigation.contains("Ops Roster"));
+    }
+
+    #[test]
     fn navigation_render_surfaces_route_state_and_blockers() {
         let mut app = sample_app();
-        app.active_screen = ActiveScreen::Navigation;
+        app.set_active_screen(ActiveScreen::Navigation);
         app.selected_client = 2;
         app.sync_from_selected_client();
 
