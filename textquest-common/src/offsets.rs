@@ -274,6 +274,20 @@ pub const INV_SLOT_GET_ITEM_BASE: u64 = 0x0001_4041_9520;
 /// Signature: void MemorizeSet(int*, int)
 pub const SPELL_BOOK_WND_MEMORIZE_SET: u64 = 0x0001_4050_EFE0;
 
+// ─── CContextMenuManager global pointer and function addresses ───
+// Source: eqgame.h `pinstCContextMenuManager_x` and `CContextMenuManager__HandleMenu_x`,
+// client date 20260310
+// Calling convention: x64 MSVC (this in RCX for member functions)
+
+/// Singleton `CContextMenuManager*` instance pointer (preferred base).
+/// Source: eqgame.h `pinstCContextMenuManager_x`
+pub const PINST_CONTEXT_MENU_MANAGER: u64 = 0x0001_40F2_1BD0;
+
+/// `CContextMenuManager::HandleMenu` — activate a context-menu item by index.
+/// Signature: void HandleMenu(int menuId, int itemId, const CXPoint& pt)
+/// Source: eqgame.h `CContextMenuManager__HandleMenu_x`
+pub const CONTEXT_MENU_MGR_HANDLE_MENU: u64 = 0x0001_4046_E770;
+
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
 /// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would underflow).
@@ -689,26 +703,20 @@ pub mod profile {
 
     /// `BaseProfile::Buffs` (`SoeUtil::Array<EQ_Affect>`) at +0x0098.
     pub const BUFFS_ARRAY: usize = 0x0098;
-
     /// `BaseProfile::SpellBook` (`int[1280]`) at +0x00b0.
     pub const SPELL_BOOK: usize = 0x00b0;
-
-    /// `BaseProfile::MemorizedSpells` (`int[15]`) at +0x14b0.
+    /// `BaseProfile::MemorizedSpells` (`int[18]`) at +0x14b0.
     pub const MEMORIZED_SPELLS: usize = 0x14b0;
-
-    /// Number of spellbook slots (`(MEMORIZED_SPELLS - SPELL_BOOK) / 4 = 1280`).
+    /// Number of spellbook slots between `SpellBook` and `MemorizedSpells`.
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
-
-    /// Total spell-book slots in `BaseProfile::SpellBook`.
+    /// Alias for `SPELL_BOOK_SLOT_COUNT` — total slots in `BaseProfile::SpellBook`.
     pub const SPELL_BOOK_SLOTS: usize = 1280;
-
     /// Visible spell-gem slots used by the live client UI.
     pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
-
-    /// Total visible memorized spell gem slots (alias for `MEMORIZED_SPELL_GEM_COUNT`).
+    /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells` (alias for `MEMORIZED_SPELL_GEM_COUNT`).
     pub const MEMORIZED_SPELL_GEMS: usize = 15;
 
-    /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the `Buffs` array.
+    /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
     pub const ARRAY_DATA_PTR: usize = 0x08;
 
     /// `SoeUtil::Array::m_size` (i32 element count) at +0x10 within the `Buffs` array.
@@ -975,86 +983,26 @@ pub mod zone_guide {
     pub const DATA_SET: usize = 0xFA48;
 }
 
-/// Offsets within `CContextMenuManager` (extends `CXWnd`).
-/// Source: third_party/eqlib/include/eqlib/game/UI.h (live branch, 2026-03-10 client)
+/// Offsets within `CContextMenuManager`.
+/// Source: eqlib/game/UI.h, client date 20260310
 ///
-/// `CContextMenuManager` is the UI subsystem singleton that owns all right-click
-/// context menus in EverQuest.  The in-game global is `pContextMenus`
-/// (MQ2: `pinstCContextMenuManager_x`).
-pub mod context_menu_manager {
-    /// Maximum number of simultaneously visible menus in the display stack.
-    /// Derived from `pCurrMenus[MAX_CONTEXT_MENU_DEPTH]` array size
-    /// (0x02b0 − 0x0270 = 0x40 bytes, 8 bytes per pointer ÷ 8).
-    pub const MAX_VISIBLE_DEPTH: usize = 8;
-
-    /// Maximum number of menus that can be registered at once.
-    /// Derived from `pMenus[MAX_CONTEXT_MENUS]` array size
-    /// (0x22b8 − 0x02b8 = 0x2000 bytes, 8 bytes per pointer = 1024).
-    pub const MAX_MENUS: usize = 1024;
-
-    /// `CXWnd* pParentMenuWnd` at +0x0268.
-    pub const PARENT_WND: usize = 0x0268;
-
-    /// `CContextMenu* pCurrMenus[MAX_VISIBLE_DEPTH]` — currently visible menu stack at +0x0270.
-    /// Up to `MAX_VISIBLE_DEPTH` (8) `CContextMenu*` pointers, 8 bytes each.
-    pub const CURR_MENUS: usize = 0x0270;
-
-    /// `int NumVisibleMenus` at +0x02b0.
-    pub const NUM_VISIBLE_MENUS: usize = 0x02b0;
-
-    /// `int CurrMenu` — index into `pCurrMenus` for the top-of-stack menu at +0x02b4.
-    pub const CURR_MENU_INDEX: usize = 0x02b4;
-
-    /// `CContextMenu* pMenus[MAX_MENUS]` — all registered menus at +0x02b8.
-    /// Up to `MAX_MENUS` (1024) `CContextMenu*` pointers, 8 bytes each.
-    pub const MENUS_ARRAY: usize = 0x02b8;
-
-    /// `int NumMenus` at +0x22b8.
-    pub const NUM_MENUS: usize = 0x22b8;
-
-    /// `CXWnd* pHandlerWnd` — window that receives `WndNotification` for menu selections at +0x22c0.
-    pub const HANDLER_WND: usize = 0x22c0;
-
-    /// `int HandlerCmd` — command ID sent with `WndNotification` on selection at +0x22c8.
-    pub const HANDLER_CMD: usize = 0x22c8;
-
-    /// `int DefaultMenuIndex` at +0x22cc.
-    pub const DEFAULT_MENU_INDEX: usize = 0x22cc;
-
-    /// `int DefaultHelpItem` at +0x22d0.
-    pub const DEFAULT_HELP_ITEM: usize = 0x22d0;
-
-    /// `int DefaultBGItem` at +0x22d4.
-    pub const DEFAULT_BG_ITEM: usize = 0x22d4;
-
-    /// `int DefaultMinItem` at +0x22d8.
-    pub const DEFAULT_MIN_ITEM: usize = 0x22d8;
-
-    /// `int DefaultCloseItem` at +0x22dc.
-    pub const DEFAULT_CLOSE_ITEM: usize = 0x22dc;
-
-    /// `int DefaultLockItem` at +0x22e0.
-    pub const DEFAULT_LOCK_ITEM: usize = 0x22e0;
-
-    /// `int DefaultEscapeItem` at +0x22e4.
-    pub const DEFAULT_ESCAPE_ITEM: usize = 0x22e4;
-
-    /// `sizeof(CContextMenuManager)` = 0x22e8
-    /// (`DefaultEscapeItem` is an `int` at +0x22e4, so struct ends at +0x22e8).
-    pub const SIZE: usize = 0x22e8;
-}
-
-/// Offsets within `CContextMenu` (extends `CListWnd`, `sizeof(CListWnd)` = 0x348).
-/// Source: third_party/eqlib/include/eqlib/game/UI.h (live branch, 2026-03-10 client)
-///
-/// `CContextMenu` is a single right-click popup list.  Individual items are appended
-/// with `AddMenuItem`/`AddSeparator` and removed with `RemoveMenuItem`/`RemoveAllMenuItems`.
-pub mod context_menu {
-    /// `int NumItems` at +0x348 (first field after the `CListWnd` base).
-    pub const NUM_ITEMS: usize = 0x348;
-
-    /// `sizeof(CContextMenu)` = 0x34c (NumItems int at 0x348 + 4 bytes).
-    pub const SIZE: usize = 0x34c;
+/// `CContextMenuManager` manages all right-click popup menus in the game.
+/// It holds an array of `CContextMenu*` entries; each `CContextMenu` is a
+/// `CListWnd` whose rows contain the menu-item labels (accessible through
+/// the shared `eqgame::CLISTWND_ITEMS_ARRAY` / `CLISTWND_ITEMS_COUNT` offsets).
+pub mod context_menu_mgr {
+    /// `ArrayClass<CContextMenu*>` — array of registered menus.
+    /// `ArrayClass` layout: `m_length` (int) at `+0x00`, `m_array` (ptr) at `+0x08`.
+    /// The `ArrayClass` starts at `CContextMenuManager` `+0x010`.
+    pub const MENUS_ARRAY_BASE: usize = 0x010;
+    /// Length of the `pMenus` `ArrayClass` (`int` at `MENUS_ARRAY_BASE + 0x00`).
+    pub const MENUS_COUNT: usize = 0x010;
+    /// Data pointer of the `pMenus` `ArrayClass` (`CContextMenu**` at `MENUS_ARRAY_BASE + 0x08`).
+    pub const MENUS_DATA: usize = 0x018;
+    /// Index of the currently displayed menu (`int` at `+0x020`).
+    pub const CUR_MENU: usize = 0x020;
+    /// Index of the currently highlighted menu item (`int` at `+0x024`).
+    pub const CUR_ITEM: usize = 0x024;
 }
 
 #[cfg(test)]
@@ -1197,6 +1145,7 @@ mod tests {
             PINST_ACTIVE_CORPSE,
             PINST_CCHAT_WINDOW_MANAGER,
             PINST_CINV_SLOT_MGR,
+            PINST_CONTEXT_MENU_MANAGER,
         ];
         for addr in &globals {
             assert!(
@@ -1240,6 +1189,7 @@ mod tests {
             INV_SLOT_MGR_MOVE_ITEM,
             INV_SLOT_MGR_SELECT_SLOT,
             SPELL_BOOK_WND_MEMORIZE_SET,
+            CONTEXT_MENU_MGR_HANDLE_MENU,
             DSP_CHAT,
         ];
         for addr in &funcs {
@@ -1461,47 +1411,24 @@ mod tests {
     }
 
     #[test]
-    fn context_menu_manager_offsets_match_eqlib_live_20260310() {
-        assert_eq!(context_menu_manager::MAX_VISIBLE_DEPTH, 8);
-        assert_eq!(context_menu_manager::MAX_MENUS, 1024);
-        assert_eq!(context_menu_manager::PARENT_WND, 0x0268);
-        assert_eq!(context_menu_manager::CURR_MENUS, 0x0270);
-        assert_eq!(context_menu_manager::NUM_VISIBLE_MENUS, 0x02b0);
-        assert_eq!(context_menu_manager::CURR_MENU_INDEX, 0x02b4);
-        assert_eq!(context_menu_manager::MENUS_ARRAY, 0x02b8);
-        assert_eq!(context_menu_manager::NUM_MENUS, 0x22b8);
-        assert_eq!(context_menu_manager::HANDLER_WND, 0x22c0);
-        assert_eq!(context_menu_manager::HANDLER_CMD, 0x22c8);
-        assert_eq!(context_menu_manager::DEFAULT_MENU_INDEX, 0x22cc);
-        assert_eq!(context_menu_manager::DEFAULT_HELP_ITEM, 0x22d0);
-        assert_eq!(context_menu_manager::DEFAULT_BG_ITEM, 0x22d4);
-        assert_eq!(context_menu_manager::DEFAULT_MIN_ITEM, 0x22d8);
-        assert_eq!(context_menu_manager::DEFAULT_CLOSE_ITEM, 0x22dc);
-        assert_eq!(context_menu_manager::DEFAULT_LOCK_ITEM, 0x22e0);
-        assert_eq!(context_menu_manager::DEFAULT_ESCAPE_ITEM, 0x22e4);
-        assert_eq!(context_menu_manager::SIZE, 0x22e8);
+    fn context_menu_mgr_addresses_match_eqgame_20260310() {
+        assert_eq!(PINST_CONTEXT_MENU_MANAGER, 0x0001_40F2_1BD0);
+        assert_eq!(CONTEXT_MENU_MGR_HANDLE_MENU, 0x0001_4046_E770);
     }
 
     #[test]
-    fn context_menu_manager_array_bounds_are_consistent() {
-        // pCurrMenus array: CURR_MENUS..NUM_VISIBLE_MENUS should span exactly
-        // MAX_VISIBLE_DEPTH * 8 bytes (one 64-bit pointer per slot).
-        const CURR_MENUS_SPAN: usize =
-            context_menu_manager::NUM_VISIBLE_MENUS - context_menu_manager::CURR_MENUS;
-        assert_eq!(CURR_MENUS_SPAN, context_menu_manager::MAX_VISIBLE_DEPTH * 8);
-
-        // pMenus array: MENUS_ARRAY..NUM_MENUS should span exactly
-        // MAX_MENUS * 8 bytes.
-        const MENUS_SPAN: usize =
-            context_menu_manager::NUM_MENUS - context_menu_manager::MENUS_ARRAY;
-        assert_eq!(MENUS_SPAN, context_menu_manager::MAX_MENUS * 8);
+    fn context_menu_mgr_addresses_rebase_successfully() {
+        let actual_base: u64 = 0x7FF600000000;
+        assert!(rebase(PINST_CONTEXT_MENU_MANAGER, actual_base).is_some());
+        assert!(rebase(CONTEXT_MENU_MGR_HANDLE_MENU, actual_base).is_some());
     }
 
     #[test]
-    fn context_menu_offsets_match_eqlib_live_20260310() {
-        assert_eq!(context_menu::NUM_ITEMS, 0x348);
-        assert_eq!(context_menu::SIZE, 0x34c);
-        // CContextMenu starts where CListWnd ends; SIZE > NUM_ITEMS
-        const _: () = assert!(context_menu::SIZE > context_menu::NUM_ITEMS);
+    fn context_menu_mgr_struct_offsets_are_ordered() {
+        const _: () = {
+            assert!(context_menu_mgr::MENUS_COUNT < context_menu_mgr::MENUS_DATA);
+            assert!(context_menu_mgr::MENUS_DATA < context_menu_mgr::CUR_MENU);
+            assert!(context_menu_mgr::CUR_MENU < context_menu_mgr::CUR_ITEM);
+        };
     }
 }

@@ -2,13 +2,9 @@
 
 ## Daily Working Loop
 
-### 1. Sync reference trees only when needed
+### 1. Use reference trees only when needed
 
-```bash
-git submodule update --init --recursive
-```
-
-This remains optional for normal build, test, and runtime work.
+`third_party/eqlib` and `third_party/macroquest` are optional local reference paths, not required bootstrap steps.
 
 Do it before:
 
@@ -40,7 +36,7 @@ cargo build --release
 
 - prefer demo mode first
 - iterate with `cargo run`
-- confirm the four main screens, command bar, and scope controls
+- confirm the five main screens, command bar, and scope controls
 
 ### Injection, packet, zoning, login, and live combat changes
 
@@ -134,8 +130,8 @@ Do not hand-edit generated sources without also updating the generator flow:
 ## Internals and Reference Discipline
 
 - prefer current code over older design docs when there is a conflict
-- prefer `third_party/eqlib` for eqlib references
-- use `third_party/macroquest` for broader upstream context such as login, routing, and scripting behavior
+- prefer `third_party/eqlib` for eqlib references when that local tree is available
+- use `third_party/macroquest` for broader upstream context such as login, routing, and scripting behavior when that local tree is available
 - treat `third_party/macroquest/src/eqlib` as vendored upstream context, not the primary TextQuest eqlib citation path
 - use MacroQuest docs, RedGuides docs, and public comparison repos as roadmap inputs, not as proof that TextQuest already implements a feature
 

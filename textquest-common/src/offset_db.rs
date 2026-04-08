@@ -102,12 +102,13 @@ impl OffsetDatabase {
         use crate::offsets::{
             CAN_USE_ITEM, CAST_SPELL, CCHAT_MGR_CREATE_CHAT_WINDOW, CCHAT_MGR_FREE_CHAT_WINDOW,
             CCHAT_MGR_GET_RGBA, CCHAT_MGR_INIT_CONTEXT_MENU, CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
-            CHANGE_HEIGHT, CHAR_LIST_ENTER_WORLD, CHAR_LIST_SELECT_CHAR, CLICKED_PLAYER, DO_ATTACK,
-            DO_COMBAT_ABILITY, DO_LOOT, EQ_PREFERRED_BASE, EXECUTE_CMD, FILE_INTEGRITY_DISPATCHER,
-            FIX_HEADING, FREE_TARGET_CAST_SPELL, GET_BEARING, GET_CON_LEVEL, GET_PC_CLIENT,
-            INBOUND_MSG_COUNTER, INTERPRET_CMD, INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM,
-            INV_SLOT_MGR_SELECT_SLOT, ISSUE_PET_COMMAND, NET_SEND, OUTBOUND_MSG_COUNTER,
-            PINST_CDISPLAY, PINST_CEVERQUEST, PINST_CONTROLLED_PLAYER, PINST_LOCAL_PC,
+            CHANGE_HEIGHT, CHAR_LIST_ENTER_WORLD, CHAR_LIST_SELECT_CHAR, CLICKED_PLAYER,
+            CONTEXT_MENU_MGR_HANDLE_MENU, DO_ATTACK, DO_COMBAT_ABILITY, DO_LOOT, EQ_PREFERRED_BASE,
+            EXECUTE_CMD, FILE_INTEGRITY_DISPATCHER, FIX_HEADING, FREE_TARGET_CAST_SPELL,
+            GET_BEARING, GET_CON_LEVEL, GET_PC_CLIENT, INBOUND_MSG_COUNTER, INTERPRET_CMD,
+            INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM, INV_SLOT_MGR_SELECT_SLOT,
+            ISSUE_PET_COMMAND, NET_SEND, OUTBOUND_MSG_COUNTER, PINST_CDISPLAY, PINST_CEVERQUEST,
+            PINST_CONTEXT_MENU_MANAGER, PINST_CONTROLLED_PLAYER, PINST_LOCAL_PC,
             PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
             PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, SERVER_MEMCHECK_HANDLER,
             SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL, WORLD_AUTHENTICATE,
@@ -123,6 +124,10 @@ impl OffsetDatabase {
         globals.insert("pinstSpellManager".to_string(), PINST_SPELL_MANAGER);
         globals.insert("pinstCDisplay".to_string(), PINST_CDISPLAY);
         globals.insert("pinstCEverQuest".to_string(), PINST_CEVERQUEST);
+        globals.insert(
+            "pinstCContextMenuManager".to_string(),
+            PINST_CONTEXT_MENU_MANAGER,
+        );
 
         let mut pb = HashMap::new();
         pb.insert("next".to_string(), player_base::NEXT);
@@ -230,6 +235,10 @@ impl OffsetDatabase {
         funcs.insert("serverMemcheckHandler".into(), SERVER_MEMCHECK_HANDLER);
         funcs.insert("worldAuthenticate".into(), WORLD_AUTHENTICATE);
         funcs.insert("systemFingerprint".into(), SYSTEM_FINGERPRINT);
+        funcs.insert(
+            "contextMenuMgrHandleMenu".into(),
+            CONTEXT_MENU_MGR_HANDLE_MENU,
+        );
 
         Self {
             client_date: "20260310".to_string(),
@@ -405,6 +414,7 @@ mod tests {
             "pinstSpellManager",
             "pinstCDisplay",
             "pinstCEverQuest",
+            "pinstCContextMenuManager",
         ];
         for key in &expected_globals {
             assert!(db.get_global(key).is_some(), "missing global: {}", key);
@@ -506,6 +516,7 @@ mod tests {
             "serverMemcheckHandler",
             "worldAuthenticate",
             "systemFingerprint",
+            "contextMenuMgrHandleMenu",
         ];
         for key in &expected_functions {
             assert!(db.get_function(key).is_some(), "missing function: {}", key);

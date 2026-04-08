@@ -3,6 +3,7 @@ import LeftSidebar, { type ActiveView } from "./components/LeftSidebar";
 import CenterContent from "./components/CenterContent";
 import RightSidebar from "./components/RightSidebar";
 import GroupBuilder from "./components/GroupBuilder";
+import LootConfig from "./components/LootConfig";
 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>("engagements");
@@ -18,6 +19,8 @@ function App() {
         <LeftSidebar activeView={activeView} onNavigate={setActiveView} />
         {activeView === "formations" ? (
           <GroupBuilder />
+        ) : activeView === "loot" ? (
+          <LootConfig />
         ) : (
           <>
             <CenterContent />
@@ -30,4 +33,3 @@ function App() {
 }
 
 export default App;
-

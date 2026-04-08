@@ -14,6 +14,7 @@ pub mod rotation;
 pub mod skill_cooldowns;
 pub mod state;
 pub mod strategy;
+pub mod toon_config;
 pub mod twist;
 pub mod xtarget;
 
