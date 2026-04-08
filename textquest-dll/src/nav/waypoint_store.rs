@@ -115,6 +115,8 @@ impl WaypointStore {
         let data: Vec<&NamedWaypoint> = self.waypoints.values().collect();
         let serialized = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
 
+        validate_store_path(&self.path)?;
+
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -206,6 +208,28 @@ impl WaypointStore {
     }
 }
 
+fn validate_store_path(path: &Path) -> Result<(), String> {
+    if path.as_os_str().is_empty() {
+        return Err(String::from("Waypoint store path cannot be empty"));
+    }
+
+    for ancestor in path.ancestors() {
+        let metadata = match fs::symlink_metadata(ancestor) {
+            Ok(metadata) => metadata,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.to_string()),
+        };
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "Waypoint store path is unsafe: {} is a symlink",
+                ancestor.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn store() -> &'static Mutex<WaypointStore> {
     static STORE: OnceLock<Mutex<WaypointStore>> = OnceLock::new();
     STORE.get_or_init(|| Mutex::new(WaypointStore::load(default_store_path())))
@@ -261,7 +285,7 @@ mod tests {
     fn temp_path(name: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
         path.push(format!("textquest-waypoints-test-{name}.json"));
-        if path.exists() {
+        if fs::symlink_metadata(&path).is_ok() {
             let _ = fs::remove_file(&path);
         }
         path
