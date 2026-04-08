@@ -725,15 +725,12 @@ pub mod profile {
     /// `PcClient::BuffIDs` — flat array of `i32[62]` spell IDs for long buffs.
     /// Faster than the full profile chain when only spell IDs are needed.
     pub const BUFF_IDS: usize = 0x068;
-<<<<<<< HEAD
-=======
 
     /// Total spellbook slots stored in `BaseProfile::SpellBook`.
     pub const SPELL_BOOK_SLOTS: usize = SPELL_BOOK_SLOT_COUNT;
 
     /// Visible memorized spell gems stored in `BaseProfile::MemorizedSpells`.
     pub const MEMORIZED_SPELL_GEMS: usize = MEMORIZED_SPELL_GEM_COUNT;
->>>>>>> master
 }
 
 /// Offsets within `CDisplay`.
