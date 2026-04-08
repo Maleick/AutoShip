@@ -3330,8 +3330,12 @@ fn spell_set_ini_candidates(
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| {
                     name.len() > prefix.len() + 4
-                        && name[..prefix.len()].eq_ignore_ascii_case(&prefix)
-                        && name[name.len() - 4..].eq_ignore_ascii_case(".ini")
+                        && name
+                            .get(..prefix.len())
+                            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(&prefix))
+                        && name
+                            .get(name.len() - 4..)
+                            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(".ini"))
                 })
         })
         .collect::<Vec<_>>();
@@ -3674,6 +3678,30 @@ mod tests {
             .collect();
 
         assert_eq!(names, vec!["Cleric01_Teek.ini", "cleric01_Test.ini"]);
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn spell_set_ini_candidates_ignore_multibyte_prefixes_without_panicking() {
+        let temp = std::env::temp_dir().join(format!(
+            "textquest-spellset-multibyte-boundary-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).expect("create temp dir");
+        std::fs::write(temp.join("€bad.ini"), "").expect("write multibyte utf8 ini");
+        std::fs::write(temp.join("a_good.ini"), "").expect("write ascii ini");
+
+        let matches = spell_set_ini_candidates(&temp, "a");
+        let names: Vec<String> = matches
+            .iter()
+            .filter_map(|path| path.file_name().and_then(|name| name.to_str()))
+            .map(ToOwned::to_owned)
+            .collect();
+
+        assert_eq!(names, vec!["a_good.ini"]);
         let _ = std::fs::remove_dir_all(&temp);
     }
 
