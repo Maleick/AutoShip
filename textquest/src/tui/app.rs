@@ -3566,6 +3566,52 @@ impl App {
         }
     }
 
+    /// Toggle the `/nav ui` debug diagnostics overlay and refresh diagnostics from the
+    /// focused client when turning on.
+    fn handle_nav_ui_command(&mut self) {
+        let was_on = self.nav_state.show_nav_debug;
+        self.nav_state.show_nav_debug = !was_on;
+
+        if self.nav_state.show_nav_debug {
+            // Try to fetch fresh diagnostics from the focused client.
+            if let Some(pid) = self.focused_pids().first().copied() {
+                if let Some(diag) = query_nav_diagnostics_sync(pid) {
+                    self.nav_state.nav_diagnostics = Some((pid, diag));
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Nav debug overlay ON — diagnostics updated."),
+                        false,
+                    );
+                } else {
+                    self.nav_state.nav_diagnostics = None;
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from(
+                            "Nav debug overlay ON — no live client data (DLL not injected?).",
+                        ),
+                        true,
+                    );
+                }
+            } else {
+                self.nav_state.nav_diagnostics = None;
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    String::from("Nav debug overlay ON — no focused client."),
+                    true,
+                );
+            }
+            // Ensure the navigation screen is visible.
+            self.set_active_screen(ActiveScreen::Navigation);
+        } else {
+            self.nav_state.nav_diagnostics = None;
+            self.set_feedback(
+                ToastLevel::Info,
+                String::from("Nav debug overlay OFF."),
+                false,
+            );
+        }
+    }
+
     fn usage_feedback(&mut self, command: &str, reason: impl Into<String>) {
         let reason = reason.into();
         if let Some(entry) = command::command_entry(command) {
@@ -3744,15 +3790,8 @@ impl App {
                 let destination = rest.to_string();
                 if destination.is_empty() {
                     self.usage_feedback("nav", "Missing navigation target.");
-                } else if parts
-                    .get(1)
-                    .is_some_and(|arg| arg.eq_ignore_ascii_case("reload"))
-                {
-                    if parts.len() > 2 {
-                        self.usage_feedback("nav reload", "Unexpected arguments.");
-                    } else {
-                        self.execute_nav_reload_command();
-                    }
+                } else if parts.get(1).copied() == Some("ui") {
+                    self.handle_nav_ui_command();
                 } else if let Some((label, target, zone_hint)) =
                     self.resolve_nav_target(&parts[1..])
                 {
@@ -5416,6 +5455,11 @@ impl App {
             {
                 self.handle_mapfilter_radius(parts, false);
             }
+            Some(arg)
+                if arg.eq_ignore_ascii_case("aggroradius") || arg.eq_ignore_ascii_case("ar") =>
+            {
+                self.handle_mapfilter_aggro_radius(parts);
+            }
             Some(arg) if arg.eq_ignore_ascii_case("targetpath") => {
                 let v = parts
                     .get(2)
@@ -5571,6 +5615,45 @@ impl App {
                 self.set_feedback(
                     ToastLevel::Success,
                     format!("{label} radius {r:.0} ({color:?})"),
+                    true,
+                );
+            }
+        }
+    }
+
+    fn handle_mapfilter_aggro_radius(&mut self, parts: &[&str]) {
+        match parts.get(2).map(|s| s.to_ascii_lowercase()).as_deref() {
+            None | Some("off" | "0" | "clear") => {
+                self.map_state.aggro_radius = None;
+                self.set_feedback(ToastLevel::Info, String::from("Aggro radius cleared"), true);
+            }
+            Some(val) => {
+                let Ok(r) = val.parse::<f32>() else {
+                    self.usage_feedback(
+                        "mapfilter aggroradius",
+                        "Usage: mapfilter aggroradius <radius> [color]",
+                    );
+                    return;
+                };
+                if !r.is_finite() || r <= 0.0 {
+                    self.usage_feedback(
+                        "mapfilter aggroradius",
+                        "Usage: mapfilter aggroradius <radius> [color] (radius must be > 0)",
+                    );
+                    return;
+                }
+                let color = parts
+                    .get(3)
+                    .and_then(|c| super::theme::parse_color_name(c))
+                    .unwrap_or(Color::Red);
+                self.map_state.aggro_radius = Some(MapRadiusOverlay {
+                    radius: r,
+                    color,
+                    label: format!("Aggro {r:.0}"),
+                });
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Aggro radius {r:.0} ({color:?})"),
                     true,
                 );
             }
@@ -5779,7 +5862,7 @@ impl App {
                     self.usage_feedback("mapmarker", "Usage: mapmarker clear <name|all>");
                     return;
                 };
-                let msg = if name.to_ascii_lowercase() == "all" {
+                let msg = if name.eq_ignore_ascii_case("all") {
                     self.map_state.named_markers.clear();
                     String::from("All markers cleared")
                 } else {
@@ -6257,6 +6340,22 @@ fn send_ipc_command(pid: u32, cmd: &textquest_common::ipc::Command) -> anyhow::R
     pipe.send_raw_token(&token)?;
     pipe.send_async(cmd)?;
     Ok(())
+}
+
+/// Query nav diagnostics synchronously from a live DLL client.
+/// Returns `None` if the client is not injected or the query fails.
+fn query_nav_diagnostics_sync(pid: u32) -> Option<textquest_common::nav::NavDiagnostics> {
+    use crate::ipc::pipe::CommandPipe;
+    use textquest_common::ipc::{Command, Response};
+
+    let token = crate::ipc::load_session_token(pid)?;
+    let session_id = textquest_common::ipc::session_id_from_token(&token);
+    let pipe = CommandPipe::connect(pid, session_id).ok()?;
+    pipe.send_raw_token(&token).ok()?;
+    match pipe.send(&Command::NavDiagnosticsQuery).ok()? {
+        Response::NavDiagnosticsResult { diagnostics } => Some(diagnostics),
+        _ => None,
+    }
 }
 
 fn is_reserved_command_name(name: &str) -> bool {
@@ -6816,6 +6915,41 @@ mod tests {
     }
 
     #[test]
+    fn focused_pids_one_toon_returns_only_that_pid() {
+        use textquest_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.clients.push(test_client(10, "Warrior"));
+        app.clients.push(test_client(20, "Cleric"));
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Cleric".to_string(),
+        };
+        let pids = app.focused_pids();
+        assert_eq!(pids, vec![20]);
+    }
+
+    #[test]
+    fn focused_pids_one_toon_unknown_returns_empty() {
+        use textquest_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.clients.push(test_client(10, "Warrior"));
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Ghost".to_string(),
+        };
+        assert!(app.focused_pids().is_empty());
+    }
+
+    #[test]
+    fn focused_pids_all_session_returns_all() {
+        use textquest_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.clients.push(test_client(1, "A"));
+        app.clients.push(test_client(2, "B"));
+        app.routing_scope = RoutingScope::AllSession;
+        let pids = app.focused_pids();
+        assert_eq!(pids.len(), 2);
+    }
+
+    #[test]
     fn scope_command_unknown_character_shows_error_feedback() {
         let mut app = App::new();
         app.execute_scope_command(&["NonExistentToon"]);
@@ -7017,6 +7151,45 @@ mod tests {
         app.automation_paused = true;
         app.automation_paused = true;
         assert!(app.automation_paused);
+    }
+
+    // ── Nav UI ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn nav_ui_command_toggles_show_nav_debug() {
+        let mut app = App::new();
+        assert!(!app.nav_state.show_nav_debug);
+        // Toggle on (no live clients, so diagnostics remain None)
+        app.handle_nav_ui_command();
+        assert!(app.nav_state.show_nav_debug);
+        assert!(app.nav_state.nav_diagnostics.is_none());
+        // Toggle off — clears diagnostics flag
+        app.handle_nav_ui_command();
+        assert!(!app.nav_state.show_nav_debug);
+        assert!(app.nav_state.nav_diagnostics.is_none());
+    }
+
+    #[test]
+    fn nav_ui_command_turns_off_clears_diagnostics() {
+        let mut app = App::new();
+        // Seed some fake diagnostics, then toggle off
+        app.nav_state.show_nav_debug = true;
+        app.nav_state.nav_diagnostics = Some((
+            1234,
+            textquest_common::nav::NavDiagnostics {
+                state: String::from("Moving"),
+                mesh_loaded: true,
+                path_exists: true,
+                path_length: Some(100.0),
+                velocity: 3.2,
+                waypoint_index: 1,
+                waypoint_count: 5,
+                distance_remaining: 42.0,
+            },
+        ));
+        app.handle_nav_ui_command();
+        assert!(!app.nav_state.show_nav_debug);
+        assert!(app.nav_state.nav_diagnostics.is_none());
     }
 
     // ── Layout presets ──────────────────────────────────────────────────────

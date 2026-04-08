@@ -230,12 +230,12 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "nav gfay",
     },
     CommandEntry {
-        phrase: "nav reload",
+        phrase: "nav ui",
         aliases: &[],
         section: HelpSection::Navigation,
-        usage: "nav reload",
-        summary: "Redownload and reload the active client's current zone navmesh.",
-        example: "nav reload",
+        usage: "nav ui",
+        summary: "Toggle the nav debug diagnostics overlay on the Navigation screen.",
+        example: "nav ui",
     },
     CommandEntry {
         phrase: "mapfilter",
