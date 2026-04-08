@@ -23,7 +23,7 @@ use aes_gcm::{
 use anyhow::{Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
 use rand::RngCore;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -246,6 +246,90 @@ fn generate_salt() -> [u8; 32] {
     salt
 }
 
+const MASTER_SALT_META_KEY: &str = "master_salt_hex";
+
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn decode_hex_32(hex: &str) -> Result<[u8; 32]> {
+    fn hex_nibble(ch: u8) -> Option<u8> {
+        match ch {
+            b'0'..=b'9' => Some(ch - b'0'),
+            b'a'..=b'f' => Some(ch - b'a' + 10),
+            b'A'..=b'F' => Some(ch - b'A' + 10),
+            _ => None,
+        }
+    }
+
+    if hex.len() != 64 {
+        anyhow::bail!(
+            "invalid persisted master salt length: expected 64 hex chars, got {}",
+            hex.len()
+        );
+    }
+
+    let mut salt = [0u8; 32];
+    let bytes = hex.as_bytes();
+    for i in 0..32 {
+        let hi = hex_nibble(bytes[i * 2]).with_context(|| {
+            format!(
+                "invalid hex character '{}' in persisted master salt",
+                bytes[i * 2] as char
+            )
+        })?;
+        let lo = hex_nibble(bytes[i * 2 + 1]).with_context(|| {
+            format!(
+                "invalid hex character '{}' in persisted master salt",
+                bytes[i * 2 + 1] as char
+            )
+        })?;
+        salt[i] = (hi << 4) | lo;
+    }
+    Ok(salt)
+}
+
+fn load_or_create_master_salt(conn: &Connection) -> Result<[u8; 32]> {
+    let existing = conn
+        .query_row(
+            "SELECT value FROM meta WHERE key = ?1",
+            rusqlite::params![MASTER_SALT_META_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .context("Failed to query master salt metadata")?;
+
+    if let Some(salt_hex) = existing {
+        return decode_hex_32(&salt_hex);
+    }
+
+    let salt = generate_salt();
+    let salt_hex = encode_hex(&salt);
+    conn.execute(
+        "INSERT OR IGNORE INTO meta (key, value) VALUES (?1, ?2)",
+        rusqlite::params![MASTER_SALT_META_KEY, salt_hex],
+    )
+    .context("Failed to persist master salt metadata")?;
+
+    let persisted = conn
+        .query_row(
+            "SELECT value FROM meta WHERE key = ?1",
+            rusqlite::params![MASTER_SALT_META_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .context("Failed to query persisted master salt metadata")?
+        .context("Master salt metadata missing after insert attempt")?;
+
+    decode_hex_32(&persisted)
+}
+
 fn aes_encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
     let cipher = Aes256Gcm::new(key.into());
     let mut nonce_bytes = [0u8; 12];
@@ -287,7 +371,7 @@ impl CredentialStore {
         conn.execute_batch(CREDENTIAL_SCHEMA)
             .context("Failed to initialise credential store schema")?;
 
-        let salt = generate_salt();
+        let salt = load_or_create_master_salt(&conn)?;
         let master_key = derive_key(master_password, &salt)?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -471,5 +555,33 @@ mod tests {
         cred_store.set_password("acct2", "pass").unwrap();
         cred_store.remove_password("acct2").unwrap();
         assert!(!cred_store.has_password("acct2").unwrap());
+    }
+
+    #[test]
+    fn credential_store_persists_master_salt_across_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("creds.db");
+        let _store = CredentialStore::open(&db_path, "master").unwrap();
+        let conn = Connection::open(&db_path).unwrap();
+        let first: String = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = ?1",
+                rusqlite::params![MASTER_SALT_META_KEY],
+                |row| row.get(0),
+            )
+            .unwrap();
+        drop(conn);
+
+        let _store = CredentialStore::open(&db_path, "master").unwrap();
+        let conn = Connection::open(&db_path).unwrap();
+        let second: String = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = ?1",
+                rusqlite::params![MASTER_SALT_META_KEY],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(first, second);
     }
 }
