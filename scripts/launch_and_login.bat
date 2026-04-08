@@ -22,6 +22,15 @@ if "%TextQuest_PASSWORD%"=="" (
 set EQ_PATH=C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest
 set TextQuest_PATH=C:\Users\xmale\Projects\TextQuest
 
+if "%ACCOUNT%"=="" (
+    echo ERROR: ACCOUNT cannot be empty.
+    exit /b 1
+)
+if "%PASSWORD%"=="" (
+    echo ERROR: PASSWORD cannot be empty.
+    exit /b 1
+)
+
 REM Kill any existing EQ
 echo [1/4] Killing existing EQ processes...
 taskkill /f /im eqgame.exe >nul 2>&1

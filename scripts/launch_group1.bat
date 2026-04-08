@@ -13,6 +13,8 @@ set SERVER=Firiona Vie
 set INJECT_WAIT=12
 set HOOK_WAIT=2
 set STAGGER=15
+set ACCOUNTS_FILE=%~dp0accounts_group1.txt
+set EXPECTED_CLIENTS=6
 
 REM Account list: name password
 set ACCT1=frostreaver01 dr698iDBBa1IpTS
@@ -93,9 +95,14 @@ for %%A in (
     )
 )
 
+if %CLIENT_NUM% EQU 0 (
+    echo ERROR: No valid account entries found in "%ACCOUNTS_FILE%".
+    exit /b 1
+)
+
 echo.
 echo ============================================
-echo  All 6 clients launched!
+echo  %CLIENT_NUM% clients launched!
 echo  Each will auto-login and enter world.
 echo ============================================
 echo.

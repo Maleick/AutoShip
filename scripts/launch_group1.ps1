@@ -7,6 +7,7 @@ $Server = "Firiona Vie"
 $InjectWait = 12
 $HookWait = 2
 $Stagger = 15
+$AccountsFile = Join-Path $PSScriptRoot "accounts_group1.txt"
 
 $Accounts = @(
     @{ Name = "frostreaver01" },
@@ -36,7 +37,7 @@ for ($i = 0; $i -lt $Accounts.Count; $i++) {
     $acct = $Accounts[$i]
     $num = $i + 1
     Write-Host ""
-    Write-Host "[$num/6] Launching $($acct.Name)..."
+    Write-Host "[$num/$($Accounts.Count)] Launching $($acct.Name)..."
 
     # Launch EQ
     $proc = Start-Process -FilePath "$EqPath\eqgame.exe" `
@@ -75,7 +76,7 @@ for ($i = 0; $i -lt $Accounts.Count; $i++) {
 
 Write-Host ""
 Write-Host "============================================"
-Write-Host " All 6 clients launched!"
+Write-Host " All clients launched!"
 Write-Host "============================================"
 Write-Host ""
 Write-Host "Account PIDs:"
