@@ -1222,6 +1222,11 @@ pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
 
     println!("Sending command to PID {pid}: {command}");
 
+    if let Some(message) = nav::try_handle_local_slash_command(pid, command)? {
+        println!("{message}");
+        return Ok(());
+    }
+
     let pipe = connect_authenticated_pipe(pid)?;
     // Send the slash command (fire-and-forget — DLL disconnects pipe after read).
     let cmd = Command::SlashCommand {

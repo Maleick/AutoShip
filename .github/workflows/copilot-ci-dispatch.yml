@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch CI on same-repo Copilot PR heads
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
@@ -81,19 +81,7 @@ jobs:
                     run.status === "completed" &&
                     ["success", "failure", "timed_out", "neutral"].includes(run.conclusion)
                 );
-                const blockedWorkflowDispatchRun = sameShaRuns.some(
-                  (run) =>
-                    run.event === "workflow_dispatch" &&
-                    run.status === "completed" &&
-                    run.conclusion === "action_required"
-                );
-
-                if (
-                  hasActiveRun ||
-                  hasAuthoritativeResult ||
-                  blockedWorkflowDispatchRun ||
-                  sameShaRuns.length > 0
-                ) {
+                if (hasActiveRun || hasAuthoritativeResult) {
                   skipped.push(
                     `#${pr.number} ${pr.head.ref} (${sameShaRuns[0]?.event || "no-run"} ${sameShaRuns[0]?.status || "no-op"}/${sameShaRuns[0]?.conclusion || "n/a"})`
                   );
@@ -107,7 +95,10 @@ jobs:
                   ref: pr.head.ref,
                 });
 
-                dispatched.push(`#${pr.number} ${pr.head.ref} @ ${pr.head.sha}`);
+                const retrySource = sameShaRuns[0]
+                  ? `retry after ${sameShaRuns[0].event} ${sameShaRuns[0].status}/${sameShaRuns[0].conclusion || "n/a"}`
+                  : "no prior run";
+                dispatched.push(`#${pr.number} ${pr.head.ref} @ ${pr.head.sha} (${retrySource})`);
               } catch (error) {
                 failed.push(
                   `#${pr.number} ${pr.head.ref} (${error.status || "error"} ${error.message || String(error)})`
