@@ -14,6 +14,7 @@ use crate::ipc::shared::SharedStateReader;
 use std::collections::HashMap;
 use textquest_common::combat::HateTargetCategory;
 use textquest_common::ipc::{Command, Response, SessionToken};
+use textquest_common::routing::RoutingScope;
 use textquest_common::types::GameState;
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
@@ -73,6 +74,20 @@ pub struct Orchestrator {
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
+
+    // --- M8 Orchestrator routing ---
+    /// Active routing scope (synced from TUI `App::routing_scope` each tick).
+    ///
+    /// Determines which client PIDs receive camp-loop dispatches.  Defaults to
+    /// `AllSession` so all registered clients are targeted until the operator
+    /// narrows the scope via `:scope`.
+    pub routing_scope: RoutingScope,
+    /// Pre-computed set of in-scope PIDs (synced from `App::focused_pids()`).
+    ///
+    /// The TUI app owns the canonical scope-to-PID mapping (including account-
+    /// range-based group membership).  The orchestrator consumes this list
+    /// directly instead of duplicating the mapping logic.
+    pub scope_pids: Vec<u32>,
 }
 
 impl Orchestrator {
@@ -97,6 +112,8 @@ impl Orchestrator {
             suggested_camp: None,
             prev_cc_state: HashMap::new(),
             prev_nearby_spawns: HashMap::new(),
+            routing_scope: RoutingScope::AllSession,
+            scope_pids: Vec::new(),
         }
     }
 
@@ -234,12 +251,34 @@ impl Orchestrator {
             OperatingMode::Hunt => self.tick_hunt(),
         };
 
-        let count = commands.len();
-        for (pid, action) in &commands {
+        // Filter to in-scope PIDs so the operator's routing scope is respected
+        // by camp/hunt loop commands just as it is for TUI-initiated commands.
+        let in_scope = self.pids_in_scope();
+        let scoped: Vec<_> = commands
+            .into_iter()
+            .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
+            .collect();
+
+        let count = scoped.len();
+        for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
-        self.last_dispatched = commands;
+        self.last_dispatched = scoped;
         count
+    }
+
+    /// Returns the PIDs that should receive camp/hunt loop dispatches under the
+    /// current routing scope.
+    ///
+    /// - `AllSession` (or an empty `scope_pids` list) → every registered client.
+    /// - Narrowed scope → only PIDs that were pre-computed by the TUI app and
+    ///   stored in `scope_pids`.
+    pub fn pids_in_scope(&self) -> Vec<u32> {
+        if self.routing_scope.is_all_session() || self.scope_pids.is_empty() {
+            self.client_pids.clone()
+        } else {
+            self.scope_pids.clone()
+        }
     }
 
     /// Tick the camp loop, including sell cycle, progression checks, and event production.
@@ -1397,5 +1436,45 @@ mod tests {
                 .any(|e| matches!(e, CampEvent::CcExpiring { spawn_id: 55 })),
             "Should detect CC about to expire"
         );
+    }
+
+    // ── M8 routing scope tests ─────────────────────────────────────────────
+
+    #[test]
+    fn pids_in_scope_all_session_returns_all_clients() {
+        let mut orch = Orchestrator::new();
+        orch.client_pids = vec![1, 2, 3];
+        orch.routing_scope = RoutingScope::AllSession;
+        assert_eq!(orch.pids_in_scope(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn pids_in_scope_narrowed_uses_scope_pids() {
+        let mut orch = Orchestrator::new();
+        orch.client_pids = vec![1, 2, 3];
+        orch.routing_scope = RoutingScope::OneToon {
+            name: "Cleric".to_string(),
+        };
+        orch.scope_pids = vec![2];
+        assert_eq!(orch.pids_in_scope(), vec![2]);
+    }
+
+    #[test]
+    fn pids_in_scope_empty_scope_pids_falls_back_to_all() {
+        let mut orch = Orchestrator::new();
+        orch.client_pids = vec![1, 2, 3];
+        orch.routing_scope = RoutingScope::OneToon {
+            name: "Ghost".to_string(),
+        };
+        // scope_pids is empty (unknown toon) → fall back to all clients
+        orch.scope_pids = Vec::new();
+        assert_eq!(orch.pids_in_scope(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn default_routing_scope_is_all_session() {
+        let orch = Orchestrator::new();
+        assert_eq!(orch.routing_scope, RoutingScope::AllSession);
+        assert!(orch.scope_pids.is_empty());
     }
 }

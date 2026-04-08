@@ -150,6 +150,8 @@ fn run_loop(
                 .iter()
                 .map(|c| (c.pid, c.character_name.clone()))
                 .collect();
+            orchestrator.routing_scope = app.routing_scope.clone();
+            orchestrator.scope_pids = app.focused_pids();
             last_process_scan = Instant::now();
         }
 
