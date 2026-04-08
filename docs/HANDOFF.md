@@ -73,17 +73,6 @@ running 842 tests
 test result: FAILED. 841 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 ```
 
-### Per-crate summary
-
-| Crate | Passed | Failed |
-|-------|--------|--------|
-| — | 1527 | 0 |
-| — | 0 | 0 |
-| — | 2 | 0 |
-| — | 22 | 0 |
-| — | 502 | 0 |
-| — | 841 | 1 |
-
 ## Key Offsets (from textquest-common/src/offsets.rs)
 
 | Constant | Value |
