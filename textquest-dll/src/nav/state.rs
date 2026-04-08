@@ -75,6 +75,8 @@ pub struct Navigator {
     moveto_config: Option<MoveToConfig>,
     /// Last observed HP while running moveto break-on-hit checks.
     last_moveto_hp: Option<i64>,
+    /// Last observed HP for break-on-hit detection during advanced moveto.
+    last_hp_current: Option<i64>,
     /// Global autopause flag (#164).
     autopause: bool,
     /// Break-on-GM flag — pause navigation when a GM is detected nearby.
@@ -139,6 +141,7 @@ impl Navigator {
             mesh_loaded: false,
             moveto_config: None,
             last_moveto_hp: None,
+            last_hp_current: None,
             autopause: false,
             break_on_gm: false,
         }
@@ -197,6 +200,7 @@ impl Navigator {
         self.warp.reset();
         self.moveto_config = None;
         self.last_moveto_hp = None;
+        self.last_hp_current = None;
         self.pre_pause_state = None;
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
@@ -790,7 +794,7 @@ impl Navigator {
             config.destination
         };
 
-        let dist = current_pos.distance_2d(&destination);
+        let dist = config.axis_distance(&current_pos, &destination);
         self.cached_distance = dist;
 
         if config.break_on_hit
@@ -809,7 +813,8 @@ impl Navigator {
         }
 
         // Arrival check.
-        if dist < ARRIVAL_DISTANCE {
+        let arrival_dist = config.effective_arrival_distance(ARRIVAL_DISTANCE);
+        if dist < arrival_dist {
             tracing::info!("MoveToAdvanced: arrived at destination");
             self.stop_moveto();
             return;

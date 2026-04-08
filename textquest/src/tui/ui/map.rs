@@ -2076,6 +2076,35 @@ fn draw_radius_overlays(
             );
         }
     }
+
+    if let Some(aggro) = &app.map_state.aggro_radius
+        && app.map_state.show_spawns
+    {
+        let player_z = player.z;
+        let z_range = app.map_state.z_filter_range;
+        let filters = &app.map_state.filters;
+        for spawn in &app.spawns {
+            if spawn.spawn_type != crate::eq::structs::SpawnType::Npc {
+                continue;
+            }
+            if !filters.allows_spawn(spawn) {
+                continue;
+            }
+            if (spawn.z - player_z).abs() > z_range {
+                continue;
+            }
+            draw_radius_circle(
+                to_grid,
+                spawn.x,
+                spawn.y,
+                aggro.radius,
+                aggro.color,
+                w,
+                h,
+                grid,
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2084,11 +2113,7 @@ mod tests {
     use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
     use crate::tui::app::ClientState;
     use crate::tui::state::MapRadiusOverlay;
-    use ratatui::Terminal;
-    use ratatui::backend::TestBackend;
-    use ratatui::layout::Rect;
-    use ratatui::style::Color;
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
 
     fn test_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnInfo {
         SpawnInfo {
@@ -2472,5 +2497,92 @@ mod tests {
 
         assert_eq!(grid[0][3], ('·', Color::Cyan));
         assert_eq!(grid[10][23], ('·', Color::Cyan));
+    }
+
+    #[test]
+    fn aggro_radius_renders_around_npc_spawns() {
+        let mut app = test_app_with_spawns();
+        // test_app_with_spawns adds NPC spawns at (4,4) and (5,4)
+        app.map_state.aggro_radius = Some(MapRadiusOverlay {
+            radius: 3.0,
+            color: Color::Red,
+            label: String::from("Aggro 3"),
+        });
+
+        let mut grid = vec![vec![(' ', Color::Reset); 32]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_radius_overlays(&app, &to_grid, 32, 24, &mut grid);
+
+        // spawn at x=4,y=4: at angle=0, wx=4+3=7, wy=4 => to_grid(-4,-7)=(7,4)
+        assert_eq!(grid[4][7], ('·', Color::Red));
+        // spawn at x=5,y=4: at angle=0, wx=5+3=8, wy=4 => to_grid(-4,-8)=(8,4)
+        assert_eq!(grid[4][8], ('·', Color::Red));
+    }
+
+    #[test]
+    fn aggro_radius_not_drawn_around_players() {
+        let mut app = test_app_with_spawns();
+        // Add a player-type spawn
+        let mut player_spawn = test_spawn(200, "other_player", 10.0, 0.0);
+        player_spawn.spawn_type = SpawnType::Player;
+        app.spawns.push(player_spawn);
+
+        app.map_state.aggro_radius = Some(MapRadiusOverlay {
+            radius: 3.0,
+            color: Color::Red,
+            label: String::from("Aggro 3"),
+        });
+
+        let mut grid = vec![vec![(' ', Color::Reset); 32]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_radius_overlays(&app, &to_grid, 32, 24, &mut grid);
+
+        // player_spawn at x=10,y=0: at angle=0, wx=13, wy=0 => to_grid(0,-13)=(13,0)
+        // Should NOT have aggro circle dot (player type excluded)
+        assert_ne!(grid[0][13], ('·', Color::Red));
+    }
+
+    #[test]
+    fn aggro_radius_not_drawn_when_show_spawns_off() {
+        let mut app = test_app_with_spawns();
+        app.map_state.show_spawns = false;
+        app.map_state.aggro_radius = Some(MapRadiusOverlay {
+            radius: 3.0,
+            color: Color::Red,
+            label: String::from("Aggro 3"),
+        });
+
+        let mut grid = vec![vec![(' ', Color::Reset); 32]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_radius_overlays(&app, &to_grid, 32, 24, &mut grid);
+
+        // spawn at x=4,y=4: circle point at (7,4) should not be drawn when spawns hidden
+        assert_ne!(grid[4][7], ('·', Color::Red));
+    }
+
+    #[test]
+    fn aggro_radius_respects_z_filter() {
+        let mut app = test_app_with_spawns();
+        // Move all existing spawns far above player (z=0) by setting z_filter_range tight
+        for spawn in &mut app.spawns {
+            spawn.z = 200.0; // 200 units above player z=0
+        }
+        app.map_state.z_filter_range = 10.0; // only show spawns within 10 units
+        app.map_state.aggro_radius = Some(MapRadiusOverlay {
+            radius: 3.0,
+            color: Color::Red,
+            label: String::from("Aggro 3"),
+        });
+
+        let mut grid = vec![vec![(' ', Color::Reset); 32]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_radius_overlays(&app, &to_grid, 32, 24, &mut grid);
+
+        // Spawns are z-filtered out, so aggro circles should not appear
+        assert_ne!(grid[4][7], ('·', Color::Red));
     }
 }
