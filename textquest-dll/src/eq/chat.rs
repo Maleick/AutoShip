@@ -91,6 +91,9 @@ pub fn read_chat_window_lines(
 ) -> Vec<ChatMessageInfo> {
     #[cfg(windows)]
     {
+        if eq_base == 0 || max_lines == 0 {
+            return Vec::new();
+        }
         // SAFETY: all pointer accesses inside are guarded by is_readable.
         unsafe { read_chat_window_lines_impl(eq_base, window_index, max_lines) }
     }
@@ -113,6 +116,9 @@ pub fn read_all_chat_window_lines(
 ) -> Vec<ChatMessageInfo> {
     #[cfg(windows)]
     {
+        if eq_base == 0 || max_lines_per_window == 0 {
+            return Vec::new();
+        }
         // SAFETY: all pointer accesses inside are guarded by is_readable.
         unsafe { read_all_chat_window_lines_impl(eq_base, max_lines_per_window) }
     }
@@ -268,6 +274,7 @@ unsafe fn read_stml_lines(window_ptr: usize, max_lines: usize) -> Vec<ChatMessag
 mod tests {
     use super::*;
 
+    #[cfg(not(windows))]
     #[test]
     fn read_chat_window_lines_returns_empty_on_non_windows() {
         // On macOS / Linux this must return empty without panicking.
@@ -275,6 +282,7 @@ mod tests {
         assert!(result.is_empty());
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn read_all_chat_window_lines_returns_empty_on_non_windows() {
         let result = read_all_chat_window_lines(0, 100);

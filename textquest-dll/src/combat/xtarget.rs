@@ -23,22 +23,24 @@ const EQ_MAX_NAME: usize = 64;
 /// from the game loop thread where EQ pointers are valid.
 #[cfg(windows)]
 pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> {
+    if eq_base == 0 {
+        return None;
+    }
+
     let pc_pinst = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
-    let pc_ptr = unsafe { std::ptr::read(pc_pinst as *const usize) };
+    let pc_ptr = unsafe { read_ptr(pc_pinst)? };
     if pc_ptr == 0 {
         return None;
     }
 
     let xtarget_list_ptr_addr = pc_ptr + offsets::PCCLIENT_EXTENDED_TARGET_LIST as usize;
-    let xtarget_list_ptr = unsafe { std::ptr::read(xtarget_list_ptr_addr as *const usize) };
+    let xtarget_list_ptr = unsafe { read_ptr(xtarget_list_ptr_addr)? };
     if xtarget_list_ptr == 0 {
         return None;
     }
 
     let array_base = xtarget_list_ptr + offsets::XTARGET_LIST_SLOTS_OFFSET as usize;
-    let slot_count = unsafe {
-        std::ptr::read((array_base + offsets::ARRAY_CLASS_LENGTH as usize) as *const i32)
-    };
+    let slot_count = unsafe { read_i32(array_base + offsets::ARRAY_CLASS_LENGTH as usize)? };
     if !(0..=MAX_XTARGET_SLOTS).contains(&slot_count) {
         tracing::trace!(slot_count, "XTarget slot count out of range");
         return Some(ExtendedTargetList {
@@ -47,33 +49,22 @@ pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> 
         });
     }
 
-    let array_ptr = unsafe {
-        std::ptr::read((array_base + offsets::ARRAY_CLASS_ARRAY_PTR as usize) as *const usize)
-    };
+    let array_ptr = unsafe { read_ptr(array_base + offsets::ARRAY_CLASS_ARRAY_PTR as usize)? };
     if array_ptr == 0 {
         return None;
     }
 
-    let auto_add_haters_raw = unsafe {
-        std::ptr::read(
-            (xtarget_list_ptr + offsets::XTARGET_LIST_AUTO_ADD_HATERS as usize) as *const u8,
-        )
-    };
+    let auto_add_haters_raw =
+        unsafe { read_u8(xtarget_list_ptr + offsets::XTARGET_LIST_AUTO_ADD_HATERS as usize)? };
     let auto_add_haters = auto_add_haters_raw != 0;
 
     let mut slots = Vec::with_capacity(slot_count as usize);
     for i in 0..slot_count {
         let slot_base = array_ptr + (i as u64 * offsets::XTARGET_SLOT_SIZE) as usize;
 
-        let raw_type = unsafe {
-            std::ptr::read((slot_base + offsets::XTARGET_SLOT_TYPE as usize) as *const u32)
-        };
-        let raw_status = unsafe {
-            std::ptr::read((slot_base + offsets::XTARGET_SLOT_STATUS as usize) as *const u32)
-        };
-        let spawn_id = unsafe {
-            std::ptr::read((slot_base + offsets::XTARGET_SLOT_SPAWN_ID as usize) as *const u32)
-        };
+        let raw_type = unsafe { read_u32(slot_base + offsets::XTARGET_SLOT_TYPE as usize)? };
+        let raw_status = unsafe { read_u32(slot_base + offsets::XTARGET_SLOT_STATUS as usize)? };
+        let spawn_id = unsafe { read_u32(slot_base + offsets::XTARGET_SLOT_SPAWN_ID as usize)? };
 
         let name_ptr = (slot_base + offsets::XTARGET_SLOT_NAME as usize) as *const u8;
         let name = unsafe { read_c_string(name_ptr, EQ_MAX_NAME) };
@@ -93,10 +84,45 @@ pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> 
 }
 
 #[cfg(windows)]
+unsafe fn read_ptr(addr: usize) -> Option<usize> {
+    if !crate::hooks::game_loop::is_readable(addr, size_of::<usize>()) {
+        return None;
+    }
+    Some(unsafe { std::ptr::read(addr as *const usize) })
+}
+
+#[cfg(windows)]
+unsafe fn read_i32(addr: usize) -> Option<i32> {
+    if !crate::hooks::game_loop::is_readable(addr, size_of::<i32>()) {
+        return None;
+    }
+    Some(unsafe { std::ptr::read(addr as *const i32) })
+}
+
+#[cfg(windows)]
+unsafe fn read_u32(addr: usize) -> Option<u32> {
+    if !crate::hooks::game_loop::is_readable(addr, size_of::<u32>()) {
+        return None;
+    }
+    Some(unsafe { std::ptr::read(addr as *const u32) })
+}
+
+#[cfg(windows)]
+unsafe fn read_u8(addr: usize) -> Option<u8> {
+    if !crate::hooks::game_loop::is_readable(addr, size_of::<u8>()) {
+        return None;
+    }
+    Some(unsafe { std::ptr::read(addr as *const u8) })
+}
+
+#[cfg(windows)]
 unsafe fn read_c_string(ptr: *const u8, max_len: usize) -> String {
     let mut bytes = Vec::with_capacity(max_len);
     for i in 0..max_len {
-        let b = unsafe { std::ptr::read(ptr.add(i)) };
+        let addr = ptr.wrapping_add(i) as usize;
+        let Some(b) = (unsafe { read_u8(addr) }) else {
+            break;
+        };
         if b == 0 {
             break;
         }
@@ -137,6 +163,7 @@ pub unsafe fn read_extended_targets(_eq_base: u64) -> Option<ExtendedTargetList>
 mod tests {
     use super::*;
 
+    #[cfg(not(windows))]
     #[test]
     fn stub_returns_demo_data() {
         let result = unsafe { read_extended_targets(0) };
@@ -144,6 +171,13 @@ mod tests {
         let list = result.unwrap();
         assert!(!list.slots.is_empty());
         assert!(list.auto_add_haters);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn read_extended_targets_null_eq_base_returns_none() {
+        let result = unsafe { read_extended_targets(0) };
+        assert!(result.is_none());
     }
 
     #[test]
