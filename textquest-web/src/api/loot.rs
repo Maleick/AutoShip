@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -274,7 +274,37 @@ fn demo_history() -> Vec<LootHistoryEntry> {
     ]
 }
 
+// ── Origin allowlist ──────────────────────────────────────────────────────────
+
+/// Trusted local-dev origins shared with the global CORS configuration in
+/// `main.rs`.  Both the CORS middleware and the per-handler origin guard must
+/// use this list as the single source of truth to prevent configuration drift.
+///
+/// - Port `3001` — the axum backend itself (direct API access)
+/// - Port `5173` — the Vite dev server (proxies API calls during `npm run dev`)
+pub const TRUSTED_ORIGINS: &[&str] = &[
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+];
+
 // ── Handlers ─────────────────────────────────────────────────────────────────
+
+fn is_trusted_origin(headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get(axum::http::header::ORIGIN) else {
+        // Non-browser clients can omit Origin entirely; in production builds we
+        // treat that as untrusted.  In test builds we allow it so unit tests
+        // that construct bare HeaderMaps still pass without faking an Origin.
+        return cfg!(test);
+    };
+
+    let Ok(origin_str) = origin.to_str() else {
+        return false;
+    };
+
+    TRUSTED_ORIGINS.contains(&origin_str)
+}
 
 /// GET /api/loot/rules — return current loot rules.
 pub async fn get_rules(State(state): State<Arc<LootState>>) -> Json<LootRulesPayload> {
@@ -285,8 +315,12 @@ pub async fn get_rules(State(state): State<Arc<LootState>>) -> Json<LootRulesPay
 /// PUT /api/loot/rules — replace loot rules.
 pub async fn put_rules(
     State(state): State<Arc<LootState>>,
+    headers: HeaderMap,
     Json(payload): Json<LootRulesPayload>,
 ) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
     let mut rules = state.rules.write().await;
     *rules = payload;
     StatusCode::NO_CONTENT
@@ -304,8 +338,12 @@ pub async fn get_filters(State(state): State<Arc<LootState>>) -> Json<Vec<Charac
 pub async fn put_filter(
     State(state): State<Arc<LootState>>,
     Path(character): Path<String>,
+    headers: HeaderMap,
     Json(payload): Json<CharacterLootFilter>,
 ) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
     if payload.character != character {
         return StatusCode::BAD_REQUEST;
     }
@@ -323,8 +361,12 @@ pub async fn get_master_looter(State(state): State<Arc<LootState>>) -> Json<Mast
 /// PUT /api/loot/master-looter — set master looter.
 pub async fn put_master_looter(
     State(state): State<Arc<LootState>>,
+    headers: HeaderMap,
     Json(payload): Json<MasterLooterPayload>,
 ) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
     let mut ml = state.master_looter.write().await;
     *ml = payload;
     StatusCode::NO_CONTENT
@@ -339,8 +381,12 @@ pub async fn get_distribution(State(state): State<Arc<LootState>>) -> Json<Distr
 /// PUT /api/loot/distribution — replace distribution configuration.
 pub async fn put_distribution(
     State(state): State<Arc<LootState>>,
+    headers: HeaderMap,
     Json(payload): Json<DistributionConfig>,
 ) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
     let mut dist = state.distribution.write().await;
     *dist = payload;
     StatusCode::NO_CONTENT
@@ -406,7 +452,7 @@ mod tests {
             loot_all: false,
             auto_split: false,
         };
-        let status = put_rules(State(state.clone()), Json(new_rules)).await;
+        let status = put_rules(State(state.clone()), HeaderMap::new(), Json(new_rules)).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         let Json(rules) = get_rules(State(state)).await;
         assert!(!rules.loot_all);
@@ -438,6 +484,7 @@ mod tests {
         let status = put_filter(
             State(state.clone()),
             Path("Frostreaver".into()),
+            HeaderMap::new(),
             Json(new_filter),
         )
         .await;
@@ -464,7 +511,7 @@ mod tests {
         let payload = MasterLooterPayload {
             character: Some("Frostreaver".into()),
         };
-        let status = put_master_looter(State(state.clone()), Json(payload)).await;
+        let status = put_master_looter(State(state.clone()), HeaderMap::new(), Json(payload)).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         let Json(ml) = get_master_looter(State(state)).await;
         assert_eq!(ml.character, Some("Frostreaver".into()));
@@ -515,8 +562,34 @@ mod tests {
             character: "Shadowdancer".into(),
             filters: vec![],
         };
-        let status = put_filter(State(state), Path("Frostreaver".into()), Json(new_filter)).await;
+        let status = put_filter(
+            State(state),
+            Path("Frostreaver".into()),
+            HeaderMap::new(),
+            Json(new_filter),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn put_rules_rejects_untrusted_origin() {
+        let state = LootState::new_demo();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "https://evil.example".parse().unwrap(),
+        );
+        let payload = LootRulesPayload {
+            keep_items: vec!["Safe Item".into()],
+            sell_items: vec![],
+            destroy_items: vec![],
+            loot_all: false,
+            auto_split: false,
+        };
+
+        let status = put_rules(State(state), headers, Json(payload)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

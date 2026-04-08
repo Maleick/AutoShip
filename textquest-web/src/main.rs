@@ -79,11 +79,15 @@ async fn main() {
 
     // Restrict CORS to trusted local dashboard origins so cross-site pages
     // cannot issue authenticated-like write requests against localhost APIs.
+    // Derived from `api::loot::TRUSTED_ORIGINS` so CORS middleware and the
+    // per-handler origin guard always use the same allowlist.
     let cors = CorsLayer::new()
-        .allow_origin([
-            HeaderValue::from_static("http://127.0.0.1:3001"),
-            HeaderValue::from_static("http://localhost:3001"),
-        ])
+        .allow_origin(
+            api::loot::TRUSTED_ORIGINS
+                .iter()
+                .map(|&o| HeaderValue::from_static(o))
+                .collect::<Vec<_>>(),
+        )
         .allow_methods([
             Method::GET,
             Method::POST,
