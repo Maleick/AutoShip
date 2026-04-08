@@ -54,7 +54,8 @@ fn read_u32(addr: usize) -> Option<u32> {
 /// `CXStr` is a pointer to a `CStrRep` struct:
 /// - +0x08: `u32` length in bytes
 /// - +0x18: `char[]` data start
-/// (offsets from `textquest_common::offsets::eqmain`).
+///
+/// Offsets come from `textquest_common::offsets::eqmain`.
 #[cfg(windows)]
 fn read_cxstr(addr: usize) -> Option<String> {
     use crate::hooks::game_loop::is_readable;
@@ -126,6 +127,9 @@ pub fn read_all_chat_window_lines(
 
 #[cfg(windows)]
 unsafe fn resolve_chat_mgr(eq_base: u64) -> Option<usize> {
+    if eq_base == 0 {
+        return None;
+    }
     let inst_addr = offsets::rebase(offsets::PINST_CCHAT_WINDOW_MANAGER, eq_base)?;
     read_ptr(inst_addr)
 }
@@ -141,23 +145,23 @@ unsafe fn read_chat_window_lines_impl(
         None => return Vec::new(),
     };
 
-    let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
-        Some(n) => n as usize,
-        None => return Vec::new(),
-    };
-    if window_index >= num_windows {
-        return Vec::new();
-    }
+        let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
+            Some(n) => n as usize,
+            None => return Vec::new(),
+        };
+        if window_index >= num_windows {
+            return Vec::new();
+        }
 
-    // ChatWndArray holds a `CChatWindow**` (pointer to pointer array).
-    let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
-        Some(p) => p,
-        None => return Vec::new(),
-    };
-    let window_ptr = match read_ptr(array_ptr + window_index * size_of::<usize>()) {
-        Some(p) => p,
-        None => return Vec::new(),
-    };
+        // ChatWndArray holds a `CChatWindow**` (pointer to pointer array).
+        let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+        let window_ptr = match read_ptr(array_ptr + window_index * size_of::<usize>()) {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
 
     unsafe { read_stml_lines(window_ptr, max_lines) }
 }
@@ -172,16 +176,16 @@ unsafe fn read_all_chat_window_lines_impl(
         None => return Vec::new(),
     };
 
-    let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
-        Some(n) => n as usize,
-        None => return Vec::new(),
-    };
-    let num_windows = num_windows.min(offsets::chat_window_mgr::MAX_CHAT_WINDOWS);
+        let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
+            Some(n) => n as usize,
+            None => return Vec::new(),
+        };
+        let num_windows = num_windows.min(offsets::chat_window_mgr::MAX_CHAT_WINDOWS);
 
-    let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
-        Some(p) => p,
-        None => return Vec::new(),
-    };
+        let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
 
     let mut all_lines = Vec::new();
     for idx in 0..num_windows {
@@ -189,8 +193,9 @@ unsafe fn read_all_chat_window_lines_impl(
             let lines = unsafe { read_stml_lines(window_ptr, max_lines_per_window) };
             all_lines.extend(lines);
         }
+
+        all_lines
     }
-    all_lines
 }
 
 /// Walk the `STextLine` doubly-linked list inside `CChatWindow::OutputWnd`
@@ -290,8 +295,14 @@ mod tests {
     }
 
     #[test]
+    fn read_all_chat_window_lines_null_eq_base_returns_empty() {
+        let result = read_all_chat_window_lines(0, 50);
+        assert!(result.is_empty());
+    }
+
+    #[test]
     fn read_chat_window_lines_null_eq_base_returns_empty() {
-        // eq_base=0 should fail to rebase and return empty.
+        // eq_base=0 should short-circuit before any rebase or pointer reads.
         let result = read_chat_window_lines(0, 5, 50);
         assert!(result.is_empty());
     }

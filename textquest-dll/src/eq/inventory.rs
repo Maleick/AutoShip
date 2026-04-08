@@ -210,81 +210,73 @@ unsafe fn query_open_container_slots_windows(
 ) -> Vec<ContainerSlotInfo> {
     type GetItemBaseFn = unsafe extern "C" fn(usize, *mut usize);
 
-    let Some(mgr_addr) = offsets::rebase(offsets::PINST_CINV_SLOT_MGR, eq_base) else {
-        return Vec::new();
-    };
-    let Some(mgr_ptr) = read_value::<usize>(mgr_addr) else {
-        return Vec::new();
-    };
-
-    let Some(total_slots) = read_value::<i32>(mgr_ptr + offsets::inv_slot_mgr::TOTAL_SLOTS) else {
-        return Vec::new();
-    };
-    let total_slots = total_slots.clamp(0, MAX_INV_SLOTS as i32) as usize;
-
-    let Some(get_item_base_addr) = offsets::rebase(offsets::INV_SLOT_GET_ITEM_BASE, eq_base) else {
-        return Vec::new();
-    };
-    if !crate::eq::validate_fn_ptr(get_item_base_addr, "CInvSlot::GetItemBase") {
-        return Vec::new();
-    }
-    let get_item_base: GetItemBaseFn = unsafe { std::mem::transmute(get_item_base_addr) };
-
-    let mut raw_slots = Vec::new();
-    for idx in 0..total_slots {
-        let slot_addr = mgr_ptr + offsets::inv_slot_mgr::SLOT_ARRAY + idx * size_of::<usize>();
-        let Some(slot_ptr) = read_value::<usize>(slot_addr) else {
-            continue;
+    unsafe {
+        let Some(mgr_addr) = offsets::rebase(offsets::PINST_CINV_SLOT_MGR, eq_base) else {
+            return Vec::new();
         };
-        if slot_ptr == 0 {
-            continue;
+        let Some(mgr_ptr) = read_value::<usize>(mgr_addr) else {
+            return Vec::new();
+        };
+
+        let Some(total_slots) = read_value::<i32>(mgr_ptr + offsets::inv_slot_mgr::TOTAL_SLOTS)
+        else {
+            return Vec::new();
+        };
+        let total_slots = total_slots.clamp(0, MAX_INV_SLOTS as i32) as usize;
+
+        let Some(get_item_base_addr) = offsets::rebase(offsets::INV_SLOT_GET_ITEM_BASE, eq_base)
+        else {
+            return Vec::new();
+        };
+        if !crate::eq::validate_fn_ptr(get_item_base_addr, "CInvSlot::GetItemBase") {
+            return Vec::new();
         }
         if let Some(snapshot) = unsafe { read_slot_snapshot(slot_ptr, idx as i32, get_item_base) } {
             raw_slots.push(snapshot);
         }
+
+        let parent_slots: HashMap<(i32, i16), ParentContainerInfo> = raw_slots
+            .iter()
+            .filter(|slot| slot.bag_slot < 0)
+            .filter_map(|slot| {
+                let item = slot.item.as_ref()?;
+                Some((
+                    (slot.location, slot.top_slot),
+                    ParentContainerInfo {
+                        name: item.name.clone(),
+                        id: item.id,
+                    },
+                ))
+            })
+            .collect();
+        let prepared_filter = PreparedContainerSlotQuery::from(filter);
+
+        raw_slots
+            .into_iter()
+            .filter(|slot| slot.bag_slot >= 0)
+            .map(|slot| {
+                let parent = parent_slots.get(&(slot.location, slot.top_slot));
+                ContainerSlotInfo {
+                    location: slot.location,
+                    location_name: container_instance_name(slot.location).to_string(),
+                    top_slot: slot.top_slot,
+                    bag_slot: slot.bag_slot,
+                    aug_slot: slot.aug_slot,
+                    manager_slot_index: slot.manager_slot_index,
+                    is_selected: slot.is_selected,
+                    is_find_selected: slot.is_find_selected,
+                    quantity: slot.quantity,
+                    recast_left: slot.recast_left,
+                    is_linked: slot.is_linked,
+                    is_empty: slot.item.is_none(),
+                    container_name: parent.map(|info| info.name.clone()),
+                    container_item_id: parent.map(|info| info.id),
+                    item: slot.item,
+                }
+            })
+            .filter(|slot| matches_prepared_filter(slot, &prepared_filter))
+            .collect()
     }
-
-    let parent_slots: HashMap<(i32, i16), ParentContainerInfo> = raw_slots
-        .iter()
-        .filter(|slot| slot.bag_slot < 0)
-        .filter_map(|slot| {
-            let item = slot.item.as_ref()?;
-            Some((
-                (slot.location, slot.top_slot),
-                ParentContainerInfo {
-                    name: item.name.clone(),
-                    id: item.id,
-                },
-            ))
-        })
-        .collect();
-    let prepared_filter = PreparedContainerSlotQuery::from(filter);
-
-    raw_slots
-        .into_iter()
-        .filter(|slot| slot.bag_slot >= 0)
-        .map(|slot| {
-            let parent = parent_slots.get(&(slot.location, slot.top_slot));
-            ContainerSlotInfo {
-                location: slot.location,
-                location_name: container_instance_name(slot.location).to_string(),
-                top_slot: slot.top_slot,
-                bag_slot: slot.bag_slot,
-                aug_slot: slot.aug_slot,
-                manager_slot_index: slot.manager_slot_index,
-                is_selected: slot.is_selected,
-                is_find_selected: slot.is_find_selected,
-                quantity: slot.quantity,
-                recast_left: slot.recast_left,
-                is_linked: slot.is_linked,
-                is_empty: slot.item.is_none(),
-                container_name: parent.map(|info| info.name.clone()),
-                container_item_id: parent.map(|info| info.id),
-                item: slot.item,
-            }
-        })
-        .filter(|slot| matches_prepared_filter(slot, &prepared_filter))
-        .collect()
 }
 
 #[cfg(windows)]
@@ -293,10 +285,11 @@ unsafe fn read_slot_snapshot(
     manager_slot_index: i32,
     get_item_base: unsafe extern "C" fn(usize, *mut usize),
 ) -> Option<RawSlotSnapshot> {
-    let wnd_ptr = read_value::<usize>(slot_ptr + offsets::inv_slot::WINDOW)?;
-    if wnd_ptr == 0 {
-        return None;
-    }
+    unsafe {
+        let wnd_ptr = read_value::<usize>(slot_ptr + offsets::inv_slot::WINDOW)?;
+        if wnd_ptr == 0 {
+            return None;
+        }
 
     let location = read_item_global_index(wnd_ptr + offsets::inv_slot_wnd::ITEM_LOCATION)?;
     let item = unsafe { read_slot_item(slot_ptr, get_item_base) };

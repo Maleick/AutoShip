@@ -12,8 +12,8 @@ from urllib.parse import quote
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 README_PATH = REPO_ROOT / "README.md"
-RUNNING_TESTS_RE = re.compile(r"^running (\d+) tests?$", re.MULTILINE)
-TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(?:tokio::)?test(?:\\]|\\()?")
+TEST_LIST_SUMMARY_RE = re.compile(r"^(\d+) tests?, \d+ benchmarks$", re.MULTILINE)
+TEST_ANNOTATION_RE = re.compile(r"^\s*#\[\s*(?:tokio::)?test(?:\s*\([^]]*\))?\s*\]")
 
 
 def tracked_rust_files() -> list[pathlib.Path]:
@@ -49,14 +49,14 @@ def test_count() -> tuple[int, bool]:
     """Return ``(count, is_exact)``.
 
     *is_exact* is ``True`` when the count comes from a successful
-    ``cargo test --workspace`` run (runner-reported total).  It is ``False``
+    ``cargo test --workspace -- --list`` run (runner-reported total).  It is ``False``
     when cargo is unavailable and the count comes from the source-annotation
     fallback scan, which is approximate (counts ``#[test]``/``#[tokio::test]``
     annotations, not compiled test binaries).
     """
     try:
         result = subprocess.run(
-            ["cargo", "test", "--workspace"],
+            ["cargo", "test", "--workspace", "--", "--list"],
             cwd=REPO_ROOT,
             check=False,
             capture_output=True,
@@ -69,11 +69,11 @@ def test_count() -> tuple[int, bool]:
     if result.returncode != 0:
         print(f"cargo test failed (exit {result.returncode}):\n{output}", file=sys.stderr)
         sys.exit(1)
-    running = sum(int(match.group(1)) for match in RUNNING_TESTS_RE.finditer(output))
-    if running > 0:
-        return running, True
+    listed = sum(int(match.group(1)) for match in TEST_LIST_SUMMARY_RE.finditer(output))
+    if listed > 0:
+        return listed, True
     print(
-        "warning: `cargo test --workspace` did not report any `running N tests` lines; "
+        "warning: `cargo test --workspace -- --list` did not report any summary lines; "
         "falling back to source scan",
         file=sys.stderr,
     )

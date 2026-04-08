@@ -230,4 +230,5 @@ jobs:
         if: steps.docs-check.outputs.docs_changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: "%PYTHON_CMD%" scripts/sync_wiki.py --push
+        run: |
+          "%PYTHON_CMD%" scripts/sync_wiki.py --push

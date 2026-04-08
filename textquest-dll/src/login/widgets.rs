@@ -437,7 +437,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
             tracing::warn!("Could not resolve password edit widget by SIDL name");
             return false;
         };
-        let login_button = find_window_by_name(eqmain_base, LOGIN_CONNECT_BUTTON);
+        let login_button = find_window_by_name(eqmain_base, LOGIN_CONNECT_BUTTON).unwrap_or(0);
 
         unsafe {
             // Find a valid CStrRep donor from ANY field on the username widget.

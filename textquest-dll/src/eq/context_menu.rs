@@ -175,24 +175,22 @@ unsafe fn read_list_wnd_items(list_wnd_ptr: usize) -> Vec<ContextMenuItem> {
                 crate::eq::widgets::read_cxstr(cxstr_ptr).unwrap_or_default()
             } else {
                 String::new()
-            }
-        } else {
-            String::new()
-        };
+            };
 
-        // A separator row has an empty label and enabled=false.
-        let is_separator = label.is_empty();
+            // A separator row has an empty label and enabled=false.
+            let is_separator = label.is_empty();
 
-        items.push(ContextMenuItem {
-            item_index: row_idx as u32,
-            label,
-            enabled: true, // CListWnd doesn't expose per-row disabled state via this path
-            checked: false,
-            is_separator,
-        });
+            items.push(ContextMenuItem {
+                item_index: row_idx as u32,
+                label,
+                enabled: true, // CListWnd doesn't expose per-row disabled state via this path
+                checked: false,
+                is_separator,
+            });
+        }
+
+        items
     }
-
-    items
 }
 
 #[cfg(windows)]
