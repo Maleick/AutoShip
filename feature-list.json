@@ -123,11 +123,12 @@
         "docs/implementation-roadmap.md defines M10 loot/distribution, vendor/banking, and operator-visible economy controls without reordering the canonical milestones",
         "README.md and docs/wiki/Roadmap-and-Known-Gaps.md mirror M10 Economy before M11 Soul Engine + LLM",
         "Roadmap-facing docs route provider-backed Soul/LLM work to M11 and economy execution loops to M10",
-        "python3 -m unittest discover -s tests -p 'test_m10_economy_docs.py' -v",
+        "Economy dashboard placeholders remain available via `/api/economy/settings`, `/api/economy/vendor-routes`, and `/api/economy/wealth`",
+        "python3 -m unittest discover -s tests -p 'test_*m10_economy*.py' -v",
         "python3 scripts/validate_roadmap_unknowns.py --plan docs/implementation-roadmap.md",
         "python3 scripts/sync_wiki.py --check"
       ],
-      "notes": "The canonical roadmap now gives M10 Economy explicit execution slices, ordering, and gates for loot, vendor, banking, and operator-visible override surfaces. README plus wiki mirrors now keep Economy at M10 and Soul/LLM at M11 so the self-sustaining farming loop is tracked consistently across the repo."
+      "notes": "The canonical roadmap now gives M10 Economy explicit execution slices, ordering, and gates for loot, vendor, banking, and operator-visible override surfaces. README plus wiki mirrors now keep Economy at M10 and Soul/LLM at M11 so the self-sustaining farming loop is tracked consistently across the repo while deeper execution loops remain in progress."
     }
   ]
 }
