@@ -37,6 +37,8 @@ __pycache__/
 .aidesigner/
 .serena/
 .codex/
+.codex-worktrees/
+.codex/worktrees/
 
 # Local reference repos
 mq2-definitions/
