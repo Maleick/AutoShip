@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "automation.yml"
 
 
-class AgentReadyWorkflowTests(unittest.TestCase):
+class AutomationWorkflowTests(unittest.TestCase):
     def test_closed_issues_trigger_cleanup(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         # In automation.yml it's under issues: types:

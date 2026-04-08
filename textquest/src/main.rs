@@ -110,7 +110,7 @@ enum Commands {
         command: String,
     },
 
-    /// Right-click interact with current target (open bank/merchant/quest window)
+    /// Right-click interact with current target (NPC, door, or object)
     Interact {
         /// Target PID
         pid: u32,

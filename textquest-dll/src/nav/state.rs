@@ -88,7 +88,7 @@ pub struct Navigator {
     moveto_config: Option<MoveToConfig>,
     /// Last observed HP while running moveto break-on-hit checks.
     last_moveto_hp: Option<i64>,
-    /// Last observed HP for the alternate break-on-hit check path.
+    /// Last observed HP for break-on-hit detection during advanced moveto.
     last_hp_current: Option<i64>,
     /// Global autopause flag (#164).
     autopause: bool,
@@ -826,7 +826,7 @@ impl Navigator {
             config.destination
         };
 
-        let dist = current_pos.distance_2d(&destination);
+        let dist = config.axis_distance(&current_pos, &destination);
         self.cached_distance = dist;
 
         if config.break_on_hit
@@ -845,7 +845,8 @@ impl Navigator {
         }
 
         // Arrival check.
-        if dist < ARRIVAL_DISTANCE {
+        let arrival_dist = config.effective_arrival_distance(ARRIVAL_DISTANCE);
+        if dist < arrival_dist {
             tracing::info!("MoveToAdvanced: arrived at destination");
             self.stop_moveto();
             return;

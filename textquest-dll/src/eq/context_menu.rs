@@ -24,7 +24,7 @@
 //! manager singleton if the addresses need updating for a new patch.
 
 use textquest_common::ipc::ContextMenuInfo;
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 use textquest_common::ipc::ContextMenuItem;
 
 // ─── Public API ───────────────────────────────────────────────────────────────

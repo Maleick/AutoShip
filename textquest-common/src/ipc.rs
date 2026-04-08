@@ -292,7 +292,7 @@ pub enum Command {
     },
     /// Clear the current target.
     ClearTarget,
-    /// Right-click interact with the current target (opens merchant, bank, quest windows).
+    /// Right-click interact with the current target (NPC, door, or object).
     InteractTarget,
     /// Target and activate the nearest door or switch (`/doortarget` + `/click left door`).
     ///
@@ -568,6 +568,13 @@ pub enum Command {
     /// Poll for accumulated captured packet events.
     /// The DLL drains its pending packet buffer and responds with `PacketBatch`.
     PollPackets,
+    // Chat monitor
+    /// Poll for accumulated chat messages captured since the last `PollChat`.
+    ///
+    /// The DLL drains its dedicated chat buffer (populated by the `dsp_chat`
+    /// HWBP hook) and returns them as a `ChatBatch` response. Calling this
+    /// command does **not** affect the `PollPackets` packet-event buffer.
+    PollChat,
     /// Query slot metadata and visible item info for open container windows.
     QueryContainerSlots {
         /// Filters applied before returning slot snapshots.
@@ -733,6 +740,20 @@ pub struct PacketEventInfo {
     pub payload_size: u32,
 }
 
+/// Wire-format for a single chat message in a `ChatBatch` response.
+///
+/// Carries the same fields as `Response::ChatMessage` but is designed for
+/// batched delivery via `Command::PollChat` / `Response::ChatBatch`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ChatMessageInfo {
+    /// The chat text content (may contain STML markup tags).
+    pub text: String,
+    /// EQ chat color code (e.g., 273 = default, 269 = system).
+    pub color: i32,
+    /// Timestamp in milliseconds when the message was captured.
+    pub timestamp_ms: u64,
+}
+
 /// Responses sent from the DLL back to the manager
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Response {
@@ -876,6 +897,15 @@ pub enum Response {
         /// `None` when the text does not match a recognised EQ chat verb pattern
         /// (e.g. system messages, spell feedback, or unknown formats).
         parsed: Option<crate::chat::ChatEvent>,
+    },
+    /// Batched chat messages in response to `Command::PollChat`.
+    ///
+    /// Contains all messages captured by the `dsp_chat` hook since the last
+    /// `PollChat` call. An empty `messages` list means no chat arrived in
+    /// the polling window.
+    ChatBatch {
+        /// Accumulated chat messages since the last poll.
+        messages: Vec<ChatMessageInfo>,
     },
     /// Snapshot of all menus visible in `CContextMenuManager`.
     ///
@@ -1310,6 +1340,8 @@ mod tests {
             Command::InteractDoor,
             Command::ClickObject,
             Command::QueryZoneGraph,
+            Command::PollPackets,
+            Command::PollChat,
             Command::SetRenderMode {
                 mode: RenderMode::NullRender,
             },
@@ -1373,6 +1405,21 @@ mod tests {
                 timestamp_ms: 1234567890,
                 parsed: None,
             },
+            Response::ChatBatch {
+                messages: vec![
+                    ChatMessageInfo {
+                        text: "You say, 'Hello'".into(),
+                        color: 273,
+                        timestamp_ms: 1234567890,
+                    },
+                    ChatMessageInfo {
+                        text: "Soandso tells you, 'Hi!'".into(),
+                        color: 269,
+                        timestamp_ms: 1234567900,
+                    },
+                ],
+            },
+            Response::ChatBatch { messages: vec![] },
         ];
         for resp in &responses {
             let encoded = encode(resp).expect("encode failed");
@@ -1385,6 +1432,52 @@ mod tests {
     fn generate_random_token_is_32_bytes() {
         let token = generate_random_token();
         assert_eq!(token.len(), 32);
+    }
+
+    #[test]
+    fn chat_message_info_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let info = ChatMessageInfo {
+            text: "You say, 'Hello!'".into(),
+            color: 273,
+            timestamp_ms: 9999,
+        };
+        let resp = Response::ChatBatch {
+            messages: vec![info.clone()],
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::ChatBatch { messages } = decoded {
+            assert_eq!(messages.len(), 1);
+            assert_eq!(messages[0], info);
+        } else {
+            panic!("expected ChatBatch");
+        }
+    }
+
+    #[test]
+    fn poll_chat_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::PollChat;
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(cmd, decoded);
+    }
+
+    #[test]
+    fn chat_batch_empty_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::ChatBatch { messages: vec![] };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::ChatBatch { messages } = decoded {
+            assert!(messages.is_empty());
+        } else {
+            panic!("expected ChatBatch");
+        }
     }
 
     #[test]

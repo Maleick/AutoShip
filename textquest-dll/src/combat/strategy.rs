@@ -1,10 +1,42 @@
 use textquest_common::combat::{
     AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
-    NamedPreference, SpellEntry, TargetScanConfig,
+    NamedPreference, SpellEntry, TargetScanConfig, XTargetType,
 };
 use textquest_common::types::SpawnData;
 
 use super::rotation::RotationGroup;
+
+// ─── Pet action / status types ────────────────────────────────────────────────
+
+/// An explicit pet command requested by a class strategy for the current frame.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PetAction {
+    /// Order pet to attack the current combat target.
+    Attack,
+    /// Cast a buff on the pet using the given spell entry.
+    Buff { spell: SpellEntry },
+}
+
+/// Snapshot of the pet's state, derived from the extended target list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PetStatus {
+    /// Spawn ID of the local player's pet, or `None` if no pet is active.
+    pub spawn_id: Option<u32>,
+    /// Spawn ID of whatever the pet is currently attacking, or `None` if idle.
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    /// Returns `true` if the player currently has an active pet.
+    pub fn has_pet(&self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    /// Returns `true` if the pet is currently attacking `target_id`.
+    pub fn is_attacking(&self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
 
 use super::classes::bard::BardStrategy;
 use super::classes::beastlord::BeastlordStrategy;
@@ -24,7 +56,7 @@ use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
 
-/// Snapshot of a summonsed pet's current state for pet-management decisions.
+/// Snapshot of a summoned pet's current state for pet-management decisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PetStatus {
     /// The pet's spawn ID, or `None` if no pet is active.
@@ -46,7 +78,7 @@ impl PetStatus {
 }
 
 /// Pet-management action requested by a `ClassStrategy` for the current frame.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum PetAction {
     /// Send `/pet attack` to the current target.
     Attack,
@@ -55,6 +87,23 @@ pub enum PetAction {
         /// The spell the strategy wants to cast on the pet.
         spell: SpellEntry,
     },
+}
+
+impl PartialEq for PetAction {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Attack, Self::Attack) => true,
+            (Self::Buff { spell: lhs }, Self::Buff { spell: rhs }) => {
+                lhs.slot == rhs.slot
+                    && lhs.spell_id == rhs.spell_id
+                    && lhs.name == rhs.name
+                    && (lhs.min_mana_pct - rhs.min_mana_pct).abs() < f32::EPSILON
+                    && lhs.priority == rhs.priority
+                    && lhs.is_aoe == rhs.is_aoe
+            }
+            _ => false,
+        }
+    }
 }
 
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
@@ -840,6 +889,32 @@ mod tests {
         let ctx = make_ctx_with_xtargets(&player, Some(&target), &config, true, Some(&xtargets));
         let mage = build_strategy(13, &config);
         assert_eq!(mage.pet_action(&ctx), Some(PetAction::Attack));
+    }
+
+    #[test]
+    fn pet_action_buff_equality_tolerates_float_rounding() {
+        let lhs = PetAction::Buff {
+            spell: SpellEntry {
+                name: "Burnout".into(),
+                slot: 1,
+                spell_id: 42,
+                min_mana_pct: 10.0,
+                priority: 1,
+                is_aoe: false,
+            },
+        };
+        let rhs = PetAction::Buff {
+            spell: SpellEntry {
+                name: "Burnout".into(),
+                slot: 1,
+                spell_id: 42,
+                min_mana_pct: 10.0 + (f32::EPSILON / 2.0),
+                priority: 1,
+                is_aoe: false,
+            },
+        };
+
+        assert_eq!(lhs, rhs);
     }
 
     #[test]
