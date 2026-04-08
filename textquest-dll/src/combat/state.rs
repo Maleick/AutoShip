@@ -42,6 +42,10 @@ enum CombatState {
     },
     Casting {
         spell_slot: u8,
+        /// Original spell ID passed to `cast_spell` — retained so retries can
+        /// re-issue the same spell even when the cast source was
+        /// `SpellCastSource::SpellIdDirect` (gem_id 0 + explicit spell_id).
+        spell_id: i32,
         target_id: u32,
         ticks_remaining: u32,
         /// Number of times this spell slot has been attempted (incremented on
@@ -420,6 +424,7 @@ impl Combatant {
             // If we were mid-cast, notify the strategy this was an interrupt (not completion)
             if let CombatState::Casting {
                 spell_slot,
+                spell_id,
                 target_id,
                 ..
             } = &self.state
@@ -430,6 +435,7 @@ impl Combatant {
                     nearby,
                     false,
                     *spell_slot,
+                    *spell_id,
                     *target_id,
                     0,
                     CastResult::Interrupted,
@@ -536,6 +542,7 @@ impl Combatant {
             // up (e.g., bard melody index, cleric rez_pending).
             if let CombatState::Casting {
                 spell_slot,
+                spell_id,
                 target_id,
                 ..
             } = &self.state
@@ -546,6 +553,7 @@ impl Combatant {
                     nearby,
                     true,
                     *spell_slot,
+                    *spell_id,
                     *target_id,
                     0,
                     CastResult::Interrupted,
@@ -564,6 +572,7 @@ impl Combatant {
                     self.gcd.consume();
                     self.state = CombatState::Casting {
                         spell_slot: gem_id,
+                        spell_id: 0,
                         target_id: target.map(|t| t.spawn_id).unwrap_or(0),
                         ticks_remaining: 20,
                         retry_count: 0,
@@ -730,6 +739,7 @@ impl Combatant {
                                 self.gcd.consume();
                                 self.state = CombatState::Casting {
                                     spell_slot: cast_plan.gem_id,
+                                    spell_id: cast_plan.spell_id,
                                     target_id: action.target_id,
                                     ticks_remaining: 20 + cast_delay,
                                     backoff_ticks: 0,
@@ -858,6 +868,7 @@ impl Combatant {
                     self.gcd.consume();
                     self.state = CombatState::Casting {
                         spell_slot: cast_plan.gem_id,
+                        spell_id: cast_plan.spell_id,
                         target_id: selected_spell_target
                             .or_else(|| target.map(|t| t.spawn_id))
                             .unwrap_or(0),
@@ -871,6 +882,7 @@ impl Combatant {
 
             CombatState::Casting {
                 spell_slot,
+                spell_id,
                 target_id,
                 ticks_remaining,
                 retry_count,
@@ -880,6 +892,22 @@ impl Combatant {
                 if *backoff_ticks > 0 {
                     *backoff_ticks -= 1;
                     return;
+                }
+
+                // Retry casts are scheduled by `finish_cast` after a retryable
+                // result. Re-issue the cast once when the retry backoff has
+                // completed so the retry actually occurs.
+                if *retry_count > 0 && *ticks_remaining == 20 && self.pending_cast_result.is_none()
+                {
+                    tracing::debug!(
+                        spell_slot = *spell_slot,
+                        spell_id = *spell_id,
+                        target_id = *target_id,
+                        retry_count = *retry_count,
+                        "Issuing retry cast"
+                    );
+                    crate::eq::cast_spell(*spell_slot, *spell_id);
+                    self.gcd.consume();
                 }
 
                 // Healer heal-cancel: if lowest HP member recovered above 85%,
@@ -894,13 +922,14 @@ impl Combatant {
                         tracing::info!("Healer: canceling heal — group HP recovered above 85%");
                         // Duck to interrupt cast (write STANDSTATE=4 briefly)
                         crate::eq::slash_command("/duck");
-                        let (ss, tid) = (*spell_slot, *target_id);
+                        let (ss, sid, tid) = (*spell_slot, *spell_id, *target_id);
                         self.finish_cast(
                             player,
                             target,
                             nearby,
                             true,
                             ss,
+                            sid,
                             tid,
                             0,
                             CastResult::Aborted,
@@ -910,19 +939,20 @@ impl Combatant {
                 }
 
                 if let Some(result) = self.pending_cast_result.take() {
-                    let (ss, tid, rc) = (*spell_slot, *target_id, *retry_count);
-                    self.finish_cast(player, target, nearby, true, ss, tid, rc, result);
+                    let (ss, sid, tid, rc) = (*spell_slot, *spell_id, *target_id, *retry_count);
+                    self.finish_cast(player, target, nearby, true, ss, sid, tid, rc, result);
                     return;
                 }
 
                 if *ticks_remaining == 0 {
-                    let (ss, tid) = (*spell_slot, *target_id);
+                    let (ss, sid, tid) = (*spell_slot, *spell_id, *target_id);
                     self.finish_cast(
                         player,
                         target,
                         nearby,
                         true,
                         ss,
+                        sid,
                         tid,
                         0,
                         CastResult::Success,
@@ -1096,6 +1126,7 @@ impl Combatant {
         nearby: &[SpawnData],
         in_combat: bool,
         spell_slot: u8,
+        spell_id: i32,
         target_id: u32,
         retry_count: u8,
         result: CastResult,
@@ -1130,6 +1161,7 @@ impl Combatant {
             let backoff = policy.backoff_ticks(new_retry_count);
             tracing::debug!(
                 spell_slot,
+                spell_id,
                 target_id,
                 result = %result,
                 retry_count = new_retry_count,
@@ -1138,6 +1170,7 @@ impl Combatant {
             );
             self.state = CombatState::Casting {
                 spell_slot,
+                spell_id,
                 target_id,
                 ticks_remaining: 20,
                 retry_count: new_retry_count,
@@ -1314,6 +1347,7 @@ impl Combatant {
                 self.gcd.consume();
                 self.state = CombatState::Casting {
                     spell_slot: gem_id,
+                    spell_id: spell.spell_id,
                     target_id: pet_id,
                     ticks_remaining: 20 + cast_delay,
                     retry_count: 0,
@@ -1416,6 +1450,7 @@ mod tests {
         // Force into Casting state
         c.state = CombatState::Casting {
             spell_slot: 1,
+            spell_id: 0,
             target_id: 100,
             ticks_remaining: 10,
             retry_count: 0,
@@ -1825,6 +1860,7 @@ mod tests {
         let mut c = Combatant::new(1, 0, test_config());
         c.state = CombatState::Casting {
             spell_slot: 3,
+            spell_id: 0,
             target_id: 42,
             ticks_remaining: 10,
             retry_count: 0,
@@ -1845,6 +1881,7 @@ mod tests {
 
         c.state = CombatState::Casting {
             spell_slot: 2,
+            spell_id: 0,
             target_id: target.spawn_id,
             ticks_remaining: 10,
             retry_count: 0,
@@ -1869,6 +1906,7 @@ mod tests {
 
         c.state = CombatState::Casting {
             spell_slot: 2,
+            spell_id: 0,
             target_id: target.spawn_id,
             ticks_remaining: 10,
             retry_count: 0,
@@ -1890,6 +1928,7 @@ mod tests {
 
         c.state = CombatState::Casting {
             spell_slot: 4,
+            spell_id: 0,
             target_id: target.spawn_id,
             ticks_remaining: 10,
             retry_count: 0,
@@ -1971,6 +2010,7 @@ mod tests {
 
         c.state = CombatState::Casting {
             spell_slot: 2,
+            spell_id: 0,
             target_id: target.spawn_id,
             ticks_remaining: 10,
             retry_count: 0,
@@ -2002,6 +2042,7 @@ mod tests {
 
         c.state = CombatState::Casting {
             spell_slot: 2,
+            spell_id: 0,
             target_id: target.spawn_id,
             ticks_remaining: 10,
             retry_count: 0,
@@ -2027,6 +2068,7 @@ mod tests {
 
         c.state = CombatState::Casting {
             spell_slot: 1,
+            spell_id: 0,
             target_id: target.spawn_id,
             ticks_remaining: 10,
             retry_count: 0,
@@ -2087,6 +2129,7 @@ mod tests {
         for i in 0..10u8 {
             c.state = CombatState::Casting {
                 spell_slot: 1,
+                spell_id: 0,
                 target_id: target.spawn_id,
                 ticks_remaining: 10,
                 retry_count: i,
@@ -2110,6 +2153,7 @@ mod tests {
 
         c.state = CombatState::Casting {
             spell_slot: 2,
+            spell_id: 0,
             target_id: target.spawn_id,
             ticks_remaining: 10,
             retry_count: 0,
@@ -2122,5 +2166,50 @@ mod tests {
             matches!(c.status(), CombatStatus::OnGcd),
             "Resisted cast should not retry, expected OnGcd"
         );
+    }
+
+    /// Verify that a retry attempt (retry_count > 0, ticks_remaining == 20,
+    /// no pending result) consumes the GCD — confirming the re-issue path runs.
+    /// Also verifies that the spell_id stored in Casting state is preserved on retry.
+    #[test]
+    fn recast_retry_reissue_consumes_gcd_and_preserves_spell_id() {
+        // max_tries=3 so retry is allowed, no backoff needed.
+        let mut c = Combatant::new(1, 0, config_with_retry(3, 0));
+        let player = test_player();
+        let target = test_target();
+
+        // Place the FSM into a retry-pending state: retry_count=1, backoff already
+        // exhausted (backoff_ticks=0), ticks_remaining=20 (fresh retry window),
+        // and a non-zero spell_id to confirm it is forwarded to cast_spell.
+        const SPELL_ID: i32 = 9999;
+        c.state = CombatState::Casting {
+            spell_slot: 2,
+            spell_id: SPELL_ID,
+            target_id: target.spawn_id,
+            ticks_remaining: 20,
+            retry_count: 1,
+            backoff_ticks: 0,
+        };
+
+        // GCD must be idle before the tick so we can observe consume().
+        assert!(c.gcd.is_ready(), "GCD should be ready before retry tick");
+
+        c.tick(&player, Some(&target), &[]);
+
+        // The retry re-issue path must consume the GCD.
+        assert!(
+            !c.gcd.is_ready(),
+            "GCD should be consumed after retry-cast reissue"
+        );
+
+        // spell_id must be preserved in the Casting state after the tick.
+        if let CombatState::Casting { spell_id, .. } = c.state {
+            assert_eq!(
+                spell_id, SPELL_ID,
+                "spell_id must be preserved across retry tick"
+            );
+        } else {
+            panic!("Expected CombatState::Casting after retry tick");
+        }
     }
 }
