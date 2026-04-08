@@ -5533,6 +5533,13 @@ impl App {
                     );
                     return;
                 };
+                if !r.is_finite() || r <= 0.0 {
+                    self.usage_feedback(
+                        "mapfilter aggroradius",
+                        "Usage: mapfilter aggroradius <radius> [color] (radius must be > 0)",
+                    );
+                    return;
+                }
                 let color = parts
                     .get(3)
                     .and_then(|c| super::theme::parse_color_name(c))
@@ -5753,7 +5760,7 @@ impl App {
                     self.usage_feedback("mapmarker", "Usage: mapmarker clear <name|all>");
                     return;
                 };
-                let msg = if name.to_ascii_lowercase() == "all" {
+                let msg = if name.eq_ignore_ascii_case("all") {
                     self.map_state.named_markers.clear();
                     String::from("All markers cleared")
                 } else {
