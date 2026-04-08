@@ -4,17 +4,17 @@ import {
   UsersThree,
   Globe,
   ShieldWarning,
-  Coins,
+  Bag,
 } from "@phosphor-icons/react";
-import type { ViewId } from "../App";
 
-export type ActiveView = "engagements" | "formations" | "map" | "security";
+export type ActiveView = "engagements" | "formations" | "map" | "security" | "loot";
 
 const navItems: { icon: typeof Sword; label: string; id: ActiveView; pulse?: boolean }[] = [
   { icon: Sword,         label: "Active Engagements", id: "engagements", pulse: true },
   { icon: UsersThree,    label: "Fleet Formations",   id: "formations" },
   { icon: Globe,         label: "Realm Map (Norrath)", id: "map" },
   { icon: ShieldWarning, label: "Security Wards",      id: "security" },
+  { icon: Bag,           label: "Loot Configuration",  id: "loot" },
 ];
 
 interface LeftSidebarProps {
@@ -110,4 +110,3 @@ export default function LeftSidebar({ activeView, onNavigate }: LeftSidebarProps
     </aside>
   );
 }
-

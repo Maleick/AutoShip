@@ -30,6 +30,19 @@ eq_path = "C:\\Users\\Public\\Daybreak Game Company\\Installed Games\\EverQuest"
 # mass_failure_threshold = 5
 # mass_failure_window_secs = 60
 
+# ─── Optional Peer Discovery ───
+# Enable this to advertise active sessions over UDP multicast and discover
+# other TextQuest orchestrators on the same network segment.
+# [discovery]
+# multicast_enabled = true
+# bind_addr = "0.0.0.0"
+# multicast_addr = "239.255.42.99"
+# port = 35353
+# announce_interval_ms = 1000
+# peer_ttl_ms = 5000
+# node_name = "raid-rig-a"          # Optional; empty falls back to hostname
+# multicast_ttl = 1
+
 # ─── Soul Engine ───
 # AI personality system for character behavior and social dynamics.
 # [soul]

@@ -240,6 +240,18 @@ struct PendingCommand {
 
 static PENDING_COMMANDS: Mutex<Vec<PendingCommand>> = Mutex::new(Vec::new());
 static JITTER_RNG: Mutex<Option<textquest_common::nav::Xorshift32>> = Mutex::new(None);
+static ACTIVE_BANDOLIER_SET: Mutex<Option<String>> = Mutex::new(None);
+static PENDING_BANDOLIER_RESTORE: Mutex<Option<PendingBandolierRestore>> = Mutex::new(None);
+
+const BANDOLIER_CAST_TIMEOUT_TICKS: u64 = 30;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingBandolierRestore {
+    requested_set: String,
+    restore_to: Option<String>,
+    deadline_tick: u64,
+    saw_casting: bool,
+}
 
 /// Initialize the jitter RNG with a seed derived from system time.
 /// Using time instead of PID avoids predictable sequences since PIDs
@@ -281,6 +293,194 @@ pub fn queue_slash_command(command: String) {
     }
 }
 
+// ─── Casting Loop (kill / recast) ───
+//
+// When a `CastSpell` command arrives with `kill = true` or `recast > 0`, the
+// DLL starts a repeating cast loop driven by the game tick.
+//
+// `kill` mode:  keep casting until the target's HP drops to zero or the target
+//               disappears.  The loop self-cancels on target death or a
+//               `CancelCastLoop` command.
+//
+// `recast` mode: cast N+1 times total with exponential backoff between
+//                attempts.  The backoff starts at `CAST_LOOP_BASE_BACKOFF_TICKS`
+//                and doubles each attempt, capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
+
+/// Base backoff between recast attempts (~0.4 s at 20 ticks/sec).
+const CAST_LOOP_BASE_BACKOFF_TICKS: u64 = 8;
+
+/// Maximum backoff cap in ticks (~1.5 s at 20 ticks/sec).
+const CAST_LOOP_MAX_BACKOFF_TICKS: u64 = 30;
+
+#[derive(Debug, Clone)]
+enum CastLoopMode {
+    /// Keep casting until the target dies.  Stores the target spawn-ID so we
+    /// can detect when it changes (e.g. target was cleared between iterations).
+    Kill { target_id: u32 },
+    /// Cast `remaining` more times (including the current attempt).
+    Recast { remaining: u8 },
+}
+
+#[derive(Debug)]
+struct CastingLoop {
+    /// Gem slot to cast (1-based, 1-13).
+    spell_slot: u8,
+    /// Optional spawn ID to switch target to before each cast.
+    target_id: Option<u32>,
+    /// Whether the loop is active.
+    active: bool,
+    /// Control mode.
+    mode: CastLoopMode,
+    /// Tick at which the next cast attempt should fire.
+    next_cast_tick: u64,
+    /// Current backoff in ticks (doubles on each recast attempt, capped).
+    backoff_ticks: u64,
+}
+
+impl CastingLoop {
+    fn start_kill(spell_slot: u8, target_id: Option<u32>, current_tick: u64) -> Self {
+        let target = target_id.unwrap_or(0);
+        Self {
+            spell_slot,
+            target_id,
+            active: true,
+            mode: CastLoopMode::Kill { target_id: target },
+            next_cast_tick: current_tick,
+            backoff_ticks: CAST_LOOP_BASE_BACKOFF_TICKS,
+        }
+    }
+
+    fn start_recast(spell_slot: u8, target_id: Option<u32>, recast: u8, current_tick: u64) -> Self {
+        Self {
+            spell_slot,
+            target_id,
+            active: true,
+            mode: CastLoopMode::Recast {
+                remaining: recast.saturating_add(1), // include the first cast
+            },
+            next_cast_tick: current_tick,
+            backoff_ticks: CAST_LOOP_BASE_BACKOFF_TICKS,
+        }
+    }
+
+    fn cancel(&mut self) {
+        self.active = false;
+    }
+
+    /// Execute one tick of the loop.  Queues a cast slash command if appropriate.
+    /// Returns `false` when the loop should be stopped (target dead, casts exhausted).
+    fn tick(&mut self, current_tick: u64, eq_base: u64) -> bool {
+        if !self.active {
+            return false;
+        }
+        if current_tick < self.next_cast_tick {
+            return true; // waiting for backoff
+        }
+        if eq_base != 0 && cast_in_progress(eq_base) {
+            self.next_cast_tick = current_tick + 1;
+            return true;
+        }
+
+        match &mut self.mode {
+            CastLoopMode::Kill { target_id } => {
+                // Check if the target is still alive.  On non-Windows this always
+                // returns None (stub), so the loop runs until cancelled.
+                if eq_base != 0 {
+                    let target = read_target_state(eq_base);
+                    match target {
+                        None => {
+                            tracing::info!(
+                                spell_slot = self.spell_slot,
+                                "CastLoop(kill): target gone — stopping"
+                            );
+                            self.active = false;
+                            return false;
+                        }
+                        Some(ref t) if t.spawn_id != *target_id && *target_id != 0 => {
+                            tracing::info!(
+                                spell_slot = self.spell_slot,
+                                old_target = *target_id,
+                                new_target = t.spawn_id,
+                                "CastLoop(kill): target changed — stopping"
+                            );
+                            self.active = false;
+                            return false;
+                        }
+                        Some(ref t) if t.hp_current <= 0 => {
+                            tracing::info!(
+                                spell_slot = self.spell_slot,
+                                spawn_id = t.spawn_id,
+                                "CastLoop(kill): target HP <= 0 — stopping"
+                            );
+                            self.active = false;
+                            return false;
+                        }
+                        _ => {}
+                    }
+                }
+
+                issue_cast(self.spell_slot, self.target_id);
+                self.next_cast_tick = current_tick + self.backoff_ticks;
+                true
+            }
+            CastLoopMode::Recast { remaining } => {
+                if *remaining == 0 {
+                    tracing::info!(
+                        spell_slot = self.spell_slot,
+                        "CastLoop(recast): all casts complete — stopping"
+                    );
+                    self.active = false;
+                    return false;
+                }
+
+                tracing::info!(
+                    spell_slot = self.spell_slot,
+                    remaining = *remaining,
+                    "CastLoop(recast): firing cast"
+                );
+                issue_cast(self.spell_slot, self.target_id);
+                *remaining -= 1;
+
+                let current_delay = self.backoff_ticks;
+                self.next_cast_tick = current_tick + current_delay;
+                // Exponential backoff, capped.
+                self.backoff_ticks = (current_delay * 2).min(CAST_LOOP_MAX_BACKOFF_TICKS);
+                true
+            }
+        }
+    }
+}
+
+/// Issue the cast slash command(s) for one loop iteration.
+fn issue_cast(spell_slot: u8, target_id: Option<u32>) {
+    if let Some(tid) = target_id {
+        queue_slash_command(format!("/target id {tid}"));
+    }
+    queue_slash_command(format!("/cast {spell_slot}"));
+}
+
+fn cast_in_progress(eq_base: u64) -> bool {
+    super::casting::CastingController::new(eq_base)
+        .is_casting()
+        .unwrap_or(false)
+}
+
+static CAST_LOOP: Mutex<Option<CastingLoop>> = Mutex::new(None);
+
+/// Tick the active casting loop (if any) from the game loop thread.
+fn tick_cast_loop(current_tick: u64) {
+    let Ok(mut guard) = CAST_LOOP.lock() else {
+        return;
+    };
+    let Some(ref mut loop_state) = *guard else {
+        return;
+    };
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    if !loop_state.tick(current_tick, eq_base) {
+        *guard = None; // loop finished
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CastingAction {
     CastGem(u8),
@@ -301,7 +501,30 @@ struct ParsedCastingCommand {
     action: CastingAction,
     target_id: Option<u32>,
     require_not_invisible: bool,
+    bandolier_set: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+enum MovementSlashCommand {
+    Stick(StickSlashCommand),
+    Follow(FollowSlashCommand),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum StickSlashCommand {
+    Start(textquest_common::nav::StickConfig),
+    Off,
+    Mod(f32),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum FollowSlashCommand {
+    Start { leader_name: Option<String> },
+    Off,
+}
+
+const DEFAULT_FOLLOW_DISTANCE: f32 = 20.0;
+const DEFAULT_FOLLOW_LEASH_DISTANCE: f32 = 60.0;
 
 fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, String>> {
     let tokens = match tokenize_slash_command(command) {
@@ -320,6 +543,7 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
     let mut cast_type: Option<&str> = None;
     let mut target_id = None;
     let mut require_not_invisible = false;
+    let mut bandolier_set = None;
 
     for token in &args[1..] {
         if token.eq_ignore_ascii_case("-invis") {
@@ -327,8 +551,7 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
             continue;
         }
 
-        let lower = token.to_ascii_lowercase();
-        if let Some(value) = lower.strip_prefix("-targetid|") {
+        if let Some(value) = parse_pipe_option(token, "-targetid") {
             let parsed_target = value
                 .parse::<u32>()
                 .map_err(|_| format!("invalid -targetid value: {value}"));
@@ -339,6 +562,17 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
                 }
                 Err(err) => return Some(Err(err)),
             }
+        }
+
+        if let Some(value) = parse_pipe_option(token, "-bandolier") {
+            let value = value.trim();
+            if value.is_empty() {
+                return Some(Err("missing -bandolier value".to_string()));
+            }
+            if bandolier_set.replace(value.to_string()).is_some() {
+                return Some(Err("multiple -bandolier options specified".to_string()));
+            }
+            continue;
         }
 
         if cast_type.replace(token.as_str()).is_some() {
@@ -374,7 +608,145 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
         action,
         target_id,
         require_not_invisible,
+        bandolier_set,
     }))
+}
+
+fn parse_movement_slash_command(command: &str) -> Option<Result<MovementSlashCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if verb.eq_ignore_ascii_case("/stick") {
+        return Some(parse_stick_slash_command(args).map(MovementSlashCommand::Stick));
+    }
+    if verb.eq_ignore_ascii_case("/follow") {
+        return Some(parse_follow_slash_command(args).map(MovementSlashCommand::Follow));
+    }
+    None
+}
+
+fn parse_stick_slash_command(args: &[String]) -> Result<StickSlashCommand, String> {
+    if args.is_empty() {
+        return Ok(StickSlashCommand::Start(
+            textquest_common::nav::StickConfig::default(),
+        ));
+    }
+
+    if args.len() == 1 && args[0].eq_ignore_ascii_case("off") {
+        return Ok(StickSlashCommand::Off);
+    }
+
+    if args[0].eq_ignore_ascii_case("mod") {
+        let Some(delta) = args.get(1) else {
+            return Err("missing distance delta for /stick mod".to_string());
+        };
+        let delta = delta
+            .parse::<f32>()
+            .map_err(|_| format!("invalid /stick mod value: {delta}"))?;
+        return Ok(StickSlashCommand::Mod(delta));
+    }
+
+    let mut config = textquest_common::nav::StickConfig::default();
+    let mut idx = 0usize;
+    while let Some(token) = args.get(idx) {
+        if token.eq_ignore_ascii_case("hold") {
+            config.hold = true;
+        } else if token.eq_ignore_ascii_case("always") {
+            config.always = true;
+        } else if token.eq_ignore_ascii_case("moveback") {
+            config.moveback = true;
+        } else if token.eq_ignore_ascii_case("healer") {
+            config.healer = true;
+        } else if token.eq_ignore_ascii_case("autopause") {
+            config.autopause = true;
+        } else if token.eq_ignore_ascii_case("behind") {
+            config.mode = textquest_common::nav::StickMode::Behind;
+        } else if token.eq_ignore_ascii_case("!front") || token.eq_ignore_ascii_case("notfront") {
+            config.mode = textquest_common::nav::StickMode::NotFront;
+        } else if token.eq_ignore_ascii_case("pin") {
+            config.mode = textquest_common::nav::StickMode::Pin;
+        } else if token.eq_ignore_ascii_case("front") {
+            config.mode = textquest_common::nav::StickMode::Front;
+        } else if token.eq_ignore_ascii_case("snaproll") {
+            config.mode = textquest_common::nav::StickMode::SnapRoll;
+        } else if token.eq_ignore_ascii_case("id") {
+            let Some(raw_id) = args.get(idx + 1) else {
+                return Err("missing spawn id for /stick id".to_string());
+            };
+            config.id = Some(
+                raw_id
+                    .parse::<u32>()
+                    .map_err(|_| format!("invalid /stick id value: {raw_id}"))?,
+            );
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("behindarc") {
+            let Some(raw_arc) = args.get(idx + 1) else {
+                return Err("missing arc value for /stick behindarc".to_string());
+            };
+            config.behind_arc = raw_arc
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick behindarc value: {raw_arc}"))?;
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("!frontarc")
+            || token.eq_ignore_ascii_case("notfrontarc")
+        {
+            let Some(raw_arc) = args.get(idx + 1) else {
+                return Err("missing arc value for /stick !frontarc".to_string());
+            };
+            config.not_front_arc = raw_arc
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick !frontarc value: {raw_arc}"))?;
+            idx += 1;
+        } else if token.eq_ignore_ascii_case("backupdist") {
+            let Some(raw_dist) = args.get(idx + 1) else {
+                return Err("missing distance for /stick backupdist".to_string());
+            };
+            config.backup_dist = raw_dist
+                .parse::<f32>()
+                .map_err(|_| format!("invalid /stick backupdist value: {raw_dist}"))?;
+            idx += 1;
+        } else if let Some(percent) = token.strip_suffix('%') {
+            config.distance = textquest_common::nav::StickDistance::Percent(
+                percent
+                    .parse::<f32>()
+                    .map_err(|_| format!("invalid /stick distance percentage: {token}"))?,
+            );
+        } else if let Ok(distance) = token.parse::<f32>() {
+            config.distance = textquest_common::nav::StickDistance::Absolute(distance);
+        } else {
+            return Err(format!("unsupported /stick token: {token}"));
+        }
+
+        idx += 1;
+    }
+
+    Ok(StickSlashCommand::Start(config))
+}
+
+fn parse_follow_slash_command(args: &[String]) -> Result<FollowSlashCommand, String> {
+    if args.is_empty() {
+        return Ok(FollowSlashCommand::Start { leader_name: None });
+    }
+    if args.len() == 1 && args[0].eq_ignore_ascii_case("off") {
+        return Ok(FollowSlashCommand::Off);
+    }
+
+    let leader_name = args.join(" ").trim().to_string();
+    if leader_name.is_empty() {
+        return Err("missing leader name for /follow".to_string());
+    }
+    Ok(FollowSlashCommand::Start {
+        leader_name: Some(leader_name),
+    })
+}
+
+fn parse_pipe_option<'a>(token: &'a str, option: &str) -> Option<&'a str> {
+    token
+        .split_once('|')
+        .filter(|(name, _)| name.eq_ignore_ascii_case(option))
+        .map(|(_, value)| value)
 }
 
 fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
@@ -417,6 +789,126 @@ fn tokenize_slash_command(input: &str) -> Result<Vec<String>, &'static str> {
 
 fn quote_for_eq(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn bandolier_activate_command(set_name: &str) -> String {
+    let selector = if set_name.chars().all(|ch| ch.is_ascii_digit()) {
+        set_name.to_string()
+    } else {
+        quote_for_eq(set_name)
+    };
+    format!("/bandolier activate {selector}")
+}
+
+fn parse_bandolier_activate_command(command: &str) -> Option<String> {
+    let tokens = tokenize_slash_command(command).ok()?;
+    match tokens.as_slice() {
+        [verb, action, selector, ..]
+            if verb.eq_ignore_ascii_case("/bandolier")
+                && action.eq_ignore_ascii_case("activate") =>
+        {
+            let selector = selector.trim();
+            if selector.is_empty() {
+                None
+            } else {
+                Some(selector.to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn schedule_bandolier_swap(requested_set: &str, current_tick: u64) {
+    let requested_set = requested_set.trim();
+    if requested_set.is_empty() {
+        return;
+    }
+
+    let current_active = ACTIVE_BANDOLIER_SET
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone());
+    let should_swap = current_active
+        .as_deref()
+        .is_none_or(|current| !current.eq_ignore_ascii_case(requested_set));
+
+    let restore_to = if let Ok(mut pending) = PENDING_BANDOLIER_RESTORE.lock() {
+        let restore_to = pending
+            .as_ref()
+            .and_then(|state| state.restore_to.clone())
+            .or(current_active.clone())
+            .filter(|current| !current.eq_ignore_ascii_case(requested_set));
+
+        *pending = Some(PendingBandolierRestore {
+            requested_set: requested_set.to_string(),
+            restore_to: restore_to.clone(),
+            deadline_tick: current_tick + BANDOLIER_CAST_TIMEOUT_TICKS,
+            saw_casting: false,
+        });
+        restore_to
+    } else {
+        None
+    };
+
+    if should_swap {
+        tracing::info!(bandolier = %requested_set, "Queueing /casting bandolier swap");
+        queue_slash_command(bandolier_activate_command(requested_set));
+    } else if restore_to.is_none() {
+        tracing::debug!(bandolier = %requested_set, "Skipping redundant /casting bandolier swap");
+    }
+}
+
+fn next_bandolier_restore_command(
+    pending: &mut Option<PendingBandolierRestore>,
+    current_tick: u64,
+    observed_casting: Option<bool>,
+) -> Option<String> {
+    let state = pending.as_mut()?;
+
+    let is_currently_casting = observed_casting == Some(true);
+    if is_currently_casting {
+        state.saw_casting = true;
+        state.deadline_tick = current_tick + BANDOLIER_CAST_TIMEOUT_TICKS;
+        return None;
+    }
+
+    let should_restore = if state.saw_casting {
+        observed_casting == Some(false) || current_tick >= state.deadline_tick
+    } else {
+        current_tick >= state.deadline_tick
+    };
+
+    if !should_restore {
+        return None;
+    }
+
+    let state = pending.take()?;
+    state
+        .restore_to
+        .filter(|restore_to| !restore_to.eq_ignore_ascii_case(&state.requested_set))
+        .map(|restore_to| bandolier_activate_command(&restore_to))
+}
+
+fn process_pending_bandolier_restore(current_tick: u64) {
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    let observed_casting = if eq_base == 0 {
+        None
+    } else {
+        super::casting::CastingController::new(eq_base)
+            .is_casting()
+            .ok()
+    };
+
+    let restore_command = if let Ok(mut pending) = PENDING_BANDOLIER_RESTORE.lock() {
+        next_bandolier_restore_command(&mut pending, current_tick, observed_casting)
+    } else {
+        None
+    };
+
+    if let Some(command) = restore_command {
+        tracing::info!(cmd = %command, "Restoring bandolier after /casting");
+        queue_slash_command(command);
+    }
 }
 
 fn is_item_slot_selector(selector: &str) -> bool {
@@ -645,10 +1137,111 @@ fn handle_casting_slash_command(command: &str) -> bool {
                 return true;
             }
 
+            if let Some(bandolier_set) = parsed.bandolier_set.as_deref() {
+                let current_tick = TICK_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+                schedule_bandolier_swap(bandolier_set, current_tick);
+            }
+
             if let Some(target_id) = parsed.target_id {
                 queue_slash_command(format!("/target id {target_id}"));
             }
             queue_slash_command(parsed.action.slash_command());
+            true
+        }
+    }
+}
+
+fn spawn_matches_name(spawn: &textquest_common::types::SpawnData, leader_name: &str) -> bool {
+    spawn.displayed_name.eq_ignore_ascii_case(leader_name)
+        || spawn.name.eq_ignore_ascii_case(leader_name)
+}
+
+fn resolve_follow_spawn<'a>(
+    current_target: Option<&'a textquest_common::types::SpawnData>,
+    nearby: &'a [textquest_common::types::SpawnData],
+    leader_name: Option<&str>,
+) -> Option<&'a textquest_common::types::SpawnData> {
+    let leader_name = leader_name.map(str::trim).filter(|value| !value.is_empty());
+    match leader_name {
+        None => current_target,
+        Some(leader_name) => current_target
+            .filter(|spawn| spawn_matches_name(spawn, leader_name))
+            .or_else(|| {
+                nearby
+                    .iter()
+                    .find(|spawn| spawn_matches_name(spawn, leader_name))
+            }),
+    }
+}
+
+fn handle_movement_slash_command(command: &str) -> bool {
+    match parse_movement_slash_command(command) {
+        None => false,
+        Some(Err(err)) => {
+            tracing::warn!(cmd = %command, %err, "Unsupported movement slash command");
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Off))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StickOff);
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Mod(delta)))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StickMod(delta));
+            true
+        }
+        Some(Ok(MovementSlashCommand::Stick(StickSlashCommand::Start(config)))) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            let current_target_id = if eq_base != 0 {
+                read_target_state(eq_base).map(|target| target.spawn_id)
+            } else {
+                None
+            };
+            crate::nav::handle_command(crate::nav::NavCommand::StickTo {
+                config,
+                current_target_id,
+            });
+            true
+        }
+        Some(Ok(MovementSlashCommand::Follow(FollowSlashCommand::Off))) => {
+            crate::nav::handle_command(crate::nav::NavCommand::StopFollow);
+            true
+        }
+        Some(Ok(MovementSlashCommand::Follow(FollowSlashCommand::Start { leader_name }))) => {
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base == 0 {
+                tracing::warn!(cmd = %command, "Ignoring /follow outside the world");
+                return true;
+            }
+
+            let current_target = read_target_state(eq_base);
+            let nearby_guard = CACHED_NEARBY_FOR_STICK
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let Some(leader) = resolve_follow_spawn(
+                current_target.as_ref(),
+                &nearby_guard,
+                leader_name.as_deref(),
+            ) else {
+                tracing::warn!(cmd = %command, "Could not resolve /follow leader");
+                return true;
+            };
+
+            let leader_display_name = if leader.displayed_name.trim().is_empty() {
+                leader.name.clone()
+            } else {
+                leader.displayed_name.clone()
+            };
+            let anchor = textquest_common::nav::Waypoint::new(leader.x, leader.y, leader.z);
+            drop(nearby_guard);
+
+            crate::nav::handle_command(crate::nav::NavCommand::FollowPlayer {
+                config: textquest_common::nav::FollowConfig::new(
+                    leader_display_name,
+                    DEFAULT_FOLLOW_DISTANCE,
+                    DEFAULT_FOLLOW_LEASH_DISTANCE,
+                ),
+                anchor,
+            });
             true
         }
     }
@@ -724,12 +1317,16 @@ fn on_game_tick() {
     }
 
     // Enqueue IPC commands with jitter delay for anti-detection.
-    for cmd in crate::ipc::poll_commands() {
-        enqueue_command(cmd, tick);
+    for ipc_cmd in crate::ipc::poll_commands() {
+        enqueue_command(ipc_cmd.command, tick);
     }
 
     // Execute commands whose scheduled tick has arrived.
     process_pending_commands(tick);
+    process_pending_bandolier_restore(tick);
+
+    // Tick the active casting loop (kill / recast) every frame.
+    tick_cast_loop(tick);
 
     // Check for pending login button click (queued from IPC thread).
     let button_addr = PENDING_BUTTON_CLICK.swap(0, std::sync::atomic::Ordering::AcqRel);
@@ -1638,18 +2235,33 @@ fn set_window_title_for_pid(pid: u32, title: &str) {
 
 /// Dispatch a single IPC command received from the orchestrator.
 fn dispatch_command(cmd: textquest_common::ipc::Command) {
+    use std::borrow::Cow;
     use textquest_common::ipc::Command;
 
     match cmd {
         Command::SlashCommand { command } => {
-            // Intercept /cleartarget — not a real EQ command. Route to our
-            // ClearTarget handler which writes NULL to pinstTarget directly.
             let trimmed = command.trim();
-            if trimmed.eq_ignore_ascii_case("/cleartarget") {
-                tracing::info!("Intercepted /cleartarget slash command → ClearTarget");
-                dispatch_command(Command::ClearTarget);
-                return;
-            }
+            let slash_command = match intercept_custom_slash_command(trimmed) {
+                Some(InterceptedSlashCommand::ClearTarget) => {
+                    tracing::info!("Intercepted /cleartarget slash command → ClearTarget");
+                    dispatch_command(Command::ClearTarget);
+                    return;
+                }
+                Some(InterceptedSlashCommand::InteractTarget) => {
+                    tracing::info!(
+                        cmd = trimmed,
+                        "Intercepted /click ... target → InteractTarget"
+                    );
+                    interact_with_target();
+                    return;
+                }
+                Some(InterceptedSlashCommand::Rewrite(rewritten)) => {
+                    tracing::info!(from = trimmed, to = %rewritten, "Rewriting custom slash command");
+                    Cow::Owned(rewritten)
+                }
+                None => Cow::Borrowed(trimmed),
+            };
+            let slash_command = slash_command.as_ref();
 
             if let Some(nav_waypoint_cmd) = parse_nav_waypoint_command(trimmed) {
                 match nav_waypoint_cmd {
@@ -1745,7 +2357,7 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
-            if let Some(spell_set) = parse_spell_set_command(trimmed) {
+            if let Some(spell_set) = parse_spell_set_command(slash_command) {
                 match handle_spell_set_command(spell_set) {
                     Ok(Some(eq_command)) => {
                         tracing::info!(cmd = %eq_command, "Executing translated spell-set command");
@@ -1761,20 +2373,28 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            if handle_casting_slash_command(trimmed) {
+                tracing::info!(cmd = %command, "Queued translated /casting command");
+                return;
+            }
+
+            if handle_movement_slash_command(trimmed) {
+                tracing::info!(cmd = %command, "Handled movement slash command");
+                return;
+            }
+
             // When /target is issued while already targeting, EQ's InterpretCmd
             // may not switch. Clear the current target first so /target reliably
             // acquires a new one.
-            if trimmed.len() > 7
-                && trimmed
-                    .get(..7)
-                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("/target"))
-                && trimmed.as_bytes().get(7).copied() == Some(b' ')
-            {
+            if should_preclear_target_for_slash(slash_command) {
                 let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
                 if eq_base != 0 {
                     let has_target = read_target_state(eq_base).is_some();
                     if has_target {
-                        tracing::debug!(cmd = %command, "Pre-clearing target before /target switch");
+                        tracing::debug!(
+                            cmd = %slash_command,
+                            "Pre-clearing target before target-switching slash command"
+                        );
                         let controller = super::targeting::TargetingController::new(eq_base);
                         if let Err(e) = controller.clear_target() {
                             tracing::warn!(error = %e, "Failed to pre-clear target");
@@ -1783,8 +2403,13 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 }
             }
 
-            tracing::info!(cmd = %command, "Executing slash command");
-            execute_slash_command(&command);
+            tracing::info!(cmd = %slash_command, "Executing slash command");
+            if let Some(active_bandolier) = parse_bandolier_activate_command(slash_command) {
+                if let Ok(mut known_bandolier) = ACTIVE_BANDOLIER_SET.lock() {
+                    *known_bandolier = Some(active_bandolier);
+                }
+            }
+            execute_slash_command(slash_command);
         }
         Command::NavigateTo { waypoints } => {
             crate::nav::handle_command(crate::nav::NavCommand::Navigate(waypoints));
@@ -1816,6 +2441,17 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::UpdateFollowAnchor { x, y, z } => {
             let anchor = textquest_common::nav::Waypoint::new(x, y, z);
             crate::nav::handle_command(crate::nav::NavCommand::UpdateFollowAnchor(anchor));
+        }
+        Command::UpdateFollowConfig { config } => {
+            tracing::info!(
+                leader = %config.leader_name,
+                min_delay_ms = config.min_delay_ms,
+                max_delay_ms = config.max_delay_ms,
+                return_no_aggro = config.return_no_aggro,
+                return_not_looting = config.return_not_looting,
+                "UpdateFollowConfig received"
+            );
+            crate::nav::handle_command(crate::nav::NavCommand::UpdateFollowConfig(config));
         }
         Command::StopFollow => {
             tracing::info!("StopFollow received");
@@ -1887,11 +2523,22 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 }
             }
         }
-        Command::NavDoor | Command::NavItem => {
-            // Door and item navigation require spawn list traversal to find nearest.
-            // For now, log and respond with an error — full implementation requires
-            // spawn type filtering which is an M7 feature.
-            tracing::info!("NavDoor/NavItem received (not yet implemented)");
+        Command::NavDoor => {
+            // Navigate to nearest door: use /doortarget to select it, then navigate to target.
+            // Full DoorsManager-based position lookup is an M7 feature requiring
+            // additional offsets for EQSwitch/DoorsManager memory layout.
+            tracing::info!("NavDoor received — queuing /doortarget for nearest door");
+            queue_slash_command("/doortarget".to_string());
+            // After /doortarget, the door becomes the active door target (not PINST_TARGET),
+            // so NavTarget-style coordinate navigation is not directly available here.
+            // For now, issue InteractDoor to open the nearest door in place.
+            interact_with_door();
+        }
+        Command::NavItem => {
+            // Navigate to nearest ground item — requires ground spawn list traversal.
+            // Full implementation requires ground spawn type filtering (M7 feature).
+            tracing::info!("NavItem received — clicking nearest ground item");
+            click_nearest_object();
         }
         Command::NavReload => {
             tracing::warn!("NavReload: stub — actual mesh loading is an M7 feature");
@@ -1980,6 +2627,29 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
             let slots = crate::eq::inventory::query_open_container_slots(eq_base, &filter);
             crate::ipc::send_response(textquest_common::ipc::Response::ContainerSlots { slots });
+        }
+        Command::QueryContextMenu => {
+            tracing::info!("QueryContextMenu received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let menus = crate::eq::context_menu::read_context_menus(eq_base);
+            crate::ipc::send_response(textquest_common::ipc::Response::ContextMenuState { menus });
+        }
+        Command::ActivateContextMenuItem {
+            menu_index,
+            item_index,
+        } => {
+            tracing::info!(menu_index, item_index, "ActivateContextMenuItem received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let (success, message) = match crate::eq::context_menu::activate_context_menu_item(
+                eq_base, menu_index, item_index,
+            ) {
+                Ok(()) => (true, "HandleMenu dispatched".into()),
+                Err(msg) => (false, msg),
+            };
+            crate::ipc::send_response(textquest_common::ipc::Response::ContextMenuActivated {
+                success,
+                message,
+            });
         }
         Command::QueryZoneGraph => {
             tracing::info!("QueryZoneGraph received");
@@ -2113,25 +2783,69 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::CastSpell {
             spell_slot,
             target_id,
+            kill,
+            recast,
         } => {
-            tracing::info!(spell_slot, ?target_id, "CastSpell received");
-            if let Some(tid) = target_id {
-                // Save → switch → cast → restore pattern (MQ2Cast style).
-                // Queue the target switch, cast, and restore as slash commands
-                // so they execute in order on successive game frames.
-                queue_slash_command(format!("/target id {tid}"));
-                queue_slash_command(format!("/cast {spell_slot}"));
-                // Note: target restore after cast completion is the orchestrator's
-                // responsibility — it knows who the original target was and can
-                // send a follow-up /target command when the cast finishes.
+            tracing::info!(spell_slot, ?target_id, kill, recast, "CastSpell received");
+            let tick = TICK_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+
+            if kill {
+                // `kill` mode: cast in a loop until the target dies.  A
+                // `CancelCastLoop` command or target death stops the loop.
+                tracing::info!(spell_slot, ?target_id, "CastSpell: starting kill-loop");
+                if let Ok(mut guard) = CAST_LOOP.lock() {
+                    *guard = Some(CastingLoop::start_kill(spell_slot, target_id, tick));
+                }
+            } else if recast > 0 {
+                // `recast` mode: cast `recast + 1` times with backoff.
+                tracing::info!(
+                    spell_slot,
+                    ?target_id,
+                    total = recast + 1,
+                    "CastSpell: starting recast-loop"
+                );
+                if let Ok(mut guard) = CAST_LOOP.lock() {
+                    *guard = Some(CastingLoop::start_recast(
+                        spell_slot, target_id, recast, tick,
+                    ));
+                }
             } else {
-                // Cast on current target, no swap needed.
-                queue_slash_command(format!("/cast {spell_slot}"));
+                // Plain single cast — original behavior.
+                if let Some(tid) = target_id {
+                    // Save → switch → cast → restore pattern (MQ2Cast style).
+                    // Queue the target switch, cast, and restore as slash commands
+                    // so they execute in order on successive game frames.
+                    queue_slash_command(format!("/target id {tid}"));
+                    queue_slash_command(format!("/cast {spell_slot}"));
+                    // Note: target restore after cast completion is the orchestrator's
+                    // responsibility — it knows who the original target was and can
+                    // send a follow-up /target command when the cast finishes.
+                } else {
+                    // Cast on current target, no swap needed.
+                    queue_slash_command(format!("/cast {spell_slot}"));
+                }
+            }
+        }
+        Command::CancelCastLoop => {
+            tracing::info!("CancelCastLoop received — stopping active cast loop");
+            if let Ok(mut guard) = CAST_LOOP.lock() {
+                if let Some(ref mut loop_state) = *guard {
+                    loop_state.cancel();
+                }
+                *guard = None;
             }
         }
         Command::InteractTarget => {
             tracing::info!("InteractTarget received — right-clicking current target");
             interact_with_target();
+        }
+        Command::InteractDoor => {
+            tracing::info!("InteractDoor received — targeting and opening nearest door");
+            interact_with_door();
+        }
+        Command::ClickObject => {
+            tracing::info!("ClickObject received — clicking nearest ground item");
+            click_nearest_object();
         }
         Command::Relog {
             account_name,
@@ -2176,10 +2890,167 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum InterceptedSlashCommand {
+    ClearTarget,
+    InteractTarget,
+    Rewrite(String),
+}
+
+fn intercept_custom_slash_command(command: &str) -> Option<InterceptedSlashCommand> {
+    if command.eq_ignore_ascii_case("/cleartarget") {
+        return Some(InterceptedSlashCommand::ClearTarget);
+    }
+
+    if is_click_right_target_command(command) {
+        return Some(InterceptedSlashCommand::InteractTarget);
+    }
+
+    rewrite_door_command(command).map(InterceptedSlashCommand::Rewrite)
+}
+
+fn rewrite_door_command(command: &str) -> Option<String> {
+    let mut parts = command.splitn(2, char::is_whitespace);
+    let head = parts.next().unwrap_or_default();
+    if !head.eq_ignore_ascii_case("/door") {
+        return None;
+    }
+
+    let rest = parts.next().map(str::trim).filter(|rest| !rest.is_empty());
+    Some(match rest {
+        Some(rest) => format!("/doortarget {rest}"),
+        None => "/doortarget".to_string(),
+    })
+}
+
+fn is_click_right_target_command(command: &str) -> bool {
+    let mut parts = command.split_whitespace();
+    let Some(head) = parts.next() else {
+        return false;
+    };
+    if !head.eq_ignore_ascii_case("/click") {
+        return false;
+    }
+
+    let Some(button) = parts.next() else {
+        return false;
+    };
+    if !button.eq_ignore_ascii_case("right") {
+        return false;
+    }
+
+    let Some(target) = parts.next() else {
+        return false;
+    };
+    target.eq_ignore_ascii_case("target") && parts.next().is_none()
+}
+
+fn should_preclear_target_for_slash(command: &str) -> bool {
+    let mut parts = command.splitn(2, char::is_whitespace);
+    let head = parts.next().unwrap_or_default();
+
+    if head.eq_ignore_ascii_case("/doortarget") {
+        return true;
+    }
+
+    if !head.eq_ignore_ascii_case("/target") {
+        return false;
+    }
+
+    parts
+        .next()
+        .map(str::trim)
+        .is_some_and(|rest| !rest.is_empty())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum SpellSetCommand {
     Save(String),
     Load(String),
     Delete(String),
+}
+
+fn parse_nav_destination_command(
+    command: &str,
+) -> Option<Result<textquest_common::ipc::Command, String>> {
+    use textquest_common::ipc::Command;
+
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+    let (verb, args) = tokens.split_first()?;
+    if !verb.eq_ignore_ascii_case("/nav") {
+        return None;
+    }
+
+    let args = if args
+        .first()
+        .is_some_and(|token| token.eq_ignore_ascii_case("to"))
+    {
+        &args[1..]
+    } else {
+        args
+    };
+    let (mode, rest) = args.split_first()?;
+
+    if mode.eq_ignore_ascii_case("target") {
+        return if rest.is_empty() {
+            Some(Ok(Command::NavTarget))
+        } else {
+            Some(Err(
+                "target navigation does not accept extra arguments".to_string()
+            ))
+        };
+    }
+
+    if mode.eq_ignore_ascii_case("loc") {
+        if rest.len() != 3 {
+            return Some(Err(
+                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string(),
+            ));
+        }
+
+        let parse_coord = |value: &str, axis: &str| {
+            value
+                .parse::<f32>()
+                .map_err(|_| format!("invalid {axis} coordinate: {value}"))
+        };
+
+        let y = match parse_coord(&rest[0], "Y") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+        let x = match parse_coord(&rest[1], "X") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+        let z = match parse_coord(&rest[2], "Z") {
+            Ok(value) => value,
+            Err(error) => return Some(Err(error)),
+        };
+
+        return Some(Ok(Command::NavLoc { x, y, z }));
+    }
+
+    if mode.eq_ignore_ascii_case("door") {
+        let valid = rest.is_empty() || (rest.len() == 1 && rest[0].eq_ignore_ascii_case("click"));
+        return if valid {
+            Some(Ok(Command::NavDoor))
+        } else {
+            None
+        };
+    }
+
+    if mode.eq_ignore_ascii_case("item") {
+        let valid = rest.is_empty() || (rest.len() == 1 && rest[0].eq_ignore_ascii_case("click"));
+        return if valid {
+            Some(Ok(Command::NavItem))
+        } else {
+            None
+        };
+    }
+
+    None
 }
 
 fn parse_spell_set_command(command: &str) -> Option<SpellSetCommand> {
@@ -2433,6 +3304,28 @@ fn interact_with_target() {
     tracing::trace!("InteractTarget (stub)");
 }
 
+/// Interact with the nearest door or switch by queuing `/doortarget` and `/click left door`.
+///
+/// This replicates MQ2's `/click door` behaviour:
+/// 1. `/doortarget` selects the nearest `EQSwitch` in the zone.
+/// 2. `/click left door` activates (opens/toggles) the selected door.
+///
+/// Both commands are queued so they execute on successive game-loop ticks.
+fn interact_with_door() {
+    tracing::info!("interact_with_door: queuing /doortarget + /click left door");
+    queue_slash_command("/doortarget".to_string());
+    queue_slash_command("/click left door".to_string());
+}
+
+/// Click the nearest ground item or world object by queuing `/click left item`.
+///
+/// This replicates MQ2's `/click item` behaviour, which activates the nearest
+/// ground spawn (loose item lying in the world).
+fn click_nearest_object() {
+    tracing::info!("click_nearest_object: queuing /click left item");
+    queue_slash_command("/click left item".to_string());
+}
+
 /// Call EQ's `InterpretCmd` to execute a slash command string.
 /// `CEverQuest::InterpretCmd` is a member function:
 ///   void `CEverQuest::InterpretCmd(PlayerClient`* pChar, const char* szCmd)
@@ -2558,6 +3451,79 @@ mod tests {
     }
 
     #[test]
+    fn nav_destination_parser_supports_target_and_object_modes() {
+        assert_eq!(
+            parse_nav_destination_command("/nav target"),
+            Some(Ok(textquest_common::ipc::Command::NavTarget))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to target"),
+            Some(Ok(textquest_common::ipc::Command::NavTarget))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav door"),
+            Some(Ok(textquest_common::ipc::Command::NavDoor))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to door click"),
+            Some(Ok(textquest_common::ipc::Command::NavDoor))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav item"),
+            Some(Ok(textquest_common::ipc::Command::NavItem))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to item click"),
+            Some(Ok(textquest_common::ipc::Command::NavItem))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_supports_mq2_loc_order() {
+        assert_eq!(
+            parse_nav_destination_command("/nav loc 200 100 10"),
+            Some(Ok(textquest_common::ipc::Command::NavLoc {
+                x: 100.0,
+                y: 200.0,
+                z: 10.0,
+            }))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to loc -25.5 13.25 7"),
+            Some(Ok(textquest_common::ipc::Command::NavLoc {
+                x: 13.25,
+                y: -25.5,
+                z: 7.0,
+            }))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_rejects_bad_loc_inputs() {
+        assert_eq!(
+            parse_nav_destination_command("/nav loc 100 200"),
+            Some(Err(
+                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string()
+            ))
+        );
+        assert_eq!(
+            parse_nav_destination_command("/nav to loc 100 nope 30"),
+            Some(Err("invalid X coordinate: nope".to_string()))
+        );
+    }
+
+    #[test]
+    fn nav_destination_parser_ignores_non_destination_nav_commands() {
+        assert_eq!(parse_nav_destination_command("/nav reload"), None);
+        assert_eq!(
+            parse_nav_destination_command("/nav waypoint save camp"),
+            None
+        );
+        assert_eq!(parse_nav_destination_command("/nav to guildlobby"), None);
+        assert_eq!(parse_nav_destination_command("/follow tank"), None);
+    }
+
+    #[test]
     fn spell_set_ini_candidates_match_character_prefix_case_insensitively() {
         let temp = std::env::temp_dir().join(format!(
             "textquest-spellset-test-{}",
@@ -2581,6 +3547,60 @@ mod tests {
 
         assert_eq!(names, vec!["Cleric01_Teek.ini", "cleric01_Test.ini"]);
         let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn intercepts_cleartarget_slash_command() {
+        assert_eq!(
+            intercept_custom_slash_command("/cleartarget"),
+            Some(InterceptedSlashCommand::ClearTarget)
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/ClearTarget"),
+            Some(InterceptedSlashCommand::ClearTarget)
+        );
+    }
+
+    #[test]
+    fn intercepts_click_right_target_slash_command() {
+        assert_eq!(
+            intercept_custom_slash_command("/click right target"),
+            Some(InterceptedSlashCommand::InteractTarget)
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/CLICK RIGHT TARGET"),
+            Some(InterceptedSlashCommand::InteractTarget)
+        );
+        assert_eq!(intercept_custom_slash_command("/click left target"), None);
+        assert_eq!(intercept_custom_slash_command("/click right door"), None);
+    }
+
+    #[test]
+    fn rewrites_door_slash_command_to_doortarget() {
+        assert_eq!(
+            intercept_custom_slash_command("/door"),
+            Some(InterceptedSlashCommand::Rewrite("/doortarget".into()))
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/door id 7"),
+            Some(InterceptedSlashCommand::Rewrite("/doortarget id 7".into()))
+        );
+        assert_eq!(
+            intercept_custom_slash_command("/DOOR   wooden gate"),
+            Some(InterceptedSlashCommand::Rewrite(
+                "/doortarget wooden gate".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn preclears_for_target_and_doortarget_commands() {
+        assert!(should_preclear_target_for_slash("/target Emperor Crush"));
+        assert!(!should_preclear_target_for_slash("/target"));
+        assert!(should_preclear_target_for_slash("/doortarget"));
+        assert!(should_preclear_target_for_slash("/doortarget id 5"));
+        assert!(!should_preclear_target_for_slash("/nav target"));
+        assert!(!should_preclear_target_for_slash("/click right target"));
     }
 
     #[test]
@@ -2654,6 +3674,105 @@ mod tests {
     }
 
     #[test]
+    fn parse_stick_slash_defaults_to_basic_start() {
+        let parsed = parse_movement_slash_command("/stick").unwrap().unwrap();
+        assert_eq!(
+            parsed,
+            MovementSlashCommand::Stick(StickSlashCommand::Start(
+                textquest_common::nav::StickConfig::default(),
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_stick_slash_supports_distance_mode_and_flags() {
+        let parsed = parse_movement_slash_command("/stick 18 behind hold moveback")
+            .unwrap()
+            .unwrap();
+        match parsed {
+            MovementSlashCommand::Stick(StickSlashCommand::Start(config)) => {
+                assert_eq!(
+                    config.distance,
+                    textquest_common::nav::StickDistance::Absolute(18.0)
+                );
+                assert_eq!(config.mode, textquest_common::nav::StickMode::Behind);
+                assert!(config.hold);
+                assert!(config.moveback);
+            }
+            other => panic!("expected stick start, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_stick_slash_supports_percent_and_mod() {
+        let percent = parse_movement_slash_command("/stick 80% !front")
+            .unwrap()
+            .unwrap();
+        match percent {
+            MovementSlashCommand::Stick(StickSlashCommand::Start(config)) => {
+                assert_eq!(
+                    config.distance,
+                    textquest_common::nav::StickDistance::Percent(80.0)
+                );
+                assert_eq!(config.mode, textquest_common::nav::StickMode::NotFront);
+            }
+            other => panic!("expected stick start, got {other:?}"),
+        }
+
+        let delta = parse_movement_slash_command("/stick mod -5")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            delta,
+            MovementSlashCommand::Stick(StickSlashCommand::Mod(-5.0))
+        );
+    }
+
+    #[test]
+    fn parse_follow_slash_supports_named_and_off_modes() {
+        let follow = parse_movement_slash_command(r#"/follow "Main Tank""#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            follow,
+            MovementSlashCommand::Follow(FollowSlashCommand::Start {
+                leader_name: Some("Main Tank".to_string()),
+            })
+        );
+
+        let off = parse_movement_slash_command("/follow off")
+            .unwrap()
+            .unwrap();
+        assert_eq!(off, MovementSlashCommand::Follow(FollowSlashCommand::Off));
+    }
+
+    #[test]
+    fn resolve_follow_spawn_prefers_current_target_then_nearby() {
+        let current = textquest_common::types::SpawnData {
+            spawn_id: 1,
+            name: "Camrene".into(),
+            displayed_name: "Camrene".into(),
+            ..Default::default()
+        };
+        let nearby = vec![textquest_common::types::SpawnData {
+            spawn_id: 2,
+            name: "Derakor".into(),
+            displayed_name: "Derakor".into(),
+            ..Default::default()
+        }];
+
+        assert_eq!(
+            resolve_follow_spawn(Some(&current), &nearby, None).map(|spawn| spawn.spawn_id),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_follow_spawn(Some(&current), &nearby, Some("Derakor"))
+                .map(|spawn| spawn.spawn_id),
+            Some(2)
+        );
+    }
+
+    #[test]
     fn parse_casting_spell_with_targetid_and_invis_guard() {
         let parsed = parse_casting_command(r#"/casting "Complete Heal" gem1 -targetid|42 -invis"#)
             .unwrap()
@@ -2664,6 +3783,7 @@ mod tests {
                 action: CastingAction::CastGem(1),
                 target_id: Some(42),
                 require_not_invisible: true,
+                bandolier_set: None,
             }
         );
     }
@@ -2679,6 +3799,7 @@ mod tests {
                 action: CastingAction::UseItem(r#""Fungi Tunic""#.to_string()),
                 target_id: None,
                 require_not_invisible: false,
+                bandolier_set: None,
             }
         );
     }
@@ -2694,6 +3815,7 @@ mod tests {
                 action: CastingAction::UseItem("leftear".to_string()),
                 target_id: Some(99),
                 require_not_invisible: false,
+                bandolier_set: None,
             }
         );
     }
@@ -2709,6 +3831,23 @@ mod tests {
                 action: CastingAction::UseItem("13".to_string()),
                 target_id: None,
                 require_not_invisible: false,
+                bandolier_set: None,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_casting_bandolier_option_with_spaces() {
+        let parsed = parse_casting_command(r#"/casting "Fungi Tunic" item -bandolier|"Heal Set""#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parsed,
+            ParsedCastingCommand {
+                action: CastingAction::UseItem(r#""Fungi Tunic""#.to_string()),
+                target_id: None,
+                require_not_invisible: false,
+                bandolier_set: Some("Heal Set".to_string()),
             }
         );
     }
@@ -2783,5 +3922,54 @@ mod tests {
     fn tokenize_slash_command_preserves_escaped_quotes_inside_quotes() {
         let tokens = tokenize_slash_command(r#"/casting "Item \"Name\"" item"#).unwrap();
         assert_eq!(tokens, vec!["/casting", r#"Item "Name""#, "item"]);
+    }
+
+    #[test]
+    fn parse_bandolier_activate_command_preserves_named_sets() {
+        assert_eq!(
+            parse_bandolier_activate_command(r#"/bandolier activate "Heal Set""#),
+            Some("Heal Set".to_string())
+        );
+        assert_eq!(
+            parse_bandolier_activate_command("/bandolier activate 2"),
+            Some("2".to_string())
+        );
+    }
+
+    #[test]
+    fn next_bandolier_restore_command_waits_for_cast_completion() {
+        let mut pending = Some(PendingBandolierRestore {
+            requested_set: "Heal Set".to_string(),
+            restore_to: Some("Melee".to_string()),
+            deadline_tick: 30,
+            saw_casting: false,
+        });
+
+        assert_eq!(
+            next_bandolier_restore_command(&mut pending, 5, Some(true)),
+            None
+        );
+        assert!(pending.as_ref().is_some_and(|state| state.saw_casting));
+        assert_eq!(
+            next_bandolier_restore_command(&mut pending, 6, Some(false)),
+            Some(r#"/bandolier activate "Melee""#.to_string())
+        );
+        assert!(pending.is_none());
+    }
+
+    #[test]
+    fn next_bandolier_restore_command_rolls_back_after_timeout_without_cast() {
+        let mut pending = Some(PendingBandolierRestore {
+            requested_set: "Heal Set".to_string(),
+            restore_to: Some("Melee".to_string()),
+            deadline_tick: 10,
+            saw_casting: false,
+        });
+
+        assert_eq!(
+            next_bandolier_restore_command(&mut pending, 10, None),
+            Some(r#"/bandolier activate "Melee""#.to_string())
+        );
+        assert!(pending.is_none());
     }
 }
