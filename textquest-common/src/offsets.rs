@@ -709,6 +709,8 @@ pub mod profile {
     pub const MEMORIZED_SPELLS: usize = 0x14b0;
     /// Number of spellbook slots between `SpellBook` and `MemorizedSpells`.
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
+    /// Alias for `SPELL_BOOK_SLOT_COUNT` — total slots in `BaseProfile::SpellBook`.
+    pub const SPELL_BOOK_SLOTS: usize = 1280;
     /// Visible spell-gem slots used by the live client UI.
     pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
     /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells` (alias for `MEMORIZED_SPELL_GEM_COUNT`).
