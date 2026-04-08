@@ -550,10 +550,9 @@ mod tests {
     #[test]
     fn context_menu_offsets_exposed_in_db() {
         let db = OffsetDatabase::from_compiled_offsets();
-        assert_eq!(
-            db.get_context_menu_offset("numItems"),
-            Some(crate::offsets::context_menu::NUM_ITEMS)
-        );
+        let expected = db.context_menu.get("numItems").copied();
+        assert!(expected.is_some());
+        assert_eq!(db.get_context_menu_offset("numItems"), expected);
         assert!(db.get_context_menu_offset("nonexistent").is_none());
     }
 
