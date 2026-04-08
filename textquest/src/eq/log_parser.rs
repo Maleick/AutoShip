@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // Re-export chat types from the shared crate so existing call-sites don't need updating.
 use textquest_common::chat::parse_stripped_chat_text;
@@ -180,6 +180,9 @@ pub struct LootDatabase {
 }
 
 impl LootDatabase {
+    /// Maximum amount of XP event history retained for windowed rate calculations.
+    const XP_EVENT_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
+
     /// Creates a new empty loot database.
     #[must_use]
     pub fn new() -> Self {
@@ -208,12 +211,27 @@ impl LootDatabase {
             }
             LogEvent::Experience { .. } => {
                 self.total_xp_events += 1;
-                self.xp_event_times.push_back(Instant::now());
+                let now = Instant::now();
+                self.xp_event_times.push_back(now);
+                self.prune_xp_events_older_than(now, Self::XP_EVENT_RETENTION);
             }
             LogEvent::Death { .. } => {
                 self.deaths += 1;
             }
             LogEvent::ZoneEnter { .. } | LogEvent::Chat(_) => {}
+        }
+    }
+
+    fn prune_xp_events_older_than(&mut self, now: Instant, window: Duration) {
+        let Some(cutoff) = now.checked_sub(window) else {
+            return;
+        };
+        while let Some(&ts) = self.xp_event_times.front() {
+            if ts < cutoff {
+                self.xp_event_times.pop_front();
+            } else {
+                break;
+            }
         }
     }
 
