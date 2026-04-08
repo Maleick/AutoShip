@@ -214,6 +214,24 @@ impl StickEngine {
         }
     }
 
+    /// Resolve the current stick target and convert it into a warp-monitor sample.
+    pub fn target_sample(
+        &self,
+        current_target: Option<&SpawnData>,
+        nearby: &[SpawnData],
+    ) -> Option<super::warp::TargetSample> {
+        self.resolve_target(current_target, nearby)
+            .map(|target| super::warp::TargetSample {
+                id: target.spawn_id,
+                position: Waypoint::new(target.x, target.y, target.z),
+            })
+    }
+
+    /// Whether the current stick session should remain armed when the target is lost.
+    pub fn keep_armed_on_target_loss(&self) -> bool {
+        self.active && self.config.always
+    }
+
     /// Build a [`NavStatus::Sticking`] variant for IPC reporting.
     pub fn nav_status(&self, target_id: u32, distance: f32) -> NavStatus {
         let effective_dist = self.effective_distance();
