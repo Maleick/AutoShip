@@ -586,39 +586,26 @@ pub fn slash_command(command: &str) {
 
 /// Send a raw "Living Shield" packet (Active Hack).
 ///
-/// Attempts to bypass normal class restrictions by directly injecting
-/// the `OPCODE_LIVING_SHIELD` via the `NetworkSend` and `hton` functions.
-/// **Requires `enable_unsafe_hacks` to be true in the global config.**
-pub fn send_living_shield(_target_id: u32) -> Result<(), String> {
+/// This path is intentionally disabled until the live-client connection
+/// pointer is recalibrated. The command remains wired so callers get a clear
+/// runtime error instead of a silent no-op or an unsafe packet write.
+pub fn send_living_shield(target_id: u32) -> Result<(), String> {
     #[cfg(windows)]
     {
-        // Safety Gate: Ensure active hacks are explicitly enabled.
-        let config_lock = crate::CONFIG.lock().unwrap();
-        if !config_lock.enable_unsafe_hacks {
-            tracing::warn!(
-                "Active hack attempted: /livingshield blocked by configuration. Enable 'enable_unsafe_hacks' to use."
-            );
-            return Err("Unsafe hacks are disabled.".to_string());
-        }
-
         let Some(_eq_base) = get_eq_base() else {
             return Err("EQ base not set".to_string());
         };
 
-        // TODO(Opcode Research): Locate the exact `pConnection` pointer offset
-        // to complete the `NetworkSendFunc` call. The historical offsets are
-        // loaded in `textquest_common::offsets`, but the connection pointer
-        // requires the updated Ghidra structs.
-        tracing::info!(
-            target_id = _target_id,
-            "Executing Living Shield on target (packet injected)."
+        tracing::warn!(
+            target_id,
+            "Living Shield packet injection is disabled until the connection pointer path is recalibrated"
         );
-        Ok(())
+        Err("Living Shield packet injection is not implemented in this build.".to_string())
     }
 
     #[cfg(not(windows))]
     {
-        let _ = _target_id;
+        let _ = target_id;
         Err("Active hacks are only available on Windows".to_string())
     }
 }

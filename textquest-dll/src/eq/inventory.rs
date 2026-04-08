@@ -239,7 +239,7 @@ unsafe fn query_open_container_slots_windows(
         if slot_ptr == 0 {
             continue;
         }
-        if let Some(snapshot) = read_slot_snapshot(slot_ptr, idx as i32, get_item_base) {
+        if let Some(snapshot) = unsafe { read_slot_snapshot(slot_ptr, idx as i32, get_item_base) } {
             raw_slots.push(snapshot);
         }
     }
@@ -299,7 +299,7 @@ unsafe fn read_slot_snapshot(
     }
 
     let location = read_item_global_index(wnd_ptr + offsets::inv_slot_wnd::ITEM_LOCATION)?;
-    let item = read_slot_item(slot_ptr, get_item_base);
+    let item = unsafe { read_slot_item(slot_ptr, get_item_base) };
 
     Some(RawSlotSnapshot {
         location: location.0,

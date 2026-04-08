@@ -440,85 +440,6 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
         let login_button = find_window_by_name(eqmain_base, LOGIN_CONNECT_BUTTON);
 
         unsafe {
-            let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-            let count = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-
-            if array_ptr == 0 || count == 0 || count > 500 {
-                tracing::warn!(count, "Invalid CXWndManager window array");
-                return false;
-            }
-
-            // Find username and password edit widgets by scanning for the
-            // "USERNAME" and "PASSWORD" label windows. The edit fields are
-            // the windows immediately before their labels in the array.
-            let mut username_edit: usize = 0;
-            let mut password_edit: usize = 0;
-            let mut login_button: usize = 0;
-            let mut prev_wnd: usize = 0;
-            let mut prev_prev_wnd: usize = 0;
-            // Collect all "LOGIN" buttons — the login form submit button appears
-            // BEFORE the credential fields in the window array
-            let mut login_candidates: Vec<usize> = Vec::new();
-
-            for i in 0..count as usize {
-                let wnd_ptr = *((array_ptr + i * 8) as *const usize);
-                if wnd_ptr == 0 {
-                    continue;
-                }
-
-                if let Some(text) = crate::eq::widgets::read_cxstr(wnd_ptr + off::CXWND_WINDOW_TEXT)
-                {
-                    if text == "USERNAME" && prev_prev_wnd != 0 {
-                        username_edit = prev_prev_wnd;
-                        tracing::info!(
-                            ptr = format!("{:#x}", username_edit),
-                            "Found username edit widget (2 before USERNAME label)"
-                        );
-                    }
-                    if text == "PASSWORD" && prev_prev_wnd != 0 {
-                        password_edit = prev_prev_wnd;
-                        tracing::info!(
-                            ptr = format!("{:#x}", password_edit),
-                            "Found password edit widget (2 before PASSWORD label)"
-                        );
-                    }
-                    if text == "LOGIN" {
-                        login_candidates.push(wnd_ptr);
-                    }
-                }
-
-                prev_prev_wnd = prev_wnd;
-                prev_wnd = wnd_ptr;
-
-                // Stop scanning once we have both edit widgets + at least two login
-                // candidates (menu tab + form submit button). If we only find one,
-                // keep scanning — the form submit is typically the second "LOGIN" widget.
-                // Continuing to scan past both can crash on bad window pointers.
-                if username_edit != 0 && password_edit != 0 && login_candidates.len() >= 2 {
-                    break;
-                }
-            }
-
-            // The login form submit button is typically the second "LOGIN" in the list
-            // (idx=12 is the main menu LOGIN tab, idx=18 is the form submit button)
-            if login_candidates.len() >= 2 {
-                login_button = login_candidates[1]; // Form submit button
-            } else if login_candidates.len() == 1 {
-                login_button = login_candidates[0];
-            }
-            if login_button != 0 {
-                tracing::info!(
-                    ptr = format!("{:#x}", login_button),
-                    candidates = login_candidates.len(),
-                    "Found Login button"
-                );
-            }
-
-            if username_edit == 0 || password_edit == 0 {
-                tracing::warn!("Could not find username/password edit widgets");
-                return false;
-            }
-
             // Find a valid CStrRep donor from ANY field on the username widget.
             // The /login: flag inconsistently populates InputText vs WindowText.
             let un_input_addr = username_edit + off::CEDITBASEWND_INPUT_TEXT;
@@ -621,7 +542,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
             // Click the Login button using phase-aware helper.
             // eqmain is loaded → direct vtable click (game loop not active yet).
-            if login_button != 0 {
+            if let Some(login_button) = login_button {
                 std::thread::sleep(std::time::Duration::from_millis(150));
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),

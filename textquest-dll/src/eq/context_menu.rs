@@ -23,7 +23,11 @@
 //! Use Ghidra or binary search against the string `"GFContextMenu"` to locate the
 //! manager singleton if the addresses need updating for a new patch.
 
+#[cfg(windows)]
+use std::mem::size_of;
 use textquest_common::ipc::ContextMenuInfo;
+#[cfg(windows)]
+use textquest_common::ipc::ContextMenuItem;
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -138,8 +142,12 @@ unsafe fn read_list_wnd_items(list_wnd_ptr: usize) -> Vec<ContextMenuItem> {
     use textquest_common::offsets::eqgame;
 
     // ── ItemsArray (ArrayClass<SListWndLine>) ──────────────────────────────
-    let items_count = *((list_wnd_ptr + eqgame::CLISTWND_ITEMS_COUNT) as *const i32);
-    let items_array = *((list_wnd_ptr + eqgame::CLISTWND_ITEMS_ARRAY) as *const usize);
+    let (items_count, items_array) = unsafe {
+        (
+            *((list_wnd_ptr + eqgame::CLISTWND_ITEMS_COUNT) as *const i32),
+            *((list_wnd_ptr + eqgame::CLISTWND_ITEMS_ARRAY) as *const usize),
+        )
+    };
 
     if items_count <= 0 || items_array == 0 {
         return Vec::new();
@@ -152,13 +160,17 @@ unsafe fn read_list_wnd_items(list_wnd_ptr: usize) -> Vec<ContextMenuItem> {
         let line_ptr = items_array + row_idx * eqgame::SLISTWNDLINE_SIZE;
 
         // ── Read the first cell's text (CXStr) ────────────────────────────
-        let cells_count = *((line_ptr + eqgame::SLISTWNDLINE_CELLS_COUNT) as *const i32);
-        let cells_array = *((line_ptr + eqgame::SLISTWNDLINE_CELLS_ARRAY) as *const usize);
+        let (cells_count, cells_array) = unsafe {
+            (
+                *((line_ptr + eqgame::SLISTWNDLINE_CELLS_COUNT) as *const i32),
+                *((line_ptr + eqgame::SLISTWNDLINE_CELLS_ARRAY) as *const usize),
+            )
+        };
 
         let label = if cells_count > 0 && cells_array != 0 {
             // First cell text at cells_array[0] + SLISTWNDCELL_TEXT (CXStr pointer)
             let cell0_ptr = cells_array; // cells_array points directly to cell[0]
-            let cxstr_ptr = *((cell0_ptr + eqgame::SLISTWNDCELL_TEXT) as *const usize);
+            let cxstr_ptr = unsafe { *((cell0_ptr + eqgame::SLISTWNDCELL_TEXT) as *const usize) };
             if cxstr_ptr != 0 {
                 crate::eq::widgets::read_cxstr(cxstr_ptr).unwrap_or_default()
             } else {

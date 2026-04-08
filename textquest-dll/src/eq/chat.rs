@@ -136,7 +136,7 @@ unsafe fn read_chat_window_lines_impl(
     window_index: usize,
     max_lines: usize,
 ) -> Vec<ChatMessageInfo> {
-    let mgr_ptr = match resolve_chat_mgr(eq_base) {
+    let mgr_ptr = match unsafe { resolve_chat_mgr(eq_base) } {
         Some(p) => p,
         None => return Vec::new(),
     };
@@ -159,7 +159,7 @@ unsafe fn read_chat_window_lines_impl(
         None => return Vec::new(),
     };
 
-    read_stml_lines(window_ptr, max_lines)
+    unsafe { read_stml_lines(window_ptr, max_lines) }
 }
 
 #[cfg(windows)]
@@ -167,7 +167,7 @@ unsafe fn read_all_chat_window_lines_impl(
     eq_base: u64,
     max_lines_per_window: usize,
 ) -> Vec<ChatMessageInfo> {
-    let mgr_ptr = match resolve_chat_mgr(eq_base) {
+    let mgr_ptr = match unsafe { resolve_chat_mgr(eq_base) } {
         Some(p) => p,
         None => return Vec::new(),
     };
@@ -186,7 +186,7 @@ unsafe fn read_all_chat_window_lines_impl(
     let mut all_lines = Vec::new();
     for idx in 0..num_windows {
         if let Some(window_ptr) = read_ptr(array_ptr + idx * size_of::<usize>()) {
-            let lines = read_stml_lines(window_ptr, max_lines_per_window);
+            let lines = unsafe { read_stml_lines(window_ptr, max_lines_per_window) };
             all_lines.extend(lines);
         }
     }
