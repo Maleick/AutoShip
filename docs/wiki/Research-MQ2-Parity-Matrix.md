@@ -150,7 +150,7 @@ The core movement plugin for all multibox setups. Melee groups depend on `/stick
 | `/nav pause`                        | Toggle pause                          | **Done** — `State::Paused(PauseReason)`                                 | None                                   | —        | —          |
 | `/nav stop`                         | Halt navigation                       | **Done** — Navigator FSM stop                                           | None                                   | —        | —          |
 | `/nav reload`                       | Force navmesh reload                  | **Missing**                                                             | No runtime navmesh reload              | P2       | Medium     |
-| `/nav ui`                           | Toggle debug overlay                  | **Missing**                                                             | No in-game overlay (TUI has map panel) | P2       | High       |
+| `/nav ui`                           | Toggle debug overlay                  | **Done** — `:nav ui` TUI command toggles nav diagnostics overlay on Navigation screen | Live diagnostics via `NavDiagnosticsQuery` | —        | —          |
 | `/nav save / load`                  | Persist settings                      | **Missing**                                                             | No nav config persistence              | P2       | Low        |
 
 ### 2.2 Navigation State Signals

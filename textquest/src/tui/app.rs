@@ -3403,6 +3403,52 @@ impl App {
         }
     }
 
+    /// Toggle the `/nav ui` debug diagnostics overlay and refresh diagnostics from the
+    /// focused client when turning on.
+    fn handle_nav_ui_command(&mut self) {
+        let was_on = self.nav_state.show_nav_debug;
+        self.nav_state.show_nav_debug = !was_on;
+
+        if self.nav_state.show_nav_debug {
+            // Try to fetch fresh diagnostics from the focused client.
+            if let Some(pid) = self.focused_pids().first().copied() {
+                if let Some(diag) = query_nav_diagnostics_sync(pid) {
+                    self.nav_state.nav_diagnostics = Some((pid, diag));
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Nav debug overlay ON — diagnostics updated."),
+                        false,
+                    );
+                } else {
+                    self.nav_state.nav_diagnostics = None;
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from(
+                            "Nav debug overlay ON — no live client data (DLL not injected?).",
+                        ),
+                        true,
+                    );
+                }
+            } else {
+                self.nav_state.nav_diagnostics = None;
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    String::from("Nav debug overlay ON — no focused client."),
+                    true,
+                );
+            }
+            // Ensure the navigation screen is visible.
+            self.set_active_screen(ActiveScreen::Navigation);
+        } else {
+            self.nav_state.nav_diagnostics = None;
+            self.set_feedback(
+                ToastLevel::Info,
+                String::from("Nav debug overlay OFF."),
+                false,
+            );
+        }
+    }
+
     fn usage_feedback(&mut self, command: &str, reason: impl Into<String>) {
         let reason = reason.into();
         if let Some(entry) = command::command_entry(command) {
@@ -3603,6 +3649,8 @@ impl App {
                 let destination = rest.to_string();
                 if destination.is_empty() {
                     self.usage_feedback("nav", "Missing navigation target.");
+                } else if parts.get(1).copied() == Some("ui") {
+                    self.handle_nav_ui_command();
                 } else if let Some((label, target, zone_hint)) =
                     self.resolve_nav_target(&parts[1..])
                 {
@@ -5836,6 +5884,22 @@ fn send_ipc_command(pid: u32, cmd: &textquest_common::ipc::Command) -> anyhow::R
     Ok(())
 }
 
+/// Query nav diagnostics synchronously from a live DLL client.
+/// Returns `None` if the client is not injected or the query fails.
+fn query_nav_diagnostics_sync(pid: u32) -> Option<textquest_common::nav::NavDiagnostics> {
+    use crate::ipc::pipe::CommandPipe;
+    use textquest_common::ipc::{Command, Response};
+
+    let token = crate::ipc::load_session_token(pid)?;
+    let session_id = textquest_common::ipc::session_id_from_token(&token);
+    let pipe = CommandPipe::connect(pid, session_id).ok()?;
+    pipe.send_raw_token(&token).ok()?;
+    match pipe.send(&Command::NavDiagnosticsQuery).ok()? {
+        Response::NavDiagnosticsResult { diagnostics } => Some(diagnostics),
+        _ => None,
+    }
+}
+
 fn is_reserved_command_name(name: &str) -> bool {
     matches!(
         name.to_ascii_lowercase().as_str(),
@@ -6410,6 +6474,45 @@ mod tests {
         app.automation_paused = true;
         app.automation_paused = true;
         assert!(app.automation_paused);
+    }
+
+    // ── Nav UI ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn nav_ui_command_toggles_show_nav_debug() {
+        let mut app = App::new();
+        assert!(!app.nav_state.show_nav_debug);
+        // Toggle on (no live clients, so diagnostics remain None)
+        app.handle_nav_ui_command();
+        assert!(app.nav_state.show_nav_debug);
+        assert!(app.nav_state.nav_diagnostics.is_none());
+        // Toggle off — clears diagnostics flag
+        app.handle_nav_ui_command();
+        assert!(!app.nav_state.show_nav_debug);
+        assert!(app.nav_state.nav_diagnostics.is_none());
+    }
+
+    #[test]
+    fn nav_ui_command_turns_off_clears_diagnostics() {
+        let mut app = App::new();
+        // Seed some fake diagnostics, then toggle off
+        app.nav_state.show_nav_debug = true;
+        app.nav_state.nav_diagnostics = Some((
+            1234,
+            textquest_common::nav::NavDiagnostics {
+                state: String::from("Moving"),
+                mesh_loaded: true,
+                path_exists: true,
+                path_length: Some(100.0),
+                velocity: 3.2,
+                waypoint_index: 1,
+                waypoint_count: 5,
+                distance_remaining: 42.0,
+            },
+        ));
+        app.handle_nav_ui_command();
+        assert!(!app.nav_state.show_nav_debug);
+        assert!(app.nav_state.nav_diagnostics.is_none());
     }
 
     // ── Layout presets ──────────────────────────────────────────────────────

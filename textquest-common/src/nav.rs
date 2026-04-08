@@ -1696,6 +1696,24 @@ mod tests {
         assert!(diag.velocity.abs() < f32::EPSILON);
     }
 
+    #[test]
+    fn nav_diagnostics_waypoint_fields() {
+        let diag = NavDiagnostics {
+            state: String::from("Moving"),
+            mesh_loaded: true,
+            path_exists: true,
+            path_length: Some(250.0),
+            velocity: 4.5,
+            waypoint_index: 2,
+            waypoint_count: 7,
+            distance_remaining: 18.3,
+        };
+        assert_eq!(diag.waypoint_index, 2);
+        assert_eq!(diag.waypoint_count, 7);
+        assert!((diag.distance_remaining - 18.3).abs() < 0.01);
+        assert!((diag.velocity - 4.5).abs() < f32::EPSILON);
+    }
+
     // ─── NavStateSignals tests (#176) ───
 
     #[test]

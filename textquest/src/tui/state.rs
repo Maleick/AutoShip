@@ -955,6 +955,10 @@ pub struct NavigationScreenState {
     pub nav_selected: usize,
     /// Per-client navigation statuses keyed by PID.
     pub nav_statuses: HashMap<u32, NavClientStatus>,
+    /// Whether the `/nav ui` debug diagnostics overlay is enabled.
+    pub show_nav_debug: bool,
+    /// Most recently fetched nav diagnostics for the focused client (PID, diagnostics).
+    pub nav_diagnostics: Option<(u32, textquest_common::nav::NavDiagnostics)>,
 }
 
 impl NavigationScreenState {
@@ -964,6 +968,8 @@ impl NavigationScreenState {
         Self {
             nav_selected: 0,
             nav_statuses: HashMap::new(),
+            show_nav_debug: false,
+            nav_diagnostics: None,
         }
     }
 }
