@@ -3430,6 +3430,60 @@ impl App {
         }
     }
 
+    fn execute_nav_reload_command(&mut self) {
+        self.execute_nav_reload_with(crate::nav::mesh::reload_zone_mesh);
+    }
+
+    fn execute_nav_reload_with<F>(&mut self, reload_zone_mesh: F)
+    where
+        F: FnOnce(&str) -> anyhow::Result<crate::nav::mesh::ZoneMeshReload>,
+    {
+        let Some(zone_short_name) = self
+            .current_zone_short_name()
+            .filter(|zone| !zone.is_empty())
+        else {
+            self.set_feedback(
+                ToastLevel::Warning,
+                String::from("Nav reload requires an active client with a known zone."),
+                true,
+            );
+            return;
+        };
+
+        match reload_zone_mesh(&zone_short_name) {
+            Ok(reload) => {
+                if self.map_state.show_navmesh
+                    && self.map_state.loaded_zone == reload.zone_short_name
+                {
+                    self.load_zone_navmesh_overlay(&reload.zone_short_name);
+                }
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!(
+                        "Navmesh reloaded for {} ({} bytes, {} segments)",
+                        reload.zone_short_name, reload.cache_bytes, reload.overlay_segment_count
+                    ),
+                    true,
+                );
+            }
+            Err(error) => {
+                self.set_feedback(
+                    ToastLevel::Error,
+                    format!("Navmesh reload failed for {zone_short_name}: {error}"),
+                    true,
+                );
+            }
+        }
+    }
+
+    /// Get PIDs for a specific group index (0-based).
+    fn pids_for_group(&self, group_idx: usize) -> Vec<u32> {
+        self.clients_in_group_idx(group_idx)
+            .iter()
+            .map(|c| c.pid)
+            .collect()
+    }
+
     fn parse_all_prefix<'a>(&self, input: &'a str) -> Option<&'a str> {
         let trimmed = input.trim();
         let rest = trimmed.strip_prefix("all")?;
@@ -6598,6 +6652,7 @@ mod tests {
             "status",
             "camp",
             "nav",
+            "nav reload",
             "loot",
             "door",
             "click",
@@ -6763,6 +6818,49 @@ mod tests {
     }
 
     // ── M8 routing scope tests ──────────────────────────────────────────────
+
+    #[test]
+    fn nav_reload_command_warns_without_active_zone() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+
+        app.cmd_state.command_buffer = String::from("nav reload");
+        app.execute_command(&mut orchestrator);
+
+        let toast = app.toast.as_ref().expect("warning toast");
+        assert_eq!(toast.level, ToastLevel::Warning);
+        assert!(
+            app.status_message
+                .contains("Nav reload requires an active client")
+        );
+    }
+
+    #[test]
+    fn nav_reload_uses_selected_client_zone_and_reports_success() {
+        let mut app = App::new();
+        let mut zone_seen = String::new();
+        let mut client = test_client(42, "Alpha");
+        client.zone_name = String::from("Greater Faydark");
+        app.clients.push(client);
+
+        app.execute_nav_reload_with(|zone| {
+            zone_seen = zone.to_string();
+            Ok(crate::nav::mesh::ZoneMeshReload {
+                zone_short_name: zone.to_string(),
+                cache_path: std::path::PathBuf::from(format!("data/meshes/{zone}.navmesh")),
+                replaced_cached_file: true,
+                cache_bytes: 1234,
+                overlay_segment_count: 56,
+            })
+        });
+
+        let toast = app.toast.as_ref().expect("success toast");
+        assert_eq!(toast.level, ToastLevel::Success);
+        assert_eq!(zone_seen, "gfaydark");
+        assert!(app.status_message.contains("Navmesh reloaded for gfaydark"));
+        assert!(app.status_message.contains("1234 bytes"));
+        assert!(app.status_message.contains("56 segments"));
+    }
 
     #[test]
     fn app_default_routing_scope_is_all_session() {
