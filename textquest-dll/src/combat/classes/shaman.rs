@@ -234,6 +234,7 @@ mod tests {
             holyshit_rules: vec![],
             disciplines: vec![],
             target_scan: textquest_common::combat::TargetScanConfig::default(),
+            cast_retry_policy: Default::default(),
         }
     }
 

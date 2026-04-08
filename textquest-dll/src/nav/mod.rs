@@ -91,6 +91,7 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::SetBreakOnGm(enabled) => nav.set_break_on_gm(enabled),
             NavCommand::CircleKite { config, center } => nav.circle_kite(config, center),
             NavCommand::CircleOff => nav.circle_off(),
+            NavCommand::SetHeadingMode(mode) => nav.set_heading_mode(mode),
         }
     }
 }
@@ -182,4 +183,6 @@ pub enum NavCommand {
     },
     /// Stop circle-kiting and return to Idle.
     CircleOff,
+    /// Set the heading update mode.
+    SetHeadingMode(textquest_common::nav::HeadingMode),
 }

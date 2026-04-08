@@ -2176,6 +2176,11 @@ fn read_zone_short_name(eq_base: u64) -> Option<String> {
     String::from_utf8(name_bytes[..len].to_vec()).ok()
 }
 
+#[cfg(not(windows))]
+fn read_zone_short_name(_eq_base: u64) -> Option<String> {
+    None
+}
+
 /// Read the zone long name (char[128]) from instEQZoneInfo (e.g., "West Freeport").
 #[cfg(windows)]
 fn read_zone_long_name(eq_base: u64) -> Option<String> {
@@ -2191,6 +2196,11 @@ fn read_zone_long_name(eq_base: u64) -> Option<String> {
         return None;
     }
     String::from_utf8(name_bytes[..len].to_vec()).ok()
+}
+
+#[cfg(not(windows))]
+fn read_zone_long_name(_eq_base: u64) -> Option<String> {
+    None
 }
 
 /// Set the window title for all top-level windows belonging to the given PID.
@@ -2906,73 +2916,6 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         other => {
             tracing::debug!(?other, "Unhandled command");
         }
-    }
-}
-
-fn save_nav_waypoint(_name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
-    #[cfg(not(windows))]
-    {
-        return Err(String::from(
-            "save_nav_waypoint is only available on Windows",
-        ));
-    }
-    #[cfg(windows)]
-    {
-        let name = _name;
-        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-        if eq_base == 0 {
-            return Err(String::from(
-                "EQ base not resolved; cannot read player position",
-            ));
-        }
-
-        let Some(player) = read_local_player_state(eq_base) else {
-            return Err(String::from(
-                "Local player is not available — are you logged in?",
-            ));
-        };
-
-        let zone = read_zone_short_name(eq_base)
-            .ok_or_else(|| String::from("Zone name unavailable for waypoint save"))?;
-        let position = textquest_common::nav::Waypoint::new(player.x, player.y, player.z);
-
-        crate::nav::waypoint_store::save(name, position, zone)
-    }
-}
-
-fn recall_nav_waypoint(_name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
-    #[cfg(not(windows))]
-    {
-        return Err(String::from(
-            "recall_nav_waypoint is only available on Windows",
-        ));
-    }
-    #[cfg(windows)]
-    {
-        let name = _name;
-        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
-        if eq_base == 0 {
-            return Err(String::from(
-                "EQ base not resolved; cannot read current zone",
-            ));
-        }
-
-        let current_zone = read_zone_short_name(eq_base)
-            .ok_or_else(|| String::from("Zone name unavailable for waypoint recall"))?;
-
-        let Some(saved) = crate::nav::waypoint_store::recall(name) else {
-            return Err(format!("Waypoint '{name}' not found"));
-        };
-
-        if !saved.zone.eq_ignore_ascii_case(&current_zone) {
-            return Err(format!(
-                "Waypoint '{name}' is in zone {} (current zone: {})",
-                saved.zone, current_zone
-            ));
-        }
-
-        crate::nav::handle_command(crate::nav::NavCommand::Navigate(vec![saved.position]));
-        Ok(saved)
     }
 }
 

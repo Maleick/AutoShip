@@ -11,8 +11,9 @@
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
-    CampSpot, CircleConfig, CircleMode, FollowConfig, MoveToConfig, NavCampConfig, NavDiagnostics,
-    NavStateSignals, NavStatus, PauseReason, StickConfig, Waypoint,
+    CampSpot, CircleConfig, CircleMode, FollowConfig, HeadingMode, MoveToConfig, NavCampConfig,
+    NavDiagnostics, NavStateSignals, NavStatus, PauseReason, StickConfig, Waypoint,
+    LOOSE_MAX_TURN_PER_TICK, step_toward_heading,
 };
 use textquest_common::types::SpawnData;
 

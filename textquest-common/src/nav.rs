@@ -767,6 +767,29 @@ impl ScatterConfig {
     }
 }
 
+/// Steps a heading toward a target value by at most `max_step` units.
+///
+/// Correctlty handles the 0-512 EQ heading wrap-around, always taking the
+/// shortest path.
+#[must_use]
+pub fn step_toward_heading(current: f32, target: f32, max_step: f32) -> f32 {
+    let mut diff = target - current;
+    // Normalize diff to [-256, 256] to find the shortest turn
+    while diff > 256.0 {
+        diff -= 512.0;
+    }
+    while diff <= -256.0 {
+        diff += 512.0;
+    }
+
+    if diff.abs() <= max_step {
+        target
+    } else {
+        let step = if diff > 0.0 { max_step } else { -max_step };
+        (current + step + 512.0) % 512.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NavCampConfig {
     pub center: Waypoint,

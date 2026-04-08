@@ -634,7 +634,7 @@ impl Combatant {
         }
 
         // --- Normal state machine ---
-        match &self.state {
+        match &mut self.state {
             CombatState::Idle => {
                 // Wait for an explicit engage command — do nothing.
             }
@@ -732,6 +732,8 @@ impl Combatant {
                                     spell_slot: cast_plan.gem_id,
                                     target_id: action.target_id,
                                     ticks_remaining: 20 + cast_delay,
+                                    backoff_ticks: 0,
+                                    retry_count: 0,
                                 };
                             }
                             ActionType::Disc(_) | ActionType::AA(_) => {
@@ -925,7 +927,10 @@ impl Combatant {
                         0,
                         CastResult::Success,
                     );
+                    return;
                 }
+
+                *ticks_remaining -= 1;
             }
 
             CombatState::OnGcd => {
@@ -1311,7 +1316,6 @@ impl Combatant {
                     spell_slot: gem_id,
                     target_id: pet_id,
                     ticks_remaining: 20 + cast_delay,
-                    target_id: current_target_id.unwrap_or(0),
                     retry_count: 0,
                     backoff_ticks: 0,
                 };
@@ -1327,7 +1331,7 @@ mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
     use crate::combat::rotation;
-    use textquest_common::combat::{ActionType, CombatConfig};
+    use textquest_common::combat::{ActionType, CombatConfig, CastRetryPolicy};
 
     fn test_config() -> CombatConfig {
         CombatConfig {

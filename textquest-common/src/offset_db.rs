@@ -112,7 +112,7 @@ impl OffsetDatabase {
             PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
             PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, SERVER_MEMCHECK_HANDLER,
             SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL, WORLD_AUTHENTICATE,
-            ZONE_GUIDE_MANAGER, context_menu_mgr as context_menu_manager, player_base,
+            ZONE_GUIDE_MANAGER, context_menu_mgr, player_base,
             player_zone, spawn_manager,
         };
         let mut globals = HashMap::new();
@@ -165,6 +165,8 @@ impl OffsetDatabase {
         let mut cmm = HashMap::new();
         cmm.insert("menusArray".to_string(), context_menu_mgr::MENUS_DATA);
         cmm.insert("numMenus".to_string(), context_menu_mgr::MENUS_COUNT);
+        cmm.insert("currMenu".to_string(), context_menu_mgr::CUR_MENU);
+        cmm.insert("curItem".to_string(), context_menu_mgr::CUR_ITEM);
 
         // No compile-time `offsets::context_menu` fallback is currently defined.
         // Leave the map empty here; JSON-loaded offsets can still populate it.
@@ -533,16 +535,16 @@ mod tests {
     fn context_menu_manager_offsets_exposed_in_db() {
         let db = OffsetDatabase::from_compiled_offsets();
         assert_eq!(
-            db.get_context_menu_manager_offset("currMenus"),
-            Some(crate::offsets::context_menu_mgr::CURR_MENUS)
+            db.get_context_menu_manager_offset("currMenu"),
+            Some(crate::offsets::context_menu_mgr::CUR_MENU)
         );
         assert_eq!(
             db.get_context_menu_manager_offset("numMenus"),
-            Some(crate::offsets::context_menu_mgr::NUM_MENUS)
+            Some(crate::offsets::context_menu_mgr::MENUS_COUNT)
         );
         assert_eq!(
-            db.get_context_menu_manager_offset("handlerWnd"),
-            Some(crate::offsets::context_menu_mgr::HANDLER_WND)
+            db.get_context_menu_manager_offset("curItem"),
+            Some(crate::offsets::context_menu_mgr::CUR_ITEM)
         );
         assert!(db.get_context_menu_manager_offset("nonexistent").is_none());
     }
