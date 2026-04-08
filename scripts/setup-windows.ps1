@@ -80,19 +80,9 @@ Write-Host "[3/6] Checking for Rust..." -ForegroundColor Yellow
 $desiredToolchain = "nightly-x86_64-pc-windows-msvc"
 
 if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) {
-    Write-Host "  Rust not found. Installing via rustup..." -ForegroundColor Red
-    try {
-        $rustupInit = "$env:TEMP\rustup-init.exe"
-        Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $rustupInit
-        & $rustupInit -y --default-toolchain $desiredToolchain
-        Remove-Item $rustupInit -ErrorAction SilentlyContinue
-        # Refresh PATH
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-        $env:Path += ";$env:USERPROFILE\.cargo\bin"
-    } catch {
-        Write-Host "  ERROR: Could not install Rust. Please install manually from https://rustup.rs" -ForegroundColor Red
-        exit 1
-    }
+    Write-Host "  ERROR: Rust not found. Install rustup manually from https://rustup.rs before running this script." -ForegroundColor Red
+    Write-Host "  After installing, reopen PowerShell and run this script again." -ForegroundColor Yellow
+    exit 1
 }
 $rustVersion = rustc --version
 $cargoVersion = cargo --version

@@ -67,16 +67,7 @@ function Ensure-NightlyRustToolchain {
 
     $rustup = Join-Path $cargoHome "bin\rustup.exe"
     if (-not (Test-Path $rustup)) {
-        Write-Host "Rustup was not found under $rustup. Bootstrapping rustup via official installer." -ForegroundColor Yellow
-        $tmp = Join-Path $env:TEMP "rustup-init.exe"
-        try {
-            Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile $tmp
-            & $tmp -y --no-modify-path --default-toolchain $Toolchain | Out-Null
-        } catch {
-            throw "Failed to install rustup. Please install rustup manually from https://rustup.rs and retry."
-        } finally {
-            if (Test-Path $tmp) { Remove-Item $tmp -ErrorAction SilentlyContinue }
-        }
+        throw "Rustup was not found under $rustup. Install rustup manually from https://rustup.rs before running this script."
     }
 
     $env:PATH = "${cargoHome}\bin;${env:PATH}"

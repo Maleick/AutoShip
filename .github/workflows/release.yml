@@ -35,18 +35,7 @@ jobs:
           set "PATH=%CARGO_HOME%\bin;%PATH%"
           echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
           where rustup.exe >nul 2>nul || (
-            echo [warn] rustup.exe not found in PATH. Installing rustup bootstrap.
-            curl.exe -fSLo "%TEMP%\rustup-init.exe" https://win.rustup.rs/x86_64
-            start /wait "" "%TEMP%\rustup-init.exe" -y --no-modify-path --default-toolchain %NIGHTLY_TOOLCHAIN%
-            if errorlevel 1 (
-              echo [fatal] rustup bootstrap failed.
-              exit /b 1
-            )
-            del /f /q "%TEMP%\rustup-init.exe"
-          )
-
-          where rustup.exe >nul 2>nul || (
-            echo [fatal] rustup.exe still not available after bootstrap.
+            echo [fatal] rustup.exe not found in PATH. Install rustup on this runner before running release workflows.
             exit /b 1
           )
           echo %CARGO_HOME%\bin>>%GITHUB_PATH%
