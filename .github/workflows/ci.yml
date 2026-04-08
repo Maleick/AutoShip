@@ -79,7 +79,7 @@ jobs:
   pr_gate_trusted:
     name: PR gate (trusted path)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 45
     defaults:
       run:
@@ -143,7 +143,7 @@ jobs:
 
   pr_gate:
     name: PR gate (fmt + clippy + test + python)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 60
     permissions:
       actions: read
@@ -231,7 +231,7 @@ jobs:
 
   secrets_scan:
     name: Secret scan (TruffleHog)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5

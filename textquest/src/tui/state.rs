@@ -606,7 +606,11 @@ pub fn save_named_markers(path: &PathBuf, markers: &[NamedMapMarker]) -> anyhow:
     // MOVEFILE_REPLACE_EXISTING, so no separate pre-deletion is needed.
     // If persist fails the NamedTempFile is returned in the error and auto-removed on drop.
     staged.persist(path).map(|_| ()).map_err(|e| {
-        anyhow::anyhow!("Failed to persist marker file {}: {}", path.display(), e.error)
+        anyhow::anyhow!(
+            "Failed to persist marker file {}: {}",
+            path.display(),
+            e.error
+        )
     })
 }
 
@@ -625,10 +629,7 @@ fn validate_marker_store_path(path: &Path) -> anyhow::Result<()> {
             anyhow::bail!("Marker file path is a directory: {}", path.display());
         }
         if !meta.is_file() {
-            anyhow::bail!(
-                "Marker file path is not a regular file: {}",
-                path.display()
-            );
+            anyhow::bail!("Marker file path is not a regular file: {}", path.display());
         }
     }
     // Walk every ancestor directory so that symlinks or reparse points anywhere
@@ -667,7 +668,6 @@ fn metadata_has_reparse_point(meta: &std::fs::Metadata) -> bool {
 fn metadata_has_reparse_point(_meta: &std::fs::Metadata) -> bool {
     false
 }
-
 
 /// A radius overlay circle around the player.
 #[derive(Debug, Clone)]
@@ -1964,7 +1964,8 @@ mod tests {
     #[test]
     fn marker_save_persists_json_for_regular_file() {
         let dir = tempdir().unwrap();
-        let marker_path = dir.path().join("map_markers.json");
+        let marker_dir = dir.path().canonicalize().unwrap();
+        let marker_path = marker_dir.join("map_markers.json");
         let markers = vec![NamedMapMarker {
             name: "bank".to_string(),
             x: 1.0,
@@ -2004,11 +2005,7 @@ mod tests {
         std::fs::create_dir(&marker_path).unwrap();
 
         let err = save_named_markers(&marker_path, &[]).unwrap_err();
-        assert!(
-            err.to_string().contains("directory"),
-            "{}",
-            err
-        );
+        assert!(err.to_string().contains("directory"), "{}", err);
     }
 
     #[cfg(unix)]
@@ -2024,11 +2021,7 @@ mod tests {
         let marker_path = link_dir.join("map_markers.json");
 
         let err = save_named_markers(&marker_path, &[]).unwrap_err();
-        assert!(
-            err.to_string().contains("symlink"),
-            "{}",
-            err
-        );
+        assert!(err.to_string().contains("symlink"), "{}", err);
     }
 
     #[cfg(unix)]
@@ -2047,11 +2040,7 @@ mod tests {
         let marker_path = sub.join("map_markers.json");
 
         let err = save_named_markers(&marker_path, &[]).unwrap_err();
-        assert!(
-            err.to_string().contains("symlink"),
-            "{}",
-            err
-        );
+        assert!(err.to_string().contains("symlink"), "{}", err);
     }
 
     #[cfg(unix)]
@@ -2069,10 +2058,6 @@ mod tests {
         }
 
         let err = save_named_markers(&marker_path, &[]).unwrap_err();
-        assert!(
-            err.to_string().contains("not a regular file"),
-            "{}",
-            err
-        );
+        assert!(err.to_string().contains("not a regular file"), "{}", err);
     }
 }

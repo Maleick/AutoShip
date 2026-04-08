@@ -582,9 +582,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
         });
-        let Json(configs) = list_character_configs(State(state))
-            .await
-            .expect("list character configs should succeed");
+        let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
         assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
     }
@@ -616,9 +614,7 @@ mod tests {
                 .expect("put character config should succeed");
         assert_eq!(saved.character_name, "Aelrindel");
 
-        let Json(configs) = list_character_configs(State(state))
-            .await
-            .expect("list character configs should succeed");
+        let Json(configs) = list_character_configs(State(state)).await;
         let updated = configs
             .into_iter()
             .find(|c| c.character_name == "Aelrindel")

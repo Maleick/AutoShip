@@ -142,9 +142,6 @@ mod tests {
             "You say, 'You don\\'t have enough mana to cast this spell.'",
         );
         let system_like = textquest_common::chat::parse_chat_text("You don't have enough mana.");
-        let say = textquest_common::chat::parse_chat_text("Alice says, 'hello there'");
-        let you_say = textquest_common::chat::parse_chat_text("You say, 'hello there'");
-        let system_like = textquest_common::chat::parse_chat_text("You don't have enough mana.");
 
         // Parsed player chat should never be forwarded.
         assert!(!should_forward_to_combat(say.as_ref()));

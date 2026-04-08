@@ -542,7 +542,7 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 
             // Click the Login button using phase-aware helper.
             // eqmain is loaded → direct vtable click (game loop not active yet).
-            if let Some(login_button) = login_button {
+            if login_button != 0 {
                 std::thread::sleep(std::time::Duration::from_millis(150));
                 tracing::info!(
                     ptr = format!("{:#x}", login_button),

@@ -250,11 +250,12 @@ mod tests {
         let mut monitor = monitor();
         monitor.last_pong = Instant::now() - monitor.timeout - Duration::from_millis(1);
 
+        let expected_since = monitor.last_pong + monitor.timeout;
         let health = monitor.check();
 
         match health {
             ClientHealth::Unresponsive { since } => {
-                assert_eq!(*since, monitor.last_pong + monitor.timeout);
+                assert_eq!(*since, expected_since);
             }
             other => panic!("expected unresponsive state, got {other:?}"),
         }

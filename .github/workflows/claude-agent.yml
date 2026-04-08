@@ -24,10 +24,26 @@ jobs:
       github.actor != 'Copilot' &&
       (
         (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'worker:claude')) ||
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+        (
+          github.event_name == 'issue_comment' &&
+          contains(github.event.comment.body, '@claude') &&
+          (
+            github.event.comment.author_association == 'OWNER' ||
+            github.event.comment.author_association == 'MEMBER' ||
+            github.event.comment.author_association == 'COLLABORATOR'
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request_review_comment' &&
+          contains(github.event.comment.body, '@claude') &&
+          (
+            github.event.comment.author_association == 'OWNER' ||
+            github.event.comment.author_association == 'MEMBER' ||
+            github.event.comment.author_association == 'COLLABORATOR'
+          )
+        )
       )
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 60
     steps:
       - name: Checkout repository

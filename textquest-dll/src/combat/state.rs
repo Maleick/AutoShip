@@ -633,15 +633,6 @@ impl Combatant {
             }
         }
 
-        // Decrement cast ticks before the state check so the transition fires
-        // on the correct tick (when ticks_remaining reaches 0).
-        if let CombatState::Casting {
-            ticks_remaining, ..
-        } = &mut self.state
-        {
-            *ticks_remaining = ticks_remaining.saturating_sub(1);
-        }
-
         // --- Normal state machine ---
         match &mut self.state {
             CombatState::Idle => {

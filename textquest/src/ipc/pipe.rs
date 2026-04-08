@@ -37,11 +37,11 @@ impl CommandPipe {
     pub fn connect(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {
-            use windows::core::PCSTR;
             use windows::Win32::Foundation::GENERIC_READ;
             use windows::Win32::Storage::FileSystem::{
                 CreateFileA, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING,
             };
+            use windows::core::PCSTR;
 
             let pipe_name = format!(
                 "{}\0",
@@ -316,9 +316,10 @@ mod tests {
             let pipe = CommandPipe::connect(55, 42).unwrap();
 
             assert!(pipe.send_async(&Command::StopMovement).is_ok());
-            assert!(pipe
-                .send_raw_token(&[STUB_TOKEN_BYTE; STUB_TOKEN_SIZE])
-                .is_ok());
+            assert!(
+                pipe.send_raw_token(&[STUB_TOKEN_BYTE; STUB_TOKEN_SIZE])
+                    .is_ok()
+            );
         }
     }
 }

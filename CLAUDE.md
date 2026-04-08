@@ -19,6 +19,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/implementation-roadmap.md` is the canonical milestone and evidence document.
 - Do not introduce new docs or script assumptions that require a vendored reference tree inside this repo.
 
+## Quick Start
+
+```bash
+cargo build          # Debug build (macOS OK — stubs Windows APIs)
+cargo run            # TUI with demo data (macOS) or live data (Windows)
+cargo test           # Full workspace test suite (~2,500+ tests)
+python3 scripts/dev-preflight.py  # Same checks as CI
+```
+
 ## Build Commands
 
 ```bash
@@ -98,7 +107,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 | `launcher/`       | Login automation — per-client login FSM, staggered launch, process spawner, post-login sequencer                                                            |
 | `credentials/`    | Encrypted credential store — Argon2id + AES-256-GCM, SQLite backend                                                                                         |
 | `soul/`           | Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics                                                         |
-| `discord/`        | Discord integration — webhook alerts, command bridge, embedded serenity bot (DZ lockouts, contested mob alerts, slash commands)                              |
+| `discord/`        | Discord integration — webhook alerts, command bridge, embedded serenity bot (DZ lockouts, contested mob alerts, slash commands)                             |
 | `loot/`           | EQ item database (SQLite), TLP loot tables, per-character wishlists, loot history                                                                           |
 | `metrics/`        | Fleet metrics — SQLite-backed events, DPS, loot, lockout, and plat tracking for session monitor                                                             |
 
@@ -113,7 +122,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 | `combat/`   | Combatant FSM, ClassStrategy trait, class strategy implementations (including a generic DPS strategy), HolyShit conditions, GCD tracker, mana governor, puller FSM, aggro detection, loot, skill cooldowns |
 | `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                                                                      |
 | `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                                                         |
-| `stealth/`  | Memory stealth — Gargoyle-style sleep obfuscation, page encryption, keeps DLL code encrypted ~97% of the time                                                                                             |
+| `stealth/`  | Memory stealth — Gargoyle-style sleep obfuscation, page encryption, keeps DLL code encrypted ~97% of the time                                                                                              |
 | `syscall/`  | Indirect syscalls (RecycledGate pattern) — NT API calls through ntdll gadgets to pass anti-cheat call stack inspection                                                                                     |
 
 **`textquest-common/` — Shared types**
@@ -132,10 +141,10 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 
 **`textquest-web/` — Web dashboard (axum backend + React SPA)**
 
-| Module | Purpose                                                                                    |
-| ------ | ------------------------------------------------------------------------------------------ |
-| `api/` | REST API for credentials, group config, loot tables                                        |
-| `ws/`  | WebSocket endpoint for live session monitoring                                             |
+| Module | Purpose                                             |
+| ------ | --------------------------------------------------- |
+| `api/` | REST API for credentials, group config, loot tables |
+| `ws/`  | WebSocket endpoint for live session monitoring      |
 
 ### Milestones
 
@@ -146,26 +155,27 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **M4** (complete): Combat automation — ClassStrategy trait, 17 classes, HolyShit system, puller FSM, combat coordinator
 - **M5** (complete): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
 - **M6** (complete): Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements (EQ Internals, packet sniffer, map rework, Neriak theme)
-- **M7**: Zoning/Movement — zone transitions, movement validation, travel recovery
-- **M8**: Orchestrator — multibox coordination, group/session control, relay surfaces
+- **M7** (in progress): Zoning/Movement — zone transitions, movement validation, travel recovery
+- **M8** (in progress): Orchestrator — multibox coordination, group/session control, relay surfaces
 - **M9**: Learning/RL — behavioral cloning, RL fine-tuning
 - **M10**: Economy — Krono farm, vendor automation, loot distribution, banking
 - **M11**: Soul Engine + LLM — local AI (Gemma 4/ollama), personalities, in-game chat (no external API)
 
 ## Configuration Files
 
-| File                       | Purpose                                                     |
-| -------------------------- | ----------------------------------------------------------- |
-| `config/frostreaver.toml`  | Main config — process, launch, polling, group settings      |
-| `config/accounts.toml`     | Per-account name, server, character, class, group           |
-| `config/camps/*.toml`      | Camp definitions — zone, pull point/radius, mana thresholds |
-| `config/classes/*.toml`    | 16 class ability configs with cooldowns, priorities, level overrides |
-| `config/hvt_watchlist.toml`| High-value target alerts (named mob tracking + Discord)     |
+| File                        | Purpose                                                              |
+| --------------------------- | -------------------------------------------------------------------- |
+| `config/frostreaver.toml`   | Main config — process, launch, polling, group settings               |
+| `config/accounts.toml`      | Per-account name, server, character, class, group                    |
+| `config/camps/*.toml`       | Camp definitions — zone, pull point/radius, mana thresholds          |
+| `config/classes/*.toml`     | 16 class ability configs with cooldowns, priorities, level overrides |
+| `config/hvt_watchlist.toml` | High-value target alerts (named mob tracking + Discord)              |
 
 ## Log Locations
 
 - **Orchestrator**: `./logs/textquest.log` (daily rolling)
 - **DLL**: `%TEMP%/textquest/textquest-dll.log` (daily rolling)
+- **Web**: stdout (axum default) — no file logging configured yet
 
 ## Patterns & Conventions
 

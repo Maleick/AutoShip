@@ -24,7 +24,7 @@ jobs:
   agent-ready:
     name: Auto-label agent:ready
     if: github.event_name == 'issues' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
     steps:
@@ -102,7 +102,7 @@ jobs:
   agent-close:
     name: Auto-close agent PRs
     if: github.event_name == 'pull_request_target' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
       pull-requests: write
@@ -142,7 +142,7 @@ jobs:
       (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       pull-requests: write
     steps:
@@ -172,7 +172,7 @@ jobs:
   post-merge:
     name: Post-merge sync
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
       pull-requests: write

@@ -1,6 +1,6 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-04-08T06:38:29.779Z
+> Auto-maintained by OpenWolf. Last scanned: 2026-04-08T19:25:31.012Z
 > Files: 531 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../.claude/projects/-Users-maleick-Projects-TextQuest/memory/
@@ -26,7 +26,7 @@
 - `autoresearch-results.tsv` — This file previously contained generated doc-coverage automation results. (~44 tok)
 - `autoresearch-state.json` (~54 tok)
 - `Cargo.toml` — Rust package manifest (~240 tok)
-- `CLAUDE.md` — OpenWolf (~3296 tok)
+- `CLAUDE.md` — OpenWolf (~4377 tok)
 - `feature-list.json` — Declares shape (~2773 tok)
 - `HANDOFF.md` — Session Handoff — 2026-04-01 20:45 UTC (~1458 tok)
 - `README.md` — Project documentation (~6350 tok)
