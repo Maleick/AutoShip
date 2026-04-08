@@ -24,43 +24,37 @@ use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
 
+/// Snapshot of a summonsed pet's current state for pet-management decisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PetStatus {
+    /// The pet's spawn ID, or `None` if no pet is active.
     pub spawn_id: Option<u32>,
+    /// The spawn ID the pet is currently attacking, or `None` if idle.
     pub target_id: Option<u32>,
 }
 
 impl PetStatus {
+    /// Returns `true` if a pet is currently active.
     pub fn has_pet(self) -> bool {
         self.spawn_id.is_some()
     }
 
+    /// Returns `true` if the pet is already attacking `target_id`.
     pub fn is_attacking(self, target_id: u32) -> bool {
         self.target_id == Some(target_id)
     }
 }
 
-#[derive(Debug, Clone)]
+/// Pet-management action requested by a `ClassStrategy` for the current frame.
+#[derive(Debug, Clone, PartialEq)]
 pub enum PetAction {
+    /// Send `/pet attack` to the current target.
     Attack,
-    Buff { spell: SpellEntry },
-}
-
-impl PartialEq for PetAction {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Attack, Self::Attack) => true,
-            (Self::Buff { spell: lhs }, Self::Buff { spell: rhs }) => {
-                lhs.slot == rhs.slot
-                    && lhs.spell_id == rhs.spell_id
-                    && lhs.name == rhs.name
-                    && (lhs.min_mana_pct - rhs.min_mana_pct).abs() < f32::EPSILON
-                    && lhs.priority == rhs.priority
-                    && lhs.is_aoe == rhs.is_aoe
-            }
-            _ => false,
-        }
-    }
+    /// Cast a pet-targeted buff (e.g., Burnout) using the given spell entry.
+    Buff {
+        /// The spell the strategy wants to cast on the pet.
+        spell: SpellEntry,
+    },
 }
 
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
@@ -107,46 +101,12 @@ impl CombatContext<'_> {
             .and_then(ExtendedTargetList::pet_target_id)
     }
 
-    /// Snapshot of the pet's current status from the extended target list.
     pub fn pet_status(&self) -> PetStatus {
         PetStatus {
             spawn_id: self.pet_spawn_id(),
             target_id: self.pet_target_id(),
         }
     }
-}
-
-/// Snapshot of a pet's current status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct PetStatus {
-    /// Spawn ID of this character's active pet, if any.
-    pub spawn_id: Option<u32>,
-    /// Spawn ID of the target the pet is currently attacking, if any.
-    pub target_id: Option<u32>,
-}
-
-impl PetStatus {
-    /// Returns `true` if this character has an active pet.
-    pub fn has_pet(self) -> bool {
-        self.spawn_id.is_some()
-    }
-
-    /// Returns `true` if the pet is already attacking the given target.
-    pub fn is_attacking(self, target_id: u32) -> bool {
-        self.target_id == Some(target_id)
-    }
-}
-
-/// Pet management action requested by a class strategy.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PetAction {
-    /// Command the pet to attack the current combat target.
-    Attack,
-    /// Cast a pet-targeted buff using the given spell entry.
-    Buff {
-        /// Spell to cast on the pet.
-        spell: SpellEntry,
-    },
 }
 
 #[derive(Debug, Clone)]
