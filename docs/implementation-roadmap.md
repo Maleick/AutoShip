@@ -445,7 +445,15 @@ Nightly checkpoint cadence:
 2. run the roadmap verifier and wiki guard
 3. reconcile the active checkpoint batch in the `TextQuest Roadmap` GitHub Project
 4. promote mature current-window items into GitHub issues and remove overlapping drafts
-5. record project-sync results in the autoresearch artifacts
+5. record project-sync results in the autoresearch artifacts before ending the run
+
+Project-sync logging requirements:
+
+- capture the active checkpoint batch id used for the sync pass
+- list which GitHub Project items changed and which fields changed
+- list any GitHub issues created or promoted during the checkpoint
+- note any project-scope, auth, or maturity blockers that prevented promotion
+- keep these records in local autoresearch runtime artifacts or automation memory, not in repo-tracked files
 
 Mechanical verifier:
 

@@ -104,8 +104,18 @@ Nightly sync order:
 
 1. source docs and research ledgers
 2. roadmap verifier and wiki guard
-3. GitHub issues for mature checkpoint items
-4. GitHub Project mirror fields and cards
+3. GitHub Project mirror fields and cards for the active checkpoint batch
+4. GitHub issues for mature checkpoint items and removal of overlapping drafts
+5. record project-sync results in local autoresearch artifacts before ending the run
+
+Nightly project-sync logging must capture:
+
+- the checkpoint batch id used during the sync pass
+- GitHub Project item and field updates that were applied
+- issue promotions or creations completed during the checkpoint
+- blockers such as missing project scope, auth issues, insufficient evidence, or items left as drafts
+
+Keep those logs in local automation memory or generated autoresearch artifacts. Do not commit transient run-state files such as `autoresearch-launch.json`, `autoresearch-state.json`, or `autoresearch-results.tsv`.
 
 ## Logging and Debugging
 
