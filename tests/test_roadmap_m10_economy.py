@@ -35,7 +35,7 @@ class RoadmapM10EconomyTests(unittest.TestCase):
         self.assertIn("belongs to `M11` in the canonical roadmap", architecture)
 
     def test_feature_list_tracks_m10_economy_execution_surfaces(self) -> None:
-        payload = json.loads(read("config/feature-list.json"))
+        payload = json.loads(read("feature-list.json"))
         feature = next(
             (item for item in payload["features"] if item["id"] == "m10-economy-execution-surfaces"),
             None,
