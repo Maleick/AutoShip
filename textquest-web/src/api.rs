@@ -1,8 +1,6 @@
 //! REST API handlers for the web dashboard.
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
+pub mod loot;
 use axum::Json;
 use axum::extract::Path;
 use serde::{Deserialize, Serialize};
@@ -163,11 +161,7 @@ pub async fn get_economy_settings() -> Json<EconomySettings> {
             TradeskillSupply {
                 id: "ts-2".into(),
                 skill: "Smithing".into(),
-                materials: vec![
-                    "Iron Ore".into(),
-                    "Coal".into(),
-                    "High Quality Ore".into(),
-                ],
+                materials: vec!["Iron Ore".into(), "Coal".into(), "High Quality Ore".into()],
                 restock_quantity: 50,
                 source_zone: "Kaladim".into(),
                 enabled: true,
@@ -231,13 +225,48 @@ pub async fn delete_vendor_route(Path(_id): Path<String>) -> axum::http::StatusC
 pub async fn get_wealth() -> Json<WealthHistory> {
     // TODO: Load from metrics SQLite DB
     let snapshots = vec![
-        WealthSnapshot { timestamp: "2026-04-01T00:00:00Z".into(), plat: 120_000, krono: 28, item_value_estimate: 210_000 },
-        WealthSnapshot { timestamp: "2026-04-02T00:00:00Z".into(), plat: 134_500, krono: 30, item_value_estimate: 230_000 },
-        WealthSnapshot { timestamp: "2026-04-03T00:00:00Z".into(), plat: 148_200, krono: 33, item_value_estimate: 255_000 },
-        WealthSnapshot { timestamp: "2026-04-04T00:00:00Z".into(), plat: 155_900, krono: 35, item_value_estimate: 270_000 },
-        WealthSnapshot { timestamp: "2026-04-05T00:00:00Z".into(), plat: 164_100, krono: 38, item_value_estimate: 285_000 },
-        WealthSnapshot { timestamp: "2026-04-06T00:00:00Z".into(), plat: 172_800, krono: 40, item_value_estimate: 298_000 },
-        WealthSnapshot { timestamp: "2026-04-07T00:00:00Z".into(), plat: 187_430, krono: 42, item_value_estimate: 312_000 },
+        WealthSnapshot {
+            timestamp: "2026-04-01T00:00:00Z".into(),
+            plat: 120_000,
+            krono: 28,
+            item_value_estimate: 210_000,
+        },
+        WealthSnapshot {
+            timestamp: "2026-04-02T00:00:00Z".into(),
+            plat: 134_500,
+            krono: 30,
+            item_value_estimate: 230_000,
+        },
+        WealthSnapshot {
+            timestamp: "2026-04-03T00:00:00Z".into(),
+            plat: 148_200,
+            krono: 33,
+            item_value_estimate: 255_000,
+        },
+        WealthSnapshot {
+            timestamp: "2026-04-04T00:00:00Z".into(),
+            plat: 155_900,
+            krono: 35,
+            item_value_estimate: 270_000,
+        },
+        WealthSnapshot {
+            timestamp: "2026-04-05T00:00:00Z".into(),
+            plat: 164_100,
+            krono: 38,
+            item_value_estimate: 285_000,
+        },
+        WealthSnapshot {
+            timestamp: "2026-04-06T00:00:00Z".into(),
+            plat: 172_800,
+            krono: 40,
+            item_value_estimate: 298_000,
+        },
+        WealthSnapshot {
+            timestamp: "2026-04-07T00:00:00Z".into(),
+            plat: 187_430,
+            krono: 42,
+            item_value_estimate: 312_000,
+        },
     ];
     let current = snapshots.last().unwrap().clone();
     Json(WealthHistory { current, snapshots })
@@ -246,15 +275,6 @@ pub async fn get_wealth() -> Json<WealthHistory> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::broadcast;
-
-    fn make_state() -> Arc<AppState> {
-        let (event_tx, _) = broadcast::channel(8);
-        Arc::new(AppState {
-            event_tx,
-            config_store: tokio::sync::RwLock::new(default_configs()),
-        })
-    }
 
     #[tokio::test]
     async fn health_returns_ok() {

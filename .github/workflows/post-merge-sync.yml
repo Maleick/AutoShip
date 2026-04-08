@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Update linked issues and clean labels
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
@@ -65,50 +65,25 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2
 
       - name: Check for docs changes
         id: docs-check
-        shell: bash
         run: |
-          if git diff HEAD~1 --name-only | grep -qE '^docs/'; then
-            echo "docs_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "docs_changed=false" >> "$GITHUB_OUTPUT"
-            echo "No docs changes — skipping wiki sync"
-          fi
+          @echo off
+          setlocal EnableExtensions EnableDelayedExpansion
+          set "DOCS_CHANGED=false"
+          for /f "usebackq delims=" %%F in (`git diff --name-only HEAD~1`) do (
+            echo %%F| findstr /B /C:"docs/" >nul && set "DOCS_CHANGED=true"
+          )
+          echo docs_changed=%DOCS_CHANGED%>>"%GITHUB_OUTPUT%"
+          if /I "%DOCS_CHANGED%"=="false" echo No docs changes - skipping wiki sync
 
-      - name: Locate or provision verified Python
+      - name: Setup verified Python
         if: steps.docs-check.outputs.docs_changed == 'true'
-        env:
-          PYTHON_EMBED_URL: https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
-          PYTHON_EMBED_SHA256: 4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3
-        run: |
-          setlocal EnableDelayedExpansion
-          if exist .ci-python rmdir /s /q .ci-python
-          mkdir .ci-python
-          "%SystemRoot%\System32\curl.exe" -fsSL -o .ci-python\python-embed.zip "%PYTHON_EMBED_URL%"
-          for /f "tokens=* delims=" %%H in ('"%SystemRoot%\System32\certutil.exe" -hashfile ".ci-python\python-embed.zip" SHA256 ^| findstr /r /v /c:"^SHA256" /c:"^CertUtil" /c:"^$"') do (
-            set "PYTHON_EMBED_ACTUAL_SHA256=%%H"
-          )
-          set "PYTHON_EMBED_ACTUAL_SHA256=!PYTHON_EMBED_ACTUAL_SHA256: =!"
-          if /I not "!PYTHON_EMBED_ACTUAL_SHA256!"=="%PYTHON_EMBED_SHA256%" (
-            echo [fatal] Verified Python download checksum mismatch.
-            echo [fatal] Expected: %PYTHON_EMBED_SHA256%
-            echo [fatal] Actual:   !PYTHON_EMBED_ACTUAL_SHA256!
-            exit /b 1
-          )
-          "%SystemRoot%\System32\tar.exe" -xf .ci-python\python-embed.zip -C .ci-python
-          if not exist .ci-python\python.exe (
-            echo [fatal] Extracted python.exe not found after verified download.
-            exit /b 1
-          )
-          endlocal & (
-            echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
-          )
-          "%CD%\.ci-python\python.exe" --version
+        uses: ./.github/actions/setup-verified-python
 
       - name: Sync wiki after merge
         if: steps.docs-check.outputs.docs_changed == 'true'
