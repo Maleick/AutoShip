@@ -15,6 +15,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 anyhow.workspace = true
+serde_json.workspace = true
 toml = "0.8"
 zeroize = "1"
 getrandom = "0.2"
@@ -47,11 +48,3 @@ retour = { version = "0.3", features = ["static-detour"] }
 tempfile = "3"
 
 [features]
-# Opt-in gate for Windows runtime tests that require being injected into a real
-# process, call Windows thread pool / memory APIs, or exhibit process-teardown
-# side-effects that crash the default test harness.
-# DO NOT enable in CI; run manually: cargo test -p textquest-dll --features windows-dangerous-tests
-windows-dangerous-tests = []
-
-[dev-dependencies]
-tempfile = "3"

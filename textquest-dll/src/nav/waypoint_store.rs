@@ -67,6 +67,10 @@ impl WaypointStore {
         }
 
         let bytes = fs::read(&self.path).map_err(|e| e.to_string())?;
+        if bytes.iter().all(|b| b.is_ascii_whitespace()) {
+            self.waypoints.clear();
+            return Ok(());
+        }
         let parsed: Vec<NamedWaypoint> =
             serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
 
@@ -93,17 +97,33 @@ impl WaypointStore {
 
     fn upsert(&mut self, waypoint: NamedWaypoint) -> Result<NamedWaypoint, String> {
         let key = normalize_name(&waypoint.name)?;
-        self.waypoints.insert(key, waypoint.clone());
-        self.persist().map(|_| waypoint)
+        let previous = self.waypoints.insert(key.clone(), waypoint.clone());
+        match self.persist() {
+            Ok(()) => Ok(waypoint),
+            Err(error) => {
+                if let Some(previous_waypoint) = previous {
+                    self.waypoints.insert(key, previous_waypoint);
+                } else {
+                    self.waypoints.remove(&key);
+                }
+                Err(error)
+            }
+        }
     }
 
     fn delete(&mut self, name: &str) -> Result<bool, String> {
         let key = normalize_name(name)?;
-        let removed = self.waypoints.remove(&key).is_some();
-        if removed {
-            self.persist()?;
+        let removed = self.waypoints.remove(&key);
+        match removed {
+            Some(removed_waypoint) => {
+                if let Err(error) = self.persist() {
+                    self.waypoints.insert(key, removed_waypoint);
+                    return Err(error);
+                }
+                Ok(true)
+            }
+            None => Ok(false),
         }
-        Ok(removed)
     }
 
     fn recall(&self, name: &str) -> Option<NamedWaypoint> {

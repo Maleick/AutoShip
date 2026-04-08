@@ -2263,6 +2263,64 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             };
             let slash_command = slash_command.as_ref();
 
+            if let Some(nav_waypoint_cmd) = parse_nav_waypoint_command(slash_command) {
+                match nav_waypoint_cmd {
+                    Ok(NavWaypointCommand::Save(name)) => {
+                        let (success, message) = match save_nav_waypoint(&name) {
+                            Ok(saved) => (
+                                true,
+                                format!("Saved waypoint '{}' in {}", saved.name, saved.zone),
+                            ),
+                            Err(e) => (false, e),
+                        };
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success,
+                            message,
+                        });
+                    }
+                    Ok(NavWaypointCommand::Recall(name)) => {
+                        let (success, message) = match recall_nav_waypoint(&name) {
+                            Ok(saved) => (
+                                true,
+                                format!(
+                                    "Navigating to waypoint '{}' in {}",
+                                    saved.name, saved.zone
+                                ),
+                            ),
+                            Err(e) => (false, e),
+                        };
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success,
+                            message,
+                        });
+                    }
+                    Ok(NavWaypointCommand::Delete(name)) => {
+                        let (success, message) = match crate::nav::waypoint_store::delete(&name) {
+                            Ok(true) => (true, format!("Deleted waypoint '{name}'")),
+                            Ok(false) => (false, format!("Waypoint '{name}' not found")),
+                            Err(e) => (false, e),
+                        };
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success,
+                            message,
+                        });
+                    }
+                    Ok(NavWaypointCommand::List) => {
+                        let waypoints = crate::nav::waypoint_store::list();
+                        crate::ipc::send_response(
+                            textquest_common::ipc::Response::NavWaypointList { waypoints },
+                        );
+                    }
+                    Err(error) => {
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success: false,
+                            message: error,
+                        });
+                    }
+                }
+                return;
+            }
+
             if let Some(spell_set) = parse_spell_set_command(slash_command) {
                 match handle_spell_set_command(spell_set) {
                     Ok(Some(eq_command)) => {
