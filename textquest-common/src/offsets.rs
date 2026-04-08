@@ -718,10 +718,8 @@ pub mod profile {
 
     /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
     pub const ARRAY_DATA_PTR: usize = 0x08;
-
     /// `SoeUtil::Array::m_size` (i32 element count) at +0x10 within the array.
     pub const ARRAY_SIZE: usize = 0x10;
-
     /// `PcClient::BuffIDs` — flat array of `i32[62]` spell IDs for long buffs.
     /// Faster than the full profile chain when only spell IDs are needed.
     pub const BUFF_IDS: usize = 0x068;

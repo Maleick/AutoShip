@@ -675,6 +675,8 @@ pub struct MapScreenState {
     pub cast_radius: Option<MapRadiusOverlay>,
     /// Spell radius overlay circle.
     pub spell_radius: Option<MapRadiusOverlay>,
+    /// Aggro radius overlay circle drawn around all NPC spawns.
+    pub aggro_radius: Option<MapRadiusOverlay>,
     /// Show target path overlay (nav waypoints to target).
     pub show_target_path: bool,
     /// Show direct line from player to target.
@@ -718,6 +720,7 @@ impl MapScreenState {
             name_style: MapNameStyle::Off,
             cast_radius: None,
             spell_radius: None,
+            aggro_radius: None,
             show_target_path: true,
             show_target_line: true,
             saved_presets: Vec::new(),
@@ -1038,6 +1041,10 @@ pub struct NavigationScreenState {
     pub nav_selected: usize,
     /// Per-client navigation statuses keyed by PID.
     pub nav_statuses: HashMap<u32, NavClientStatus>,
+    /// Whether the `/nav ui` debug diagnostics overlay is enabled.
+    pub show_nav_debug: bool,
+    /// Most recently fetched nav diagnostics for the focused client (PID, diagnostics).
+    pub nav_diagnostics: Option<(u32, textquest_common::nav::NavDiagnostics)>,
 }
 
 impl NavigationScreenState {
@@ -1047,6 +1054,8 @@ impl NavigationScreenState {
         Self {
             nav_selected: 0,
             nav_statuses: HashMap::new(),
+            show_nav_debug: false,
+            nav_diagnostics: None,
         }
     }
 }

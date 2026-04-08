@@ -100,23 +100,6 @@ fi
 echo '```'
 echo ""
 
-# Summarize pass/fail per crate
-echo "### Per-crate summary"
-echo ""
-echo "| Crate | Passed | Failed |"
-echo "|-------|--------|--------|"
-if [ -n "$TEST_RESULTS" ]; then
-    while IFS= read -r line; do
-        passed=$(printf '%s\n' "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
-        failed=$(printf '%s\n' "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
-        # Best-effort crate name from context — cargo test prints "Running unittests" lines
-        echo "| — | ${passed:-0} | ${failed:-0} |"
-    done <<< "$TEST_RESULTS"
-else
-    echo "| — | 0 | 0 |"
-fi
-echo ""
-
 # --- Key offsets ---
 echo "## Key Offsets (from textquest-common/src/offsets.rs)"
 echo ""
