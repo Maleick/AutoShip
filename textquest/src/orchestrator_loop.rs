@@ -2,6 +2,7 @@
 //! and Orchestrator into a single async tick loop with health checks, crash
 //! recovery, and graceful shutdown.
 
+use crate::client::discovery::PeerDiscoveryEvent;
 use crate::client::healing::ClientHealth;
 use crate::client::manager::ClientManager;
 use crate::client::session::SlotLifecycle;
@@ -20,6 +21,10 @@ pub enum LoopEvent {
     ClientRequeued { pid: u32 },
     /// A newly-launched client was registered with the orchestrator.
     ClientRegistered { pid: u32 },
+    /// A remote multicast peer became visible.
+    PeerDiscovered { node_name: String, sessions: usize },
+    /// A previously-visible multicast peer expired.
+    PeerExpired { node_name: String },
     /// Health check completed for all clients.
     HealthCheckDone { healthy: usize, unhealthy: usize },
     /// The loop is shutting down.
@@ -57,7 +62,8 @@ impl OrchestratorLoop {
 
     /// Build from an `AppConfig` and a shutdown channel.
     pub fn from_config(app_config: &AppConfig, shutdown_rx: watch::Receiver<bool>) -> Self {
-        let client_manager = ClientManager::new(&app_config.process_name);
+        let client_manager = ClientManager::new(&app_config.process_name)
+            .with_discovery_config(&app_config.discovery);
         let launch_coordinator = LaunchCoordinator::new(
             app_config.launch.clone(),
             app_config.retry.clone(),
@@ -113,6 +119,10 @@ impl OrchestratorLoop {
                     }
                 }
                 _ = orch_interval.tick() => {
+                    let events = self.tick_peer_discovery();
+                    for event in &events {
+                        tracing::debug!(?event, "orchestrator loop event");
+                    }
                     self.orchestrator.tick();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
@@ -123,6 +133,26 @@ impl OrchestratorLoop {
                 }
             }
         }
+    }
+
+    fn tick_peer_discovery(&mut self) -> Vec<LoopEvent> {
+        self.client_manager
+            .tick_peer_discovery()
+            .into_iter()
+            .map(|event| match event {
+                PeerDiscoveryEvent::PeerDiscovered {
+                    node_name,
+                    session_count,
+                    ..
+                } => LoopEvent::PeerDiscovered {
+                    node_name,
+                    sessions: session_count,
+                },
+                PeerDiscoveryEvent::PeerExpired { node_name, .. } => {
+                    LoopEvent::PeerExpired { node_name }
+                }
+            })
+            .collect()
     }
 
     /// Run health checks on all managed clients.
@@ -199,6 +229,7 @@ impl OrchestratorLoop {
         for event in coordinator_events {
             match event {
                 CoordinatorEvent::ClientLaunched { client_id, pid } => {
+                    self.client_manager.track_client(client_id, pid);
                     tracing::info!(client_id, pid, "Client launched");
                     if let Some(session) = self.client_manager.get_mut(client_id) {
                         session.slot_lifecycle = SlotLifecycle::Launching;
@@ -383,6 +414,13 @@ mod tests {
             LoopEvent::ClientCamped { pid: 1 },
             LoopEvent::ClientRequeued { pid: 2 },
             LoopEvent::ClientRegistered { pid: 3 },
+            LoopEvent::PeerDiscovered {
+                node_name: "peer-box".to_string(),
+                sessions: 2,
+            },
+            LoopEvent::PeerExpired {
+                node_name: "peer-box".to_string(),
+            },
             LoopEvent::HealthCheckDone {
                 healthy: 5,
                 unhealthy: 1,
@@ -392,7 +430,7 @@ mod tests {
         for e in &events {
             let _ = format!("{e:?}");
         }
-        assert_eq!(events.len(), 5);
+        assert_eq!(events.len(), 7);
     }
 
     #[test]

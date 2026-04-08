@@ -32,11 +32,15 @@ use super::ui::ch_chain::{CastState as ChPanelCastState, ChainCleric};
 use super::ui::draw;
 use crate::eq::structs::SpawnInfo;
 use crate::orchestrator::Orchestrator;
+#[cfg(any(windows, test))]
+use textquest_common::nav::{NavStatus, PauseReason};
 
 #[cfg(windows)]
 use super::live_cast_capture::{
     LiveCastCaptureSnapshot, diff_live_cast_capture, log_live_cast_capture_event,
 };
+#[cfg(windows)]
+use crate::ipc::shared::SharedStateReader;
 
 /// Soul Engine tick interval (5 seconds).
 const SOUL_TICK_INTERVAL: Duration = Duration::from_secs(5);
@@ -123,6 +127,10 @@ fn run_loop(
     let mut last_log_poll = Instant::now();
     let mut last_packet_poll = Instant::now();
     let mut process_handles: HashMap<u32, crate::process::memory::ProcessHandle> = HashMap::new();
+    #[cfg(windows)]
+    let mut shared_state_readers: HashMap<u32, SharedStateReader> = HashMap::new();
+    #[cfg(windows)]
+    let mut shared_state_reader_retry_at: HashMap<u32, Instant> = HashMap::new();
 
     while app.running {
         // Draw the UI
@@ -142,6 +150,10 @@ fn run_loop(
                 .map(|client| client.pid)
                 .collect();
             process_handles.retain(|pid, _| active_live_pids.contains(pid));
+            #[cfg(windows)]
+            shared_state_readers.retain(|pid, _| active_live_pids.contains(pid));
+            #[cfg(windows)]
+            shared_state_reader_retry_at.retain(|pid, _| active_live_pids.contains(pid));
 
             // Sync orchestrator's client list from app
             orchestrator.client_pids = app.clients.iter().map(|c| c.pid).collect();
@@ -157,6 +169,14 @@ fn run_loop(
 
         // Periodic data refresh from EQ process
         if last_refresh.elapsed() >= refresh_interval {
+            #[cfg(windows)]
+            refresh_eq_data(
+                app,
+                &mut process_handles,
+                &mut shared_state_readers,
+                &mut shared_state_reader_retry_at,
+            );
+            #[cfg(not(windows))]
             refresh_eq_data(app, &mut process_handles);
             app.tick_count += 1;
             app.clear_expired_toast();
@@ -626,10 +646,17 @@ fn parse_title_fields(title: &str) -> (String, String) {
 fn refresh_eq_data(
     app: &mut App,
     _process_handles: &mut HashMap<u32, crate::process::memory::ProcessHandle>,
+    #[cfg(windows)] _shared_state_readers: &mut HashMap<u32, SharedStateReader>,
+    #[cfg(windows)] _shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
 ) {
     #[cfg(windows)]
     {
-        refresh_eq_data_live(app, _process_handles);
+        refresh_eq_data_live(
+            app,
+            _process_handles,
+            _shared_state_readers,
+            _shared_state_reader_retry_at,
+        );
         // If no EQ processes found, load demo data so TUI is testable on Windows too
         if app.clients.is_empty() {
             load_demo_data(app);
@@ -665,12 +692,15 @@ fn spawn_refresh_due(last_refresh: Option<Instant>, now: Instant, is_selected: b
 fn refresh_eq_data_live(
     app: &mut App,
     process_handles: &mut HashMap<u32, crate::process::memory::ProcessHandle>,
+    shared_state_readers: &mut HashMap<u32, SharedStateReader>,
+    shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
 ) {
     use crate::eq;
     use crate::process::memory::ProcessHandle;
 
     let selected_index = app.selected_client;
     let now = Instant::now();
+    let mut nav_status_updates = Vec::new();
 
     for (client_index, client) in app.clients.iter_mut().enumerate() {
         if client.is_demo {
@@ -807,9 +837,28 @@ fn refresh_eq_data_live(
             }
         }
 
+        if let Some((zone_name, nav_status)) = read_live_nav_state(
+            client.pid,
+            shared_state_readers,
+            shared_state_reader_retry_at,
+            now,
+        ) {
+            if !zone_name.is_empty() {
+                client.zone_name = zone_name;
+            }
+            nav_status_updates.push((
+                client.pid,
+                build_live_nav_client_status(&nav_status, &client.zone_name),
+            ));
+        }
+
         if !hard_read_failed {
             process_handles.insert(client.pid, proc);
         }
+    }
+
+    for (pid, status) in nav_status_updates {
+        app.nav_state.nav_statuses.insert(pid, status);
     }
 
     // Sync selected client data to legacy fields
@@ -817,6 +866,167 @@ fn refresh_eq_data_live(
 
     // Reload map if the selected client's zone changed (or map not yet loaded)
     app.reload_map_for_selected_client();
+}
+
+#[cfg(windows)]
+fn read_live_nav_state(
+    pid: u32,
+    shared_state_readers: &mut HashMap<u32, SharedStateReader>,
+    shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
+    now: Instant,
+) -> Option<(String, NavStatus)> {
+    if shared_state_reader_retry_at
+        .get(&pid)
+        .is_some_and(|retry_at| *retry_at > now)
+    {
+        return None;
+    }
+
+    if let std::collections::hash_map::Entry::Vacant(entry) = shared_state_readers.entry(pid) {
+        let Some(token) = crate::ipc::load_session_token(pid) else {
+            shared_state_reader_retry_at.insert(pid, now + Duration::from_secs(2));
+            return None;
+        };
+        let session_id = textquest_common::ipc::session_id_from_token(&token);
+        match SharedStateReader::new(pid, session_id) {
+            Ok(reader) => {
+                entry.insert(reader);
+                shared_state_reader_retry_at.remove(&pid);
+            }
+            Err(error) => {
+                tracing::trace!(pid, %error, "Failed to open TUI shared state reader");
+                shared_state_reader_retry_at.insert(pid, now + Duration::from_secs(2));
+                return None;
+            }
+        }
+    }
+
+    let reader = shared_state_readers.get_mut(&pid)?;
+    let state = reader.read()?;
+    Some((
+        resolve_live_zone_name(state.zone_long_name, state.zone_short_name),
+        state.nav_status,
+    ))
+}
+
+#[cfg(windows)]
+fn resolve_live_zone_name(zone_long_name: String, zone_short_name: String) -> String {
+    if zone_long_name.is_empty() {
+        zone_short_name
+    } else {
+        zone_long_name
+    }
+}
+
+#[cfg(any(windows, test))]
+fn build_live_nav_client_status(status: &NavStatus, zone_name: &str) -> NavClientStatus {
+    NavClientStatus {
+        destination: live_nav_destination(status),
+        status: status.clone(),
+        eta_secs: None,
+        waypoints: Vec::new(),
+        path_exists: matches!(
+            status,
+            NavStatus::Moving { .. }
+                | NavStatus::Paused { .. }
+                | NavStatus::Stuck { .. }
+                | NavStatus::Arrived
+        ),
+        path_length: None,
+        failure_reason: None,
+        route_state: live_nav_route_state(status),
+        recovery_state: live_nav_recovery_state(status),
+        blockers: live_nav_blockers(status, zone_name),
+        is_demo_scripted: false,
+    }
+}
+
+#[cfg(any(windows, test))]
+fn live_nav_destination(status: &NavStatus) -> String {
+    match status {
+        NavStatus::Idle => String::new(),
+        NavStatus::Moving { .. }
+        | NavStatus::Paused { .. }
+        | NavStatus::Stuck { .. }
+        | NavStatus::Arrived => String::from("Active route"),
+        NavStatus::Following { leader_name, .. } => leader_name.clone(),
+        NavStatus::Sticking { target_id, .. } => format!("Target #{target_id}"),
+    }
+}
+
+#[cfg(any(windows, test))]
+fn live_nav_route_state(status: &NavStatus) -> String {
+    match status {
+        NavStatus::Moving { .. } => String::from("Live route"),
+        NavStatus::Paused { .. } => String::from("Route paused"),
+        NavStatus::Stuck { .. } => String::from("Recovery route"),
+        NavStatus::Arrived => String::from("Route complete"),
+        NavStatus::Idle => String::from("Standing by"),
+        NavStatus::Following { leader_name, .. } => format!("Following {leader_name}"),
+        NavStatus::Sticking { target_id, .. } => format!("Sticking to #{target_id}"),
+    }
+}
+
+#[cfg(any(windows, test))]
+fn live_nav_recovery_state(status: &NavStatus) -> Option<String> {
+    match status {
+        NavStatus::Paused { reason, .. } => Some(match reason {
+            PauseReason::Warp => String::from("Waiting for warp validation"),
+            PauseReason::UserPause => String::from("Paused by operator command"),
+            PauseReason::UserInput => String::from("Waiting for manual movement to stop"),
+            PauseReason::GmNearby => String::from("Safety hold: GM nearby"),
+        }),
+        NavStatus::Stuck { recovery_attempt } => Some(format!(
+            "Trying alternate line (attempt {})",
+            recovery_attempt
+        )),
+        _ => None,
+    }
+}
+
+#[cfg(any(windows, test))]
+fn live_nav_blockers(status: &NavStatus, zone_name: &str) -> Vec<String> {
+    match status {
+        NavStatus::Paused { reason, .. } => vec![match reason {
+            PauseReason::Warp => format!(
+                "Movement paused in {zone_name}; waiting for the client to stabilize after a warp."
+            ),
+            PauseReason::UserPause => {
+                String::from("Movement paused by operator request until /nav resume.")
+            }
+            PauseReason::UserInput => {
+                String::from("Movement paused because local keyboard input is active.")
+            }
+            PauseReason::GmNearby => {
+                String::from("Movement paused because break-on-GM safety is active.")
+            }
+        }],
+        NavStatus::Stuck { recovery_attempt } => vec![format!(
+            "Movement validation reported no progress; recovery attempt {} is active in {}.",
+            recovery_attempt, zone_name
+        )],
+        NavStatus::Following {
+            leader_name,
+            returning,
+            ..
+        } => {
+            if *returning {
+                vec![format!("Returning to follow anchor for {leader_name}.")]
+            } else {
+                Vec::new()
+            }
+        }
+        NavStatus::Sticking { in_range, .. } => {
+            if *in_range {
+                Vec::new()
+            } else {
+                vec![String::from(
+                    "Closing to stick range before the target can be held in place.",
+                )]
+            }
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// Demo data for testing the TUI without a live EQ process.
@@ -1339,9 +1549,10 @@ fn poll_log_watchers(app: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::{discord_sender_is_authorized, spawn_refresh_due};
+    use super::{build_live_nav_client_status, discord_sender_is_authorized, spawn_refresh_due};
     use crate::tui::app::App;
     use std::time::{Duration, Instant};
+    use textquest_common::nav::{NavStatus, PauseReason};
 
     #[test]
     fn selected_client_spawn_refresh_uses_fast_interval() {
@@ -1395,5 +1606,67 @@ mod tests {
         app.discord_command_allowed_senders
             .insert("raidlead".to_string());
         assert!(discord_sender_is_authorized(&app, "  RaidLead  "));
+    }
+
+    #[test]
+    fn live_nav_status_maps_paused_reason_into_operator_surface() {
+        let status = build_live_nav_client_status(
+            &NavStatus::Paused {
+                reason: PauseReason::UserInput,
+                waypoint_index: 1,
+                waypoint_count: 3,
+                distance_remaining: 25.0,
+            },
+            "Guild Lobby",
+        );
+
+        assert_eq!(status.destination, "Active route");
+        assert_eq!(status.route_state, "Route paused");
+        assert_eq!(
+            status.recovery_state.as_deref(),
+            Some("Waiting for manual movement to stop")
+        );
+        assert_eq!(
+            status.blockers,
+            vec![String::from(
+                "Movement paused because local keyboard input is active."
+            )]
+        );
+    }
+
+    #[test]
+    fn live_nav_status_maps_following_and_stuck_states() {
+        let follow = build_live_nav_client_status(
+            &NavStatus::Following {
+                leader_name: String::from("Raidlead"),
+                distance_to_anchor: 18.0,
+                returning: true,
+            },
+            "poknowledge",
+        );
+        assert_eq!(follow.destination, "Raidlead");
+        assert_eq!(follow.route_state, "Following Raidlead");
+        assert_eq!(
+            follow.blockers,
+            vec![String::from("Returning to follow anchor for Raidlead.")]
+        );
+
+        let stuck = build_live_nav_client_status(
+            &NavStatus::Stuck {
+                recovery_attempt: 2,
+            },
+            "greatdivide",
+        );
+        assert_eq!(stuck.route_state, "Recovery route");
+        assert_eq!(
+            stuck.recovery_state.as_deref(),
+            Some("Trying alternate line (attempt 2)")
+        );
+        assert_eq!(
+            stuck.blockers,
+            vec![String::from(
+                "Movement validation reported no progress; recovery attempt 2 is active in greatdivide."
+            )]
+        );
     }
 }

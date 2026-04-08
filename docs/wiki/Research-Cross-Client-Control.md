@@ -5,7 +5,7 @@ This document formalises the routing scope and session lifecycle model for TextQ
 ## Sources
 
 - [docs/external-research/jmb-session-and-relay-comparison.md](jmb-session-and-relay-comparison.md)
-- [docs/external-research/kissassist-gap-and-tui-translation.md](kissassist-gap-and-tui-translation.md)
+- [docs/wiki/Research-KissAssist-Gap-Analysis.md](Research-KissAssist-Gap-Analysis.md)
 - `textquest-common/src/routing.rs` — `RoutingScope` enum
 - `textquest/src/client/session.rs` — `SlotLifecycle` enum
 
@@ -100,14 +100,14 @@ From the JMB comparison, these constraints carry forward:
 
 ## Evidence State
 
-All items in this document are **Research-backed** (see jmb-session-and-relay-comparison.md and kissassist-gap-and-tui-translation.md).  No items are marked Live-validated until a live EQ client integration test is run.
+All items in this document are **Research-backed** (see `Research-JMB-Relay-Comparison.md` and `Research-KissAssist-Gap-Analysis.md`).  No items are marked Live-validated until a live EQ client integration test is run.
 
 ## Implemented Slices
 
 | Slice | Status | Location |
 |---|---|---|
 | JMB coordination comparison | Done | `jmb-session-and-relay-comparison.md` |
-| KissAssist TUI translation | Done | `kissassist-gap-and-tui-translation.md` |
+| KissAssist TUI translation | Done | `Research-KissAssist-Gap-Analysis.md` |
 | `RoutingScope` type | Done | `textquest-common/src/routing.rs` |
 | `SlotLifecycle` enum | Done | `textquest/src/client/session.rs` |
 | `:scope` command | Done | `textquest/src/tui/app.rs` |

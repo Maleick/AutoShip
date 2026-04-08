@@ -145,25 +145,12 @@ if (Test-Path "Cargo.toml") {
     git pull
 } else {
     Write-Host "  Cloning repository..." -ForegroundColor Green
-    git clone --recurse-submodules $RepoUrl
+    git clone $RepoUrl
     Set-Location TextQuest
 }
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  ERROR: Could not clone or update the repository." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "  Syncing reference submodules..." -ForegroundColor Green
-git submodule sync --recursive
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "  ERROR: Could not sync repository submodules." -ForegroundColor Red
-    exit 1
-}
-
-git submodule update --init --recursive
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "  ERROR: Could not initialize repository submodules." -ForegroundColor Red
     exit 1
 }
 

@@ -191,6 +191,10 @@ pub struct AppConfig {
     /// Spawn watch / alert feed configuration
     #[serde(default)]
     pub spawn_watch: SpawnWatchConfig,
+
+    /// Optional decentralized UDP multicast peer discovery.
+    #[serde(default)]
+    pub discovery: PeerDiscoveryConfig,
 }
 
 /// Discord webhook and bot configuration.
@@ -376,6 +380,43 @@ impl Default for OrchestratorConfig {
     }
 }
 
+/// Configuration for optional UDP multicast peer discovery between orchestrators.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct PeerDiscoveryConfig {
+    /// Enable multicast peer discovery announcements and peer listening.
+    pub multicast_enabled: bool,
+    /// Local IPv4 bind address for the discovery listener.
+    pub bind_addr: String,
+    /// IPv4 multicast group address used for announcements.
+    pub multicast_addr: String,
+    /// UDP port shared by all discovery participants.
+    pub port: u16,
+    /// Interval between outbound announcements.
+    pub announce_interval_ms: u64,
+    /// Time-to-live for remote peers before they expire locally.
+    pub peer_ttl_ms: u64,
+    /// Optional operator-defined node label. Empty falls back to hostname.
+    pub node_name: String,
+    /// Multicast packet TTL for routed subnets.
+    pub multicast_ttl: u32,
+}
+
+impl Default for PeerDiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            multicast_enabled: false,
+            bind_addr: "0.0.0.0".to_string(),
+            multicast_addr: "239.255.42.99".to_string(),
+            port: 35353,
+            announce_interval_ms: 1_000,
+            peer_ttl_ms: 5_000,
+            node_name: String::new(),
+            multicast_ttl: 1,
+        }
+    }
+}
+
 fn default_process_name() -> String {
     "eqgame.exe".to_string()
 }
@@ -412,6 +453,7 @@ impl AppConfig {
             discord: DiscordConfig::default(),
             orchestrator: OrchestratorConfig::default(),
             spawn_watch: SpawnWatchConfig::default(),
+            discovery: PeerDiscoveryConfig::default(),
         }
     }
 }
@@ -541,6 +583,7 @@ character = "Foo"
         assert_eq!(cfg.process_name, "eqgame.exe");
         assert_eq!(cfg.max_spawns, 2048);
         assert!(cfg.group.is_empty());
+        assert!(!cfg.discovery.multicast_enabled);
     }
 
     #[test]
@@ -568,6 +611,19 @@ character = "Foo"
         assert_eq!(cfg.base_backoff_secs, 30);
         assert_eq!(cfg.mass_failure_threshold, 5);
         assert_eq!(cfg.mass_failure_window_secs, 60);
+    }
+
+    #[test]
+    fn peer_discovery_defaults() {
+        let cfg = PeerDiscoveryConfig::default();
+        assert!(!cfg.multicast_enabled);
+        assert_eq!(cfg.bind_addr, "0.0.0.0");
+        assert_eq!(cfg.multicast_addr, "239.255.42.99");
+        assert_eq!(cfg.port, 35353);
+        assert_eq!(cfg.announce_interval_ms, 1_000);
+        assert_eq!(cfg.peer_ttl_ms, 5_000);
+        assert_eq!(cfg.multicast_ttl, 1);
+        assert!(cfg.node_name.is_empty());
     }
 
     #[test]
@@ -675,6 +731,16 @@ character = "Foo"
             loot = "https://example.com/loot"
             timers = "https://example.com/timers"
             feats = "https://example.com/feats"
+
+            [discovery]
+            multicast_enabled = true
+            bind_addr = "0.0.0.0"
+            multicast_addr = "239.255.42.123"
+            port = 39001
+            announce_interval_ms = 2500
+            peer_ttl_ms = 9000
+            node_name = "basement-rig"
+            multicast_ttl = 2
         "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.process_name, "custom.exe");
@@ -698,6 +764,13 @@ character = "Foo"
             cfg.discord.channels.get("kills").unwrap(),
             "https://example.com/kills"
         );
+        assert!(cfg.discovery.multicast_enabled);
+        assert_eq!(cfg.discovery.multicast_addr, "239.255.42.123");
+        assert_eq!(cfg.discovery.port, 39001);
+        assert_eq!(cfg.discovery.announce_interval_ms, 2500);
+        assert_eq!(cfg.discovery.peer_ttl_ms, 9000);
+        assert_eq!(cfg.discovery.node_name, "basement-rig");
+        assert_eq!(cfg.discovery.multicast_ttl, 2);
     }
 
     #[test]
