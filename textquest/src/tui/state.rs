@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use ratatui::style::Color;
 use ratatui::widgets::TableState;
@@ -582,16 +583,91 @@ pub fn load_named_markers_pub(path: &PathBuf) -> Vec<NamedMapMarker> {
 ///
 /// Returns `Ok(())` on success or an `anyhow::Error` on failure.
 pub fn save_named_markers(path: &PathBuf, markers: &[NamedMapMarker]) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    validate_marker_store_path(path)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Marker file path has no parent: {}", path.display()))?;
+    std::fs::create_dir_all(parent)?;
     let file = NamedMarkerFile {
         markers: markers.to_vec(),
     };
     let json = serde_json::to_string_pretty(&file)?;
-    std::fs::write(path, json)?;
+    // Write to a non-guessable OS-random temp file in the same directory.
+    // NamedTempFile auto-removes the temp file if dropped without persisting,
+    // ensuring cleanup on all error paths.
+    let mut staged = tempfile::Builder::new()
+        .prefix(".map_markers.")
+        .suffix(".tmp")
+        .tempfile_in(parent)?;
+    staged.write_all(json.as_bytes())?;
+    staged.as_file().sync_all()?;
+    // Atomically replace the destination.
+    // On Unix this is a rename(2); on Windows tempfile uses MoveFileExW with
+    // MOVEFILE_REPLACE_EXISTING, so no separate pre-deletion is needed.
+    // If persist fails the NamedTempFile is returned in the error and auto-removed on drop.
+    staged.persist(path).map(|_| ()).map_err(|e| {
+        anyhow::anyhow!("Failed to persist marker file {}: {}", path.display(), e.error)
+    })
+}
+
+fn validate_marker_store_path(path: &Path) -> anyhow::Result<()> {
+    if let Ok(meta) = std::fs::symlink_metadata(path) {
+        if meta.file_type().is_symlink() {
+            anyhow::bail!("Marker file path is a symlink: {}", path.display());
+        }
+        if metadata_has_reparse_point(&meta) {
+            anyhow::bail!(
+                "Marker file path is a Windows reparse point: {}",
+                path.display()
+            );
+        }
+        if meta.is_dir() {
+            anyhow::bail!("Marker file path is a directory: {}", path.display());
+        }
+        if !meta.is_file() {
+            anyhow::bail!(
+                "Marker file path is not a regular file: {}",
+                path.display()
+            );
+        }
+    }
+    // Walk every ancestor directory so that symlinks or reparse points anywhere
+    // in the path chain are detected, not just the immediate parent.
+    for ancestor in path.ancestors().skip(1) {
+        if let Ok(meta) = std::fs::symlink_metadata(ancestor) {
+            if meta.file_type().is_symlink() {
+                anyhow::bail!("Marker directory is a symlink: {}", ancestor.display());
+            }
+            if metadata_has_reparse_point(&meta) {
+                anyhow::bail!(
+                    "Marker directory is a Windows reparse point: {}",
+                    ancestor.display()
+                );
+            }
+            if !meta.is_dir() {
+                anyhow::bail!(
+                    "Marker directory is not a directory: {}",
+                    ancestor.display()
+                );
+            }
+        }
+    }
     Ok(())
 }
+
+#[cfg(windows)]
+fn metadata_has_reparse_point(meta: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+    meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn metadata_has_reparse_point(_meta: &std::fs::Metadata) -> bool {
+    false
+}
+
 
 /// A radius overlay circle around the player.
 #[derive(Debug, Clone)]
@@ -1677,6 +1753,7 @@ impl EqInternalsState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn command_frequency_tracking() {
@@ -1882,5 +1959,120 @@ mod tests {
         assert!(s.highlights.is_empty());
         assert_eq!(s.name_style, MapNameStyle::Off);
         assert_eq!(s.click_action, MapClickAction::None);
+    }
+
+    #[test]
+    fn marker_save_persists_json_for_regular_file() {
+        let dir = tempdir().unwrap();
+        let marker_path = dir.path().join("map_markers.json");
+        let markers = vec![NamedMapMarker {
+            name: "bank".to_string(),
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            label: Some("Bank".to_string()),
+            zone: "qeynos".to_string(),
+        }];
+
+        save_named_markers(&marker_path, &markers).unwrap();
+        let loaded = load_named_markers_pub(&marker_path);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "bank");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn marker_save_rejects_symlink_target() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let real_target = dir.path().join("real.json");
+        std::fs::write(&real_target, "{}").unwrap();
+        let marker_path = dir.path().join("map_markers.json");
+        symlink(&real_target, &marker_path).unwrap();
+
+        let err = save_named_markers(&marker_path, &[]).unwrap_err();
+        let err_msg = err.to_string();
+        assert!(err_msg.contains("symlink"), "{err_msg}");
+        assert_eq!(std::fs::read_to_string(&real_target).unwrap(), "{}");
+    }
+
+    #[test]
+    fn marker_save_rejects_directory_target() {
+        let dir = tempdir().unwrap();
+        let marker_path = dir.path().join("subdir");
+        std::fs::create_dir(&marker_path).unwrap();
+
+        let err = save_named_markers(&marker_path, &[]).unwrap_err();
+        assert!(
+            err.to_string().contains("directory"),
+            "{}",
+            err
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn marker_save_rejects_symlink_parent() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let real_dir = dir.path().join("real_dir");
+        std::fs::create_dir(&real_dir).unwrap();
+        let link_dir = dir.path().join("link_dir");
+        symlink(&real_dir, &link_dir).unwrap();
+        let marker_path = link_dir.join("map_markers.json");
+
+        let err = save_named_markers(&marker_path, &[]).unwrap_err();
+        assert!(
+            err.to_string().contains("symlink"),
+            "{}",
+            err
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn marker_save_rejects_ancestor_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let real_dir = dir.path().join("real_dir");
+        std::fs::create_dir(&real_dir).unwrap();
+        let link_dir = dir.path().join("link_dir");
+        symlink(&real_dir, &link_dir).unwrap();
+        // Place the marker path two levels deep inside the symlinked ancestor
+        let sub = link_dir.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        let marker_path = sub.join("map_markers.json");
+
+        let err = save_named_markers(&marker_path, &[]).unwrap_err();
+        assert!(
+            err.to_string().contains("symlink"),
+            "{}",
+            err
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn marker_save_rejects_fifo_target() {
+        let dir = tempdir().unwrap();
+        let marker_path = dir.path().join("map_markers.json");
+        let status = std::process::Command::new("mkfifo")
+            .arg(&marker_path)
+            .status();
+        // Skip if mkfifo is unavailable on this platform
+        match status {
+            Ok(s) if s.success() => {}
+            _ => return,
+        }
+
+        let err = save_named_markers(&marker_path, &[]).unwrap_err();
+        assert!(
+            err.to_string().contains("not a regular file"),
+            "{}",
+            err
+        );
     }
 }
