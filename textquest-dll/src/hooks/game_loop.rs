@@ -2792,16 +2792,16 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
     }
 }
 
-fn save_nav_waypoint(name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
+fn save_nav_waypoint(_name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
     #[cfg(not(windows))]
     {
-        let _ = name;
         return Err(String::from(
             "save_nav_waypoint is only available on Windows",
         ));
     }
     #[cfg(windows)]
     {
+        let name = _name;
         let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
         if eq_base == 0 {
             return Err(String::from(
@@ -2823,16 +2823,16 @@ fn save_nav_waypoint(name: &str) -> Result<textquest_common::nav::NamedWaypoint,
     }
 }
 
-fn recall_nav_waypoint(name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
+fn recall_nav_waypoint(_name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
     #[cfg(not(windows))]
     {
-        let _ = name;
         return Err(String::from(
             "recall_nav_waypoint is only available on Windows",
         ));
     }
     #[cfg(windows)]
     {
+        let name = _name;
         let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
         if eq_base == 0 {
             return Err(String::from(
