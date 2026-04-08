@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and publish repo-tracked GitHub wiki pages for DMFT."""
+"""Validate and publish repo-tracked GitHub wiki pages for TextQuest."""
 
 from __future__ import annotations
 
@@ -372,7 +372,7 @@ def main() -> int:
         wiki_dir = args.wiki_dir.resolve()
         ensure_dir(wiki_dir)
     else:
-        temp_dir = tempfile.TemporaryDirectory(prefix="dmft-wiki-")
+        temp_dir = tempfile.TemporaryDirectory(prefix="textquest-wiki-")
         wiki_dir = Path(temp_dir.name) / "wiki"
         ensure_dir(wiki_dir)
 

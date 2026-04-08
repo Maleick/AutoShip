@@ -1,10 +1,10 @@
-# DMFT Wiki
+# TextQuest Wiki
 
-DMFT is a Rust workspace for operating and automating EverQuest clients in two layers:
+TextQuest is a Rust workspace for operating and automating EverQuest clients in two layers:
 
-- `dmft`: the external orchestrator, TUI, config loader, launcher, and camp logic
-- `dmft-dll`: the injected DLL that runs inside `eqgame.exe`
-- `dmft-common`: shared IPC, offsets, nav, combat, login, and soul types
+- `textquest`: the external orchestrator, TUI, config loader, launcher, and camp logic
+- `textquest-dll`: the injected DLL that runs inside `eqgame.exe`
+- `textquest-common`: shared IPC, offsets, nav, combat, login, and soul types
 
 This wiki is the long-lived operator and developer reference for the current repository state. It is technical on purpose: use it to build, run, operate, debug, and extend the codebase.
 
@@ -35,10 +35,10 @@ This wiki is the long-lived operator and developer reference for the current rep
 
 - The production target is Windows with live EverQuest clients.
 - Demo mode is the normal experience on macOS/Linux and also on Windows when no live EQ client is attached.
-- The TUI currently exposes four main screens: Characters, Map, Navigation, and Debug.
+- The TUI currently exposes five main screens: Characters, Map, Navigation, Debug, and Packets.
 - Login automation, DLL injection, navigation, CH chain management, and the Soul Engine are all present in the repository today.
-- MacroQuest reference code is tracked as git submodules under `third_party/eqlib` and `third_party/macroquest`, but those trees are reference-only and not required for normal build, test, or runtime work.
-- `third_party/eqlib` is the canonical local eqlib reference path for offsets and struct work in this repo.
+- `third_party/eqlib` and `third_party/macroquest` are optional local reference paths for offset, struct, login, and upstream behavior research when those trees are present in your workspace.
+- `third_party/eqlib` remains the canonical local eqlib citation path for offsets and struct work in this repo.
 
 ## Source of Truth
 
@@ -48,10 +48,10 @@ Use these files first when validating or updating the wiki:
 - `HANDOFF.md`
 - `CLAUDE.md`
 - `third_party/README.md`
-- `dmft/src/main.rs`
-- `dmft/src/tui/app.rs`
-- `dmft-common/src/ipc.rs`
-- `dmft-common/src/offsets.rs`
+- `textquest/src/main.rs`
+- `textquest/src/tui/app.rs`
+- `textquest-common/src/ipc.rs`
+- `textquest-common/src/offsets.rs`
 
 Repository rules that matter for documentation:
 
@@ -69,14 +69,14 @@ Repository rules that matter for documentation:
 
 ### Roadmap and validation notes
 
-- The canonical active roadmap now resumes at `M5` Packet Engine and places provider-backed Soul/LLM work at `M10`.
+- The canonical active roadmap now resumes at `M5` Anti-Cheat (active) and places locally-hosted Soul/LLM work at `M11`.
 - The current code keeps the queue/provider abstraction for Soul behavior, but routine live provider use is not yet the claimed default operating mode.
 - Some live-client behavior still needs regular Windows validation after EQ patches, especially login selectors, offsets, and nav/combat edge cases.
-- Old research docs may still say "Frostreaver"; treat the current product name as DMFT and prefer code plus current top-level docs if anything conflicts.
+- Old research docs may still say "Frostreaver"; treat the current product name as TextQuest and prefer code plus current top-level docs if anything conflicts.
 
 ## Documentation Policy
 
 - Update the matching page in `docs/wiki/` in the same PR that changes behavior.
 - Prefer current code and generated docs over older narrative research notes.
 - When behavior is not revalidated on live EQ, say so explicitly instead of presenting it as confirmed.
-- When citing eqlib headers or offsets, prefer `third_party/eqlib`; treat `third_party/macroquest/src/eqlib` as upstream-vendored context only.
+- When citing eqlib headers or offsets, prefer `third_party/eqlib` when that local reference tree is available; treat `third_party/macroquest/src/eqlib` as upstream-vendored context only.

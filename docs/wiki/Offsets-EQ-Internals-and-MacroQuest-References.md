@@ -2,20 +2,14 @@
 
 ## Current Rules
 
-The reference submodules are not required for normal build, test, or runtime work.
-
-Before doing any offset or struct work, sync them with:
-
-```bash
-git submodule update --init --recursive
-```
+The local reference trees are not required for normal build, test, or runtime work.
 
 Then use:
 
-- `third_party/eqlib` as the canonical local eqlib reference tree
-- `third_party/macroquest` as the broader upstream MacroQuest reference tree
+- `third_party/eqlib` as the canonical local eqlib reference tree when it is present in your workspace
+- `third_party/macroquest` as the broader upstream MacroQuest reference tree when it is present in your workspace
 
-Do not treat the vendored `third_party/macroquest/src/eqlib` copy as the primary DMFT citation path.
+Do not treat the vendored `third_party/macroquest/src/eqlib` copy as the primary TextQuest citation path.
 
 For roadmap-facing research promotion, combine these local references with:
 
@@ -24,7 +18,7 @@ For roadmap-facing research promotion, combine these local references with:
 
 ## Offset Model
 
-The compiled offsets live in `dmft-common/src/offsets.rs`.
+The compiled offsets live in `textquest-common/src/offsets.rs`.
 
 Current repo rules:
 
@@ -36,12 +30,12 @@ This is one of the most important codebase conventions.
 
 ## Field Reading Strategy
 
-DMFT intentionally reads many EQ fields one by one rather than casting large C structs wholesale.
+TextQuest intentionally reads many EQ fields one by one rather than casting large C structs wholesale.
 
 Reason:
 
 - MQ2/eqlib layouts can contain padding, gaps, or version-sensitive fields
-- DMFT often only needs selected offsets
+- TextQuest often only needs selected offsets
 - field-by-field reads are safer when layouts are not perfectly contiguous
 
 If you see code like:
@@ -57,7 +51,7 @@ repeated across a type, that is usually deliberate.
 Important current patterns:
 
 - spawn traversal is based on the linked-list style structures exposed through EQ and documented in the reference trees
-- zone and nav routing information is shared through `dmft-common/src/nav.rs`
+- zone and nav routing information is shared through `textquest-common/src/nav.rs`
 - login internals and widget behavior are cross-checked against local MacroQuest references when needed
 
 ## Offsets Database
@@ -72,21 +66,20 @@ Use it for:
 
 ## Recommended Investigation Workflow
 
-1. sync submodules
-2. inspect `third_party/eqlib`
-3. compare against the current code path using the offset
-4. update `dmft-common/src/offsets.rs` and, if needed, `config/offsets.json`
-5. validate on a live Windows client
-6. update the relevant wiki page if the operator or developer workflow changed
-7. if the work changes roadmap assumptions or evidence state, update `docs/implementation-roadmap.md`
+1. inspect `third_party/eqlib` if the local reference tree is available
+2. compare against the current code path using the offset
+3. update `textquest-common/src/offsets.rs` and, if needed, `config/offsets.json`
+4. validate on a live Windows client
+5. update the relevant wiki page if the operator or developer workflow changed
+6. if the work changes roadmap assumptions or evidence state, update `docs/implementation-roadmap.md`
 
 ## Current Behavior vs Roadmap
 
 ### Current behavior
 
-- The submodule-based reference layout is the current reality of this repo for research work.
+- Local reference trees under `third_party/` are optional research aids, not required repo plumbing.
 - Those reference trees are not required for normal build, test, or runtime work.
-- `third_party/eqlib` is the canonical eqlib path and should be cited that way in docs and PRs.
+- `third_party/eqlib` is the canonical eqlib path and should be cited that way in docs and PRs when it is available in the workspace.
 
 ### Validation notes
 

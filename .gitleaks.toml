@@ -1,0 +1,13 @@
+# gitleaks configuration — https://github.com/gitleaks/gitleaks
+#
+# Extends the default ruleset. Only overrides listed here apply.
+
+[extend]
+# Use the default gitleaks rules as a base.
+
+# Allowlist paths that contain vendored third-party code with false positives.
+[allowlist]
+  paths = [
+    '''contrib/imgui/''',
+    '''third_party/''',
+  ]

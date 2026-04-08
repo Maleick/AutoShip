@@ -2,13 +2,9 @@
 
 ## Daily Working Loop
 
-### 1. Sync reference trees only when needed
+### 1. Use reference trees only when needed
 
-```bash
-git submodule update --init --recursive
-```
-
-This remains optional for normal build, test, and runtime work.
+`third_party/eqlib` and `third_party/macroquest` are optional local reference paths, not required bootstrap steps.
 
 Do it before:
 
@@ -40,7 +36,7 @@ cargo build --release
 
 - prefer demo mode first
 - iterate with `cargo run`
-- confirm the four main screens, command bar, and scope controls
+- confirm the five main screens, command bar, and scope controls
 
 ### Injection, packet, zoning, login, and live combat changes
 
@@ -95,11 +91,12 @@ Nightly automation now runs across the self-hosted Windows runner and GitHub-hos
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
 - `.github/workflows/copilot-ci-dispatch.yml` sweeps open same-repo Copilot PRs from `master`, dispatches `CI` when the PR-triggered run is stuck in approval, and skips PRs that edit workflow files so those still require manual review
 - `.github/workflows/agent-ready.yml` keeps `agent:ready` vs `agent:skip-ready` aligned on issue events plus an hourly sweep, suppresses `agent:ready` when an issue already has an open linked PR or active `agent:working` / `agent:blocked` state, bootstraps those labels when missing, and treats roadmap-container titles that start with `M<number>` or `Mx` as skip-ready
-- `scripts/reconcile-agent-queue.sh` plus the scheduled DMFT issue-queue reconciler automation add missing open issues to the roadmap project, set `Agent Status`, clean stale `agent:ready` / `agent:working` labels off non-ready items, and promote every other open non-epic issue to `Ready for Agent`
+- `scripts/reconcile-agent-queue.sh` plus the scheduled TextQuest issue-queue reconciler automation add missing open issues to the roadmap project, set `Agent Status`, clean stale `agent:ready` / `agent:working` labels off non-ready items, and promote every other open non-epic issue to `Ready for Agent`
 - `.github/workflows/agent-close-pr.yml` closes only agent-authored PRs when they carry the `agent:close` label and the PR is agent-owned via a `codex/*` or `claude/*` head branch or the literal `codex-automation` label
-- the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current
+- the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current (currently paused — Codex quota exhausted until April 8, 2026)
 - the issue executor opens trusted agent PRs with `merge:auto` by default unless the PR or linked issue is marked `human:required`, `risk:high`, or `agent:blocked`
 - the PR manager may resolve clearly addressed bot review threads, merge clean trusted PRs once the required gate is green, and close stale or superseded trusted agent PRs automatically
+- as of 2026-04-03, Claude Code is the primary active agent worker; Codex automations are paused
 
 These workflows mirror repo state. They do not replace keeping source docs current.
 
@@ -114,8 +111,8 @@ Nightly sync order:
 
 Primary log locations:
 
-- `logs/dmft.log`
-- `%TEMP%/dmft/dmft-dll.log`
+- `logs/textquest.log`
+- `%TEMP%/textquest/textquest-dll.log`
 
 When debugging IPC or injection:
 
@@ -133,10 +130,10 @@ Do not hand-edit generated sources without also updating the generator flow:
 ## Internals and Reference Discipline
 
 - prefer current code over older design docs when there is a conflict
-- prefer `third_party/eqlib` for eqlib references
-- use `third_party/macroquest` for broader upstream context such as login, routing, and scripting behavior
-- treat `third_party/macroquest/src/eqlib` as vendored upstream context, not the primary DMFT eqlib citation path
-- use MacroQuest docs, RedGuides docs, and public comparison repos as roadmap inputs, not as proof that DMFT already implements a feature
+- prefer `third_party/eqlib` for eqlib references when that local tree is available
+- use `third_party/macroquest` for broader upstream context such as login, routing, and scripting behavior when that local tree is available
+- treat `third_party/macroquest/src/eqlib` as vendored upstream context, not the primary TextQuest eqlib citation path
+- use MacroQuest docs, RedGuides docs, and public comparison repos as roadmap inputs, not as proof that TextQuest already implements a feature
 
 ## Current Behavior vs Roadmap
 

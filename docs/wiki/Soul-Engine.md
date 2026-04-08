@@ -2,7 +2,7 @@
 
 ## Current Operator View
 
-The Soul Engine is DMFT's personality and idle-behavior layer.
+The Soul Engine is TextQuest's personality and idle-behavior layer.
 
 It is configured through the `[soul]` section of `config/frostreaver.toml` and can influence:
 
@@ -16,7 +16,7 @@ The persistent database path is `data/soul_memory.db`.
 
 ## Current Behavior
 
-The current implementation is in `dmft/src/soul/` and shared types live in `dmft-common/src/soul.rs`.
+The current implementation is in `textquest/src/soul/` and shared types live in `textquest-common/src/soul.rs`.
 
 Current components:
 
@@ -39,6 +39,7 @@ This is the most important implementation detail to understand:
 - the queue and provider abstraction already exist
 - the current coordinator initializes the queue with a zero token budget
 - requests are answered by the deterministic fallback responder today
+- the live provider surface is local-only (`ollama` or `none`), matching the roadmap's no-external-API requirement
 - code comments explicitly describe real provider integration as a later phase
 
 So the Soul Engine is present and useful now, but current repo behavior is still fallback-driven rather than live-provider-driven.
@@ -78,5 +79,6 @@ Important current note from code:
 
 ### Roadmap and validation notes
 
-- Real external provider integrations and richer in-game chat behavior now sit under `M10` in the canonical roadmap.
+- Real external provider integrations and richer in-game chat behavior now sit under `M11` in the canonical roadmap.
 - If you are documenting or demoing Soul behavior today, describe it as deterministic fallback plus persistent memory, not as fully live LLM autonomy.
+- Keep operator-facing descriptions explicit that Soul inference is intended to stay local and operator-safe.

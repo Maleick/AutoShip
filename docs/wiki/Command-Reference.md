@@ -4,34 +4,38 @@ This page covers both CLI commands and TUI `:` commands.
 
 ## CLI Commands
 
-Defined in `dmft/src/main.rs` and implemented in `dmft/src/cli.rs`.
+Defined in `textquest/src/main.rs` and implemented in `textquest/src/cli.rs`.
 
 | Command | Purpose |
 | --- | --- |
-| `cargo run` or `dmft.exe tui` | Launch the TUI dashboard |
-| `dmft.exe inject [--pid <pid>]` | Inject the DLL into one or all EQ clients |
-| `dmft.exe login <account> [--server <name>] [--character <name>] [--pid <pid>]` | Start automated login |
-| `dmft.exe cmd <pid> "/slash command"` | Send a slash command through authenticated IPC |
-| `dmft.exe nav <pid> <x> <y> <z>` | Navigate one client to coordinates |
-| `dmft.exe nav-all <x> <y> <z>` | Navigate all connected clients |
-| `dmft.exe nav-path <zone> <x1> <y1> <z1> <x2> <y2> <z2>` | Compute or test a route in one zone |
-| `dmft.exe status <pid>` | Print one client's live state |
-| `dmft.exe status-all` | Print a summary table for all clients |
-| `dmft.exe zones <pid>` | Query the live zone graph from an injected client |
-| `dmft.exe calibrate` | Dump login calibration info |
+| `cargo run` or `textquest.exe tui` | Launch the TUI dashboard |
+| `textquest.exe inject [--pid <pid>]` | Inject the DLL into one or all EQ clients |
+| `textquest.exe login <account> [--server <name>] [--character <name>] [--pid <pid>]` | Start automated login |
+| `textquest.exe cmd <pid> "/slash command"` | Send a slash command through authenticated IPC |
+| `textquest.exe nav <pid> <x> <y> <z>` | Navigate one client to coordinates |
+| `textquest.exe nav-all <x> <y> <z>` | Navigate all connected clients |
+| `textquest.exe nav-path <zone> <x1> <y1> <z1> <x2> <y2> <z2>` | Compute or test a route in one zone |
+| `textquest.exe navmesh reload [<zone>] [--pid <pid>]` | Redownload and validate a cached zone navmesh |
+| `textquest.exe navmesh diagnostics [<zone>] [--pid <pid>]` | Print cache health and optional live navigator diagnostics |
+| `textquest.exe status <pid>` | Print one client's live state |
+| `textquest.exe status-all` | Print a summary table for all clients |
+| `textquest.exe zones <pid>` | Query the live zone graph from an injected client |
+| `textquest.exe calibrate` | Dump login calibration info |
 | `cargo run -- --dump` | Original one-shot dump mode |
 
 Example:
 
 ```powershell
-target\release\dmft.exe cmd 12345 "/sit"
-target\release\dmft.exe status-all
-target\release\dmft.exe zones 12345
+target\release\textquest.exe cmd 12345 "/sit"
+target\release\textquest.exe navmesh reload gfaydark
+target\release\textquest.exe navmesh diagnostics --pid 12345
+target\release\textquest.exe status-all
+target\release\textquest.exe zones 12345
 ```
 
 ## TUI Command Bar
 
-Top-level commands come from `KNOWN_COMMANDS` and the parser in `dmft/src/tui/app.rs`.
+Top-level commands come from `KNOWN_COMMANDS` and the parser in `textquest/src/tui/app.rs`.
 
 ### Help and inspection
 
@@ -75,7 +79,7 @@ Top-level commands come from `KNOWN_COMMANDS` and the parser in `dmft/src/tui/ap
 - `:ch stop`
 - `:ch status`
 - `:ch add <pid>`
-- `:ch rm <pid>`
+- `:ch remove <pid>` (`:ch rm <pid>` remains supported)
 - `:ch interval <seconds>`
 - `:ch adaptive <on|off>`
 - `:chui`
@@ -122,8 +126,8 @@ Important current caveat:
 ## Internals
 
 - TUI command completion is context-aware and includes camps, tracked names, account names, zone names, and group targets.
-- IPC-backed commands eventually flow through `dmft_common::ipc::Command`.
-- CLI authenticated commands load `%TEMP%/dmft/login_token_<pid>.bin`, derive the session ID, then connect to the matching named pipe.
+- IPC-backed commands eventually flow through `textquest_common::ipc::Command`.
+- CLI authenticated commands load `%TEMP%/textquest/login_token_<pid>.bin`, derive the session ID, then connect to the matching named pipe.
 
 ## Current Behavior vs Roadmap
 

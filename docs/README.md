@@ -1,4 +1,12 @@
-# DMFT Documentation Index
+# TextQuest Documentation Index
+
+<p align="center">
+  <img src="../Art/TextQuest.jpeg" alt="TextQuest Logo" width="400">
+</p>
+
+<p align="center">
+  <i>"What happens in Neriak, stays in Neriak."</i>
+</p>
 
 This directory stores project documentation and is split into distinct buckets.
 

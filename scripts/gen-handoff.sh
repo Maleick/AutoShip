@@ -18,10 +18,10 @@ cat <<EOF
 
 Read this file + check memories (\`MEMORY.md\`) for full project context.
 
-MacroQuest reference code now lives in local git submodules at \`third_party/eqlib\`
-and \`third_party/macroquest\`. Routine \`cargo build\` / \`cargo test\` work does not
-require them, but offset or struct work does. After checkout, run
-\`git submodule update --init --recursive\` before working against those trees.
+Optional local reference trees may live at \`third_party/eqlib\` and
+\`third_party/macroquest\`. Routine \`cargo build\` / \`cargo test\` work does not
+require them, but offset or struct work may use them when they are present in
+the workspace.
 
 ## Repository Stats
 
@@ -48,32 +48,12 @@ echo ""
 # --- Reference trees ---
 echo "## Reference Trees"
 echo ""
-git submodule status --recursive | while IFS= read -r line; do
-    status_char=${line:0:1}
-    rest=${line:1}
-    sha=${rest%% *}
-    rest=${rest#"$sha "}
-    path=${rest%% *}
-
-    case "$status_char" in
-        ' ')
-            state="ready"
-            ;;
-        '-')
-            state="not initialized"
-            ;;
-        '+')
-            state="checked out at a different commit"
-            ;;
-        'U')
-            state="merge conflict"
-            ;;
-        *)
-            state="unknown"
-            ;;
-    esac
-
-    echo "- \`$path\` — $state (\`$sha\`)"
+for path in third_party/eqlib third_party/macroquest; do
+    if [ -d "$path" ] && [ -n "$(find "$path" -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then
+        echo "- \`$path\` — present"
+    else
+        echo "- \`$path\` — not present"
+    fi
 done
 echo ""
 
@@ -120,29 +100,12 @@ fi
 echo '```'
 echo ""
 
-# Summarize pass/fail per crate
-echo "### Per-crate summary"
-echo ""
-echo "| Crate | Passed | Failed |"
-echo "|-------|--------|--------|"
-if [ -n "$TEST_RESULTS" ]; then
-    while IFS= read -r line; do
-        passed=$(printf '%s\n' "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
-        failed=$(printf '%s\n' "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
-        # Best-effort crate name from context — cargo test prints "Running unittests" lines
-        echo "| — | ${passed:-0} | ${failed:-0} |"
-    done <<< "$TEST_RESULTS"
-else
-    echo "| — | 0 | 0 |"
-fi
-echo ""
-
 # --- Key offsets ---
-echo "## Key Offsets (from dmft-common/src/offsets.rs)"
+echo "## Key Offsets (from textquest-common/src/offsets.rs)"
 echo ""
 echo "| Constant | Value |"
 echo "|----------|-------|"
-grep -E '^pub const' dmft-common/src/offsets.rs | sed 's/pub const \([A-Z0-9_]*\):[^=]*= \(0x[0-9A-Fa-f_]*\);/| \1 | `\2` |/' | head -30
+grep -E '^pub const' textquest-common/src/offsets.rs | sed 's/pub const \([A-Z0-9_]*\):[^=]*= \(0x[0-9A-Fa-f_]*\);/| \1 | `\2` |/' | head -30
 echo ""
 
 # --- Build requirements ---
@@ -150,9 +113,6 @@ cat <<'BUILDEOF'
 ## Build Requirements
 
 ```bash
-# Optional reference trees (only for offset/struct work)
-git submodule update --init --recursive
-
 # macOS/Linux (development — demo mode)
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 cargo build

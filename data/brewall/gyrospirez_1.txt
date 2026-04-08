@@ -1,0 +1,18 @@
+P 47.8167, 760.0240, -0.2148, 255, 0, 0, 3, to_Fortress_Mechantos_(click)
+P 9.8705, 880.4279, -0.2914, 255, 0, 0, 2, Succor
+P 1.3529, 274.8214, 602.9586, 240, 240, 240, 2, Breech_Room
+P 9.9892, 257.4308, 464.1633, 240, 240, 240, 2, 3-Pipes_Room
+P 63.2175, 222.7167, 350.2408, 240, 240, 240, 2, Secret_Room
+P -89.3070, 254.5029, 1.3787, 240, 240, 240, 2, Meeting_Room
+P -123.4545, 268.5853, -36.4065, 240, 240, 240, 2, Primary_Power_Plant
+P -6.9663, 263.0489, 461.7422, 240, 240, 240, 2, Auxillary_Power_Plant
+P 53.8354, 160.4072, 457.3188, 0, 0, 0, 2, Technician_Masterwork
+P -133.6931, 60.7491, 35.1010, 127, 64, 0, 2, Chamberlain_VI_(Hunter)
+P 50.1642, 135.4215, 458.5384, 127, 64, 0, 2, Commander_Gearwell_(Hunter)
+P 0.8871, 251.9659, 462.3180, 127, 64, 0, 2, Engineer_LXII_(Hunter)
+P -5.2452, 214.4195, 457.3188, 127, 64, 0, 2, Engineer_LXII_(Hunter,Roam)
+P -16.5262, 215.8291, 294.8054, 127, 64, 0, 2, Fuelmaster_XI_(Hunter)
+P -83.4552, 197.8339, 1.9369, 127, 64, 0, 2, Repair_Steamwork_XIV_(Hunter)
+P -16.7720, 309.1312, 622.5261, 127, 64, 0, 2, Shocktroop_Commander_XIX_(Hunter)
+P -1.5829, 303.1196, 623.0515, 127, 64, 0, 2, Zeka_Repairer_III_(Hunter)
+

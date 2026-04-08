@@ -13,7 +13,7 @@ Shared operating contract for autonomous coding agents in this repository.
 - Codex is the default issue worker.
 - Claude is an optional worker only when an issue is labeled `worker:claude` or a comment explicitly mentions `@claude`.
 - An issue is eligible for autonomous execution only when both are true:
-  - the `DMFT Roadmap` GitHub Project `Agent Status` field is `Ready for Agent`
+  - the `TextQuest Roadmap` GitHub Project `Agent Status` field is `Ready for Agent`
   - the issue has label `agent:ready`
 - Skip issues that already have `agent:working`, already have an open pull request, or are already blocked with `agent:blocked`.
 - GitHub label meanings:

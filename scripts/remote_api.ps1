@@ -1,12 +1,12 @@
 # ============================================================
-#  DMFT Remote API Server
+#  TextQuest Remote API Server
 #  Minimal HTTP server for remote control from macOS
 #  Usage: powershell -ExecutionPolicy Bypass -File remote_api.ps1
 #         powershell -ExecutionPolicy Bypass -File remote_api.ps1 -Port 8080
 #
 #  Endpoints:
 #    GET  /status       - EQ process status + DLL log tail
-#    POST /run          - Execute PowerShell command (body = command string)
+#    POST /run          - Disabled (was command execution; removed for security)
 #    POST /screenshot   - Capture screen, return base64 PNG
 #    GET  /test-results - Latest test_loop results
 #    GET  /dll-log      - Latest DLL log tail
@@ -16,24 +16,23 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = "C:\Users\xmale\Projects\DMFT"
+$ProjectDir = "C:\Users\xmale\Projects\TextQuest"
 
-Write-Host "Starting DMFT Remote API on port $Port..."
+Write-Host "Starting TextQuest Remote API on port $Port..."
 
-# Create HTTP listener
+# Create HTTP listener (localhost-only to avoid remote exposure)
 $listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://+:$Port/")
+$listener.Prefixes.Add("http://localhost:$Port/")
 
 try {
     $listener.Start()
 } catch {
-    Write-Host "Failed to start listener. Try running as Administrator, or use:"
-    Write-Host "  netsh http add urlacl url=http://+:$Port/ user=$env:USERNAME"
+    Write-Host "Failed to start listener on localhost:$Port."
     exit 1
 }
 
 Write-Host "Listening on http://localhost:$Port/"
-Write-Host "Endpoints: /status, /run, /screenshot, /test-results, /dll-log"
+Write-Host "Endpoints: /status, /run (disabled), /screenshot, /test-results, /dll-log"
 Write-Host "Press Ctrl+C to stop."
 
 function Get-EqStatus {
@@ -46,7 +45,7 @@ function Get-EqStatus {
     }
 
     # DLL log check
-    $logFiles = Get-ChildItem "$env:TEMP\dmft\dmft-dll.log*" -ErrorAction SilentlyContinue |
+    $logFiles = Get-ChildItem "$env:TEMP\textquest\textquest-dll.log*" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending
     if ($logFiles) {
         $latest = $logFiles[0]
@@ -66,7 +65,7 @@ function Get-EqStatus {
 
 function Get-DllLogTail {
     param([int]$Lines = 50)
-    $logFiles = Get-ChildItem "$env:TEMP\dmft\dmft-dll.log*" -ErrorAction SilentlyContinue |
+    $logFiles = Get-ChildItem "$env:TEMP\textquest\textquest-dll.log*" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending
     if ($logFiles) {
         $content = Get-Content $logFiles[0].FullName -Tail $Lines -ErrorAction SilentlyContinue
@@ -103,8 +102,27 @@ function Invoke-RemoteCommand {
     $allowed = @("tasklist", "netstat", "cargo", "git", "Get-Process", "Get-Content",
                  "Get-ChildItem", "Test-Path", "dir", "type", "systeminfo", "hostname",
                  "Start-Process", "Stop-Process", "powershell")
-    $firstWord = ($Command -split '\s+')[0]
-    $isAllowed = $allowed | Where-Object { $firstWord -like "$_*" }
+
+    # Reject command separator characters to prevent multi-command injection.
+    if ($Command -match "[;|&]" -or $Command.Contains("`n") -or $Command.Contains("`r")) {
+        return @{
+            success = $false
+            output  = "Command contains disallowed separators"
+            exit_code = -1
+        }
+    }
+
+    $trimmed = $Command.Trim()
+    if (-not $trimmed) {
+        return @{
+            success = $false
+            output  = "No command provided"
+            exit_code = -1
+        }
+    }
+
+    $firstWord = ($trimmed -split '\s+', 2)[0]
+    $isAllowed = $allowed -contains $firstWord
     if (-not $isAllowed) {
         return @{
             success = $false
@@ -140,7 +158,7 @@ function Invoke-RemoteCommand {
 
 function Get-Screenshot {
     # Use built-in Windows screenshot tool to avoid AV triggers
-    $outFile = Join-Path $env:TEMP "dmft_screenshot.png"
+    $outFile = Join-Path $env:TEMP "textquest_screenshot.png"
     $snippingArgs = "/clip"
     try {
         # Use nircmd if available, otherwise fall back to info message
@@ -211,24 +229,9 @@ while ($listener.IsListening) {
                 if ($method -ne "POST") {
                     Send-JsonResponse $response @{ error = "POST required" } 405
                 } else {
-                    $reader = New-Object System.IO.StreamReader($request.InputStream)
-                    $body = $reader.ReadToEnd()
-                    $reader.Close()
-
-                    # Parse JSON body if present, otherwise treat as raw command
-                    try {
-                        $parsed = $body | ConvertFrom-Json
-                        $cmd = $parsed.command
-                    } catch {
-                        $cmd = $body
-                    }
-
-                    if (-not $cmd) {
-                        Send-JsonResponse $response @{ error = "No command provided" } 400
-                    } else {
-                        $result = Invoke-RemoteCommand -Command $cmd
-                        Send-JsonResponse $response $result
-                    }
+                    Send-JsonResponse $response @{
+                        error = "The /run endpoint has been disabled for security reasons."
+                    } 403
                 }
             }
             "/screenshot" {
@@ -274,7 +277,7 @@ while ($listener.IsListening) {
                     Send-JsonResponse $response @{ error = "POST required" } 405
                 } else {
                     try {
-                        $result = & "$ProjectDir\target\release\dmft.exe" --inject 2>&1
+                        $result = & "$ProjectDir\target\release\textquest.exe" --inject 2>&1
                         Send-JsonResponse $response @{ success = $true; output = ($result -join "`n") }
                     } catch {
                         Send-JsonResponse $response @{ success = $false; error = $_.ToString() } 500
@@ -313,7 +316,7 @@ while ($listener.IsListening) {
                 $help = @{
                     endpoints = @(
                         "GET  /status       - EQ process status + DLL log summary"
-                        "POST /run          - Execute command (body: {`"command`":`"...`"})"
+                        "POST /run          - Disabled for security"
                         "POST /launch-eq    - Launch EQ (body: {`"account`":`"name`"})"
                         "POST /inject       - Inject DLL into running EQ"
                         "POST /kill-eq      - Kill all EQ processes"

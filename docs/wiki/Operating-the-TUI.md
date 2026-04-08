@@ -2,20 +2,21 @@
 
 ## Current Operator Workflow
 
-DMFT's default interface is a ratatui-based dashboard with four main screens:
+TextQuest's default interface is a ratatui-based dashboard with five main screens:
 
 | Screen | Key | Main purpose |
 | --- | --- | --- |
 | Characters | `1` | Roster, selected character state, group and scope panels |
-| Map | `2` | Zone geometry, spawn overlays, named tracking, nav path overlays |
-| Navigation | `3` | Per-character nav status, route state, waypoint visibility |
-| Debug | `4` | Spawn table, filters, live search, target detail, hex dump |
+| Map | `2` | Tactical map, spawn overlays, named tracking, tactical nav section, and viewport controls |
+| Navigation | `3` | Per-character route status, selected-route detail, blockers, recovery state, and command reference |
+| Debug | `4` | Raw spawn table, filters, target detail, hex dump, explorer, and EQ internals |
+| Packets | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation |
 
 ### Core keys
 
 | Key | Action |
 | --- | --- |
-| `1-4` | Switch screens |
+| `1-5` | Switch screens |
 | `Shift+1-6` | Focus group G1-G6 |
 | `Shift+0` | Clear group focus |
 | `Tab` | Cycle focused pane |
@@ -35,7 +36,7 @@ DMFT's default interface is a ratatui-based dashboard with four main screens:
 
 ### Themes and privacy
 
-- Themes currently cycle through Dark Modern, Dracula, and Classic.
+- Themes currently cycle through Dark Modern, Dracula, Classic, and Neriak Third Gate.
 - Privacy mode redacts your character names and server label for screenshots or streaming.
 
 ### Demo mode expectations
@@ -86,30 +87,42 @@ Use this for:
 - target details
 - raw hex dump of the selected spawn or demo payload
 
+### Packets
+
+Use this for:
+
+- live send/receive packet capture
+- pausing the packet stream without leaving the screen
+- opcode decode and filter inspection
+- comparing raw traffic while other screens stay focused on state
+
 ## Command and Overlay Surfaces
 
-- `:` opens the command bar defined in `dmft/src/tui/app.rs`.
-- `?` opens a context-sensitive help overlay.
+- `:` opens the command bar defined in `textquest/src/tui/app.rs`.
+- `?` opens a context-sensitive, scrollable help overlay with command usage and jump targets.
 - `config` opens the interactive configuration panel.
 - `chui` opens the CH chain panel.
 - `wizard` opens the setup wizard shell.
+- Shared TUI surfaces include breadcrumbs, tab bars, the dropdown command menu bar, toast notifications, keybinding hint rows, badges, cast bars, sparklines, scrollable lists with scrollbar indicators, tooltips, popup selectors, the config tree editor, and the first-run wizard overlay.
 
 ## Internals
 
-- TUI state is centered in `dmft/src/tui/app.rs`.
-- Rendering is split under `dmft/src/tui/ui/`.
-- Demo content comes from `dmft/src/tui/demo_data.rs`.
-- Theme definitions live in `dmft/src/tui/theme.rs`.
-- Map and navigation overlays are fed from `dmft/src/tui/state.rs` and `dmft/src/nav/mesh.rs`.
+- TUI state is centered in `textquest/src/tui/app.rs`.
+- Rendering is split under `textquest/src/tui/ui/`.
+- Demo content comes from `textquest/src/tui/demo_data.rs`.
+- Theme definitions live in `textquest/src/tui/theme.rs`.
+- Map and navigation overlays are fed from `textquest/src/tui/state.rs` and `textquest/src/nav/mesh.rs`.
 
 ## Current Behavior vs Roadmap
 
 ### Current behavior
 
-- The four-screen layout is real and current.
+- The five-screen layout is real and current.
+- The Characters screen is still rendered by `textquest/src/tui/ui/dashboard.rs` via the `ActiveScreen::Overview` dispatch in `textquest/src/tui/ui/mod.rs`; the old PR #507 handoff note about a missing dashboard renderer is historical only.
 - Help, config, CH panel, command history, search, filters, themes, and privacy mode all exist in the codebase now.
 
 ### Roadmap or partial wiring
 
+- If a new Characters-screen renderer regression appears, track it with a fresh issue against the current TUI surface instead of reusing the old PR #507 handoff note.
 - The TUI `:inject` command is still a placeholder instead of a full injection trigger.
 - Some map orientation and overlay behavior has comments in code noting that final live-client verification is still deferred in a few cases.

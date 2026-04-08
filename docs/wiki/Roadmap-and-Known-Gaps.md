@@ -18,17 +18,19 @@ These milestones remain part of project history:
 
 The active roadmap now resumes at `M5`:
 
-- `M5`: Packet Engine
-- `M6`: Zoning/Movement
-- `M7`: Anti-Cheat
+- `M5`: Anti-Cheat (**active**)
+- `M6`: Web Dashboard (config + monitoring)
+- `M7`: Zoning/Movement
 - `M8`: Orchestrator
 - `M9`: Learning/RL
-- `M10`: Soul Engine + LLM
-- `M11`: Economy
+- `M10`: Economy
+- `M11`: Soul Engine + LLM (local AI only)
 
 External research may add slices and validation tasks, but it may not reorder milestones on its own.
 
 ## Current Validated State
+
+As of 2026-04-06: ~1,001 commits, ~113K lines of Rust, 2,584 tests (all passing). M5 Anti-Cheat complete (#355 closed — launchpad bypassed via /patchme). M6 Web Dashboard complete (TUI enhancements, axum + React SPA scaffold, fleet metrics).
 
 - TUI with four primary screens and command bar
 - demo mode for non-Windows and no-client workflows
@@ -37,11 +39,16 @@ External research may add slices and validation tasks, but it may not reorder mi
 - navmesh-backed routing and map overlays
 - combat FSM plus class strategies and CH chain
 - Soul Engine with deterministic fallback and persistent memory
+- stick-to-target and player-follow navigation modes
+- camp loop state machine with buff/CC/loot/positioning
+- Discord webhook integration and command bridge
+- encrypted credential store (Argon2id + AES-256-GCM)
 
 ## Main Gaps Still Requiring Live Validation
 
 - packet-level control paths inferred from research rather than live validation
-- the current packet inventory keeps combat, utility, and chat packet seams separate from the existing IPC plus in-process DLL control boundary
+- the current packet inventory keeps combat, utility, and chat packet seams separate from the existing IPC plus in-process DLL control boundary; see `docs/external-research/packet-engine-send-receive-pipeline.md` for the full send/receive layer inventory and capability boundary summary
+- the send pipeline requires opcode scrambling and anti-cheat counter synchronization before any packet-first path can be treated as safe
 - zoning state-machine details and recovery behavior after client changes
 - offset stability after upstream EQ updates
 - cross-zone travel behavior in more zones than the current dev/test set
@@ -80,8 +87,10 @@ Current deep-dive order:
 Use:
 
 - `docs/external-research/automation-source-ledger.md`
+- `docs/external-research/packet-engine-send-receive-pipeline.md`
 - `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
-- `docs/external-research/kissassist-gap-and-tui-translation.md`
+- `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
+- `docs/wiki/Research-KissAssist-Gap-Analysis.md`
 - `docs/external-research/jmb-session-and-relay-comparison.md`
 - `docs/external-research/daybreak-detection-digest.md`
 - `docs/external-research/zoning-queue-and-safe-coord-validation.md`
@@ -98,6 +107,30 @@ The current follow-on implementation slices remain:
 
 - #152 for the addressable actor routing abstraction
 - #109 for launch profiles, session presets, and slot-health visibility
+
+## Current `M9` learning guidance
+
+`M9` remains a tuning layer on top of stable orchestration and metrics rather than a license to widen runtime authority.
+
+- optimize only operator-visible scorecards such as encounter throughput, recovery success, command latency, and resource efficiency
+- require a named baseline, success metric, regression budget, and rollback path before a training-driven candidate can leave draft status
+- evaluate candidate changes in replay, shadow, or canary mode before wider live rollout
+- keep packet, zoning, anti-cheat, and authenticated IPC boundaries unchanged unless a separate gated milestone explicitly reopens them
+- treat training-driven changes as operator-opt-in until live validation proves they do not regress current behavior
+
+## Current `M10` economy guidance
+
+The current economy pass stays intentionally bounded to operator-visible execution loops:
+
+- treat loot intake, distribution, vendor, and banking work as explicit queues and state machines, not as hidden background automation
+- reuse the existing authenticated routing and session/group scope model instead of inventing a separate economy control plane
+- ship pause/skip/abort/resume controls and economy-facing TUI summaries alongside each loop before claiming a self-sustaining farm workflow
+
+The current follow-on implementation slices are:
+
+- loot intake plus distribution ownership and reserve rules
+- vendor and banking route controllers with failure-state visibility
+- plat/item ledger summaries plus operator overrides
 
 ## Developer Guidance
 

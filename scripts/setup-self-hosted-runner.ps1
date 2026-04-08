@@ -1,15 +1,15 @@
 # =============================================================================
-# DMFT — Self-hosted GitHub Actions runner bootstrap
+# TextQuest — Self-hosted GitHub Actions runner bootstrap
 # =============================================================================
 # This script installs/updates the runner in C:\actions-runner and configures it for
-# this repository with labels [self-hosted, Windows, X64, dmft].
+# this repository with labels [self-hosted, Windows, X64, textquest].
 #
 # USAGE:
 #   .\scripts\setup-self-hosted-runner.ps1 -Token "<YOUR_REGISTRATION_TOKEN>"
 #
 # Optional:
 #   -Token "<token>"            New registration token from GitHub UI
-#   -RepositoryUrl "<url>"       Defaults to https://github.com/Maleick/DMFT
+#   -RepositoryUrl "<url>"       Defaults to https://github.com/Maleick/TextQuest
 #   -Version "latest"|"2.333.1"  Runner package version (defaults to latest)
 #   -RunnerName "MyRunner"      Runner display name
 #   -RunnerRoot "C:\actions-runner"
@@ -23,11 +23,11 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Token,
 
-    [string]$RepositoryUrl = "https://github.com/Maleick/DMFT",
+    [string]$RepositoryUrl = "https://github.com/Maleick/TextQuest",
     [string]$Version = "latest",
     [string]$RunnerRoot = "C:\actions-runner",
     [string]$RunnerName = "",
-    [string[]]$Labels = @("dmft", "Windows", "X64"),
+    [string[]]$Labels = @("textquest", "Windows", "X64"),
     [switch]$InstallService,
     [string]$ServiceName = "",
     [switch]$Force
@@ -96,12 +96,12 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
 }
 
 if (-not $RunnerName) {
-    $RunnerName = "dmft-$(hostname)"
+    $RunnerName = "textquest-$(hostname)"
 }
 
 if ($Version -eq "latest") {
     try {
-        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/actions/runner/releases/latest" -Headers @{ "User-Agent" = "dmft-self-hosted-runner-setup" }
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/actions/runner/releases/latest" -Headers @{ "User-Agent" = "textquest-self-hosted-runner-setup" }
         $Version = ($release.tag_name -replace "^v", "")
     } catch {
         throw "Could not resolve latest runner release. Re-run with -Version set explicitly."
@@ -168,14 +168,14 @@ if ($InstallService) { $runnerConfigArgs += "--runasservice" }
 Write-Host "Runner configured with labels: self-hosted, $($Labels -join ', ')." -ForegroundColor Green
 Write-Host "Seeding Git safe.directory entries for this runner..." -ForegroundColor Yellow
 
-$repoName = "DMFT"
+$repoName = "TextQuest"
 try {
     $repoName = ([System.Uri]$RepositoryUrl).Segments[-1].TrimEnd("/")
 } catch {
-    Write-Host "Could not parse repository name from RepositoryUrl, using fallback 'DMFT'." -ForegroundColor Yellow
+    Write-Host "Could not parse repository name from RepositoryUrl, using fallback 'TextQuest'." -ForegroundColor Yellow
 }
 if ([string]::IsNullOrWhiteSpace($repoName)) {
-    $repoName = "DMFT"
+    $repoName = "TextQuest"
 }
 
 $workRoot = Join-Path $RunnerRoot "_work"

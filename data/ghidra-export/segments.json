@@ -1,0 +1,56 @@
+[
+  {
+    "name": "Headers",
+    "start": "0x140000000",
+    "end": "0x1400003ff",
+    "size_bytes": 1024
+  },
+  {
+    "name": ".text",
+    "start": "0x140001000",
+    "end": "0x1408425ff",
+    "size_bytes": 8656384
+  },
+  {
+    "name": ".rdata",
+    "start": "0x140843000",
+    "end": "0x140c155ff",
+    "size_bytes": 4007424
+  },
+  {
+    "name": ".data",
+    "start": "0x140c16000",
+    "end": "0x1415a2bf3",
+    "size_bytes": 10013684
+  },
+  {
+    "name": ".pdata",
+    "start": "0x1415a3000",
+    "end": "0x1415f09ff",
+    "size_bytes": 317952
+  },
+  {
+    "name": "_RDATA",
+    "start": "0x1415f1000",
+    "end": "0x1415f11ff",
+    "size_bytes": 512
+  },
+  {
+    "name": ".rsrc",
+    "start": "0x1415f2000",
+    "end": "0x1416205ff",
+    "size_bytes": 189952
+  },
+  {
+    "name": ".reloc",
+    "start": "0x141621000",
+    "end": "0x1416459ff",
+    "size_bytes": 150016
+  },
+  {
+    "name": "tdb",
+    "start": "0xff00000000",
+    "end": "0xff0000184f",
+    "size_bytes": 6224
+  }
+]

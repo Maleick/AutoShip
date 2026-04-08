@@ -1,8 +1,8 @@
-## DMFT - Group 1 Launch (6 clients) with per-PID targeting
+## TextQuest - Group 1 Launch (6 clients) with per-PID targeting
 ## Requires Console session with GPU (not RDP)
 
 $EqPath = "C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest"
-$DmftExe = "C:\Users\xmale\Projects\DMFT\target\release\dmft.exe"
+$DmftExe = "C:\Users\xmale\Projects\TextQuest\target\release\textquest.exe"
 $Server = "Firiona Vie"
 $InjectWait = 12
 $HookWait = 2
@@ -18,7 +18,7 @@ $Accounts = @(
 )
 
 Write-Host "============================================"
-Write-Host " DMFT - Group 1 Launch (6 clients)"
+Write-Host " TextQuest - Group 1 Launch (6 clients)"
 Write-Host "============================================"
 Write-Host ""
 
@@ -28,7 +28,7 @@ Stop-Process -Name eqgame -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 3
 
 # Clear DLL logs
-Remove-Item "$env:TEMP\dmft\dmft-dll.log.*" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\textquest\textquest-dll.log.*" -Force -ErrorAction SilentlyContinue
 
 $Results = @()
 
@@ -82,7 +82,7 @@ Write-Host "Account PIDs:"
 $Results | Format-Table -AutoSize
 
 # Monitor
-Write-Host "Monitoring for 120s... (check $env:TEMP\dmft\ for logs)"
+Write-Host "Monitoring for 120s... (check $env:TEMP\textquest\ for logs)"
 Start-Sleep -Seconds 30
 
 Write-Host ""

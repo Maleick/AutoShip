@@ -8,13 +8,9 @@
 - No `.env` file is required for normal build, test, or runtime work
 - `.cargo/config.toml` already sets `CMAKE_POLICY_VERSION_MINIMUM=3.5` for normal Cargo commands
 
-### Optional reference-only submodules
+### Optional local reference trees
 
-Sync these only when doing offset, struct, eqlib, or MacroQuest research:
-
-```bash
-git submodule update --init --recursive
-```
+`third_party/eqlib` and `third_party/macroquest` are optional local reference paths for offset, struct, eqlib, and MacroQuest research when those trees are present in your workspace. They are not required for normal build, test, or runtime work.
 
 ### Windows production builds
 
@@ -82,8 +78,8 @@ cargo run -- --dump
 ### Windows
 
 - `cargo run` launches the real app entrypoint and will attach to live EQ processes if found.
-- `dmft.exe inject` stages and injects `dmft_dll.dll`.
-- `dmft.exe cmd`, `status`, `status-all`, `nav`, and `zones` all expect live injected clients.
+- `textquest.exe inject` stages and injects `textquest_dll.dll`.
+- `textquest.exe cmd`, `status`, `status-all`, `nav`, and `zones` all expect live injected clients.
 - CI currently validates the Windows build on nightly, so contributors should match that toolchain when reproducing Windows build issues.
 
 ## Important Files and Paths
@@ -100,23 +96,23 @@ cargo run -- --dump
 
 ## Runtime Logs
 
-- Orchestrator log: `logs/dmft.log`
-- DLL log on Windows: `%TEMP%/dmft/dmft-dll.log`
-- Session token files: `%TEMP%/dmft/token_<pid>.bin` and `%TEMP%/dmft/login_token_<pid>.bin`
+- Orchestrator log: `logs/textquest.log`
+- DLL log on Windows: `%TEMP%/textquest/textquest-dll.log`
+- Session token files: `%TEMP%/textquest/token_<pid>.bin` and `%TEMP%/textquest/login_token_<pid>.bin`
 
 ## Internals
 
-- `dmft` builds the external orchestrator and TUI.
-- `dmft-dll` builds the injected `cdylib`.
-- `dmft-common` provides shared command/response, offsets, nav, login, combat, and soul types.
-- Navmesh support uses a Detour/Recast bridge from `dmft/src/nav/mesh.rs` plus the C++ shim compiled by the build.
+- `textquest` builds the external orchestrator and TUI.
+- `textquest-dll` builds the injected `cdylib`.
+- `textquest-common` provides shared command/response, offsets, nav, login, combat, and soul types.
+- Navmesh support uses a Detour/Recast bridge from `textquest/src/nav/mesh.rs` plus the C++ shim compiled by the build.
 
 ## Current Behavior vs Roadmap
 
 ### Current behavior
 
 - Cross-platform compilation is deliberate; the repo is structured so UI and logic work on non-Windows even when live control cannot.
-- Submodule-backed reference trees are available for offset and struct investigations, but they are not required for normal build, test, or runtime work.
+- Local reference trees under `third_party/` are optional for offset and struct investigations, but they are not required for normal build, test, or runtime work.
 
 ### Gaps and caveats
 

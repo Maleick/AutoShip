@@ -6,12 +6,13 @@ import unittest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "agent-ready.yml"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "automation.yml"
 
 
-class AgentReadyWorkflowTests(unittest.TestCase):
+class AutomationWorkflowTests(unittest.TestCase):
     def test_closed_issues_trigger_cleanup(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
+        # In automation.yml it's under issues: types:
         self.assertRegex(
             text,
             re.compile(
@@ -21,16 +22,10 @@ class AgentReadyWorkflowTests(unittest.TestCase):
 
     def test_roadmap_container_regex_keeps_js_tokens(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn(r'return /^M(\d+|x)\b/i.test((title || "").trim());', text)
+        self.assertIn(r'/^M(\d+|x)\b/i.test((title || "").trim());', text)
 
     def test_ready_label_is_never_added_to_closed_issues(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertRegex(
-            text,
-            re.compile(
-                r'async function ensureReadyState\(\{\s*number,\s*state = "open",\s*title = "",\s*labels: currentLabels = \[\]\s*\}\)'
-            ),
-        )
         self.assertIn('const isClosed = state !== "open";', text)
         self.assertRegex(
             text,

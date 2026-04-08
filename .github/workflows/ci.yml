@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
 
 env:
@@ -26,7 +27,7 @@ env:
 
 jobs:
   pr_gate_untrusted:
-    name: PR gate (fmt + clippy + test + python)
+    name: PR gate (fork PR path)
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
     timeout-minutes: 45
@@ -34,24 +35,11 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Initialize reference submodules
-        run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive --depth 1
-
-      - name: Verify reference trees
-        run: |
-          git submodule status --recursive
-          if not exist "third_party\eqlib\include\eqlib\offsets\eqgame.h" (echo missing third_party\eqlib\include\eqlib\offsets\eqgame.h & exit /b 1)
-          if not exist "third_party\macroquest\src\login" (echo missing third_party\macroquest\src\login & exit /b 1)
-          if not exist "third_party\macroquest\src\routing" (echo missing third_party\macroquest\src\routing & exit /b 1)
-          if not exist "third_party\macroquest\src\eqlib" (echo missing third_party\macroquest\src\eqlib & exit /b 1)
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.12.10'
+          python-version: "3.12.10"
 
       - name: Configure Python command
         run: |
@@ -82,7 +70,7 @@ jobs:
           )
           echo %CARGO_HOME%\bin>>%GITHUB_PATH%
           rustup --version
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
           rustup default %NIGHTLY_TOOLCHAIN%
           rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
           rustup run %NIGHTLY_TOOLCHAIN% rustc -V
@@ -93,31 +81,33 @@ jobs:
           echo [info] Nightly compiler confirmed for %NIGHTLY_TOOLCHAIN%.
 
       - uses: lukka/get-cmake@v4.3.1
-      - run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
-      - run: '%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v'
+      - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
+      - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
 
   pr_gate_trusted:
-    name: PR gate (fmt + clippy + test + python)
+    name: PR gate (trusted path)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, Windows, X64, dmft]
+    runs-on: windows-latest
     timeout-minutes: 45
     defaults:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Configure Git safe directories for runner account
+      - name: Configure Git safe directories
         run: |
+          setlocal EnableDelayedExpansion
           echo [info] Marking workflow directories as trusted for Git.
           if "%GITHUB_WORKSPACE%"=="" (
-            echo [fatal] GITHUB_WORKSPACE is not defined.
-            exit /b 1
+            echo [warn] GITHUB_WORKSPACE is not defined. Falling back to %CD%.
+            set "GITHUB_WORKSPACE=%CD%"
           )
-          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+          echo [info] Using GITHUB_WORKSPACE as "!GITHUB_WORKSPACE!"
+          for %%D in ("!GITHUB_WORKSPACE!") do (
             git config --global --add safe.directory "%%~D" || (
               echo [fatal] Unable to add safe.directory for %%~D.
               exit /b 1
@@ -126,57 +116,8 @@ jobs:
           echo [info] Active safe.directory values:
           git config --global --get-all safe.directory
 
-      - name: Initialize reference submodules
-        run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive --depth 1
-
-      - name: Verify reference trees
-        run: |
-          git submodule status --recursive
-          if not exist "third_party\eqlib\include\eqlib\offsets\eqgame.h" (echo missing third_party\eqlib\include\eqlib\offsets\eqgame.h & exit /b 1)
-          if not exist "third_party\macroquest\src\login" (echo missing third_party\macroquest\src\login & exit /b 1)
-          if not exist "third_party\macroquest\src\routing" (echo missing third_party\macroquest\src\routing & exit /b 1)
-          if not exist "third_party\macroquest\src\eqlib" (echo missing third_party\macroquest\src\eqlib & exit /b 1)
-
-      - name: Locate or provision verified Python
-        env:
-          PYTHON_EMBED_URL: https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip
-          PYTHON_EMBED_SHA256: 4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3
-        run: |
-          where python >nul 2>nul && (
-            echo PYTHON_CMD=python>>"%GITHUB_ENV%"
-            python --version
-            exit /b 0
-          )
-          where py >nul 2>nul && (
-            echo PYTHON_CMD=py -3>>"%GITHUB_ENV%"
-            py -3 --version
-            exit /b 0
-          )
-          setlocal EnableDelayedExpansion
-          if exist .ci-python rmdir /s /q .ci-python
-          mkdir .ci-python
-          curl.exe -fsSL -o .ci-python\python-embed.zip "%PYTHON_EMBED_URL%"
-          for /f "tokens=* delims=" %%H in ('certutil -hashfile ".ci-python\python-embed.zip" SHA256 ^| findstr /r /v /c:"^SHA256" /c:"^CertUtil" /c:"^$"') do (
-            set "PYTHON_EMBED_ACTUAL_SHA256=%%H"
-          )
-          set "PYTHON_EMBED_ACTUAL_SHA256=!PYTHON_EMBED_ACTUAL_SHA256: =!"
-          if /I not "!PYTHON_EMBED_ACTUAL_SHA256!"=="%PYTHON_EMBED_SHA256%" (
-            echo [fatal] Verified Python download checksum mismatch.
-            echo [fatal] Expected: %PYTHON_EMBED_SHA256%
-            echo [fatal] Actual:   !PYTHON_EMBED_ACTUAL_SHA256!
-            exit /b 1
-          )
-          tar -xf .ci-python\python-embed.zip -C .ci-python
-          if not exist .ci-python\python.exe (
-            echo [fatal] Extracted python.exe not found after verified download.
-            exit /b 1
-          )
-          endlocal & (
-            echo PYTHON_CMD=%CD%\.ci-python\python.exe>>"%GITHUB_ENV%"
-          )
-          "%CD%\.ci-python\python.exe" --version
+      - name: Setup verified Python
+        uses: ./.github/actions/setup-verified-python
 
       - name: Provision nightly toolchain via rustup
         env:
@@ -202,7 +143,8 @@ jobs:
           )
           echo %CARGO_HOME%\bin>>%GITHUB_PATH%
           rustup --version
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup show
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
           rustup default %NIGHTLY_TOOLCHAIN%
           rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
           rustup run %NIGHTLY_TOOLCHAIN% rustc -V
@@ -212,33 +154,135 @@ jobs:
           )
           echo [info] Nightly compiler confirmed for %NIGHTLY_TOOLCHAIN%.
 
-      - uses: lukka/get-cmake@v4.3.1
-      - run: '%PYTHON_CMD% scripts/sync_wiki.py --check'
-      - run: '%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v'
+      - name: Ensure cmake on PATH
+        uses: ./.github/actions/ensure-cmake
+      - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
+      - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test
+      - run: cargo test -- --nocapture
+
+  pr_gate:
+    name: PR gate (fmt + clippy + test + python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Wait for runner-specific gate result
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const isForkPr =
+              context.eventName === "pull_request" &&
+              context.payload.pull_request.head.repo.full_name !== `${owner}/${repo}`;
+            const targetJobName = isForkPr
+              ? "PR gate (fork PR path)"
+              : "PR gate (trusted path)";
+            const otherJobName = isForkPr
+              ? "PR gate (trusted path)"
+              : "PR gate (fork PR path)";
+
+            // listJobsForWorkflowRunAttempt requires attempt_number and returns 404 in some
+            // PR contexts (e.g. when context.runAttempt is unavailable).  Fall back to
+            // listJobsForWorkflowRun, which is always available, to avoid hard failures.
+            async function listJobs() {
+              if (context.runAttempt) {
+                try {
+                  return await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
+                    owner,
+                    repo,
+                    run_id: context.runId,
+                    attempt_number: context.runAttempt,
+                    per_page: 100,
+                  });
+                } catch (e) {
+                  core.warning(
+                    `listJobsForWorkflowRunAttempt failed (${e.status ?? "unknown"}); ` +
+                    `falling back to listJobsForWorkflowRun`
+                  );
+                }
+              }
+              return await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                owner,
+                repo,
+                run_id: context.runId,
+                per_page: 100,
+              });
+            }
+
+            for (let attempt = 1; attempt <= 180; attempt += 1) {
+              const jobs = await listJobs();
+
+              const target = jobs.find((job) => job.name === targetJobName);
+              const other = jobs.find((job) => job.name === otherJobName);
+              core.info(
+                `Attempt ${attempt}: ${targetJobName}=${target?.status ?? "missing"}/${target?.conclusion ?? "n/a"}, ` +
+                `${otherJobName}=${other?.status ?? "missing"}/${other?.conclusion ?? "n/a"}`
+              );
+
+              if (
+                other &&
+                other.status === "completed" &&
+                other.conclusion &&
+                other.conclusion !== "skipped"
+              ) {
+                core.setFailed(`Unexpected ${otherJobName} result: ${other.conclusion}`);
+                return;
+              }
+
+              if (!target || target.status !== "completed") {
+                await new Promise((resolve) => setTimeout(resolve, 10000));
+                continue;
+              }
+
+              if (target.conclusion !== "success") {
+                core.setFailed(`${targetJobName} concluded with ${target.conclusion}`);
+                return;
+              }
+
+              core.info(`${targetJobName} succeeded; merge gate satisfied.`);
+              return;
+            }
+
+            core.setFailed(`Timed out waiting for ${targetJobName} to finish.`);
+
+  secrets_scan:
+    name: Secret scan (TruffleHog)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b # v3.94.2
+        with:
+          extra_args: --only-verified
 
   windows:
     name: Windows release build (manual)
     if: github.event_name == 'workflow_dispatch' && inputs.run_release_build
-    needs: pr_gate_trusted
-    runs-on: [self-hosted, Windows, X64, dmft]
+    needs: pr_gate
+    runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 30
     defaults:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure Git safe directories for runner account
         run: |
+          setlocal EnableDelayedExpansion
           echo [info] Marking workflow directories as trusted for Git.
           if "%GITHUB_WORKSPACE%"=="" (
-            echo [fatal] GITHUB_WORKSPACE is not defined.
-            exit /b 1
+            echo [warn] GITHUB_WORKSPACE is not defined. Falling back to %CD%.
+            set "GITHUB_WORKSPACE=%CD%"
           )
-          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+          echo [info] Using GITHUB_WORKSPACE as "!GITHUB_WORKSPACE!"
+          for %%D in ("!GITHUB_WORKSPACE!" "C:\actions-runner\_work\TextQuest\TextQuest" "C:\actions-runner\_work\TextQuest") do (
             git config --global --add safe.directory "%%~D" || (
               echo [fatal] Unable to add safe.directory for %%~D.
               exit /b 1
@@ -247,10 +291,21 @@ jobs:
           echo [info] Active safe.directory values:
           git config --global --get-all safe.directory
 
-      - name: Initialize reference submodules
+      - name: Reclaim leaked browser processes on self-hosted runner
+        shell: pwsh
         run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive --depth 1
+          $browserNames = @("chrome", "msedge", "chromium")
+          $browserProcesses = @(Get-Process -Name $browserNames -ErrorAction SilentlyContinue)
+          if ($browserProcesses.Count -gt 0) {
+            Write-Warning ("Stopping {0} leaked browser process(es) before the manual Windows build." -f $browserProcesses.Count)
+            $browserProcesses | Stop-Process -Force
+          } else {
+            Write-Host "No leaked Chrome/Edge/Chromium processes detected before the manual Windows build."
+          }
+          $os = Get-CimInstance Win32_OperatingSystem
+          $freeGiB = [math]::Round(($os.FreePhysicalMemory * 1KB) / 1GB, 2)
+          $totalGiB = [math]::Round(($os.TotalVisibleMemorySize * 1KB) / 1GB, 2)
+          Write-Host ("Available physical memory before build: {0} GiB / {1} GiB" -f $freeGiB, $totalGiB)
 
       - name: Provision nightly toolchain via rustup
         env:
@@ -278,7 +333,7 @@ jobs:
           echo [info] rustup version:
           rustup --version
           rustup show
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
+          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
           rustup default %NIGHTLY_TOOLCHAIN%
           rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
           rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
@@ -286,7 +341,8 @@ jobs:
             exit /b 1
           )
 
-      - uses: lukka/get-cmake@v4.3.1
+      - name: Ensure cmake on PATH
+        uses: ./.github/actions/ensure-cmake
 
       - name: Nightly compiler sanity check
         run: |

@@ -35,12 +35,12 @@ Typical error:
 
 What it means:
 
-- the orchestrator could not find `%TEMP%/dmft/login_token_<pid>.bin`
+- the orchestrator could not find `%TEMP%/textquest/login_token_<pid>.bin`
 
 Fix:
 
 1. re-run injection for that PID
-2. confirm the token files exist under `%TEMP%/dmft`
+2. confirm the token files exist under `%TEMP%/textquest`
 3. retry the CLI or TUI command
 
 ## Cannot open shared memory
@@ -61,8 +61,8 @@ Checks:
 
 Checks:
 
-- review `logs/dmft.log`
-- review `%TEMP%/dmft/dmft-dll.log`
+- review `logs/textquest.log`
+- review `%TEMP%/textquest/textquest-dll.log`
 - confirm the pipe authentication token was sent
 - confirm you are not using the TUI `:inject` placeholder as if it were the real injector
 

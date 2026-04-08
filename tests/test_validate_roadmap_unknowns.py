@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -59,7 +60,7 @@ class RoadmapValidatorTests(unittest.TestCase):
     def test_strict_mode_fails_for_broken_evidence_rules(self) -> None:
         broken_doc = textwrap.dedent(
             """
-            # DMFT Implementation Roadmap
+            # TextQuest Implementation Roadmap
 
             ## Canonical Milestone Order
 
@@ -104,7 +105,7 @@ class RoadmapValidatorTests(unittest.TestCase):
     def test_analyze_custom_roadmap_detects_missing_sections(self) -> None:
         custom_doc = textwrap.dedent(
             """
-            # DMFT Implementation Roadmap
+            # TextQuest Implementation Roadmap
 
             ## Canonical Milestone Order
 
@@ -156,6 +157,25 @@ class RoadmapValidatorTests(unittest.TestCase):
             requested_domains=["Packet Engine", "Zoning/Movement", "Anti-Cheat"],
         )
         self.assertEqual(report.missing_requested_domains, [])
+
+    def test_m9_section_defines_metrics_and_guardrails(self) -> None:
+        roadmap = (REPO_ROOT / "docs" / "implementation-roadmap.md").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(
+            r"^### `M9` Learning/RL\s*$\n(?P<section>.*?)(?=^### `M\d+(?:\.\d+)?`?\s+.+$)",
+            roadmap,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "expected to find the M9 roadmap section")
+        m9_section = match.group("section")
+
+        self.assertIn("behavior optimization targets", m9_section)
+        self.assertIn("measurable tuning loops", m9_section)
+        self.assertIn("guardrails that prevent regressions from training-driven changes", m9_section)
+        self.assertIn("named baseline, success metric, regression budget, and rollback path", m9_section)
+        self.assertIn("replay, shadow, or canary mode", m9_section)
+        self.assertIn("authenticated control boundary", m9_section)
 
 
 if __name__ == "__main__":

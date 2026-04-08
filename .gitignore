@@ -16,47 +16,46 @@ target/
 
 /target
 
-# Credential databases (runtime data, not source code)
-*.db
-*.sqlite
-*.sqlite3
+# Credential databases (sensitive — never commit)
 credentials.db*
-
-# Markdown files (except README) — handoff docs may contain credentials
-*.md
-!README.md
-!AGENTS.md
-!CLAUDE.md
-!AGENTS.md
-!docs/
-!docs/**/*.md
-!docs/wiki/
-!docs/wiki/*.md
 
 # Playwright MCP
 .playwright-mcp/
 
-# Local Codex/Claude workspace artifacts
-.claude/hooks/
+# Local Claude workspace artifacts (runtime, not config)
 .claude/worktrees/
 logs/
-autoresearch-launch.json
-autoresearch-state.json
-autoresearch-state.prev.json
+autoresearch-*.json
+autoresearch-*.tsv
 research-results.tsv
 __pycache__/
 *.pyc
+
+# AI/tooling runtime state (keep out of repo)
+.wolf/
+.claude/
+.aidesigner/
+.serena/
+.codex/
+.codex-worktrees/
+.codex/worktrees/
 
 # Local reference repos
 mq2-definitions/
 mq2-eqlib/
 mq2-reference/
 
+# TUI runtime preferences (user-specific)
+config/tui-prefs.toml
+
 # Account credentials
 accounts.csv
 config/accounts.toml
+config/.credentials
 
-# Downloaded data files (maps, navmeshes — too large for git)
-data/
+# Large map text files (200MB+ each, use config/maps/*.zip instead)
 config/maps/*.txt
 config/accounts.csv
+
+# Ghidra exports
+data/ghidra-export/

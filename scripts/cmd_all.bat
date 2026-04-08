@@ -14,13 +14,13 @@ if "%~1"=="" (
 
 set "CMD=%~1"
 
-REM --- Locate dmft.exe ---
-set "DMFT_EXE=%~dp0..\target\release\dmft.exe"
-if not exist "%DMFT_EXE%" (
-    set "DMFT_EXE=%~dp0..\target\debug\dmft.exe"
+REM --- Locate textquest.exe ---
+set "TextQuest_EXE=%~dp0..\target\release\textquest.exe"
+if not exist "%TextQuest_EXE%" (
+    set "TextQuest_EXE=%~dp0..\target\debug\textquest.exe"
 )
-if not exist "%DMFT_EXE%" (
-    echo [ERROR] Cannot find dmft.exe. Run: cargo build --release
+if not exist "%TextQuest_EXE%" (
+    echo [ERROR] Cannot find textquest.exe. Run: cargo build --release
     goto :eof
 )
 
@@ -29,7 +29,7 @@ set COUNT=0
 for /f "tokens=2" %%p in ('tasklist /fi "imagename eq eqgame.exe" /fo list ^| findstr "PID:"') do (
     set /a COUNT+=1
     echo  [!COUNT!] PID=%%p  sending: %CMD%
-    "%DMFT_EXE%" --cmd %%p "%CMD%"
+    "%TextQuest_EXE%" --cmd %%p "%CMD%"
 )
 
 if %COUNT%==0 (

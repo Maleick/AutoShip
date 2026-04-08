@@ -20,7 +20,7 @@ permissions:
 jobs:
   gate:
     name: Local time gate
-    runs-on: [self-hosted, Windows, X64, dmft]
+    runs-on: [self-hosted, Windows, X64, textquest]
     outputs:
       should_run: ${{ steps.gate.outputs.should_run }}
     defaults:
@@ -53,13 +53,13 @@ jobs:
     name: Build rolling nightly prerelease
     needs: gate
     if: needs.gate.outputs.should_run == 'true'
-    runs-on: [self-hosted, Windows, X64, dmft]
+    runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 45
     defaults:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -69,7 +69,7 @@ jobs:
             echo [fatal] GITHUB_WORKSPACE is not defined.
             exit /b 1
           )
-          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\DMFT\DMFT" "C:\actions-runner\_work\DMFT") do (
+          for %%D in ("%GITHUB_WORKSPACE%" "C:\actions-runner\_work\TextQuest\TextQuest" "C:\actions-runner\_work\TextQuest") do (
             git config --global --add safe.directory "%%~D" || (
               echo [fatal] Failed to add safe.directory for %%~D.
               exit /b 1
@@ -118,7 +118,8 @@ jobs:
             exit /b 1
           )
 
-      - uses: lukka/get-cmake@v4.3.1
+      - name: Ensure cmake on PATH
+        uses: ./.github/actions/ensure-cmake
 
       - name: Build release binaries
         run: cargo build --release
@@ -128,29 +129,29 @@ jobs:
       - name: Package nightly artifacts
         run: |
           if not exist release mkdir release
-          if not exist target\release\dmft.exe (
-            echo [fatal] Expected target\release\dmft.exe to exist after the build.
+          if not exist target\release\textquest.exe (
+            echo [fatal] Expected target\release\textquest.exe to exist after the build.
             exit /b 1
           )
-          if not exist target\release\dmft_dll.dll (
-            echo [fatal] Expected target\release\dmft_dll.dll to exist after the build.
+          if not exist target\release\textquest_dll.dll (
+            echo [fatal] Expected target\release\textquest_dll.dll to exist after the build.
             exit /b 1
           )
-          copy /Y target\release\dmft.exe release\
-          copy /Y target\release\dmft_dll.dll release\
+          copy /Y target\release\textquest.exe release\
+          copy /Y target\release\textquest_dll.dll release\
           for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "[DateTime]::UtcNow.ToString('o')"') do set "UTC_TS=%%T"
-          echo DMFT Nightly > release\NOTES.txt
+          echo TextQuest Nightly > release\NOTES.txt
           echo Commit: %GITHUB_SHA% >> release\NOTES.txt
           echo Run: %GITHUB_RUN_NUMBER% >> release\NOTES.txt
           echo UTC: %UTC_TS% >> release\NOTES.txt
 
       - name: Upload nightly artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: dmft-nightly-${{ github.run_number }}
+          name: textquest-nightly-${{ github.run_number }}
           path: |
-            release/dmft.exe
-            release/dmft_dll.dll
+            release/textquest.exe
+            release/textquest_dll.dll
           if-no-files-found: error
 
       - name: Move nightly tag to current commit
@@ -165,9 +166,9 @@ jobs:
         with:
           allowUpdates: true
           artifactErrorsFailBuild: true
-          artifacts: "release/dmft.exe,release/dmft_dll.dll"
+          artifacts: "release/textquest.exe,release/textquest_dll.dll"
           bodyFile: "release/NOTES.txt"
-          name: "DMFT Nightly"
+          name: "TextQuest Nightly"
           prerelease: true
           removeArtifacts: true
           replacesArtifacts: true

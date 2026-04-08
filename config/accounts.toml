@@ -1,4 +1,4 @@
-# Account Configuration for DMFT
+# Account Configuration for TextQuest
 # Each account maps to a Daybreak login, target server, and character.
 # Passwords are stored separately in the encrypted credential store.
 #
@@ -6,12 +6,14 @@
 #   :login all        — launch all accounts below
 #   :login G1         — launch only accounts in group 1
 #   :login frostreaver01 — launch a single account
+#   :profile launch MainRaid  — launch all accounts in the "MainRaid" profile group
+#   F1 (hotkey)       — launch the profile group assigned to F1
 
 [[accounts]]
 name = "frostreaver01"
 server = "Firiona Vie"
-character = "TBD"
-class = "WAR"
+character = "Camrene"
+class = "PAL"
 group = 1
 
 [[accounts]]
@@ -91,11 +93,214 @@ character = "TBD"
 class = "BRD"
 group = 2
 
-# Add more accounts for groups 3-6 as needed.
-# Template:
-# [[accounts]]
-# name = "frostreaver13"
-# server = "Firiona Vie"
-# character = "TBD"
-# class = "SK"
-# group = 3
+# ─── Group 3: Offtank DPS ─────────────────────────────────────────────────
+
+[[accounts]]
+name = "frostreaver13"
+server = "Firiona Vie"
+character = "TBD"
+class = "SK"
+group = 3
+
+[[accounts]]
+name = "frostreaver14"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 3
+
+[[accounts]]
+name = "frostreaver15"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 3
+
+[[accounts]]
+name = "frostreaver16"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 3
+
+[[accounts]]
+name = "frostreaver17"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 3
+
+[[accounts]]
+name = "frostreaver18"
+server = "Firiona Vie"
+character = "TBD"
+class = "BRD"
+group = 3
+
+# ─── Group 4: Caster DPS ─────────────────────────────────────────────────
+
+[[accounts]]
+name = "frostreaver19"
+server = "Firiona Vie"
+character = "TBD"
+class = "MAG"
+group = 4
+
+[[accounts]]
+name = "frostreaver20"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 4
+
+[[accounts]]
+name = "frostreaver21"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 4
+
+[[accounts]]
+name = "frostreaver22"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 4
+
+[[accounts]]
+name = "frostreaver23"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 4
+
+[[accounts]]
+name = "frostreaver24"
+server = "Firiona Vie"
+character = "TBD"
+class = "BRD"
+group = 4
+
+# ─── Group 5: DPS Ranged ─────────────────────────────────────────────────
+
+[[accounts]]
+name = "frostreaver25"
+server = "Firiona Vie"
+character = "TBD"
+class = "RNG"
+group = 5
+
+[[accounts]]
+name = "frostreaver26"
+server = "Firiona Vie"
+character = "TBD"
+class = "BST"
+group = 5
+
+[[accounts]]
+name = "frostreaver27"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 5
+
+[[accounts]]
+name = "frostreaver28"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 5
+
+[[accounts]]
+name = "frostreaver29"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 5
+
+[[accounts]]
+name = "frostreaver30"
+server = "Firiona Vie"
+character = "TBD"
+class = "BRD"
+group = 5
+
+# ─── Group 6: Caster ─────────────────────────────────────────────────────
+
+[[accounts]]
+name = "frostreaver31"
+server = "Firiona Vie"
+character = "TBD"
+class = "DRU"
+group = 6
+
+[[accounts]]
+name = "frostreaver32"
+server = "Firiona Vie"
+character = "TBD"
+class = "NEC"
+group = 6
+
+[[accounts]]
+name = "frostreaver33"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 6
+
+[[accounts]]
+name = "frostreaver34"
+server = "Firiona Vie"
+character = "TBD"
+class = "CLR"
+group = 6
+
+[[accounts]]
+name = "frostreaver35"
+server = "Firiona Vie"
+character = "TBD"
+class = "WIZ"
+group = 6
+
+[[accounts]]
+name = "frostreaver36"
+server = "Firiona Vie"
+character = "TBD"
+class = "BRD"
+group = 6
+
+# ─── Profile Groups ────────────────────────────────────────────────────────
+# Named profile groups for one-action multi-character launches.
+# Each profile maps a name and optional hotkey (F1–F9) to a numeric group ID.
+# Press the hotkey in the TUI to launch all accounts in that group.
+# Use `:profile list` to view profiles, `:profile launch <name>` to launch.
+
+[[profile_groups]]
+id = 1
+name = "MainRaid"
+hotkey = "F1"
+
+[[profile_groups]]
+id = 2
+name = "SecondRaid"
+hotkey = "F2"
+
+[[profile_groups]]
+id = 3
+name = "OfftankDPS"
+hotkey = "F3"
+
+[[profile_groups]]
+id = 4
+name = "CasterDPS"
+hotkey = "F4"
+
+[[profile_groups]]
+id = 5
+name = "RangedDPS"
+hotkey = "F5"
+
+[[profile_groups]]
+id = 6
+name = "Caster"
+hotkey = "F6"

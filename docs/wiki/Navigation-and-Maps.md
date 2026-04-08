@@ -13,13 +13,13 @@ Map assets currently come from `config/maps/*.txt`, following the Brewall-style 
 
 ## Current Navigation Behavior
 
-When you issue `:nav`, DMFT tries to resolve the destination as:
+When you issue `:nav`, TextQuest tries to resolve the destination as:
 
 1. a saved camp
 2. explicit coordinates
 3. a zone short name
 
-Per-client results are then sent through `dmft_common::ipc::Command::NavigateTo`.
+Per-client results are then sent through `textquest_common::ipc::Command::NavigateTo`.
 
 Possible route sources in current code:
 
@@ -30,16 +30,16 @@ The TUI reports which path source was used while updating per-client nav state.
 
 ## Navmesh and Zone Routing
 
-The core implementation is in `dmft/src/nav/mesh.rs` and `dmft-common/src/nav.rs`.
+The core implementation is in `textquest/src/nav/mesh.rs` and `textquest-common/src/nav.rs`.
 
 Current facts:
 
-- DMFT reads MQ2Nav-format navmesh files
+- TextQuest reads MQ2Nav-format navmesh files
 - the mesh payload is loaded into Detour
 - zone-to-zone planning uses `ZoneGraph` BFS
 - nav status is reported as `Idle`, `Moving`, `Stuck`, or `Arrived`
 
-The zone graph model is shared in `dmft-common/src/nav.rs`, and live zone graph data can be queried from an injected client with the CLI `zones` command.
+The zone graph model is shared in `textquest-common/src/nav.rs`, and live zone graph data can be queried from an injected client with the CLI `zones` command.
 
 ## TUI Map Features
 
@@ -53,7 +53,7 @@ The Map screen currently supports:
 - nav path overlays
 - navmesh overlay toggle when mesh data is available
 
-The map directory lookup is handled in `dmft/src/tui/state.rs`.
+The map directory lookup is handled in `textquest/src/tui/state.rs`.
 
 ## Demo Mode Notes
 
@@ -70,22 +70,23 @@ That makes it useful for UI validation, but it does not prove live movement corr
 
 ### Orchestrator side
 
-- `dmft/src/nav/mesh.rs`: mesh parsing, route planning, overlay loading
-- `dmft/src/nav/recorder.rs`: waypoint capture and simplification
-- `dmft/src/nav/router.rs`: route and step abstractions
+- `textquest/src/nav/mesh.rs`: mesh parsing, route planning, overlay loading
+- `textquest/src/nav/recorder.rs`: waypoint capture and simplification
+- `textquest/src/nav/router.rs`: route and step abstractions
 
 ### DLL side
 
-- `dmft-dll/src/nav/state.rs`: navigator FSM
-- `dmft-dll/src/nav/stuck.rs`: stuck detection and escalating recovery
-- `dmft-dll/src/nav/humanize.rs`: detours and movement variation
+- `textquest-dll/src/nav/state.rs`: navigator FSM
+- `textquest-dll/src/nav/stuck.rs`: stuck detection and escalating recovery
+- `textquest-dll/src/nav/humanize.rs`: detours and movement variation
 
 ## Current Behavior vs Roadmap
 
 ### Current behavior
 
 - MQ2Nav-style navmesh support and Detour integration are part of the repo today.
-- Straight-line fallback is deliberate and should be expected when mesh or live state data is unavailable.
+- Straight-line fallback is deliberate only for navmesh data gaps or unavailable mesh data.
+- If a mesh exists but no safe corridor can be planned, TextQuest now reports a blocked route and recommends replanning instead of taking a direct shortcut through walls.
 
 ### Validation notes
 

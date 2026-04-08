@@ -1,4 +1,4 @@
-name: Claude agent issue worker
+name: Claude agent
 
 on:
   issue_comment:
@@ -6,7 +6,7 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, reopened, labeled]
+    types: [labeled]
 
 concurrency:
   group: claude-agent-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -31,11 +31,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && format('refs/pull/{0}/head', github.event.issue.number) || github.event_name == 'pull_request_review_comment' && format('refs/pull/{0}/head', github.event.pull_request.number) || '' }}
 
-      - name: Run Claude issue worker
+      - name: Run Claude agent
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -44,8 +45,8 @@ jobs:
           prompt: |
             Follow `docs/claude-issue-worker.md` exactly.
             Read `AGENTS.md` and `CLAUDE.md` before editing.
-            In DMFT, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge.
+            In TextQuest, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge.
           claude_args: |
             --model claude-sonnet-4-6
             --max-turns 12
-            --append-system-prompt "Read AGENTS.md and CLAUDE.md before editing. In DMFT, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge."
+            --append-system-prompt "Read AGENTS.md and CLAUDE.md before editing. In TextQuest, Claude may claim issues, implement changes, run verification, and open pull requests, but must never merge or enable merge."

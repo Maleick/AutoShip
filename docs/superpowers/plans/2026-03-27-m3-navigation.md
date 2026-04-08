@@ -6,7 +6,7 @@
 
 **Architecture:** Two-layer design. The DLL runs a per-tick navigation state machine that autonomously follows waypoints, handles heading/speed, and detects stuck conditions. The orchestrator handles high-level routing (which zone, port coordination, group travel). IPC carries high-level commands down (`NavigateTo`, `SetCamp`) and navigation status up (via `GameState`). Waypoint recording comes first; Recast/Detour navmesh generation is a later phase.
 
-**Tech Stack:** Rust, retour (detours), bincode (IPC), dmft-common (shared types). No new external dependencies in Phase 1.
+**Tech Stack:** Rust, retour (detours), bincode (IPC), textquest-common (shared types). No new external dependencies in Phase 1.
 
 ---
 
@@ -16,44 +16,44 @@
 
 | File                           | Responsibility                                                |
 | ------------------------------ | ------------------------------------------------------------- |
-| `dmft-dll/src/nav/mod.rs`      | Navigation module root, re-exports                            |
-| `dmft-dll/src/nav/state.rs`    | Per-tick navigation state machine (Idle/Moving/Stuck/Arrived) |
-| `dmft-dll/src/nav/waypoint.rs` | Waypoint queue, path following logic                          |
-| `dmft-dll/src/nav/stuck.rs`    | Stuck detection and recovery strategies                       |
-| `dmft-dll/src/nav/humanize.rs` | Speed jitter, heading wobble, path deviation                  |
-| `dmft-common/src/nav.rs`       | Shared nav types (Waypoint, NavCommand, NavStatus, CampSpot)  |
-| `dmft/src/nav/mod.rs`          | Orchestrator-side navigation module root                      |
-| `dmft/src/nav/router.rs`       | High-level A-to-B zone routing, port coordination             |
-| `dmft/src/nav/camp.rs`         | Camp position definitions and assignment                      |
-| `dmft/src/nav/recorder.rs`     | Waypoint recording from live character movement               |
+| `textquest-dll/src/nav/mod.rs`      | Navigation module root, re-exports                            |
+| `textquest-dll/src/nav/state.rs`    | Per-tick navigation state machine (Idle/Moving/Stuck/Arrived) |
+| `textquest-dll/src/nav/waypoint.rs` | Waypoint queue, path following logic                          |
+| `textquest-dll/src/nav/stuck.rs`    | Stuck detection and recovery strategies                       |
+| `textquest-dll/src/nav/humanize.rs` | Speed jitter, heading wobble, path deviation                  |
+| `textquest-common/src/nav.rs`       | Shared nav types (Waypoint, NavCommand, NavStatus, CampSpot)  |
+| `textquest/src/nav/mod.rs`          | Orchestrator-side navigation module root                      |
+| `textquest/src/nav/router.rs`       | High-level A-to-B zone routing, port coordination             |
+| `textquest/src/nav/camp.rs`         | Camp position definitions and assignment                      |
+| `textquest/src/nav/recorder.rs`     | Waypoint recording from live character movement               |
 
 ### Modified files
 
 | File                                    | Changes                                        |
 | --------------------------------------- | ---------------------------------------------- |
-| `dmft-common/src/ipc.rs`                | Add navigation commands and responses          |
-| `dmft-common/src/types.rs`              | Add `NavStatus` to `GameState`                 |
-| `dmft-common/src/lib.rs`                | Add `pub mod nav;`                             |
-| `dmft-dll/src/lib.rs`                   | Add `mod nav;`                                 |
-| `dmft-dll/src/hooks/movement.rs`        | Implement actual movement via EQ memory writes |
-| `dmft-dll/src/hooks/game_loop.rs`       | Call nav state machine in `on_game_tick()`     |
-| `dmft/src/main.rs` or `dmft/src/lib.rs` | Add `mod nav;`                                 |
+| `textquest-common/src/ipc.rs`                | Add navigation commands and responses          |
+| `textquest-common/src/types.rs`              | Add `NavStatus` to `GameState`                 |
+| `textquest-common/src/lib.rs`                | Add `pub mod nav;`                             |
+| `textquest-dll/src/lib.rs`                   | Add `mod nav;`                                 |
+| `textquest-dll/src/hooks/movement.rs`        | Implement actual movement via EQ memory writes |
+| `textquest-dll/src/hooks/game_loop.rs`       | Call nav state machine in `on_game_tick()`     |
+| `textquest/src/main.rs` or `textquest/src/lib.rs` | Add `mod nav;`                                 |
 
 ---
 
-## Task 1: Shared Navigation Types (dmft-common)
+## Task 1: Shared Navigation Types (textquest-common)
 
 **Files:**
 
-- Create: `dmft-common/src/nav.rs`
-- Modify: `dmft-common/src/lib.rs`
-- Modify: `dmft-common/src/ipc.rs`
-- Modify: `dmft-common/src/types.rs`
+- Create: `textquest-common/src/nav.rs`
+- Modify: `textquest-common/src/lib.rs`
+- Modify: `textquest-common/src/ipc.rs`
+- Modify: `textquest-common/src/types.rs`
 
-- [ ] **Step 1: Create `dmft-common/src/nav.rs` with core types**
+- [ ] **Step 1: Create `textquest-common/src/nav.rs` with core types**
 
 ```rust
-// dmft-common/src/nav.rs
+// textquest-common/src/nav.rs
 use serde::{Deserialize, Serialize};
 
 /// A single point in 3D space with optional metadata.
@@ -122,7 +122,7 @@ pub struct CampDefinition {
 }
 ```
 
-- [ ] **Step 2: Add `pub mod nav;` to `dmft-common/src/lib.rs`**
+- [ ] **Step 2: Add `pub mod nav;` to `textquest-common/src/lib.rs`**
 
 Add after existing module declarations:
 
@@ -130,7 +130,7 @@ Add after existing module declarations:
 pub mod nav;
 ```
 
-- [ ] **Step 3: Add navigation commands to `dmft-common/src/ipc.rs`**
+- [ ] **Step 3: Add navigation commands to `textquest-common/src/ipc.rs`**
 
 Add these variants to the `Command` enum:
 
@@ -144,7 +144,7 @@ Add these variants to the `Command` enum:
     StopNavigation,
 ```
 
-- [ ] **Step 4: Add `NavStatus` to `GameState` in `dmft-common/src/types.rs`**
+- [ ] **Step 4: Add `NavStatus` to `GameState` in `textquest-common/src/types.rs`**
 
 Add field to `GameState`:
 
@@ -156,13 +156,13 @@ And update the `GameState` struct's construction sites to default to `NavStatus:
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cargo build -p dmft-common`
+Run: `cargo build -p textquest-common`
 Expected: Clean compile with no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add dmft-common/src/nav.rs dmft-common/src/lib.rs dmft-common/src/ipc.rs dmft-common/src/types.rs
+git add textquest-common/src/nav.rs textquest-common/src/lib.rs textquest-common/src/ipc.rs textquest-common/src/types.rs
 git commit -m "feat(nav): add shared navigation types — Waypoint, NavStatus, CampSpot, nav commands"
 ```
 
@@ -172,12 +172,12 @@ git commit -m "feat(nav): add shared navigation types — Waypoint, NavStatus, C
 
 **Files:**
 
-- Modify: `dmft-dll/src/hooks/movement.rs`
-- Modify: `dmft-common/src/offsets.rs`
+- Modify: `textquest-dll/src/hooks/movement.rs`
+- Modify: `textquest-common/src/offsets.rs`
 
 Movement in EQ works by writing directly to the PlayerClient struct fields: set heading, then set the speed/movement flags. The game engine picks up these values each tick.
 
-- [ ] **Step 1: Add movement-related field offsets to `dmft-common/src/offsets.rs`**
+- [ ] **Step 1: Add movement-related field offsets to `textquest-common/src/offsets.rs`**
 
 Add to the `player_base` module:
 
@@ -201,7 +201,7 @@ Replace the full file:
 //! Writes directly to PlayerClient struct fields in EQ memory.
 //! The game engine reads these values each tick to process movement.
 
-use dmft_common::nav::Waypoint;
+use textquest_common::nav::Waypoint;
 
 /// Arrival threshold in game units (close enough to "be there").
 pub const ARRIVAL_DISTANCE: f32 = 15.0;
@@ -258,7 +258,7 @@ impl MovementController {
     pub fn write_heading(&self, heading: f32) {
         #[cfg(windows)]
         unsafe {
-            let addr = self.player_base + dmft_common::offsets::player_base::HEADING;
+            let addr = self.player_base + textquest_common::offsets::player_base::HEADING;
             std::ptr::write(addr as *mut f32, heading);
         }
         #[cfg(not(windows))]
@@ -269,7 +269,7 @@ impl MovementController {
     pub fn write_speed_heading(&self, heading: f32) {
         #[cfg(windows)]
         unsafe {
-            let addr = self.player_base + dmft_common::offsets::player_base::SPEED_HEADING;
+            let addr = self.player_base + textquest_common::offsets::player_base::SPEED_HEADING;
             std::ptr::write(addr as *mut f32, heading);
         }
         #[cfg(not(windows))]
@@ -281,9 +281,9 @@ impl MovementController {
         #[cfg(windows)]
         unsafe {
             let base = self.player_base;
-            let y = std::ptr::read((base + dmft_common::offsets::player_base::Y) as *const f32);
-            let x = std::ptr::read((base + dmft_common::offsets::player_base::X) as *const f32);
-            let z = std::ptr::read((base + dmft_common::offsets::player_base::Z) as *const f32);
+            let y = std::ptr::read((base + textquest_common::offsets::player_base::Y) as *const f32);
+            let x = std::ptr::read((base + textquest_common::offsets::player_base::X) as *const f32);
+            let z = std::ptr::read((base + textquest_common::offsets::player_base::Z) as *const f32);
             Waypoint::new(x, y, z)
         }
         #[cfg(not(windows))]
@@ -297,7 +297,7 @@ impl MovementController {
     pub fn read_heading(&self) -> f32 {
         #[cfg(windows)]
         unsafe {
-            std::ptr::read((self.player_base + dmft_common::offsets::player_base::HEADING) as *const f32)
+            std::ptr::read((self.player_base + textquest_common::offsets::player_base::HEADING) as *const f32)
         }
         #[cfg(not(windows))]
         {
@@ -310,13 +310,13 @@ impl MovementController {
 
 - [ ] **Step 3: Verify it compiles**
 
-Run: `cargo build -p dmft-dll`
+Run: `cargo build -p textquest-dll`
 Expected: Clean compile.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add dmft-dll/src/hooks/movement.rs dmft-common/src/offsets.rs
+git add textquest-dll/src/hooks/movement.rs textquest-common/src/offsets.rs
 git commit -m "feat(nav): implement movement primitives — heading calc, memory read/write, MovementController"
 ```
 
@@ -326,19 +326,19 @@ git commit -m "feat(nav): implement movement primitives — heading calc, memory
 
 **Files:**
 
-- Create: `dmft-dll/src/nav/mod.rs`
-- Create: `dmft-dll/src/nav/state.rs`
-- Create: `dmft-dll/src/nav/waypoint.rs`
-- Modify: `dmft-dll/src/lib.rs`
+- Create: `textquest-dll/src/nav/mod.rs`
+- Create: `textquest-dll/src/nav/state.rs`
+- Create: `textquest-dll/src/nav/waypoint.rs`
+- Modify: `textquest-dll/src/lib.rs`
 
 This is the core per-tick logic. The state machine transitions: Idle -> Moving -> (Stuck -> Moving) -> Arrived -> Idle.
 
-- [ ] **Step 1: Create `dmft-dll/src/nav/waypoint.rs` — waypoint queue**
+- [ ] **Step 1: Create `textquest-dll/src/nav/waypoint.rs` — waypoint queue**
 
 ```rust
 //! Waypoint queue — stores and advances through a path of waypoints.
 
-use dmft_common::nav::Waypoint;
+use textquest_common::nav::Waypoint;
 
 /// A queue of waypoints to follow in order.
 pub struct WaypointQueue {
@@ -399,13 +399,13 @@ impl WaypointQueue {
 }
 ```
 
-- [ ] **Step 2: Create `dmft-dll/src/nav/state.rs` — navigation state machine**
+- [ ] **Step 2: Create `textquest-dll/src/nav/state.rs` — navigation state machine**
 
 ```rust
 //! Navigation state machine — runs once per game tick.
 //! Transitions: Idle -> Moving -> (Stuck -> Moving) -> Arrived -> Idle
 
-use dmft_common::nav::{NavStatus, Waypoint, CampSpot};
+use textquest_common::nav::{NavStatus, Waypoint, CampSpot};
 use crate::hooks::movement::{self, MovementController, ARRIVAL_DISTANCE};
 use super::waypoint::WaypointQueue;
 
@@ -601,7 +601,7 @@ impl Navigator {
 }
 ```
 
-- [ ] **Step 3: Create `dmft-dll/src/nav/mod.rs`**
+- [ ] **Step 3: Create `textquest-dll/src/nav/mod.rs`**
 
 ```rust
 //! Navigation module — autonomous waypoint-based movement.
@@ -612,7 +612,7 @@ pub mod waypoint;
 pub use state::Navigator;
 ```
 
-- [ ] **Step 4: Add `mod nav;` to `dmft-dll/src/lib.rs`**
+- [ ] **Step 4: Add `mod nav;` to `textquest-dll/src/lib.rs`**
 
 Add after existing module declarations:
 
@@ -622,13 +622,13 @@ mod nav;
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cargo build -p dmft-dll`
+Run: `cargo build -p textquest-dll`
 Expected: Clean compile.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add dmft-dll/src/nav/
+git add textquest-dll/src/nav/
 git commit -m "feat(nav): add navigation state machine — Idle/Moving/Stuck/Arrived FSM with waypoint queue"
 ```
 
@@ -638,8 +638,8 @@ git commit -m "feat(nav): add navigation state machine — Idle/Moving/Stuck/Arr
 
 **Files:**
 
-- Modify: `dmft-dll/src/hooks/game_loop.rs`
-- Modify: `dmft-dll/src/hooks/mod.rs`
+- Modify: `textquest-dll/src/hooks/game_loop.rs`
+- Modify: `textquest-dll/src/hooks/mod.rs`
 
 Wire the Navigator into `on_game_tick()` so it runs every frame.
 
@@ -647,7 +647,7 @@ Wire the Navigator into `on_game_tick()` so it runs every frame.
 
 The Navigator needs to persist across ticks. Use a `Mutex<Option<Navigator>>` global since the game loop is single-threaded but commands arrive from IPC.
 
-Add to `dmft-dll/src/nav/mod.rs`:
+Add to `textquest-dll/src/nav/mod.rs`:
 
 ```rust
 use std::sync::Mutex;
@@ -669,11 +669,11 @@ pub fn tick() {
 }
 
 /// Get current navigation status for IPC reporting.
-pub fn status() -> dmft_common::nav::NavStatus {
+pub fn status() -> textquest_common::nav::NavStatus {
     NAVIGATOR.lock().unwrap()
         .as_ref()
         .map(|n| n.status())
-        .unwrap_or(dmft_common::nav::NavStatus::Idle)
+        .unwrap_or(textquest_common::nav::NavStatus::Idle)
 }
 
 /// Handle a navigation command from IPC.
@@ -689,15 +689,15 @@ pub fn handle_command(cmd: NavCommand) {
 
 /// Commands that can be sent to the navigator.
 pub enum NavCommand {
-    Navigate(Vec<dmft_common::nav::Waypoint>),
-    SetCamp(dmft_common::nav::CampSpot),
+    Navigate(Vec<textquest_common::nav::Waypoint>),
+    SetCamp(textquest_common::nav::CampSpot),
     Stop,
 }
 ```
 
 - [ ] **Step 2: Call `nav::tick()` from `on_game_tick()`**
 
-In `dmft-dll/src/hooks/game_loop.rs`, update `on_game_tick()`:
+In `textquest-dll/src/hooks/game_loop.rs`, update `on_game_tick()`:
 
 ```rust
 fn on_game_tick() {
@@ -712,13 +712,13 @@ fn on_game_tick() {
 
 - [ ] **Step 3: Verify it compiles**
 
-Run: `cargo build -p dmft-dll`
+Run: `cargo build -p textquest-dll`
 Expected: Clean compile.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add dmft-dll/src/nav/mod.rs dmft-dll/src/hooks/game_loop.rs
+git add textquest-dll/src/nav/mod.rs textquest-dll/src/hooks/game_loop.rs
 git commit -m "feat(nav): integrate Navigator into game loop — runs nav tick every frame"
 ```
 
@@ -728,12 +728,12 @@ git commit -m "feat(nav): integrate Navigator into game loop — runs nav tick e
 
 **Files:**
 
-- Create: `dmft-dll/src/nav/humanize.rs`
-- Modify: `dmft-dll/src/nav/state.rs`
+- Create: `textquest-dll/src/nav/humanize.rs`
+- Modify: `textquest-dll/src/nav/state.rs`
 
 Make each character move differently so 36 characters don't look like synchronized bots.
 
-- [ ] **Step 1: Create `dmft-dll/src/nav/humanize.rs`**
+- [ ] **Step 1: Create `textquest-dll/src/nav/humanize.rs`**
 
 ```rust
 //! Movement humanization — per-character speed jitter, heading wobble,
@@ -797,7 +797,7 @@ impl MovementPersonality {
 
 - [ ] **Step 2: Integrate personality into Navigator**
 
-In `dmft-dll/src/nav/state.rs`, add `personality` field to `Navigator`:
+In `textquest-dll/src/nav/state.rs`, add `personality` field to `Navigator`:
 
 ```rust
 use super::humanize::MovementPersonality;
@@ -839,7 +839,7 @@ Update `tick_moving()` to apply wobble when writing heading:
 
 - [ ] **Step 3: Update `nav::init()` to accept `client_id`**
 
-In `dmft-dll/src/nav/mod.rs`:
+In `textquest-dll/src/nav/mod.rs`:
 
 ```rust
 pub fn init(player_base: usize, client_id: u32) {
@@ -849,17 +849,17 @@ pub fn init(player_base: usize, client_id: u32) {
 }
 ```
 
-- [ ] **Step 4: Add `pub mod humanize;` to `dmft-dll/src/nav/mod.rs`**
+- [ ] **Step 4: Add `pub mod humanize;` to `textquest-dll/src/nav/mod.rs`**
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cargo build -p dmft-dll`
+Run: `cargo build -p textquest-dll`
 Expected: Clean compile.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add dmft-dll/src/nav/humanize.rs dmft-dll/src/nav/mod.rs dmft-dll/src/nav/state.rs
+git add textquest-dll/src/nav/humanize.rs textquest-dll/src/nav/mod.rs textquest-dll/src/nav/state.rs
 git commit -m "feat(nav): add movement humanization — per-character speed/heading personality via xorshift PRNG"
 ```
 
@@ -869,12 +869,12 @@ git commit -m "feat(nav): add movement humanization — per-character speed/head
 
 **Files:**
 
-- Create: `dmft-dll/src/nav/stuck.rs`
-- Modify: `dmft-dll/src/nav/state.rs`
+- Create: `textquest-dll/src/nav/stuck.rs`
+- Modify: `textquest-dll/src/nav/state.rs`
 
 Extract stuck detection into its own module with escalating recovery strategies.
 
-- [ ] **Step 1: Create `dmft-dll/src/nav/stuck.rs`**
+- [ ] **Step 1: Create `textquest-dll/src/nav/stuck.rs`**
 
 ```rust
 //! Stuck detection and escalating recovery strategies.
@@ -886,7 +886,7 @@ Extract stuck detection into its own module with escalating recovery strategies.
 //! 4. Jump + turn
 //! 5. Give up, alert orchestrator
 
-use dmft_common::nav::Waypoint;
+use textquest_common::nav::Waypoint;
 use crate::hooks::movement::MovementController;
 
 /// How many ticks with < threshold movement before stuck.
@@ -1042,17 +1042,17 @@ Update `tick_moving()` to use the detector:
 
 Remove `State::Stuck` variant and `tick_stuck()` method since the `StuckDetector` handles it inline now.
 
-- [ ] **Step 3: Add `pub mod stuck;` to `dmft-dll/src/nav/mod.rs`**
+- [ ] **Step 3: Add `pub mod stuck;` to `textquest-dll/src/nav/mod.rs`**
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cargo build -p dmft-dll`
+Run: `cargo build -p textquest-dll`
 Expected: Clean compile.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add dmft-dll/src/nav/stuck.rs dmft-dll/src/nav/mod.rs dmft-dll/src/nav/state.rs
+git add textquest-dll/src/nav/stuck.rs textquest-dll/src/nav/mod.rs textquest-dll/src/nav/state.rs
 git commit -m "feat(nav): add StuckDetector with escalating recovery — turn/backup/diagonal/give-up"
 ```
 
@@ -1062,18 +1062,18 @@ git commit -m "feat(nav): add StuckDetector with escalating recovery — turn/ba
 
 **Files:**
 
-- Create: `dmft/src/nav/mod.rs`
-- Create: `dmft/src/nav/recorder.rs`
+- Create: `textquest/src/nav/mod.rs`
+- Create: `textquest/src/nav/recorder.rs`
 
 Record a character's movement as waypoints for later replay by other characters. This is the "known routes first" strategy from the decision profile.
 
-- [ ] **Step 1: Create `dmft/src/nav/recorder.rs`**
+- [ ] **Step 1: Create `textquest/src/nav/recorder.rs`**
 
 ```rust
 //! Waypoint recorder — captures a character's movement into a replayable path.
 //! Records position snapshots at regular intervals while the character moves.
 
-use dmft_common::nav::Waypoint;
+use textquest_common::nav::Waypoint;
 use std::time::{Duration, Instant};
 
 /// Minimum distance between recorded waypoints to avoid redundant points.
@@ -1202,7 +1202,7 @@ fn point_line_distance_2d(point: &Waypoint, line_start: &Waypoint, line_end: &Wa
 }
 ```
 
-- [ ] **Step 2: Create `dmft/src/nav/mod.rs`**
+- [ ] **Step 2: Create `textquest/src/nav/mod.rs`**
 
 ```rust
 //! Orchestrator-side navigation — routing, recording, camp management.
@@ -1212,7 +1212,7 @@ pub mod recorder;
 
 - [ ] **Step 3: Add `mod nav;` to the orchestrator crate root**
 
-Add to `dmft/src/main.rs` (with the other mod declarations):
+Add to `textquest/src/main.rs` (with the other mod declarations):
 
 ```rust
 mod nav;
@@ -1226,7 +1226,7 @@ Expected: Clean compile.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add dmft/src/nav/
+git add textquest/src/nav/
 git commit -m "feat(nav): add waypoint recorder with RDP path simplification for route recording"
 ```
 
@@ -1236,18 +1236,18 @@ git commit -m "feat(nav): add waypoint recorder with RDP path simplification for
 
 **Files:**
 
-- Create: `dmft/src/nav/camp.rs`
-- Modify: `dmft/src/nav/mod.rs`
+- Create: `textquest/src/nav/camp.rs`
+- Modify: `textquest/src/nav/mod.rs`
 
 Define camp positions with role-based spot assignments. Characters navigate to their assigned spot and face the specified heading.
 
-- [ ] **Step 1: Create `dmft/src/nav/camp.rs`**
+- [ ] **Step 1: Create `textquest/src/nav/camp.rs`**
 
 ```rust
 //! Camp position management — assign characters to role-based spots.
 
-use dmft_common::nav::{CampDefinition, CampSpot, Waypoint};
-use dmft_common::types::ClientId;
+use textquest_common::nav::{CampDefinition, CampSpot, Waypoint};
+use textquest_common::types::ClientId;
 use std::collections::HashMap;
 
 /// Manages camp assignments for a group.
@@ -1364,7 +1364,7 @@ pub fn create_standard_camp(
 }
 ```
 
-- [ ] **Step 2: Add `pub mod camp;` to `dmft/src/nav/mod.rs`**
+- [ ] **Step 2: Add `pub mod camp;` to `textquest/src/nav/mod.rs`**
 
 ```rust
 pub mod camp;
@@ -1379,7 +1379,7 @@ Expected: Clean compile.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add dmft/src/nav/camp.rs dmft/src/nav/mod.rs
+git add textquest/src/nav/camp.rs textquest/src/nav/mod.rs
 git commit -m "feat(nav): add camp position system — role-based spot assignment with standard layout generator"
 ```
 
@@ -1389,18 +1389,18 @@ git commit -m "feat(nav): add camp position system — role-based spot assignmen
 
 **Files:**
 
-- Create: `dmft/src/nav/router.rs`
-- Modify: `dmft/src/nav/mod.rs`
+- Create: `textquest/src/nav/router.rs`
+- Modify: `textquest/src/nav/mod.rs`
 
 Handle zone-to-zone travel with staggered entries and port-first coordination.
 
-- [ ] **Step 1: Create `dmft/src/nav/router.rs`**
+- [ ] **Step 1: Create `textquest/src/nav/router.rs`**
 
 ```rust
 //! High-level zone routing — plans multi-zone travel and coordinates group transitions.
 
-use dmft_common::nav::Waypoint;
-use dmft_common::types::ClientId;
+use textquest_common::nav::Waypoint;
+use textquest_common::types::ClientId;
 use std::collections::HashMap;
 
 /// A step in a multi-zone travel plan.
@@ -1516,7 +1516,7 @@ pub fn plan_group_travel(
 }
 ```
 
-- [ ] **Step 2: Add `pub mod router;` to `dmft/src/nav/mod.rs`**
+- [ ] **Step 2: Add `pub mod router;` to `textquest/src/nav/mod.rs`**
 
 ```rust
 pub mod camp;
@@ -1532,7 +1532,7 @@ Expected: Clean compile.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add dmft/src/nav/router.rs dmft/src/nav/mod.rs
+git add textquest/src/nav/router.rs textquest/src/nav/mod.rs
 git commit -m "feat(nav): add zone router — travel plans with staggered zone transitions"
 ```
 
@@ -1542,12 +1542,12 @@ git commit -m "feat(nav): add zone router — travel plans with staggered zone t
 
 **Files:**
 
-- Modify: `dmft-dll/src/hooks/game_loop.rs`
-- Modify: `dmft-common/src/ipc.rs`
+- Modify: `textquest-dll/src/hooks/game_loop.rs`
+- Modify: `textquest-common/src/ipc.rs`
 
 Connect the navigation commands from IPC to the Navigator. When the game loop processes commands, navigation commands get routed to the nav module.
 
-- [ ] **Step 1: Add nav status to the Response enum in `dmft-common/src/ipc.rs`**
+- [ ] **Step 1: Add nav status to the Response enum in `textquest-common/src/ipc.rs`**
 
 Add a new variant:
 
@@ -1559,10 +1559,10 @@ Add a new variant:
 
 - [ ] **Step 2: Update `on_game_tick()` to dispatch nav commands**
 
-In `dmft-dll/src/hooks/game_loop.rs`:
+In `textquest-dll/src/hooks/game_loop.rs`:
 
 ```rust
-use dmft_common::ipc::Command;
+use textquest_common::ipc::Command;
 
 fn on_game_tick() {
     // Run navigation state machine.
@@ -1593,7 +1593,7 @@ Expected: Clean compile across all crates.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add dmft-dll/src/hooks/game_loop.rs dmft-common/src/ipc.rs
+git add textquest-dll/src/hooks/game_loop.rs textquest-common/src/ipc.rs
 git commit -m "feat(nav): wire IPC command dispatch — NavigateTo/SetCamp/StopNavigation route to Navigator"
 ```
 
@@ -1618,7 +1618,7 @@ git commit -m "feat(nav): wire IPC command dispatch — NavigateTo/SetCamp/StopN
 2. **Placeholder scan:** All code blocks contain complete implementations. No TBD/TODO in new code (existing TODOs in game_loop.rs are pre-existing and noted as comments showing future dispatch).
 
 3. **Type consistency:**
-   - `Waypoint` used consistently across all files (from `dmft_common::nav`)
+   - `Waypoint` used consistently across all files (from `textquest_common::nav`)
    - `NavStatus` consistent between `nav.rs` (definition) and `state.rs` (production)
    - `CampSpot`/`CampDefinition` consistent between `nav.rs` and `camp.rs`
    - `Navigator::new` signature updated in Task 5 to include `client_id` — Task 4's `nav::init()` updated to match

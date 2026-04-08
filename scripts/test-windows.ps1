@@ -1,5 +1,5 @@
 # =============================================================================
-# DMFT — Windows Test Runner
+# TextQuest — Windows Test Runner
 # =============================================================================
 # Runs automated tests and reports results. Run from the repo root.
 #
@@ -54,7 +54,7 @@ function Test-Skip {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " DMFT — Windows Test Suite" -ForegroundColor Cyan
+Write-Host " TextQuest — Windows Test Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Host " Host: $env:COMPUTERNAME"
@@ -79,21 +79,21 @@ Test-Check "Cargo available" {
     $LASTEXITCODE -eq 0
 }
 
-# T1.3: Debug build — dmft-common
-Test-Check "cargo build: dmft-common" {
-    $null = cargo build -p dmft-common 2>&1
+# T1.3: Debug build — textquest-common
+Test-Check "cargo build: textquest-common" {
+    $null = cargo build -p textquest-common 2>&1
     $LASTEXITCODE -eq 0
 }
 
-# T1.4: Debug build — dmft-dll
-Test-Check "cargo build: dmft-dll" {
-    $null = cargo build -p dmft-dll 2>&1
+# T1.4: Debug build — textquest-dll
+Test-Check "cargo build: textquest-dll" {
+    $null = cargo build -p textquest-dll 2>&1
     $LASTEXITCODE -eq 0
 }
 
-# T1.5: Debug build — dmft
-Test-Check "cargo build: dmft" {
-    $null = cargo build -p dmft 2>&1
+# T1.5: Debug build — textquest
+Test-Check "cargo build: textquest" {
+    $null = cargo build -p textquest 2>&1
     $LASTEXITCODE -eq 0
 }
 
@@ -117,18 +117,18 @@ Test-Check "Config file exists (config/frostreaver.toml)" {
 }
 
 # T1.9: DLL artifact built
-Test-Check "DLL artifact exists (target/release/dmft_dll.dll)" {
-    Test-Path "target/release/dmft_dll.dll"
+Test-Check "DLL artifact exists (target/release/textquest_dll.dll)" {
+    Test-Path "target/release/textquest_dll.dll"
 }
 
 # T1.10: EXE artifact built
-Test-Check "EXE artifact exists (target/release/dmft.exe)" {
-    Test-Path "target/release/dmft.exe"
+Test-Check "EXE artifact exists (target/release/textquest.exe)" {
+    Test-Path "target/release/textquest.exe"
 }
 
 # T1.11: TUI launches and exits cleanly (send 'q' after 2 seconds)
 Test-Check "TUI launches in demo mode" {
-    $proc = Start-Process -FilePath "target\release\dmft.exe" -PassThru -NoNewWindow
+    $proc = Start-Process -FilePath "target\release\textquest.exe" -PassThru -NoNewWindow
     Start-Sleep -Seconds 3
     if (-not $proc.HasExited) {
         $proc.Kill()
@@ -140,7 +140,7 @@ Test-Check "TUI launches in demo mode" {
 
 # T1.12: Dump mode runs
 Test-Check "Dump mode (--dump) runs" {
-    $null = & "target\release\dmft.exe" --dump 2>&1
+    $null = & "target\release\textquest.exe" --dump 2>&1
     # On Windows without EQ, this should exit gracefully (non-zero is OK if no process found)
     $true  # Just checking it doesn't crash/hang
 }
@@ -170,20 +170,20 @@ if ($Tier -ge 2) {
         Write-Host ""
 
         # T2.1: Process detection
-        Test-Check "EQ process detected by dmft" {
-            $output = & "target\release\dmft.exe" --dump 2>&1 | Out-String
+        Test-Check "EQ process detected by textquest" {
+            $output = & "target\release\textquest.exe" --dump 2>&1 | Out-String
             $output -match "(?i)found|player|spawn"
         }
 
         # T2.2: Player data
         Test-Check "Player data readable" {
-            $output = & "target\release\dmft.exe" --dump 2>&1 | Out-String
+            $output = & "target\release\textquest.exe" --dump 2>&1 | Out-String
             $output -match "(?i)name|level|class|hp"
         }
 
         # T2.3: Spawn list
         Test-Check "Spawn list populated" {
-            $output = & "target\release\dmft.exe" --dump 2>&1 | Out-String
+            $output = & "target\release\textquest.exe" --dump 2>&1 | Out-String
             $output -match "(?i)spawn|npc|pc"
         }
 
@@ -213,7 +213,7 @@ if ($Tier -ge 3) {
     Write-Host ""
     Write-Host "  1. Launch ONE EQ client on a throwaway account" -ForegroundColor White
     Write-Host "  2. Log into any server, select any character" -ForegroundColor White
-    Write-Host "  3. Run: target\release\dmft.exe --inject" -ForegroundColor White
+    Write-Host "  3. Run: target\release\textquest.exe --inject" -ForegroundColor White
     Write-Host "  4. Check for: 'Injection successful' message" -ForegroundColor White
     Write-Host "  5. Check for: IPC connection established" -ForegroundColor White
     Write-Host "  6. In TUI, verify live data updates" -ForegroundColor White
@@ -243,7 +243,7 @@ Write-Host ""
 Write-Host "--- Copy below and paste into Discord ---" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "``````"
-Write-Host "DMFT Test Report — $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+Write-Host "TextQuest Test Report — $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
 Write-Host "Host: $env:COMPUTERNAME | OS: $([System.Environment]::OSVersion.VersionString)"
 Write-Host "Rust: $(rustc --version 2>&1)"
 Write-Host "Results: $passed passed / $failed failed / $skipped skipped"
