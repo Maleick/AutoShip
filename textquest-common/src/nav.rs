@@ -659,10 +659,30 @@ impl NamedWaypoint {
     }
 }
 
+/// Axis constraint for `/moveto` arrival detection (#135).
+///
+/// Controls which spatial axes are used when measuring distance to the
+/// destination for the arrival check.
+///
+/// - `Both`  — 2D XY distance (default, same as MQ2MoveUtils standard).
+/// - `X`     — only the X-axis separation matters for arrival.
+/// - `Y`     — only the Y-axis separation matters for arrival.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ArrivalAxis {
+    /// Arrive when the 2D (XY) distance is within the threshold (default).
+    #[default]
+    Both,
+    /// Arrive when only the X-axis separation is within the threshold.
+    X,
+    /// Arrive when only the Y-axis separation is within the threshold.
+    Y,
+}
+
 /// Configuration for advanced `/moveto` commands (#184).
 ///
 /// Supports MQ2MoveUtils options: moveto by spawn ID, xloc/yloc,
 /// break-on-aggro, break-on-hit, use-walk, use-back.
+/// Also supports distance and axis arrival controls (#135).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MoveToConfig {
     /// Destination waypoint (from xloc/yloc or spawn position).
@@ -689,6 +709,16 @@ pub struct MoveToConfig {
     pub use_back: bool,
     /// Autopause — pause movement on player keyboard input.
     pub autopause: bool,
+    /// Custom arrival distance threshold in EQ units (`/moveto dist #`).
+    ///
+    /// When `None`, the DLL's default `ARRIVAL_DISTANCE` constant is used.
+    #[serde(default)]
+    pub dist: Option<f32>,
+    /// Axis constraint for arrival detection (`/moveto xloc`/`yloc` beeline mode).
+    ///
+    /// Defaults to `ArrivalAxis::Both` (standard 2D distance check).
+    #[serde(default)]
+    pub axis: ArrivalAxis,
 }
 
 impl Default for MoveToConfig {
@@ -704,6 +734,8 @@ impl Default for MoveToConfig {
             use_walk: false,
             use_back: false,
             autopause: false,
+            dist: None,
+            axis: ArrivalAxis::Both,
         }
     }
 }
@@ -764,6 +796,29 @@ impl MoveToConfig {
             target_id: Some(spawn_id),
             ..Self::default()
         }
+    }
+
+    /// Compute the distance from `current` to `destination` according to `self.axis`.
+    ///
+    /// - `ArrivalAxis::Both` — standard 2D XY distance.
+    /// - `ArrivalAxis::X`   — absolute X-axis separation only.
+    /// - `ArrivalAxis::Y`   — absolute Y-axis separation only.
+    #[must_use]
+    pub fn axis_distance(&self, current: &Waypoint, destination: &Waypoint) -> f32 {
+        match self.axis {
+            ArrivalAxis::Both => current.distance_2d(destination),
+            ArrivalAxis::X => (current.x - destination.x).abs(),
+            ArrivalAxis::Y => (current.y - destination.y).abs(),
+        }
+    }
+
+    /// Return the arrival distance threshold, applying the `dist` override when set.
+    ///
+    /// Falls back to `default_arrival_distance` (the DLL's `ARRIVAL_DISTANCE` constant)
+    /// when no explicit `dist` was configured.
+    #[must_use]
+    pub fn effective_arrival_distance(&self, default_arrival_distance: f32) -> f32 {
+        self.dist.unwrap_or(default_arrival_distance)
     }
 }
 
@@ -1738,6 +1793,8 @@ mod tests {
         assert!(!config.use_walk);
         assert!(!config.use_back);
         assert!(!config.autopause);
+        assert!(config.dist.is_none());
+        assert_eq!(config.axis, ArrivalAxis::Both);
     }
 
     #[test]
@@ -1768,10 +1825,72 @@ mod tests {
             use_walk: true,
             use_back: false,
             autopause: true,
+            dist: Some(8.0),
+            axis: ArrivalAxis::X,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let restored: MoveToConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(config, restored);
+    }
+
+    #[test]
+    fn moveto_config_axis_distance_both() {
+        let config = MoveToConfig {
+            axis: ArrivalAxis::Both,
+            ..MoveToConfig::default()
+        };
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(3.0, 4.0, 0.0);
+        let d = config.axis_distance(&a, &b);
+        assert!((d - 5.0).abs() < 0.001, "expected 5.0, got {d}");
+    }
+
+    #[test]
+    fn moveto_config_axis_distance_x_only() {
+        let config = MoveToConfig {
+            axis: ArrivalAxis::X,
+            ..MoveToConfig::default()
+        };
+        let a = Waypoint::new(10.0, 0.0, 0.0);
+        let b = Waypoint::new(13.0, 999.0, 0.0);
+        let d = config.axis_distance(&a, &b);
+        assert!((d - 3.0).abs() < f32::EPSILON, "expected 3.0, got {d}");
+    }
+
+    #[test]
+    fn moveto_config_axis_distance_y_only() {
+        let config = MoveToConfig {
+            axis: ArrivalAxis::Y,
+            ..MoveToConfig::default()
+        };
+        let a = Waypoint::new(999.0, 5.0, 0.0);
+        let b = Waypoint::new(0.0, 12.0, 0.0);
+        let d = config.axis_distance(&a, &b);
+        assert!((d - 7.0).abs() < f32::EPSILON, "expected 7.0, got {d}");
+    }
+
+    #[test]
+    fn moveto_config_effective_arrival_distance_uses_override() {
+        let config = MoveToConfig {
+            dist: Some(5.0),
+            ..MoveToConfig::default()
+        };
+        assert!((config.effective_arrival_distance(15.0) - 5.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn moveto_config_effective_arrival_distance_falls_back_to_default() {
+        let config = MoveToConfig::default();
+        assert!((config.effective_arrival_distance(15.0) - 15.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn moveto_config_serde_backward_compat_missing_dist_axis() {
+        // JSON without dist/axis fields should deserialize without error using serde defaults.
+        let json = r#"{"destination":{"x":1.0,"y":2.0,"z":0.0},"target_id":null,"break_on_aggro":false,"break_on_warp":false,"pause_on_warp":false,"break_on_summon":false,"break_on_hit":false,"use_walk":false,"use_back":false,"autopause":false}"#;
+        let config: MoveToConfig = serde_json::from_str(json).expect("deserialize legacy JSON");
+        assert!(config.dist.is_none());
+        assert_eq!(config.axis, ArrivalAxis::Both);
     }
 
     // ─── New variant tests ───
