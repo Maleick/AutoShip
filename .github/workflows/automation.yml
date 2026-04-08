@@ -183,7 +183,7 @@ jobs:
               try { await github.rest.issues.removeLabel({ owner, repo, issue_number: prNumber, name: label }); } catch (_) {}
             }
 
-            const linkedIssues = [...prBody.matchAll(/(?:fix(?:es)?|close(?:s)?|resolve(?:s)?)\s+#(\d+)/gi)].map(m => parseInt(m[1], 10));
+            const linkedIssues = [...prBody.matchAll(/(?:fix(es)?|close(s)?|resolve(s)?)\s+#(\d+)/gi)].map(m => parseInt(m[3], 10));
             for (const issueNumber of linkedIssues) {
               for (const label of labelsToRemove) {
                 try { await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: label }); } catch (_) {}
@@ -217,4 +217,4 @@ jobs:
         if: steps.docs-check.outputs.docs_changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: "%PYTHON_CMD%" scripts/sync_wiki.py --push
+        run: '"%PYTHON_CMD%" scripts/sync_wiki.py --push'

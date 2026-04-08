@@ -239,7 +239,20 @@ impl CommandListener {
 /// Validate that command parameters are within acceptable bounds.
 pub fn validate_command(cmd: &Command) -> bool {
     match cmd {
-        Command::CastSpell { spell_slot, .. } => *spell_slot <= 13,
+        Command::CastSpell { spell_slot, .. } => {
+            // Slot must be 1-13. `recast` is already bounded by u8; 0 means
+            // single-cast, non-zero enables the recast loop.
+            *spell_slot >= 1
+                && *spell_slot <= 13
+                && !matches!(
+                    cmd,
+                    Command::CastSpell {
+                        kill: true,
+                        recast: 1..,
+                        ..
+                    }
+                )
+        }
         Command::MoveTo { x, y, z } => x.is_finite() && y.is_finite() && z.is_finite(),
         Command::NavigateTo { waypoints } => waypoints.len() <= 1000,
         Command::NavLoc { x, y, z } => x.is_finite() && y.is_finite() && z.is_finite(),
@@ -394,5 +407,84 @@ impl Drop for CommandListener {
                 let _ = CloseHandle(self.handle);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_command;
+    use textquest_common::ipc::Command;
+
+    #[test]
+    fn validate_cast_spell_valid_slot() {
+        assert!(validate_command(&Command::CastSpell {
+            spell_slot: 1,
+            target_id: None,
+            kill: false,
+            recast: 0,
+        }));
+        assert!(validate_command(&Command::CastSpell {
+            spell_slot: 13,
+            target_id: Some(42),
+            kill: false,
+            recast: 0,
+        }));
+    }
+
+    #[test]
+    fn validate_cast_spell_invalid_slot_zero() {
+        // Slot 0 is invalid (1-based indexing).
+        assert!(!validate_command(&Command::CastSpell {
+            spell_slot: 0,
+            target_id: None,
+            kill: false,
+            recast: 0,
+        }));
+    }
+
+    #[test]
+    fn validate_cast_spell_invalid_slot_too_high() {
+        assert!(!validate_command(&Command::CastSpell {
+            spell_slot: 14,
+            target_id: None,
+            kill: false,
+            recast: 0,
+        }));
+    }
+
+    #[test]
+    fn validate_cast_spell_kill_flag_valid() {
+        assert!(validate_command(&Command::CastSpell {
+            spell_slot: 5,
+            target_id: Some(99),
+            kill: true,
+            recast: 0,
+        }));
+    }
+
+    #[test]
+    fn validate_cast_spell_recast_flag_valid() {
+        assert!(validate_command(&Command::CastSpell {
+            spell_slot: 5,
+            target_id: None,
+            kill: false,
+            recast: 10,
+        }));
+    }
+
+    #[test]
+    fn validate_cast_spell_kill_and_recast_rejected() {
+        // Combining kill=true and recast>0 is invalid (ambiguous intent).
+        assert!(!validate_command(&Command::CastSpell {
+            spell_slot: 5,
+            target_id: None,
+            kill: true,
+            recast: 3,
+        }));
+    }
+
+    #[test]
+    fn validate_cancel_cast_loop_always_valid() {
+        assert!(validate_command(&Command::CancelCastLoop));
     }
 }

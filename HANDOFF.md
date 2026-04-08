@@ -73,11 +73,27 @@ running 842 tests
 test result: FAILED. 841 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 ```
 
+### Test summary
+
+| Passed | Failed |
+|--------|--------|
+| 1527 | 0 |
+| 0 | 0 |
+| 2 | 0 |
+| 22 | 0 |
+| 502 | 0 |
+| 841 | 1 |
+
 ## Key Offsets (from textquest-common/src/offsets.rs)
 
-Per-crate names were not captured in the summarized test output, so the
-per-crate table is omitted rather than showing misleading placeholder values.
-Refer to the raw test output above for the observed pass/fail counts.
+| Constant | Value |
+|----------|-------|
+| EQ_PREFERRED_BASE | `0x0001_4000_0000` |
+| PINST_LOCAL_PLAYER | `0x0001_40E8_E380` |
+| PINST_CONTROLLED_PLAYER | `0x0001_40E8_E430` |
+| PINST_TARGET | `0x0001_40E8_E428` |
+| PINST_SPAWN_MANAGER | `0x0001_40F0_CD90` |
+| PINST_LOCAL_PC | `0x0001_40E9_09A8` |
 | PINST_SPELL_MANAGER | `0x0001_40F0_E6F0` |
 | PINST_CDISPLAY | `0x0001_40E8_E450` |
 | PINST_CEVERQUEST | `0x0001_40F1_1758` |

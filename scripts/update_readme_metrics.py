@@ -13,7 +13,7 @@ from urllib.parse import quote
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 README_PATH = REPO_ROOT / "README.md"
 RUNNING_TESTS_RE = re.compile(r"^running (\d+) tests?$", re.MULTILINE)
-TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(tokio::)?test(?:\]|\()")
+TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(?:tokio::)?test(?:\([^\]]*\))?\]")
 
 
 def tracked_rust_files() -> list[pathlib.Path]:
@@ -63,7 +63,25 @@ def test_count() -> int:
     output = f"{result.stdout}\n{result.stderr}"
     running = sum(int(match.group(1)) for match in RUNNING_TESTS_RE.finditer(output))
     if running > 0:
+        if result.returncode != 0:
+            print(
+                f"warning: `cargo test --workspace` exited with code {result.returncode}, "
+                f"but reported {running} tests; using observed count",
+                file=sys.stderr,
+            )
         return running
+    if result.returncode != 0:
+        print(
+            f"warning: `cargo test --workspace` exited with code {result.returncode} "
+            "without reporting any `running N tests` lines; falling back to source scan",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "warning: `cargo test --workspace` did not report any `running N tests` lines; "
+            "falling back to source scan",
+            file=sys.stderr,
+        )
     return test_count_from_source()
 
 

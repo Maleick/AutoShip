@@ -228,21 +228,39 @@ impl ClericStrategy {
     /// Find a cure spell (remove poison, disease, curse).
     fn find_cure_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         let mana_pct = ctx.player.mana_pct();
-        ctx.config
+        let cures: Vec<&SpellEntry> = ctx
+            .config
             .spells
             .iter()
             .filter(|s| is_cure_spell(s))
             .filter(|s| mana_pct >= s.min_mana_pct)
-            .max_by_key(|s| s.priority)
-            .cloned()
+            .collect();
+        if strategy::afflicted_member_count(ctx) > 1
+            && let Some(group_cure) = cures
+                .iter()
+                .copied()
+                .filter(|s| strategy::is_group_cure_spell(s))
+                .max_by_key(|s| s.priority)
+        {
+            return Some(group_cure.clone());
+        }
+        cures.into_iter().max_by_key(|s| s.priority).cloned()
     }
 
-    /// Find the first group member with a detrimental effect.
+    /// Find the highest-priority group member who should receive a single-target cure.
     fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
-        ctx.group_members
-            .iter()
-            .find(|m| !m.is_dead && m.has_detrimental)
-            .map(|m| m.spawn_id)
+        strategy::prioritized_afflicted_member(ctx).map(|(spawn_id, _)| spawn_id)
+    }
+
+    fn cure_target(&self, ctx: &CombatContext) -> Option<u32> {
+        if strategy::afflicted_member_count(ctx) > 1
+            && self
+                .find_cure_spell(ctx)
+                .is_some_and(|spell| strategy::is_group_cure_spell(&spell))
+        {
+            return Some(ctx.player.spawn_id);
+        }
+        self.afflicted_member(ctx)
     }
 
     /// Check if the cleric should cancel an in-progress heal because the target
@@ -268,7 +286,7 @@ impl ClassStrategy for ClericStrategy {
         }
 
         // Priority 2: Afflicted group member for cure
-        if let Some(afflicted_id) = self.afflicted_member(ctx) {
+        if let Some(afflicted_id) = self.cure_target(ctx) {
             return Some(afflicted_id);
         }
 
@@ -379,11 +397,7 @@ fn is_rez_spell(s: &SpellEntry) -> bool {
 /// Check if a spell entry is a cure spell (remove poison, disease, curse).
 fn is_cure_spell(s: &SpellEntry) -> bool {
     let name = s.name.to_lowercase();
-    name.contains("cure")
-        || name.contains("purify")
-        || name.contains("remove")
-        || name.contains("abolish")
-        || name.contains("radiant cure")
+    strategy::is_standard_cure_spell(s) || name.contains("abolish") || name.contains("radiant cure")
 }
 
 /// Check if a spell entry is a buff spell.
@@ -839,6 +853,90 @@ mod tests {
 
         let spell = cleric.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Cure Disease");
+    }
+
+    #[test]
+    fn cure_target_prefers_lowest_hp_afflicted_member() {
+        let cleric = ClericStrategy::new(2);
+        let player = textquest_common::types::SpawnData::default();
+        let config = textquest_common::combat::CombatConfig::default();
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 99,
+            ..Default::default()
+        };
+        let mut sturdy = make_member(10, 80.0, false);
+        sturdy.has_detrimental = true;
+        let mut fragile = make_member(11, 45.0, false);
+        fragile.has_detrimental = true;
+        let members = vec![sturdy, fragile];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert_eq!(cleric.select_target(&ctx), Some(11));
+    }
+
+    #[test]
+    fn group_cure_targets_self_for_multiple_afflicted_members() {
+        let cleric = ClericStrategy::new(2);
+        let player = textquest_common::types::SpawnData {
+            spawn_id: 7,
+            mana_current: 100,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let mut first = make_member(10, 80.0, false);
+        first.has_detrimental = true;
+        let mut second = make_member(11, 60.0, false);
+        second.has_detrimental = true;
+        let members = vec![first, second];
+        let spells = vec![
+            SpellEntry {
+                slot: 6,
+                spell_id: 600,
+                name: "Cure Disease".to_string(),
+                min_mana_pct: 10.0,
+                priority: 15,
+                is_aoe: false,
+            },
+            SpellEntry {
+                slot: 7,
+                spell_id: 601,
+                name: "Radiant Cure".to_string(),
+                min_mana_pct: 10.0,
+                priority: 5,
+                is_aoe: true,
+            },
+        ];
+        let config = make_config(&spells);
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert_eq!(cleric.select_spell(&ctx).unwrap().name, "Radiant Cure");
+        assert_eq!(cleric.select_target(&ctx), Some(7));
     }
 
     #[test]

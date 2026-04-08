@@ -1103,7 +1103,7 @@ fn overlay_from_loaded(loaded: &LoadedNavMesh) -> Result<NavMeshOverlay> {
     Ok(overlay)
 }
 
-fn same_point(a: EqPoint, b: EqPoint) -> bool {
+fn same_eq_point(a: EqPoint, b: EqPoint) -> bool {
     const EPSILON: f32 = 0.001;
     (a.0 - b.0).abs() <= EPSILON && (a.1 - b.1).abs() <= EPSILON && (a.2 - b.2).abs() <= EPSILON
 }
@@ -1132,7 +1132,7 @@ fn append_points(target: &mut Vec<EqPoint>, points: &[EqPoint]) {
 }
 
 fn find_detour_path(loaded: &LoadedNavMesh, from: EqPoint, to: EqPoint) -> Result<Vec<EqPoint>> {
-    if same_point(from, to) {
+    if same_eq_point(from, to) {
         return Ok(vec![from]);
     }
 
@@ -1234,7 +1234,7 @@ fn find_path_via_connections<F>(
 where
     F: FnMut(EqPoint, EqPoint) -> Result<Vec<EqPoint>>,
 {
-    if same_point(from, to) {
+    if same_eq_point(from, to) {
         return Ok(vec![from]);
     }
 
@@ -1254,7 +1254,7 @@ where
     for (idx, connection) in connections.iter().enumerate() {
         let from_idx = 2 + idx * 2;
         let to_idx = from_idx + 1;
-        if !same_point(connection.pos_from, connection.pos_to) {
+        if !same_eq_point(connection.pos_from, connection.pos_to) {
             off_mesh_edges
                 .entry(from_idx)
                 .or_default()
@@ -1302,7 +1302,7 @@ where
             let route = mesh_cache
                 .entry((current, next))
                 .or_insert_with(|| {
-                    if same_point(points[current], points[next]) {
+                    if same_eq_point(points[current], points[next]) {
                         Some(vec![points[current]])
                     } else {
                         find_mesh_path(points[current], points[next]).ok()
@@ -1862,11 +1862,11 @@ mod tests {
 
         let route =
             find_path_via_connections(start, end, &connections, |from, to| match (from, to) {
-                (a, b) if same_point(a, b) => Ok(vec![a]),
-                (a, b) if same_point(a, start) && same_point(b, door_in) => {
+                (a, b) if same_eq_point(a, b) => Ok(vec![a]),
+                (a, b) if same_eq_point(a, start) && same_eq_point(b, door_in) => {
                     Ok(vec![start, door_in])
                 }
-                (a, b) if same_point(a, door_out) && same_point(b, end) => Ok(vec![door_out, end]),
+                (a, b) if same_eq_point(a, door_out) && same_eq_point(b, end) => Ok(vec![door_out, end]),
                 _ => bail!("no mesh route"),
             })
             .expect("expected stitched route");
@@ -1927,14 +1927,14 @@ mod tests {
 
         let route =
             find_path_via_connections(start, end, &connections, |from, to| match (from, to) {
-                (a, b) if same_point(a, b) => Ok(vec![a]),
-                (a, b) if same_point(a, start) && same_point(b, first_in) => {
+                (a, b) if same_eq_point(a, b) => Ok(vec![a]),
+                (a, b) if same_eq_point(a, start) && same_eq_point(b, first_in) => {
                     Ok(vec![start, first_in])
                 }
-                (a, b) if same_point(a, first_out) && same_point(b, second_in) => {
+                (a, b) if same_eq_point(a, first_out) && same_eq_point(b, second_in) => {
                     Ok(vec![first_out, second_in])
                 }
-                (a, b) if same_point(a, second_out) && same_point(b, end) => {
+                (a, b) if same_eq_point(a, second_out) && same_eq_point(b, end) => {
                     Ok(vec![second_out, end])
                 }
                 _ => bail!("no mesh route"),
