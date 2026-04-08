@@ -17,6 +17,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
+use axum::http::{HeaderValue, Method};
 use axum::routing::{get, put};
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
@@ -70,6 +71,22 @@ async fn main() {
         .route("/history", get(api::loot::get_history))
         .with_state(loot_state);
 
+    // Restrict CORS to trusted local dashboard origins so cross-site pages
+    // cannot issue authenticated-like write requests against localhost APIs.
+    let cors = CorsLayer::new()
+        .allow_origin([
+            HeaderValue::from_static("http://127.0.0.1:3001"),
+            HeaderValue::from_static("http://localhost:3001"),
+        ])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([axum::http::header::CONTENT_TYPE]);
+
     let app = Router::new()
         // Health + sessions
         .route("/api/health", get(api::health))
@@ -91,7 +108,7 @@ async fn main() {
         .nest("/api/loot", loot_router)
         .route("/ws", get(ws::ws_handler))
         .fallback_service(serve_spa)
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
