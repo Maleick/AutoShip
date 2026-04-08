@@ -304,6 +304,38 @@ impl Navigator {
         }
     }
 
+    /// Update the follow configuration while maintaining active follow state.
+    pub fn update_follow_config(&mut self, new_config: FollowConfig) {
+        if let State::Following {
+            ref mut config,
+            ref mut returning,
+            ..
+        } = self.state
+        {
+            tracing::info!(
+                old_leader = %config.leader_name,
+                new_leader = %new_config.leader_name,
+                "Updating follow configuration"
+            );
+            *config = new_config;
+            // Reset returning state to allow new leash check with new config
+            *returning = false;
+        }
+    }
+
+    /// Mutate the active follow configuration using a closure.
+    pub fn mutate_follow_config(&mut self, f: impl FnOnce(&mut FollowConfig)) {
+        if let State::Following {
+            ref mut config,
+            ref mut returning,
+            ..
+        } = self.state
+        {
+            f(config);
+            *returning = false;
+        }
+    }
+
     /// Stop player follow mode and return to idle.
     pub fn stop_follow(&mut self) {
         if matches!(self.state, State::Following { .. }) {
@@ -428,9 +460,10 @@ impl Navigator {
                 State::Following { ref config, .. } => self
                     .warp
                     .update(find_follow_target_sample(nearby, &config.leader_name).as_ref()),
-                State::Sticking => self
-                    .warp
-                    .update(self.stick.target_sample(current_target, nearby).as_ref()),
+                State::Sticking => {
+                    let stick_sample = self.stick.target_sample(current_target, nearby);
+                    self.warp.update(target_sample.or(stick_sample.as_ref()))
+                }
                 _ => self.warp.update(target_sample),
             }
         };
@@ -898,7 +931,8 @@ impl Navigator {
     /// One tick for player follow mode.
     ///
     /// Implements the leash/return logic:
-    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back.
+    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back,
+    ///   subject to return policy gates (`return_no_aggro`).
     /// - If currently returning and distance <= `follow_distance`: stop, hold position.
     fn tick_following(&mut self, nearby: &[SpawnData]) {
         if let State::Following {
@@ -912,7 +946,7 @@ impl Navigator {
         }
 
         // Extract values without holding a mutable borrow on self.state.
-        let (leash_distance, follow_distance, anchor, currently_returning) =
+        let (leash_distance, follow_distance, anchor, currently_returning, return_no_aggro) =
             if let State::Following {
                 ref config,
                 ref anchor,
@@ -924,6 +958,7 @@ impl Navigator {
                     config.follow_distance,
                     *anchor,
                     returning,
+                    config.return_no_aggro,
                 )
             } else {
                 return;
@@ -934,8 +969,19 @@ impl Navigator {
         self.cached_distance = dist;
 
         if dist > leash_distance {
-            // Beyond the leash — navigate back toward the anchor.
+            // Beyond the leash — check return policy gates before navigating back.
             if !currently_returning {
+                // #return_no_aggro: suppress return while hostile NPCs are nearby.
+                if return_no_aggro && has_hostile_nearby(nearby, &current_pos) {
+                    tracing::debug!(
+                        dist,
+                        leash = leash_distance,
+                        "Follow leash exceeded but return_no_aggro suppressing return"
+                    );
+                    self.controller.stop_forward();
+                    return;
+                }
+
                 tracing::debug!(
                     dist,
                     leash = leash_distance,
@@ -1095,8 +1141,10 @@ mod tests {
     #[test]
     fn stick_target_loss_stays_active_with_always() {
         let mut nav = Navigator::new(0, 1);
-        let mut config = StickConfig::default();
-        config.always = true;
+        let config = StickConfig {
+            always: true,
+            ..StickConfig::default()
+        };
         nav.stick_to(config, Some(42));
 
         nav.tick(None, &[], None);
@@ -1132,14 +1180,19 @@ mod tests {
             id: target.spawn_id,
             position: Waypoint::new(10.0, 0.0, 0.0),
         };
-        nav.tick(Some(&target), &[target.clone()], Some(&stable));
+        nav.tick(Some(&target), std::slice::from_ref(&target), Some(&stable));
         assert!(matches!(nav.status(), NavStatus::Sticking { .. }));
 
+        let warped_target = follow_spawn(9, "a_mob", 200.0, 0.0);
         let warped = TargetSample {
-            id: target.spawn_id,
+            id: warped_target.spawn_id,
             position: Waypoint::new(200.0, 0.0, 0.0),
         };
-        nav.tick(Some(&target), &[target.clone()], Some(&warped));
+        nav.tick(
+            Some(&warped_target),
+            std::slice::from_ref(&warped_target),
+            Some(&warped),
+        );
         assert!(matches!(nav.status(), NavStatus::Idle));
     }
 

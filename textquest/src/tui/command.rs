@@ -278,6 +278,14 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "maploc recall",
     },
     CommandEntry {
+        phrase: "mapmarker",
+        aliases: &["mm"],
+        section: HelpSection::Navigation,
+        usage: "mapmarker <set|recall|clear|list|save|load> [name] [x y [z]]",
+        summary: "Persistent named map markers — place, recall, clear, list, and persist.",
+        example: "mapmarker set camp",
+    },
+    CommandEntry {
         phrase: "mapshow",
         aliases: &[],
         section: HelpSection::Navigation,

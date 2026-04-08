@@ -69,7 +69,7 @@ Evidence state: `Research-backed`
 
 ### Input-hook examples are comparison input only
 
-The JMB Input Hook Example is useful for understanding the shape of JMB's operator runtime, but TextQuest should not translate it into broader hidden input capture or control escalation. The anti-cheat digest keeps hook and module exposure as explicit `M7` categories.
+The JMB Input Hook Example is useful for understanding the shape of JMB's operator runtime, but TextQuest should not translate it into broader hidden input capture or control escalation. The anti-cheat digest keeps hook and module exposure as explicit `M5` categories.
 
 Repo fit for TextQuest:
 

@@ -5,7 +5,7 @@
 //! compile-only stub.
 
 use anyhow::Result;
-use textquest_common::ipc::{Command, Response};
+use textquest_common::ipc::{Command, CorrelationIdGenerator, IpcCommand, IpcResponse, Response};
 #[cfg(windows)]
 use textquest_common::protocol;
 use textquest_common::types::ClientId;
@@ -13,6 +13,7 @@ use textquest_common::types::ClientId;
 /// Sends commands to an injected DLL via named pipe.
 pub struct CommandPipe {
     client_id: ClientId,
+    correlation_ids: CorrelationIdGenerator,
     #[cfg(windows)]
     handle: windows::Win32::Foundation::HANDLE,
 }
@@ -57,13 +58,20 @@ impl CommandPipe {
                 )
             }?;
 
-            Ok(Self { client_id, handle })
+            Ok(Self {
+                client_id,
+                correlation_ids: CorrelationIdGenerator::new(),
+                handle,
+            })
         }
 
         #[cfg(not(windows))]
         {
             let _ = session_id;
-            Ok(Self { client_id })
+            Ok(Self {
+                client_id,
+                correlation_ids: CorrelationIdGenerator::new(),
+            })
         }
     }
 
@@ -73,11 +81,42 @@ impl CommandPipe {
     ///
     /// Returns an error if the operation fails.
     pub fn send(&self, cmd: &Command) -> Result<Response> {
+        let correlation_id = self.correlation_ids.next_id();
+        let (response, echoed_correlation_id) = self.send_correlated(cmd, correlation_id)?;
+        if echoed_correlation_id != Some(correlation_id) {
+            anyhow::bail!(
+                "response correlation mismatch for client {}: sent {}, received {:?}",
+                self.client_id,
+                correlation_id,
+                echoed_correlation_id
+            );
+        }
+        Ok(response)
+    }
+
+    /// Send a command with a correlation ID and wait for a response.
+    ///
+    /// Returns the response payload and the echoed correlation ID (if any).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    pub fn send_correlated(
+        &self,
+        cmd: &Command,
+        correlation_id: u64,
+    ) -> Result<(Response, Option<u64>)> {
+        self.send_ipc(&IpcCommand::with_correlation(cmd.clone(), correlation_id))
+    }
+
+    /// Internal: encode an `IpcCommand`, write it to the pipe, read back an
+    /// `IpcResponse`, and return `(response, correlation_id)`.
+    fn send_ipc(&self, ipc_cmd: &IpcCommand) -> Result<(Response, Option<u64>)> {
         #[cfg(windows)]
         {
             use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile};
 
-            let data = protocol::encode(cmd)
+            let data = protocol::encode(ipc_cmd)
                 .map_err(|e| anyhow::anyhow!("failed to encode command: {e}"))?;
 
             // Pipe is in byte mode (PIPE_TYPE_BYTE), so partial writes are
@@ -104,20 +143,23 @@ impl CommandPipe {
                 ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)?;
             }
 
-            let (response, _) = protocol::decode::<Response>(&buf[..bytes_read as usize])
+            let (ipc_resp, _) = protocol::decode::<IpcResponse>(&buf[..bytes_read as usize])
                 .ok_or_else(|| {
                     anyhow::anyhow!("Failed to decode response from client {}", self.client_id)
                 })?;
 
-            Ok(response)
+            Ok((ipc_resp.response, ipc_resp.correlation_id))
         }
 
         #[cfg(not(windows))]
         {
-            let _ = (self.client_id, cmd);
-            Ok(Response::Error {
-                message: "Not implemented (non-Windows stub)".into(),
-            })
+            let _ = (self.client_id, ipc_cmd);
+            Ok((
+                Response::Error {
+                    message: "Not implemented (non-Windows stub)".into(),
+                },
+                None,
+            ))
         }
     }
 
@@ -168,7 +210,7 @@ impl CommandPipe {
         {
             use windows::Win32::Storage::FileSystem::WriteFile;
 
-            let data = protocol::encode(cmd)
+            let data = protocol::encode(&IpcCommand::new(cmd.clone()))
                 .map_err(|e| anyhow::anyhow!("failed to encode command: {e}"))?;
 
             // Pipe is in byte mode — loop to handle partial writes.

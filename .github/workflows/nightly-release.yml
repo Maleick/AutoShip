@@ -59,7 +59,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -146,7 +146,7 @@ jobs:
           echo UTC: %UTC_TS% >> release\NOTES.txt
 
       - name: Upload nightly artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: textquest-nightly-${{ github.run_number }}
           path: |
