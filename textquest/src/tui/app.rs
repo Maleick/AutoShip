@@ -635,6 +635,9 @@ impl NavClientStatus {
                     format!("Sticking #{target_id} • {distance:.0}u")
                 }
             }
+            textquest_common::nav::NavStatus::Circling { radius, mode, .. } => {
+                format!("Circling r={radius:.0} ({mode:?})")
+            }
         }
     }
 
@@ -3832,6 +3835,7 @@ impl App {
             "mapnames" => self.handle_mapnames_command(&parts),
             "map" => self.handle_map_layer_command(&parts),
             "highlight" | "hl" => self.handle_highlight_command(&parts),
+            "circle" => self.handle_circle_command(&parts, orchestrator),
             "loot" => {
                 let ok = self.send_ipc_to_focused(&textquest_common::ipc::Command::LootCorpse);
                 if ok == 0 {
@@ -5431,6 +5435,121 @@ impl App {
 
     // ─── Map parity command handlers ─────────────────────────────────────
 
+    fn handle_circle_command(&mut self, parts: &[&str], orchestrator: &mut Orchestrator) {
+        use textquest_common::ipc::Command;
+        use textquest_common::nav::{CircleConfig, CircleMode, Waypoint};
+
+        let sub = parts.get(1).map(|s| s.to_ascii_lowercase());
+        match sub.as_deref() {
+            Some("off") => {
+                let ok = self.send_ipc_to_focused(&Command::CircleOff);
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        "Circle off: no clients received command.",
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Circle kite stopped (sent to {ok} clients)"),
+                        true,
+                    );
+                }
+            }
+            Some("on") | None => {
+                let mut config = CircleConfig::default();
+                let mut i = 2usize;
+                // Optional radius
+                if let Some(r) = parts.get(i).and_then(|s| s.parse::<f32>().ok()) {
+                    config.radius = r;
+                    i += 1;
+                }
+                // Optional mode tokens
+                while let Some(&token) = parts.get(i) {
+                    match token.to_ascii_lowercase().as_str() {
+                        "cw" | "clockwise" => config.mode = CircleMode::Cw,
+                        "ccw" | "counterclockwise" => config.mode = CircleMode::Ccw,
+                        "drunken" => config.mode = CircleMode::Drunken,
+                        "backward" => config.mode = CircleMode::Backward,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                let mode_label = match config.mode {
+                    CircleMode::Cw => "CW",
+                    CircleMode::Ccw => "CCW",
+                    CircleMode::Drunken => "Drunken",
+                    CircleMode::Backward => "Backward",
+                };
+                let ok = self.send_ipc_to_focused(&Command::CircleKite {
+                    config: config.clone(),
+                });
+                if ok == 0 {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        "Circle kite: no clients received command.",
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!(
+                            "Circle kite started — radius={:.0} mode={mode_label} (sent to {ok} clients)",
+                            config.radius
+                        ),
+                        true,
+                    );
+                }
+                let _ = orchestrator;
+            }
+            Some("loc") => {
+                // circle loc Y X [radius]
+                let y: Option<f32> = parts.get(2).and_then(|s| s.parse().ok());
+                let x: Option<f32> = parts.get(3).and_then(|s| s.parse().ok());
+                let radius: Option<f32> = parts.get(4).and_then(|s| s.parse().ok());
+                match (y, x) {
+                    (Some(y), Some(x)) => {
+                        let mut config = CircleConfig::default();
+                        if let Some(r) = radius {
+                            config.radius = r;
+                        }
+                        config.center = Some(Waypoint::new(x, y, 0.0));
+                        let ok = self.send_ipc_to_focused(&Command::CircleKite {
+                            config: config.clone(),
+                        });
+                        if ok == 0 {
+                            self.set_feedback(
+                                ToastLevel::Warning,
+                                "Circle loc: no clients received command.",
+                                true,
+                            );
+                        } else {
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!(
+                                    "Circle kite at ({y}, {x}) radius={:.0} (sent to {ok} clients)",
+                                    config.radius
+                                ),
+                                true,
+                            );
+                        }
+                    }
+                    _ => {
+                        self.usage_feedback("circle", "Usage: circle loc Y X [radius]");
+                    }
+                }
+                let _ = orchestrator;
+            }
+            _ => {
+                self.usage_feedback(
+                    "circle",
+                    "Usage: circle on [radius] [cw|ccw|drunken|backward] | circle off | circle loc Y X [radius]",
+                );
+            }
+        }
+    }
+
     fn handle_mapfilter_command(&mut self, parts: &[&str]) {
         match parts.get(1).copied() {
             None => {
@@ -6623,7 +6742,7 @@ mod tests {
         let summary = app.combat_status_summary();
 
         assert!(summary.contains("Combat: mode=Camp"));
-        assert!(summary.contains("scope=All Groups"));
+        assert!(summary.contains("scope=All"));
         assert!(summary.contains("focused=0/0 clients"));
         assert!(summary.contains("MA=Warrior"));
         assert!(summary.contains("MT=Paladin"));

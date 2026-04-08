@@ -15,7 +15,8 @@ use warp::TargetSample;
 use std::sync::Mutex;
 
 use textquest_common::nav::{
-    CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavStatus, StickConfig, Waypoint,
+    CampSpot, CircleConfig, FollowConfig, MoveToConfig, NavCampConfig, NavStatus, StickConfig,
+    Waypoint,
 };
 use textquest_common::types::SpawnData;
 
@@ -88,6 +89,8 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::MoveToAdvanced(config) => nav.move_to_advanced(config),
             NavCommand::SetAutopause(enabled) => nav.set_autopause(enabled),
             NavCommand::SetBreakOnGm(enabled) => nav.set_break_on_gm(enabled),
+            NavCommand::CircleKite { config, center } => nav.circle_kite(config, center),
+            NavCommand::CircleOff => nav.circle_off(),
         }
     }
 }
@@ -170,4 +173,13 @@ pub enum NavCommand {
     SetAutopause(bool),
     /// Enable or disable break-on-GM safety halt.
     SetBreakOnGm(bool),
+    /// Start circle-kiting mode around a center point.
+    CircleKite {
+        /// Circle kiting configuration (radius, mode, target_id, etc.).
+        config: CircleConfig,
+        /// Center of the circle.  `None` means use the player's current position.
+        center: Option<Waypoint>,
+    },
+    /// Stop circle-kiting and return to Idle.
+    CircleOff,
 }
