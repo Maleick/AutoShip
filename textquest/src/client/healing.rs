@@ -153,3 +153,119 @@ fn is_process_running(_pid: u32) -> bool {
 }
 
 // Process launching has moved to crate::launcher::spawner::spawn_eq_client
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn monitor() -> HealthMonitor {
+        HealthMonitor::new(42, std::process::id())
+    }
+
+    #[test]
+    fn new_monitor_starts_healthy_with_expected_defaults() {
+        let monitor = monitor();
+
+        assert_eq!(monitor.client_id(), 42);
+        assert_eq!(monitor.pid(), std::process::id());
+        assert_eq!(monitor.current_health(), &ClientHealth::Healthy);
+        assert_eq!(monitor.restart_count(), 0);
+        assert_eq!(monitor.ping_interval(), Duration::from_secs(5));
+        assert!(!monitor.should_restart());
+    }
+
+    #[test]
+    fn record_pong_restores_healthy_state_and_refreshes_timestamp() {
+        let mut monitor = monitor();
+        monitor.last_pong = Instant::now() - Duration::from_secs(60);
+        monitor.health = ClientHealth::Restarting;
+        let previous_pong = monitor.last_pong;
+
+        monitor.record_pong();
+
+        assert_eq!(monitor.current_health(), &ClientHealth::Healthy);
+        assert!(monitor.last_pong >= previous_pong);
+    }
+
+    #[test]
+    fn record_restart_marks_restarting_and_increments_counter() {
+        let mut monitor = monitor();
+        monitor.health = ClientHealth::Unresponsive {
+            since: Instant::now() - Duration::from_secs(1),
+        };
+
+        monitor.record_restart();
+
+        assert_eq!(monitor.current_health(), &ClientHealth::Restarting);
+        assert_eq!(monitor.restart_count(), 1);
+        assert!(!monitor.should_restart());
+    }
+
+    #[test]
+    fn update_pid_resets_health_and_timeout_tracking() {
+        let mut monitor = monitor();
+        monitor.record_restart();
+        monitor.last_pong = Instant::now() - Duration::from_secs(60);
+
+        monitor.update_pid(777);
+
+        assert_eq!(monitor.pid(), 777);
+        assert_eq!(monitor.current_health(), &ClientHealth::Healthy);
+        assert!(monitor.last_pong.elapsed() < Duration::from_secs(1));
+        assert_eq!(monitor.restart_count(), 1);
+    }
+
+    #[test]
+    fn should_restart_respects_health_state_and_restart_budget() {
+        let mut monitor = monitor();
+
+        assert!(!monitor.should_restart());
+
+        monitor.health = ClientHealth::Crashed;
+        assert!(monitor.should_restart());
+
+        monitor.health = ClientHealth::Unresponsive {
+            since: Instant::now() - Duration::from_secs(1),
+        };
+        assert!(monitor.should_restart());
+
+        monitor.record_restart();
+        monitor.restart_count = monitor.max_restarts;
+        monitor.health = ClientHealth::Crashed;
+        assert!(!monitor.should_restart());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn check_stays_healthy_when_process_is_alive_and_recently_responded() {
+        let mut monitor = monitor();
+        monitor.last_pong = Instant::now();
+
+        assert_eq!(monitor.check(), &ClientHealth::Healthy);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn check_marks_process_unresponsive_after_timeout() {
+        let mut monitor = monitor();
+        monitor.last_pong = Instant::now() - monitor.timeout - Duration::from_millis(1);
+
+        let health = monitor.check();
+
+        match health {
+            ClientHealth::Unresponsive { since } => {
+                assert_eq!(*since, monitor.last_pong + monitor.timeout);
+            }
+            other => panic!("expected unresponsive state, got {other:?}"),
+        }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn check_marks_process_crashed_on_non_windows_stub() {
+        let mut monitor = monitor();
+
+        assert_eq!(monitor.check(), &ClientHealth::Crashed);
+        assert!(!monitor.is_process_alive());
+    }
+}
