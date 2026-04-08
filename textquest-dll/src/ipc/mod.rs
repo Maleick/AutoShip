@@ -123,6 +123,11 @@ static PENDING_RESPONSES: OnceLock<Mutex<Vec<Response>>> = OnceLock::new();
 /// chat messages and `PollChat` does not consume packet events.
 static PENDING_CHAT: OnceLock<Mutex<Vec<textquest_common::ipc::ChatMessageInfo>>> = OnceLock::new();
 
+/// Maximum number of chat messages retained in `PENDING_CHAT` before oldest
+/// entries are dropped. Prevents unbounded growth when the orchestrator is not
+/// polling `Command::PollChat`.
+const MAX_PENDING_CHAT: usize = 2048;
+
 /// Enqueue a response to be sent to the orchestrator.
 /// Called from the game loop thread (e.g., login FSM phase updates).
 pub fn send_response(response: Response) {
@@ -136,9 +141,21 @@ pub fn send_response(response: Response) {
 ///
 /// Called from the `dsp_chat` HWBP callback on every in-game chat event.
 /// Messages stored here are returned by `Command::PollChat` / `Response::ChatBatch`.
+///
+/// Skips buffering when IPC is not running. Enforces a retention cap of
+/// [`MAX_PENDING_CHAT`] entries; oldest messages are dropped when the cap is
+/// exceeded to prevent unbounded memory growth.
 pub fn push_chat_message(text: String, color: i32, timestamp_ms: u64) {
+    if !is_running() {
+        return;
+    }
     let pending = PENDING_CHAT.get_or_init(|| Mutex::new(Vec::new()));
     if let Ok(mut queue) = pending.lock() {
+        if queue.len() >= MAX_PENDING_CHAT {
+            // Drop oldest entries to keep the buffer bounded.
+            let overflow = queue.len() - MAX_PENDING_CHAT + 1;
+            queue.drain(..overflow);
+        }
         queue.push(textquest_common::ipc::ChatMessageInfo {
             text,
             color,

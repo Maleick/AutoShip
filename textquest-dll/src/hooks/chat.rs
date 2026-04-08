@@ -1,8 +1,10 @@
 //! Chat message hook — intercepts `CEverQuest::dsp_chat` to capture all in-game text.
 //!
 //! Uses hardware breakpoint DR1. When EQ calls `dsp_chat`, the VEH handler fires,
-//! we read the chat text and color from the function arguments, publish a
-//! `Response::ChatMessage` via IPC, then resume the original function.
+//! we read the chat text and color from the function arguments, buffer the message
+//! internally, then resume the original function. Buffered messages are returned
+//! to the orchestrator when it sends `Command::PollChat`; the DLL replies with
+//! `Response::ChatBatch`. No unsolicited IPC response is sent per chat line.
 //!
 //! `dsp_chat` signature (x64 Microsoft ABI):
 //!   - RCX = this (CEverQuest*)
@@ -24,7 +26,7 @@ fn should_forward_to_combat(parsed: Option<&textquest_common::chat::ChatEvent>) 
 /// HWBP callback for the chat hook.
 ///
 /// Reads the `text` (RDX) and `color` (R8) registers from the exception context,
-/// then publishes a `ChatMessage` response via IPC.
+/// then buffers it for retrieval through the `PollChat` IPC command.
 #[cfg(windows)]
 #[cfg_attr(windows, unsafe(link_section = ".tq"))]
 fn chat_callback(exception_info: *mut ()) -> bool {
@@ -73,15 +75,8 @@ fn chat_callback(exception_info: *mut ()) -> bool {
 
             // Push into the dedicated chat buffer so it can be retrieved via
             // Command::PollChat / Response::ChatBatch without affecting the
-            // packet-event pipeline. Also send the legacy ChatMessage response
-            // for any consumers that are not yet using the PollChat path.
-            crate::ipc::push_chat_message(text.clone(), color, timestamp_ms);
-            crate::ipc::send_response(textquest_common::ipc::Response::ChatMessage {
-                text,
-                color,
-                timestamp_ms,
-                parsed,
-            });
+            // packet-event pipeline.
+            crate::ipc::push_chat_message(text, color, timestamp_ms);
         }
     }
 
