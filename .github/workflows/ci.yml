@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  actions: read
   contents: read
 
 env:
@@ -146,6 +145,9 @@ jobs:
     name: PR gate (fmt + clippy + test + python)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Wait for runner-specific gate result
         uses: actions/github-script@v8
