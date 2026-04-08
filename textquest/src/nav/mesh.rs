@@ -1992,11 +1992,8 @@ mod tests {
             pos_to: required_out,
         });
 
-        let result = find_path_via_connections(
-            start,
-            end,
-            &connections,
-            |from, to| match (from, to) {
+        let result =
+            find_path_via_connections(start, end, &connections, |from, to| match (from, to) {
                 (a, b) if same_eq_point(a, b) => Ok(vec![a]),
                 (a, b) if same_eq_point(a, start) && same_eq_point(b, required_in) => {
                     Ok(vec![start, required_in])
@@ -2005,8 +2002,7 @@ mod tests {
                     Ok(vec![required_out, end])
                 }
                 _ => bail!("no mesh route"),
-            },
-        );
+            });
 
         assert!(result.is_err());
     }

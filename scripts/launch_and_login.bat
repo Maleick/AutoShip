@@ -9,7 +9,7 @@ set SERVER=Firiona Vie
 
 REM Credentials must come from environment or prompt (do not hardcode secrets).
 if "%TextQuest_ACCOUNT%"=="" (
-    set /p ACCOUNT=Enter EQ account: 
+    set /p ACCOUNT=Enter EQ account from config/accounts.toml: 
 ) else (
     set ACCOUNT=%TextQuest_ACCOUNT%
 )
@@ -28,6 +28,17 @@ if "%ACCOUNT%"=="" (
 )
 if "%PASSWORD%"=="" (
     echo ERROR: PASSWORD cannot be empty.
+    exit /b 1
+)
+if not exist "%TextQuest_PATH%\config\accounts.toml" (
+    echo ERROR: Missing %TextQuest_PATH%\config\accounts.toml
+    echo        This script uses textquest.exe autologin and requires a configured account.
+    exit /b 1
+)
+findstr /i /c:"name = \"%ACCOUNT%\"" "%TextQuest_PATH%\config\accounts.toml" >nul
+if errorlevel 1 (
+    echo ERROR: ACCOUNT "%ACCOUNT%" was not found in config/accounts.toml.
+    echo        Add it there first, then rerun this script.
     exit /b 1
 )
 
