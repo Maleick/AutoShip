@@ -1346,7 +1346,7 @@ pub fn run_interact_mode(pid: u32) -> Result<()> {
     pipe.send_async(&cmd)
         .context("Failed to send InteractTarget")?;
 
-    println!("InteractTarget sent — NPC window should open if target is valid.");
+    println!("InteractTarget sent — the current target should be interacted with if valid.");
     Ok(())
 }
 

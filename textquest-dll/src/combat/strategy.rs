@@ -56,7 +56,7 @@ use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
 
-/// Snapshot of a summonsed pet's current state for pet-management decisions.
+/// Snapshot of a summoned pet's current state for pet-management decisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PetStatus {
     /// The pet's spawn ID, or `None` if no pet is active.
@@ -78,7 +78,7 @@ impl PetStatus {
 }
 
 /// Pet-management action requested by a `ClassStrategy` for the current frame.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum PetAction {
     /// Send `/pet attack` to the current target.
     Attack,
@@ -87,6 +87,23 @@ pub enum PetAction {
         /// The spell the strategy wants to cast on the pet.
         spell: SpellEntry,
     },
+}
+
+impl PartialEq for PetAction {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Attack, Self::Attack) => true,
+            (Self::Buff { spell: lhs }, Self::Buff { spell: rhs }) => {
+                lhs.slot == rhs.slot
+                    && lhs.spell_id == rhs.spell_id
+                    && lhs.name == rhs.name
+                    && (lhs.min_mana_pct - rhs.min_mana_pct).abs() < f32::EPSILON
+                    && lhs.priority == rhs.priority
+                    && lhs.is_aoe == rhs.is_aoe
+            }
+            _ => false,
+        }
+    }
 }
 
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
@@ -872,6 +889,32 @@ mod tests {
         let ctx = make_ctx_with_xtargets(&player, Some(&target), &config, true, Some(&xtargets));
         let mage = build_strategy(13, &config);
         assert_eq!(mage.pet_action(&ctx), Some(PetAction::Attack));
+    }
+
+    #[test]
+    fn pet_action_buff_equality_tolerates_float_rounding() {
+        let lhs = PetAction::Buff {
+            spell: SpellEntry {
+                name: "Burnout".into(),
+                slot: 1,
+                spell_id: 42,
+                min_mana_pct: 10.0,
+                priority: 1,
+                is_aoe: false,
+            },
+        };
+        let rhs = PetAction::Buff {
+            spell: SpellEntry {
+                name: "Burnout".into(),
+                slot: 1,
+                spell_id: 42,
+                min_mana_pct: 10.0 + (f32::EPSILON / 2.0),
+                priority: 1,
+                is_aoe: false,
+            },
+        };
+
+        assert_eq!(lhs, rhs);
     }
 
     #[test]
