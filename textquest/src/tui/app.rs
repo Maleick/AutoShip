@@ -5353,6 +5353,11 @@ impl App {
             {
                 self.handle_mapfilter_radius(parts, false);
             }
+            Some(arg)
+                if arg.eq_ignore_ascii_case("aggroradius") || arg.eq_ignore_ascii_case("ar") =>
+            {
+                self.handle_mapfilter_aggro_radius(parts);
+            }
             Some(arg) if arg.eq_ignore_ascii_case("targetpath") => {
                 let v = parts
                     .get(2)
@@ -5508,6 +5513,45 @@ impl App {
                 self.set_feedback(
                     ToastLevel::Success,
                     format!("{label} radius {r:.0} ({color:?})"),
+                    true,
+                );
+            }
+        }
+    }
+
+    fn handle_mapfilter_aggro_radius(&mut self, parts: &[&str]) {
+        match parts.get(2).map(|s| s.to_ascii_lowercase()).as_deref() {
+            None | Some("off" | "0" | "clear") => {
+                self.map_state.aggro_radius = None;
+                self.set_feedback(ToastLevel::Info, String::from("Aggro radius cleared"), true);
+            }
+            Some(val) => {
+                let Ok(r) = val.parse::<f32>() else {
+                    self.usage_feedback(
+                        "mapfilter aggroradius",
+                        "Usage: mapfilter aggroradius <radius> [color]",
+                    );
+                    return;
+                };
+                if !r.is_finite() || r <= 0.0 {
+                    self.usage_feedback(
+                        "mapfilter aggroradius",
+                        "Usage: mapfilter aggroradius <radius> [color] (radius must be > 0)",
+                    );
+                    return;
+                }
+                let color = parts
+                    .get(3)
+                    .and_then(|c| super::theme::parse_color_name(c))
+                    .unwrap_or(Color::Red);
+                self.map_state.aggro_radius = Some(MapRadiusOverlay {
+                    radius: r,
+                    color,
+                    label: format!("Aggro {r:.0}"),
+                });
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Aggro radius {r:.0} ({color:?})"),
                     true,
                 );
             }
@@ -5716,7 +5760,7 @@ impl App {
                     self.usage_feedback("mapmarker", "Usage: mapmarker clear <name|all>");
                     return;
                 };
-                let msg = if name.to_ascii_lowercase() == "all" {
+                let msg = if name.eq_ignore_ascii_case("all") {
                     self.map_state.named_markers.clear();
                     String::from("All markers cleared")
                 } else {

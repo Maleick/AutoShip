@@ -675,6 +675,8 @@ pub struct MapScreenState {
     pub cast_radius: Option<MapRadiusOverlay>,
     /// Spell radius overlay circle.
     pub spell_radius: Option<MapRadiusOverlay>,
+    /// Aggro radius overlay circle drawn around all NPC spawns.
+    pub aggro_radius: Option<MapRadiusOverlay>,
     /// Show target path overlay (nav waypoints to target).
     pub show_target_path: bool,
     /// Show direct line from player to target.
@@ -718,6 +720,7 @@ impl MapScreenState {
             name_style: MapNameStyle::Off,
             cast_radius: None,
             spell_radius: None,
+            aggro_radius: None,
             show_target_path: true,
             show_target_line: true,
             saved_presets: Vec::new(),
