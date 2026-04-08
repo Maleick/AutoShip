@@ -80,6 +80,16 @@ pub fn activate_context_menu_item(
 
 // ─── Windows implementation ───────────────────────────────────────────────────
 
+/// Maximum number of menus to process — mirrors the safety cap applied in
+/// both `read_context_menus_windows` and `activate_context_menu_item_windows`.
+#[cfg(windows)]
+const MAX_CONTEXT_MENUS: i32 = 64;
+
+/// Maximum number of items per menu to process — mirrors the safety cap applied
+/// in both `read_list_wnd_items` and `activate_context_menu_item_windows`.
+#[cfg(windows)]
+const MAX_MENU_ITEMS: i32 = 256;
+
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn read_context_menus_windows(eq_base: u64) -> Vec<ContextMenuInfo> {
@@ -112,7 +122,7 @@ unsafe fn read_context_menus_windows(eq_base: u64) -> Vec<ContextMenuInfo> {
         return Vec::new();
     }
 
-    let num_menus = menus_count.min(64) as usize; // safety cap: no more than 64 menus
+    let num_menus = menus_count.min(MAX_CONTEXT_MENUS) as usize; // safety cap
 
     let mut result = Vec::with_capacity(num_menus);
 
@@ -153,7 +163,7 @@ unsafe fn read_list_wnd_items(list_wnd_ptr: usize) -> Vec<ContextMenuItem> {
         return Vec::new();
     }
 
-    let count = items_count.min(256) as usize; // safety cap: no more than 256 items per menu
+    let count = items_count.min(MAX_MENU_ITEMS) as usize; // safety cap
     let mut items = Vec::with_capacity(count);
 
     for row_idx in 0..count {
@@ -203,7 +213,7 @@ unsafe fn activate_context_menu_item_windows(
     item_index: u32,
 ) -> Result<(), String> {
     use textquest_common::offsets::{
-        CONTEXT_MENU_MGR_HANDLE_MENU, PINST_CONTEXT_MENU_MANAGER, context_menu_mgr,
+        CONTEXT_MENU_MGR_HANDLE_MENU, PINST_CONTEXT_MENU_MANAGER, context_menu_mgr, eqgame,
     };
 
     if eq_base == 0 {
@@ -220,9 +230,37 @@ unsafe fn activate_context_menu_item_windows(
 
     // ── Bounds-check: verify menu_index is within range ───────────────────────
     let menus_count = *((mgr_ptr + context_menu_mgr::MENUS_COUNT) as *const i32);
-    if menus_count <= 0 || menu_index >= menus_count as u32 {
+    let menus_data = *((mgr_ptr + context_menu_mgr::MENUS_DATA) as *const usize);
+    if menus_count <= 0 {
         return Err(format!(
             "menu_index {menu_index} out of range (manager has {menus_count} menus)"
+        ));
+    }
+    let effective_menus = menus_count.min(MAX_CONTEXT_MENUS) as u32;
+    if menu_index >= effective_menus {
+        return Err(format!(
+            "menu_index {menu_index} out of range (manager has {menus_count} menus, effective cap {effective_menus})"
+        ));
+    }
+    if menus_data == 0 {
+        return Err("context menu manager menus data pointer is null".into());
+    }
+
+    // ── Bounds-check: verify item_index is within selected menu range ─────────
+    let menu_ptr = *((menus_data + menu_index as usize * size_of::<usize>()) as *const usize);
+    if menu_ptr == 0 {
+        return Err(format!("menu pointer is null for menu_index {menu_index}"));
+    }
+    let items_count = *((menu_ptr + eqgame::CLISTWND_ITEMS_COUNT) as *const i32);
+    if items_count <= 0 {
+        return Err(format!(
+            "item_index {item_index} out of range for menu_index {menu_index} (menu has {items_count} items)"
+        ));
+    }
+    let effective_items = items_count.min(MAX_MENU_ITEMS) as u32;
+    if item_index >= effective_items {
+        return Err(format!(
+            "item_index {item_index} out of range for menu_index {menu_index} (menu has {items_count} items, effective cap {effective_items})"
         ));
     }
 
