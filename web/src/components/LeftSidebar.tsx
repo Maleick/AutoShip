@@ -38,6 +38,9 @@ export default function LeftSidebar({ activeView, onNavigate }: LeftSidebarProps
         <p className="font-tech text-spectral text-sm tracking-[0.3em] mt-1 border-b border-white/10 pb-4">
           Third Gate Command
         </p>
+        <p className="mt-4 italic text-xs text-white/30 tracking-widest font-archaic uppercase">
+          "What happens in Neriak, stays in Neriak."
+        </p>
       </div>
 
       {/* Leyline Network Stats */}

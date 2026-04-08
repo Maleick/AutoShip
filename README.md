@@ -1,5 +1,13 @@
 # TextQuest
 
+<p align="center">
+  <img src="Art/TextQuest.jpeg" alt="TextQuest Logo" width="600">
+</p>
+
+<p align="center">
+  <i>"What happens in Neriak, stays in Neriak."</i>
+</p>
+
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
