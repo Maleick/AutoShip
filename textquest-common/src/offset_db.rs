@@ -166,8 +166,9 @@ impl OffsetDatabase {
         cmm.insert("menusArray".to_string(), context_menu_mgr::MENUS_DATA);
         cmm.insert("numMenus".to_string(), context_menu_mgr::MENUS_COUNT);
 
-        let mut cm = HashMap::new();
-        cm.insert("numItems".to_string(), context_menu::NUM_ITEMS);
+        // No compile-time `offsets::context_menu` fallback is currently defined.
+        // Leave the map empty here; JSON-loaded offsets can still populate it.
+        let cm = HashMap::new();
 
         let mut funcs = HashMap::new();
         funcs.insert("castSpell".into(), CAST_SPELL);
