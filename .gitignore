@@ -40,6 +40,13 @@ __pycache__/
 .codex-worktrees/
 .codex/worktrees/
 
+# Local-sync only (synced between machines, not in repo)
+knowledge/
+downloads/
+feature-list.json
+HANDOFF.md
+AGENTS.md
+
 # Local reference repos
 mq2-definitions/
 mq2-eqlib/

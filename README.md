@@ -1,7 +1,7 @@
 # TextQuest
 
 <p align="center">
-  <img src="Art/TextQuest.jpeg" alt="TextQuest Logo" width="600">
+  <img src="art/TextQuest.jpeg" alt="TextQuest Logo" width="600">
 </p>
 
 <p align="center">
