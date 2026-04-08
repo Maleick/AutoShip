@@ -108,6 +108,16 @@ The current follow-on implementation slices remain:
 - #152 for the addressable actor routing abstraction
 - #109 for launch profiles, session presets, and slot-health visibility
 
+## Current `M9` learning guidance
+
+`M9` remains a tuning layer on top of stable orchestration and metrics rather than a license to widen runtime authority.
+
+- optimize only operator-visible scorecards such as encounter throughput, recovery success, command latency, and resource efficiency
+- require a named baseline, success metric, regression budget, and rollback path before a training-driven candidate can leave draft status
+- evaluate candidate changes in replay, shadow, or canary mode before wider live rollout
+- keep packet, zoning, anti-cheat, and authenticated IPC boundaries unchanged unless a separate gated milestone explicitly reopens them
+- treat training-driven changes as operator-opt-in until live validation proves they do not regress current behavior
+
 ## Current `M10` economy guidance
 
 The current economy pass stays intentionally bounded to operator-visible execution loops:
