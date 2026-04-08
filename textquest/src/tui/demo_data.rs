@@ -1495,6 +1495,7 @@ fn demo_nav_from_profile(
         NavStatus::Idle => Vec::new(),
         NavStatus::Following { .. } => Vec::new(),
         NavStatus::Sticking { .. } => Vec::new(),
+        NavStatus::Circling { .. } => Vec::new(),
     };
 
     DemoNavInfo {

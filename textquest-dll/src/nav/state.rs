@@ -11,8 +11,8 @@
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
-    CampSpot, FollowConfig, HeadingMode, LOOSE_MAX_TURN_PER_TICK, MoveToConfig, NavCampConfig,
-    NavDiagnostics, NavStateSignals, NavStatus, PauseReason, StickConfig, Waypoint,
+    CampSpot, CircleConfig, CircleMode, FollowConfig, MoveToConfig, NavCampConfig, NavDiagnostics,
+    NavStateSignals, NavStatus, PauseReason, StickConfig, Waypoint,
 };
 use textquest_common::types::SpawnData;
 
@@ -40,6 +40,19 @@ enum State {
     Sticking,
     /// Advanced moveto — tracking a destination with break conditions (#184).
     MovingTo,
+    /// Circle-kiting around a center point.
+    Circling {
+        /// Center of the orbit.
+        center: Waypoint,
+        /// Full circle configuration.
+        config: CircleConfig,
+        /// Current angle in radians (measured CW from north, 0 = +Y axis).
+        angle: f32,
+        /// Ticks elapsed since last drunken direction change.
+        drunken_ticks: u32,
+        /// Current clockwise flag for drunken mode.
+        drunken_cw: bool,
+    },
 }
 
 /// The navigation engine, owned per-client in the DLL.
@@ -75,6 +88,8 @@ pub struct Navigator {
     moveto_config: Option<MoveToConfig>,
     /// Last observed HP while running moveto break-on-hit checks.
     last_moveto_hp: Option<i64>,
+    /// Last observed HP for break-on-hit detection during advanced moveto.
+    last_hp_current: Option<i64>,
     /// Global autopause flag (#164).
     autopause: bool,
     /// Break-on-GM flag — pause navigation when a GM is detected nearby.
@@ -111,32 +126,11 @@ fn has_gm_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
     })
 }
 
-/// Step `current` EQ heading toward `target` by at most `max_step` units.
+/// Returns `true` if the current HP sample indicates damage was taken since the
+/// last observed HP.  Updates `last_hp` to the new sample.
 ///
-/// Takes the shortest arc around the 0–512 circle so the character always
-/// turns in the optimal direction.
-fn step_toward_heading(current: f32, target: f32, max_step: f32) -> f32 {
-    // Normalise both values to 0..512.
-    let current = current.rem_euclid(512.0);
-    let target = target.rem_euclid(512.0);
-    // Compute the signed difference on the circle (shortest path).
-    let mut diff = target - current;
-    if diff > 256.0 {
-        diff -= 512.0;
-    } else if diff < -256.0 {
-        diff += 512.0;
-    }
-    // Clamp the step.
-    let step = diff.clamp(-max_step, max_step);
-    (current + step).rem_euclid(512.0)
-}
-
-/// Check whether the player has taken damage since the last HP sample.
-///
-/// Updates `last_hp_current` with the `current_hp` value (when present) and returns
-/// `true` only when both a previous and current reading exist and `current_hp`
-/// is strictly less than the last recorded value.  Returns `false` (without
-/// updating `last_hp_current`) when `current_hp` is `None`.
+/// - If `last_hp` is `None` (first sample), stores it and returns `false`.
+/// - If `current_hp` is `None` (HP unreadable), leaves `last_hp` unchanged and returns `false`.
 fn break_on_hit_triggered(last_hp_current: &mut Option<i64>, current_hp: Option<i64>) -> bool {
     let Some(current_hp) = current_hp else {
         return false;
@@ -167,6 +161,7 @@ impl Navigator {
             mesh_loaded: false,
             moveto_config: None,
             last_moveto_hp: None,
+            last_hp_current: None,
             autopause: false,
             break_on_gm: false,
             heading_mode: HeadingMode::default(),
@@ -226,6 +221,7 @@ impl Navigator {
         self.warp.reset();
         self.moveto_config = None;
         self.last_moveto_hp = None;
+        self.last_hp_current = None;
         self.pre_pause_state = None;
         self.state = State::Idle;
         tracing::info!("Navigation stopped");
@@ -234,7 +230,7 @@ impl Navigator {
     /// Pause navigation, retaining path and state for later resume (#168).
     pub fn pause(&mut self) {
         match self.state {
-            State::Moving | State::Following { .. } | State::Sticking => {
+            State::Moving | State::Following { .. } | State::Sticking | State::Circling { .. } => {
                 self.controller.stop_forward();
                 self.controller.stop_back();
                 let old_state = std::mem::replace(&mut self.state, State::Idle);
@@ -274,7 +270,7 @@ impl Navigator {
         NavStateSignals {
             active: matches!(
                 self.state,
-                State::Moving | State::Following { .. } | State::Sticking
+                State::Moving | State::Following { .. } | State::Sticking | State::Circling { .. }
             ),
             mesh_loaded: self.mesh_loaded,
             path_exists: !self.queue.is_empty(),
@@ -521,7 +517,11 @@ impl Navigator {
             self.warp.update(moveto_target_sample.as_ref())
         } else {
             match self.state {
-                State::Idle | State::Arrived | State::MovingTo => WarpAction::None,
+                // Warp detection is not applicable to Idle, Arrived, MovingTo, or Circling.
+                // Circling tracks the mob center live, so target displacement is expected.
+                State::Idle | State::Arrived | State::MovingTo | State::Circling { .. } => {
+                    WarpAction::None
+                }
                 State::Following { ref config, .. } => self
                     .warp
                     .update(find_follow_target_sample(nearby, &config.leader_name).as_ref()),
@@ -580,7 +580,11 @@ impl Navigator {
             if gm_present
                 && matches!(
                     self.state,
-                    State::Moving | State::Following { .. } | State::Sticking | State::MovingTo
+                    State::Moving
+                        | State::Following { .. }
+                        | State::Sticking
+                        | State::MovingTo
+                        | State::Circling { .. }
                 )
             {
                 tracing::warn!("GM detected nearby — pausing navigation (break_on_gm)");
@@ -612,6 +616,7 @@ impl Navigator {
             State::Following { .. } => self.tick_following(nearby),
             State::Sticking => self.tick_sticking(current_target, nearby),
             State::MovingTo => self.tick_moveto(nearby),
+            State::Circling { .. } => self.tick_circling(nearby),
         }
     }
 
@@ -665,6 +670,11 @@ impl Navigator {
                         <= effective_dist + super::stick::STICK_ARRIVAL_THRESHOLD,
                 }
             }
+            State::Circling { config, angle, .. } => NavStatus::Circling {
+                radius: config.radius,
+                angle: *angle,
+                mode: config.mode,
+            },
         }
     }
 
@@ -852,7 +862,7 @@ impl Navigator {
             config.destination
         };
 
-        let dist = current_pos.distance_2d(&destination);
+        let dist = config.axis_distance(&current_pos, &destination);
         self.cached_distance = dist;
 
         if config.break_on_hit
@@ -871,7 +881,8 @@ impl Navigator {
         }
 
         // Arrival check.
-        if dist < ARRIVAL_DISTANCE {
+        let arrival_dist = config.effective_arrival_distance(ARRIVAL_DISTANCE);
+        if dist < arrival_dist {
             tracing::info!("MoveToAdvanced: arrived at destination");
             self.stop_moveto();
             return;
@@ -910,10 +921,164 @@ impl Navigator {
         self.controller.stop_back();
         self.moveto_config = None;
         self.last_moveto_hp = None;
+        self.last_hp_current = None;
         self.stuck.reset();
         self.warp.reset();
         self.pre_pause_state = None;
         self.state = State::Idle;
+    }
+
+    /// Start circle-kiting mode.
+    ///
+    /// `center` is the resolved orbit center (already computed by the caller from
+    /// the player's current position or an explicit location).  When `config.target_id`
+    /// is set, `tick_circling` will update the center live from the spawn list each tick.
+    pub fn circle_kite(&mut self, config: CircleConfig, center: Option<Waypoint>) {
+        let resolved_center = center.unwrap_or_else(|| self.controller.read_position());
+
+        // Calculate initial angle: direction from center to player's current position.
+        let player_pos = self.controller.read_position();
+        let dx = player_pos.x - resolved_center.x;
+        let dy = player_pos.y - resolved_center.y;
+        let initial_angle = dx.atan2(dy); // radians, CW from north (+Y axis)
+
+        tracing::info!(
+            radius = config.radius,
+            mode = ?config.mode,
+            target_id = config.target_id,
+            center_x = resolved_center.x,
+            center_y = resolved_center.y,
+            "Starting circle kite"
+        );
+
+        self.controller.stop_forward();
+        self.controller.stop_back();
+        self.queue.clear();
+        self.camp = None;
+        self.camp_config = None;
+        self.stuck.reset();
+        self.stick.stop();
+        self.warp.reset();
+        self.moveto_config = None;
+        self.last_moveto_hp = None;
+        self.pre_pause_state = None;
+        self.state = State::Circling {
+            center: resolved_center,
+            angle: initial_angle,
+            drunken_ticks: 0,
+            drunken_cw: true,
+            config,
+        };
+    }
+
+    /// Stop circle-kiting and return to Idle.
+    pub fn circle_off(&mut self) {
+        if matches!(self.state, State::Circling { .. }) {
+            self.controller.stop_forward();
+            self.controller.stop_back();
+            self.state = State::Idle;
+            tracing::info!("Circle kite off — returning to Idle");
+        }
+    }
+
+    /// One tick for circle-kiting mode.
+    ///
+    /// Each tick:
+    /// 1. Optionally update the center from the live mob position.
+    /// 2. Advance the orbit angle by `CIRCLE_ANGLE_STEP`.
+    /// 3. Calculate the target waypoint on the circle.
+    /// 4. Face and move toward it.
+    fn tick_circling(&mut self, nearby: &[SpawnData]) {
+        // Angular advance per tick (radians). At radius=20 and 20 ticks/sec this
+        // puts the "lead" waypoint ~3 units ahead, producing smooth continuous movement.
+        const CIRCLE_ANGLE_STEP: f32 = 0.15;
+
+        // Extract mutable state — we need to mutate self while holding refs.
+        let (mut center, config, mut angle, mut drunken_ticks, mut drunken_cw) =
+            match std::mem::replace(&mut self.state, State::Idle) {
+                State::Circling {
+                    center,
+                    config,
+                    angle,
+                    drunken_ticks,
+                    drunken_cw,
+                } => (center, config, angle, drunken_ticks, drunken_cw),
+                other => {
+                    self.state = other;
+                    return;
+                }
+            };
+
+        // Track a live spawn center if target_id is set.
+        if let Some(tid) = config.target_id {
+            if let Some(spawn) = nearby.iter().find(|s| s.spawn_id == tid) {
+                center = Waypoint::new(spawn.x, spawn.y, spawn.z);
+            }
+        }
+
+        // Determine CW/CCW and update drunken state.
+        let step = match config.mode {
+            CircleMode::Cw | CircleMode::Backward => CIRCLE_ANGLE_STEP,
+            CircleMode::Ccw => -CIRCLE_ANGLE_STEP,
+            CircleMode::Drunken => {
+                drunken_ticks += 1;
+                if drunken_ticks >= config.drunken_interval {
+                    drunken_ticks = 0;
+                    drunken_cw = !drunken_cw;
+                    tracing::debug!(cw = drunken_cw, "Drunken circle: reversing direction");
+                }
+                if drunken_cw {
+                    CIRCLE_ANGLE_STEP
+                } else {
+                    -CIRCLE_ANGLE_STEP
+                }
+            }
+        };
+
+        angle += step;
+        // Normalize to (-π, π].
+        let pi = std::f32::consts::PI;
+        while angle > pi {
+            angle -= 2.0 * pi;
+        }
+        while angle <= -pi {
+            angle += 2.0 * pi;
+        }
+
+        // Target point on the circle perimeter at the new angle.
+        let target = Waypoint::new(
+            center.x + config.radius * angle.sin(),
+            center.y + config.radius * angle.cos(),
+            center.z,
+        );
+
+        let player_pos = self.controller.read_position();
+
+        // Restore state with updated values before movement writes.
+        self.state = State::Circling {
+            center,
+            config: config.clone(),
+            angle,
+            drunken_ticks,
+            drunken_cw,
+        };
+
+        let heading = movement::calc_heading(&player_pos, &target);
+        let wobbled = self.personality.wobble_heading(heading);
+
+        if matches!(config.mode, CircleMode::Backward) {
+            // Face toward the target point but run backward.
+            let reverse = (wobbled + 256.0) % 512.0;
+            self.controller.write_heading(reverse);
+            self.controller.write_speed_heading(reverse);
+            self.controller.stop_forward();
+            self.controller.press_back();
+        } else {
+            self.controller.write_heading(wobbled);
+            self.controller.write_speed_heading(wobbled);
+            self.controller.stop_back();
+            self.controller.press_forward();
+        }
     }
 
     fn should_track_moveto_warp(&self) -> bool {
@@ -1602,5 +1767,82 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // ─── Circle kite tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn circle_kite_enters_circling_state() {
+        use textquest_common::nav::{CircleConfig, CircleMode};
+        let mut nav = Navigator::new(0, 1);
+        let config = CircleConfig {
+            radius: 30.0,
+            mode: CircleMode::Ccw,
+            ..CircleConfig::default()
+        };
+        nav.circle_kite(config, None);
+        assert!(matches!(nav.status(), NavStatus::Circling { .. }));
+    }
+
+    #[test]
+    fn circle_kite_status_reports_radius_and_mode() {
+        use textquest_common::nav::{CircleConfig, CircleMode};
+        let mut nav = Navigator::new(0, 1);
+        let config = CircleConfig {
+            radius: 25.0,
+            mode: CircleMode::Cw,
+            ..CircleConfig::default()
+        };
+        nav.circle_kite(config, None);
+        match nav.status() {
+            NavStatus::Circling { radius, mode, .. } => {
+                assert!((radius - 25.0).abs() < 0.01, "radius mismatch: {radius}");
+                assert_eq!(mode, CircleMode::Cw);
+            }
+            other => panic!("Expected Circling, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn circle_off_returns_to_idle() {
+        use textquest_common::nav::CircleConfig;
+        let mut nav = Navigator::new(0, 1);
+        nav.circle_kite(CircleConfig::default(), None);
+        assert!(matches!(nav.status(), NavStatus::Circling { .. }));
+        nav.circle_off();
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn circle_off_is_noop_when_not_circling() {
+        let mut nav = Navigator::new(0, 1);
+        nav.circle_off(); // Should not panic.
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn circle_kite_with_explicit_center_uses_that_center() {
+        use textquest_common::nav::{CircleConfig, CircleMode};
+        let mut nav = Navigator::new(0, 1);
+        let center = Waypoint::new(100.0, 200.0, 0.0);
+        let config = CircleConfig {
+            radius: 20.0,
+            mode: CircleMode::Ccw,
+            center: Some(center),
+            ..CircleConfig::default()
+        };
+        // Pass center from config into circle_kite (mirrors what dispatch does).
+        let center_wp = config.center;
+        nav.circle_kite(config, center_wp);
+        assert!(matches!(nav.status(), NavStatus::Circling { .. }));
+    }
+
+    #[test]
+    fn circle_kite_stop_also_returns_to_idle() {
+        use textquest_common::nav::CircleConfig;
+        let mut nav = Navigator::new(0, 1);
+        nav.circle_kite(CircleConfig::default(), None);
+        nav.stop();
+        assert!(matches!(nav.status(), NavStatus::Idle));
     }
 }

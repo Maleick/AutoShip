@@ -94,6 +94,39 @@ fn query_nav_diagnostics(pid: u32) -> Result<textquest_common::nav::NavDiagnosti
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct NavSignalDisplay {
+    active: &'static str,
+    mesh_loaded: &'static str,
+    path_exists: &'static str,
+    path_length: String,
+    velocity: String,
+}
+
+fn format_nav_signal_flag(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "yes",
+        Some(false) => "no",
+        None => "n/a",
+    }
+}
+
+fn format_nav_signal_metric(value: Option<f32>) -> String {
+    value.map_or_else(|| String::from("n/a"), |metric| format!("{metric:.1}"))
+}
+
+fn nav_signal_display(
+    signals: Option<&textquest_common::nav::NavStateSignals>,
+) -> NavSignalDisplay {
+    NavSignalDisplay {
+        active: format_nav_signal_flag(signals.map(|signals| signals.active)),
+        mesh_loaded: format_nav_signal_flag(signals.map(|signals| signals.mesh_loaded)),
+        path_exists: format_nav_signal_flag(signals.map(|signals| signals.path_exists)),
+        path_length: format_nav_signal_metric(signals.and_then(|signals| signals.path_length)),
+        velocity: format_nav_signal_metric(signals.map(|signals| signals.velocity)),
+    }
+}
+
 fn resolve_built_dll_path() -> Result<PathBuf> {
     let exe_dir = std::env::current_exe()
         .context("Failed to resolve current executable path")?
@@ -456,6 +489,8 @@ pub fn run_navmesh_diagnostics_mode(zone: Option<&str>, pid: Option<u32>) -> Res
 /// Returns an error if the operation fails.
 pub fn run_status_mode(pid: u32) -> Result<()> {
     let mut reader = shared_state_reader_for_pid(pid)?;
+    let nav_signals = query_nav_signals(pid).ok();
+    let nav_display = nav_signal_display(nav_signals.as_ref());
 
     match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
         Some(state) => {
@@ -477,6 +512,11 @@ pub fn run_status_mode(pid: u32) -> Result<()> {
                 println!("Mana: {}/{}", player.mana_current, player.mana_max);
                 println!("Level: {} Class: {}", player.level, player.class_id);
                 println!("Nav: {:?}", state.nav_status);
+                println!("Nav active: {}", nav_display.active);
+                println!("Nav mesh loaded: {}", nav_display.mesh_loaded);
+                println!("Nav path exists: {}", nav_display.path_exists);
+                println!("Nav path length: {}", nav_display.path_length);
+                println!("Nav velocity: {}", nav_display.velocity);
             } else {
                 println!("No player data (not in world?)");
             }
@@ -512,11 +552,25 @@ pub fn run_statusall_mode() -> Result<()> {
 
     // Header
     println!(
-        "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
-        "PID", "Character", "Zone", "Position", "HP%", "Lv", "Nav", "Spawns"
+        "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
+        "PID",
+        "Character",
+        "Zone",
+        "Position",
+        "HP%",
+        "Lv",
+        "Nav",
+        "Active",
+        "MeshLoaded",
+        "PathExists",
+        "PathLength",
+        "Velocity",
+        "Spawns"
     );
 
     for &pid in &pids {
+        let nav_signals = query_nav_signals(pid).ok();
+        let nav_display = nav_signal_display(nav_signals.as_ref());
         match shared_state_reader_for_pid(pid) {
             Ok(mut reader) => {
                 match read_shared_state_with_retry(&mut reader, Duration::from_millis(1200)) {
@@ -551,6 +605,9 @@ pub fn run_statusall_mode() -> Result<()> {
                                 } => {
                                     format!("Sticking #{target_id}")
                                 }
+                                textquest_common::nav::NavStatus::Circling { radius, .. } => {
+                                    format!("Circling r={radius:.0}")
+                                }
                             };
                             let zone = if state.zone_short_name.is_empty() {
                                 "(unknown)".to_string()
@@ -558,7 +615,7 @@ pub fn run_statusall_mode() -> Result<()> {
                                 state.zone_short_name.clone()
                             };
                             println!(
-                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
+                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
                                 pid,
                                 player.name,
                                 zone,
@@ -566,27 +623,68 @@ pub fn run_statusall_mode() -> Result<()> {
                                 hp,
                                 player.level,
                                 nav,
+                                nav_display.active,
+                                nav_display.mesh_loaded,
+                                nav_display.path_exists,
+                                nav_display.path_length,
+                                nav_display.velocity,
                                 state.nearby_spawns.len()
                             );
                         } else {
                             println!(
-                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
-                                pid, "(no player)", "(not in world)", "-", "-", "-", "-", "-"
+                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
+                                pid,
+                                "(no player)",
+                                "(not in world)",
+                                "-",
+                                "-",
+                                "-",
+                                "-",
+                                nav_display.active,
+                                nav_display.mesh_loaded,
+                                nav_display.path_exists,
+                                nav_display.path_length,
+                                nav_display.velocity,
+                                "-"
                             );
                         }
                     }
                     None => {
                         println!(
-                            "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
-                            pid, "(no data)", "-", "-", "-", "-", "-", "-"
+                            "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
+                            pid,
+                            "(no data)",
+                            "-",
+                            "-",
+                            "-",
+                            "-",
+                            "-",
+                            nav_display.active,
+                            nav_display.mesh_loaded,
+                            nav_display.path_exists,
+                            nav_display.path_length,
+                            nav_display.velocity,
+                            "-"
                         );
                     }
                 }
             }
             Err(_) => {
                 println!(
-                    "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<7}{:<7}",
-                    pid, "(no shm)", "-", "-", "-", "-", "-", "-"
+                    "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
+                    pid,
+                    "(no shm)",
+                    "-",
+                    "-",
+                    "-",
+                    "-",
+                    "-",
+                    nav_display.active,
+                    nav_display.mesh_loaded,
+                    nav_display.path_exists,
+                    nav_display.path_length,
+                    nav_display.velocity,
+                    "-"
                 );
             }
         }
@@ -1251,7 +1349,7 @@ pub fn run_interact_mode(pid: u32) -> Result<()> {
     pipe.send_async(&cmd)
         .context("Failed to send InteractTarget")?;
 
-    println!("InteractTarget sent — NPC window should open if target is valid.");
+    println!("InteractTarget sent — the current target should be interacted with if valid.");
     Ok(())
 }
 
@@ -2110,7 +2208,8 @@ pub fn load_config() -> Result<config::AppConfig> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_pid_session, resolve_navmesh_zone};
+    use super::{load_pid_session, nav_signal_display, resolve_navmesh_zone};
+    use textquest_common::nav::NavStateSignals;
 
     #[test]
     fn load_pid_session_errors_without_token_file() {
@@ -2147,5 +2246,34 @@ mod tests {
     fn resolve_navmesh_zone_returns_explicit_zone_without_pid() {
         let zone = resolve_navmesh_zone(Some("gfaydark"), None).expect("explicit zone");
         assert_eq!(zone, "gfaydark");
+    }
+
+    #[test]
+    fn nav_signal_display_formats_available_values() {
+        let signals = NavStateSignals {
+            active: true,
+            mesh_loaded: false,
+            path_exists: true,
+            path_length: Some(123.4),
+            velocity: 8.75,
+            paused: false,
+        };
+
+        let display = nav_signal_display(Some(&signals));
+        assert_eq!(display.active, "yes");
+        assert_eq!(display.mesh_loaded, "no");
+        assert_eq!(display.path_exists, "yes");
+        assert_eq!(display.path_length, "123.4");
+        assert_eq!(display.velocity, "8.8");
+    }
+
+    #[test]
+    fn nav_signal_display_formats_unavailable_values() {
+        let display = nav_signal_display(None);
+        assert_eq!(display.active, "n/a");
+        assert_eq!(display.mesh_loaded, "n/a");
+        assert_eq!(display.path_exists, "n/a");
+        assert_eq!(display.path_length, "n/a");
+        assert_eq!(display.velocity, "n/a");
     }
 }

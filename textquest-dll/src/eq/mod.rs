@@ -2,8 +2,10 @@
 //! These are offsets from the eqgame.exe base address.
 //! Derived from MQ2 source headers.
 
+pub mod chat;
 pub mod context_menu;
 pub mod inventory;
+pub mod notification;
 pub mod widgets;
 
 /// `CEverQuest::MainLoop` offset from EQ base.

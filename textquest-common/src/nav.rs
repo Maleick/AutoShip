@@ -208,6 +208,90 @@ pub enum StickMode {
     SnapRoll,
 }
 
+/// Rotation direction for `/circle` kiting mode.
+///
+/// Maps the MQ2MoveUtils `/circle` modifier syntax:
+/// - `clockwise` / `cw`         → `CircleMode::Cw` (default)
+/// - `counterclockwise` / `ccw` → `CircleMode::Ccw`
+/// - `drunken`                  → `CircleMode::Drunken`
+/// - `backward`                 → `CircleMode::Backward`
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum CircleMode {
+    /// Clockwise rotation around the center point (default).
+    #[default]
+    Cw,
+    /// Counter-clockwise rotation around the center point.
+    Ccw,
+    /// Random direction changes at a configurable interval (drunken kiting).
+    Drunken,
+    /// Move backward while circling (character faces toward center).
+    Backward,
+}
+
+/// Configuration for a `/circle` kiting session.
+///
+/// Mirrors the MQ2MoveUtils `/circle` command surface:
+/// - `/circle on [radius]`           → start with optional radius
+/// - `/circle off`                    → stop circling
+/// - `/circle loc Y X`               → circle around specified coordinates
+/// - `clockwise` / `cw`              → `mode = CircleMode::Cw`
+/// - `counterclockwise` / `ccw`      → `mode = CircleMode::Ccw`
+/// - `drunken`                        → `mode = CircleMode::Drunken`
+/// - `backward`                       → `mode = CircleMode::Backward`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CircleConfig {
+    /// Orbit radius in EQ world units (default: 20.0).
+    pub radius: f32,
+    /// Rotation direction / style.
+    pub mode: CircleMode,
+    /// Optional explicit center point.
+    ///
+    /// When `None`, the player's position at the time `/circle on` is issued
+    /// becomes the center.  When `Some`, the character circles that fixed point.
+    pub center: Option<Waypoint>,
+    /// Optional spawn ID to orbit around.
+    ///
+    /// When set, the center tracks the target's live position each tick,
+    /// enabling active kiting of a moving mob.
+    pub target_id: Option<u32>,
+    /// Ticks between direction reversals in `Drunken` mode (default: 20).
+    pub drunken_interval: u32,
+}
+
+impl Default for CircleConfig {
+    fn default() -> Self {
+        Self {
+            radius: 20.0,
+            mode: CircleMode::Cw,
+            center: None,
+            target_id: None,
+            drunken_interval: 20,
+        }
+    }
+}
+
+impl CircleConfig {
+    /// Create a default config that starts circling the player's current
+    /// position at the given radius.
+    #[must_use]
+    pub fn with_radius(radius: f32) -> Self {
+        Self {
+            radius,
+            ..Self::default()
+        }
+    }
+
+    /// Create a config that circles a fixed map location.
+    #[must_use]
+    pub fn at_loc(y: f32, x: f32, z: f32, radius: f32) -> Self {
+        Self {
+            radius,
+            center: Some(Waypoint::new(x, y, z)),
+            ..Self::default()
+        }
+    }
+}
+
 /// Configuration for a `/stick` session (MQ2MoveUtils compatible).
 ///
 /// Maps the MQ2MoveUtils command surface:
@@ -325,6 +409,15 @@ pub enum NavStatus {
         /// `true` when within the desired stick range.
         in_range: bool,
     },
+    /// Circle-kiting around a fixed or mob-tracked center point.
+    Circling {
+        /// Orbit radius in EQ world units.
+        radius: f32,
+        /// Current angle in radians (0 = north, increases clockwise).
+        angle: f32,
+        /// The active rotation mode.
+        mode: CircleMode,
+    },
 }
 
 impl NavStatus {
@@ -339,6 +432,7 @@ impl NavStatus {
             Self::Arrived => "Arrived",
             Self::Following { .. } => "Following",
             Self::Sticking { .. } => "Sticking",
+            Self::Circling { .. } => "Circling",
         }
     }
 
@@ -376,6 +470,12 @@ impl NavStatus {
     #[must_use]
     pub fn is_sticking(&self) -> bool {
         matches!(self, Self::Sticking { .. })
+    }
+
+    /// Returns true if circle-kiting mode is active.
+    #[must_use]
+    pub fn is_circling(&self) -> bool {
+        matches!(self, Self::Circling { .. })
     }
 }
 
@@ -750,10 +850,30 @@ impl NamedWaypoint {
     }
 }
 
+/// Axis constraint for `/moveto` arrival detection (#135).
+///
+/// Controls which spatial axes are used when measuring distance to the
+/// destination for the arrival check.
+///
+/// - `Both`  — 2D XY distance (default, same as MQ2MoveUtils standard).
+/// - `X`     — only the X-axis separation matters for arrival.
+/// - `Y`     — only the Y-axis separation matters for arrival.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ArrivalAxis {
+    /// Arrive when the 2D (XY) distance is within the threshold (default).
+    #[default]
+    Both,
+    /// Arrive when only the X-axis separation is within the threshold.
+    X,
+    /// Arrive when only the Y-axis separation is within the threshold.
+    Y,
+}
+
 /// Configuration for advanced `/moveto` commands (#184).
 ///
 /// Supports MQ2MoveUtils options: moveto by spawn ID, xloc/yloc,
 /// break-on-aggro, break-on-hit, use-walk, use-back.
+/// Also supports distance and axis arrival controls (#135).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MoveToConfig {
     /// Destination waypoint (from xloc/yloc or spawn position).
@@ -780,6 +900,16 @@ pub struct MoveToConfig {
     pub use_back: bool,
     /// Autopause — pause movement on player keyboard input.
     pub autopause: bool,
+    /// Custom arrival distance threshold in EQ units (`/moveto dist #`).
+    ///
+    /// When `None`, the DLL's default `ARRIVAL_DISTANCE` constant is used.
+    #[serde(default)]
+    pub dist: Option<f32>,
+    /// Axis constraint for arrival detection (`/moveto xloc`/`yloc` beeline mode).
+    ///
+    /// Defaults to `ArrivalAxis::Both` (standard 2D distance check).
+    #[serde(default)]
+    pub axis: ArrivalAxis,
 }
 
 impl Default for MoveToConfig {
@@ -795,6 +925,8 @@ impl Default for MoveToConfig {
             use_walk: false,
             use_back: false,
             autopause: false,
+            dist: None,
+            axis: ArrivalAxis::Both,
         }
     }
 }
@@ -855,6 +987,29 @@ impl MoveToConfig {
             target_id: Some(spawn_id),
             ..Self::default()
         }
+    }
+
+    /// Compute the distance from `current` to `destination` according to `self.axis`.
+    ///
+    /// - `ArrivalAxis::Both` — standard 2D XY distance.
+    /// - `ArrivalAxis::X`   — absolute X-axis separation only.
+    /// - `ArrivalAxis::Y`   — absolute Y-axis separation only.
+    #[must_use]
+    pub fn axis_distance(&self, current: &Waypoint, destination: &Waypoint) -> f32 {
+        match self.axis {
+            ArrivalAxis::Both => current.distance_2d(destination),
+            ArrivalAxis::X => (current.x - destination.x).abs(),
+            ArrivalAxis::Y => (current.y - destination.y).abs(),
+        }
+    }
+
+    /// Return the arrival distance threshold, applying the `dist` override when set.
+    ///
+    /// Falls back to `default_arrival_distance` (the DLL's `ARRIVAL_DISTANCE` constant)
+    /// when no explicit `dist` was configured.
+    #[must_use]
+    pub fn effective_arrival_distance(&self, default_arrival_distance: f32) -> f32 {
+        self.dist.unwrap_or(default_arrival_distance)
     }
 }
 
@@ -1888,6 +2043,8 @@ mod tests {
         assert!(!config.use_walk);
         assert!(!config.use_back);
         assert!(!config.autopause);
+        assert!(config.dist.is_none());
+        assert_eq!(config.axis, ArrivalAxis::Both);
     }
 
     #[test]
@@ -1918,10 +2075,72 @@ mod tests {
             use_walk: true,
             use_back: false,
             autopause: true,
+            dist: Some(8.0),
+            axis: ArrivalAxis::X,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let restored: MoveToConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(config, restored);
+    }
+
+    #[test]
+    fn moveto_config_axis_distance_both() {
+        let config = MoveToConfig {
+            axis: ArrivalAxis::Both,
+            ..MoveToConfig::default()
+        };
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(3.0, 4.0, 0.0);
+        let d = config.axis_distance(&a, &b);
+        assert!((d - 5.0).abs() < 0.001, "expected 5.0, got {d}");
+    }
+
+    #[test]
+    fn moveto_config_axis_distance_x_only() {
+        let config = MoveToConfig {
+            axis: ArrivalAxis::X,
+            ..MoveToConfig::default()
+        };
+        let a = Waypoint::new(10.0, 0.0, 0.0);
+        let b = Waypoint::new(13.0, 999.0, 0.0);
+        let d = config.axis_distance(&a, &b);
+        assert!((d - 3.0).abs() < f32::EPSILON, "expected 3.0, got {d}");
+    }
+
+    #[test]
+    fn moveto_config_axis_distance_y_only() {
+        let config = MoveToConfig {
+            axis: ArrivalAxis::Y,
+            ..MoveToConfig::default()
+        };
+        let a = Waypoint::new(999.0, 5.0, 0.0);
+        let b = Waypoint::new(0.0, 12.0, 0.0);
+        let d = config.axis_distance(&a, &b);
+        assert!((d - 7.0).abs() < f32::EPSILON, "expected 7.0, got {d}");
+    }
+
+    #[test]
+    fn moveto_config_effective_arrival_distance_uses_override() {
+        let config = MoveToConfig {
+            dist: Some(5.0),
+            ..MoveToConfig::default()
+        };
+        assert!((config.effective_arrival_distance(15.0) - 5.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn moveto_config_effective_arrival_distance_falls_back_to_default() {
+        let config = MoveToConfig::default();
+        assert!((config.effective_arrival_distance(15.0) - 15.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn moveto_config_serde_backward_compat_missing_dist_axis() {
+        // JSON without dist/axis fields should deserialize without error using serde defaults.
+        let json = r#"{"destination":{"x":1.0,"y":2.0,"z":0.0},"target_id":null,"break_on_aggro":false,"break_on_warp":false,"pause_on_warp":false,"break_on_summon":false,"break_on_hit":false,"use_walk":false,"use_back":false,"autopause":false}"#;
+        let config: MoveToConfig = serde_json::from_str(json).expect("deserialize legacy JSON");
+        assert!(config.dist.is_none());
+        assert_eq!(config.axis, ArrivalAxis::Both);
     }
 
     // ─── New variant tests ───

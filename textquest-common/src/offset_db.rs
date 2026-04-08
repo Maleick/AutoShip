@@ -20,6 +20,12 @@ pub struct OffsetDatabase {
     pub player_zone: HashMap<String, usize>,
     /// SpawnManager struct offsets keyed by name.
     pub spawn_manager: HashMap<String, usize>,
+    /// `CContextMenuManager` struct field offsets keyed by name.
+    #[serde(default)]
+    pub context_menu_manager: HashMap<String, usize>,
+    /// `CContextMenu` struct field offsets keyed by name.
+    #[serde(default)]
+    pub context_menu: HashMap<String, usize>,
     /// Internal function addresses keyed by name (e.g. "castSpell").
     #[serde(default)]
     pub functions: HashMap<String, u64>,
@@ -71,6 +77,18 @@ impl OffsetDatabase {
         self.functions.get(name).copied()
     }
 
+    /// Look up a `CContextMenuManager` field offset by name.
+    #[must_use]
+    pub fn get_context_menu_manager_offset(&self, name: &str) -> Option<usize> {
+        self.context_menu_manager.get(name).copied()
+    }
+
+    /// Look up a `CContextMenu` field offset by name.
+    #[must_use]
+    pub fn get_context_menu_offset(&self, name: &str) -> Option<usize> {
+        self.context_menu.get(name).copied()
+    }
+
     /// Convert a preferred-base address to a runtime address using this database's preferred base.
     #[must_use]
     pub fn rebase(&self, preferred_addr: u64, actual_base: u64) -> Option<usize> {
@@ -94,7 +112,8 @@ impl OffsetDatabase {
             PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
             PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, SERVER_MEMCHECK_HANDLER,
             SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL, WORLD_AUTHENTICATE,
-            ZONE_GUIDE_MANAGER, player_base, player_zone, spawn_manager,
+            ZONE_GUIDE_MANAGER, context_menu_mgr as context_menu_manager, player_base,
+            player_zone, spawn_manager,
         };
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
@@ -142,6 +161,14 @@ impl OffsetDatabase {
 
         let mut sm = HashMap::new();
         sm.insert("playerList".to_string(), spawn_manager::PLAYER_LIST);
+
+        let mut cmm = HashMap::new();
+        cmm.insert("menusArray".to_string(), context_menu_mgr::MENUS_DATA);
+        cmm.insert("numMenus".to_string(), context_menu_mgr::MENUS_COUNT);
+
+        // No compile-time `offsets::context_menu` fallback is currently defined.
+        // Leave the map empty here; JSON-loaded offsets can still populate it.
+        let cm = HashMap::new();
 
         let mut funcs = HashMap::new();
         funcs.insert("castSpell".into(), CAST_SPELL);
@@ -205,6 +232,8 @@ impl OffsetDatabase {
             player_base: pb,
             player_zone: pz,
             spawn_manager: sm,
+            context_menu_manager: cmm,
+            context_menu: cm,
             functions: funcs,
         }
     }
@@ -498,5 +527,47 @@ mod tests {
     fn get_function_returns_none_for_missing() {
         let db = OffsetDatabase::from_compiled_offsets();
         assert!(db.get_function("does_not_exist").is_none());
+    }
+
+    #[test]
+    fn context_menu_manager_offsets_exposed_in_db() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert_eq!(
+            db.get_context_menu_manager_offset("currMenus"),
+            Some(crate::offsets::context_menu_mgr::CURR_MENUS)
+        );
+        assert_eq!(
+            db.get_context_menu_manager_offset("numMenus"),
+            Some(crate::offsets::context_menu_mgr::NUM_MENUS)
+        );
+        assert_eq!(
+            db.get_context_menu_manager_offset("handlerWnd"),
+            Some(crate::offsets::context_menu_mgr::HANDLER_WND)
+        );
+        assert!(db.get_context_menu_manager_offset("nonexistent").is_none());
+    }
+
+    #[test]
+    fn context_menu_offsets_exposed_in_db() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let expected = db.context_menu.get("numItems").copied();
+        assert!(expected.is_some());
+        assert_eq!(db.get_context_menu_offset("numItems"), expected);
+        assert!(db.get_context_menu_offset("nonexistent").is_none());
+    }
+
+    #[test]
+    fn context_menu_db_roundtrips_through_json() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let json = serde_json::to_string(&db).expect("serialize");
+        let restored: OffsetDatabase = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(
+            restored.get_context_menu_manager_offset("numMenus"),
+            db.get_context_menu_manager_offset("numMenus")
+        );
+        assert_eq!(
+            restored.get_context_menu_offset("numItems"),
+            db.get_context_menu_offset("numItems")
+        );
     }
 }

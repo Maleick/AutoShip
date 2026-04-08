@@ -162,6 +162,8 @@ fn run_loop(
                 .iter()
                 .map(|c| (c.pid, c.character_name.clone()))
                 .collect();
+            orchestrator.routing_scope = app.routing_scope.clone();
+            orchestrator.scope_pids = app.focused_pids();
             last_process_scan = Instant::now();
         }
 
@@ -482,6 +484,9 @@ fn apply_demo_scenario(app: &mut App) {
                             }
                             textquest_common::nav::NavStatus::Sticking { target_id, .. } => {
                                 format!("Sticking to #{target_id}")
+                            }
+                            textquest_common::nav::NavStatus::Circling { radius, .. } => {
+                                format!("Circling r={radius:.0}")
                             }
                         },
                         recovery_state: match &nav.status {
@@ -949,6 +954,7 @@ fn live_nav_destination(status: &NavStatus) -> String {
         | NavStatus::Arrived => String::from("Active route"),
         NavStatus::Following { leader_name, .. } => leader_name.clone(),
         NavStatus::Sticking { target_id, .. } => format!("Target #{target_id}"),
+        NavStatus::Circling { radius, .. } => format!("Circle r={radius:.0}"),
     }
 }
 
@@ -962,6 +968,7 @@ fn live_nav_route_state(status: &NavStatus) -> String {
         NavStatus::Idle => String::from("Standing by"),
         NavStatus::Following { leader_name, .. } => format!("Following {leader_name}"),
         NavStatus::Sticking { target_id, .. } => format!("Sticking to #{target_id}"),
+        NavStatus::Circling { radius, .. } => format!("Circling r={radius:.0}"),
     }
 }
 

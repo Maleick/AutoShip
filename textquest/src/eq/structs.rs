@@ -722,10 +722,8 @@ mod tests {
             spell_name: None,
         };
 
-        assert_eq!(
-            spawn.current_spellset_lines(2),
-            vec![String::from("G1 Complete Heal  G2 Spell 456")]
-        );
+        assert_eq!(named.display_name(), "Complete Heal");
+        assert_eq!(unnamed.display_name(), "Spell 456");
     }
 
     #[test]

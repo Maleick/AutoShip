@@ -362,18 +362,105 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
     for (cmd, desc) in &[
         (":nav <dest>", "Mesh route or slash fallback"),
+        (":nav ui    ", "Toggle debug diagnostics overlay"),
         (":mode camp ", "Camp mode"),
         (":mode hunt ", "Hunt mode"),
         (":camp start", "Start camp"),
         (":camp stop ", "Stop camp"),
         (":camp next ", "Next waypoint"),
         (":camp prev ", "Prev waypoint"),
+        (":circle on  ", "Start circle kite"),
+        (":circle off ", "Stop circle kite"),
     ] {
         lines.push(Line::from(vec![
             Span::styled(*cmd, cmd_s),
             Span::raw("  "),
             Span::styled(*desc, lbl_s),
         ]));
+    }
+
+    // ── Nav Debug Diagnostics overlay ─────────────────────────────────
+    if app.nav_state.show_nav_debug {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Nav Debug Diagnostics",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+
+        if let Some((pid, ref diag)) = app.nav_state.nav_diagnostics {
+            lines.push(Line::from(vec![
+                Span::styled("  PID:   ", Style::default().fg(t.text_muted)),
+                Span::styled(pid.to_string(), Style::default().fg(t.text_secondary)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  State: ", Style::default().fg(t.text_muted)),
+                Span::styled(diag.state.as_str(), Style::default().fg(t.text_highlight)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  Mesh:  ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    if diag.mesh_loaded { "Loaded" } else { "None" },
+                    Style::default().fg(if diag.mesh_loaded {
+                        t.hp_high
+                    } else {
+                        t.hp_low
+                    }),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  Path:  ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    if diag.path_exists { "Yes" } else { "No" },
+                    Style::default().fg(if diag.path_exists {
+                        t.hp_high
+                    } else {
+                        t.hp_low
+                    }),
+                ),
+            ]));
+            if let Some(len) = diag.path_length {
+                lines.push(Line::from(vec![
+                    Span::styled("  Len:   ", Style::default().fg(t.text_muted)),
+                    Span::styled(format!("{len:.0}u"), Style::default().fg(t.text_secondary)),
+                ]));
+            }
+            lines.push(Line::from(vec![
+                Span::styled("  WP:    ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{}/{}", diag.waypoint_index, diag.waypoint_count),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  Dist:  ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{:.0}u", diag.distance_remaining),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  Vel:   ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{:.1} u/s", diag.velocity),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    "(run :nav ui again to refresh)",
+                    Style::default().fg(t.text_muted),
+                ),
+            ]));
+        } else {
+            lines.push(Line::from(Span::styled(
+                "  No live diagnostics — run :nav ui while a client is focused.",
+                Style::default().fg(t.text_muted),
+            )));
+        }
     }
 
     lines.push(Line::from(""));
