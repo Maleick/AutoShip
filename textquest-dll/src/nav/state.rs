@@ -94,6 +94,8 @@ pub struct Navigator {
     autopause: bool,
     /// Break-on-GM flag — pause navigation when a GM is detected nearby.
     break_on_gm: bool,
+    /// Heading update mode — controls how heading writes are applied.
+    heading_mode: HeadingMode,
 }
 
 /// Radius for hostile NPC proximity checks (aggro detection), in EQ world units.
@@ -162,6 +164,7 @@ impl Navigator {
             last_hp_current: None,
             autopause: false,
             break_on_gm: false,
+            heading_mode: HeadingMode::default(),
         }
     }
 
@@ -429,6 +432,42 @@ impl Navigator {
         tracing::info!(enabled, "BreakOnGm set");
     }
 
+    /// Set the heading update mode.
+    ///
+    /// - `HeadingMode::True`  — instant memory write to the heading field only.
+    /// - `HeadingMode::Loose` — smooth interpolated turn, capped at
+    ///   [`LOOSE_MAX_TURN_PER_TICK`] EQ heading units per tick.
+    /// - `HeadingMode::Fast`  — instant memory write to both heading and
+    ///   speed-heading (default).
+    pub fn set_heading_mode(&mut self, mode: HeadingMode) {
+        self.heading_mode = mode;
+        tracing::info!(?mode, "HeadingMode set");
+    }
+
+    /// Apply a target heading according to the active [`HeadingMode`].
+    ///
+    /// - `True`:  writes heading field only (instant snap).
+    /// - `Fast`:  writes both heading and speed-heading (instant snap, default).
+    /// - `Loose`: steps toward `target` from the current heading by at most
+    ///   [`LOOSE_MAX_TURN_PER_TICK`] EQ units, then writes both fields.
+    fn apply_heading(&self, target: f32) {
+        match self.heading_mode {
+            HeadingMode::True => {
+                self.controller.write_heading(target);
+            }
+            HeadingMode::Fast => {
+                self.controller.write_heading(target);
+                self.controller.write_speed_heading(target);
+            }
+            HeadingMode::Loose => {
+                let current = self.controller.read_heading();
+                let stepped = step_toward_heading(current, target, LOOSE_MAX_TURN_PER_TICK);
+                self.controller.write_heading(stepped);
+                self.controller.write_speed_heading(stepped);
+            }
+        }
+    }
+
     /// Run one tick of the navigation state machine. Call from on_game_tick().
     ///
     /// `current_target` and `nearby` are used by the stick engine.
@@ -688,8 +727,7 @@ impl Navigator {
         if let Some(target) = self.queue.current() {
             let heading = movement::calc_heading(&current_pos, target);
             let wobbled = self.personality.wobble_heading(heading);
-            self.controller.write_heading(wobbled);
-            self.controller.write_speed_heading(wobbled);
+            self.apply_heading(wobbled);
             // Actually walk forward via ExecuteCmd.
             self.controller.press_forward();
         }
@@ -727,7 +765,7 @@ impl Navigator {
                 // Healer mode: face target even when in range (for casting).
                 if let Some(ref ft) = face_target {
                     let heading = movement::calc_heading(&player_pos, ft);
-                    self.controller.write_heading(heading);
+                    self.apply_heading(heading);
                 }
             }
             StickTickResult::OutOfRange {
@@ -747,8 +785,7 @@ impl Navigator {
                     let h = movement::calc_heading(&player_pos, &desired_pos);
                     self.personality.wobble_heading(h)
                 };
-                self.controller.write_heading(heading);
-                self.controller.write_speed_heading(heading);
+                self.apply_heading(heading);
                 self.controller.press_forward();
             }
             StickTickResult::TooClose {
@@ -764,8 +801,7 @@ impl Navigator {
                 self.controller.stop_forward();
                 let heading = movement::calc_heading(&player_pos, &retreat_pos);
                 let wobbled = self.personality.wobble_heading(heading);
-                self.controller.write_heading(wobbled);
-                self.controller.write_speed_heading(wobbled);
+                self.apply_heading(wobbled);
                 self.controller.press_back();
             }
         }
@@ -869,13 +905,11 @@ impl Navigator {
         if config.use_back {
             // Move backward: face away from destination, press back.
             let reverse = (wobbled + 256.0) % 512.0;
-            self.controller.write_heading(reverse);
-            self.controller.write_speed_heading(reverse);
+            self.apply_heading(reverse);
             self.controller.stop_forward();
             self.controller.press_back();
         } else {
-            self.controller.write_heading(wobbled);
-            self.controller.write_speed_heading(wobbled);
+            self.apply_heading(wobbled);
             self.controller.stop_back();
             self.controller.press_forward();
         }
@@ -1200,8 +1234,7 @@ impl Navigator {
             // Face and step toward anchor.
             let heading = movement::calc_heading(&current_pos, &anchor);
             let wobbled = self.personality.wobble_heading(heading);
-            self.controller.write_heading(wobbled);
-            self.controller.write_speed_heading(wobbled);
+            self.apply_heading(wobbled);
             self.controller.press_forward();
         } else if currently_returning && dist <= follow_distance {
             // Arrived back within follow range — stop moving.
