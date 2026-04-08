@@ -5633,18 +5633,13 @@ impl App {
             // :mapmarker set <name> [x y [z]]
             Some("set") => {
                 let Some(name) = parts.get(2) else {
-                    self.usage_feedback(
-                        "mapmarker",
-                        "Usage: mapmarker set <name> [x y [z]]",
-                    );
+                    self.usage_feedback("mapmarker", "Usage: mapmarker set <name> [x y [z]]");
                     return;
                 };
                 let name = (*name).to_string();
 
                 // Explicit coordinates supplied?
-                let (x, y, z, zone) = if let (Some(xs), Some(ys)) =
-                    (parts.get(3), parts.get(4))
-                {
+                let (x, y, z, zone) = if let (Some(xs), Some(ys)) = (parts.get(3), parts.get(4)) {
                     let Ok(xv) = xs.parse::<f32>() else {
                         self.set_feedback(
                             ToastLevel::Warning,
@@ -5673,9 +5668,7 @@ impl App {
                     (xv, yv, zv, zone)
                 } else {
                     // Use player position.
-                    let Some(player) = self
-                        .active_client()
-                        .and_then(|c| c.local_player.as_ref())
+                    let Some(player) = self.active_client().and_then(|c| c.local_player.as_ref())
                     else {
                         self.set_feedback(
                             ToastLevel::Warning,
@@ -5829,16 +5822,12 @@ impl App {
                 let path = self.map_state.marker_file.clone();
                 let markers = self.map_state.named_markers.clone();
                 match save_named_markers(&path, &markers) {
-                    Ok(()) => self.set_feedback(
-                        ToastLevel::Success,
-                        String::from("Markers saved"),
-                        true,
-                    ),
-                    Err(e) => self.set_feedback(
-                        ToastLevel::Warning,
-                        format!("Save failed: {e}"),
-                        false,
-                    ),
+                    Ok(()) => {
+                        self.set_feedback(ToastLevel::Success, String::from("Markers saved"), true)
+                    }
+                    Err(e) => {
+                        self.set_feedback(ToastLevel::Warning, format!("Save failed: {e}"), false)
+                    }
                 }
             }
 
