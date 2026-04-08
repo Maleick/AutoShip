@@ -161,64 +161,6 @@ fn item_action_key(item_name: &str) -> i32 {
     (hash & 0x7FFF_FFFF) as i32
 }
 
-<<<<<<< HEAD
-/// Plan a spell cast, resolving the gem slot to use given memorised spells.
-///
-/// - `preferred_slot`: the zero-based gem slot from the config/rotation entry,
-///   or `None` for rotation actions that don't specify a slot.
-/// - `spell_id`: the spell to cast (from `SpellEntry::spell_id`).
-/// - `memorized_spells`: slice of spell IDs currently loaded in gem slots
-///   (index 0 = gem 0).
-///
-/// Returns `None` only if `preferred_slot` is `Some` and the slot index is
-/// invalid (i.e. `normalize_gem_id` returns `None`).  In all other cases
-/// returns a valid `PlannedSpellCast`.
-fn plan_spell_cast(
-    preferred_slot: Option<u8>,
-    spell_id: i32,
-    memorized_spells: &[i32],
-) -> Option<PlannedSpellCast> {
-    if let Some(slot) = preferred_slot {
-        let gem = normalize_gem_id(slot)?;
-        let gem_idx = gem as usize;
-        // Check whether the spell is already in the preferred gem.
-        if memorized_spells.get(gem_idx).copied() == Some(spell_id) {
-            return Some(PlannedSpellCast {
-                gem_id: gem,
-                spell_id,
-                source: SpellCastSource::PreferredGem,
-            });
-        }
-        // Fall back to any other gem that has the spell.
-        if let Some(fallback) = memorized_spells.iter().position(|&id| id == spell_id) {
-            return Some(PlannedSpellCast {
-                gem_id: fallback as u8,
-                spell_id,
-                source: SpellCastSource::FallbackGem,
-            });
-        }
-        // Not memorised anywhere — cast by spell ID directly.
-        return Some(PlannedSpellCast {
-            gem_id: 0,
-            spell_id,
-            source: SpellCastSource::SpellIdDirect,
-        });
-    }
-    // No preferred slot: find the spell in any gem.
-    if let Some(fallback) = memorized_spells.iter().position(|&id| id == spell_id) {
-        return Some(PlannedSpellCast {
-            gem_id: fallback as u8,
-            spell_id,
-            source: SpellCastSource::FallbackGem,
-        });
-    }
-    // Not memorised — cast by spell ID.
-    Some(PlannedSpellCast {
-        gem_id: 0,
-        spell_id,
-        source: SpellCastSource::SpellIdDirect,
-    })
-=======
 fn normalize_action_name(action_name: &str) -> String {
     action_name
         .chars()
@@ -277,7 +219,6 @@ fn lookup_combat_skill_id(normalized_action_name: &str) -> Option<u32> {
 fn combat_skill_id(action_name: &str) -> Option<u32> {
     let normalized_action_name = normalize_action_name(action_name);
     lookup_combat_skill_id(&normalized_action_name)
->>>>>>> master
 }
 
 /// The main combat state machine for a single EQ character.
@@ -1314,11 +1255,7 @@ impl Combatant {
                 self.gcd.consume();
                 self.state = CombatState::Casting {
                     spell_slot: gem_id,
-<<<<<<< HEAD
-                    target_id: current_target_id.unwrap_or(0),
-=======
                     target_id: pet_id,
->>>>>>> master
                     ticks_remaining: 20 + cast_delay,
                 };
                 true
