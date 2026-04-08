@@ -90,7 +90,7 @@ jobs:
             
             git add README.md
             git commit -m "chore(readme): refresh project metrics"
-            git push origin !BRANCH_NAME! --force
+            git push origin !BRANCH_NAME! --force-with-lease
             
             echo [info] Checking for existing PR.
             set "PR_EXISTS="

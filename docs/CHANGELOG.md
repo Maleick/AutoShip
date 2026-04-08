@@ -5,7 +5,7 @@ All notable changes to TextQuest are documented in this file.
 ## [0.6.1] - 2026-04-07
 
 ### Fixed
-- **README metrics hardening** — `update_readme_metrics.py` now includes a source-based fallback (regex scan for `#[test]`) to accurately count tests when the `cargo test --workspace` binary runner fails or captures zero tests (common in macOS demo mode).
+- **README metrics hardening** — `update_readme_metrics.py` now includes a source-based fallback (regex scan for `#[test]`) to accurately count tests when the `cargo test --workspace` runner is unavailable (`FileNotFoundError`) or a successful run yields zero parsed tests (common in macOS demo mode). A non-zero `cargo test` exit now surfaces the failure immediately (`sys.exit(1)`) instead of silently falling back.
 - **Handoff automation** — `scripts/gen-handoff.sh` now auto-generates `HANDOFF.md` with live repo stats (lines of code, crate versions, recent commits, and test results).
 
 ### Removed

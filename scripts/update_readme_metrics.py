@@ -65,10 +65,10 @@ def test_count() -> tuple[int, bool]:
         )
     except FileNotFoundError:
         return test_count_from_source(), False
-    if result.returncode != 0:
-        print(f"cargo test failed (exit {result.returncode}):\n{result.stderr}", file=sys.stderr)
-        sys.exit(1)
     output = f"{result.stdout}\n{result.stderr}"
+    if result.returncode != 0:
+        print(f"cargo test failed (exit {result.returncode}):\n{output}", file=sys.stderr)
+        sys.exit(1)
     running = sum(int(match.group(1)) for match in RUNNING_TESTS_RE.finditer(output))
     if running > 0:
         return running, True
