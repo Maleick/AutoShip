@@ -35,11 +35,6 @@ timeout /t 3 /nobreak >nul
 REM Clear DLL logs
 del /q "%TEMP%\textquest\textquest-dll.log.*" 2>nul
 
-REM Snapshot existing PIDs before first launch
-for /f "tokens=2" %%a in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
-    set "EXISTING_%%a=1"
-)
-
 set CLIENT_NUM=0
 
 REM --- Launch function ---
@@ -53,33 +48,32 @@ for %%A in (
     "!ACCT6!"
 ) do (
     set /a CLIENT_NUM+=1
-    for /f "tokens=1,2" %%U in (%%A) do (
-        echo.
-        echo [!CLIENT_NUM!/6] Launching %%U...
 
         REM Launch EQ
         cd /d "%EQ_PATH%"
         start "" "%EQ_PATH%\eqgame.exe" patchme /login:%%U
         cd /d "%TextQuest_PATH%"
 
-        REM Wait for process to start, then find its PID
-        timeout /t 3 /nobreak >nul
-        set "NEW_PID="
-        for /f "tokens=2" %%P in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
-            if not defined KNOWN_%%P (
-                set "NEW_PID=%%P"
-            )
-        )
+    REM Launch EQ
+    cd /d "%EQ_PATH%"
+    start "" "%EQ_PATH%\eqgame.exe" patchme /login:%%U
+    cd /d "%DMFT_PATH%"
 
-        if not defined NEW_PID (
-            echo   ERROR: Could not find new eqgame.exe PID for %%U
-        ) else (
-            echo   PID: !NEW_PID!
-            set "KNOWN_!NEW_PID!=1"
+    REM Wait for process to start, then find latest PID
+    timeout /t 3 /nobreak >nul
+    set "NEW_PID="
+    for /f "tokens=2" %%P in ('tasklist /fi "imagename eq eqgame.exe" /nh 2^>nul ^| findstr /i "eqgame"') do (
+        set "NEW_PID=%%P"
+    )
 
-            REM Wait for login screen
-            echo   Waiting %INJECT_WAIT%s for login screen...
-            timeout /t %INJECT_WAIT% /nobreak >nul
+    if not defined NEW_PID (
+        echo   ERROR: Could not find eqgame.exe PID for %%U
+    ) else (
+        echo   PID: !NEW_PID!
+
+        REM Wait for login screen
+        echo   Waiting %INJECT_WAIT%s for login screen...
+        timeout /t %INJECT_WAIT% /nobreak >nul
 
             REM Inject into this specific PID
             echo   Injecting DLL into PID !NEW_PID!...
@@ -91,11 +85,10 @@ for %%A in (
             "%TextQuest_EXE%" --login-pid !NEW_PID! %%U %%V "%SERVER%"
             echo   %%U login sent to PID !NEW_PID!
 
-            REM Stagger before next client
-            if !CLIENT_NUM! LSS 6 (
-                echo   Waiting %STAGGER%s before next client...
-                timeout /t %STAGGER% /nobreak >nul
-            )
+        REM Stagger before next client
+        if !CLIENT_NUM! LSS 6 (
+            echo   Waiting %STAGGER%s before next client...
+            timeout /t %STAGGER% /nobreak >nul
         )
     )
 )
