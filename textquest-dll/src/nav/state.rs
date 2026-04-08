@@ -794,7 +794,7 @@ impl Navigator {
             config.destination
         };
 
-        let dist = current_pos.distance_2d(&destination);
+        let dist = config.axis_distance(&current_pos, &destination);
         self.cached_distance = dist;
 
         if config.break_on_hit
@@ -813,7 +813,8 @@ impl Navigator {
         }
 
         // Arrival check.
-        if dist < ARRIVAL_DISTANCE {
+        let arrival_dist = config.effective_arrival_distance(ARRIVAL_DISTANCE);
+        if dist < arrival_dist {
             tracing::info!("MoveToAdvanced: arrived at destination");
             self.stop_moveto();
             return;
