@@ -413,22 +413,31 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     }
 }
 
-/// Write credentials directly to `CEditWnd` widgets by finding them in `CXWndManager`'s
-/// window list and setting their `InputText` `CXStr` in-place.
+/// Write credentials directly to login `CEditWnd` widgets and optionally click Login.
 ///
-/// This is the MQ2 approach — no keyboard simulation. We:
-/// 1. Walk `CXWndManager::pWindows` to find username/password edit widgets
-/// 2. Write directly to `CEditBaseWnd::InputText` (`CXStr` at +0x278)
-/// 3. Click the Login button via vtable WndNotification(XWM_LCLICK)
+/// Security note: this function only writes when the login SIDL screen (`connect`)
+/// is visible and all widgets are resolved by stable XML/SIDL names. This avoids
+/// positional pointer inference from `CXWndManager::pWindows`.
 pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]
     {
         use textquest_common::offsets::eqmain as off;
 
-        let Some(cxwnd_mgr) = super::eqmain::resolve_cxwnd_manager(eqmain_base) else {
-            tracing::warn!("Cannot write credentials — CXWndManager not resolved");
+        // Only write credentials when we are definitely on the login screen.
+        if !is_sidl_window_visible(eqmain_base, SIDL_CONNECT) {
+            tracing::warn!("Refusing credential write — login screen is not active");
+            return false;
+        }
+
+        let Some(username_edit) = find_window_by_name(eqmain_base, LOGIN_USERNAME_EDIT) else {
+            tracing::warn!("Could not resolve username edit widget by SIDL name");
             return false;
         };
+        let Some(password_edit) = find_window_by_name(eqmain_base, LOGIN_PASSWORD_EDIT) else {
+            tracing::warn!("Could not resolve password edit widget by SIDL name");
+            return false;
+        };
+        let login_button = find_window_by_name(eqmain_base, LOGIN_CONNECT_BUTTON);
 
         unsafe {
             let array_ptr = *((cxwnd_mgr + off::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
