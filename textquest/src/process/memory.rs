@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::mem;
 
 /// Handle to an opened process for memory reading.
@@ -270,4 +270,63 @@ pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
         "find_processes_by_name called on non-Windows platform (stub)"
     );
     Ok(Vec::new())
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(not(windows))]
+    mod non_windows {
+        use super::super::*;
+
+        const STUB_TEST_ADDR: usize = 0xDEADBEEF;
+
+        #[test]
+        fn non_windows_stubs_return_safe_defaults() {
+            let handle = ProcessHandle::open(1234).unwrap();
+
+            assert_eq!(handle.pid, 1234);
+            assert_eq!(handle.module_base().unwrap(), 0x140000000);
+            assert_eq!(handle.read_string(STUB_TEST_ADDR, 32).unwrap(), "");
+            assert!(find_processes_by_name("eqgame.exe").unwrap().is_empty());
+        }
+
+        #[test]
+        fn non_windows_read_reports_pid_address_and_size() {
+            let handle = ProcessHandle::open(42).unwrap();
+
+            let err = handle.read::<u32>(0x1234).unwrap_err();
+            let msg = format!("{err:#}");
+
+            assert!(msg.contains("Cannot read process memory on non-Windows platform"));
+            assert!(msg.contains("pid=42"));
+            assert!(msg.contains("addr=0x1234"));
+            assert!(msg.contains("size=4"));
+        }
+
+        #[test]
+        fn non_windows_read_bytes_reports_pid_address_and_count() {
+            let handle = ProcessHandle::open(77).unwrap();
+
+            let err = handle.read_bytes(0xBEEF, 16).unwrap_err();
+            let msg = format!("{err:#}");
+
+            assert!(msg.contains("Cannot read process memory on non-Windows platform"));
+            assert!(msg.contains("pid=77"));
+            assert!(msg.contains("addr=0xbeef"));
+            assert!(msg.contains("count=16"));
+        }
+
+        #[test]
+        fn chase_ptr_adds_step_context_to_read_failures() {
+            let handle = ProcessHandle::open(99).unwrap();
+
+            let err = handle.chase_ptr(0x1000, &[0x10, 0x20]).unwrap_err();
+            let msg = format!("{err:#}");
+
+            assert!(msg.contains("chase_ptr: failed at step 0"));
+            assert!(msg.contains("addr=0x1000"));
+            assert!(msg.contains("offset=0x10"));
+            assert!(msg.contains("pid=99"));
+        }
+    }
 }

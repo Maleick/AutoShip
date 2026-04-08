@@ -37,11 +37,11 @@ impl CommandPipe {
     pub fn connect(client_id: ClientId, session_id: u64) -> Result<Self> {
         #[cfg(windows)]
         {
+            use windows::core::PCSTR;
             use windows::Win32::Foundation::GENERIC_READ;
             use windows::Win32::Storage::FileSystem::{
                 CreateFileA, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING,
             };
-            use windows::core::PCSTR;
 
             let pipe_name = format!(
                 "{}\0",
@@ -256,6 +256,69 @@ impl Drop for CommandPipe {
             unsafe {
                 let _ = CloseHandle(self.handle);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(not(windows))]
+    mod non_windows {
+        use super::super::*;
+
+        const STUB_TOKEN_BYTE: u8 = 0xAB;
+        const STUB_TOKEN_SIZE: usize = 32;
+
+        #[test]
+        fn connect_keeps_client_id_and_returns_stub_response() {
+            let pipe = CommandPipe::connect(77, 123).unwrap();
+
+            assert_eq!(pipe.client_id, 77);
+
+            let (response, correlation_id) =
+                pipe.send_correlated(&Command::StopMovement, 99).unwrap();
+
+            assert_eq!(correlation_id, None);
+            match response {
+                Response::Error { message } => {
+                    assert_eq!(message, "Not implemented (non-Windows stub)");
+                }
+                other => panic!("expected stub error response, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn send_reports_correlation_mismatch_against_stub_response() {
+            let pipe = CommandPipe::connect(88, 456).unwrap();
+
+            let err = pipe.send(&Command::StopMovement).unwrap_err();
+            let msg = format!("{err:#}");
+
+            assert!(msg.contains("response correlation mismatch"));
+            assert!(msg.contains("client 88"));
+            assert!(msg.contains("sent 1"));
+            assert!(msg.contains("received None"));
+        }
+
+        #[test]
+        fn send_advances_correlation_ids_between_calls() {
+            let pipe = CommandPipe::connect(91, 789).unwrap();
+
+            let first_err_msg = format!("{:#}", pipe.send(&Command::StopMovement).unwrap_err());
+            let second_err_msg = format!("{:#}", pipe.send(&Command::StopMovement).unwrap_err());
+
+            assert!(first_err_msg.contains("sent 1"));
+            assert!(second_err_msg.contains("sent 2"));
+        }
+
+        #[test]
+        fn send_async_and_send_raw_token_are_noops_on_stub() {
+            let pipe = CommandPipe::connect(55, 42).unwrap();
+
+            assert!(pipe.send_async(&Command::StopMovement).is_ok());
+            assert!(pipe
+                .send_raw_token(&[STUB_TOKEN_BYTE; STUB_TOKEN_SIZE])
+                .is_ok());
         }
     }
 }
