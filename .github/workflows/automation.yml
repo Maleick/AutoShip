@@ -218,7 +218,8 @@ jobs:
           setlocal EnableDelayedExpansion
           set "DOCS_CHANGED=false"
           for /f "usebackq delims=" %%F in (`git diff --name-only HEAD~1`) do (
-            echo %%F| findstr /B /C:"docs/" >nul && set "DOCS_CHANGED=true"
+            set "FILE=%%F"
+            if /I "!FILE:~0,5!"=="docs/" set "DOCS_CHANGED=true"
           )
           echo [info] DOCS_CHANGED=!DOCS_CHANGED!
           echo docs_changed=!DOCS_CHANGED!>>"%GITHUB_OUTPUT%"
