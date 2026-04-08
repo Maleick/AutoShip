@@ -75,14 +75,9 @@ test result: FAILED. 841 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
 
 ## Key Offsets (from textquest-common/src/offsets.rs)
 
-| Constant | Value |
-|----------|-------|
-| EQ_PREFERRED_BASE | `0x0001_4000_0000` |
-| PINST_LOCAL_PLAYER | `0x0001_40E8_E380` |
-| PINST_CONTROLLED_PLAYER | `0x0001_40E8_E430` |
-| PINST_TARGET | `0x0001_40E8_E428` |
-| PINST_SPAWN_MANAGER | `0x0001_40F0_CD90` |
-| PINST_LOCAL_PC | `0x0001_40E9_09A8` |
+Per-crate names were not available in this generated handoff, so the summary
+table has been omitted to avoid presenting anonymous rows as crate-specific
+results. Refer to the raw test output above for pass/fail counts.
 | PINST_SPELL_MANAGER | `0x0001_40F0_E6F0` |
 | PINST_CDISPLAY | `0x0001_40E8_E450` |
 | PINST_CEVERQUEST | `0x0001_40F1_1758` |
