@@ -12,7 +12,8 @@
 #    GET  /dll-log      - Latest DLL log tail
 # ============================================================
 param(
-    [int]$Port = 8080
+    [int]$Port = 8080,
+    [string]$ApiKey = $env:DMFT_API_KEY
 )
 
 $ErrorActionPreference = "Stop"
@@ -197,6 +198,12 @@ function Send-BinaryResponse {
     $Response.OutputStream.Close()
 }
 
+function Test-AuthorizedRequest {
+    param($Request)
+    $providedKey = $Request.Headers["X-DMFT-API-Key"]
+    return -not [string]::IsNullOrWhiteSpace($providedKey) -and ($providedKey -eq $ApiKey)
+}
+
 # --- Main loop ---
 while ($listener.IsListening) {
     try {
@@ -207,6 +214,11 @@ while ($listener.IsListening) {
         $method = $request.HttpMethod
 
         Write-Host "$(Get-Date -Format 'HH:mm:ss') $method $path"
+
+        if (-not (Test-AuthorizedRequest -Request $request)) {
+            Send-JsonResponse $response @{ error = "Unauthorized" } 401
+            continue
+        }
 
         switch ($path) {
             "/status" {
