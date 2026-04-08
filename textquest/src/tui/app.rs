@@ -6773,6 +6773,41 @@ mod tests {
     }
 
     #[test]
+    fn focused_pids_one_toon_returns_only_that_pid() {
+        use textquest_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.clients.push(test_client(10, "Warrior"));
+        app.clients.push(test_client(20, "Cleric"));
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Cleric".to_string(),
+        };
+        let pids = app.focused_pids();
+        assert_eq!(pids, vec![20]);
+    }
+
+    #[test]
+    fn focused_pids_one_toon_unknown_returns_empty() {
+        use textquest_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.clients.push(test_client(10, "Warrior"));
+        app.routing_scope = RoutingScope::OneToon {
+            name: "Ghost".to_string(),
+        };
+        assert!(app.focused_pids().is_empty());
+    }
+
+    #[test]
+    fn focused_pids_all_session_returns_all() {
+        use textquest_common::routing::RoutingScope;
+        let mut app = App::new();
+        app.clients.push(test_client(1, "A"));
+        app.clients.push(test_client(2, "B"));
+        app.routing_scope = RoutingScope::AllSession;
+        let pids = app.focused_pids();
+        assert_eq!(pids.len(), 2);
+    }
+
+    #[test]
     fn scope_command_unknown_character_shows_error_feedback() {
         let mut app = App::new();
         app.execute_scope_command(&["NonExistentToon"]);
