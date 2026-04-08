@@ -13,7 +13,7 @@ from urllib.parse import quote
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 README_PATH = REPO_ROOT / "README.md"
 RUNNING_TESTS_RE = re.compile(r"^running (\d+) tests?$", re.MULTILINE)
-TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(?:tokio::)?test(?:\([^\]]*\))?\]")
+TEST_ANNOTATION_RE = re.compile(r"^\s*#\[(?:tokio::)?test(?:\\]|\\()?")
 
 
 def tracked_rust_files() -> list[pathlib.Path]:
@@ -45,38 +45,39 @@ def test_count_from_source() -> int:
     return count
 
 
-def test_count() -> int:
-    result = subprocess.run(
-        ["cargo", "test", "--workspace"],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        env={**os.environ, "CARGO_TERM_COLOR": "never"},
-    )
+def test_count() -> tuple[int, bool]:
+    """Return ``(count, is_exact)``.
+
+    *is_exact* is ``True`` when the count comes from a successful
+    ``cargo test --workspace`` run (runner-reported total).  It is ``False``
+    when cargo is unavailable and the count comes from the source-annotation
+    fallback scan, which is approximate (counts ``#[test]``/``#[tokio::test]``
+    annotations, not compiled test binaries).
+    """
+    try:
+        result = subprocess.run(
+            ["cargo", "test", "--workspace"],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CARGO_TERM_COLOR": "never"},
+        )
+    except FileNotFoundError:
+        return test_count_from_source(), False
     output = f"{result.stdout}\n{result.stderr}"
+    if result.returncode != 0:
+        print(f"cargo test failed (exit {result.returncode}):\n{output}", file=sys.stderr)
+        sys.exit(1)
     running = sum(int(match.group(1)) for match in RUNNING_TESTS_RE.finditer(output))
     if running > 0:
-        if result.returncode != 0:
-            print(
-                f"warning: `cargo test --workspace` exited with code {result.returncode}, "
-                f"but reported {running} tests; using observed count",
-                file=sys.stderr,
-            )
-        return running
-    if result.returncode != 0:
-        print(
-            f"warning: `cargo test --workspace` exited with code {result.returncode} "
-            "without reporting any `running N tests` lines; falling back to source scan",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            "warning: `cargo test --workspace` did not report any `running N tests` lines; "
-            "falling back to source scan",
-            file=sys.stderr,
-        )
-    return test_count_from_source()
+        return running, True
+    print(
+        "warning: `cargo test --workspace` did not report any `running N tests` lines; "
+        "falling back to source scan",
+        file=sys.stderr,
+    )
+    return test_count_from_source(), False
 
 
 def badge(label: str, value: str, color: str) -> str:
@@ -103,7 +104,8 @@ def main() -> int:
     readme = README_PATH.read_text(encoding="utf-8")
 
     loc = rust_loc()
-    tests = test_count()
+    tests, tests_exact = test_count()
+    test_label = f"{tests:,} exact" if tests_exact else f"~{tests:,}"
 
     updated = replace_line(
         readme,
@@ -113,13 +115,13 @@ def main() -> int:
     updated = replace_line(
         updated,
         "[![Tests]",
-        badge("Tests", f"{tests:,} exact", "brightgreen"),
+        badge("Tests", test_label, "brightgreen"),
     )
     updated = replace_line(
         updated,
         "Current workspace totals:",
         (
-            f"Current workspace totals: {loc:,} Rust lines and {tests:,} exact tests. "
+            f"Current workspace totals: {loc:,} Rust lines and {test_label} tests. "
             "This line and the badges above are auto-refreshed by "
             "`scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:"
         ),
