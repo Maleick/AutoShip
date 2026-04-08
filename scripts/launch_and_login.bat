@@ -11,13 +11,21 @@ REM Credentials must come from environment or prompt (do not hardcode secrets).
 if "%TextQuest_ACCOUNT%"=="" (
     set /p ACCOUNT=Enter EQ account from config/accounts.toml: 
 ) else (
-    set ACCOUNT=%TextQuest_ACCOUNT%
+    if not "%TextQuest_ACCOUNT%"=="" (
+        set ACCOUNT=%TextQuest_ACCOUNT%
+    ) else (
+        set /p ACCOUNT=Enter EQ account from config/accounts.toml: 
+    )
 )
 
-if "%TextQuest_PASSWORD%"=="" (
-    set /p PASSWORD=Enter EQ password: 
+if not "%TEXTQUEST_PASSWORD%"=="" (
+    set PASSWORD=%TEXTQUEST_PASSWORD%
 ) else (
-    set PASSWORD=%TextQuest_PASSWORD%
+    if not "%TextQuest_PASSWORD%"=="" (
+        set PASSWORD=%TextQuest_PASSWORD%
+    ) else (
+        set /p PASSWORD=Enter EQ password: 
+    )
 )
 set EQ_PATH=C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest
 set TextQuest_PATH=C:\Users\xmale\Projects\TextQuest
@@ -64,8 +72,11 @@ echo [3/4] Injecting DLL...
 timeout /t 2 /nobreak >nul
 
 REM Send login
-echo [4/4] Sending login command...
-"%TextQuest_PATH%\target\release\textquest.exe" autologin --account %ACCOUNT% --password %PASSWORD%
+echo [4/4] Sending autologin command...
+setlocal
+set "TEXTQUEST_PASSWORD=%PASSWORD%"
+"%TextQuest_PATH%\target\release\textquest.exe" autologin --account "%ACCOUNT%"
+endlocal
 echo.
 echo Login chain started! The DLL handles:
 echo   - Credential entry + Login click

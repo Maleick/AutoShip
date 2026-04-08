@@ -249,11 +249,10 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<CharacterConfig>> {
-    let configs_map = state.character_configs.read().await;
-    let mut configs = configs_map
-        .values()
-        .cloned()
-        .collect::<Vec<_>>();
+    let mut configs = {
+        let configs_map = state.character_configs.read().await;
+        configs_map.values().cloned().collect::<Vec<_>>()
+    };
     configs.sort_by(|a, b| a.character_name.cmp(&b.character_name));
     Json(configs)
 }
@@ -270,8 +269,10 @@ pub async fn put_character_config(
         return Err(StatusCode::BAD_REQUEST);
     }
     config.character_name = name;
-    let mut configs_map = state.character_configs.write().await;
-    configs_map.insert(config.character_name.clone(), config.clone());
+    {
+        let mut configs_map = state.character_configs.write().await;
+        configs_map.insert(config.character_name.clone(), config.clone());
+    }
     Ok(Json(config))
 }
 

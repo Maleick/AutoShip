@@ -151,23 +151,23 @@ unsafe fn read_chat_window_lines_impl(
         None => return Vec::new(),
     };
 
-        let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
-            Some(n) => n as usize,
-            None => return Vec::new(),
-        };
-        if window_index >= num_windows {
-            return Vec::new();
-        }
+    let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
+        Some(n) => n as usize,
+        None => return Vec::new(),
+    };
+    if window_index >= num_windows {
+        return Vec::new();
+    }
 
-        // ChatWndArray holds a `CChatWindow**` (pointer to pointer array).
-        let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
-            Some(p) => p,
-            None => return Vec::new(),
-        };
-        let window_ptr = match read_ptr(array_ptr + window_index * size_of::<usize>()) {
-            Some(p) => p,
-            None => return Vec::new(),
-        };
+    // ChatWndArray holds a `CChatWindow**` (pointer to pointer array).
+    let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
+        Some(p) => p,
+        None => return Vec::new(),
+    };
+    let window_ptr = match read_ptr(array_ptr + window_index * size_of::<usize>()) {
+        Some(p) => p,
+        None => return Vec::new(),
+    };
 
     unsafe { read_stml_lines(window_ptr, max_lines) }
 }
@@ -182,16 +182,16 @@ unsafe fn read_all_chat_window_lines_impl(
         None => return Vec::new(),
     };
 
-        let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
-            Some(n) => n as usize,
-            None => return Vec::new(),
-        };
-        let num_windows = num_windows.min(offsets::chat_window_mgr::MAX_CHAT_WINDOWS);
+    let num_windows = match read_u32(mgr_ptr + offsets::chat_window_mgr::NUM_WINDOWS) {
+        Some(n) => n as usize,
+        None => return Vec::new(),
+    };
+    let num_windows = num_windows.min(offsets::chat_window_mgr::MAX_CHAT_WINDOWS);
 
-        let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
-            Some(p) => p,
-            None => return Vec::new(),
-        };
+    let array_ptr = match read_ptr(mgr_ptr + offsets::chat_window_mgr::CHAT_WND_ARRAY) {
+        Some(p) => p,
+        None => return Vec::new(),
+    };
 
     let mut all_lines = Vec::new();
     for idx in 0..num_windows {
@@ -199,9 +199,9 @@ unsafe fn read_all_chat_window_lines_impl(
             let lines = unsafe { read_stml_lines(window_ptr, max_lines_per_window) };
             all_lines.extend(lines);
         }
-
-        all_lines
     }
+
+    all_lines
 }
 
 /// Walk the `STextLine` doubly-linked list inside `CChatWindow::OutputWnd`

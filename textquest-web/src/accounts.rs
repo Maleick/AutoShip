@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::{api::ErrorResponse, AppState};
+use crate::{AppState, api::ErrorResponse};
 
 type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ErrorResponse>)>;
 #[derive(Debug, Deserialize)]

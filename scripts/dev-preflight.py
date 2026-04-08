@@ -160,9 +160,19 @@ def detect_windows_toolchain(results: list[CheckResult]) -> None:
 def check_reference_trees(
     results: list[CheckResult],
     require_reference_trees: bool,
-    eqlib_root: str | None,
-    macroquest_root: str | None,
+    eqlib_root: str | None = None,
+    macroquest_root: str | None = None,
 ) -> None:
+    if eqlib_root is None:
+        default_eqlib_root = REPO_ROOT / "third_party" / "eqlib"
+        if default_eqlib_root.exists():
+            eqlib_root = str(default_eqlib_root)
+
+    if macroquest_root is None:
+        default_macroquest_root = REPO_ROOT / "third_party" / "macroquest"
+        if default_macroquest_root.exists():
+            macroquest_root = str(default_macroquest_root)
+
     configured_roots: list[tuple[str, pathlib.Path, list[pathlib.Path]]] = []
     if eqlib_root:
         root = pathlib.Path(eqlib_root).expanduser()
@@ -211,7 +221,7 @@ def check_reference_trees(
     ]
     if missing_paths:
         detail = f"Configured reference roots are present but incomplete: {', '.join(missing_paths)}"
-        fix = "Refresh the local eqlib or MacroQuest checkout before offset or struct work."
+        fix = "Refresh or repopulate the local eqlib or MacroQuest checkout before offset or struct work."
         status_name = "FAIL" if require_reference_trees else "WARN"
         record(results, status_name, "Reference trees", detail, fix)
         return
