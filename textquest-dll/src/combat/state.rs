@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
 use textquest_common::combat::{
-    CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
+    CastResult, CastRetryPolicy, CombatConfig, CombatRole, CombatStatus, HolyShitAction,
+    ResolvedAbility,
 };
 use textquest_common::nav::Waypoint;
 use textquest_common::types::SpawnData;
@@ -43,6 +44,11 @@ enum CombatState {
         spell_slot: u8,
         target_id: u32,
         ticks_remaining: u32,
+        /// Number of times this spell slot has been attempted (incremented on
+        /// retryable failures before the retry fires).
+        retry_count: u8,
+        /// Number of idle ticks to wait before the next retry attempt.
+        backoff_ticks: u32,
     },
     OnGcd,
     Recovering,
@@ -274,6 +280,7 @@ impl Combatant {
                     false,
                     *spell_slot,
                     *target_id,
+                    0,
                     CastResult::Interrupted,
                 );
             } else {
@@ -389,6 +396,7 @@ impl Combatant {
                     true,
                     *spell_slot,
                     *target_id,
+                    0,
                     CastResult::Interrupted,
                 );
             }
@@ -407,6 +415,8 @@ impl Combatant {
                         spell_slot: gem_id,
                         target_id: target.map(|t| t.spawn_id).unwrap_or(0),
                         ticks_remaining: 20,
+                        retry_count: 0,
+                        backoff_ticks: 0,
                     };
                     return;
                 }
@@ -553,6 +563,8 @@ impl Combatant {
                             spell_slot: 0,
                             target_id: action.target_id,
                             ticks_remaining: 20 + cast_delay,
+                            retry_count: 0,
+                            backoff_ticks: 0,
                         };
                     }
                     return;
@@ -609,6 +621,8 @@ impl Combatant {
                             .or_else(|| target.map(|t| t.spawn_id))
                             .unwrap_or(0),
                         ticks_remaining: 20 + cast_delay, // base ~1s + jitter
+                        retry_count: 0,
+                        backoff_ticks: 0,
                     };
                 }
                 // If strategy returns None, stay in Engaging and try next tick.
@@ -618,7 +632,15 @@ impl Combatant {
                 spell_slot,
                 target_id,
                 ticks_remaining,
+                retry_count,
+                backoff_ticks,
             } => {
+                // Consume backoff ticks before resuming normal cast countdown.
+                if *backoff_ticks > 0 {
+                    *backoff_ticks -= 1;
+                    return;
+                }
+
                 // Healer heal-cancel: if lowest HP member recovered above 85%,
                 // duck to interrupt the heal and save mana.
                 if matches!(self.config.role, CombatRole::Healer) && *ticks_remaining > 5 {
@@ -631,13 +653,15 @@ impl Combatant {
                         tracing::info!("Healer: canceling heal — group HP recovered above 85%");
                         // Duck to interrupt cast (write STANDSTATE=4 briefly)
                         crate::eq::slash_command("/duck");
+                        let (ss, tid) = (*spell_slot, *target_id);
                         self.finish_cast(
                             player,
                             target,
                             nearby,
                             true,
-                            *spell_slot,
-                            *target_id,
+                            ss,
+                            tid,
+                            0,
                             CastResult::Aborted,
                         );
                         return;
@@ -645,26 +669,21 @@ impl Combatant {
                 }
 
                 if let Some(result) = self.pending_cast_result.take() {
-                    self.finish_cast(
-                        player,
-                        target,
-                        nearby,
-                        true,
-                        *spell_slot,
-                        *target_id,
-                        result,
-                    );
+                    let (ss, tid, rc) = (*spell_slot, *target_id, *retry_count);
+                    self.finish_cast(player, target, nearby, true, ss, tid, rc, result);
                     return;
                 }
 
                 if *ticks_remaining == 0 {
+                    let (ss, tid) = (*spell_slot, *target_id);
                     self.finish_cast(
                         player,
                         target,
                         nearby,
                         true,
-                        *spell_slot,
-                        *target_id,
+                        ss,
+                        tid,
+                        0,
                         CastResult::Success,
                     );
                 }
@@ -711,7 +730,7 @@ impl Combatant {
             CombatState::Casting {
                 spell_slot,
                 target_id,
-                ticks_remaining: _,
+                ..
             } => CombatStatus::Casting {
                 spell_slot: *spell_slot,
                 target_id: *target_id,
@@ -832,6 +851,7 @@ impl Combatant {
         in_combat: bool,
         spell_slot: u8,
         target_id: u32,
+        retry_count: u8,
         result: CastResult,
     ) {
         let group_members = std::mem::take(&mut self.group_members);
@@ -855,7 +875,44 @@ impl Combatant {
         self.strategy.on_cast_outcome(&ctx, spell_slot, result);
         self.strategy.on_action_complete(&ctx);
 
-        tracing::debug!(spell_slot, target_id, result = %result, "Cast resolved");
+        // Attempts so far = retry_count + 1 (the initial cast).
+        let attempts_so_far = retry_count.saturating_add(1);
+        let policy = self.config.cast_retry_policy;
+
+        if result.is_retryable() && policy.retry_allowed(attempts_so_far) {
+            let new_retry_count = attempts_so_far;
+            let backoff = policy.backoff_ticks(new_retry_count);
+            tracing::debug!(
+                spell_slot,
+                target_id,
+                result = %result,
+                retry_count = new_retry_count,
+                backoff_ticks = backoff,
+                "Retryable cast result — scheduling retry"
+            );
+            self.state = CombatState::Casting {
+                spell_slot,
+                target_id,
+                ticks_remaining: 20,
+                retry_count: new_retry_count,
+                backoff_ticks: backoff,
+            };
+            self.group_members = group_members;
+            return;
+        }
+
+        if result.is_retryable() {
+            tracing::debug!(
+                spell_slot,
+                target_id,
+                result = %result,
+                attempts = attempts_so_far,
+                max_tries = ?policy.max_tries,
+                "Retry limit reached — giving up on this cast"
+            );
+        } else {
+            tracing::debug!(spell_slot, target_id, result = %result, "Cast resolved");
+        }
 
         self.state = match result {
             CastResult::OutOfMana => CombatState::Recovering,
@@ -1012,6 +1069,9 @@ impl Combatant {
                 self.state = CombatState::Casting {
                     spell_slot: gem_id,
                     ticks_remaining: 20 + cast_delay,
+                    target_id: current_target_id.unwrap_or(0),
+                    retry_count: 0,
+                    backoff_ticks: 0,
                 };
                 true
             }
@@ -1028,7 +1088,13 @@ mod tests {
     use textquest_common::combat::CombatConfig;
 
     fn test_config() -> CombatConfig {
-        CombatConfig::default()
+        CombatConfig {
+            cast_retry_policy: textquest_common::combat::CastRetryPolicy {
+                max_tries: Some(1),
+                base_backoff_ticks: 0,
+            },
+            ..CombatConfig::default()
+        }
     }
 
     fn test_player() -> SpawnData {
@@ -1106,6 +1172,8 @@ mod tests {
             spell_slot: 1,
             target_id: 100,
             ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
         };
 
         // Tick with no target
@@ -1500,6 +1568,8 @@ mod tests {
             spell_slot: 3,
             target_id: 42,
             ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
         };
         if let CombatStatus::Casting { spell_slot, .. } = c.status() {
             assert_eq!(spell_slot, 3);
@@ -1518,6 +1588,8 @@ mod tests {
             spell_slot: 2,
             target_id: target.spawn_id,
             ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
         };
         assert_eq!(
             c.observe_chat_message("Your spell fizzles!"),
@@ -1540,6 +1612,8 @@ mod tests {
             spell_slot: 2,
             target_id: target.spawn_id,
             ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
         };
         c.observe_chat_message("You don't have enough mana to cast this spell.");
 
@@ -1559,6 +1633,8 @@ mod tests {
             spell_slot: 4,
             target_id: target.spawn_id,
             ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
         };
         c.observe_chat_message("Spell is not ready yet, please wait.");
 
@@ -1614,6 +1690,178 @@ mod tests {
                 AbilityAvailability::CoolingDown(3)
             ),
             "Disc should re-fire after cooldown expires"
+        );
+    }
+
+    fn config_with_retry(max_tries: u8, base_backoff_ticks: u32) -> CombatConfig {
+        CombatConfig {
+            cast_retry_policy: CastRetryPolicy {
+                max_tries: Some(max_tries),
+                base_backoff_ticks,
+            },
+            ..CombatConfig::default()
+        }
+    }
+
+    #[test]
+    fn recast_loop_retries_on_fizzle_within_max_tries() {
+        // max_tries=2 means 1 initial attempt + 1 retry allowed.
+        let mut c = Combatant::new(1, 0, config_with_retry(2, 0));
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Casting {
+            spell_slot: 2,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        c.observe_chat_message("Your spell fizzles!");
+        c.tick(&player, Some(&target), &[]);
+
+        // Should still be Casting (retrying), not OnGcd.
+        assert!(
+            matches!(c.status(), CombatStatus::Casting { .. }),
+            "Expected Casting (retry), got {:?}",
+            c.status()
+        );
+        // retry_count should be incremented to 1.
+        if let CombatState::Casting { retry_count, .. } = c.state {
+            assert_eq!(retry_count, 1);
+        } else {
+            panic!("expected CombatState::Casting");
+        }
+    }
+
+    #[test]
+    fn recast_loop_gives_up_after_max_tries_exhausted() {
+        // max_tries=1 means no retries: first failure ends the cast.
+        let mut c = Combatant::new(1, 0, config_with_retry(1, 0));
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Casting {
+            spell_slot: 2,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        c.observe_chat_message("Your spell fizzles!");
+        c.tick(&player, Some(&target), &[]);
+
+        // Should move to OnGcd after exhausting max_tries.
+        assert!(
+            matches!(c.status(), CombatStatus::OnGcd),
+            "Expected OnGcd after exhausting retries, got {:?}",
+            c.status()
+        );
+    }
+
+    #[test]
+    fn recast_loop_uses_base_backoff_before_exponential_growth() {
+        // max_tries=3 with base_backoff_ticks=2: first retry backs off 2 ticks.
+        let mut c = Combatant::new(1, 0, config_with_retry(3, 2));
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Casting {
+            spell_slot: 1,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        c.observe_chat_message("Your spell fizzles!");
+        c.tick(&player, Some(&target), &[]);
+
+        // After the first fizzle: should be Casting with backoff_ticks = 2*1 = 2.
+        if let CombatState::Casting {
+            retry_count,
+            backoff_ticks,
+            ..
+        } = c.state
+        {
+            assert_eq!(retry_count, 1, "retry_count should be 1");
+            assert_eq!(
+                backoff_ticks, 2,
+                "backoff_ticks should be 2 (base * attempt)"
+            );
+        } else {
+            panic!("expected CombatState::Casting");
+        }
+
+        // Tick once — backoff decrements but stays in Casting.
+        c.tick(&player, Some(&target), &[]);
+        if let CombatState::Casting { backoff_ticks, .. } = c.state {
+            assert_eq!(backoff_ticks, 1, "backoff_ticks should decrement to 1");
+        }
+
+        // Tick again — backoff reaches 0, cast resumes.
+        c.tick(&player, Some(&target), &[]);
+        if let CombatState::Casting { backoff_ticks, .. } = c.state {
+            assert_eq!(
+                backoff_ticks, 0,
+                "backoff_ticks should be 0 after burn-down"
+            );
+        }
+    }
+
+    #[test]
+    fn recast_unlimited_retries_when_max_tries_is_none() {
+        let mut c = Combatant::new(
+            1,
+            0,
+            CombatConfig {
+                cast_retry_policy: CastRetryPolicy {
+                    max_tries: None,
+                    base_backoff_ticks: 0,
+                },
+                ..CombatConfig::default()
+            },
+        );
+        let player = test_player();
+        let target = test_target();
+
+        // Simulate 10 consecutive fizzles — each should produce a retry.
+        for i in 0..10u8 {
+            c.state = CombatState::Casting {
+                spell_slot: 1,
+                target_id: target.spawn_id,
+                ticks_remaining: 10,
+                retry_count: i,
+                backoff_ticks: 0,
+            };
+            c.observe_chat_message("Your spell fizzles!");
+            c.tick(&player, Some(&target), &[]);
+            assert!(
+                matches!(c.status(), CombatStatus::Casting { .. }),
+                "Attempt {i}: expected Casting (unlimited retries)"
+            );
+        }
+    }
+
+    #[test]
+    fn recast_non_retryable_result_skips_retry() {
+        // Resisted is non-retryable — should not trigger a retry regardless of policy.
+        let mut c = Combatant::new(1, 0, config_with_retry(5, 0));
+        let player = test_player();
+        let target = test_target();
+
+        c.state = CombatState::Casting {
+            spell_slot: 2,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        c.observe_chat_message("Your target resisted your spell!");
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(
+            matches!(c.status(), CombatStatus::OnGcd),
+            "Resisted cast should not retry, expected OnGcd"
         );
     }
 }

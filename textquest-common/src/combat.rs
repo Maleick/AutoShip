@@ -628,6 +628,9 @@ pub struct CombatConfig {
     /// MA target scan settings for smart target selection.
     #[serde(default)]
     pub target_scan: TargetScanConfig,
+    /// Per-cast retry policy (maxtries + backoff).
+    #[serde(default)]
+    pub cast_retry_policy: CastRetryPolicy,
 }
 
 impl Default for CombatConfig {
@@ -642,6 +645,7 @@ impl Default for CombatConfig {
             mana_floor: 20.0,
             aoe_threshold: 3,
             target_scan: TargetScanConfig::default(),
+            cast_retry_policy: CastRetryPolicy::default(),
         }
     }
 }
@@ -860,6 +864,54 @@ impl CastResult {
     /// Whether the spell actually landed on the target.
     pub fn landed(self) -> bool {
         matches!(self, Self::Success)
+    }
+}
+
+/// Per-cast retry policy inspired by MQ2Cast's `-maxtries` flag.
+///
+/// When a cast ends in a retryable result (fizzle, interrupt, etc.) the FSM
+/// checks this policy before immediately cycling back to the next spell.  If
+/// `max_tries` is exceeded the slot is skipped for the current engagement.
+/// `base_backoff_ticks` adds a brief pause before each retry attempt; the
+/// actual delay grows linearly with the attempt number so the FSM does not
+/// hammer the spell queue on repeated failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CastRetryPolicy {
+    /// Maximum total cast attempts (initial + retries).  `None` means unlimited.
+    pub max_tries: Option<u8>,
+    /// Base delay in FSM ticks to wait before the next retry.
+    /// Actual delay = `base_backoff_ticks * attempt_number` (linear growth).
+    pub base_backoff_ticks: u32,
+}
+
+impl Default for CastRetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_tries: Some(3),
+            base_backoff_ticks: 2,
+        }
+    }
+}
+
+impl CastRetryPolicy {
+    /// Return true when another retry is allowed after this many prior attempts.
+    ///
+    /// `attempts` is the number of times the spell has already been cast
+    /// (including the initial attempt).
+    #[must_use]
+    pub fn retry_allowed(&self, attempts: u8) -> bool {
+        match self.max_tries {
+            None => true,
+            Some(max) => attempts < max,
+        }
+    }
+
+    /// Compute the backoff delay in ticks for a given attempt number (1-based).
+    ///
+    /// Returns `base_backoff_ticks * attempt` so the wait grows linearly.
+    #[must_use]
+    pub fn backoff_ticks(&self, attempt: u8) -> u32 {
+        self.base_backoff_ticks.saturating_mul(u32::from(attempt))
     }
 }
 
@@ -1473,6 +1525,7 @@ mod tests {
             mana_floor: 15.0,
             aoe_threshold: 5,
             target_scan: TargetScanConfig::default(),
+            cast_retry_policy: CastRetryPolicy::default(),
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let restored: CombatConfig = serde_json::from_str(&json).expect("deserialize");
@@ -1717,6 +1770,77 @@ mod tests {
         assert!(!CastResult::OutOfMana.is_retryable());
         assert!(CastResult::Success.landed());
         assert!(!CastResult::TakeHold.landed());
+    }
+
+    #[test]
+    fn cast_retry_policy_default_values() {
+        let policy = CastRetryPolicy::default();
+        assert_eq!(policy.max_tries, Some(3));
+        assert_eq!(policy.base_backoff_ticks, 2);
+    }
+
+    #[test]
+    fn cast_retry_policy_retry_allowed_within_limit() {
+        let policy = CastRetryPolicy {
+            max_tries: Some(3),
+            base_backoff_ticks: 0,
+        };
+        assert!(policy.retry_allowed(0), "0 attempts: retry allowed");
+        assert!(policy.retry_allowed(1), "1 attempt: retry allowed");
+        assert!(policy.retry_allowed(2), "2 attempts: retry allowed");
+        assert!(!policy.retry_allowed(3), "3 attempts: no more retries");
+        assert!(!policy.retry_allowed(10), "10 attempts: no more retries");
+    }
+
+    #[test]
+    fn cast_retry_policy_unlimited_retries_when_none() {
+        let policy = CastRetryPolicy {
+            max_tries: None,
+            base_backoff_ticks: 0,
+        };
+        for i in 0..=100u8 {
+            assert!(
+                policy.retry_allowed(i),
+                "unlimited: attempt {i} should be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn cast_retry_policy_backoff_ticks_linear_growth() {
+        let policy = CastRetryPolicy {
+            max_tries: Some(5),
+            base_backoff_ticks: 3,
+        };
+        assert_eq!(policy.backoff_ticks(0), 0, "attempt 0 = no backoff");
+        assert_eq!(policy.backoff_ticks(1), 3, "attempt 1 = 3*1");
+        assert_eq!(policy.backoff_ticks(2), 6, "attempt 2 = 3*2");
+        assert_eq!(policy.backoff_ticks(3), 9, "attempt 3 = 3*3");
+    }
+
+    #[test]
+    fn cast_retry_policy_serialization_roundtrip() {
+        let policy = CastRetryPolicy {
+            max_tries: Some(5),
+            base_backoff_ticks: 4,
+        };
+        let json = serde_json::to_string(&policy).expect("serialize");
+        let restored: CastRetryPolicy = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.max_tries, policy.max_tries);
+        assert_eq!(restored.base_backoff_ticks, policy.base_backoff_ticks);
+    }
+
+    #[test]
+    fn combat_config_includes_cast_retry_policy() {
+        let config = CombatConfig::default();
+        assert_eq!(config.cast_retry_policy.max_tries, Some(3));
+        // Verify it round-trips through JSON without requiring the field.
+        let json = serde_json::to_string(&config).expect("serialize");
+        let restored: CombatConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(
+            restored.cast_retry_policy.max_tries,
+            config.cast_retry_policy.max_tries
+        );
     }
 
     #[test]
