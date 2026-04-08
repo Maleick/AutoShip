@@ -17,6 +17,10 @@ use super::hwbp::{self, HwbpSlot};
 
 const CHAT_HOOK_SLOT: HwbpSlot = HwbpSlot::Dr1;
 
+fn should_forward_to_combat(parsed: Option<&textquest_common::chat::ChatEvent>) -> bool {
+    parsed.is_none()
+}
+
 /// HWBP callback for the chat hook.
 ///
 /// Reads the `text` (RDX) and `color` (R8) registers from the exception context,
@@ -54,9 +58,13 @@ fn chat_callback(exception_info: *mut ()) -> bool {
         };
 
         if !text.is_empty() {
-            let _ = crate::combat::observe_chat_message(&text);
-
             let parsed = textquest_common::chat::parse_chat_text(&text);
+            // Only feed non-channel chat/system-like lines into cast outcome parsing.
+            // Structured player chat (say/tell/group/etc.) is untrusted and may contain
+            // spoofed substrings like "you don't have enough mana".
+            if should_forward_to_combat(parsed.as_ref()) {
+                let _ = crate::combat::observe_chat_message(&text);
+            }
 
             let timestamp_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -120,6 +128,51 @@ mod tests {
     #[test]
     fn chat_hook_slot_is_dr1() {
         assert_eq!(CHAT_HOOK_SLOT, HwbpSlot::Dr1);
+    }
+
+    #[test]
+    fn only_non_channel_text_forwards_to_combat_parser() {
+        let say = textquest_common::chat::parse_chat_text("Alice says, 'hello there'");
+        let you_say = textquest_common::chat::parse_chat_text("You say, 'hello there'");
+        let you_shout = textquest_common::chat::parse_chat_text("You shout, 'WTS Fungi!'");
+        let you_group = textquest_common::chat::parse_chat_text("You tell the group, 'INC 3'");
+        let you_guild =
+            textquest_common::chat::parse_chat_text("You say to your guild, 'Good fight!'");
+        let you_ooc =
+            textquest_common::chat::parse_chat_text("You say out of character, 'Anyone?'");
+        let you_raid = textquest_common::chat::parse_chat_text("You tell the raid, 'Pull!'");
+        let you_auction = textquest_common::chat::parse_chat_text("You auction, 'WTB Fungi'");
+        // The spoof payload: self-authored say containing a cast-feedback phrase.
+        let you_say_spoof = textquest_common::chat::parse_chat_text(
+            "You say, 'You don\\'t have enough mana to cast this spell.'",
+        );
+        let system_like = textquest_common::chat::parse_chat_text("You don't have enough mana.");
+        let say = textquest_common::chat::parse_chat_text("Alice says, 'hello there'");
+        let you_say = textquest_common::chat::parse_chat_text("You say, 'hello there'");
+        let system_like = textquest_common::chat::parse_chat_text("You don't have enough mana.");
+
+        // Parsed player chat should never be forwarded.
+        assert!(!should_forward_to_combat(say.as_ref()));
+
+        // Self-authored channel text is still structured player chat and should not
+        // be treated like combat/system text, even if parser coverage lags behind.
+        assert!(!should_forward_to_combat(you_say.as_ref()));
+
+        // Unparsed system-like text should continue to forward.
+
+        // Self-authored channel text is structured player chat — must not be forwarded
+        // even though it arrives as "You <verb>, '...'" rather than "Sender <verb>, '...'".
+        assert!(!should_forward_to_combat(you_say.as_ref()));
+        assert!(!should_forward_to_combat(you_shout.as_ref()));
+        assert!(!should_forward_to_combat(you_group.as_ref()));
+        assert!(!should_forward_to_combat(you_guild.as_ref()));
+        assert!(!should_forward_to_combat(you_ooc.as_ref()));
+        assert!(!should_forward_to_combat(you_raid.as_ref()));
+        assert!(!should_forward_to_combat(you_auction.as_ref()));
+        assert!(!should_forward_to_combat(you_say_spoof.as_ref()));
+
+        // Unparsed system-like text (real cast feedback) must still be forwarded.
+        assert!(should_forward_to_combat(system_like.as_ref()));
     }
 
     #[test]

@@ -89,13 +89,20 @@ pub fn strip_stml(text: &str) -> String {
 /// |---|---|
 /// | `"You told {target}, '{msg}'"` | [`ChatChannel::TellOut`] |
 /// | `"{sender} says, '{msg}'"` | [`ChatChannel::Say`] |
+/// | `"You say, '{msg}'"` | [`ChatChannel::Say`] |
 /// | `"{sender} tells you, '{msg}'"` | [`ChatChannel::Tell`] |
 /// | `"{sender} tells the group, '{msg}'"` | [`ChatChannel::Group`] |
+/// | `"You tell the group, '{msg}'"` | [`ChatChannel::Group`] |
 /// | `"{sender} says to your guild, '{msg}'"` | [`ChatChannel::Guild`] |
+/// | `"You say to your guild, '{msg}'"` | [`ChatChannel::Guild`] |
 /// | `"{sender} tells the raid, '{msg}'"` | [`ChatChannel::Raid`] |
+/// | `"You tell the raid, '{msg}'"` | [`ChatChannel::Raid`] |
 /// | `"{sender} shouts, '{msg}'"` | [`ChatChannel::Shout`] |
+/// | `"You shout, '{msg}'"` | [`ChatChannel::Shout`] |
 /// | `"{sender} says out of character, '{msg}'"` | [`ChatChannel::Ooc`] |
+/// | `"You say out of character, '{msg}'"` | [`ChatChannel::Ooc`] |
 /// | `"{sender} auctions, '{msg}'"` | [`ChatChannel::Auction`] |
+/// | `"You auction, '{msg}'"` | [`ChatChannel::Auction`] |
 ///
 /// Returns `None` if the text does not match any known pattern.
 ///
@@ -185,12 +192,59 @@ pub fn parse_stripped_chat_text(text: &str) -> Option<ChatEvent> {
                 sender: sender.to_string(),
                 message: msg.to_string(),
             })
-        } else {
-            lhs.strip_suffix(" auctions").map(|sender| ChatEvent {
+        } else if let Some(sender) = lhs.strip_suffix(" auctions") {
+            Some(ChatEvent {
                 channel: ChatChannel::Auction,
                 sender: sender.to_string(),
                 message: msg.to_string(),
             })
+        // Self-authored channel messages: EQ uses singular verb forms for the local player.
+        // These must be explicitly matched because the sender-prefix strip_suffix approach
+        // only works for third-person verbs (" says", " shouts", etc.).
+        } else if lhs == "You say" {
+            Some(ChatEvent {
+                channel: ChatChannel::Say,
+                sender: "You".to_string(),
+                message: msg.to_string(),
+            })
+        } else if lhs == "You shout" {
+            Some(ChatEvent {
+                channel: ChatChannel::Shout,
+                sender: "You".to_string(),
+                message: msg.to_string(),
+            })
+        } else if lhs == "You say out of character" {
+            Some(ChatEvent {
+                channel: ChatChannel::Ooc,
+                sender: "You".to_string(),
+                message: msg.to_string(),
+            })
+        } else if lhs == "You auction" {
+            Some(ChatEvent {
+                channel: ChatChannel::Auction,
+                sender: "You".to_string(),
+                message: msg.to_string(),
+            })
+        } else if lhs == "You tell the group" {
+            Some(ChatEvent {
+                channel: ChatChannel::Group,
+                sender: "You".to_string(),
+                message: msg.to_string(),
+            })
+        } else if lhs == "You tell the raid" {
+            Some(ChatEvent {
+                channel: ChatChannel::Raid,
+                sender: "You".to_string(),
+                message: msg.to_string(),
+            })
+        } else if lhs == "You say to your guild" {
+            Some(ChatEvent {
+                channel: ChatChannel::Guild,
+                sender: "You".to_string(),
+                message: msg.to_string(),
+            })
+        } else {
+            None
         };
         if event.is_some() {
             return event;
@@ -317,6 +371,74 @@ mod tests {
         assert!(parse_chat_text("You gain experience!").is_none());
         assert!(parse_chat_text("").is_none());
         assert!(parse_chat_text("Some random system message.").is_none());
+    }
+
+    #[test]
+    fn parse_you_say() {
+        let ev = parse_chat_text("You say, 'Hello there!'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Say);
+        assert_eq!(ev.sender, "You");
+        assert_eq!(ev.message, "Hello there!");
+    }
+
+    #[test]
+    fn parse_you_shout() {
+        let ev = parse_chat_text("You shout, 'WTS Fungi!'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Shout);
+        assert_eq!(ev.sender, "You");
+        assert_eq!(ev.message, "WTS Fungi!");
+    }
+
+    #[test]
+    fn parse_you_say_out_of_character() {
+        let ev = parse_chat_text("You say out of character, 'Anyone need buffs?'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Ooc);
+        assert_eq!(ev.sender, "You");
+        assert_eq!(ev.message, "Anyone need buffs?");
+    }
+
+    #[test]
+    fn parse_you_auction() {
+        let ev = parse_chat_text("You auction, 'WTB Fungi Tunic'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Auction);
+        assert_eq!(ev.sender, "You");
+        assert_eq!(ev.message, "WTB Fungi Tunic");
+    }
+
+    #[test]
+    fn parse_you_tell_the_group() {
+        let ev = parse_chat_text("You tell the group, 'INC 3'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Group);
+        assert_eq!(ev.sender, "You");
+        assert_eq!(ev.message, "INC 3");
+    }
+
+    #[test]
+    fn parse_you_tell_the_raid() {
+        let ev = parse_chat_text("You tell the raid, 'Pull to camp!'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Raid);
+        assert_eq!(ev.sender, "You");
+        assert_eq!(ev.message, "Pull to camp!");
+    }
+
+    #[test]
+    fn parse_you_say_to_your_guild() {
+        let ev = parse_chat_text("You say to your guild, 'Good fight!'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Guild);
+        assert_eq!(ev.sender, "You");
+        assert_eq!(ev.message, "Good fight!");
+    }
+
+    #[test]
+    fn parse_you_say_spoofed_cast_feedback_is_structured() {
+        // This is the critical security test: a player saying a spoofed cast-feedback
+        // phrase must be recognized as structured channel chat (not None), so that
+        // should_forward_to_combat returns false and it never reaches cast-outcome parsing.
+        let ev =
+            parse_chat_text("You say, 'You don\\'t have enough mana to cast this spell.'").unwrap();
+        assert_eq!(ev.channel, ChatChannel::Say);
+        assert_eq!(ev.sender, "You");
+        // The message body itself is irrelevant here — what matters is that `Some` is returned.
     }
 
     #[test]
