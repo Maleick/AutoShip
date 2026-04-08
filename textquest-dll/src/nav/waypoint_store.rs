@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -30,6 +32,44 @@ fn normalize_name(name: &str) -> Result<String, String> {
     Ok(trimmed.to_ascii_lowercase())
 }
 
+fn verify_not_symlink_path(path: &Path) -> Result<(), String> {
+    if let Ok(meta) = fs::symlink_metadata(path) {
+        if meta.file_type().is_symlink() {
+            return Err(String::from(
+                "Refusing to read/write waypoint store through a symlink path",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// RAII guard that removes a temp file on drop unless `commit()` has been called.
+struct TempFileGuard {
+    path: PathBuf,
+    committed: bool,
+}
+
+impl TempFileGuard {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            committed: false,
+        }
+    }
+
+    fn commit(&mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
 #[derive(Default)]
 struct WaypointStore {
     path: PathBuf,
@@ -51,6 +91,8 @@ impl WaypointStore {
     }
 
     fn load_from_disk(&mut self) -> Result<(), String> {
+        verify_not_symlink_path(&self.path)?;
+
         if !self.path.exists() {
             return Ok(());
         }
@@ -77,7 +119,64 @@ impl WaypointStore {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
 
-        fs::write(&self.path, serialized).map_err(|e| e.to_string())
+        verify_not_symlink_path(&self.path)?;
+
+        let parent = self
+            .path
+            .parent()
+            .ok_or_else(|| String::from("Waypoint store path has no parent directory"))?;
+
+        // Generate a cryptographically random suffix to prevent prediction/collision.
+        let mut random_bytes = [0u8; 8];
+        getrandom::getrandom(&mut random_bytes).map_err(|e| e.to_string())?;
+        let mut unique = String::with_capacity(16);
+        for b in random_bytes {
+            use std::fmt::Write as FmtWrite;
+            let _ = write!(unique, "{b:02x}");
+        }
+        let temp_path = parent.join(format!(".waypoints-{unique}.tmp"));
+
+        // Write serialized data to the temp file; guard removes it on all error paths.
+        let mut temp_guard = TempFileGuard::new(temp_path.clone());
+        let mut temp_file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temp_path)
+            .map_err(|e| e.to_string())?;
+        temp_file
+            .write_all(serialized.as_bytes())
+            .map_err(|e| e.to_string())?;
+        temp_file.flush().map_err(|e| e.to_string())?;
+        drop(temp_file);
+
+        // Backup-and-restore: rename existing store to a backup first so the old
+        // file is preserved until the new one is successfully in place.
+        // Use a fixed backup name — at most one persist runs at a time (Mutex) and
+        // keeping it distinct from the random temp name avoids any coupling.
+        let backup_path = parent.join(".waypoints.bak");
+        let had_existing = if self.path.exists() {
+            verify_not_symlink_path(&self.path)?;
+            fs::rename(&self.path, &backup_path).map_err(|e| e.to_string())?;
+            true
+        } else {
+            false
+        };
+
+        if let Err(error) = fs::rename(&temp_path, &self.path) {
+            // Restore backup so no data is lost.
+            if had_existing {
+                let _ = fs::rename(&backup_path, &self.path);
+            }
+            return Err(error.to_string());
+        }
+
+        // Rename succeeded — temp was moved, so guard must not delete it.
+        temp_guard.commit();
+        if had_existing {
+            let _ = fs::remove_file(&backup_path);
+        }
+
+        Ok(())
     }
 
     fn upsert(&mut self, waypoint: NamedWaypoint) -> Result<NamedWaypoint, String> {
@@ -219,5 +318,38 @@ mod tests {
         assert!(normalize_name("   ").is_err());
         let long_name = "a".repeat(65);
         assert!(normalize_name(&long_name).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persist_rejects_symlink_store_path() {
+        use std::os::unix::fs::symlink;
+
+        let path = temp_path("symlink");
+        let target = temp_path("symlink-target");
+        fs::write(&target, "{}").expect("create target");
+        symlink(&target, &path).expect("create symlink");
+
+        let mut store = WaypointStore {
+            path: path.clone(),
+            waypoints: BTreeMap::new(),
+        };
+        let result = store.upsert(NamedWaypoint::new(
+            "pull",
+            Waypoint::new(1.0, 2.0, 3.0),
+            "guk",
+        ));
+        assert!(result.is_err());
+
+        // load_from_disk should also reject a symlinked store path.
+        let mut load_store = WaypointStore {
+            path: path.clone(),
+            waypoints: BTreeMap::new(),
+        };
+        let load_result = load_store.load_from_disk();
+        assert!(
+            load_result.is_err(),
+            "loading from a symlinked store path should be rejected"
+        );
     }
 }
