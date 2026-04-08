@@ -8,7 +8,7 @@
 //! Stuck detection and recovery are handled inline by `StuckDetector`
 //! rather than via a separate FSM state.
 
-use crate::hooks::movement::{self, MovementController, ARRIVAL_DISTANCE};
+use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
 use textquest_common::nav::{
     CampSpot, FollowConfig, MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals,
@@ -75,6 +75,8 @@ pub struct Navigator {
     moveto_config: Option<MoveToConfig>,
     /// Last observed HP while running moveto break-on-hit checks.
     last_moveto_hp: Option<i64>,
+    /// Last observed HP for break-on-hit detection during advanced moveto.
+    last_hp_current: Option<i64>,
     /// Global autopause flag (#164).
     autopause: bool,
     /// Break-on-GM flag — pause navigation when a GM is detected nearby.
@@ -109,6 +111,19 @@ fn has_gm_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
     })
 }
 
+/// Returns `true` if the player just took a hit (HP dropped since the last call).
+///
+/// Updates `last_hp` with the current HP sample. Returns `false` without
+/// triggering if either sample is missing (first call or HP unreadable).
+fn break_on_hit_triggered(last_hp: &mut Option<i64>, current_hp: Option<i64>) -> bool {
+    let Some(current) = current_hp else {
+        return false;
+    };
+    let triggered = last_hp.is_some_and(|prev| current < prev);
+    *last_hp = Some(current);
+    triggered
+}
+
 impl Navigator {
     pub fn new(player_base: usize, client_id: u32) -> Self {
         Self {
@@ -130,6 +145,7 @@ impl Navigator {
             mesh_loaded: false,
             moveto_config: None,
             last_moveto_hp: None,
+            last_hp_current: None,
             autopause: false,
             break_on_gm: false,
         }
@@ -188,6 +204,7 @@ impl Navigator {
         self.warp.reset();
         self.moveto_config = None;
         self.last_moveto_hp = None;
+        self.last_hp_current = None;
         self.pre_pause_state = None;
         self.state = State::Idle;
         tracing::info!("Navigation stopped");

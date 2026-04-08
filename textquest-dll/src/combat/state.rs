@@ -22,7 +22,7 @@ use super::mana::ManaGovernor;
 use super::rotation::{self, RotationGroup};
 use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
 use super::strategy::{
-    ClassStrategy, CombatContext, GroupMemberState, build_strategy, pet_attack_focused,
+    ClassStrategy, CombatContext, GroupMemberState, PetAction, build_strategy, pet_attack_focused,
     pet_back_off,
 };
 
@@ -80,7 +80,51 @@ fn normalize_gem_id(slot: u8) -> Option<u8> {
     }
 }
 
-/// Build a safe `/useitem` slash command for an item name.
+/// Plan a spell cast given an optional preferred gem slot, a spell ID, and the
+/// current memorized spell array.
+///
+/// Returns `None` only when `preferred_slot` is `Some(slot)` and `slot` is out of
+/// bounds for the given memorized array (invalid config). In all other cases some
+/// plan is returned:
+///
+/// - `PreferredGem` — the preferred slot already has the right spell loaded.
+/// - `FallbackGem`  — spell found in a different gem (or no preference given).
+/// - `SpellIdDirect` — spell not memorized anywhere; `gem_id` is 0 and EQ will
+///   auto-memorize on cast.
+fn plan_spell_cast(
+    preferred_slot: Option<u8>,
+    spell_id: i32,
+    memorized: &[i32],
+) -> Option<PlannedSpellCast> {
+    if let Some(slot) = preferred_slot {
+        let idx = slot as usize;
+        if idx >= memorized.len() {
+            return None;
+        }
+        if memorized[idx] == spell_id {
+            return Some(PlannedSpellCast {
+                gem_id: slot,
+                spell_id,
+                source: SpellCastSource::PreferredGem,
+            });
+        }
+    }
+    // Search for the spell in all memorized gems.
+    if let Some(fallback) = memorized.iter().position(|&m| m == spell_id) {
+        return Some(PlannedSpellCast {
+            gem_id: fallback as u8,
+            spell_id,
+            source: SpellCastSource::FallbackGem,
+        });
+    }
+    // Not memorized anywhere; let EQ handle auto-memorization.
+    Some(PlannedSpellCast {
+        gem_id: 0,
+        spell_id,
+        source: SpellCastSource::SpellIdDirect,
+    })
+}
+
 ///
 /// EQ item names commonly contain spaces, so they are quoted. Quotes and control
 /// characters are stripped to avoid malformed commands or command injection.
@@ -544,7 +588,7 @@ impl Combatant {
                         );
                         let memorized_spells = crate::eq::read_memorized_spells();
                         let cast_plan = plan_spell_cast(None, spell_id, &memorized_spells).expect(
-                            "rotation spell planning without preferred slot should be valid",
+                            "plan_spell_cast with None preferred slot is always Some; this is a bug"
                         );
                         crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
                         let cast_delay = u32::from(self.personality.next_cast_delay());
@@ -604,7 +648,7 @@ impl Combatant {
                     let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
                     self.state = CombatState::Casting {
-                        spell_slot: gem_id,
+                        spell_slot: cast_plan.gem_id,
                         target_id: selected_spell_target
                             .or_else(|| target.map(|t| t.spawn_id))
                             .unwrap_or(0),
@@ -1011,6 +1055,7 @@ impl Combatant {
                 self.gcd.consume();
                 self.state = CombatState::Casting {
                     spell_slot: gem_id,
+                    target_id: pet_id,
                     ticks_remaining: 20 + cast_delay,
                 };
                 true
@@ -1025,7 +1070,7 @@ mod tests {
     use super::*;
     use crate::combat::ability_cooldowns::AbilityAvailability;
     use crate::combat::rotation;
-    use textquest_common::combat::CombatConfig;
+    use textquest_common::combat::{ActionType, CombatConfig};
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

@@ -1,10 +1,42 @@
 use textquest_common::combat::{
     AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
-    NamedPreference, SpellEntry, TargetScanConfig,
+    NamedPreference, SpellEntry, TargetScanConfig, XTargetType,
 };
 use textquest_common::types::SpawnData;
 
 use super::rotation::RotationGroup;
+
+// ─── Pet action / status types ────────────────────────────────────────────────
+
+/// An explicit pet command requested by a class strategy for the current frame.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PetAction {
+    /// Order pet to attack the current combat target.
+    Attack,
+    /// Cast a buff on the pet using the given spell entry.
+    Buff { spell: SpellEntry },
+}
+
+/// Snapshot of the pet's state, derived from the extended target list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PetStatus {
+    /// Spawn ID of the local player's pet, or `None` if no pet is active.
+    pub spawn_id: Option<u32>,
+    /// Spawn ID of whatever the pet is currently attacking, or `None` if idle.
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    /// Returns `true` if the player currently has an active pet.
+    pub fn has_pet(&self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    /// Returns `true` if the pet is currently attacking `target_id`.
+    pub fn is_attacking(&self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
 
 use super::classes::bard::BardStrategy;
 use super::classes::beastlord::BeastlordStrategy;
@@ -66,6 +98,34 @@ impl CombatContext<'_> {
     pub fn pet_target_id(&self) -> Option<u32> {
         self.extended_targets
             .and_then(ExtendedTargetList::pet_target_id)
+    }
+
+    /// Return a snapshot of the pet's current state from the extended target list.
+    pub fn pet_status(&self) -> PetStatus {
+        let Some(list) = self.extended_targets else {
+            return PetStatus {
+                spawn_id: None,
+                target_id: None,
+            };
+        };
+        let spawn_id = list.slots.iter().find_map(|s| {
+            if s.slot_type == XTargetType::MyPet {
+                Some(s.spawn_id)
+            } else {
+                None
+            }
+        });
+        let target_id = list.slots.iter().find_map(|s| {
+            if s.slot_type == XTargetType::MyPetTarget {
+                Some(s.spawn_id)
+            } else {
+                None
+            }
+        });
+        PetStatus {
+            spawn_id,
+            target_id,
+        }
     }
 }
 
@@ -450,7 +510,7 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus};
+    use textquest_common::combat::{ExtendedTargetSlot, XTargetSlotStatus, XTargetType};
 
     fn make_ctx_with_xtargets<'a>(
         player: &'a SpawnData,

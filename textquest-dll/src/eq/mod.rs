@@ -3,6 +3,7 @@
 //! Derived from MQ2 source headers.
 
 pub mod inventory;
+pub mod notification;
 pub mod widgets;
 
 /// `CEverQuest::MainLoop` offset from EQ base.
