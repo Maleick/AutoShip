@@ -4,6 +4,13 @@ Canonical roadmap for the packet-first reset adopted in April 2026.
 
 This document is the source of truth for roadmap order, milestone gates, evidence handling, external research promotion, and GitHub Project mirroring. Older design and review docs remain useful historical evidence, but they are not canonical roadmap sources once they conflict with this file.
 
+## Documentation Surfaces
+
+- `README.md` is the usage-first entry point for building, running, and operating TextQuest.
+- `docs/wiki/` is the long-lived operator and developer reference.
+- `docs/implementation-roadmap.md` is the milestone, evidence, and project-mirror source of truth.
+- GitHub Projects mirror these repo docs after the repo-side sources are updated.
+
 ## Milestone Status Summary
 
 | Milestone | Name                    | Status       | Notes                                                              |
@@ -17,7 +24,7 @@ This document is the source of truth for roadmap order, milestone gates, evidenc
 | M6        | Web Dashboard           | **COMPLETE** | TUI enhancements, axum + React/Vite/Tailwind SPA, fleet metrics   |
 | M7–M11    | Future                  | Planned      | Zoning, Orchestrator, RL, Economy, Soul Engine                     |
 
-_Last updated: 2026-04-07. ~1284 commits, ~2944 tests across 4 crates._
+_Last updated: 2026-04-08._
 
 ## Historical Base
 
@@ -467,33 +474,6 @@ Expected outputs:
 - GitHub issue promotion for mature checkpoint items
 - evidence-state changes
 - no milestone reordering
-
-## Nightly Automation
-
-### GitHub Actions
-
-- `.github/workflows/wiki-nightly.yml`
-  - scheduled/manual wiki auto-publish using `scripts/sync_wiki.py --push`
-  - also runs after a successful nightly release
-  - uses `GH_TOKEN` in Actions, with local `gh auth` still supported by the script
-- `.github/workflows/nightly-release.yml`
-  - scheduled rolling nightly prerelease build on the self-hosted Windows runner
-
-### Codex automation
-
-The nightly external-research digest runs as a Codex automation after the GitHub workflows. It is intentionally separate from GitHub Actions because it needs evidence modeling, source weighting, and slice promotion rules that are easier to enforce in a Codex-guided research loop.
-
-Automation definition: `.codex/automations/textquest-night-research/automation.toml`
-
-Nightly project-sync rules:
-
-- repo docs remain the source of truth; project sync only begins after the roadmap verifier and wiki guard both pass
-- the active checkpoint batch may update GitHub Project fields after the docs pass guard and verifier checks
-- mature, cited, evidence-scored items (Research-backed or higher) may be promoted into GitHub issues using `python scripts/sync_project.py --promote`
-- provisional or low-confidence findings must remain draft project items until they are strengthened by additional research or live validation
-- after promoting a draft item to an issue, remove the overlapping draft from the project board so the active board has exactly one execution item per slice
-- every project-sync run records its results (items promoted, skipped, errored) in `autoresearch-project-sync.json` before the loop exits
-- `autoresearch-project-sync.json` and all other transient loop state files are excluded from git via `.gitignore` and must never be committed
 
 ## Near-Term Backlog
 

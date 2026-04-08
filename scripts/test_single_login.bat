@@ -49,12 +49,12 @@ timeout /t 12 /nobreak >nul
 
 REM Inject
 echo [3/5] Injecting DLL into PID %PID%...
-"%TextQuest_EXE%" --inject-pid %PID%
+"%TextQuest_EXE%" inject --pid %PID%
 timeout /t 2 /nobreak >nul
 
 REM Login
 echo [4/5] Sending login command...
-"%TextQuest_EXE%" --login-pid %PID% %ACCOUNT% %PASSWORD% "%SERVER%"
+"%TextQuest_EXE%" autologin --account %ACCOUNT% --password %PASSWORD%
 
 echo.
 echo [5/5] Monitoring... (60s)

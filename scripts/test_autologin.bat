@@ -14,13 +14,13 @@ pause >nul
 echo.
 echo Step 3: Injecting DLL...
 cd /d C:\Users\xmale\Projects\TextQuest
-target\release\textquest.exe --inject
+target\release\textquest.exe inject
 echo.
 echo Step 4: Waiting 5 seconds for DLL hooks...
 timeout /t 5 /nobreak >nul
 echo.
 echo Step 5: Running calibration...
-target\release\textquest.exe --calibrate
+target\release\textquest.exe calibrate
 echo.
 echo Step 6: Checking DLL log...
 timeout /t 2 /nobreak >nul

@@ -1,19 +1,15 @@
 # Development Workflow
 
+## Documentation Split
+
+- `README.md` is the quick usage and run/build entrypoint.
+- `docs/implementation-roadmap.md` is the canonical roadmap and project-mirror policy document.
+- `docs/wiki/` is the long-lived operator and developer reference.
+- `AGENTS.md` defines the autonomous issue-worker contract.
+
 ## Daily Working Loop
 
-### 1. Use reference trees only when needed
-
-`third_party/eqlib` and `third_party/macroquest` are optional local reference paths, not required bootstrap steps.
-
-Do it before:
-
-- offset work
-- eqlib or MacroQuest reference lookups
-- struct-field investigations
-- upstream behavior comparisons
-
-## Build and Test
+### 1. Build and test
 
 Use the normal Rust flow from the repo root:
 
@@ -30,19 +26,29 @@ For release validation on Windows:
 cargo build --release
 ```
 
-## Recommended Working Modes
+### 2. Pick the right validation mode
 
-### UI and orchestration changes
+#### UI and orchestration changes
 
 - prefer demo mode first
 - iterate with `cargo run`
 - confirm the five main screens, command bar, and scope controls
 
-### Injection, packet, zoning, login, and live combat changes
+#### Injection, packet, zoning, login, and live combat changes
 
 - use Windows
 - validate against live EQ clients
 - capture logs and state what was and was not revalidated
+
+### 3. Keep docs aligned with behavior
+
+When behavior or roadmap guidance changes:
+
+1. update the code or source docs
+2. update the matching page in `docs/wiki/`
+3. run `python scripts/sync_wiki.py --check`
+4. run `python scripts/sync_wiki.py --dry-run` before a manual publish
+5. include the wiki source changes in the same PR when possible
 
 ## Roadmap and Research Workflow
 
@@ -71,51 +77,11 @@ Default roadmap verifier:
 
 - `python scripts/validate_roadmap_unknowns.py --plan docs/implementation-roadmap.md --domains packet,zoning,anticheat`
 
-## Documentation Expectations
+## Maintainer Notes
 
-The repo treats `docs/wiki/` as the canonical source for the GitHub wiki.
-
-When behavior or roadmap guidance changes:
-
-1. update the code or source docs
-2. update the matching page in `docs/wiki/`
-3. run `python scripts/sync_wiki.py --check`
-4. run `python scripts/sync_wiki.py --dry-run` before a manual publish
-5. include the wiki source changes in the same PR when possible
-
-## Nightly Automation
-
-Nightly automation now runs across the self-hosted Windows runner and GitHub-hosted Linux jobs:
-
-- `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot on schedule, manual dispatch, and after successful nightly releases
-- `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
-- `.github/workflows/copilot-ci-dispatch.yml` sweeps open same-repo Copilot PRs from `master`, dispatches `CI` when the PR-triggered run is stuck in approval, and skips PRs that edit workflow files so those still require manual review
-- `.github/workflows/agent-ready.yml` keeps `agent:ready` vs `agent:skip-ready` aligned on issue events plus an hourly sweep, suppresses `agent:ready` when an issue already has an open linked PR or active `agent:working` / `agent:blocked` state, bootstraps those labels when missing, and treats roadmap-container titles that start with `M<number>` or `Mx` as skip-ready
-- `scripts/reconcile-agent-queue.sh` plus the scheduled TextQuest issue-queue reconciler automation add missing open issues to the roadmap project, set `Agent Status`, clean stale `agent:ready` / `agent:working` labels off non-ready items, and promote every other open non-epic issue to `Ready for Agent`
-- `.github/workflows/agent-close-pr.yml` closes only agent-authored PRs when they carry the `agent:close` label and the PR is agent-owned via a `codex/*` or `claude/*` head branch or the literal `codex-automation` label
-- the external-research Codex automation follows those workflows and can sync the roadmap mirror after the repo docs are current (currently paused — Codex quota exhausted until April 8, 2026)
-- the issue executor opens trusted agent PRs with `merge:auto` by default unless the PR or linked issue is marked `human:required`, `risk:high`, or `agent:blocked`
-- the PR manager may resolve clearly addressed bot review threads, merge clean trusted PRs once the required gate is green, and close stale or superseded trusted agent PRs automatically
-- as of 2026-04-03, Claude Code is the primary active agent worker; Codex automations are paused
-
-These workflows mirror repo state. They do not replace keeping source docs current.
-
-Nightly sync order:
-
-1. source docs and research ledgers
-2. roadmap verifier and wiki guard
-3. GitHub Project mirror fields and cards for the active checkpoint batch
-4. GitHub issues for mature checkpoint items and removal of overlapping drafts
-5. record project-sync results in local autoresearch artifacts before ending the run
-
-Nightly project-sync logging must capture:
-
-- the checkpoint batch id used during the sync pass
-- GitHub Project item and field updates that were applied
-- issue promotions or creations completed during the checkpoint
-- blockers such as missing project scope, auth issues, insufficient evidence, or items left as drafts
-
-Keep those logs in local automation memory or generated autoresearch artifacts. Do not commit transient run-state files such as `autoresearch-launch.json`, `autoresearch-state.json`, or `autoresearch-results.tsv`.
+- The project mirror and autonomous queue rules live in `AGENTS.md` and `docs/implementation-roadmap.md`.
+- `scripts/reconcile-agent-queue.sh` and `scripts/sync_project.py` are maintainer and automation tools, not part of the normal build-run loop.
+- Do not commit transient automation state such as `autoresearch-launch.json`, `autoresearch-state.json`, or `research-results.tsv`.
 
 ## Logging and Debugging
 
@@ -128,21 +94,19 @@ When debugging IPC or injection:
 
 - verify the session token files exist
 - verify the DLL log is updating
-- verify `status` or `status-all` can read live shared memory
+- verify `client-status` or `client-status-all` can read live shared memory
 
 ## Generated and Derived Files
 
 Do not hand-edit generated sources without also updating the generator flow:
 
 - `HANDOFF.md` is generated by `scripts/gen-handoff.sh`
-- README metrics are refreshed by `scripts/update_readme_metrics.py`
 
 ## Internals and Reference Discipline
 
 - prefer current code over older design docs when there is a conflict
-- prefer `third_party/eqlib` for eqlib references when that local tree is available
-- use `third_party/macroquest` for broader upstream context such as login, routing, and scripting behavior when that local tree is available
-- treat `third_party/macroquest/src/eqlib` as vendored upstream context, not the primary TextQuest eqlib citation path
+- prefer checked-in code and docs first
+- use public upstream references when you need external context
 - use MacroQuest docs, RedGuides docs, and public comparison repos as roadmap inputs, not as proof that TextQuest already implements a feature
 
 ## Current Behavior vs Roadmap

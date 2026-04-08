@@ -44,6 +44,7 @@ BANNED_LITERALS = {
     "mq2-reference": "stale pre-submodule reference",
     "Source: third_party/macroquest/src/eqlib": "vendor eqlib path used as a primary source citation",
     "source: third_party/macroquest/src/eqlib": "vendor eqlib path used as a primary source citation",
+    "third_party/": "deleted local vendor path",
 }
 
 

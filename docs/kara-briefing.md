@@ -172,7 +172,7 @@ cargo test                   # Run full test suite including Windows-specific te
 
 - **Frostreaver specs**: AMD Ryzen AI 9 HX 370, 64GB DDR5, Radeon 890M iGPU, Windows 11
 - **Repo path**: `C:\Users\xmale\Projects\TextQuest`
-- **Reference trees**: `third_party/eqlib` and `third_party/macroquest` are optional local references for offset and struct work when they are present in your workspace
+- **Reference trees**: external eqlib and MacroQuest checkouts are optional local references for offset and struct work when you maintain them outside this repo
 - **Sync script**: `scripts/sync-frostreaver.ps1` — syncs Claude Code settings and rebuilds TextQuest
 
 Good hunting, Kara.

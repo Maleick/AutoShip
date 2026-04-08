@@ -4,6 +4,8 @@ The canonical roadmap source is `docs/implementation-roadmap.md`.
 
 This page summarizes the active milestone order, the evidence model, and the main validation gaps that still matter operationally.
 
+README is intentionally the usage surface for TextQuest. Treat this page and `docs/implementation-roadmap.md` as the places for roadmap status and validation guidance.
+
 ## Historical Base
 
 These milestones remain part of project history:
@@ -18,8 +20,8 @@ These milestones remain part of project history:
 
 The active roadmap now resumes at `M5`:
 
-- `M5`: Anti-Cheat (**active**)
-- `M6`: Web Dashboard (config + monitoring)
+- `M5`: Anti-Cheat
+- `M6`: Web Dashboard
 - `M7`: Zoning/Movement
 - `M8`: Orchestrator
 - `M9`: Learning/RL
@@ -30,19 +32,14 @@ External research may add slices and validation tasks, but it may not reorder mi
 
 ## Current Validated State
 
-As of 2026-04-06: ~1,001 commits, ~113K lines of Rust, 2,584 tests (all passing). M5 Anti-Cheat complete (#355 closed — launchpad bypassed via /patchme). M6 Web Dashboard complete (TUI enhancements, axum + React SPA scaffold, fleet metrics).
-
-- TUI with four primary screens and command bar
+- TUI with five main screens and command bar
 - demo mode for non-Windows and no-client workflows
 - live Windows injection and authenticated IPC path
 - login automation structure and in-client login logic
 - navmesh-backed routing and map overlays
 - combat FSM plus class strategies and CH chain
 - Soul Engine with deterministic fallback and persistent memory
-- stick-to-target and player-follow navigation modes
-- camp loop state machine with buff/CC/loot/positioning
-- Discord webhook integration and command bridge
-- encrypted credential store (Argon2id + AES-256-GCM)
+- web/dashboard code is present in the repo, but milestone order and evidence state still come from the canonical roadmap
 
 ## Main Gaps Still Requiring Live Validation
 

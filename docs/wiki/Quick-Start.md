@@ -4,13 +4,7 @@ This page is the fastest path to a useful TextQuest session.
 
 ## Current Behavior
 
-### 1. Decide whether you need optional reference trees
-
-You can skip `third_party/eqlib` and `third_party/macroquest` for normal build, test, and runtime work.
-
-Use those local reference paths only when you are doing offset, struct, eqlib, or MacroQuest investigation in a workspace that already has them available.
-
-### 2. Choose the runtime you are actually in
+### 1. Choose the runtime you are actually in
 
 #### Demo mode
 
@@ -46,18 +40,18 @@ Commands:
 ```powershell
 cargo build --release
 target\release\textquest.exe inject
-target\release\textquest.exe
+target\release\textquest.exe tui
 ```
 
 Useful follow-up commands:
 
 ```powershell
 target\release\textquest.exe cmd <pid> "/sit"
-target\release\textquest.exe status <pid>
-target\release\textquest.exe status-all
+target\release\textquest.exe client-status <pid>
+target\release\textquest.exe client-status-all
 ```
 
-### 3. Learn the five TUI screens
+### 2. Learn the five TUI screens
 
 - `1`: Characters
 - `2`: Map
@@ -74,7 +68,7 @@ High-value keys:
 - `[` and `]` change the selected client
 - `q` quit
 
-### 4. Use command mode for actual work
+### 3. Use command mode for actual work
 
 Common starting commands:
 
@@ -93,6 +87,13 @@ Common starting commands:
 - CLI subcommands live in `textquest/src/main.rs` and call into `textquest/src/cli.rs`.
 - Pipe and shared-memory naming come from `textquest-common/src/ipc.rs`.
 - Demo mode is driven by `textquest/src/tui/demo_data.rs` and non-Windows stubs.
+
+## Next Pages
+
+- Build and platform setup: [Installation and Build](Installation-and-Build)
+- TUI usage details: [Operating the TUI](Operating-the-TUI)
+- Full command list: [Command Reference](Command-Reference)
+- Troubleshooting: [Troubleshooting](Troubleshooting)
 
 ## Current Behavior vs Roadmap
 

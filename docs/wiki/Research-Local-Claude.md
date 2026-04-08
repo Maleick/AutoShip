@@ -8,7 +8,7 @@ Currently we develop on macOS and remote-control frostreaver via SSH/API. This c
 
 1. Edit Rust code and run `cargo build`
 2. Launch `eqgame.exe` (visible on desktop)
-3. Run the DLL injector (`textquest.exe --inject`)
+3. Run the DLL injector (`textquest.exe inject`)
 4. Read DLL log files
 5. Iterate autonomously (build -> test -> check logs -> fix -> repeat)
 
@@ -52,7 +52,7 @@ Claude Code runs natively on Windows 10/11. No WSL required (though WSL is also 
 
 - Zero session isolation — runs in the user's desktop session
 - Full access to cargo, git, all CLI tools
-- Can launch eqgame.exe, run textquest.exe --inject, read logs
+- Can launch eqgame.exe, run `textquest.exe inject`, read logs
 - Auto-updates, auto-installs, zero-config
 - Same CLAUDE.md / HANDOFF.md workflow we already use
 - Native Windows binary, signed by Anthropic
@@ -211,7 +211,7 @@ frostreaver (deployment + live testing):
   - git pull
   - cargo build --release
   - Launch eqgame.exe
-  - Run textquest.exe --inject
+  - Run `textquest.exe inject`
   - Check logs, iterate on bugs
   - Push fixes back to GitHub
 ```

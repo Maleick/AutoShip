@@ -16,7 +16,7 @@
 ## 1. Login Automation
 
 Frostreaver: `textquest-dll/src/login/`, `textquest/src/launcher/`
-MQ2: `third_party/macroquest/src/plugins/autologin/`
+MQ2: local MacroQuest autologin plugin sources
 
 | Feature                         | MQ2                                                      | Frostreaver                                                            | Status | Notes                                                                                                             |
 | ------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
@@ -93,7 +93,7 @@ MQ2: Navigation is via MQ2Nav/MQ2MoveUtils (external plugins — **not in refere
 ## 4. Window / UI Interaction
 
 Frostreaver: `textquest-dll/src/eq/widgets.rs`, `textquest-dll/src/login/widgets.rs`
-MQ2: `third_party/macroquest/src/eqlib/include/eqlib/game/CXWnd.h`, UI headers
+MQ2: MacroQuest eqlib UI headers (`CXWnd.h`)
 
 | Feature                  | MQ2                                           | Frostreaver                                                | Status | Notes                                                          |
 | ------------------------ | --------------------------------------------- | ---------------------------------------------------------- | ------ | -------------------------------------------------------------- |
@@ -118,7 +118,7 @@ MQ2: `third_party/macroquest/src/eqlib/include/eqlib/game/CXWnd.h`, UI headers
 ## 5. IPC / Multi-Client Communication
 
 Frostreaver: `textquest-dll/src/ipc/`, `textquest/src/ipc/`, `textquest-common/src/protocol.rs`
-MQ2: `third_party/macroquest/src/routing/` (PostOffice, NamedPipes, Network)
+MQ2: MacroQuest routing sources (PostOffice, NamedPipes, Network)
 
 | Feature                  | MQ2                                            | Frostreaver                                                               | Status | Notes                                                                  |
 | ------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
@@ -140,7 +140,7 @@ MQ2: `third_party/macroquest/src/routing/` (PostOffice, NamedPipes, Network)
 ## 6. Offset Management
 
 Frostreaver: `textquest-common/src/offsets.rs`, `textquest-common/src/offset_db.rs`
-MQ2: `third_party/macroquest/src/eqlib/include/eqlib/offsets/eqgame.h`
+MQ2: MacroQuest eqlib offset header (`eqgame.h`)
 
 | Feature                    | MQ2                                                 | Frostreaver                                                       | Status | Notes                                                               |
 | -------------------------- | --------------------------------------------------- | ----------------------------------------------------------------- | ------ | ------------------------------------------------------------------- |

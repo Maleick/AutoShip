@@ -29,7 +29,7 @@ set COUNT=0
 for /f "tokens=2" %%p in ('tasklist /fi "imagename eq eqgame.exe" /fo list ^| findstr "PID:"') do (
     set /a COUNT+=1
     echo  [!COUNT!] PID=%%p  sending: %CMD%
-    "%TextQuest_EXE%" --cmd %%p "%CMD%"
+    "%TextQuest_EXE%" cmd %%p "%CMD%"
 )
 
 if %COUNT%==0 (

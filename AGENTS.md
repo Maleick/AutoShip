@@ -5,8 +5,11 @@ Shared operating contract for autonomous coding agents in this repository.
 ## Source Of Truth
 
 - The repository contents and docs are authoritative. GitHub Projects mirror repo truth; they do not replace it.
+- `README.md` is the usage-first entry point for building, running, and operating TextQuest.
+- `docs/wiki/` is the long-lived operator and developer reference.
 - `docs/implementation-roadmap.md` remains the source of truth for milestone order, checkpoint batches, and evidence-state rules.
 - `feature-list.json` remains the source of truth for multi-session feature tracking.
+- External eqlib or MacroQuest research material is optional and repo-external; do not assume a vendored reference-tree layout in new docs or scripts.
 
 ## Queue Entry
 
@@ -50,6 +53,7 @@ Shared operating contract for autonomous coding agents in this repository.
   - add `merge:auto` when neither the PR nor the linked issue has `human:required`, `risk:high`, or `agent:blocked`
 - Move the GitHub Project `Agent Status` field to `PR Open` after the PR exists.
 - When behavior or operator guidance changes, update README and the matching `docs/wiki/` page in the same PR.
+- Keep README usage-focused. Put roadmap execution detail, project/governance rules, and deep reference material in `docs/implementation-roadmap.md`, `docs/wiki/`, or the GitHub Project mirror instead.
 ## Verification
 
 - Always run every command listed in the issue template's `Verify` section.

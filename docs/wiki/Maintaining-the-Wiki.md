@@ -34,7 +34,7 @@ This validates:
 - required page presence
 - flat layout rules
 - required special files such as `Home.md` and `_Sidebar.md`
-- banned stale references such as old pre-submodule paths
+- banned stale references such as deleted local vendor paths
 
 ### 3. Preview the publish result
 
@@ -76,42 +76,19 @@ Fix:
 - wiki updates should ship in the same PR as the behavior change whenever possible
 - README should continue to point contributors at `docs/wiki/` and the sync script commands
 
-## Nightly Publish
-
-The repository also has a nightly wiki publish workflow:
-
-- `.github/workflows/wiki-nightly.yml`
-
-Behavior:
-
-- runs on the self-hosted runner labeled `[self-hosted, Windows, X64, textquest]`
-- follows successful `Nightly Release` runs by default and also supports manual dispatch for ad hoc publishes
-- uses two UTC cron entries plus a local-time gate so the publish happens at 3 AM America/Chicago year-round
-- validates with `python scripts/sync_wiki.py --check`
-- publishes with `python scripts/sync_wiki.py --push`
-- checks out the exact built commit SHA for `workflow_run` events and can accept an explicit `source_sha` on manual dispatch
-
-Auth model:
-
-- the workflow relies on runner-local `gh auth`
-- the job runs `gh auth status` before `--check` and `--push` so missing auth fails immediately
-- if `gh auth status` fails or the wiki remote has not been initialized, the job should fail clearly rather than silently skipping work
-
-This nightly job mirrors the repo-side canonical pages. It does not replace the requirement to update `docs/wiki/` in normal PRs.
-
 ## Content Rules
 
 - prefer operator guidance first, internals second
 - separate current behavior from roadmap or not-yet-revalidated behavior
-- use `third_party/eqlib` as the canonical eqlib reference path
-- avoid stale references to old pre-submodule layouts
+- cite checked-in source files or public upstream references
+- avoid deleted local vendor paths
 
 ## Current Behavior vs Roadmap
 
 ### Current behavior
 
 - wiki maintenance stays repo-first and reviewable in normal PRs
-- a nightly auto-publish job now mirrors the reviewed repo state to the GitHub wiki
+- publish still flows through `scripts/sync_wiki.py`
 
 ### Future options
 

@@ -12,6 +12,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **TextQuest** is a Rust-based EverQuest multibox controller (targeting a 36-box setup on a TLP server). Four workspace crates: an external orchestrator (`textquest`) that reads game state via `ReadProcessMemory` and displays a TUI dashboard, an injected DLL (`textquest-dll`, cdylib) that hooks internal EQ functions for direct control, shared types (`textquest-common`), and a web dashboard (`textquest-web`, axum + React SPA).
 
+## Documentation Surfaces
+
+- `README.md` is the usage-first entry point.
+- `docs/wiki/` holds the long-lived operator and developer reference.
+- `docs/implementation-roadmap.md` is the canonical milestone and evidence document.
+- Do not introduce new docs or script assumptions that require a vendored reference tree inside this repo.
+
 ## Build Commands
 
 ```bash
@@ -46,7 +53,7 @@ cargo test -p textquest test_name_here
 cargo test -p textquest --test integration test_name
 ```
 
-~2,500+ tests across 4 workspace crates (auto-counted by `scripts/update_readme_metrics.py`). Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
+~2,500+ tests across 4 workspace crates. Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
 
 **CI gate**: Required check is `PR gate (fmt + clippy + test + python)`. Runs on self-hosted Windows runner for same-repo PRs, GitHub-hosted Windows for forks. Dev preflight: `python3 scripts/dev-preflight.py`.
 
@@ -175,6 +182,6 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **CMAKE env var**: `CMAKE_POLICY_VERSION_MINIMUM=3.5` is already set via `.cargo/config.toml`. Only export it manually if you are troubleshooting outside the normal Cargo flow.
 - **macOS stubs**: `#[cfg(not(windows))]` stubs return dummy data. Some code paths are unreachable on macOS — don't chase bugs in stub implementations.
 - **Offset addresses are not pointers**: Values in `offsets.rs` are preferred-base hex addresses, not ready-to-use pointers. Always `rebase()` before use.
-- **MacroQuest references are optional local trees**: `third_party/eqlib` and `third_party/macroquest` are optional local reference paths for offset and struct-reference work when they are present in your workspace. Routine `cargo build` / `cargo test` work does not require them. Derived offsets still live in `textquest-common/src/offsets.rs`.
+- **MacroQuest/eqlib references are optional local checkouts**: keep them outside the repo if you use them for offset or struct-reference work. Routine `cargo build` / `cargo test` work does not require them. Derived offsets still live in `textquest-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
 - **Nightly MSVC toolchain**: Windows builds require nightly Rust because `retour` (function hooking) uses unstable features. macOS builds work on stable.

@@ -213,7 +213,7 @@ if ($Tier -ge 3) {
     Write-Host ""
     Write-Host "  1. Launch ONE EQ client on a throwaway account" -ForegroundColor White
     Write-Host "  2. Log into any server, select any character" -ForegroundColor White
-    Write-Host "  3. Run: target\release\textquest.exe --inject" -ForegroundColor White
+    Write-Host "  3. Run: target\release\textquest.exe inject" -ForegroundColor White
     Write-Host "  4. Check for: 'Injection successful' message" -ForegroundColor White
     Write-Host "  5. Check for: IPC connection established" -ForegroundColor White
     Write-Host "  6. In TUI, verify live data updates" -ForegroundColor White

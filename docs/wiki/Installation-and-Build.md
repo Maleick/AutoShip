@@ -8,10 +8,6 @@
 - No `.env` file is required for normal build, test, or runtime work
 - `.cargo/config.toml` already sets `CMAKE_POLICY_VERSION_MINIMUM=3.5` for normal Cargo commands
 
-### Optional local reference trees
-
-`third_party/eqlib` and `third_party/macroquest` are optional local reference paths for offset, struct, eqlib, and MacroQuest research when those trees are present in your workspace. They are not required for normal build, test, or runtime work.
-
 ### Windows production builds
 
 - CMake 3.5+
@@ -24,14 +20,13 @@ If the navmesh FFI build complains about CMake policy settings, export:
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 ```
 
-The repository also sets this through repo configuration, but the explicit export is still a useful fallback when troubleshooting.
+The repository already sets this through repo configuration, but the explicit export is still a useful fallback when troubleshooting.
 
 ## Local Environment Notes
 
-- Codex and other local tooling will automatically pick up checked-in repo configuration such as `.cargo/config.toml`.
+- Codex and other local tooling automatically pick up checked-in repo configuration such as `.cargo/config.toml`.
 - There is no required project `.env` file today.
 - The main user-provided setup is installing the host tools: Rust, CMake, and on Windows LLVM/Clang.
-- Wiki publishing can use `GH_TOKEN`, but the nightly self-hosted workflow expects a runner-local `gh auth login`.
 
 ## Build Commands
 
@@ -79,8 +74,7 @@ cargo run -- --dump
 
 - `cargo run` launches the real app entrypoint and will attach to live EQ processes if found.
 - `textquest.exe inject` stages and injects `textquest_dll.dll`.
-- `textquest.exe cmd`, `status`, `status-all`, `nav`, and `zones` all expect live injected clients.
-- CI currently validates the Windows build on nightly, so contributors should match that toolchain when reproducing Windows build issues.
+- `textquest.exe cmd`, `client-status`, `client-status-all`, `nav`, and `zones` all expect live injected clients.
 
 ## Important Files and Paths
 
@@ -90,7 +84,7 @@ cargo run -- --dump
 - Class configs: `config/classes/*.toml`
 - Named watchlists: `config/named_mobs/*.toml`
 - HVT watchlist: `config/hvt_watchlist.toml`
-- Offsets DB: `config/offsets.json`
+- Offsets snapshot: `config/offsets.json`
 - Brewall-style maps: `config/maps/*.txt`
 - Canonical wiki source: `docs/wiki/*.md`
 
@@ -112,7 +106,7 @@ cargo run -- --dump
 ### Current behavior
 
 - Cross-platform compilation is deliberate; the repo is structured so UI and logic work on non-Windows even when live control cannot.
-- Local reference trees under `third_party/` are optional for offset and struct investigations, but they are not required for normal build, test, or runtime work.
+- `config/offsets.json` is a checked-in offset-data snapshot; compiled defaults still live in `textquest-common/src/offsets.rs`.
 
 ### Gaps and caveats
 

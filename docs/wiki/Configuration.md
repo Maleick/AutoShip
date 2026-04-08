@@ -12,7 +12,7 @@
 | `config/hvt_watchlist.toml` | High-value target watchlist |
 | `config/named_mobs/*.toml` | Named spawn definitions by zone |
 | `config/maps/*.txt` | Brewall-style zone map data |
-| `config/offsets.json` | Hot-updatable offsets database |
+| `config/offsets.json` | Checked-in offset data snapshot and schema reference |
 
 ## Main App Config
 
@@ -106,7 +106,7 @@ These files are optional. When no per-toon file exists, TextQuest keeps using th
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.
-- `config/offsets.json` is the hot-updatable offsets store that complements the compiled constants in `textquest-common/src/offsets.rs`.
+- `config/offsets.json` is a maintained offset-data snapshot that matches the `textquest-common/src/offset_db.rs` schema. The compiled defaults still live in `textquest-common/src/offsets.rs`.
 
 ## Internals
 

@@ -103,6 +103,23 @@ def replace_line(text: str, prefix: str, replacement: str) -> str:
 def main() -> int:
     readme = README_PATH.read_text(encoding="utf-8")
 
+    required_markers = (
+        "[![Rust LOC]",
+        "[![Tests]",
+        "Current workspace totals:",
+    )
+    present = [m for m in required_markers if m in readme]
+    if not present:
+        return 0
+    missing = [m for m in required_markers if m not in readme]
+    if missing:
+        print(
+            f"ERROR: README is partially instrumented. "
+            f"Missing markers: {missing}",
+            file=sys.stderr,
+        )
+        return 1
+
     loc = rust_loc()
     tests, tests_exact = test_count()
     test_label = f"{tests:,} exact" if tests_exact else f"~{tests:,}"
@@ -123,7 +140,7 @@ def main() -> int:
         (
             f"Current workspace totals: {loc:,} Rust lines and {test_label} tests. "
             "This line and the badges above are auto-refreshed by "
-            "`scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:"
+            "`scripts/update_readme_metrics.py`."
         ),
     )
 

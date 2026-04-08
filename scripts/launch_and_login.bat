@@ -49,12 +49,12 @@ timeout /t 12 /nobreak >nul
 
 REM Inject DLL
 echo [3/4] Injecting DLL...
-"%TextQuest_PATH%\target\release\textquest.exe" --inject
+"%TextQuest_PATH%\target\release\textquest.exe" inject
 timeout /t 2 /nobreak >nul
 
 REM Send login
 echo [4/4] Sending login command...
-"%TextQuest_PATH%\target\release\textquest.exe" --login %ACCOUNT% %PASSWORD% "%SERVER%"
+"%TextQuest_PATH%\target\release\textquest.exe" autologin --account %ACCOUNT% --password %PASSWORD%
 echo.
 echo Login chain started! The DLL handles:
 echo   - Credential entry + Login click

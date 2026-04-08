@@ -2,16 +2,15 @@
 
 ## Current Rules
 
-The local reference trees are not required for normal build, test, or runtime work.
+The repository no longer treats local vendored reference trees as part of the normal workflow.
 
-Then use:
+Use these sources in order:
 
-- `third_party/eqlib` as the canonical local eqlib reference tree when it is present in your workspace
-- `third_party/macroquest` as the broader upstream MacroQuest reference tree when it is present in your workspace
+- current checked-in code under `textquest/`, `textquest-dll/`, and `textquest-common/`
+- `docs/implementation-roadmap.md` and the matching wiki pages
+- public upstream eqlib or MacroQuest references when you need outside comparison material
 
-Do not treat the vendored `third_party/macroquest/src/eqlib` copy as the primary TextQuest citation path.
-
-For roadmap-facing research promotion, combine these local references with:
+For roadmap-facing research promotion, combine those references with:
 
 - `docs/implementation-roadmap.md`
 - `docs/external-research/automation-source-ledger.md`
@@ -34,7 +33,7 @@ TextQuest intentionally reads many EQ fields one by one rather than casting larg
 
 Reason:
 
-- MQ2/eqlib layouts can contain padding, gaps, or version-sensitive fields
+- MQ2 and eqlib layouts can contain padding, gaps, or version-sensitive fields
 - TextQuest often only needs selected offsets
 - field-by-field reads are safer when layouts are not perfectly contiguous
 
@@ -50,23 +49,23 @@ repeated across a type, that is usually deliberate.
 
 Important current patterns:
 
-- spawn traversal is based on the linked-list style structures exposed through EQ and documented in the reference trees
+- spawn traversal is based on the linked-list style structures exposed through EQ
 - zone and nav routing information is shared through `textquest-common/src/nav.rs`
-- login internals and widget behavior are cross-checked against local MacroQuest references when needed
+- login internals and widget behavior can be cross-checked against public upstream references when needed
 
 ## Offsets Database
 
-`config/offsets.json` is the hot-updatable offset database.
+`config/offsets.json` is the checked-in offset database snapshot.
 
 Use it for:
 
-- updating data without recompiling everything
-- tracking live-client corrections
-- keeping runtime offset overrides separate from compiled defaults
+- maintaining the shared JSON schema in `textquest-common/src/offset_db.rs`
+- tracking live-client corrections in a reviewable file
+- comparing JSON-backed offset data with the compiled defaults in `textquest-common/src/offsets.rs`
 
 ## Recommended Investigation Workflow
 
-1. inspect `third_party/eqlib` if the local reference tree is available
+1. inspect the current checked-in code path using the offset
 2. compare against the current code path using the offset
 3. update `textquest-common/src/offsets.rs` and, if needed, `config/offsets.json`
 4. validate on a live Windows client
@@ -77,9 +76,8 @@ Use it for:
 
 ### Current behavior
 
-- Local reference trees under `third_party/` are optional research aids, not required repo plumbing.
-- Those reference trees are not required for normal build, test, or runtime work.
-- `third_party/eqlib` is the canonical eqlib path and should be cited that way in docs and PRs when it is available in the workspace.
+- Public upstream references can still be useful for comparison work, but checked-in TextQuest code and docs remain the primary source of truth.
+- The repo does not rely on deleted local vendor paths for normal build, test, or runtime work.
 
 ### Validation notes
 

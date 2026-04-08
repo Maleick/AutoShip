@@ -289,7 +289,7 @@ while ($listener.IsListening) {
                     Send-JsonResponse $response @{ error = "POST required" } 405
                 } else {
                     try {
-                        $result = & "$ProjectDir\target\release\textquest.exe" --inject 2>&1
+                        $result = & "$ProjectDir\target\release\textquest.exe" inject 2>&1
                         Send-JsonResponse $response @{ success = $true; output = ($result -join "`n") }
                     } catch {
                         Send-JsonResponse $response @{ success = $false; error = $_.ToString() } 500

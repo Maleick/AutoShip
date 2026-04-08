@@ -18,338 +18,71 @@
 
 External process memory reader, DLL injector, and multibox controller for EverQuest, built in Rust.
 
-TextQuest reads live game state from EQ client memory, injects a DLL for direct control via internal function calls (InterpretCmd), and orchestrates up to 36 characters across a TLP multibox setup.
+TextQuest reads live game state from EQ clients, injects a DLL for direct control via in-process EQ calls, and coordinates multi-client sessions from a TUI-first operator workflow.
 
-Routine `cargo build` / `cargo test` work does not require any vendored reference trees. When you need eqlib or MacroQuest source context for offset, struct, or login investigation, use the local `third_party/` paths when they are present in your workspace and treat them as optional reference material rather than required setup.
+## What TextQuest Does Today
 
-## Status
-
-**DLL injection + command execution confirmed working on live eqgame.exe** (March 2026 build). Login automation (Phases 1-3) working end-to-end: credential entry, server select, character select, Enter World. Two characters successfully grouped, following, sitting/standing via remote commands.
+- Runs in demo mode on macOS, Linux, or Windows without attached EQ clients so the TUI and operator flow remain usable during normal development
+- Runs live on Windows for injection, IPC, login, navigation, combat, camp-loop, and packet-monitoring work
+- Exposes five main TUI screens: Characters, Map, Navigation, Debug, and Packets
+- Supports command-bar control, camp automation, navmesh tooling, login orchestration, named tracking, and shared-memory session inspection
+- Keeps Soul Engine and provider-backed chat behavior separate from the current operator/runtime surface and tracked under `M11` in the canonical roadmap
 
 ## Features
 
-### Core
-
-- **DLL Injection** — Rust `cdylib` injected via CreateRemoteThread + LoadLibraryW, staged with randomized names
-- **InterpretCmd** — Calls EQ's internal `CEverQuest::InterpretCmd` to execute any slash command invisibly
-- **Game State Publishing** — DLL reads HP/mana/target/nearby spawns every tick, publishes via shared memory
-- **IPC Pipeline** — Named pipes (commands) + shared memory (game state) with current-user DACL security
-- **Render Mode System** — Three modes: Normal (full render), Strobe (1 frame per 5 sec, ~97% GPU savings), NullRender (zero rendering). DX11 hooks use DXGI Present vtable approach to intercept `ID3D11Device`, replacing textures with 1×1 and buffers with 256 bytes, saving ~500 MB per background client
-
-### TUI Dashboard (5 screens, 4 themes)
-
-| Screen     | Key | Description                                                                                                                                      |
-| ---------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Characters | `1` | Operator roster, selected character detail, group/scope panels, and side panels for combat, session, and priorities                              |
-| Map        | `2` | Tactical zone map with spawn list, named tracker, tactical navigation section, visibility overlays, viewport modes, and map interaction controls |
-| Navigation | `3` | Per-character route status table plus selected-route detail, blockers/recovery state, and navigation command reference                           |
-| Debug      | `4` | Raw spawn table, hex dump with field annotations, Ghidra-style explorer, EQ internals, and target inspection                                     |
-| Packets    | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation                                                      |
-
-**Themes:** Dark Modern (default), Dracula, Classic, Neriak Third Gate — cycle with `T`
-
-**Widget library:** Breadcrumbs, tab bars, a dropdown command menu bar, toast notifications, command-bar inline hints, keybinding hint rows, badges, cast/gauge bars, sparklines, scrollable lists with scrollbar indicators, tooltips, popup selectors (single and multi-option), the config tree editor, and the first-run wizard overlay. The help overlay is context-sensitive and scrollable, with per-screen keybinding hints, command usage suggestions, and jump targets for major command groups.
-
-### TUI Controls
-
-| Key         | Action                                                |
-| ----------- | ----------------------------------------------------- |
-| `1-5`       | Switch screens                                        |
-| `Shift+1-6` | Focus group G1-G6                                     |
-| `Shift+0`   | All groups (clear group focus)                        |
-| `Tab`       | Cycle focused pane                                    |
-| `[` / `]`   | Cycle between EQ clients                              |
-| `/`         | Search spawns (live typing)                           |
-| `f`         | Cycle spawn type filter                               |
-| `g`         | Toggle group section (Characters screen)              |
-| `v`         | Toggle scope section (Characters screen)              |
-| `z`         | Collapse focused section                              |
-| `+` / `-`   | Adjust Tactical Z slice                               |
-| `m`         | Maximize Tactical map                                 |
-| `p`         | Privacy mode (redacts names + server for screenshots) |
-| `T`         | Cycle theme                                           |
-| `:`         | Command mode                                          |
-| `?`         | Help overlay (scrollable, context-sensitive)          |
-| `q`         | Quit                                                  |
-
-**Status Glyphs:** `⚔`/`✚`/`✦` Fight/Heal/Cast · `➜`/`✓`/`!` Navigate/Arrived/Stuck · `☾`/`⇣`/`⌕` Sit/Feign/Loot
-
-### Command Bar (`:` mode)
-
-```text
-:<name> /sit             Send slash command to character
-:G1-G6 /cmd             Send to group
-:all /sit                Broadcast to all clients
-:camp start|stop|list|status|next|prev  Camp loop control
-:camp add|remove        Add/remove camp config
-:nav <dest>              Navigate to camp, coords, or slash fallback
-:all /sss <name>         Save current spell set on focused clients
-:all /ssl <name>         Load a saved spell set on focused clients
-:all /ssd <name>         Delete a saved spell set from the character ini
-:all /casting "Clicky" item -bandolier|"Heal Set"  Swap to a cast set, click, then restore the tracked bandolier
-:track <name>            Track a spawn
-:ma <name>               Set Main Assist
-:mt <name>               Set Main Tank
-:engage / :disengage     Start/stop combat
-:invite <name>           Group invite
-:accept                  Accept group invite
-:mode camp|hunt          Set operating mode
-:ch start <pids> <int>   Start CH chain
-:ch stop|add|remove      CH chain management (`rm` also works)
-:ch adaptive on|off      Adaptive CH timing
-:help                    Show all commands
-```
-
-### Camp Loop Automation
-
-- **6-phase state machine**: Idle -> Pulling -> Fighting -> Looting -> Medding -> Buffing
-- **Smart decisions** from real game state (HP/mana-driven, not timers)
-- **16 class ability configs** (TOML) with cooldowns, priorities, conditions
-- **CC system**: Charm/mez tracking, Tash->Malo debuff chain, charm break emergency response
-- **Rogue backstab positioning**: Calculates behind-target position using EQ heading math
-- **Intelligent pull target selection**: Filters by distance/type, prefers HVT watchlist targets
-- **Buff maintenance**: Tracks durations, auto-rebuffs during idle/med
-- **Death recovery**: Detects deaths, cleric rez commands, rebuff sequence
-- **Sell/bank cycle**: Navigate to vendor, sell, return to camp
-
-### Soul Engine
-
-- **Personality system** — Per-character mood, traits, and behavioral profiles with deterministic personality engine
-- **Persistent memory** — SQLite-backed memory database for long-term character state
-- **Social dynamics** — Social graph tracking relationships between characters
-- **Idle behavior** — Personality-driven actions during downtime
-- **LLM integration** — Async request queue for provider-backed character responses (tracked under `M11` in the canonical roadmap)
-
-### Login Automation
-
-- **Credential store** — Argon2id + AES-256-GCM encrypted credentials in SQLite, with CLI management (`--add`, `--list`, `--password`/`--master-password` flags)
-- **Login FSM** — Full end-to-end chain: credential entry → server select → character select → Enter World
-- **Launch coordinator** — Staggered multi-client launch with post-login sequencing
-- **Process spawner** — Spawns and manages EQ client processes
-- **Daemon CLI** — Headless orchestrator mode for scripted/remote operation
-
-### Navigation
-
-- **Navmesh pathfinding** — Detour-based pathfinding via C++ FFI shim
-- **888-zone BFS routing** — Zone-to-zone route planning across the full EQ world
-- **Navigator FSM** — Waypoint following with stuck detection and recovery
-- **Movement humanization** — Natural-looking movement patterns
-- **Waypoint recording** — RDP simplification for path recording
-- **Travel diagnostics** — Navigation screen calls out fallback routing, stuck recovery, and pending zone-match blockers
-
-### Combat
-
-- **17 class strategies** — ClassStrategy trait with per-class implementations including generic DPS fallback
-- **Puller FSM** — Automated pull cycle with target selection and aggro management
-- **HolyShit system** — Emergency response conditions (low HP, charm break, adds)
-- **GCD tracker + mana governor** — Intelligent ability timing and resource management
-- **CH chain** — Coordinated Complete Heal rotation with adaptive timing
-- **Skill cooldown tracking** — Per-ability cooldown management across all classes
-
-### Anti-Detection
-
-- **CSPRNG session tokens** (not PID-derived)
-- **Randomized DLL staging names** (CSPRNG filename, not static)
-- **Restrictive pipe DACL** (current user only)
-- **Session-derived IPC naming** — active helpers derive names from the per-session token rather than a simple fixed public prefix
-- **Human-like command jitter** (triangle distribution + hesitation spikes)
-- **Per-character personality profiles** (reaction speed, aggression, discipline variation)
-- **GM flag detection** (alerts on GM spawns)
-- **Render mode system** (Normal / Strobe / NullRender with DX11 null device hooks)
-
-### Named Spawn Tracker
-
-- Detects named mobs (filters generic "a goblin" names)
-- HVT watchlist (`config/hvt_watchlist.toml`) with Discord alert support
-- Tracks up/down status with respawn timer estimation
-- Map shows `!` for live named, `X` for dead with countdown
-
-### EQ Log Parser
-
-- Parses loot, kills, money, XP, deaths, zone changes from EQ log files
-- Live session stats on TUI dashboard (XP/hr, plat/hr, top items)
-- Feeds into LootDatabase for economy analysis
-
-## Architecture
-
-```text
-TextQuest Workspace (4 crates, ~134K lines of Rust)
-├── textquest/           — Orchestrator: TUI, camp loop, process reading, injection, soul engine
-├── textquest-dll/       — Injected DLL: hooks, game state reader, IPC, render strobing, combat
-├── textquest-common/    — Shared types: IPC, offsets, combat/nav/soul types
-└── textquest-web/       — Web dashboard: axum REST API, WebSocket session monitoring
-```
-
-### Command Pipeline
-
-```text
-TUI :command  →  Orchestrator  →  Named Pipe  →  DLL  →  InterpretCmd  →  EQ
-     or  (invisible to game)
-Discord msg
-```
-
-### Camp Loop
-
-```text
-Orchestrator ticks camp loop → reads game state from shared memory →
-generates (pid, slash_command) pairs per role → sends via IPC pipe →
-DLL executes InterpretCmd with human-like jitter delay
-```
+- **DLL Injection** — Rust `cdylib` injected into running EQ clients
+- **InterpretCmd Control** — Calls EQ's internal slash-command path for direct command execution
+- **IPC Pipeline** — Named pipes for commands and shared memory for live game state
+- **TUI Operator Surface** — Five-screen dashboard with command mode, help overlay, privacy mode, themes, filters, and client focus controls
+- **Camp Automation** — Six-phase camp loop, class-driven combat logic, CH chain support, CC handling, buff maintenance, and recovery flows
+- **Login Automation** — Credential store, launch coordination, login FSM, and post-login sequencing
+- **Navigation** — Navmesh pathfinding, route diagnostics, waypoint tooling, stuck detection, and recovery support
+- **Packet Monitoring** — Live send/receive capture with filtering and opcode decode
+- **Web Surface** — Embedded web/dashboard crate for configuration and monitoring work already present in the repo
 
 ## Quick Start
 
-### Developer Preflight (optional, recommended)
+### Preflight
 
 ```bash
 python3 scripts/dev-preflight.py
-python3 scripts/dev-preflight.py --require-reference-trees
 ```
 
-Use the default run for routine `cargo build` / `cargo test` work. Add
-`--require-reference-trees` when you plan to inspect or cite
-`third_party/eqlib` or `third_party/macroquest` if those local reference trees
-are available in your workspace. On Windows, use `py -3`
-instead of `python3`, or run `scripts\setup-windows.ps1` for full machine setup.
+Routine `cargo build` / `cargo test` work does not require external eqlib or MacroQuest reference material.
 
-### GitHub Actions Self-hosted Runner (Windows)
+### Demo mode
 
-For workflows that now target `self-hosted` Windows runners, use:
-
-```powershell
-.\scripts\setup-self-hosted-runner.ps1 -Token "<NEW_GITHUB_TOKEN>" -InstallService
-```
-
-Run `setup-self-hosted-runner.ps1` from an elevated PowerShell session for automatic service install.
-If `svc.cmd` is not present in that runner package, the script prints `sc.exe` fallback commands.
-For unattended PR merges and nightly jobs, keep this `textquest` runner on a dedicated
-always-on Windows box or VM instead of a personal laptop. The canonical bootstrap flow
-is [`scripts/setup-self-hosted-runner.ps1`](scripts/setup-self-hosted-runner.ps1).
-
-CI and nightly automation:
-
-- **`ci.yml`** — Required `PR gate (fmt + clippy + test + python)` + TruffleHog secret scan. Self-hosted Windows runner for same-repo PRs; GitHub-hosted Windows for forks
-- **`nightly-release.yml`** — Rolling nightly prerelease (`textquest.exe` + `textquest_dll.dll`) at 3 AM CT, with a local-time gate
-- **`wiki-nightly.yml`** — Publishes GitHub wiki from `docs/wiki/` after each successful nightly release
-- **`readme-metrics.yml`** — Auto-updates README badges (test count, LOC) on push to master via PR
-- **`automation.yml`** — Agent labeling (`agent:ready`), auto-merge on `merge:auto` PRs, agent PR cleanup, post-merge label sync, and wiki sync on docs changes
-- **`release.yml`** — Tag-triggered Windows release build
-- **`copilot-ci-dispatch.yml`** — Dispatches CI for blocked Copilot PRs on push to master (manual dispatch available)
-- **`claude-agent.yml`** — Runs Claude on `worker:claude`-labeled issues and `@claude` PR comments
-- Self-hosted CI/wiki jobs use runner-local `python` / `py -3` when available, otherwise they fall back to the official Python 3.12.10 embeddable ZIP with a pinned SHA-256 check
-- The self-hosted Windows gate reclaims stray Chrome/Edge/Chromium processes before Rust work starts
-
-If this runner will also mirror GitHub Projects, refresh the CLI scopes on the runner account:
-
-```powershell
-gh auth status
-gh auth refresh -s project -s read:project
-```
-
-### Git Hygiene (PRs + stale branches)
+Use this on macOS, Linux, or Windows when you do not have a live EQ client attached.
 
 ```bash
-# Preview cleanup operations (default: dry-run)
-scripts/git_prune.sh
-
-# Apply local cleanup. By default this protects main/master, release/*,
-# hotfix/*, codex/*, copilot/*, dependabot/*, the current branch, and the base branch.
-scripts/git_prune.sh --apply
-
-# Add extra protected globs for long-lived branches
-scripts/git_prune.sh --apply --protect 'feature/keep-*'
-
-# Also delete merged remote PR branches (requires gh auth)
-scripts/git_prune.sh --apply --include-remote
-```
-
-The script auto-detects the base branch from local `main`, local `master`, then
-`origin/HEAD` unless you pass `--base`.
-
-Stale local branches are only deleted by default when they are already merged into the
-base branch or their upstream has disappeared. Use `--force-stale` if you really want
-age-only pruning.
-
-### Protected `master` workflow
-
-`master` remains the protected release branch for TextQuest.
-
-1. Branch from `master` into a short-lived topic branch (`feature/*`, `hotfix/*`, `codex/*`, etc.).
-2. Push that branch. The expected path is that Codex or Claude opens the pull request back into `master`, though you can still open one manually if needed.
-3. GitHub requires `PR gate (fmt + clippy + test + python)` on every PR, including README-only and docs-only changes.
-4. Keep the PR up to date with `master`, address review comments in the PR thread, and merge once the required gate is green.
-5. Let GitHub auto-delete the merged topic branch. Auto-merge can stay enabled when the gate is already satisfied.
-
-TextQuest-specific notes:
-
-- Required merge blocker: `PR gate (fmt + clippy + test + python)` + `Secret scan (TruffleHog)`.
-- Same-repo PRs run on 4 self-hosted Windows runners (`self-hosted`, `Windows`, `X64`, `textquest`). Fork PRs use GitHub-hosted `windows-latest`.
-- Nightly toolchain required on Windows (retour dependency).
-- `automation.yml` handles agent labeling (`agent:ready`), auto-merge on `merge:auto` PRs, agent PR cleanup (`agent:close`), and post-merge label sync.
-- Trusted agent PRs carry `merge:auto` by default unless labeled `human:required`, `risk:high`, or `agent:blocked`.
-- `Release`, `Nightly Release`, `README Metrics`, and `Wiki Nightly` are not required merge gates.
-
-### Development (any platform — demo mode)
-
-```bash
-cargo build              # Debug build
-cargo run                # TUI with demo data (auto-detected on non-Windows)
-cargo test               # Run the full workspace test suite
+cargo build
+cargo run
+cargo test
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-**Demo mode** activates automatically when no live EQ process is found (always on macOS/Linux, on Windows when EQ isn't running). It populates the TUI with 18 simulated characters across 3 groups covering all 16 EQ classes:
+### Live Windows mode
 
-| Group | Zone           | Classes                      |
-| ----- | -------------- | ---------------------------- |
-| G1    | Permafrost     | WAR, CLR, ENC, BRD, RNG, WIZ |
-| G2    | Eastern Wastes | SK, SHM, DRU, ROG, NEC, MAG  |
-| G3    | Great Divide   | PAL, MNK, BST, BER, CLR, WIZ |
-
-Each zone has NPC spawns (including named bosses like Lady Vox, Wuoshi, Garudon), corpses, and realistic HP/mana values. This lets you develop and test all TUI screens without a live EQ client.
-
-### Production (Windows — live EQ)
+Use this for real EQ interaction, injection, login, navigation, combat, and packet work.
 
 ```powershell
-# Build
 cargo build --release
-
-# Run TUI dashboard (live mode with connected EQ clients)
-target\release\textquest.exe
-
-# One-shot CLI dump of player, target, and spawn data
-target\release\textquest.exe --dump
-
-# Inject DLL into all running EQ clients
-target\release\textquest.exe --inject
-
-# Inject DLL into a specific client by PID
-target\release\textquest.exe --inject-pid <pid>
-
-# Start login automation for a specific client
-target\release\textquest.exe --login-pid <pid> <account> <password> [server] [character]
-
-# Query shared memory state for a single client
-target\release\textquest.exe --status <pid>
-
-# Summary table of all connected EQ clients
-target\release\textquest.exe --statusall
-
-# Send a slash command to a specific client
-target\release\textquest.exe --cmd <pid> "/sit"
-
-# Regenerate a cached navmesh for a zone
-target\release\textquest.exe navmesh reload gfaydark
-
-# Inspect cached navmesh + live navigator diagnostics for a client
-target\release\textquest.exe navmesh diagnostics --pid <pid>
+target\release\textquest.exe inject
+target\release\textquest.exe tui
 ```
 
-### Log Files
+Useful direct CLI commands:
 
-- **Orchestrator:** `./logs/textquest.log` (daily rolling)
-- **DLL:** `%TEMP%/textquest/textquest-dll.log` (daily rolling)
+```powershell
+target\release\textquest.exe dump
+target\release\textquest.exe client-status 12345
+target\release\textquest.exe client-status-all
+target\release\textquest.exe cmd 12345 "/sit"
+target\release\textquest.exe navmesh reload gfaydark
+target\release\textquest.exe navmesh diagnostics --pid 12345
+```
 
-## Testing
+## TUI Basics
 
 Current workspace totals: 134,428 Rust lines and 2,984 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`. The required PR gate keeps a single visible check name across trusted and untrusted PRs:
 
@@ -370,144 +103,53 @@ Release and wiki automation now run separately on the self-hosted Windows runner
 
 ## Configuration
 
-### Accounts (`config/accounts.toml`)
+Useful starting commands:
 
-```toml
-[[accounts]]
-name = "textquest01"
-server = "Firiona Vie"
-character = "Camrene"
-class = "WAR"
-group = 1
+```text
+:status overview
+:camp list
+:nav <camp|x y z|zone>
+:login all
+:ch status
+:help camp
 ```
 
-### Camp Configs (`config/camps/*.toml`)
+The full operator guide lives in [`docs/wiki/Operating-the-TUI.md`](docs/wiki/Operating-the-TUI.md) and [`docs/wiki/Command-Reference.md`](docs/wiki/Command-Reference.md).
 
-```toml
-name = "crushbone_entrance"
-zone = "crushbone"
-camp_center = [500.0, -200.0, 3.0]
-pull_point = [550.0, -180.0, 3.0]
-pull_radius = 150.0
-camp_radius = 30.0
-rest_mana_pct = 20
-pull_mana_pct = 60
-```
+The TUI `:inject` command is still a placeholder; use the CLI `inject` command for live injection work.
 
-### Class Ability Configs (`config/classes/*.toml`)
+## Configuration
 
-16 classes: WAR, CLR, PAL, RNG, SK, DRU, MNK, BRD, ROG, SHM, NEC, WIZ, MAG, ENC, BST, BER
+- Main app config: `config/frostreaver.toml`
+- Accounts and group-launch metadata: `config/accounts.toml`
+- Camps: `config/camps/*.toml`
+- Class configs: `config/classes/*.toml`
+- Per-toon overrides: `config/toons/*.toml`
+- HVT watchlist: `config/hvt_watchlist.toml`
+- Zone maps: `config/maps/*.txt`
 
-- Optional `[[level_overrides]]` blocks gate alternate combat/buff/emergency/cc/debuff ability lists by level range; categories omitted inside an override fall back to the base class lists, and the base profile is used when no override matches.
+The detailed configuration guide lives in [`docs/wiki/Configuration.md`](docs/wiki/Configuration.md).
 
-### Optional Peer Discovery (`[discovery]`)
+## Documentation
 
-```toml
-[discovery]
-multicast_enabled = true
-bind_addr = "0.0.0.0"
-multicast_addr = "239.255.42.99"
-port = 35353
-announce_interval_ms = 1000
-peer_ttl_ms = 5000
-node_name = "raid-rig-a"
-multicast_ttl = 1
-```
-
-- Disabled by default.
-- When enabled, TextQuest announces locally tracked sessions over UDP multicast and keeps a time-limited cache of remote orchestrator peers.
-- `node_name` is optional; when omitted, TextQuest falls back to the machine hostname.
-
-### HVT Watchlist (`config/hvt_watchlist.toml`)
-
-```toml
-[[targets]]
-name = "Emperor Crush"
-zone = "crushbone"
-priority = "high"
-alert_discord = true
-```
-
-### EQ Client Optimization
-
-Run `scripts\optimize_ini.ps1` to apply minimal settings:
-
-- StickFigures=1, Shadows=0, MaxBGFPS=10, AllLuclinPcModelsOff=1
-- Expected: ~500MB RAM per client (down from ~2GB)
+- Start here: [`docs/wiki/Quick-Start.md`](docs/wiki/Quick-Start.md)
+- Build and platform setup: [`docs/wiki/Installation-and-Build.md`](docs/wiki/Installation-and-Build.md)
+- TUI operator guide: [`docs/wiki/Operating-the-TUI.md`](docs/wiki/Operating-the-TUI.md)
+- Command reference: [`docs/wiki/Command-Reference.md`](docs/wiki/Command-Reference.md)
+- Troubleshooting: [`docs/wiki/Troubleshooting.md`](docs/wiki/Troubleshooting.md)
 
 ## Roadmap
 
-Canonical roadmap source:
+README stays focused on building, running, and operating TextQuest. Milestone order, evidence rules, validation gaps, and project-mirroring rules live in [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md) and the summary page [`docs/wiki/Roadmap-and-Known-Gaps.md`](docs/wiki/Roadmap-and-Known-Gaps.md).
 
-- `docs/implementation-roadmap.md`
-
-Historical milestones already implemented in the repository:
-
-- [x] **M1** — External memory reading + TUI dashboard
-- [x] **M2** — DLL injection + function hooking + IPC + self-healing monitor
-- [x] **M2.5** — Login automation + encrypted credential store + launch coordinator
-- [x] **M3** — Navigation — navmesh pathfinding (Detour), 888-zone BFS routing, movement humanization
-- [x] **M4** — Combat automation — 17 class strategies, puller FSM, HolyShit system, CH chain
-
-Canonical active roadmap order:
-
-- [x] **M5** (complete) — Anti-Cheat — stealth stack shipped (PoolParty injection, stack spoofing, fingerprint spoofing, sleep obfuscation, page encryption, ETW blinding, stealth allocator)
-- [x] **M6** (complete) — Web Dashboard + TUI — EQ Internals, packet monitor, map rework, DPS bars, Neriak theme; web dashboard scaffold (Axum + React/Vite/Tailwind), fleet metrics (SQLite), Discord webhooks
-- [x] **M7** (complete) — Zoning/Movement — MQ2Nav parity (waypoints, reload, state signals, /nav ui), map markers, heading/circle/makecamp controls, radius overlays
-- [x] **M8** (complete) — Orchestrator — IPC correlation IDs, actor routing, peer discovery, context menu dispatch, UI notifications, KissAssist parity, nav reload wiring
-- [ ] **M9** — Learning/RL — metrics-backed tuning loops with explicit regression budgets, canary/shadow rollout, and rollback paths
-- [ ] **M10** — Economy
-- [ ] **M11** — Soul Engine + LLM
-
-Execution rules:
-
-- external research can add milestone slices, but it cannot reorder milestones on its own
-- `docs/implementation-roadmap.md` is the source of truth for milestone gates and evidence states
-- GitHub Projects mirror the roadmap; they do not replace the repo docs as the source of truth
-
-## Research Docs
-
-- `docs/implementation-roadmap.md` — canonical roadmap, evidence model, milestone gates
-- `docs/external-research/automation-source-ledger.md` — primary, secondary, and low-confidence source ledger
-- `docs/external-research/packet-zoning-send-path-and-state-ledger.md` — curated `M5`/`M6` control-path ledger that separates in-process defaults from packet candidates and blocked protocol gaps
-- `docs/wiki/Research-KissAssist-Gap-Analysis.md` — KissAssist capability audit and native TextQuest TUI translation targets
-- `docs/external-research/daybreak-detection-digest.md` — official Daybreak policy anchors, `M5`-`M8` risk gates, and operator hygiene inputs
-- `docs/external-research/zoning-queue-and-safe-coord-validation.md` — curated `M6` checkpoint note for queue flush, timeout, and safe-coordinate recovery
-- `docs/research-imports/2026-04-02-packet-zoning/` — raw packet and zoning evidence archive
-- `docs/orchestration-design.md` — 7-phase plan, group model, camp loop design
-- `docs/anti-detection.md` — evidence-based anti-detection posture, gate matrix, and operator-risk rules
-- `docs/redguides-automation-research.md` — KissAssist, CWTN, camp loop patterns
-- `docs/mq2-deep-dive.md` — MQ2Nav, combat, stick/follow analysis
-- `docs/eq-maps-research.md` — Brewall format, coordinate transform
-- `docs/eq-ini-optimization.md` — 4-tier INI settings, memory budgets
-- `docs/dll-injection-plan.md` — Injection sequence, integration loop
-- `docs/wineq-research.md` — Render strobing, window management
-- `docs/roadmap-review.md` — Milestone priorities, risk assessment
-- `docs/code-review-session3.md` — Code audit findings
-
-## Wiki
-
-The long-lived operator and developer wiki is source-controlled in `docs/wiki/` and published to
-the GitHub wiki with `scripts/sync_wiki.py`.
-
-```bash
-python scripts/sync_wiki.py --check
-python scripts/sync_wiki.py --dry-run
-python scripts/sync_wiki.py --push
-```
-
-Update the repo-side source files in `docs/wiki/` in the same PRs that change behavior, then
-publish the wiki snapshot after review.
-
-The nightly wiki publish workflow exports `GH_TOKEN` in GitHub Actions and runs the same
-`scripts/sync_wiki.py` flow used locally. Manual wiki publishing can still use either
-`GH_TOKEN` or `gh auth login`.
+The current roadmap keeps economy work at `M10` and Soul Engine + LLM work at `M11`.
 
 ## Requirements
 
-- **Rust** (edition 2024; nightly MSVC toolchain currently required on Windows because `retour` uses unstable features)
-- **Windows** for live EQ interaction (macOS/Linux for development only)
-- **EverQuest** client (March 2026 build confirmed)
+- **Rust** edition 2024
+- **Windows** for live EQ interaction
+- **Nightly MSVC toolchain on Windows** because `retour` still depends on unstable features
+- **EverQuest client** for real injection, login, navigation, combat, and packet validation
 
 ## License
 

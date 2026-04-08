@@ -130,7 +130,7 @@ This is inherited from the ShowEQ/LoY cartography format and is a well-known sou
 
 ## 3. MQ2Map Plugin Analysis
 
-The MQ2Map plugin in `third_party/macroquest/src/plugins/map/` (5,108 lines total) is a **real-time spawn overlay**, not a zone geometry loader. Key insight:
+The MQ2Map plugin in a local MacroQuest checkout (5,108 lines total) is a **real-time spawn overlay**, not a zone geometry loader. Key insight:
 
 - `MapGenerate()` iterates the live spawn list from memory
 - Creates `MapObject` instances for each spawn (PC, NPC, pet, corpse, ground item)
@@ -432,5 +432,5 @@ Overlay live spawn data on top of the static map:
 - nox-maps Python parser: https://github.com/devin-hart/nox-maps
 - ZlizEQMap C# parser: https://github.com/hada79/ZlizEQMap
 - MQ2Map plugin docs: https://docs.macroquest.org/plugins/core-plugins/mq2map/
-- MQ2Map source: `third_party/macroquest/src/plugins/map/` (5,108 lines)
-- MapViewLine/MapViewLabel structs: `third_party/macroquest/src/eqlib/include/eqlib/game/UI.h`
+- MQ2Map source: local MacroQuest `plugins/map/` sources (5,108 lines)
+- MapViewLine/MapViewLabel structs: MacroQuest eqlib `UI.h`

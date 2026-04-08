@@ -25,7 +25,7 @@ If you expected live mode on Windows:
 - start EQ first
 - verify the process is visible
 - verify the DLL was injected
-- use `status-all` to confirm shared-memory reads
+- use `client-status-all` to confirm shared-memory reads
 
 ## Missing session token
 

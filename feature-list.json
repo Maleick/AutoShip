@@ -141,6 +141,20 @@
         "git remote prune origin leaves no stale origin/* refs beyond origin/master"
       ],
       "notes": "All reviewed branch work was either already present on master, superseded by newer master work, or equivalent to master. Remote and local branches were pruned down to master, and the cleanup ledger captures the final disposition for each branch."
+    },
+    {
+      "id": "docs-surface-cleanup",
+      "name": "README, roadmap, wiki, and repo-doc surface cleanup",
+      "status": "complete",
+      "acceptance_tests": [
+        "README.md stays usage-first and no longer carries GitHub Actions or git-hygiene guidance",
+        "docs/implementation-roadmap.md, docs/wiki/Home.md, and docs/wiki/Development-Workflow.md agree on the documentation split between README, wiki, roadmap, and project mirror",
+        "The repo no longer vendors a third_party/ placeholder folder and active docs/scripts no longer assume that layout",
+        "Stale top-level merge-helper artifacts (closed_unmerged.json, open_merged_queue.json, open_prs.json, final_merge.py) are removed",
+        "python3 scripts/sync_wiki.py --check",
+        "python3 - <<'PY'\nfrom pathlib import Path\nfor path in ['closed_unmerged.json', 'open_merged_queue.json', 'open_prs.json', 'final_merge.py', 'third_party']:\n    assert not Path(path).exists(), path\nprint('ok')\nPY"
+      ],
+      "notes": "README now focuses on running and using TextQuest, roadmap and wiki surfaces own milestone and reference detail, helper scripts no longer assume repo-managed third_party references, and stale merge-helper queue artifacts were removed from the repo root."
     }
   ]
 }

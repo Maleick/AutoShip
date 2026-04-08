@@ -34,7 +34,7 @@ frostreaver06 = "dps"        # RNG — assist MA, DPS burn
 
 ### Group Lifecycle
 1. **Launch**: `launch_eq.bat` starts 6 clients per group
-2. **Inject**: `textquest.exe --inject` injects DLL into all running clients
+2. **Inject**: `textquest.exe inject` injects DLL into all running clients
 3. **Discover**: Orchestrator matches PID → character name via window title or memory read
 4. **Form**: Leader invites members, all accept
 5. **Assign**: Load camp config, assign roles

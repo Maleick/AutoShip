@@ -157,46 +157,68 @@ def detect_windows_toolchain(results: list[CheckResult]) -> None:
         )
 
 
-def check_reference_trees(results: list[CheckResult], require_reference_trees: bool) -> None:
-    required_paths = {
-        "third_party/eqlib": [
-            REPO_ROOT / "third_party/eqlib/include/eqlib/offsets/eqgame.h",
-        ],
-        "third_party/macroquest": [
-            REPO_ROOT / "third_party/macroquest/src/login",
-            REPO_ROOT / "third_party/macroquest/src/routing",
-        ],
-    }
-    existing_roots = [root for root in required_paths if (REPO_ROOT / root).exists()]
-    if not existing_roots:
-        detail = "No optional local reference trees found under `third_party/`."
-        if require_reference_trees:
-            record(
-                results,
-                "FAIL",
-                "Reference trees",
-                detail,
-                "Populate `third_party/eqlib` and `third_party/macroquest` before offset or struct work.",
+def check_reference_trees(
+    results: list[CheckResult],
+    require_reference_trees: bool,
+    eqlib_root: str | None,
+    macroquest_root: str | None,
+) -> None:
+    configured_roots: list[tuple[str, pathlib.Path, list[pathlib.Path]]] = []
+    if eqlib_root:
+        root = pathlib.Path(eqlib_root).expanduser()
+        configured_roots.append(
+            (
+                "eqlib",
+                root,
+                [root / "include/eqlib/offsets/eqgame.h"],
             )
+        )
+    if macroquest_root:
+        root = pathlib.Path(macroquest_root).expanduser()
+        configured_roots.append(
+            (
+                "macroquest",
+                root,
+                [root / "src/login", root / "src/routing"],
+            )
+        )
+
+    if not configured_roots:
+        detail = "No optional local reference roots were configured."
+        fix = (
+            "Set `TEXTQUEST_EQLIB_ROOT` / `TEXTQUEST_MACROQUEST_ROOT` or pass "
+            "`--eqlib-root` / `--macroquest-root` before offset or struct work."
+        )
+        if require_reference_trees:
+            record(results, "FAIL", "Reference trees", detail, fix)
         else:
             record(results, "PASS", "Reference trees", f"{detail} Routine cargo work is still fine without them.")
         return
 
-    missing_paths = [
-        str(path.relative_to(REPO_ROOT))
-        for root in existing_roots
-        for path in required_paths[root]
-        if not path.exists()
-    ]
-    if missing_paths:
-        detail = f"Reference trees are present but incomplete: {', '.join(missing_paths)}"
-        fix = "Refresh or repopulate the local `third_party/` references before offset or struct work."
+    missing_roots = [f"{name}={root}" for name, root, _ in configured_roots if not root.exists()]
+    if missing_roots:
+        detail = f"Configured reference roots are missing: {', '.join(missing_roots)}"
+        fix = "Point the preflight helper at existing local eqlib or MacroQuest checkouts."
         status_name = "FAIL" if require_reference_trees else "WARN"
         record(results, status_name, "Reference trees", detail, fix)
         return
 
+    missing_paths = [
+        f"{name}:{path}"
+        for name, _, expected in configured_roots
+        for path in expected
+        if not path.exists()
+    ]
+    if missing_paths:
+        detail = f"Configured reference roots are present but incomplete: {', '.join(missing_paths)}"
+        fix = "Refresh the local eqlib or MacroQuest checkout before offset or struct work."
+        status_name = "FAIL" if require_reference_trees else "WARN"
+        record(results, status_name, "Reference trees", detail, fix)
+        return
+
+    summary = ", ".join(f"{name}={root}" for name, root, _ in configured_roots)
     profile_note = "Required reference material is available." if require_reference_trees else "Ready if you need offset or struct work."
-    record(results, "PASS", "Reference trees", f"Optional local references are present under `third_party/`. {profile_note}")
+    record(results, "PASS", "Reference trees", f"Optional local reference roots are configured ({summary}). {profile_note}")
 
 
 def print_results(results: list[CheckResult], require_reference_trees: bool) -> int:
@@ -217,7 +239,12 @@ def print_results(results: list[CheckResult], require_reference_trees: bool) -> 
     if counts["FAIL"] == 0:
         print("Next: run `cargo build`, `cargo test`, or `cargo run`.")
         if not require_reference_trees:
-            print("Need MacroQuest/eqlib refs too? Rerun with `--require-reference-trees`.")
+            print(
+                "Need local eqlib or MacroQuest refs too? "
+                "Rerun with `--require-reference-trees --eqlib-root /path/to/eqlib "
+                "--macroquest-root /path/to/macroquest` or set "
+                "`TEXTQUEST_EQLIB_ROOT` / `TEXTQUEST_MACROQUEST_ROOT`."
+            )
         return 0
 
     print("Preflight found blocking issues. Fix them and rerun this script.")
@@ -229,7 +256,17 @@ def main() -> int:
     parser.add_argument(
         "--require-reference-trees",
         action="store_true",
-        help="Treat missing optional local MacroQuest/eqlib reference trees as blocking failures.",
+        help="Treat missing optional local MacroQuest/eqlib reference roots as blocking failures.",
+    )
+    parser.add_argument(
+        "--eqlib-root",
+        default=os.environ.get("TEXTQUEST_EQLIB_ROOT"),
+        help="Path to a local eqlib checkout. Defaults to TEXTQUEST_EQLIB_ROOT if set.",
+    )
+    parser.add_argument(
+        "--macroquest-root",
+        default=os.environ.get("TEXTQUEST_MACROQUEST_ROOT"),
+        help="Path to a local MacroQuest checkout. Defaults to TEXTQUEST_MACROQUEST_ROOT if set.",
     )
     args = parser.parse_args()
 
@@ -298,7 +335,12 @@ def main() -> int:
         detect_windows_toolchain(results)
 
     if git_ok:
-        check_reference_trees(results, require_reference_trees=args.require_reference_trees)
+        check_reference_trees(
+            results,
+            require_reference_trees=args.require_reference_trees,
+            eqlib_root=args.eqlib_root,
+            macroquest_root=args.macroquest_root,
+        )
 
     return print_results(results, require_reference_trees=args.require_reference_trees)
 

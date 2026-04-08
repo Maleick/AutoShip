@@ -54,7 +54,7 @@ for ($i = 0; $i -lt $Accounts.Count; $i++) {
 
     # Inject
     Write-Host "  Injecting DLL..."
-    & $DmftExe --inject-pid $procId
+    & $DmftExe inject --pid $procId
     Start-Sleep -Seconds $HookWait
 
     # Login

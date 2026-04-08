@@ -3,7 +3,7 @@
 // At runtime, subtract the preferred base and add the actual base
 // (obtained via GetModuleInformation or EnumProcessModules).
 //
-// Source: third_party/eqlib/include/eqlib/offsets/eqgame.h
+// Source: local eqlib offset header (eqgame.h)
 // Client date: 20260310 (March 10, 2026)
 
 /// Preferred base address of eqgame.exe (64-bit)
@@ -456,7 +456,7 @@ pub mod eqgame {
     pub const CSIDL_SCREEN_WND_SIDL_TEXT: usize = 0x270;
 
     // ─── CListWnd offsets (for character list reading) ───
-    // Source: third_party/eqlib/include/eqlib/game/UI.h — CListWnd inherits CSidlScreenWnd
+    // Source: eqlib UI headers — CListWnd inherits CSidlScreenWnd
 
     /// `CListWnd::ItemsArray.m_array` — pointer to `SListWndLine` array (at +0x270)
     pub const CLISTWND_ITEMS_ARRAY: usize = 0x270;
@@ -597,7 +597,7 @@ pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
-// Source: third_party/eqlib/include/eqlib/game/PlayerClient.h
+// Source: eqlib PlayerClient.h
 
 /// Offsets within `PlayerBase` (base class of `PlayerClient`)
 pub mod player_base {
@@ -636,9 +636,9 @@ pub mod player_base {
 }
 
 /// Buff slot constants and `EQ_Affect` field offsets.
-/// Source: third_party/eqlib/include/eqlib/game/Spells.h (`EQ_Affect`),
-///         third_party/eqlib/include/eqlib/game/Constants.h (slot counts),
-///         third_party/eqlib/include/eqlib/game/PcClient.h (access path).
+/// Source: eqlib `Spells.h` (`EQ_Affect`),
+///         eqlib `Constants.h` (slot counts),
+///         eqlib `PcClient.h` (access path).
 pub mod buff_slots {
     /// Number of long-duration buff slots.
     pub const NUM_LONG_BUFFS: usize = 62;
@@ -734,7 +734,7 @@ pub mod profile {
 }
 
 /// Offsets within `CDisplay`.
-/// Source: third_party/eqlib/include/eqlib/game/Display.h
+/// Source: eqlib `Display.h`
 pub mod display {
     /// `uint32_t` — EQ's live millisecond timestamp counter.
     pub const TIME_STAMP: usize = 0x016c;
@@ -805,14 +805,14 @@ pub mod stext_line {
 }
 
 /// Offsets within `CharacterZoneClient` as embedded in `PcClient`.
-/// Source: third_party/eqlib/include/eqlib/game/PcClient.h
+/// Source: eqlib `PcClient.h`
 pub mod character_zone {
     /// `PlayerClient*` — local spawn pointer (`CharacterZoneClient::me`).
     pub const ME: usize = 0x2798;
 }
 
 /// Offsets within `LaunchSpellData`.
-/// Source: third_party/eqlib/include/eqlib/game/PlayerClient.h
+/// Source: eqlib `PlayerClient.h`
 pub mod launch_spell_data {
     /// `int` — active spell ID (`-1` when not casting).
     pub const SPELL_ID: usize = 0x00;
@@ -836,7 +836,7 @@ pub mod launch_spell_data {
 }
 
 /// Offsets within `ClientSpellManager`.
-/// Source: `third_party/eqlib/include/eqlib/game/Spells.h`
+/// Source: eqlib `Spells.h`
 pub mod client_spell_manager {
     /// `int` — largest valid spell ID in the loaded spell database.
     pub const MAX_SPELL_ID: usize = 0x0064;
@@ -845,7 +845,7 @@ pub mod client_spell_manager {
 }
 
 /// Offsets within `EQ_Spell`.
-/// Source: `third_party/eqlib/include/eqlib/game/Spells.h`
+/// Source: eqlib `Spells.h`
 pub mod eq_spell {
     /// `uint32_t` — base cast time from spell data (does not include live haste/focus modifiers).
     pub const CAST_TIME: usize = 0x0010;
@@ -858,7 +858,7 @@ pub mod eq_spell {
 }
 
 /// Offsets within `SoeUtil::HashMap<int, EQ_Spell>`.
-/// Source: `third_party/eqlib/include/eqlib/game/SoeUtil.h` + `EQ_Spell` size above.
+/// Source: eqlib `SoeUtil.h` + `EQ_Spell` size above.
 pub mod spell_hash_map {
     const fn align_up(value: usize, alignment: usize) -> usize {
         let remainder = value % alignment;
@@ -944,7 +944,7 @@ pub mod actor_client {
 }
 
 /// Group-related offsets
-/// Source: third_party/eqlib/include/eqlib/game/PcClient.h
+/// Source: eqlib `PcClient.h`
 pub mod group {
     /// Offset of `CGroup`* pointer within `PcClient` struct
     /// PcClient.Group at 0x2EB0
@@ -980,7 +980,7 @@ pub mod group {
 }
 
 /// Zone info offsets (zoneHeader / ZONEINFO struct)
-/// Source: third_party/eqlib/include/eqlib/game/EverQuest.h (zoneHeader)
+/// Source: eqlib `EverQuest.h` (zoneHeader)
 pub mod zone_info {
     /// Address of the zoneHeader struct (instEQZoneInfo).
     /// This is NOT a pointer — it's the struct itself at this address.

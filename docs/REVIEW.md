@@ -13,6 +13,6 @@
 - New IPC commands should update both the `Command` surface and the matching `Response` handling in `textquest-common`, whether that is a dedicated response variant or `Response::CommandResult`
 
 ## Skip
-- Generated files under `third_party/`
+- Generated handoff snapshots such as `HANDOFF.md`
 - Demo data in `textquest/src/tui/run.rs` (macOS stubs are intentionally dummy)
 - Formatting-only changes (prettier/rustfmt handles this in CI)

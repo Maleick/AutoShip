@@ -18,10 +18,9 @@ cat <<EOF
 
 Read this file + check memories (\`MEMORY.md\`) for full project context.
 
-Optional local reference trees may live at \`third_party/eqlib\` and
-\`third_party/macroquest\`. Routine \`cargo build\` / \`cargo test\` work does not
-require them, but offset or struct work may use them when they are present in
-the workspace.
+Routine \`cargo build\` / \`cargo test\` work does not depend on any vendored
+reference trees in this repo. If offset or struct work used external eqlib or
+MacroQuest material, record that local path separately in session notes.
 
 ## Repository Stats
 
@@ -43,18 +42,6 @@ else
 fi
 echo "- **Rust lines:** ~${LINES}"
 
-echo ""
-
-# --- Reference trees ---
-echo "## Reference Trees"
-echo ""
-for path in third_party/eqlib third_party/macroquest; do
-    if [ -d "$path" ] && [ -n "$(find "$path" -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then
-        echo "- \`$path\` — present"
-    else
-        echo "- \`$path\` — not present"
-    fi
-done
 echo ""
 
 # --- Crate structure ---
@@ -138,10 +125,8 @@ BUILDEOF
 cat <<'REFEOF'
 ## Key References
 
-- Local eqlib reference: `third_party/eqlib`
-- Local MacroQuest reference: `third_party/macroquest`
-- MacroQuest login code: `third_party/macroquest/src/login`
-- MacroQuest routing code: `third_party/macroquest/src/routing`
+- Local eqlib and MacroQuest references are optional repo-external inputs.
+- If a session depends on them, record the exact local paths used in session notes.
 - MQ2Nav: https://github.com/brainiac/MQ2Nav
 - mqmesh.com — navmesh downloads + updater.json manifest
 REFEOF
