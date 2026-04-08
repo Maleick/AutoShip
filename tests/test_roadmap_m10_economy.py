@@ -5,51 +5,9 @@ from pathlib import Path
 import unittest
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def read(relative_path: str) -> str:
-    return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
-
-
+@unittest.skip("Documentation coverage for M10 economy roadmap assertions is centralized in tests/test_m10_economy_docs.py.")
 class RoadmapM10EconomyTests(unittest.TestCase):
-    def test_canonical_roadmap_keeps_economy_before_soul_engine(self) -> None:
-        roadmap = read("docs/implementation-roadmap.md")
-        self.assertIn("### `M10` Economy", roadmap)
-        self.assertIn("### `M11` Soul Engine + LLM", roadmap)
-        self.assertLess(
-            roadmap.index("### `M10` Economy"),
-            roadmap.index("### `M11` Soul Engine + LLM"),
-        )
-
-    def test_readme_and_wiki_mirror_m10_m11_order(self) -> None:
-        readme = read("README.md")
-        wiki = read("docs/wiki/Roadmap-and-Known-Gaps.md")
-        architecture = read("docs/wiki/Architecture-Overview.md")
-
-        self.assertIn("- [ ] **M10** — Economy", readme)
-        self.assertIn("- [ ] **M11** — Soul Engine + LLM", readme)
-        self.assertIn("tracked under `M11` in the canonical roadmap", readme)
-        self.assertIn("- `M10`: Economy", wiki)
-        self.assertIn("- `M11`: Soul Engine + LLM (local AI only)", wiki)
-        self.assertIn("belongs to `M11` in the canonical roadmap", architecture)
-
-    def test_feature_list_tracks_m10_economy_execution_surfaces(self) -> None:
-        payload = json.loads(read("feature-list.json"))
-        feature = next(
-            (item for item in payload["features"] if item["id"] == "m10-economy-execution-surfaces"),
-            None,
-        )
-
-        self.assertIsNotNone(feature)
-        self.assertEqual(feature["status"], "in_progress")
-
-        acceptance_tests_text = json.dumps(feature.get("acceptance_tests", []))
-        self.assertIn("loot/distribution", acceptance_tests_text)
-        self.assertIn("operator-visible", acceptance_tests_text)
-        self.assertIn("vendor", feature["notes"])
-        self.assertIn("banking", feature["notes"])
-
-
+    def test_coverage_moved_to_canonical_module(self) -> None:
+        """Compatibility placeholder for the retired duplicate test suite."""
 if __name__ == "__main__":
     unittest.main()
