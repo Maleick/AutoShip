@@ -63,6 +63,11 @@ fn chat_callback(exception_info: *mut ()) -> bool {
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0);
 
+            // Push into the dedicated chat buffer so it can be retrieved via
+            // Command::PollChat / Response::ChatBatch without affecting the
+            // packet-event pipeline. Also send the legacy ChatMessage response
+            // for any consumers that are not yet using the PollChat path.
+            crate::ipc::push_chat_message(text.clone(), color, timestamp_ms);
             crate::ipc::send_response(textquest_common::ipc::Response::ChatMessage {
                 text,
                 color,

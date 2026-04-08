@@ -734,6 +734,70 @@ pub mod display {
     pub const TIME_STAMP: usize = 0x016c;
 }
 
+/// Offsets within `CChatWindowManager`.
+///
+/// `CChatWindowManager` is the singleton that owns all open chat windows.
+/// Access via `PINST_CCHAT_WINDOW_MANAGER` → pointer → struct fields.
+/// Source: mq2-eqlib/include/eqlib/game/ChatWindow.h, client 20260310.
+pub mod chat_window_mgr {
+    /// Maximum number of `CChatWindow` slots in the manager array.
+    pub const MAX_CHAT_WINDOWS: usize = 32;
+
+    /// `ArrayClass2<CChatWindow*> ChatWndArray` — managed list of all open
+    /// chat windows.  The `m_array` pointer (a `CChatWindow**`) sits here.
+    pub const CHAT_WND_ARRAY: usize = 0x0c8;
+
+    /// `int NumWindows` — count of currently active chat windows.
+    pub const NUM_WINDOWS: usize = 0x0d0;
+
+    /// `CChatWindow* pLockedActiveChatWnd` — the currently locked/active window.
+    pub const LOCKED_ACTIVE_WND: usize = 0x0d8;
+}
+
+/// Offsets within `CChatWindow` (inherits `CSidlScreenWnd → CXWnd`).
+///
+/// The base-class chain occupies roughly 0x2B0 bytes before class-specific
+/// fields begin.
+/// Source: mq2-eqlib/include/eqlib/game/ChatWindow.h, client 20260310.
+pub mod chat_window {
+    /// `CStmlWnd* OutputWnd` — the scrollable text-output surface.
+    pub const OUTPUT_WND: usize = 0x2d0;
+
+    /// `CEditWnd* InputWnd` — the text-input box at the bottom of the window.
+    pub const INPUT_WND: usize = 0x2d8;
+
+    /// `CChatWindowManager* pManager` — back-pointer to the owning manager.
+    pub const MANAGER_PTR: usize = 0x2e0;
+}
+
+/// Offsets within `CStmlWnd` (scrollable STML text display widget).
+///
+/// `CStmlWnd` inherits from `CXWnd` and keeps rendered text as a linked list.
+/// Source: mq2-eqlib/include/eqlib/game/UI.h, client 20260310.
+pub mod cstml_wnd {
+    /// `LinkedList<STextLine> TextLines` — list head pointer for text lines.
+    pub const TEXT_LINES: usize = 0x3e0;
+
+    /// `int MaxLines` — soft limit on how many lines the window buffers.
+    pub const MAX_LINES: usize = 0x3ec;
+}
+
+/// Offsets within each `STextLine` node in `CStmlWnd::TextLines`.
+///
+/// `STextLine` is a doubly-linked node whose `Text` field holds the rendered
+/// line content as a `CXStr`.
+/// Source: mq2-eqlib/include/eqlib/game/UI.h, client 20260310.
+pub mod stext_line {
+    /// `STextLine* pNext` — next node in the linked list.
+    pub const NEXT: usize = 0x000;
+
+    /// `STextLine* pPrev` — previous node in the linked list.
+    pub const PREV: usize = 0x008;
+
+    /// `CXStr Text` — CXStr pointer for the line's rendered text content.
+    pub const TEXT: usize = 0x010;
+}
+
 /// Offsets within `CharacterZoneClient` as embedded in `PcClient`.
 /// Source: third_party/eqlib/include/eqlib/game/PcClient.h
 pub mod character_zone {
@@ -1430,5 +1494,30 @@ mod tests {
             assert!(context_menu_mgr::MENUS_DATA < context_menu_mgr::CUR_MENU);
             assert!(context_menu_mgr::CUR_MENU < context_menu_mgr::CUR_ITEM);
         };
+    }
+
+    #[test]
+    fn chat_window_mgr_struct_offsets_ordered() {
+        use super::chat_window_mgr;
+        // Array precedes count, count precedes locked-active pointer.
+        const _: () = assert!(chat_window_mgr::CHAT_WND_ARRAY < chat_window_mgr::NUM_WINDOWS);
+        const _: () = assert!(chat_window_mgr::NUM_WINDOWS < chat_window_mgr::LOCKED_ACTIVE_WND);
+    }
+
+    #[test]
+    fn chat_window_struct_offsets_ordered() {
+        use super::chat_window;
+        // OutputWnd → InputWnd → ManagerPtr are laid out in ascending order.
+        const _: () = assert!(chat_window::OUTPUT_WND < chat_window::INPUT_WND);
+        const _: () = assert!(chat_window::INPUT_WND < chat_window::MANAGER_PTR);
+    }
+
+    #[test]
+    fn stext_line_struct_offsets_match_x64_pointer_layout() {
+        use super::stext_line;
+        // Each pointer is 8 bytes on x64: NEXT=0, PREV=8, TEXT=16.
+        assert_eq!(stext_line::NEXT, 0x000);
+        assert_eq!(stext_line::PREV, stext_line::NEXT + 8);
+        assert_eq!(stext_line::TEXT, stext_line::PREV + 8);
     }
 }
