@@ -466,6 +466,80 @@ fn spell_name_indicates_invisibility(name: &str) -> bool {
         || lower.contains("shroud of stealth")
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum NavWaypointCommand {
+    Save(String),
+    Recall(String),
+    Delete(String),
+    List,
+}
+
+fn parse_nav_waypoint_command(command: &str) -> Option<Result<NavWaypointCommand, String>> {
+    let tokens = match tokenize_slash_command(command) {
+        Ok(tokens) => tokens,
+        Err(err) => return Some(Err(err.to_string())),
+    };
+
+    let (verb, args) = tokens.split_first()?;
+    if !verb.eq_ignore_ascii_case("/nav") {
+        return None;
+    }
+
+    let Some(first) = args.first() else {
+        return None;
+    };
+
+    // Support MQ2-style aliases: /nav waypoint, /nav wp, /nav recordwaypoint.
+    let subcommand = first.to_ascii_lowercase();
+    match subcommand.as_str() {
+        "waypoint" | "wp" => {
+            // /nav waypoint list
+            if args.len() == 2 && args[1].eq_ignore_ascii_case("list") {
+                return Some(Ok(NavWaypointCommand::List));
+            }
+
+            if args.len() >= 2 && args[1].eq_ignore_ascii_case("delete") {
+                let name = args.get(2).map(|s| s.as_str()).unwrap_or_default();
+                if name.trim().is_empty() {
+                    return Some(Err(String::from("Waypoint name is required for delete")));
+                }
+                return Some(Ok(NavWaypointCommand::Delete(name.to_string())));
+            }
+
+            if args.len() >= 2 && args[1].eq_ignore_ascii_case("save") {
+                let name = args.get(2).map(|s| s.as_str()).unwrap_or_default();
+                if name.trim().is_empty() {
+                    return Some(Err(String::from("Waypoint name is required for save")));
+                }
+                return Some(Ok(NavWaypointCommand::Save(name.to_string())));
+            }
+
+            if args.len() >= 2 && args[1].eq_ignore_ascii_case("recall") {
+                let name = args.get(2).map(|s| s.as_str()).unwrap_or_default();
+                if name.trim().is_empty() {
+                    return Some(Err(String::from("Waypoint name is required for recall")));
+                }
+                return Some(Ok(NavWaypointCommand::Recall(name.to_string())));
+            }
+
+            // /nav waypoint <name> — shorthand recall
+            let name = args.get(1).map(|s| s.as_str()).unwrap_or_default();
+            if name.trim().is_empty() {
+                return Some(Err(String::from("Waypoint name is required")));
+            }
+            Some(Ok(NavWaypointCommand::Recall(name.to_string())))
+        }
+        "recordwaypoint" => {
+            let name = args.get(1).map(|s| s.as_str()).unwrap_or_default();
+            if name.trim().is_empty() {
+                return Some(Err(String::from("Waypoint name is required for save")));
+            }
+            Some(Ok(NavWaypointCommand::Save(name.to_string())))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(windows)]
 fn player_is_invisible(eq_base: u64) -> bool {
     crate::combat::buffs::read_active_buffs(eq_base)
@@ -1577,6 +1651,66 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 return;
             }
 
+            if let Some(nav_waypoint_cmd) = parse_nav_waypoint_command(trimmed) {
+                match nav_waypoint_cmd {
+                    Ok(NavWaypointCommand::Save(name)) => {
+                        let result = save_nav_waypoint(&name);
+                        let (success, message) = match result {
+                            Ok(saved) => (
+                                true,
+                                format!("Saved waypoint '{}' in {}", saved.name, saved.zone),
+                            ),
+                            Err(e) => (false, e),
+                        };
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success,
+                            message,
+                        });
+                    }
+                    Ok(NavWaypointCommand::Recall(name)) => {
+                        let result = recall_nav_waypoint(&name);
+                        let (success, message) = match result {
+                            Ok(saved) => (
+                                true,
+                                format!(
+                                    "Navigating to waypoint '{}' in {}",
+                                    saved.name, saved.zone
+                                ),
+                            ),
+                            Err(e) => (false, e),
+                        };
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success,
+                            message,
+                        });
+                    }
+                    Ok(NavWaypointCommand::Delete(name)) => {
+                        let (success, message) = match crate::nav::waypoint_store::delete(&name) {
+                            Ok(true) => (true, format!("Deleted waypoint '{name}'")),
+                            Ok(false) => (false, format!("Waypoint '{name}' not found")),
+                            Err(e) => (false, e),
+                        };
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success,
+                            message,
+                        });
+                    }
+                    Ok(NavWaypointCommand::List) => {
+                        let waypoints = crate::nav::waypoint_store::list();
+                        crate::ipc::send_response(
+                            textquest_common::ipc::Response::NavWaypointList { waypoints },
+                        );
+                    }
+                    Err(error) => {
+                        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                            success: false,
+                            message: error,
+                        });
+                    }
+                }
+                return;
+            }
+
             if let Some(spell_set) = parse_spell_set_command(trimmed) {
                 match handle_spell_set_command(spell_set) {
                     Ok(Some(eq_command)) => {
@@ -1730,28 +1864,69 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         }
         Command::NavWaypointSave { name } => {
             tracing::info!(name = %name, "NavWaypointSave received");
-            // Waypoint persistence is handled orchestrator-side (#175).
-            // DLL acknowledges; orchestrator reads position from shared memory.
-            crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
-                success: true,
-                message: format!("Waypoint save '{name}' acknowledged"),
-            });
+            match save_nav_waypoint(&name) {
+                Ok(saved) => {
+                    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                        success: true,
+                        message: format!("Saved waypoint '{}' in {}", saved.name, saved.zone),
+                    });
+                }
+                Err(error) => {
+                    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                        success: false,
+                        message: error,
+                    });
+                }
+            }
         }
         Command::NavWaypointRecall { name } => {
             tracing::info!(name = %name, "NavWaypointRecall received");
-            // Orchestrator resolves the name to coordinates and sends NavigateTo.
-            // DLL-side recall is a no-op — the orchestrator handles lookup.
+            match recall_nav_waypoint(&name) {
+                Ok(saved) => {
+                    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                        success: true,
+                        message: format!(
+                            "Navigating to waypoint '{}' in {}",
+                            saved.name, saved.zone
+                        ),
+                    });
+                }
+                Err(error) => {
+                    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                        success: false,
+                        message: error,
+                    });
+                }
+            }
         }
         Command::NavWaypointList => {
             tracing::info!("NavWaypointList received");
-            // Waypoint storage is orchestrator-side; DLL returns empty.
             crate::ipc::send_response(textquest_common::ipc::Response::NavWaypointList {
-                waypoints: vec![],
+                waypoints: crate::nav::waypoint_store::list(),
             });
         }
         Command::NavWaypointDelete { name } => {
             tracing::info!(name = %name, "NavWaypointDelete received");
-            // Handled orchestrator-side.
+            match crate::nav::waypoint_store::delete(&name) {
+                Ok(true) => {
+                    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                        success: true,
+                        message: format!("Deleted waypoint '{name}'"),
+                    });
+                }
+                Ok(false) => {
+                    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                        success: false,
+                        message: format!("Waypoint '{name}' not found"),
+                    });
+                }
+                Err(error) => {
+                    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                        success: false,
+                        message: error,
+                    });
+                }
+            }
         }
         Command::NavSignalsQuery => {
             let signals = crate::nav::signals();
@@ -1960,6 +2135,73 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         other => {
             tracing::debug!(?other, "Unhandled command");
         }
+    }
+}
+
+fn save_nav_waypoint(name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        return Err(String::from(
+            "save_nav_waypoint is only available on Windows",
+        ));
+    }
+    #[cfg(windows)]
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            return Err(String::from(
+                "EQ base not resolved; cannot read player position",
+            ));
+        }
+
+        let Some(player) = read_local_player_state(eq_base) else {
+            return Err(String::from(
+                "Local player is not available — are you logged in?",
+            ));
+        };
+
+        let zone = read_zone_short_name(eq_base)
+            .ok_or_else(|| String::from("Zone name unavailable for waypoint save"))?;
+        let position = textquest_common::nav::Waypoint::new(player.x, player.y, player.z);
+
+        crate::nav::waypoint_store::save(name, position, zone)
+    }
+}
+
+fn recall_nav_waypoint(name: &str) -> Result<textquest_common::nav::NamedWaypoint, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        return Err(String::from(
+            "recall_nav_waypoint is only available on Windows",
+        ));
+    }
+    #[cfg(windows)]
+    {
+        let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+        if eq_base == 0 {
+            return Err(String::from(
+                "EQ base not resolved; cannot read current zone",
+            ));
+        }
+
+        let current_zone = read_zone_short_name(eq_base)
+            .ok_or_else(|| String::from("Zone name unavailable for waypoint recall"))?;
+
+        let Some(saved) = crate::nav::waypoint_store::recall(name) else {
+            return Err(format!("Waypoint '{name}' not found"));
+        };
+
+        if !saved.zone.eq_ignore_ascii_case(&current_zone) {
+            return Err(format!(
+                "Waypoint '{name}' is in zone {} (current zone: {})",
+                saved.zone, current_zone
+            ));
+        }
+
+        crate::nav::handle_command(crate::nav::NavCommand::Navigate(vec![saved.position]));
+        Ok(saved)
     }
 }
 
@@ -2484,5 +2726,50 @@ mod tests {
     fn tokenize_slash_command_preserves_escaped_quotes_inside_quotes() {
         let tokens = tokenize_slash_command(r#"/casting "Item \"Name\"" item"#).unwrap();
         assert_eq!(tokens, vec!["/casting", r#"Item "Name""#, "item"]);
+    }
+
+    #[test]
+    fn parse_nav_waypoint_supports_save_and_recall() {
+        let save = parse_nav_waypoint_command("/nav waypoint save Camp1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(save, NavWaypointCommand::Save(String::from("Camp1")));
+
+        let recall = parse_nav_waypoint_command("/nav waypoint Camp1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(recall, NavWaypointCommand::Recall(String::from("Camp1")));
+
+        let recall_kw = parse_nav_waypoint_command("/nav waypoint recall camp2")
+            .unwrap()
+            .unwrap();
+        assert_eq!(recall_kw, NavWaypointCommand::Recall(String::from("camp2")));
+
+        let record = parse_nav_waypoint_command("/nav recordwaypoint pull_spot")
+            .unwrap()
+            .unwrap();
+        assert_eq!(record, NavWaypointCommand::Save(String::from("pull_spot")));
+    }
+
+    #[test]
+    fn parse_nav_waypoint_handles_list_and_delete() {
+        let list = parse_nav_waypoint_command("/nav wp list").unwrap().unwrap();
+        assert_eq!(list, NavWaypointCommand::List);
+
+        let delete = parse_nav_waypoint_command("/nav waypoint delete camp1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(delete, NavWaypointCommand::Delete(String::from("camp1")));
+
+        let missing = parse_nav_waypoint_command("/nav waypoint")
+            .unwrap()
+            .unwrap_err();
+        assert!(missing.contains("Waypoint name is required"));
+    }
+
+    #[test]
+    fn parse_nav_waypoint_ignores_non_nav_commands() {
+        assert!(parse_nav_waypoint_command("/target mob").is_none());
+        assert!(parse_nav_waypoint_command("/nav stop").is_none());
     }
 }
