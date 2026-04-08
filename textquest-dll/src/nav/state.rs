@@ -1812,4 +1812,3 @@ mod tests {
         assert!(matches!(nav.status(), NavStatus::Idle));
     }
 }
-
