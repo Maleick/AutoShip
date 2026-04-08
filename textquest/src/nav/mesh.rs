@@ -1225,6 +1225,8 @@ impl Ord for QueueEntry {
     }
 }
 
+const MAX_OFF_MESH_CONNECTIONS: usize = 256;
+
 fn find_path_via_connections<F>(
     from: EqPoint,
     to: EqPoint,
@@ -1241,6 +1243,17 @@ where
     if connections.is_empty() {
         bail!("No off-mesh connections available");
     }
+
+    let connections = if connections.len() > MAX_OFF_MESH_CONNECTIONS {
+        tracing::warn!(
+            provided = connections.len(),
+            capped = MAX_OFF_MESH_CONNECTIONS,
+            "Capping off-mesh connection count for route planning"
+        );
+        &connections[..MAX_OFF_MESH_CONNECTIONS]
+    } else {
+        connections
+    };
 
     let mut points = Vec::with_capacity(2 + connections.len() * 2);
     points.push(from);
@@ -1947,5 +1960,54 @@ mod tests {
             route,
             vec![start, first_in, first_out, second_in, second_out, end]
         );
+    }
+
+    #[test]
+    fn off_mesh_planner_caps_connection_count() {
+        let start = (0.0, 0.0, 0.0);
+        let end = (50.0, 0.0, 0.0);
+        let mut connections = Vec::with_capacity(MAX_OFF_MESH_CONNECTIONS + 1);
+        for idx in 0..MAX_OFF_MESH_CONNECTIONS {
+            let base = idx as f32 * 2.0 + 1000.0;
+            connections.push(OffMeshConnection {
+                id: idx as u32,
+                name: format!("unused-{idx}"),
+                connection_type: 0,
+                area_type: 4,
+                one_way: true,
+                pos_from: (base, 0.0, 0.0),
+                pos_to: (base + 1.0, 0.0, 0.0),
+            });
+        }
+
+        let required_in = (1.0, 0.0, 0.0);
+        let required_out = (49.0, 0.0, 0.0);
+        connections.push(OffMeshConnection {
+            id: MAX_OFF_MESH_CONNECTIONS as u32,
+            name: "required".into(),
+            connection_type: 0,
+            area_type: 4,
+            one_way: true,
+            pos_from: required_in,
+            pos_to: required_out,
+        });
+
+        let result = find_path_via_connections(
+            start,
+            end,
+            &connections,
+            |from, to| match (from, to) {
+                (a, b) if same_eq_point(a, b) => Ok(vec![a]),
+                (a, b) if same_eq_point(a, start) && same_eq_point(b, required_in) => {
+                    Ok(vec![start, required_in])
+                }
+                (a, b) if same_eq_point(a, required_out) && same_eq_point(b, end) => {
+                    Ok(vec![required_out, end])
+                }
+                _ => bail!("no mesh route"),
+            },
+        );
+
+        assert!(result.is_err());
     }
 }
