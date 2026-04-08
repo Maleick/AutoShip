@@ -534,15 +534,15 @@ mod tests {
         let db = OffsetDatabase::from_compiled_offsets();
         assert_eq!(
             db.get_context_menu_manager_offset("currMenus"),
-            Some(crate::offsets::context_menu_manager::CURR_MENUS)
+            Some(crate::offsets::context_menu_mgr::CURR_MENUS)
         );
         assert_eq!(
             db.get_context_menu_manager_offset("numMenus"),
-            Some(crate::offsets::context_menu_manager::NUM_MENUS)
+            Some(crate::offsets::context_menu_mgr::NUM_MENUS)
         );
         assert_eq!(
             db.get_context_menu_manager_offset("handlerWnd"),
-            Some(crate::offsets::context_menu_manager::HANDLER_WND)
+            Some(crate::offsets::context_menu_mgr::HANDLER_WND)
         );
         assert!(db.get_context_menu_manager_offset("nonexistent").is_none());
     }
