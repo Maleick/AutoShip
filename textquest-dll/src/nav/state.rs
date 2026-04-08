@@ -333,6 +333,38 @@ impl Navigator {
         }
     }
 
+    /// Update the follow configuration while maintaining active follow state.
+    pub fn update_follow_config(&mut self, new_config: FollowConfig) {
+        if let State::Following {
+            ref mut config,
+            ref mut returning,
+            ..
+        } = self.state
+        {
+            tracing::info!(
+                old_leader = %config.leader_name,
+                new_leader = %new_config.leader_name,
+                "Updating follow configuration"
+            );
+            *config = new_config;
+            // Reset returning state to allow new leash check with new config
+            *returning = false;
+        }
+    }
+
+    /// Mutate the active follow configuration using a closure.
+    pub fn mutate_follow_config(&mut self, f: impl FnOnce(&mut FollowConfig)) {
+        if let State::Following {
+            ref mut config,
+            ref mut returning,
+            ..
+        } = self.state
+        {
+            f(config);
+            *returning = false;
+        }
+    }
+
     /// Stop player follow mode and return to idle.
     pub fn stop_follow(&mut self) {
         if matches!(self.state, State::Following { .. }) {

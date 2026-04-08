@@ -1866,7 +1866,9 @@ mod tests {
                 (a, b) if same_eq_point(a, start) && same_eq_point(b, door_in) => {
                     Ok(vec![start, door_in])
                 }
-                (a, b) if same_eq_point(a, door_out) && same_eq_point(b, end) => Ok(vec![door_out, end]),
+                (a, b) if same_eq_point(a, door_out) && same_eq_point(b, end) => {
+                    Ok(vec![door_out, end])
+                }
                 _ => bail!("no mesh route"),
             })
             .expect("expected stitched route");
