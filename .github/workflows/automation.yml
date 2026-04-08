@@ -205,11 +205,14 @@ jobs:
         id: docs-check
         run: |
           @echo off
+          setlocal EnableDelayedExpansion
           set "DOCS_CHANGED=false"
           for /f "usebackq delims=" %%F in (`git diff --name-only HEAD~1`) do (
             echo %%F| findstr /B /C:"docs/" >nul && set "DOCS_CHANGED=true"
           )
-          echo docs_changed=%DOCS_CHANGED%>>"%GITHUB_OUTPUT%"
+          echo [info] DOCS_CHANGED=!DOCS_CHANGED!
+          echo docs_changed=!DOCS_CHANGED!>>"%GITHUB_OUTPUT%"
+          exit /b 0
       - name: Setup verified Python
         if: steps.docs-check.outputs.docs_changed == 'true'
         uses: ./.github/actions/setup-verified-python
