@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use ratatui::style::Color;
 use ratatui::widgets::TableState;
@@ -518,6 +519,80 @@ pub struct MapLocMarker {
     pub label: String,
 }
 
+/// A persistent named marker saved to disk and rendered on the map.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NamedMapMarker {
+    /// User-assigned name for recall and display.
+    pub name: String,
+    /// EQ X coordinate.
+    pub x: f32,
+    /// EQ Y coordinate.
+    pub y: f32,
+    /// Optional Z (vertical) coordinate.
+    pub z: f32,
+    /// Optional display label (defaults to name when absent).
+    pub label: Option<String>,
+    /// Zone short name where the marker was placed.
+    pub zone: String,
+}
+
+impl NamedMapMarker {
+    /// The text to show alongside the marker glyph on the map.
+    #[must_use]
+    pub fn display_label(&self) -> &str {
+        self.label.as_deref().unwrap_or(&self.name)
+    }
+}
+
+/// Persistent store of named map markers.
+///
+/// Backed by a JSON file in `%TEMP%/textquest/map_markers.json` (or the
+/// `TEXTQUEST_MARKER_FILE` environment variable override).
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+struct NamedMarkerFile {
+    markers: Vec<NamedMapMarker>,
+}
+
+/// Return the path to the marker persistence file.
+fn marker_store_path() -> PathBuf {
+    if let Ok(env_path) = std::env::var("TEXTQUEST_MARKER_FILE") {
+        return PathBuf::from(env_path);
+    }
+    std::env::temp_dir()
+        .join("textquest")
+        .join("map_markers.json")
+}
+
+/// Load markers from disk, returning an empty list on any error.
+fn load_named_markers(path: &PathBuf) -> Vec<NamedMapMarker> {
+    load_named_markers_pub(path)
+}
+
+/// Public re-export of marker loading for use from `app.rs`.
+pub fn load_named_markers_pub(path: &PathBuf) -> Vec<NamedMapMarker> {
+    let Ok(bytes) = std::fs::read(path) else {
+        return Vec::new();
+    };
+    serde_json::from_slice::<NamedMarkerFile>(&bytes)
+        .map(|f| f.markers)
+        .unwrap_or_default()
+}
+
+/// Save markers to disk, creating parent directories as needed.
+///
+/// Returns `Ok(())` on success or an `anyhow::Error` on failure.
+pub fn save_named_markers(path: &PathBuf, markers: &[NamedMapMarker]) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let file = NamedMarkerFile {
+        markers: markers.to_vec(),
+    };
+    let json = serde_json::to_string_pretty(&file)?;
+    std::fs::write(path, json)?;
+    Ok(())
+}
+
 /// A radius overlay circle around the player.
 #[derive(Debug, Clone)]
 pub struct MapRadiusOverlay {
@@ -608,6 +683,10 @@ pub struct MapScreenState {
     pub saved_presets: Vec<MapFilterPreset>,
     /// What the map click/enter action does.
     pub click_action: MapClickAction,
+    /// Named persistent markers keyed by lowercase name.
+    pub named_markers: Vec<NamedMapMarker>,
+    /// Path to the marker persistence file.
+    pub marker_file: PathBuf,
 }
 
 impl MapScreenState {
@@ -615,6 +694,8 @@ impl MapScreenState {
     #[must_use]
     pub fn new() -> Self {
         let map_dir = resolve_map_dir();
+        let marker_file = marker_store_path();
+        let named_markers = load_named_markers(&marker_file);
         Self {
             zone_map: None,
             map_dir,
@@ -641,6 +722,8 @@ impl MapScreenState {
             show_target_line: true,
             saved_presets: Vec::new(),
             click_action: MapClickAction::None,
+            named_markers,
+            marker_file,
         }
     }
 

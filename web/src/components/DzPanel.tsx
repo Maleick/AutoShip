@@ -126,10 +126,6 @@ function LockoutRow({
 }
 
 function InstanceCard({ instance }: { instance: RaidInstance }) {
-  const elapsed = Math.floor(
-    (Date.now() - new Date(instance.entered_at).getTime()) / 1000
-  );
-
   return (
     <div className="arcane-tablet p-4 flex flex-col gap-3">
       <div className="flex justify-between items-start">
@@ -145,7 +141,9 @@ function InstanceCard({ instance }: { instance: RaidInstance }) {
           <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">
             Elapsed
           </div>
-          <div className="font-rune text-spectral">{formatDuration(elapsed)}</div>
+          <div className="font-rune text-spectral">
+            {formatDuration(instance.elapsed_secs)}
+          </div>
         </div>
       </div>
 

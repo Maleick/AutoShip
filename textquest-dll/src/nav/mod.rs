@@ -71,6 +71,7 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::FollowPlayer { config, anchor } => nav.follow_player(config, anchor),
             NavCommand::UpdateFollowAnchor(anchor) => nav.update_follow_anchor(anchor),
             NavCommand::StopFollow => nav.stop_follow(),
+            NavCommand::UpdateFollowConfig(config) => nav.update_follow_config(config),
             NavCommand::StickTo {
                 config,
                 current_target_id,
@@ -108,6 +109,24 @@ pub fn diagnostics() -> textquest_common::nav::NavDiagnostics {
         .map_or_else(Default::default, state::Navigator::diagnostics)
 }
 
+/// Apply a mutation to the active follow config.
+///
+/// Used by the `/makecamp` slash command handler to update individual
+/// return-policy fields (mindelay, maxdelay, returnnoaggro, returnnotlooting)
+/// on the live follow session without restarting it.
+/// If no follow session is active the closure is never called.
+pub fn update_follow_policy<F>(f: F)
+where
+    F: FnOnce(&mut FollowConfig),
+{
+    if let Some(ref mut nav) = *NAVIGATOR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    {
+        nav.mutate_follow_config(f);
+    }
+}
+
 /// Commands that can be sent to the navigator.
 pub enum NavCommand {
     Navigate(Vec<Waypoint>),
@@ -125,6 +144,9 @@ pub enum NavCommand {
     UpdateFollowAnchor(Waypoint),
     /// Stop player follow mode.
     StopFollow,
+    /// Update the return-policy options of an active follow session at runtime.
+    /// See `Navigator::update_follow_config` for semantics.
+    UpdateFollowConfig(FollowConfig),
     /// Begin a stick session with the given config.
     /// `current_target_id` is used for `hold` locking.
     StickTo {
