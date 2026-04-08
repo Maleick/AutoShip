@@ -1008,25 +1008,9 @@ pub fn recovery_action(error: &LoginError) -> RecoveryAction {
 
 /// Strip STML/HTML-like tags from EQ dialog text.
 ///
-/// EQ uses a simple markup language (STML) for dialog text with tags like
-/// `<BR>`, `<c "#FF0000">`, etc. This strips all `<...>` sequences and
-/// normalizes whitespace.
+/// Delegates to [`textquest_common::chat::strip_stml`].
 fn strip_stml_tags(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut in_tag = false;
-
-    for ch in text.chars() {
-        match ch {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => result.push(ch),
-            _ => {}
-        }
-    }
-
-    // Collapse multiple whitespace sequences into single spaces
-    let collapsed: String = result.split_whitespace().collect::<Vec<_>>().join(" ");
-    collapsed
+    textquest_common::chat::strip_stml(text)
 }
 
 /// Read text content from the OK error dialog.

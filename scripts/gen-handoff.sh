@@ -18,10 +18,10 @@ cat <<EOF
 
 Read this file + check memories (\`MEMORY.md\`) for full project context.
 
-MacroQuest reference code now lives in local git submodules at \`third_party/eqlib\`
-and \`third_party/macroquest\`. Routine \`cargo build\` / \`cargo test\` work does not
-require them, but offset or struct work does. After checkout, run
-\`git submodule update --init --recursive\` before working against those trees.
+Optional local reference trees may live at \`third_party/eqlib\` and
+\`third_party/macroquest\`. Routine \`cargo build\` / \`cargo test\` work does not
+require them, but offset or struct work may use them when they are present in
+the workspace.
 
 ## Repository Stats
 
@@ -48,32 +48,12 @@ echo ""
 # --- Reference trees ---
 echo "## Reference Trees"
 echo ""
-git submodule status --recursive | while IFS= read -r line; do
-    status_char=${line:0:1}
-    rest=${line:1}
-    sha=${rest%% *}
-    rest=${rest#"$sha "}
-    path=${rest%% *}
-
-    case "$status_char" in
-        ' ')
-            state="ready"
-            ;;
-        '-')
-            state="not initialized"
-            ;;
-        '+')
-            state="checked out at a different commit"
-            ;;
-        'U')
-            state="merge conflict"
-            ;;
-        *)
-            state="unknown"
-            ;;
-    esac
-
-    echo "- \`$path\` — $state (\`$sha\`)"
+for path in third_party/eqlib third_party/macroquest; do
+    if [ -d "$path" ] && [ -n "$(find "$path" -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then
+        echo "- \`$path\` — present"
+    else
+        echo "- \`$path\` — not present"
+    fi
 done
 echo ""
 
@@ -150,9 +130,6 @@ cat <<'BUILDEOF'
 ## Build Requirements
 
 ```bash
-# Optional reference trees (only for offset/struct work)
-git submodule update --init --recursive
-
 # macOS/Linux (development — demo mode)
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 cargo build

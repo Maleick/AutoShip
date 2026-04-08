@@ -134,6 +134,22 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "loot",
     },
     CommandEntry {
+        phrase: "door",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "door",
+        summary: "Target and open the nearest door or switch (MQ2 /click door equivalent).",
+        example: "door",
+    },
+    CommandEntry {
+        phrase: "click",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "click [door|item]",
+        summary: "Click nearest ground item (default) or door. Equivalent to MQ2 /click.",
+        example: "click door",
+    },
+    CommandEntry {
         phrase: "heal",
         aliases: &[],
         section: HelpSection::Combat,
@@ -268,6 +284,14 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         usage: "maploc [recall|clear]",
         summary: "Place/recall/clear location marker.",
         example: "maploc recall",
+    },
+    CommandEntry {
+        phrase: "mapmarker",
+        aliases: &["mm"],
+        section: HelpSection::Navigation,
+        usage: "mapmarker <set|recall|clear|list|save|load> [name] [x y [z]]",
+        summary: "Persistent named map markers — place, recall, clear, list, and persist.",
+        example: "mapmarker set camp",
     },
     CommandEntry {
         phrase: "mapshow",

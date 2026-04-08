@@ -2,6 +2,18 @@
 
 All notable changes to TextQuest are documented in this file.
 
+## [0.6.1] - 2026-04-07
+
+### Added
+- **Subproject worktrees** — Registration of four new PR worktrees (`pr544`, `pr595`, `pr610`, `pr616`) in `.codex-worktrees/` for automated code analysis.
+
+### Fixed
+- **README metrics hardening** — `update_readme_metrics.py` now includes a source-based fallback (regex scan for `#[test]`) to accurately count tests when the `cargo test --workspace` binary runner fails or captures zero tests (common in macOS demo mode).
+- **Handoff automation** — `scripts/gen-handoff.sh` now auto-generates `HANDOFF.md` with live repo stats (lines of code, crate versions, recent commits, and test results).
+
+### Removed
+- **Stale MCP configuration** — Removed legacy `.mcp.json` referencing local development server paths.
+
 ## [0.6.0] - 2026-04-06
 
 ### Added
@@ -11,6 +23,7 @@ All notable changes to TextQuest are documented in this file.
 - **`click_button_for_phase()` helper** — Phase-aware button clicking that selects direct vtable click (eqmain) vs game loop queue (eqgame) based on context, preventing the recurring "queued click never drains" bug class.
 - **Screen-state tracing** — Login phases log which SIDL windows are visible (connect, serverselect, yesnodialog, okdialog) for diagnostic purposes.
 - **InteractTarget command** — `CEverQuest::RightClickedOnPlayer` for NPC interaction via IPC.
+- **MQ2-style `/door` and `/click right target` slash handling** — rewrites `/door` to `/doortarget` and routes `/click right target` through the DLL interaction path.
 - **Accounts groups 3-6** — 24 placeholder accounts in `accounts.toml` for 36-box setup.
 
 ### Fixed
