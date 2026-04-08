@@ -46,6 +46,7 @@ downloads/
 feature-list.json
 HANDOFF.md
 AGENTS.md
+scripts/sync-to-frostreaver.sh
 
 # Local reference repos
 mq2-definitions/
