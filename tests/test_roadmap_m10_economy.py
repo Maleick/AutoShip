@@ -43,10 +43,12 @@ class RoadmapM10EconomyTests(unittest.TestCase):
 
         self.assertIsNotNone(feature)
         self.assertEqual(feature["status"], "in_progress")
-        self.assertIn("loot/distribution", feature["notes"])
+
+        acceptance_tests_text = json.dumps(feature.get("acceptance_tests", []))
+        self.assertIn("loot/distribution", acceptance_tests_text)
+        self.assertIn("operator-visible", acceptance_tests_text)
         self.assertIn("vendor", feature["notes"])
         self.assertIn("banking", feature["notes"])
-        self.assertIn("operator-visible", feature["notes"])
 
 
 if __name__ == "__main__":
