@@ -129,6 +129,18 @@
         "python3 scripts/sync_wiki.py --check"
       ],
       "notes": "The canonical roadmap now gives M10 Economy explicit execution slices, ordering, and gates for loot, vendor, banking, and operator-visible override surfaces. README plus wiki mirrors now keep Economy at M10 and Soul/LLM at M11 so the self-sustaining farming loop is tracked consistently across the repo while deeper execution loops remain in progress."
+    },
+    {
+      "id": "branch-consolidation-master-cleanup",
+      "name": "Branch consolidation to master",
+      "status": "complete",
+      "acceptance_tests": [
+        "docs/branch-cleanup-ledger.csv records every reviewed local and remote branch with disposition and evidence",
+        "gh api repos/Maleick/TextQuest/branches --paginate shows only master",
+        "git branch -vv shows only local master tracking origin/master",
+        "git remote prune origin leaves no stale origin/* refs beyond origin/master"
+      ],
+      "notes": "All reviewed branch work was either already present on master, superseded by newer master work, or equivalent to master. Remote and local branches were pruned down to master, and the cleanup ledger captures the final disposition for each branch."
     }
   ]
 }
