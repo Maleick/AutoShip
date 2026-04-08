@@ -50,19 +50,6 @@ def command_path(name: str) -> str | None:
     return shutil.which(name)
 
 
-def declared_submodule_paths() -> list[str]:
-    config = run_command("git", "config", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$")
-    if config.returncode != 0:
-        return []
-
-    paths: list[str] = []
-    for raw_line in config.stdout.splitlines():
-        parts = raw_line.strip().split(maxsplit=1)
-        if len(parts) == 2 and parts[1]:
-            paths.append(parts[1].strip())
-    return paths
-
-
 def check_command(results: list[CheckResult], name: str, command: str, *args: str, fix: str | None = None) -> bool:
     path = command_path(command)
     if not path:
@@ -170,140 +157,46 @@ def detect_windows_toolchain(results: list[CheckResult]) -> None:
         )
 
 
-def sync_submodules(results: list[CheckResult]) -> None:
-    print("Initializing submodules with `git submodule update --init --recursive`...")
-    target_args = ["--", *declared_submodule_paths()]
-    sync = run_command("git", "submodule", "sync", "--recursive", *target_args)
-    if sync.returncode != 0:
-        record(
-            results,
-            "FAIL",
-            "Submodule sync",
-            first_line(sync.stderr or sync.stdout),
-            "Run `git submodule sync --recursive` manually.",
-        )
-        return
-
-    update = subprocess.run(
-        ["git", "submodule", "update", "--init", "--recursive", *target_args],
-        cwd=REPO_ROOT,
-        check=False,
-    )
-    if update.returncode == 0:
-        record(results, "PASS", "Submodule sync", "Initialized and updated submodules recursively.")
-    else:
-        record(
-            results,
-            "FAIL",
-            "Submodule sync",
-            f"`git submodule update --init --recursive` exited with status {update.returncode}.",
-            "Run `git submodule update --init --recursive` manually.",
-        )
-
-
-def check_reference_submodules(results: list[CheckResult], require_reference_trees: bool) -> None:
-    if not (REPO_ROOT / ".gitmodules").exists():
-        record(results, "PASS", "Reference submodules", "No `.gitmodules` file present.")
-        return
-
-    submodule_paths = declared_submodule_paths()
-    if not submodule_paths:
-        record(results, "PASS", "Reference submodules", "No submodule paths declared in `.gitmodules`.")
-        return
-
-    status = run_command("git", "submodule", "status", "--recursive", "--", *submodule_paths)
-    if status.returncode != 0:
-        record(
-            results,
-            "FAIL",
-            "Reference submodules",
-            first_line(status.stderr or status.stdout),
-            "Run `git submodule update --init --recursive`.",
-        )
-        return
-
-    missing: list[str] = []
-    drifted: list[str] = []
-    conflicted: list[str] = []
-    ready = 0
-
-    for raw_line in status.stdout.splitlines():
-        if not raw_line:
-            continue
-        flag = raw_line[0]
-        remainder = raw_line[1:].strip()
-        parts = remainder.split()
-        if len(parts) < 2:
-            continue
-        path = parts[1]
-        if flag == "-":
-            missing.append(path)
-        elif flag == "+":
-            drifted.append(path)
-        elif flag == "U":
-            conflicted.append(path)
-        else:
-            ready += 1
-
-    required_entries = {
-        "third_party/eqlib",
-        "third_party/macroquest",
-        "third_party/macroquest/src/eqlib",
+def check_reference_trees(results: list[CheckResult], require_reference_trees: bool) -> None:
+    required_paths = {
+        "third_party/eqlib": [
+            REPO_ROOT / "third_party/eqlib/include/eqlib/offsets/eqgame.h",
+        ],
+        "third_party/macroquest": [
+            REPO_ROOT / "third_party/macroquest/src/login",
+            REPO_ROOT / "third_party/macroquest/src/routing",
+        ],
     }
-    required_paths = [
-        REPO_ROOT / "third_party/eqlib/include/eqlib/offsets/eqgame.h",
-        REPO_ROOT / "third_party/macroquest/src/login",
-        REPO_ROOT / "third_party/macroquest/src/routing",
+    existing_roots = [root for root in required_paths if (REPO_ROOT / root).exists()]
+    if not existing_roots:
+        detail = "No optional local reference trees found under `third_party/`."
+        if require_reference_trees:
+            record(
+                results,
+                "FAIL",
+                "Reference trees",
+                detail,
+                "Populate `third_party/eqlib` and `third_party/macroquest` before offset or struct work.",
+            )
+        else:
+            record(results, "PASS", "Reference trees", f"{detail} Routine cargo work is still fine without them.")
+        return
+
+    missing_paths = [
+        str(path.relative_to(REPO_ROOT))
+        for root in existing_roots
+        for path in required_paths[root]
+        if not path.exists()
     ]
-    missing_paths = [str(path.relative_to(REPO_ROOT)) for path in required_paths if not path.exists()]
-    blocking_missing = [path for path in missing if path in required_entries]
-    optional_missing = [path for path in missing if path not in required_entries]
-
-    if conflicted:
-        record(
-            results,
-            "FAIL",
-            "Reference submodules",
-            f"Merge conflicts detected in: {', '.join(conflicted)}",
-            "Resolve the submodule conflicts, then rerun preflight.",
-        )
-        return
-
-    if blocking_missing or missing_paths:
-        missing_detail = ", ".join(blocking_missing + missing_paths)
-        detail = f"Missing or uninitialized reference trees: {missing_detail}"
-        fix = "Run `git submodule update --init --recursive` or rerun with `--init-submodules`."
+    if missing_paths:
+        detail = f"Reference trees are present but incomplete: {', '.join(missing_paths)}"
+        fix = "Refresh or repopulate the local `third_party/` references before offset or struct work."
         status_name = "FAIL" if require_reference_trees else "WARN"
-        if not require_reference_trees:
-            detail += ". Routine cargo work is still fine without them."
-        record(results, status_name, "Reference submodules", detail, fix)
+        record(results, status_name, "Reference trees", detail, fix)
         return
 
-    if drifted:
-        record(
-            results,
-            "WARN",
-            "Reference submodules",
-            f"Submodules are checked out at non-recorded commits: {', '.join(drifted)}",
-            "Run `git submodule update --init --recursive` to realign them.",
-        )
-        return
-
-    if optional_missing:
-        record(
-            results,
-            "WARN",
-            "Reference submodules",
-            (
-                "Reference trees are ready, but extra nested MacroQuest submodules are still "
-                f"missing: {', '.join(optional_missing)}"
-            ),
-            "Run `git submodule update --init --recursive` for a fully hydrated vendor tree.",
-        )
-        return
-
-    profile_note = "Required for reference work." if require_reference_trees else "Ready if you need offset or struct work."
-    record(results, "PASS", "Reference submodules", f"{ready} submodule entries are ready. {profile_note}")
+    profile_note = "Required reference material is available." if require_reference_trees else "Ready if you need offset or struct work."
+    record(results, "PASS", "Reference trees", f"Optional local references are present under `third_party/`. {profile_note}")
 
 
 def print_results(results: list[CheckResult], require_reference_trees: bool) -> int:
@@ -334,14 +227,9 @@ def print_results(results: list[CheckResult], require_reference_trees: bool) -> 
 def main() -> int:
     parser = argparse.ArgumentParser(description="TextQuest developer bootstrap/preflight helper.")
     parser.add_argument(
-        "--init-submodules",
-        action="store_true",
-        help="Initialize or update git submodules before checking them.",
-    )
-    parser.add_argument(
         "--require-reference-trees",
         action="store_true",
-        help="Treat missing MacroQuest/eqlib reference submodules as blocking failures.",
+        help="Treat missing optional local MacroQuest/eqlib reference trees as blocking failures.",
     )
     args = parser.parse_args()
 
@@ -409,11 +297,8 @@ def main() -> int:
     if rustc_ok:
         detect_windows_toolchain(results)
 
-    if git_ok and args.init_submodules:
-        sync_submodules(results)
-
     if git_ok:
-        check_reference_submodules(results, require_reference_trees=args.require_reference_trees)
+        check_reference_trees(results, require_reference_trees=args.require_reference_trees)
 
     return print_results(results, require_reference_trees=args.require_reference_trees)
 

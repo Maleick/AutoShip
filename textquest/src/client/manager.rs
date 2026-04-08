@@ -1,6 +1,8 @@
 //! `ClientManager` — discovers, tracks, and manages all EQ client sessions.
 
+use super::discovery::{MulticastPeerDiscovery, PeerDiscoveryEvent, RemotePeer};
 use super::session::{EqSession, SlotLifecycle};
+use crate::config::PeerDiscoveryConfig;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
@@ -12,6 +14,7 @@ pub struct ClientManager {
     sessions_by_pid: HashMap<u32, ClientId>,
     next_client_id: ClientId,
     eq_process_name: String,
+    peer_discovery: Option<MulticastPeerDiscovery>,
 }
 
 impl ClientManager {
@@ -23,7 +26,32 @@ impl ClientManager {
             sessions_by_pid: HashMap::new(),
             next_client_id: 1,
             eq_process_name: process_name.to_string(),
+            peer_discovery: None,
         }
+    }
+
+    /// Enable multicast peer discovery from config.
+    #[must_use]
+    pub fn with_discovery_config(mut self, config: &PeerDiscoveryConfig) -> Self {
+        if !config.multicast_enabled {
+            return self;
+        }
+
+        match MulticastPeerDiscovery::new(config) {
+            Ok(discovery) => {
+                tracing::info!(
+                    multicast_addr = %config.multicast_addr,
+                    port = config.port,
+                    "UDP multicast peer discovery enabled"
+                );
+                self.peer_discovery = Some(discovery);
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "Failed to initialize UDP multicast peer discovery");
+            }
+        }
+
+        self
     }
 
     /// Discover running EQ processes and create sessions for new ones.
@@ -40,15 +68,57 @@ impl ClientManager {
                 continue;
             }
             let id = self.next_client_id;
-            self.next_client_id += 1;
-            let session = EqSession::new(id, pid);
+            self.track_client(id, pid);
             tracing::info!(client_id = id, pid, "Discovered new EQ process");
-            self.sessions.insert(id, session);
-            self.sessions_by_pid.insert(pid, id);
             new_clients.push(id);
         }
 
         Ok(new_clients)
+    }
+
+    /// Track a client ID / PID pair produced by the launch coordinator or discovery.
+    pub fn track_client(&mut self, client_id: ClientId, pid: u32) {
+        if let Some(session) = self.sessions.get_mut(&client_id) {
+            self.sessions_by_pid.remove(&session.pid);
+            session.pid = pid;
+            self.sessions_by_pid.insert(pid, client_id);
+            self.next_client_id = self.next_client_id.max(client_id.saturating_add(1));
+            return;
+        }
+
+        if let Some(existing_id) = self.sessions_by_pid.get(&pid).copied() {
+            if existing_id != client_id {
+                self.sessions.remove(&existing_id);
+                self.sessions
+                    .insert(client_id, EqSession::new(client_id, pid));
+                self.sessions_by_pid.insert(pid, client_id);
+            }
+        } else if let std::collections::hash_map::Entry::Vacant(entry) =
+            self.sessions.entry(client_id)
+        {
+            entry.insert(EqSession::new(client_id, pid));
+            self.sessions_by_pid.insert(pid, client_id);
+        }
+
+        self.next_client_id = self.next_client_id.max(client_id.saturating_add(1));
+    }
+
+    /// Pump the optional multicast discovery transport.
+    pub fn tick_peer_discovery(&mut self) -> Vec<PeerDiscoveryEvent> {
+        let sessions: Vec<&EqSession> = self.sessions.values().collect();
+        self.peer_discovery
+            .as_mut()
+            .map_or_else(Vec::new, |discovery| discovery.tick(sessions))
+    }
+
+    /// Get the current remote peers discovered through multicast.
+    #[must_use]
+    pub fn remote_peers(&self) -> Vec<&RemotePeer> {
+        if let Some(discovery) = &self.peer_discovery {
+            discovery.peers()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Inject the DLL into a specific client.
@@ -217,6 +287,7 @@ impl ClientManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::PeerDiscoveryConfig;
 
     #[test]
     fn initiate_camp_out_returns_false_for_missing_client() {
@@ -234,5 +305,29 @@ mod tests {
     fn check_camp_outs_ignores_non_camping_sessions() {
         let mut mgr = ClientManager::new("eqgame.exe");
         assert!(mgr.check_camp_outs().is_empty());
+    }
+
+    #[test]
+    fn track_client_registers_session() {
+        let mut mgr = ClientManager::new("eqgame.exe");
+        mgr.track_client(7, 1234);
+        let session = mgr.get(7).unwrap();
+        assert_eq!(session.pid, 1234);
+    }
+
+    #[test]
+    fn track_client_updates_existing_pid() {
+        let mut mgr = ClientManager::new("eqgame.exe");
+        mgr.track_client(7, 1234);
+        mgr.track_client(7, 5678);
+        let session = mgr.get(7).unwrap();
+        assert_eq!(session.pid, 5678);
+    }
+
+    #[test]
+    fn discovery_disabled_keeps_transport_absent() {
+        let mgr =
+            ClientManager::new("eqgame.exe").with_discovery_config(&PeerDiscoveryConfig::default());
+        assert!(mgr.remote_peers().is_empty());
     }
 }

@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use textquest_common::nav::{NavPathMetrics, Waypoint};
+use textquest_common::nav::{NavPathFailureKind, NavPathMetrics, Waypoint};
 
 // ---------------------------------------------------------------------------
 // Protobuf types (hand-written to match MQ2Nav's NavMeshFile.proto)
@@ -729,6 +729,8 @@ pub enum RouteSource {
     NavMesh,
     /// Straight line from A to B (navmesh unavailable).
     StraightLineFallback,
+    /// Navmesh data exists, but no safe route could be planned.
+    NavMeshBlocked,
 }
 
 /// A planned navigation route with waypoints and metadata.
@@ -755,6 +757,43 @@ fn path_length(waypoints: &[Waypoint]) -> Option<f32> {
     }
 
     Some(total)
+}
+
+fn classify_query_failure(error: &anyhow::Error) -> NavPathFailureKind {
+    let message = error.to_string().to_ascii_lowercase();
+    if message.contains("not on navmesh") {
+        NavPathFailureKind::DataGap
+    } else {
+        NavPathFailureKind::TransientBlockage
+    }
+}
+
+fn straight_line_fallback_plan(
+    destination: Waypoint,
+    mesh_cached: bool,
+    failure_reason: String,
+    failure_kind: NavPathFailureKind,
+    fallback_length: Option<f32>,
+) -> RoutePlan {
+    RoutePlan {
+        waypoints: vec![destination],
+        source: RouteSource::StraightLineFallback,
+        mesh_cached,
+        metrics: NavPathMetrics::failure(failure_reason, failure_kind, fallback_length, false),
+    }
+}
+
+fn blocked_navmesh_plan(
+    mesh_cached: bool,
+    failure_reason: String,
+    failure_kind: NavPathFailureKind,
+) -> RoutePlan {
+    RoutePlan {
+        waypoints: Vec::new(),
+        source: RouteSource::NavMeshBlocked,
+        mesh_cached,
+        metrics: NavPathMetrics::failure(failure_reason, failure_kind, None, true),
+    }
 }
 
 /// Load a parsed navmesh into Detour, returning a query-ready object.
@@ -832,7 +871,7 @@ fn detour_to_map(d: &[f32; 3]) -> (f32, f32, f32) {
     (-d[2], -d[0], d[1])
 }
 
-fn same_point(a: &[f32; 3], b: &[f32; 3]) -> bool {
+fn same_detour_point(a: &[f32; 3], b: &[f32; 3]) -> bool {
     a.iter()
         .zip(b.iter())
         .all(|(lhs, rhs)| (lhs - rhs).abs() <= WAYPOINT_DEDUP_EPSILON)
@@ -841,7 +880,7 @@ fn same_point(a: &[f32; 3], b: &[f32; 3]) -> bool {
 fn push_point(waypoints: &mut Vec<[f32; 3]>, point: [f32; 3]) {
     if waypoints
         .last()
-        .is_some_and(|last| same_point(last, &point))
+        .is_some_and(|last| same_detour_point(last, &point))
     {
         return;
     }
@@ -1064,7 +1103,7 @@ fn overlay_from_loaded(loaded: &LoadedNavMesh) -> Result<NavMeshOverlay> {
     Ok(overlay)
 }
 
-fn same_point(a: EqPoint, b: EqPoint) -> bool {
+fn same_eq_point(a: EqPoint, b: EqPoint) -> bool {
     const EPSILON: f32 = 0.001;
     (a.0 - b.0).abs() <= EPSILON && (a.1 - b.1).abs() <= EPSILON && (a.2 - b.2).abs() <= EPSILON
 }
@@ -1093,7 +1132,7 @@ fn append_points(target: &mut Vec<EqPoint>, points: &[EqPoint]) {
 }
 
 fn find_detour_path(loaded: &LoadedNavMesh, from: EqPoint, to: EqPoint) -> Result<Vec<EqPoint>> {
-    if same_point(from, to) {
+    if same_eq_point(from, to) {
         return Ok(vec![from]);
     }
 
@@ -1195,7 +1234,7 @@ fn find_path_via_connections<F>(
 where
     F: FnMut(EqPoint, EqPoint) -> Result<Vec<EqPoint>>,
 {
-    if same_point(from, to) {
+    if same_eq_point(from, to) {
         return Ok(vec![from]);
     }
 
@@ -1215,7 +1254,7 @@ where
     for (idx, connection) in connections.iter().enumerate() {
         let from_idx = 2 + idx * 2;
         let to_idx = from_idx + 1;
-        if !same_point(connection.pos_from, connection.pos_to) {
+        if !same_eq_point(connection.pos_from, connection.pos_to) {
             off_mesh_edges
                 .entry(from_idx)
                 .or_default()
@@ -1263,7 +1302,7 @@ where
             let route = mesh_cache
                 .entry((current, next))
                 .or_insert_with(|| {
-                    if same_point(points[current], points[next]) {
+                    if same_eq_point(points[current], points[next]) {
                         Some(vec![points[current]])
                     } else {
                         find_mesh_path(points[current], points[next]).ok()
@@ -1434,6 +1473,7 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
     let mesh_cached = has_cached_zone_mesh(zone_short_name);
     let origin = Waypoint::new(from.0, from.1, from.2);
     let destination = Waypoint::new(to.0, to.1, to.2);
+    let fallback_length = path_length(&[origin, destination]);
 
     match load_zone(zone_short_name) {
         Ok(loaded) => match find_path(&loaded, from, to) {
@@ -1452,37 +1492,42 @@ pub fn plan_route(zone_short_name: &str, from: (f32, f32, f32), to: (f32, f32, f
                 }
             }
             Err(error) => {
+                let failure_reason = format!("Navmesh path query failed: {error}");
+                let failure_kind = classify_query_failure(&error);
                 tracing::warn!(
                     zone = zone_short_name,
+                    failure_kind = failure_kind.label(),
                     %error,
-                    "Navmesh path query failed; falling back to straight-line route"
+                    "Navmesh path query failed"
                 );
-                RoutePlan {
-                    waypoints: vec![destination],
-                    source: RouteSource::StraightLineFallback,
-                    mesh_cached,
-                    metrics: NavPathMetrics::failure(
-                        format!("Navmesh path query failed: {error}"),
-                        path_length(&[origin, destination]),
+                match failure_kind {
+                    NavPathFailureKind::DataGap => straight_line_fallback_plan(
+                        destination,
+                        mesh_cached,
+                        failure_reason,
+                        failure_kind,
+                        fallback_length,
                     ),
+                    NavPathFailureKind::TransientBlockage => {
+                        blocked_navmesh_plan(mesh_cached, failure_reason, failure_kind)
+                    }
                 }
             }
         },
         Err(error) => {
+            let failure_reason = format!("Navmesh load failed: {error}");
             tracing::warn!(
                 zone = zone_short_name,
                 %error,
                 "Navmesh load failed; falling back to straight-line route"
             );
-            RoutePlan {
-                waypoints: vec![destination],
-                source: RouteSource::StraightLineFallback,
+            straight_line_fallback_plan(
+                destination,
                 mesh_cached,
-                metrics: NavPathMetrics::failure(
-                    format!("Navmesh load failed: {error}"),
-                    path_length(&[origin, destination]),
-                ),
-            }
+                failure_reason,
+                NavPathFailureKind::DataGap,
+                fallback_length,
+            )
         }
     }
 }
@@ -1539,7 +1584,6 @@ mod tests {
     use super::*;
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
-    use std::cell::RefCell;
     use std::io::Write;
 
     #[test]
@@ -1750,6 +1794,57 @@ mod tests {
     }
 
     #[test]
+    fn classify_query_failure_treats_navmesh_coverage_as_data_gap() {
+        let error = anyhow::anyhow!("Start position (1, 2, 3) not on navmesh");
+        assert_eq!(classify_query_failure(&error), NavPathFailureKind::DataGap);
+    }
+
+    #[test]
+    fn classify_query_failure_treats_missing_corridor_as_transient_blockage() {
+        let error = anyhow::anyhow!("No path found between start and end");
+        assert_eq!(
+            classify_query_failure(&error),
+            NavPathFailureKind::TransientBlockage
+        );
+    }
+
+    #[test]
+    fn straight_line_fallback_plan_records_data_gap_metrics() {
+        let destination = Waypoint::new(25.0, 0.0, 0.0);
+        let plan = straight_line_fallback_plan(
+            destination,
+            false,
+            String::from("Navmesh load failed: zone mesh unavailable"),
+            NavPathFailureKind::DataGap,
+            Some(25.0),
+        );
+
+        assert_eq!(plan.source, RouteSource::StraightLineFallback);
+        assert_eq!(plan.waypoints, vec![destination]);
+        assert_eq!(plan.metrics.failure_kind, Some(NavPathFailureKind::DataGap));
+        assert!(!plan.metrics.replan_recommended);
+        assert_eq!(plan.metrics.path_length, Some(25.0));
+    }
+
+    #[test]
+    fn blocked_navmesh_plan_avoids_straight_line_shortcuts() {
+        let plan = blocked_navmesh_plan(
+            true,
+            String::from("Navmesh path query failed: No path found between start and end"),
+            NavPathFailureKind::TransientBlockage,
+        );
+
+        assert_eq!(plan.source, RouteSource::NavMeshBlocked);
+        assert!(plan.waypoints.is_empty());
+        assert_eq!(
+            plan.metrics.failure_kind,
+            Some(NavPathFailureKind::TransientBlockage)
+        );
+        assert!(plan.metrics.replan_recommended);
+        assert_eq!(plan.metrics.path_length, None);
+    }
+
+    #[test]
     fn off_mesh_planner_stitches_one_way_connection() {
         let start = (0.0, 0.0, 0.0);
         let door_in = (1.0, 0.0, 0.0);
@@ -1767,11 +1862,13 @@ mod tests {
 
         let route =
             find_path_via_connections(start, end, &connections, |from, to| match (from, to) {
-                (a, b) if same_point(a, b) => Ok(vec![a]),
-                (a, b) if same_point(a, start) && same_point(b, door_in) => {
+                (a, b) if same_eq_point(a, b) => Ok(vec![a]),
+                (a, b) if same_eq_point(a, start) && same_eq_point(b, door_in) => {
                     Ok(vec![start, door_in])
                 }
-                (a, b) if same_point(a, door_out) && same_point(b, end) => Ok(vec![door_out, end]),
+                (a, b) if same_eq_point(a, door_out) && same_eq_point(b, end) => {
+                    Ok(vec![door_out, end])
+                }
                 _ => bail!("no mesh route"),
             })
             .expect("expected stitched route");
@@ -1832,14 +1929,14 @@ mod tests {
 
         let route =
             find_path_via_connections(start, end, &connections, |from, to| match (from, to) {
-                (a, b) if same_point(a, b) => Ok(vec![a]),
-                (a, b) if same_point(a, start) && same_point(b, first_in) => {
+                (a, b) if same_eq_point(a, b) => Ok(vec![a]),
+                (a, b) if same_eq_point(a, start) && same_eq_point(b, first_in) => {
                     Ok(vec![start, first_in])
                 }
-                (a, b) if same_point(a, first_out) && same_point(b, second_in) => {
+                (a, b) if same_eq_point(a, first_out) && same_eq_point(b, second_in) => {
                     Ok(vec![first_out, second_in])
                 }
-                (a, b) if same_point(a, second_out) && same_point(b, end) => {
+                (a, b) if same_eq_point(a, second_out) && same_eq_point(b, end) => {
                     Ok(vec![second_out, end])
                 }
                 _ => bail!("no mesh route"),

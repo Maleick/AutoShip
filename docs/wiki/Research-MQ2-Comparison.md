@@ -77,16 +77,16 @@ MQ2: Navigation is via MQ2Nav/MQ2MoveUtils (external plugins — **not in refere
 | ----------------------- | ---------------------------------- | -------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------- |
 | Nav FSM                 | MQ2Nav (external)                  | Idle→Moving→Arrived                                                        | 🔥     | Built-in, not plugin-dependent                                       |
 | Waypoint following      | MQ2Nav navmesh pathfinding         | Queue-based waypoint cursor with 2D distance checks                        | ⚠️     | MQ2Nav uses full 3D navmesh; Frostreaver uses pre-recorded waypoints |
-| Navmesh pathfinding     | MQ2Nav (Recast/Detour integration) | Not implemented                                                            | ❌     | MQ2Nav has full 3D pathfinding with obstacle avoidance               |
+| Navmesh pathfinding     | MQ2Nav (Recast/Detour integration) | Recast/Detour planning with deterministic data-gap fallback and blocked-route detection | ⚠️     | Avoids straight-line wall cuts when a mesh exists; live replanning parity still trails MQ2Nav |
 | Stuck detection         | MQ2MoveUtils basic stuck check     | 40-tick threshold + 5-attempt escalating recovery                          | 🔥     | Progressive recovery: 90° → -90° → 180° → 45° → give up              |
 | Movement humanization   | Not built-in                       | Per-client personality: speed ±7%, heading wobble 1-4°, detour 0-8%        | 🔥     | Deterministic per client_id via Xorshift32 PRNG                      |
-| /stick and /follow      | MQ2MoveUtils (external)            | Not implemented as commands                                                | ❌     | MQ2MoveUtils provides stick-to-target and follow commands            |
+| /stick and /follow      | MQ2MoveUtils (external)            | DLL slash-command handlers for `/stick` / `/follow` with warp/summon guards | ⚠️     | Basic stick/follow command surface exists; full MQ2MoveUtils parity still pending |
 | Camp positioning        | MQ2 macros                         | CampManager: role-based spot assignment, standard EQ camp layout generator | 🔥     | Tank forward, healer back, DPS semicircle — automatic                |
 | Path recording          | Not built-in                       | WaypointRecorder + RDP simplification (Ramer-Douglas-Peucker)              | 🔥     | Record movement, auto-simplify collinear points                      |
 | Zone routing            | MQ2Nav zone connections            | TravelPlan FSM: WalkTo, ZoneTo, PortTo, StaggerWait                        | 🔥     | Multi-zone travel planning with porter awareness                     |
 | Zone stagger            | Not built-in                       | Deterministic per-client zone entry delays (anti-detection)                | 🔥     | Prevents simultaneous zone entries                                   |
 | Heading control         | MQ2MoveUtils /face                 | EQ heading 0-512 with wobble jitter                                        | ✅     |                                                                      |
-| Door/object interaction | MQ2 /door, /click                  | Not implemented                                                            | ❌     |                                                                      |
+| Door/object interaction | MQ2 /door, /click                  | `InteractDoor` (`/doortarget` + `/click left door`), `ClickObject` (`/click left item`); TUI `:door` / `:click` | ✅     | Navigation to door position (M7 DoorsManager) still pending  |
 
 ---
 
@@ -125,7 +125,7 @@ MQ2: `third_party/macroquest/src/routing/` (PostOffice, NamedPipes, Network)
 | Transport: Named pipes   | NamedPipes.h/cpp (35 KB impl)                  | Per-client pipes: `\\.\pipe\{session}_cmd_{id}`                           | ✅     | Both use named pipes for command/response                              |
 | Transport: Shared memory | Not primary (PostOffice-based)                 | Per-client 64KB shared memory for GameState publishing                    | 🔥     | Lock-free atomic sequence reads; zero-copy state polling               |
 | Wire protocol            | Protobuf (Network.proto, Routing.proto)        | Length-prefixed bincode frames (u32 LE + payload)                         | ✅     | MQ2 uses protobuf; Frostreaver uses Rust bincode (more compact)        |
-| Peer discovery           | UDP multicast (configurable ports)             | Orchestrator manages client registry                                      | ⚠️     | MQ2 has decentralized discovery; Frostreaver is centralized            |
+| Peer discovery           | UDP multicast (configurable ports)             | Orchestrator-managed registry with optional UDP multicast peer discovery  | ✅     | Default remains centralized; multicast mode is optional for peer sync  |
 | PostOffice routing       | Full routing with mailboxes, addresses, actors | Direct pipe per client (no routing needed)                                | ✅     | Different architectures; Frostreaver's hub-spoke is simpler for 36-box |
 | Session authentication   | Not documented in reference                    | 32-byte random token + constant-time comparison                           | 🔥     | Prevents unauthorized command injection                                |
 | Command vocabulary       | Plugin-defined messages                        | 30+ typed commands (movement, combat, login, chat, system)                | 🔥     | Strongly-typed Rust enums with validation                              |

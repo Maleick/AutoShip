@@ -1,10 +1,16 @@
 //! In-memory account registry with encrypted password storage.
 //!
-//! Account metadata (name, server, character, class, group, status) is held in an
-//! `Arc<Mutex<AccountStore>>` that lives in `AppState`.  Passwords are encrypted with
-//! AES-256-GCM using a per-account key derived from the master key via Argon2id, and
-//! persisted in the shared `data/credentials.db` SQLite database — the same schema
-//! used by the CLI credential store in the orchestrator crate.
+//! This module is staged for the web dashboard account-management slice but is not
+//! yet wired into `AppState` or any axum routes on current `master`.
+//!
+//! Passwords are encrypted with AES-256-GCM using a per-account key derived from the
+//! master key via Argon2id, and persisted in the shared `data/credentials.db`
+//! SQLite database — the same schema used by the CLI credential store in the
+//! orchestrator crate.
+#![allow(
+    dead_code,
+    reason = "staged web account registry is not wired into routes yet"
+)]
 
 use std::collections::HashMap;
 use std::path::Path;

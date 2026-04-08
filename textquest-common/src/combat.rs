@@ -998,19 +998,21 @@ pub fn resolve_abilities(
             if character_level < candidate.min_level {
                 continue;
             }
-            let is_known = known.iter().any(|k| {
-                if candidate.spell_id >= 0 && k.spell_id == candidate.spell_id {
-                    return true;
-                }
-                k.name.eq_ignore_ascii_case(&candidate.name)
+            let matched_ability = known.iter().find(|known_ability| {
+                (candidate.spell_id >= 0 && known_ability.spell_id == candidate.spell_id)
+                    || known_ability.name.eq_ignore_ascii_case(&candidate.name)
             });
-            if is_known {
+            if let Some(matched_ability) = matched_ability {
                 resolved.insert(
                     set.name.clone(),
                     ResolvedAbility {
                         set_name: set.name.clone(),
                         ability_name: candidate.name.clone(),
-                        spell_id: candidate.spell_id,
+                        spell_id: if candidate.spell_id >= 0 {
+                            candidate.spell_id
+                        } else {
+                            matched_ability.spell_id
+                        },
                         min_level: candidate.min_level,
                     },
                 );
@@ -2087,6 +2089,29 @@ mod tests {
         let result = resolve_abilities(&sets, &known, 65);
         let nuke = result.get("Nuke").expect("should match by spell_id");
         assert_eq!(nuke.ability_name, "Ice Comet");
+    }
+
+    #[test]
+    fn resolve_runtime_lookup_candidate_uses_known_spell_id() {
+        let sets = vec![AbilitySet {
+            name: "CombatEndRegen".into(),
+            candidates: vec![AbilityCandidate {
+                name: "Breather".into(),
+                min_level: 55,
+                spell_id: -1,
+            }],
+        }];
+        let known = vec![KnownAbility {
+            name: "Breather".into(),
+            spell_id: 6001,
+            level: 55,
+        }];
+        let result = resolve_abilities(&sets, &known, 65);
+        let resolved = result
+            .get("CombatEndRegen")
+            .expect("runtime lookup candidate should resolve");
+        assert_eq!(resolved.ability_name, "Breather");
+        assert_eq!(resolved.spell_id, 6001);
     }
 
     #[test]

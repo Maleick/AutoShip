@@ -4,17 +4,11 @@ This page is the fastest path to a useful TextQuest session.
 
 ## Current Behavior
 
-### 1. Optional: initialize the reference submodules
+### 1. Decide whether you need optional reference trees
 
-You can skip this for normal build, test, and runtime work.
+You can skip `third_party/eqlib` and `third_party/macroquest` for normal build, test, and runtime work.
 
-Run this only before offset, struct, eqlib, or MacroQuest investigation:
-
-```bash
-git submodule update --init --recursive
-```
-
-These submodules are reference-only and are not part of the normal Cargo inner loop.
+Use those local reference paths only when you are doing offset, struct, eqlib, or MacroQuest investigation in a workspace that already has them available.
 
 ### 2. Choose the runtime you are actually in
 
@@ -37,7 +31,7 @@ Expected result:
 
 - TextQuest opens the TUI
 - the UI shows simulated characters and activity
-- the four main screens are usable without EQ running
+- the five main screens are usable without EQ running
 
 #### Live Windows mode
 
@@ -63,12 +57,13 @@ target\release\textquest.exe status <pid>
 target\release\textquest.exe status-all
 ```
 
-### 3. Learn the four TUI screens
+### 3. Learn the five TUI screens
 
 - `1`: Characters
 - `2`: Map
 - `3`: Navigation
 - `4`: Debug
+- `5`: Packets
 
 High-value keys:
 

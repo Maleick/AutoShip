@@ -56,6 +56,39 @@ use super::classes::shaman::ShamanStrategy;
 use super::classes::warrior::WarriorStrategy;
 use super::classes::wizard::WizardStrategy;
 
+/// Snapshot of a summonsed pet's current state for pet-management decisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PetStatus {
+    /// The pet's spawn ID, or `None` if no pet is active.
+    pub spawn_id: Option<u32>,
+    /// The spawn ID the pet is currently attacking, or `None` if idle.
+    pub target_id: Option<u32>,
+}
+
+impl PetStatus {
+    /// Returns `true` if a pet is currently active.
+    pub fn has_pet(self) -> bool {
+        self.spawn_id.is_some()
+    }
+
+    /// Returns `true` if the pet is already attacking `target_id`.
+    pub fn is_attacking(self, target_id: u32) -> bool {
+        self.target_id == Some(target_id)
+    }
+}
+
+/// Pet-management action requested by a `ClassStrategy` for the current frame.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PetAction {
+    /// Send `/pet attack` to the current target.
+    Attack,
+    /// Cast a pet-targeted buff (e.g., Burnout) using the given spell entry.
+    Buff {
+        /// The spell the strategy wants to cast on the pet.
+        spell: SpellEntry,
+    },
+}
+
 /// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
 pub struct CombatContext<'a> {
     pub player: &'a SpawnData,
@@ -100,31 +133,10 @@ impl CombatContext<'_> {
             .and_then(ExtendedTargetList::pet_target_id)
     }
 
-    /// Return a snapshot of the pet's current state from the extended target list.
     pub fn pet_status(&self) -> PetStatus {
-        let Some(list) = self.extended_targets else {
-            return PetStatus {
-                spawn_id: None,
-                target_id: None,
-            };
-        };
-        let spawn_id = list.slots.iter().find_map(|s| {
-            if s.slot_type == XTargetType::MyPet {
-                Some(s.spawn_id)
-            } else {
-                None
-            }
-        });
-        let target_id = list.slots.iter().find_map(|s| {
-            if s.slot_type == XTargetType::MyPetTarget {
-                Some(s.spawn_id)
-            } else {
-                None
-            }
-        });
         PetStatus {
-            spawn_id,
-            target_id,
+            spawn_id: self.pet_spawn_id(),
+            target_id: self.pet_target_id(),
         }
     }
 }
@@ -307,15 +319,61 @@ pub fn pet_back_off() {
 /// Used by healer and hybrid classes (cleric, druid, paladin, shaman) for heal targeting.
 #[inline]
 pub fn lowest_hp_member(ctx: &CombatContext) -> Option<(u32, f32)> {
+    lowest_hp_member_in(
+        ctx.group_members
+            .iter()
+            .filter(|m| !m.is_dead && m.hp_pct.is_finite() && m.hp_pct > 0.0),
+    )
+}
+
+/// Count living group members who currently need a cure.
+#[inline]
+pub fn afflicted_member_count(ctx: &CombatContext) -> usize {
     ctx.group_members
         .iter()
-        .filter(|m| !m.is_dead && m.hp_pct.is_finite() && m.hp_pct > 0.0)
+        .filter(|m| !m.is_dead && m.has_detrimental)
+        .count()
+}
+
+/// Find the afflicted group member with the lowest HP.
+///
+/// This makes single-target cures prefer the most at-risk player instead of the
+/// first member in roster order.
+#[inline]
+pub fn prioritized_afflicted_member(ctx: &CombatContext) -> Option<(u32, f32)> {
+    lowest_hp_member_in(
+        ctx.group_members
+            .iter()
+            .filter(|m| !m.is_dead && m.has_detrimental && m.hp_pct.is_finite() && m.hp_pct > 0.0),
+    )
+}
+
+#[inline]
+fn lowest_hp_member_in<'a>(
+    members: impl Iterator<Item = &'a GroupMemberState>,
+) -> Option<(u32, f32)> {
+    members
         .min_by(|a, b| {
             a.hp_pct
                 .partial_cmp(&b.hp_pct)
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
         .map(|m| (m.spawn_id, m.hp_pct))
+}
+
+#[inline]
+pub fn is_standard_cure_spell(spell: &SpellEntry) -> bool {
+    let name = spell.name.to_lowercase();
+    name.contains("cure")
+        || name.contains("purify")
+        || name.contains("remove")
+        || name.contains("counteract")
+}
+
+#[inline]
+pub fn is_group_cure_spell(spell: &SpellEntry) -> bool {
+    let name = spell.name.to_lowercase();
+    spell.is_aoe || name.contains("group") || name.contains("radiant cure")
 }
 
 /// Select the highest-priority spell from config, filtered by current mana.
@@ -966,6 +1024,58 @@ mod tests {
         };
         let result = lowest_hp_member(&ctx);
         assert_eq!(result, Some((2, 50.0)));
+    }
+
+    #[test]
+    fn prioritized_afflicted_member_prefers_lowest_hp_afflicted() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let members = vec![
+            GroupMemberState {
+                spawn_id: 1,
+                hp_pct: 80.0,
+                mana_pct: 100.0,
+                class_id: 1,
+                is_dead: false,
+                name: "Warrior".into(),
+                has_detrimental: true,
+            },
+            GroupMemberState {
+                spawn_id: 2,
+                hp_pct: 40.0,
+                mana_pct: 100.0,
+                class_id: 2,
+                is_dead: false,
+                name: "Cleric".into(),
+                has_detrimental: true,
+            },
+            GroupMemberState {
+                spawn_id: 3,
+                hp_pct: 20.0,
+                mana_pct: 100.0,
+                class_id: 3,
+                is_dead: true,
+                name: "Paladin".into(),
+                has_detrimental: true,
+            },
+        ];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert_eq!(afflicted_member_count(&ctx), 2);
+        assert_eq!(prioritized_afflicted_member(&ctx), Some((2, 40.0)));
     }
 
     // ── MA target scan tests ─────────────────────────────────────────

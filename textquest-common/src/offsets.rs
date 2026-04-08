@@ -274,6 +274,20 @@ pub const INV_SLOT_GET_ITEM_BASE: u64 = 0x0001_4041_9520;
 /// Signature: void MemorizeSet(int*, int)
 pub const SPELL_BOOK_WND_MEMORIZE_SET: u64 = 0x0001_4050_EFE0;
 
+// ─── CContextMenuManager global pointer and function addresses ───
+// Source: eqgame.h `pinstCContextMenuManager_x` and `CContextMenuManager__HandleMenu_x`,
+// client date 20260310
+// Calling convention: x64 MSVC (this in RCX for member functions)
+
+/// Singleton `CContextMenuManager*` instance pointer (preferred base).
+/// Source: eqgame.h `pinstCContextMenuManager_x`
+pub const PINST_CONTEXT_MENU_MANAGER: u64 = 0x0001_40F2_1BD0;
+
+/// `CContextMenuManager::HandleMenu` — activate a context-menu item by index.
+/// Signature: void HandleMenu(int menuId, int itemId, const CXPoint& pt)
+/// Source: eqgame.h `CContextMenuManager__HandleMenu_x`
+pub const CONTEXT_MENU_MGR_HANDLE_MENU: u64 = 0x0001_4046_E770;
+
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
 /// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would underflow).
@@ -695,13 +709,11 @@ pub mod profile {
     pub const MEMORIZED_SPELLS: usize = 0x14b0;
     /// Number of spellbook slots between `SpellBook` and `MemorizedSpells`.
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
+    /// Alias for `SPELL_BOOK_SLOT_COUNT` — total slots in `BaseProfile::SpellBook`.
+    pub const SPELL_BOOK_SLOTS: usize = 1280;
     /// Visible spell-gem slots used by the live client UI.
     pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
-
-    /// Total spell-book slots in `BaseProfile::SpellBook`.
-    pub const SPELL_BOOK_SLOTS: usize = 1280;
-
-    /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells`.
+    /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells` (alias for `MEMORIZED_SPELL_GEM_COUNT`).
     pub const MEMORIZED_SPELL_GEMS: usize = 15;
 
     /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
@@ -971,6 +983,28 @@ pub mod zone_guide {
     pub const DATA_SET: usize = 0xFA48;
 }
 
+/// Offsets within `CContextMenuManager`.
+/// Source: eqlib/game/UI.h, client date 20260310
+///
+/// `CContextMenuManager` manages all right-click popup menus in the game.
+/// It holds an array of `CContextMenu*` entries; each `CContextMenu` is a
+/// `CListWnd` whose rows contain the menu-item labels (accessible through
+/// the shared `eqgame::CLISTWND_ITEMS_ARRAY` / `CLISTWND_ITEMS_COUNT` offsets).
+pub mod context_menu_mgr {
+    /// `ArrayClass<CContextMenu*>` — array of registered menus.
+    /// `ArrayClass` layout: `m_length` (int) at `+0x00`, `m_array` (ptr) at `+0x08`.
+    /// The `ArrayClass` starts at `CContextMenuManager` `+0x010`.
+    pub const MENUS_ARRAY_BASE: usize = 0x010;
+    /// Length of the `pMenus` `ArrayClass` (`int` at `MENUS_ARRAY_BASE + 0x00`).
+    pub const MENUS_COUNT: usize = 0x010;
+    /// Data pointer of the `pMenus` `ArrayClass` (`CContextMenu**` at `MENUS_ARRAY_BASE + 0x08`).
+    pub const MENUS_DATA: usize = 0x018;
+    /// Index of the currently displayed menu (`int` at `+0x020`).
+    pub const CUR_MENU: usize = 0x020;
+    /// Index of the currently highlighted menu item (`int` at `+0x024`).
+    pub const CUR_ITEM: usize = 0x024;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1111,6 +1145,7 @@ mod tests {
             PINST_ACTIVE_CORPSE,
             PINST_CCHAT_WINDOW_MANAGER,
             PINST_CINV_SLOT_MGR,
+            PINST_CONTEXT_MENU_MANAGER,
         ];
         for addr in &globals {
             assert!(
@@ -1154,6 +1189,7 @@ mod tests {
             INV_SLOT_MGR_MOVE_ITEM,
             INV_SLOT_MGR_SELECT_SLOT,
             SPELL_BOOK_WND_MEMORIZE_SET,
+            CONTEXT_MENU_MGR_HANDLE_MENU,
             DSP_CHAT,
         ];
         for addr in &funcs {
@@ -1372,5 +1408,27 @@ mod tests {
             let result = rebase(*addr, actual_base);
             assert!(result.is_some(), "rebase failed for func 0x{:X}", addr);
         }
+    }
+
+    #[test]
+    fn context_menu_mgr_addresses_match_eqgame_20260310() {
+        assert_eq!(PINST_CONTEXT_MENU_MANAGER, 0x0001_40F2_1BD0);
+        assert_eq!(CONTEXT_MENU_MGR_HANDLE_MENU, 0x0001_4046_E770);
+    }
+
+    #[test]
+    fn context_menu_mgr_addresses_rebase_successfully() {
+        let actual_base: u64 = 0x7FF600000000;
+        assert!(rebase(PINST_CONTEXT_MENU_MANAGER, actual_base).is_some());
+        assert!(rebase(CONTEXT_MENU_MGR_HANDLE_MENU, actual_base).is_some());
+    }
+
+    #[test]
+    fn context_menu_mgr_struct_offsets_are_ordered() {
+        const _: () = {
+            assert!(context_menu_mgr::MENUS_COUNT < context_menu_mgr::MENUS_DATA);
+            assert!(context_menu_mgr::MENUS_DATA < context_menu_mgr::CUR_MENU);
+            assert!(context_menu_mgr::CUR_MENU < context_menu_mgr::CUR_ITEM);
+        };
     }
 }

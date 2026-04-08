@@ -79,6 +79,6 @@ Important current note from code:
 
 ### Roadmap and validation notes
 
-- Live local-model integration and richer in-game chat behavior sit under `M11` in the canonical roadmap.
+- Real external provider integrations and richer in-game chat behavior now sit under `M11` in the canonical roadmap.
 - If you are documenting or demoing Soul behavior today, describe it as deterministic fallback plus persistent memory, not as fully live LLM autonomy.
 - Keep operator-facing descriptions explicit that Soul inference is intended to stay local and operator-safe.

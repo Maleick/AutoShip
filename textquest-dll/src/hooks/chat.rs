@@ -56,6 +56,8 @@ fn chat_callback(exception_info: *mut ()) -> bool {
         if !text.is_empty() {
             let _ = crate::combat::observe_chat_message(&text);
 
+            let parsed = textquest_common::chat::parse_chat_text(&text);
+
             let timestamp_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -65,6 +67,7 @@ fn chat_callback(exception_info: *mut ()) -> bool {
                 text,
                 color,
                 timestamp_ms,
+                parsed,
             });
         }
     }
@@ -116,6 +119,8 @@ mod tests {
 
     #[test]
     fn install_remove_roundtrip() {
+        let _guard = hwbp::test_guard();
+        hwbp::remove_all();
         let dummy_addr = 0xDEAD_BEEF;
 
         if std::env::var_os("TEXTQUEST_RUN_HWBP_TESTS").is_none() {
@@ -123,6 +128,7 @@ mod tests {
                 "Skipping chat hook install/remove roundtrip check; \
                  set TEXTQUEST_RUN_HWBP_TESTS=1 to opt in"
             );
+            hwbp::remove_all();
             return;
         }
 
@@ -149,5 +155,6 @@ mod tests {
         assert!(hwbp::is_active(HwbpSlot::Dr1));
         remove();
         assert!(!hwbp::is_active(HwbpSlot::Dr1));
+        hwbp::remove_all();
     }
 }
