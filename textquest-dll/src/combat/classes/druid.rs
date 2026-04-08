@@ -33,10 +33,39 @@ impl DruidStrategy {
     }
 
     fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
-        ctx.group_members
+        strategy::prioritized_afflicted_member(ctx).map(|(spawn_id, _)| spawn_id)
+    }
+
+    fn find_cure_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
+        let mana_pct = ctx.player.mana_pct();
+        let cures: Vec<&SpellEntry> = ctx
+            .config
+            .spells
             .iter()
-            .find(|m| !m.is_dead && m.has_detrimental)
-            .map(|m| m.spawn_id)
+            .filter(|s| strategy::is_standard_cure_spell(s))
+            .filter(|s| mana_pct >= s.min_mana_pct)
+            .collect();
+        if strategy::afflicted_member_count(ctx) > 1
+            && let Some(group_cure) = cures
+                .iter()
+                .copied()
+                .filter(|s| strategy::is_group_cure_spell(s))
+                .max_by_key(|s| s.priority)
+        {
+            return Some(group_cure.clone());
+        }
+        cures.into_iter().max_by_key(|s| s.priority).cloned()
+    }
+
+    fn cure_target(&self, ctx: &CombatContext) -> Option<u32> {
+        if strategy::afflicted_member_count(ctx) > 1
+            && self
+                .find_cure_spell(ctx)
+                .is_some_and(|spell| strategy::is_group_cure_spell(&spell))
+        {
+            return Some(ctx.player.spawn_id);
+        }
+        self.afflicted_member(ctx)
     }
 
     fn dead_member<'a>(&self, ctx: &CombatContext<'a>) -> Option<&'a str> {
@@ -74,7 +103,7 @@ impl ClassStrategy for DruidStrategy {
             return None;
         }
 
-        if let Some(afflicted_id) = self.afflicted_member(ctx) {
+        if let Some(afflicted_id) = self.cure_target(ctx) {
             return Some(afflicted_id);
         }
 
@@ -104,18 +133,9 @@ impl ClassStrategy for DruidStrategy {
         }
 
         // Priority 1: Cure detrimental effects
-        let has_afflicted = ctx
-            .group_members
-            .iter()
-            .any(|m| !m.is_dead && m.has_detrimental);
-        if has_afflicted {
-            if let Some(cure) = self.find_spell_by_category(
-                &ctx.config.spells,
-                &["cure", "purify", "remove", "counteract"],
-            ) {
-                if mana_pct >= cure.min_mana_pct {
-                    return Some(cure.clone());
-                }
+        if strategy::afflicted_member_count(ctx) > 0 {
+            if let Some(cure) = self.find_cure_spell(ctx) {
+                return Some(cure);
             }
         }
 
@@ -327,5 +347,59 @@ mod tests {
         };
 
         assert_eq!(druid.select_target(&ctx), Some(10));
+    }
+
+    #[test]
+    fn druid_group_cure_targets_self_for_multiple_afflicted_members() {
+        let druid = DruidStrategy::new(6);
+        let player = textquest_common::types::SpawnData {
+            spawn_id: 6,
+            mana_current: 100,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let mut first = make_member(10, 80.0, false);
+        first.has_detrimental = true;
+        let mut second = make_member(11, 50.0, false);
+        second.has_detrimental = true;
+        let members = vec![first, second];
+        let config = textquest_common::combat::CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    slot: 1,
+                    spell_id: 100,
+                    name: "Cure Poison".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    slot: 2,
+                    spell_id: 101,
+                    name: "Radiant Cure".into(),
+                    min_mana_pct: 10.0,
+                    priority: 1,
+                    is_aoe: true,
+                },
+            ],
+            ..Default::default()
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert_eq!(druid.select_spell(&ctx).unwrap().name, "Radiant Cure");
+        assert_eq!(druid.select_target(&ctx), Some(6));
     }
 }
