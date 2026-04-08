@@ -57,5 +57,5 @@ config/.credentials
 config/maps/*.txt
 config/accounts.csv
 
-# Ghidra exports
-data/ghidra-export/
+# Data directory (moved to TextQuest-Ghidra repo)
+data/

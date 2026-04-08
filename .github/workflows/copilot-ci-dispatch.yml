@@ -1,8 +1,8 @@
 name: Copilot CI dispatch
 
 on:
-  push:
-    branches: [master]
+  schedule:
+    - cron: "45 11 * * *" # Daily 6:45am CT: dispatch CI for blocked Copilot PRs
   workflow_dispatch:
 
 permissions:

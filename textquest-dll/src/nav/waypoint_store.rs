@@ -213,7 +213,35 @@ fn validate_store_path(path: &Path) -> Result<(), String> {
         return Err(String::from("Waypoint store path cannot be empty"));
     }
 
-    for ancestor in path.ancestors() {
+    // Canonicalize the deepest existing ancestor so OS-level symlinks (e.g.
+    // macOS /var → /private/var) are resolved before we walk the path.  Only
+    // the segment *below* the canonical prefix is checked for user-created
+    // symlinks, which is the actual attack surface.
+    let resolved = {
+        let mut base = path.to_path_buf();
+        loop {
+            match base.canonicalize() {
+                Ok(canonical) => break canonical,
+                Err(_) => {
+                    if !base.pop() {
+                        // Nothing left to resolve — fall through to raw walk.
+                        break path.to_path_buf();
+                    }
+                }
+            }
+        }
+    };
+
+    // Walk the *original* path; only flag components that sit below the
+    // canonical root (i.e. the ones the OS didn't already resolve).
+    let canonical_depth = resolved.components().count();
+    for (i, ancestor) in path.ancestors().enumerate() {
+        // Skip ancestors that are part of the already-canonicalized prefix.
+        let depth = path.components().count().saturating_sub(i);
+        if depth <= canonical_depth {
+            break;
+        }
+
         let metadata = match fs::symlink_metadata(ancestor) {
             Ok(metadata) => metadata,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,

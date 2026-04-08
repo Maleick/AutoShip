@@ -13,8 +13,7 @@ on:
     workflows: ["CI"]
     types: [completed]
   schedule:
-    - cron: "0 * * * *"   # Hourly: agent-ready sync
-    - cron: "15 * * * *"  # Hourly + 15m: agent-close sync
+    - cron: "0 11 * * *" # Daily 6am CT: agent-ready + agent-close sweep
   workflow_dispatch:
 
 permissions:

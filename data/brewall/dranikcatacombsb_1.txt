@@ -1,7 +1,0 @@
-P -214.6262, -649.2227, -14.7663, 240, 0, 0, 3, to_The_Ruined_City_of_Dranik
-P -1123.9341, -689.0970, -12.3304, 0, 0, 0, 2, Insidious_Dragorn
-P 69.4762, -259.0697, -34.4411, 127, 64, 0, 2, Elite_Overlord_Vijaz_(Hunter)
-P -30.7788, 6.4590, -8.4609, 127, 64, 0, 2, High_Enchantress_Zy`chia_(Hunter)
-P -641.8716, -656.1523, -17.7932, 127, 64, 0, 2, High_Sorceress_Vi`tara_(Hunter)
-P -1274.9563, -754.4042, -15.8082, 127, 64, 0, 2, High_Sorcress_Vi`tara_(Hunter)
-P 69.3866, -260.3224, -34.4591, 127, 64, 0, 2, High_Sorcress_Vi`tara_(Hunter)

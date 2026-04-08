@@ -1,8 +1,8 @@
 name: README Metrics
 
 on:
-  push:
-    branches: [master]
+  schedule:
+    - cron: "30 11 * * *" # Daily 6:30am CT: refresh README metrics
   workflow_dispatch:
 
 concurrency:
