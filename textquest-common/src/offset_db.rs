@@ -163,24 +163,8 @@ impl OffsetDatabase {
         sm.insert("playerList".to_string(), spawn_manager::PLAYER_LIST);
 
         let mut cmm = HashMap::new();
-        cmm.insert("parentWnd".to_string(), context_menu_manager::PARENT_WND);
-        cmm.insert("currMenus".to_string(), context_menu_manager::CURR_MENUS);
-        cmm.insert(
-            "numVisibleMenus".to_string(),
-            context_menu_manager::NUM_VISIBLE_MENUS,
-        );
-        cmm.insert(
-            "currMenuIndex".to_string(),
-            context_menu_manager::CURR_MENU_INDEX,
-        );
-        cmm.insert("menusArray".to_string(), context_menu_manager::MENUS_ARRAY);
-        cmm.insert("numMenus".to_string(), context_menu_manager::NUM_MENUS);
-        cmm.insert("handlerWnd".to_string(), context_menu_manager::HANDLER_WND);
-        cmm.insert("handlerCmd".to_string(), context_menu_manager::HANDLER_CMD);
-        cmm.insert(
-            "defaultMenuIndex".to_string(),
-            context_menu_manager::DEFAULT_MENU_INDEX,
-        );
+        cmm.insert("menusArray".to_string(), context_menu_mgr::MENUS_DATA);
+        cmm.insert("numMenus".to_string(), context_menu_mgr::MENUS_COUNT);
 
         let mut cm = HashMap::new();
         cm.insert("numItems".to_string(), context_menu::NUM_ITEMS);
