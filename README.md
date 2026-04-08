@@ -511,7 +511,9 @@ python scripts/sync_wiki.py --push
 Update the repo-side source files in `docs/wiki/` in the same PRs that change behavior, then
 publish the wiki snapshot after review.
 
-The nightly wiki publish workflow uses runner-local `gh auth`, not a repository secret token.
+The nightly wiki publish workflow exports `GH_TOKEN` in GitHub Actions and runs the same
+`scripts/sync_wiki.py` flow used locally. Manual wiki publishing can still use either
+`GH_TOKEN` or `gh auth login`.
 
 ## Requirements
 

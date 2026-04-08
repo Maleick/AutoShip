@@ -87,7 +87,7 @@ When behavior or roadmap guidance changes:
 
 Nightly automation now runs across the self-hosted Windows runner and GitHub-hosted Linux jobs:
 
-- `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot
+- `.github/workflows/wiki-nightly.yml` publishes the wiki snapshot on schedule, manual dispatch, and after successful nightly releases
 - `.github/workflows/nightly-release.yml` builds and refreshes the rolling nightly prerelease
 - `.github/workflows/copilot-ci-dispatch.yml` sweeps open same-repo Copilot PRs from `master`, dispatches `CI` when the PR-triggered run is stuck in approval, and skips PRs that edit workflow files so those still require manual review
 - `.github/workflows/agent-ready.yml` keeps `agent:ready` vs `agent:skip-ready` aligned on issue events plus an hourly sweep, suppresses `agent:ready` when an issue already has an open linked PR or active `agent:working` / `agent:blocked` state, bootstraps those labels when missing, and treats roadmap-container titles that start with `M<number>` or `Mx` as skip-ready

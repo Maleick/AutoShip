@@ -465,8 +465,9 @@ Expected outputs:
 ### GitHub Actions
 
 - `.github/workflows/wiki-nightly.yml`
-  - scheduled wiki auto-publish using `scripts/sync_wiki.py --push`
-  - requires runner-local `gh auth`
+  - scheduled/manual wiki auto-publish using `scripts/sync_wiki.py --push`
+  - also runs after a successful nightly release
+  - uses `GH_TOKEN` in Actions, with local `gh auth` still supported by the script
 - `.github/workflows/nightly-release.yml`
   - scheduled rolling nightly prerelease build on the self-hosted Windows runner
 
