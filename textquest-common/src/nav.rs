@@ -124,17 +124,48 @@ pub struct FollowConfig {
     /// Maximum distance from the anchor before forcing a return.
     /// Mirrors MQ2MoveUtils `/makecamp leash` enforcement radius.
     pub leash_distance: f32,
+    /// Minimum delay (ms) before returning toward the anchor after the leash
+    /// is exceeded.  Mirrors MQ2MoveUtils `/makecamp mindelay`.
+    #[serde(default)]
+    pub min_delay_ms: u32,
+    /// Maximum delay (ms) before returning toward the anchor after the leash
+    /// is exceeded.  When greater than `min_delay_ms` a random value in
+    /// `[min_delay_ms, max_delay_ms]` is chosen.
+    /// Mirrors MQ2MoveUtils `/makecamp maxdelay`.
+    #[serde(default)]
+    pub max_delay_ms: u32,
+    /// Suppress camp-return navigation while hostile NPCs are in aggro range.
+    /// Mirrors MQ2MoveUtils `/makecamp returnnoaggro`.
+    #[serde(default)]
+    pub return_no_aggro: bool,
+    /// Suppress camp-return navigation while the character is actively looting.
+    /// Mirrors MQ2MoveUtils `/makecamp returnnotlooting`.
+    #[serde(default)]
+    pub return_not_looting: bool,
 }
 
 impl FollowConfig {
-    /// Create a new follow configuration.
+    /// Create a new follow configuration with the given core distances.
+    /// Return policy fields default to disabled (MQ2 defaults).
     #[must_use]
     pub fn new(leader_name: impl Into<String>, follow_distance: f32, leash_distance: f32) -> Self {
         Self {
             leader_name: leader_name.into(),
             follow_distance,
             leash_distance,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
         }
+    }
+}
+
+impl Default for FollowConfig {
+    /// Returns a follow config with MQ2MoveUtils-parity defaults:
+    /// follow distance 15 EQ units, leash 75 EQ units, no delays, no aggro/loot gates.
+    fn default() -> Self {
+        Self::new("", 15.0, 75.0)
     }
 }
 
@@ -357,6 +388,30 @@ pub struct NavPathMetrics {
     pub path_length: Option<f32>,
     /// Human-readable reason when no navmesh path could be found.
     pub failure_reason: Option<String>,
+    /// Stable classification for route-planning failures.
+    pub failure_kind: Option<NavPathFailureKind>,
+    /// Whether the caller should attempt a fresh navmesh query later.
+    pub replan_recommended: bool,
+}
+
+/// Stable route-planning failure classes for operator diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NavPathFailureKind {
+    /// Required navmesh coverage/data is unavailable for the query.
+    DataGap,
+    /// A navmesh exists, but the route is temporarily blocked or disconnected.
+    TransientBlockage,
+}
+
+impl NavPathFailureKind {
+    /// Short operator-facing label for the failure class.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::DataGap => "data gap",
+            Self::TransientBlockage => "transient blockage",
+        }
+    }
 }
 
 impl NavPathMetrics {
@@ -367,16 +422,25 @@ impl NavPathMetrics {
             path_exists: true,
             path_length,
             failure_reason: None,
+            failure_kind: None,
+            replan_recommended: false,
         }
     }
 
     /// Construct metrics for a failed navmesh query.
     #[must_use]
-    pub fn failure(reason: impl Into<String>, path_length: Option<f32>) -> Self {
+    pub fn failure(
+        reason: impl Into<String>,
+        failure_kind: NavPathFailureKind,
+        path_length: Option<f32>,
+        replan_recommended: bool,
+    ) -> Self {
         Self {
             path_exists: false,
             path_length,
             failure_reason: Some(reason.into()),
+            failure_kind: Some(failure_kind),
+            replan_recommended,
         }
     }
 }
@@ -806,6 +870,10 @@ mod tests {
         assert_eq!(cfg.leader_name, "Camrene");
         assert!((cfg.follow_distance - 15.0).abs() < f32::EPSILON);
         assert!((cfg.leash_distance - 60.0).abs() < f32::EPSILON);
+        assert_eq!(cfg.min_delay_ms, 0);
+        assert_eq!(cfg.max_delay_ms, 0);
+        assert!(!cfg.return_no_aggro);
+        assert!(!cfg.return_not_looting);
     }
 
     #[test]
@@ -813,6 +881,30 @@ mod tests {
         let cfg1 = FollowConfig::new("Leader", 10.0, 50.0);
         let cfg2 = FollowConfig::new(String::from("Leader"), 10.0, 50.0);
         assert_eq!(cfg1.leader_name, cfg2.leader_name);
+    }
+
+    #[test]
+    fn follow_config_default_has_mq2_parity_distances() {
+        let cfg = FollowConfig::default();
+        assert!((cfg.follow_distance - 15.0).abs() < f32::EPSILON);
+        assert!((cfg.leash_distance - 75.0).abs() < f32::EPSILON);
+        assert!(!cfg.return_no_aggro);
+        assert!(!cfg.return_not_looting);
+    }
+
+    #[test]
+    fn follow_config_return_policy_fields_roundtrip() {
+        let mut cfg = FollowConfig::new("Tank", 20.0, 100.0);
+        cfg.min_delay_ms = 500;
+        cfg.max_delay_ms = 2000;
+        cfg.return_no_aggro = true;
+        cfg.return_not_looting = true;
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let restored: FollowConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.min_delay_ms, 500);
+        assert_eq!(restored.max_delay_ms, 2000);
+        assert!(restored.return_no_aggro);
+        assert!(restored.return_not_looting);
     }
 
     // ─── NavStatus tests ───
@@ -1721,6 +1813,37 @@ mod tests {
         assert!(!diag.path_exists);
         assert!(diag.path_length.is_none());
         assert!(diag.velocity.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn nav_path_metrics_success_clears_failure_metadata() {
+        let metrics = NavPathMetrics::success(Some(42.0));
+        assert!(metrics.path_exists);
+        assert_eq!(metrics.path_length, Some(42.0));
+        assert_eq!(metrics.failure_reason, None);
+        assert_eq!(metrics.failure_kind, None);
+        assert!(!metrics.replan_recommended);
+    }
+
+    #[test]
+    fn nav_path_metrics_failure_tracks_kind_and_replan_state() {
+        let metrics = NavPathMetrics::failure(
+            "No path found between start and end",
+            NavPathFailureKind::TransientBlockage,
+            None,
+            true,
+        );
+        assert!(!metrics.path_exists);
+        assert_eq!(metrics.path_length, None);
+        assert_eq!(
+            metrics.failure_reason.as_deref(),
+            Some("No path found between start and end")
+        );
+        assert_eq!(
+            metrics.failure_kind,
+            Some(NavPathFailureKind::TransientBlockage)
+        );
+        assert!(metrics.replan_recommended);
     }
 
     // ─── NavStateSignals tests (#176) ───
