@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ElementType, type ReactNode } from "react";
 import {
   Shield,
   Sword,
@@ -24,7 +24,7 @@ import { useWebSocket } from "../hooks/useWebSocket";
 
 const ROLE_META: Record<
   RaidRole,
-  { label: string; color: string; bg: string; border: string; Icon: React.ElementType }
+  { label: string; color: string; bg: string; border: string; Icon: ElementType }
 > = {
   main_tank:    { label: "MT",  color: "text-yellow-300",  bg: "bg-yellow-900/30",  border: "border-yellow-500/50",  Icon: Shield },
   main_assist:  { label: "MA",  color: "text-spectral",    bg: "bg-cyan-900/30",    border: "border-spectral/50",    Icon: Crosshair },
@@ -51,7 +51,7 @@ function RoleBadge({ role }: { role: RaidRole }) {
 
 // ── Behavior-mode toggle ──────────────────────────────────────────────────────
 
-const MODES: { id: BehaviorMode; label: string; Icon: React.ElementType; desc: string }[] = [
+const MODES: { id: BehaviorMode; label: string; Icon: ElementType; desc: string }[] = [
   { id: "camp",   label: "Camp",   Icon: MapPin,    desc: "Hold position at camp anchor" },
   { id: "hunt",   label: "Hunt",   Icon: Crosshair, desc: "Actively seek and engage mobs" },
   { id: "follow", label: "Follow", Icon: UsersThree, desc: "Follow main assist" },
@@ -387,8 +387,8 @@ function Section({
   children,
 }: {
   title: string;
-  icon: React.ElementType;
-  children: React.ReactNode;
+  icon: ElementType;
+  children: ReactNode;
 }) {
   return (
     <div className="bg-violet/20 border border-white/8 p-5">

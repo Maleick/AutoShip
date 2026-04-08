@@ -138,16 +138,23 @@ impl CommandPipe {
                 offset += written as usize;
             }
 
-            // Read response (buffer sized to MAX_MESSAGE_SIZE + length prefix)
-            let mut buf = vec![0u8; protocol::MAX_MESSAGE_SIZE as usize + 4];
+            // Read response (buffer sized to MAX_MESSAGE_SIZE + protocol header)
+            let mut buf =
+                vec![0u8; protocol::MAX_MESSAGE_SIZE as usize + protocol::FRAME_HEADER_SIZE];
             let mut bytes_read: u32 = 0;
             unsafe {
                 ReadFile(self.handle, Some(&mut buf), Some(&mut bytes_read), None)?;
             }
 
-            let (ipc_resp, _) = protocol::decode::<IpcResponse>(&buf[..bytes_read as usize])
+            let (ipc_resp, _) = protocol::decode_frame::<IpcResponse>(&buf[..bytes_read as usize])
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "Protocol error decoding response from client {}: {error}",
+                        self.client_id
+                    )
+                })?
                 .ok_or_else(|| {
-                    anyhow::anyhow!("Failed to decode response from client {}", self.client_id)
+                    anyhow::anyhow!("Incomplete response frame from client {}", self.client_id)
                 })?;
 
             Ok((ipc_resp.response, ipc_resp.correlation_id))

@@ -1,4 +1,5 @@
-import { User, Funnel, Terminal } from "@phosphor-icons/react";
+import { useState } from "react";
+import { User, Funnel, Terminal, Warning } from "@phosphor-icons/react";
 import { players, combatLog } from "../data/demo";
 import type { Player } from "../types";
 

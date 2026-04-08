@@ -6,6 +6,7 @@
 
 use anyhow::Result;
 use std::sync::LazyLock;
+use textquest_common::nav::NavStatus;
 use textquest_common::types::{ClientId, GameState, SharedStateFrame, SpawnData};
 
 static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
@@ -30,6 +31,13 @@ pub struct SharedStateReader {
     #[cfg(windows)]
     _size: usize,
     cached_spawns: Option<(u64, Vec<SpawnData>)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SharedNavSnapshot {
+    pub zone_short_name: String,
+    pub zone_long_name: String,
+    pub nav_status: NavStatus,
 }
 
 // SAFETY: SharedStateReader is only accessed from the orchestrator's poll thread (single reader).
@@ -109,6 +117,19 @@ impl SharedStateReader {
     /// A zero sequence number means the DLL hasn't written yet.
     #[must_use]
     pub fn read(&mut self) -> Option<GameState> {
+        let frame = self.read_frame()?;
+        reconstruct_game_state(frame, &mut self.cached_spawns)
+    }
+
+    /// Read only the zone and nav status from the latest shared-memory frame.
+    #[must_use]
+    pub fn read_nav_state(&mut self) -> Option<SharedNavSnapshot> {
+        let frame = self.read_frame()?;
+        Some(nav_snapshot_from_frame(frame))
+    }
+
+    #[must_use]
+    fn read_frame(&mut self) -> Option<SharedStateFrame> {
         #[cfg(windows)]
         {
             use std::sync::atomic::{AtomicU64, Ordering};
@@ -156,20 +177,18 @@ impl SharedStateReader {
                 bincode::serde::decode_from_slice(&payload_copy, bincode::config::standard())
                     .ok()?;
 
-            let state = reconstruct_game_state(frame, &mut self.cached_spawns)?;
-
             if let Some(start) = perf_start {
                 tracing::info!(
                     target: "textquest::perf",
                     client_id = self.client_id,
-                    nearby_spawns = state.nearby_spawns.len(),
+                    nearby_spawns = frame.nearby_spawns.as_ref().map_or(0, Vec::len),
                     cached_spawn_epoch = self.cached_spawns.as_ref().map(|(epoch, _)| *epoch),
                     elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
                     "Shared memory frame consumed"
                 );
             }
 
-            Some(state)
+            Some(frame)
         }
 
         #[cfg(not(windows))]
@@ -177,6 +196,14 @@ impl SharedStateReader {
             let _ = self.client_id;
             None
         }
+    }
+}
+
+fn nav_snapshot_from_frame(frame: SharedStateFrame) -> SharedNavSnapshot {
+    SharedNavSnapshot {
+        zone_short_name: frame.zone_short_name,
+        zone_long_name: frame.zone_long_name,
+        nav_status: frame.nav_status,
     }
 }
 
@@ -292,5 +319,13 @@ mod tests {
         assert_eq!(updated.nearby_spawns.len(), 1);
         assert_eq!(updated.nearby_spawns[0].spawn_id, 99);
         assert_eq!(cached.as_ref().map(|(epoch, _)| *epoch), Some(2));
+    }
+
+    #[test]
+    fn nav_snapshot_extracts_zone_and_nav_without_spawn_cache() {
+        let snapshot = nav_snapshot_from_frame(make_frame(0, None));
+        assert_eq!(snapshot.zone_short_name, "qeynos");
+        assert_eq!(snapshot.zone_long_name, "South Qeynos");
+        assert_eq!(snapshot.nav_status, textquest_common::nav::NavStatus::Idle);
     }
 }

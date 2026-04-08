@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Coins,
   Storefront,
@@ -33,7 +33,7 @@ function SectionHeader({
   title,
   subtitle,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   subtitle?: string;
 }) {
@@ -59,7 +59,7 @@ function FieldRow({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-white/5">

@@ -4,11 +4,55 @@ pub mod loot;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::AppState;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ErrorResponse {
+    pub error: String,
+}
+
+fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        status,
+        Json(ErrorResponse {
+            error: message.into(),
+        }),
+    )
+}
+
+/// Catch-all for unknown API routes so they do not fall through to the SPA.
+pub async fn api_not_found() -> impl IntoResponse {
+    json_error(StatusCode::NOT_FOUND, "API route not found")
+}
+
+/// Placeholder response for known raid-config endpoints that are not implemented on this build.
+pub async fn raid_config_unavailable() -> impl IntoResponse {
+    json_error(
+        StatusCode::NOT_IMPLEMENTED,
+        "Raid configuration API is not implemented in this build",
+    )
+}
+
+/// Placeholder response for known character-config list endpoint.
+pub async fn character_configs_unavailable() -> impl IntoResponse {
+    json_error(
+        StatusCode::NOT_IMPLEMENTED,
+        "Character configuration API is not implemented in this build",
+    )
+}
+
+/// Placeholder response for known per-character config mutation endpoint.
+pub async fn character_config_unavailable(Path(character): Path<String>) -> impl IntoResponse {
+    json_error(
+        StatusCode::NOT_IMPLEMENTED,
+        format!("Character configuration API is not implemented for '{character}'"),
+    )
+}
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 
@@ -200,22 +244,23 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 }
 
 /// GET /api/config/characters — list all character tuning configs.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
+#[allow(dead_code)]
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<CharacterConfig>>, StatusCode> {
-    let configs_map = state.character_configs.read().map_err(|_|
-        // It's good practice to log this error for observability.
-        StatusCode::INTERNAL_SERVER_ERROR
-    )?;
+) -> Json<Vec<CharacterConfig>> {
+    let configs_map = state.character_configs.read().await;
     let mut configs = configs_map
         .values()
         .cloned()
         .collect::<Vec<_>>();
     configs.sort_by(|a, b| a.character_name.cmp(&b.character_name));
-    Ok(Json(configs))
+    Json(configs)
 }
 
 /// PUT /api/config/characters/:name — upsert per-character tuning config.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
+#[allow(dead_code)]
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -225,10 +270,7 @@ pub async fn put_character_config(
         return Err(StatusCode::BAD_REQUEST);
     }
     config.character_name = name;
-    let mut configs_map = state
-        .character_configs
-        .write()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut configs_map = state.character_configs.write().await;
     configs_map.insert(config.character_name.clone(), config.clone());
     Ok(Json(config))
 }
@@ -534,7 +576,10 @@ mod tests {
     async fn character_configs_returns_demo_data() {
         let state = Arc::new(AppState {
             event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            loot_state: crate::api::loot::LootState::new_demo(),
         });
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
@@ -545,7 +590,10 @@ mod tests {
     async fn put_character_config_upserts() {
         let state = Arc::new(AppState {
             event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            loot_state: crate::api::loot::LootState::new_demo(),
         });
         let input = CharacterConfig {
             character_name: "IgnoredName".into(),

@@ -20,6 +20,10 @@ export function useRaidConfig() {
   const fetchConfig = useCallback(async () => {
     try {
       const res = await fetch("/api/raid/config");
+      if (res.status === 404 || res.status === 501) {
+        setError("Raid config backend unavailable (demo mode)");
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: RaidConfig = await res.json();
       setConfig(data);
@@ -39,6 +43,11 @@ export function useRaidConfig() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated),
       });
+      if (res.status === 404 || res.status === 501) {
+        setConfig(updated);
+        setError("Raid config backend unavailable (demo mode)");
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setConfig(updated);
       setError(null);

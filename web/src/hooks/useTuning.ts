@@ -10,6 +10,10 @@ export function useCharacterConfigs() {
   const fetchConfigs = useCallback(async () => {
     try {
       const res = await fetch("/api/config/characters");
+      if (res.status === 404 || res.status === 501) {
+        setError("Character config backend unavailable (demo mode)");
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: CharacterConfig[] = await res.json();
       setConfigs(data);
@@ -39,6 +43,10 @@ export function useCharacterConfigs() {
           body: JSON.stringify(config),
         },
       );
+      if (res.status === 404 || res.status === 501) {
+        setError("Character config backend unavailable (demo mode)");
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await fetchConfigs();
     },

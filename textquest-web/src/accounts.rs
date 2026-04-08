@@ -1,20 +1,15 @@
 //! In-memory account registry with encrypted password storage.
 //!
-//! This module is staged for the web dashboard account-management slice but is not
-//! yet wired into `AppState` or any axum routes on current `master`.
+//! This module backs the web dashboard account-management slice.
 //!
 //! Passwords are encrypted with AES-256-GCM using a per-account key derived from the
 //! master key via Argon2id, and persisted in the shared `data/credentials.db`
 //! SQLite database — the same schema used by the CLI credential store in the
 //! orchestrator crate.
-#![allow(
-    dead_code,
-    reason = "staged web account registry is not wired into routes yet"
-)]
 
 use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Mutex;
+use std::path::Path as FsPath;
+use std::sync::{Mutex, MutexGuard};
 
 use aes_gcm::{
     Aes256Gcm, Nonce,
@@ -22,11 +17,35 @@ use aes_gcm::{
 };
 use anyhow::{Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    routing::{get, post, put},
+};
 use rand::RngCore;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
+
+use crate::{api::ErrorResponse, AppState};
+
+type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ErrorResponse>)>;
+#[derive(Debug, Deserialize)]
+pub struct ImportAccountsRequest {
+    pub accounts: Vec<AccountRecord>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportAccountsResponse {
+    pub imported: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExportAccountsResponse {
+    pub accounts: Vec<AccountRecord>,
+}
 
 // ─── Domain types ────────────────────────────────────────────────────────────
 
@@ -363,7 +382,7 @@ pub struct CredentialStore {
 
 impl CredentialStore {
     /// Open (or create) the credential store at the given path.
-    pub fn open(path: &Path, master_password: &str) -> Result<Self> {
+    pub fn open(path: &FsPath, master_password: &str) -> Result<Self> {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open credential store at {}", path.display()))?;
         conn.execute_batch("PRAGMA journal_mode = WAL;")
@@ -445,6 +464,192 @@ pub fn build_record(req: CreateAccountRequest) -> AccountRecord {
         status: req.status,
         has_password: false,
     }
+}
+
+pub fn router() -> Router<std::sync::Arc<AppState>> {
+    Router::new()
+        .route("/", get(list_accounts).post(create_account))
+        .route("/export", get(export_accounts))
+        .route("/import", post(import_accounts))
+        .route("/{name}", put(update_account).delete(delete_account))
+        .route("/{name}/password", put(set_password))
+}
+
+fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        status,
+        Json(ErrorResponse {
+            error: message.into(),
+        }),
+    )
+}
+
+fn lock_store(
+    state: &AppState,
+) -> Result<MutexGuard<'_, AccountStore>, (StatusCode, Json<ErrorResponse>)> {
+    state.account_store.lock().map_err(|error| {
+        json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("account store lock poisoned: {error}"),
+        )
+    })
+}
+
+fn require_credential_store(
+    state: &AppState,
+) -> Result<&CredentialStore, (StatusCode, Json<ErrorResponse>)> {
+    state.credential_store.as_ref().ok_or_else(|| {
+        json_error(
+            StatusCode::NOT_IMPLEMENTED,
+            "Password storage requires TEXTQUEST_MASTER_PASSWORD at server startup",
+        )
+    })
+}
+
+pub async fn list_accounts(
+    State(state): State<std::sync::Arc<AppState>>,
+) -> ApiResult<Vec<AccountRecord>> {
+    let store = lock_store(&state)?;
+    Ok(Json(store.list()))
+}
+
+pub async fn create_account(
+    State(state): State<std::sync::Arc<AppState>>,
+    Json(req): Json<CreateAccountRequest>,
+) -> ApiResult<AccountRecord> {
+    let requested_password = req.password.clone();
+    if requested_password.is_some() {
+        let _ = require_credential_store(&state)?;
+    }
+
+    let mut record = build_record(req);
+    {
+        let mut store = lock_store(&state)?;
+        store
+            .insert(record.clone())
+            .map_err(|error| json_error(StatusCode::CONFLICT, error.to_string()))?;
+    }
+
+    if let Some(password) = requested_password.as_deref() {
+        let credential_store = require_credential_store(&state)?;
+        if let Err(error) = credential_store.set_password(&record.name, password) {
+            let mut store = lock_store(&state)?;
+            let _ = store.remove(&record.name);
+            return Err(json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error.to_string(),
+            ));
+        }
+        let mut store = lock_store(&state)?;
+        store
+            .set_has_password(&record.name, true)
+            .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        record.has_password = true;
+    }
+
+    Ok(Json(record))
+}
+
+pub async fn update_account(
+    State(state): State<std::sync::Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(req): Json<UpdateAccountRequest>,
+) -> ApiResult<AccountRecord> {
+    if req.password.is_some() {
+        let _ = require_credential_store(&state)?;
+    }
+
+    let updated = {
+        let mut store = lock_store(&state)?;
+        store
+            .update(&name, &req)
+            .map_err(|error| json_error(StatusCode::NOT_FOUND, error.to_string()))?
+    };
+
+    if let Some(password) = req.password.as_deref() {
+        let credential_store = require_credential_store(&state)?;
+        credential_store
+            .set_password(&name, password)
+            .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        let mut store = lock_store(&state)?;
+        store
+            .set_has_password(&name, true)
+            .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        let refreshed = store.get(&name).cloned().ok_or_else(|| {
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Account '{name}' disappeared after password update"),
+            )
+        })?;
+        return Ok(Json(refreshed));
+    }
+
+    Ok(Json(updated))
+}
+
+pub async fn delete_account(
+    State(state): State<std::sync::Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    {
+        let mut store = lock_store(&state)?;
+        store
+            .remove(&name)
+            .map_err(|error| json_error(StatusCode::NOT_FOUND, error.to_string()))?;
+    }
+
+    if let Some(credential_store) = state.credential_store.as_ref() {
+        credential_store
+            .remove_password(&name)
+            .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn set_password(
+    State(state): State<std::sync::Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(req): Json<SetPasswordRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    {
+        let store = lock_store(&state)?;
+        if store.get(&name).is_none() {
+            return Err(json_error(
+                StatusCode::NOT_FOUND,
+                format!("Account '{name}' not found"),
+            ));
+        }
+    }
+
+    let credential_store = require_credential_store(&state)?;
+    credential_store
+        .set_password(&name, &req.password)
+        .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+
+    let mut store = lock_store(&state)?;
+    store
+        .set_has_password(&name, true)
+        .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn export_accounts(
+    State(state): State<std::sync::Arc<AppState>>,
+) -> ApiResult<ExportAccountsResponse> {
+    let store = lock_store(&state)?;
+    Ok(Json(ExportAccountsResponse {
+        accounts: store.list(),
+    }))
+}
+
+pub async fn import_accounts(
+    State(state): State<std::sync::Arc<AppState>>,
+    Json(req): Json<ImportAccountsRequest>,
+) -> ApiResult<ImportAccountsResponse> {
+    let mut store = lock_store(&state)?;
+    let imported = store.import_bulk(req.accounts);
+    Ok(Json(ImportAccountsResponse { imported }))
 }
 
 #[cfg(test)]

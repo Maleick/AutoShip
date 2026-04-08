@@ -1,4 +1,6 @@
-use std::collections::{HashMap, VecDeque};
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque, hash_map::DefaultHasher};
+use std::hash::{Hash, Hasher};
 
 use super::cast::{CastDisplay, live_cast_display, short_cast_label};
 use super::command::{self, HelpSection};
@@ -420,6 +422,10 @@ pub struct App {
     filtered_spawn_cache: FilteredSpawnCache,
     /// Cached tactical-map spawn overlay cells.
     pub(crate) map_spawn_cache: MapSpawnPresentationCache,
+    /// Revision-keyed cache for live group construction.
+    live_group_cache: RefCell<Option<CachedLiveGroups>>,
+    /// Revision-keyed cache for case-insensitive client-name lookup.
+    client_name_index_cache: RefCell<Option<CachedClientNameIndex>>,
     /// Status bar message displayed at the bottom of the TUI.
     pub status_message: String,
     /// Monotonic tick counter incremented each refresh cycle.
@@ -666,6 +672,9 @@ struct FocusedNavClient {
     is_demo: bool,
 }
 
+type CachedLiveGroups = (u64, Vec<LiveGroup>, Vec<usize>);
+type CachedClientNameIndex = (u64, HashMap<String, usize>);
+
 impl App {
     /// Create a new TUI application with default state.
     #[must_use]
@@ -690,6 +699,8 @@ impl App {
             synced_spawn_revision: None,
             filtered_spawn_cache: FilteredSpawnCache::default(),
             map_spawn_cache: MapSpawnPresentationCache::default(),
+            live_group_cache: RefCell::new(None),
+            client_name_index_cache: RefCell::new(None),
             status_message: String::from("Waiting for EQ process..."),
             tick_count: 0,
 
@@ -1669,89 +1680,158 @@ impl App {
         self.clients.iter().any(|c| c.group_info.is_some())
     }
 
+    fn client_display_name(client: &ClientState) -> Option<&str> {
+        if !client.character_name.is_empty() {
+            Some(client.character_name.as_str())
+        } else {
+            client
+                .local_player
+                .as_ref()
+                .map(|player| player.displayed_name.as_str())
+        }
+    }
+
+    fn client_name_revision_key(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.clients.len().hash(&mut hasher);
+        for client in &self.clients {
+            client.pid.hash(&mut hasher);
+            Self::client_display_name(client)
+                .unwrap_or_default()
+                .hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+
+    fn live_group_revision_key(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.clients.len().hash(&mut hasher);
+        for client in &self.clients {
+            client.pid.hash(&mut hasher);
+            client.zone_name.hash(&mut hasher);
+            Self::client_display_name(client)
+                .unwrap_or_default()
+                .hash(&mut hasher);
+            if let Some(group_info) = &client.group_info {
+                group_info.leader_name.hash(&mut hasher);
+                for member in &group_info.members {
+                    member.hash(&mut hasher);
+                }
+            }
+        }
+        hasher.finish()
+    }
+
+    fn rebuild_client_name_index(&self) -> HashMap<String, usize> {
+        let mut index = HashMap::new();
+        for (idx, client) in self.clients.iter().enumerate() {
+            if let Some(name) = Self::client_display_name(client) {
+                index.insert(name.to_ascii_lowercase(), idx);
+            }
+        }
+        index
+    }
+
     /// Build dynamic group list from live EQ group membership.
     /// Groups clients by `leader_name` — same leader means same group.
     /// Returns an ordered list of `LiveGroup` plus a list of ungrouped client indices.
     pub fn build_live_groups(&self) -> (Vec<LiveGroup>, Vec<usize>) {
-        let mut groups_map: HashMap<String, LiveGroup> = HashMap::new();
-        let mut grouped_indices: std::collections::HashSet<usize> =
-            std::collections::HashSet::new();
+        let revision = self.live_group_revision_key();
+        if self
+            .live_group_cache
+            .borrow()
+            .as_ref()
+            .is_none_or(|(cached_revision, _, _)| *cached_revision != revision)
+        {
+            let mut groups_map: HashMap<String, LiveGroup> = HashMap::new();
+            let mut grouped_indices: std::collections::HashSet<usize> =
+                std::collections::HashSet::new();
 
-        for (idx, client) in self.clients.iter().enumerate() {
-            if let Some(gi) = &client.group_info {
-                if gi.leader_name.is_empty() {
-                    continue;
-                }
-                grouped_indices.insert(idx);
+            for (idx, client) in self.clients.iter().enumerate() {
+                if let Some(gi) = &client.group_info {
+                    if gi.leader_name.is_empty() {
+                        continue;
+                    }
+                    grouped_indices.insert(idx);
 
-                let entry = groups_map
-                    .entry(gi.leader_name.clone())
-                    .or_insert_with(|| LiveGroup {
-                        leader: gi.leader_name.clone(),
-                        member_names: Vec::new(),
-                        zone: client.zone_name.clone(),
-                    });
+                    let entry =
+                        groups_map
+                            .entry(gi.leader_name.clone())
+                            .or_insert_with(|| LiveGroup {
+                                leader: gi.leader_name.clone(),
+                                member_names: Vec::new(),
+                                zone: client.zone_name.clone(),
+                            });
 
-                // Merge member names from this client's perspective
-                for member in &gi.members {
-                    if !member.is_empty() && !entry.member_names.contains(member) {
-                        entry.member_names.push(member.clone());
+                    for member in &gi.members {
+                        if !member.is_empty() && !entry.member_names.contains(member) {
+                            entry.member_names.push(member.clone());
+                        }
                     }
                 }
             }
-        }
 
-        // Ensure leader is first in member list
-        for group in groups_map.values_mut() {
-            if let Some(pos) = group.member_names.iter().position(|n| n == &group.leader) {
-                group.member_names.swap(0, pos);
-            }
-        }
-
-        // Collect ungrouped clients (those not mentioned in any group)
-        let all_grouped_names: std::collections::HashSet<&str> = groups_map
-            .values()
-            .flat_map(|g| g.member_names.iter().map(std::string::String::as_str))
-            .collect();
-
-        let ungrouped: Vec<usize> = self
-            .clients
-            .iter()
-            .enumerate()
-            .filter(|(idx, c)| {
-                if grouped_indices.contains(idx) {
-                    return false;
+            for group in groups_map.values_mut() {
+                if let Some(pos) = group.member_names.iter().position(|n| n == &group.leader) {
+                    group.member_names.swap(0, pos);
                 }
-                let name = if !c.character_name.is_empty() {
-                    c.character_name.as_str()
-                } else if let Some(p) = &c.local_player {
-                    p.displayed_name.as_str()
-                } else {
-                    return true;
-                };
-                !all_grouped_names.contains(name)
-            })
-            .map(|(idx, _)| idx)
-            .collect();
+            }
 
-        // Sort groups by leader name for stable ordering
-        let mut groups: Vec<LiveGroup> = groups_map.into_values().collect();
-        groups.sort_by(|a, b| a.leader.cmp(&b.leader));
+            let all_grouped_names: std::collections::HashSet<&str> = groups_map
+                .values()
+                .flat_map(|g| g.member_names.iter().map(std::string::String::as_str))
+                .collect();
 
-        (groups, ungrouped)
+            let ungrouped: Vec<usize> = self
+                .clients
+                .iter()
+                .enumerate()
+                .filter(|(idx, c)| {
+                    if grouped_indices.contains(idx) {
+                        return false;
+                    }
+                    let name = if !c.character_name.is_empty() {
+                        c.character_name.as_str()
+                    } else if let Some(p) = &c.local_player {
+                        p.displayed_name.as_str()
+                    } else {
+                        return true;
+                    };
+                    !all_grouped_names.contains(name)
+                })
+                .map(|(idx, _)| idx)
+                .collect();
+
+            let mut groups: Vec<LiveGroup> = groups_map.into_values().collect();
+            groups.sort_by(|a, b| a.leader.cmp(&b.leader));
+
+            *self.live_group_cache.borrow_mut() = Some((revision, groups, ungrouped));
+        }
+
+        let cache = self.live_group_cache.borrow();
+        let (_, groups, ungrouped) = cache
+            .as_ref()
+            .expect("live group cache should be populated");
+        (groups.clone(), ungrouped.clone())
     }
 
     fn find_client_index_by_name(&self, name: &str) -> Option<usize> {
-        let lower = name.to_lowercase();
-        self.clients.iter().position(|c| {
-            if !c.character_name.is_empty() {
-                return c.character_name.to_lowercase() == lower;
-            }
-            if let Some(p) = &c.local_player {
-                return p.displayed_name.to_lowercase() == lower;
-            }
-            false
-        })
+        let revision = self.client_name_revision_key();
+        if self
+            .client_name_index_cache
+            .borrow()
+            .as_ref()
+            .is_none_or(|(cached_revision, _)| *cached_revision != revision)
+        {
+            *self.client_name_index_cache.borrow_mut() =
+                Some((revision, self.rebuild_client_name_index()));
+        }
+
+        let lower = name.to_ascii_lowercase();
+        let cache = self.client_name_index_cache.borrow();
+        cache
+            .as_ref()
+            .and_then(|(_, index)| index.get(&lower).copied())
     }
 
     /// Find a client by character name (case-insensitive).
@@ -6565,7 +6645,7 @@ fn ascii_icontains(haystack: &str, needle: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
+    use crate::eq::structs::{GroupInfo, SpawnInfo, SpawnType, StandState};
     use crate::orchestrator::Orchestrator;
 
     fn test_spawn(name: &str) -> SpawnInfo {
@@ -6605,6 +6685,14 @@ mod tests {
         client
     }
 
+    fn test_group(leader_name: &str, members: &[&str]) -> GroupInfo {
+        GroupInfo {
+            leader_name: leader_name.to_string(),
+            members: members.iter().map(|member| (*member).to_string()).collect(),
+            member_count: members.len() as u8,
+        }
+    }
+
     #[test]
     fn client_command_target_respects_privacy_mode() {
         let mut app = App::new();
@@ -6642,6 +6730,57 @@ mod tests {
             app.parse_group_prefix("G1 /assist Bob"),
             Some((0, "/assist Bob"))
         );
+    }
+
+    #[test]
+    fn find_client_by_name_is_case_insensitive_and_invalidates_after_rename() {
+        let mut app = App::new();
+        app.clients.push(test_client(1, "Alpha"));
+
+        let found = app
+            .find_client_by_name("alpha")
+            .expect("expected initial client to be indexed");
+        assert_eq!(found.pid, 1);
+
+        app.clients[0].character_name = String::from("Bravo");
+        app.clients[0].local_player = Some(test_spawn("Bravo"));
+
+        assert!(app.find_client_by_name("alpha").is_none());
+        let renamed = app
+            .find_client_by_name("BRAVO")
+            .expect("renamed client should refresh the cache");
+        assert_eq!(renamed.pid, 1);
+    }
+
+    #[test]
+    fn build_live_groups_invalidates_cache_when_group_membership_changes() {
+        let mut app = App::new();
+        let mut alpha = test_client(1, "Alpha");
+        alpha.zone_name = String::from("Guild Lobby");
+        alpha.group_info = Some(test_group("Alpha", &["Alpha", "Bravo"]));
+        let mut bravo = test_client(2, "Bravo");
+        bravo.zone_name = String::from("Guild Lobby");
+        bravo.group_info = Some(test_group("Alpha", &["Alpha", "Bravo"]));
+        let charlie = test_client(3, "Charlie");
+        app.clients.extend([alpha, bravo, charlie]);
+
+        let (groups, ungrouped) = app.build_live_groups();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].leader, "Alpha");
+        assert_eq!(groups[0].member_names, vec!["Alpha", "Bravo"]);
+        assert_eq!(ungrouped, vec![2]);
+
+        app.clients[0].group_info = Some(test_group("Bravo", &["Bravo", "Alpha"]));
+        app.clients[1].group_info = Some(test_group("Bravo", &["Bravo", "Alpha"]));
+        app.clients[0].zone_name = String::from("Plane of Knowledge");
+        app.clients[1].zone_name = String::from("Plane of Knowledge");
+
+        let (updated_groups, updated_ungrouped) = app.build_live_groups();
+        assert_eq!(updated_groups.len(), 1);
+        assert_eq!(updated_groups[0].leader, "Bravo");
+        assert_eq!(updated_groups[0].member_names, vec!["Bravo", "Alpha"]);
+        assert_eq!(updated_groups[0].zone, "Plane of Knowledge");
+        assert_eq!(updated_ungrouped, vec![2]);
     }
 
     #[test]

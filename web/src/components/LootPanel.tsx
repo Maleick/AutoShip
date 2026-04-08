@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Crown,
   Funnel,
@@ -36,10 +36,10 @@ function Section({
   subtitle,
   children,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   subtitle: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="bg-violet/20 border border-white/10 p-5">
@@ -104,7 +104,7 @@ export default function LootPanel() {
         entry.zone,
         entry.source,
         entry.policy,
-      ].some((value) => value.toLowerCase().includes(needle));
+      ].some((value) => (value ?? "").toLowerCase().includes(needle));
     });
   }, [history, search]);
 

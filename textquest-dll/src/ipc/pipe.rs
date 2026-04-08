@@ -160,7 +160,11 @@ impl CommandListener {
             }
 
             // Read the next command from the connected pipe.
-            let mut buf = vec![0u8; textquest_common::protocol::MAX_MESSAGE_SIZE as usize + 4];
+            let mut buf = vec![
+                0u8;
+                textquest_common::protocol::MAX_MESSAGE_SIZE as usize
+                    + textquest_common::protocol::FRAME_HEADER_SIZE
+            ];
             let mut bytes_read: u32 = 0;
             // SAFETY: self.handle is a connected pipe. buf is a heap-allocated
             // 4096-byte buffer. ReadFile writes at most buf.len() bytes.
@@ -178,9 +182,15 @@ impl CommandListener {
                 return Err(e.into());
             }
 
-            let (ipc_cmd, _) = protocol::decode::<IpcCommand>(&buf[..bytes_read as usize])
+            let (ipc_cmd, _) = protocol::decode_frame::<IpcCommand>(&buf[..bytes_read as usize])
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "Protocol error decoding command for client {}: {error}",
+                        self.client_id
+                    )
+                })?
                 .ok_or_else(|| {
-                    anyhow::anyhow!("Failed to decode command for client {}", self.client_id)
+                    anyhow::anyhow!("Incomplete command frame for client {}", self.client_id)
                 })?;
 
             if !validate_command(&ipc_cmd.command) {

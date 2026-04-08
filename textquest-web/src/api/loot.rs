@@ -9,6 +9,8 @@ use axum::http::{HeaderMap, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
+use crate::AppState;
+
 // ── Shared loot state ────────────────────────────────────────────────────────
 
 /// In-memory loot configuration state shared across handlers.
@@ -307,28 +309,28 @@ fn is_trusted_origin(headers: &HeaderMap) -> bool {
 }
 
 /// GET /api/loot/rules — return current loot rules.
-pub async fn get_rules(State(state): State<Arc<LootState>>) -> Json<LootRulesPayload> {
-    let rules = state.rules.read().await;
+pub async fn get_rules(State(state): State<Arc<AppState>>) -> Json<LootRulesPayload> {
+    let rules = state.loot_state.rules.read().await;
     Json(rules.clone())
 }
 
 /// PUT /api/loot/rules — replace loot rules.
 pub async fn put_rules(
-    State(state): State<Arc<LootState>>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(payload): Json<LootRulesPayload>,
 ) -> StatusCode {
     if !is_trusted_origin(&headers) {
         return StatusCode::FORBIDDEN;
     }
-    let mut rules = state.rules.write().await;
+    let mut rules = state.loot_state.rules.write().await;
     *rules = payload;
     StatusCode::NO_CONTENT
 }
 
 /// GET /api/loot/filters — return all character loot filters.
-pub async fn get_filters(State(state): State<Arc<LootState>>) -> Json<Vec<CharacterLootFilter>> {
-    let filters = state.filters.read().await;
+pub async fn get_filters(State(state): State<Arc<AppState>>) -> Json<Vec<CharacterLootFilter>> {
+    let filters = state.loot_state.filters.read().await;
     let mut list: Vec<CharacterLootFilter> = filters.values().cloned().collect();
     list.sort_by(|a, b| a.character.cmp(&b.character));
     Json(list)
@@ -336,7 +338,7 @@ pub async fn get_filters(State(state): State<Arc<LootState>>) -> Json<Vec<Charac
 
 /// PUT /api/loot/filters/:character — replace a character's loot filter.
 pub async fn put_filter(
-    State(state): State<Arc<LootState>>,
+    State(state): State<Arc<AppState>>,
     Path(character): Path<String>,
     headers: HeaderMap,
     Json(payload): Json<CharacterLootFilter>,
@@ -347,57 +349,57 @@ pub async fn put_filter(
     if payload.character != character {
         return StatusCode::BAD_REQUEST;
     }
-    let mut filters = state.filters.write().await;
+    let mut filters = state.loot_state.filters.write().await;
     filters.insert(character, payload);
     StatusCode::NO_CONTENT
 }
 
 /// GET /api/loot/master-looter — return master looter assignment.
-pub async fn get_master_looter(State(state): State<Arc<LootState>>) -> Json<MasterLooterPayload> {
-    let ml = state.master_looter.read().await;
+pub async fn get_master_looter(State(state): State<Arc<AppState>>) -> Json<MasterLooterPayload> {
+    let ml = state.loot_state.master_looter.read().await;
     Json(ml.clone())
 }
 
 /// PUT /api/loot/master-looter — set master looter.
 pub async fn put_master_looter(
-    State(state): State<Arc<LootState>>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(payload): Json<MasterLooterPayload>,
 ) -> StatusCode {
     if !is_trusted_origin(&headers) {
         return StatusCode::FORBIDDEN;
     }
-    let mut ml = state.master_looter.write().await;
+    let mut ml = state.loot_state.master_looter.write().await;
     *ml = payload;
     StatusCode::NO_CONTENT
 }
 
 /// GET /api/loot/distribution — return distribution rules.
-pub async fn get_distribution(State(state): State<Arc<LootState>>) -> Json<DistributionConfig> {
-    let dist = state.distribution.read().await;
+pub async fn get_distribution(State(state): State<Arc<AppState>>) -> Json<DistributionConfig> {
+    let dist = state.loot_state.distribution.read().await;
     Json(dist.clone())
 }
 
 /// PUT /api/loot/distribution — replace distribution configuration.
 pub async fn put_distribution(
-    State(state): State<Arc<LootState>>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(payload): Json<DistributionConfig>,
 ) -> StatusCode {
     if !is_trusted_origin(&headers) {
         return StatusCode::FORBIDDEN;
     }
-    let mut dist = state.distribution.write().await;
+    let mut dist = state.loot_state.distribution.write().await;
     *dist = payload;
     StatusCode::NO_CONTENT
 }
 
 /// GET /api/loot/history — return loot history, with optional search filters.
 pub async fn get_history(
-    State(state): State<Arc<LootState>>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<HistoryQuery>,
 ) -> Json<Vec<LootHistoryEntry>> {
-    let history = state.history.read().await;
+    let history = state.loot_state.history.read().await;
     // Clamp limit: 0 falls back to default; max 500.
     let limit = params.limit.filter(|&l| l > 0).unwrap_or(50).min(500);
     // Lowercase the search query once so we don't redo it on every iteration.
@@ -433,9 +435,20 @@ pub async fn get_history(
 mod tests {
     use super::*;
 
+    fn demo_state() -> Arc<AppState> {
+        let (event_tx, _) = tokio::sync::broadcast::channel(1);
+        Arc::new(AppState {
+            event_tx,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            loot_state: LootState::new_demo(),
+        })
+    }
+
     #[tokio::test]
     async fn get_rules_returns_defaults() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let Json(rules) = get_rules(State(state)).await;
         assert!(rules.loot_all);
         assert!(rules.auto_split);
@@ -444,7 +457,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_rules_updates_state() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let new_rules = LootRulesPayload {
             keep_items: vec!["Fabled Sword".into()],
             sell_items: vec![],
@@ -461,7 +474,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_filters_returns_all_characters() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let Json(filters) = get_filters(State(state)).await;
         assert!(!filters.is_empty());
         // Should be sorted alphabetically
@@ -473,7 +486,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_filter_updates_character() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let new_filter = CharacterLootFilter {
             character: "Frostreaver".into(),
             filters: vec![ItemFilterEntry {
@@ -500,14 +513,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_master_looter_returns_default() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let Json(ml) = get_master_looter(State(state)).await;
         assert!(ml.character.is_none());
     }
 
     #[tokio::test]
     async fn put_master_looter_sets_character() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let payload = MasterLooterPayload {
             character: Some("Frostreaver".into()),
         };
@@ -519,14 +532,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_distribution_returns_defaults() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let Json(dist) = get_distribution(State(state)).await;
         assert!(!dist.rules.is_empty());
     }
 
     #[tokio::test]
     async fn get_history_returns_entries() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let Json(history) = get_history(
             State(state),
             Query(HistoryQuery {
@@ -541,7 +554,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_history_filters_by_search() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let Json(history) = get_history(
             State(state),
             Query(HistoryQuery {
@@ -557,7 +570,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_filter_rejects_character_mismatch() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let new_filter = CharacterLootFilter {
             character: "Shadowdancer".into(),
             filters: vec![],
@@ -574,7 +587,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_rules_rejects_untrusted_origin() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let mut headers = HeaderMap::new();
         headers.insert(
             axum::http::header::ORIGIN,
@@ -594,7 +607,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_history_clamps_limit() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         // limit=0 falls back to default (50); should return all demo entries (< 50)
         let Json(history) = get_history(
             State(state.clone()),
@@ -622,7 +635,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_history_filters_by_character() {
-        let state = LootState::new_demo();
+        let state = demo_state();
         let Json(history) = get_history(
             State(state),
             Query(HistoryQuery {

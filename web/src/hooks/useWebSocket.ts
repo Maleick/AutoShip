@@ -6,24 +6,31 @@ export function useWebSocket(url: string) {
   const [lastMessage, setLastMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
 
     function connect() {
       const ws = new WebSocket(url);
       wsRef.current = ws;
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        if (active) setConnected(true);
+      };
       ws.onclose = () => {
+        if (!active) return;
         setConnected(false);
         timeoutId = setTimeout(connect, 3000);
       };
-      ws.onmessage = (e) => setLastMessage(e.data);
+      ws.onmessage = (e) =>
+        setLastMessage(typeof e.data === "string" ? e.data : String(e.data));
       ws.onerror = () => ws.close();
     }
 
     connect();
     return () => {
-      clearTimeout(timeoutId);
+      active = false;
+      if (timeoutId !== null) clearTimeout(timeoutId);
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [url]);
 

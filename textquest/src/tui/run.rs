@@ -321,6 +321,7 @@ fn scan_for_clients_live(app: &mut App) {
     let Ok(pids) = find_processes_by_name("eqgame.exe") else {
         return;
     };
+    let window_fields = eq_window_fields_by_pid();
 
     // Track which PIDs we already have
     let existing_pids: std::collections::HashSet<u32> = app.clients.iter().map(|c| c.pid).collect();
@@ -347,21 +348,8 @@ fn scan_for_clients_live(app: &mut App) {
             // Read zone name from memory if possible
             if let Ok(zone) = crate::eq::spawn::read_zone_name(&proc, base) {
                 client.zone_name = zone;
-            } else if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest") {
-                for w in &windows {
-                    if w.pid == pid {
-                        let (char_name, zone) = parse_title_fields(&w.title);
-                        if !char_name.is_empty() {
-                            client.character_name = char_name;
-                        }
-                        client.zone_name = if zone.is_empty() {
-                            String::from("Unknown")
-                        } else {
-                            zone
-                        };
-                        break;
-                    }
-                }
+            } else {
+                apply_window_fields(&mut client, window_fields.get(&pid));
             }
 
             tracing::info!(
@@ -645,6 +633,37 @@ fn parse_title_fields(title: &str) -> (String, String) {
     (char_name, zone)
 }
 
+#[cfg(windows)]
+fn eq_window_fields_by_pid() -> HashMap<u32, (String, String)> {
+    crate::process::window::find_windows_by_title("EverQuest")
+        .map(|windows| {
+            windows
+                .into_iter()
+                .map(|window| (window.pid, parse_title_fields(&window.title)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(windows)]
+fn apply_window_fields(
+    client: &mut super::app::ClientState,
+    window_fields: Option<&(String, String)>,
+) {
+    let Some((character_name, zone_name)) = window_fields else {
+        return;
+    };
+
+    if !character_name.is_empty() {
+        client.character_name = character_name.clone();
+    }
+    client.zone_name = if zone_name.is_empty() {
+        String::from("Unknown")
+    } else {
+        zone_name.clone()
+    };
+}
+
 /// Refresh live EQ data. On non-Windows or when not attached, loads demo data.
 fn refresh_eq_data(
     app: &mut App,
@@ -704,6 +723,7 @@ fn refresh_eq_data_live(
     let selected_index = app.selected_client;
     let now = Instant::now();
     let mut nav_status_updates = Vec::new();
+    let window_fields = eq_window_fields_by_pid();
 
     for (client_index, client) in app.clients.iter_mut().enumerate() {
         if client.is_demo {
@@ -809,26 +829,7 @@ fn refresh_eq_data_live(
         if refresh_zone {
             match eq::spawn::read_zone_name(&proc, client.eq_base) {
                 Ok(zone) => client.zone_name = zone,
-                Err(_) => {
-                    // Fallback: parse from window title
-                    if let Ok(windows) = crate::process::window::find_windows_by_title("EverQuest")
-                    {
-                        for w in &windows {
-                            if w.pid == client.pid {
-                                let (char_name, zone) = parse_title_fields(&w.title);
-                                if !char_name.is_empty() {
-                                    client.character_name = char_name;
-                                }
-                                client.zone_name = if zone.is_empty() {
-                                    String::from("Unknown")
-                                } else {
-                                    zone
-                                };
-                                break;
-                            }
-                        }
-                    }
-                }
+                Err(_) => apply_window_fields(client, window_fields.get(&client.pid)),
             }
         }
 
@@ -905,7 +906,7 @@ fn read_live_nav_state(
     }
 
     let reader = shared_state_readers.get_mut(&pid)?;
-    let state = reader.read()?;
+    let state = reader.read_nav_state()?;
     Some((
         resolve_live_zone_name(state.zone_long_name, state.zone_short_name),
         state.nav_status,

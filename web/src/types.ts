@@ -111,6 +111,7 @@ export interface RaidInstance {
   zone: string;
   group: string;
   entered_at: string;
+  elapsed_secs: number;
   members: string[];
 }
 
@@ -303,6 +304,30 @@ export interface LootRules {
 }
 
 export type FilterAction = "keep" | "sell" | "destroy" | "bank";
+export type LootFilterAction = FilterAction;
+
+export type LootPolicy =
+  | "need-before-greed"
+  | "round-robin"
+  | "master-looter"
+  | "greed-only";
+
+export interface LootRule {
+  id: string;
+  item_scope: string;
+  quality: string;
+  policy: LootPolicy;
+  master_looter: string;
+  enabled: boolean;
+}
+
+export interface AutoLootFilter {
+  id: string;
+  character_name: string;
+  matcher: string;
+  action: LootFilterAction;
+  notes?: string;
+}
 
 export interface ItemFilterEntry {
   item_name: string;
@@ -345,4 +370,11 @@ export interface LootHistoryEntry {
   zone: string | null;
   quantity: number;
   assigned_by: string | null;
+  item_type: string;
+  quality: string | null;
+  assigned_to: string;
+  looted_by: string;
+  source: string | null;
+  policy: LootPolicy;
+  estimated_value: number;
 }

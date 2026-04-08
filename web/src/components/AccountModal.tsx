@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { X, Eye, EyeSlash, Key } from "@phosphor-icons/react";
 import type { Account, AccountStatus, CreateAccountPayload, UpdateAccountPayload } from "../types";
 
@@ -50,7 +50,7 @@ export default function AccountModal({ account, onClose, onSave }: Props) {
     }
   }, [account]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFieldError(null);
 

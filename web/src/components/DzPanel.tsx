@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import {
   Timer,
   ArrowCounterClockwise,
@@ -243,7 +243,7 @@ export default function DzPanel() {
     setToast(`Reset queued for ${lo.expedition} (${lo.character})`);
   };
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     {
       id: "lockouts",
       label: "Lockout Timers",
