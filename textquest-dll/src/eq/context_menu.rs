@@ -262,6 +262,7 @@ unsafe fn activate_context_menu_item_windows(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use textquest_common::ipc::ContextMenuItem;
 
     #[test]
     fn read_context_menus_no_crash_when_eq_base_zero() {

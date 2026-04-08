@@ -227,10 +227,7 @@ impl Navigator {
     /// Pause navigation, retaining path and state for later resume (#168).
     pub fn pause(&mut self) {
         match self.state {
-            State::Moving
-            | State::Following { .. }
-            | State::Sticking
-            | State::Circling { .. } => {
+            State::Moving | State::Following { .. } | State::Sticking | State::Circling { .. } => {
                 self.controller.stop_forward();
                 self.controller.stop_back();
                 let old_state = std::mem::replace(&mut self.state, State::Idle);
@@ -1737,4 +1734,82 @@ mod tests {
             }
         ));
     }
+
+    // ─── Circle kite tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn circle_kite_enters_circling_state() {
+        use textquest_common::nav::{CircleConfig, CircleMode};
+        let mut nav = Navigator::new(0, 1);
+        let config = CircleConfig {
+            radius: 30.0,
+            mode: CircleMode::Ccw,
+            ..CircleConfig::default()
+        };
+        nav.circle_kite(config, None);
+        assert!(matches!(nav.status(), NavStatus::Circling { .. }));
+    }
+
+    #[test]
+    fn circle_kite_status_reports_radius_and_mode() {
+        use textquest_common::nav::{CircleConfig, CircleMode};
+        let mut nav = Navigator::new(0, 1);
+        let config = CircleConfig {
+            radius: 25.0,
+            mode: CircleMode::Cw,
+            ..CircleConfig::default()
+        };
+        nav.circle_kite(config, None);
+        match nav.status() {
+            NavStatus::Circling { radius, mode, .. } => {
+                assert!((radius - 25.0).abs() < 0.01, "radius mismatch: {radius}");
+                assert_eq!(mode, CircleMode::Cw);
+            }
+            other => panic!("Expected Circling, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn circle_off_returns_to_idle() {
+        use textquest_common::nav::CircleConfig;
+        let mut nav = Navigator::new(0, 1);
+        nav.circle_kite(CircleConfig::default(), None);
+        assert!(matches!(nav.status(), NavStatus::Circling { .. }));
+        nav.circle_off();
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn circle_off_is_noop_when_not_circling() {
+        let mut nav = Navigator::new(0, 1);
+        nav.circle_off(); // Should not panic.
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
+
+    #[test]
+    fn circle_kite_with_explicit_center_uses_that_center() {
+        use textquest_common::nav::{CircleConfig, CircleMode};
+        let mut nav = Navigator::new(0, 1);
+        let center = Waypoint::new(100.0, 200.0, 0.0);
+        let config = CircleConfig {
+            radius: 20.0,
+            mode: CircleMode::Ccw,
+            center: Some(center),
+            ..CircleConfig::default()
+        };
+        // Pass center from config into circle_kite (mirrors what dispatch does).
+        let center_wp = config.center;
+        nav.circle_kite(config, center_wp);
+        assert!(matches!(nav.status(), NavStatus::Circling { .. }));
+    }
+
+    #[test]
+    fn circle_kite_stop_also_returns_to_idle() {
+        use textquest_common::nav::CircleConfig;
+        let mut nav = Navigator::new(0, 1);
+        nav.circle_kite(CircleConfig::default(), None);
+        nav.stop();
+        assert!(matches!(nav.status(), NavStatus::Idle));
+    }
 }
+

@@ -551,6 +551,9 @@ pub fn run_statusall_mode() -> Result<()> {
                                 } => {
                                     format!("Sticking #{target_id}")
                                 }
+                                textquest_common::nav::NavStatus::Circling { radius, .. } => {
+                                    format!("Circling r={radius:.0}")
+                                }
                             };
                             let zone = if state.zone_short_name.is_empty() {
                                 "(unknown)".to_string()

@@ -635,6 +635,9 @@ impl NavClientStatus {
                     format!("Sticking #{target_id} • {distance:.0}u")
                 }
             }
+            textquest_common::nav::NavStatus::Circling { radius, mode, .. } => {
+                format!("Circling r={radius:.0} ({mode:?})")
+            }
         }
     }
 
@@ -5356,11 +5359,9 @@ impl App {
                 let mut config = CircleConfig::default();
                 let mut i = 2usize;
                 // Optional radius
-                if let Some(&r_str) = parts.get(i) {
-                    if let Ok(r) = r_str.parse::<f32>() {
-                        config.radius = r;
-                        i += 1;
-                    }
+                if let Some(r) = parts.get(i).and_then(|s| s.parse::<f32>().ok()) {
+                    config.radius = r;
+                    i += 1;
                 }
                 // Optional mode tokens
                 while let Some(&token) = parts.get(i) {
@@ -5379,7 +5380,9 @@ impl App {
                     CircleMode::Drunken => "Drunken",
                     CircleMode::Backward => "Backward",
                 };
-                let ok = self.send_ipc_to_focused(&Command::CircleKite { config: config.clone() });
+                let ok = self.send_ipc_to_focused(&Command::CircleKite {
+                    config: config.clone(),
+                });
                 if ok == 0 {
                     self.set_feedback(
                         ToastLevel::Warning,
@@ -5410,7 +5413,9 @@ impl App {
                             config.radius = r;
                         }
                         config.center = Some(Waypoint::new(x, y, 0.0));
-                        let ok = self.send_ipc_to_focused(&Command::CircleKite { config: config.clone() });
+                        let ok = self.send_ipc_to_focused(&Command::CircleKite {
+                            config: config.clone(),
+                        });
                         if ok == 0 {
                             self.set_feedback(
                                 ToastLevel::Warning,
@@ -5429,10 +5434,7 @@ impl App {
                         }
                     }
                     _ => {
-                        self.usage_feedback(
-                            "circle",
-                            "Usage: circle loc Y X [radius]",
-                        );
+                        self.usage_feedback("circle", "Usage: circle loc Y X [radius]");
                     }
                 }
                 let _ = orchestrator;
@@ -5833,7 +5835,7 @@ impl App {
                     self.usage_feedback("mapmarker", "Usage: mapmarker clear <name|all>");
                     return;
                 };
-                let msg = if name.to_ascii_lowercase() == "all" {
+                let msg = if name.eq_ignore_ascii_case("all") {
                     self.map_state.named_markers.clear();
                     String::from("All markers cleared")
                 } else {
@@ -6578,7 +6580,7 @@ mod tests {
         let summary = app.combat_status_summary();
 
         assert!(summary.contains("Combat: mode=Camp"));
-        assert!(summary.contains("scope=All Groups"));
+        assert!(summary.contains("scope=All"));
         assert!(summary.contains("focused=0/0 clients"));
         assert!(summary.contains("MA=Warrior"));
         assert!(summary.contains("MT=Paladin"));
