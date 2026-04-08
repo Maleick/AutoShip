@@ -113,7 +113,7 @@
         "README.md and docs/wiki/Roadmap-and-Known-Gaps.md mirror M10 Economy before M11 Soul Engine + LLM",
         "Roadmap-facing docs route provider-backed Soul/LLM work to M11 and economy execution loops to M10",
         "Economy dashboard placeholders remain available via `/api/economy/settings`, `/api/economy/vendor-routes`, and `/api/economy/wealth`",
-        "python3 -m unittest discover -s tests -p 'test_m10_economy_docs.py' -v",
+        "python3 -m unittest discover -s tests -p 'test_*m10_economy*.py' -v",
         "python3 scripts/validate_roadmap_unknowns.py --plan docs/implementation-roadmap.md",
         "python3 scripts/sync_wiki.py --check"
       ],
