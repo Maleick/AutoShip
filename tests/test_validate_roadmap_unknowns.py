@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -161,17 +162,14 @@ class RoadmapValidatorTests(unittest.TestCase):
         roadmap = (REPO_ROOT / "docs" / "implementation-roadmap.md").read_text(
             encoding="utf-8"
         )
-        m9_marker = "### `M9` Learning/RL"
-        m10_marker = "### `M10` Economy"
-
-        self.assertIn(m9_marker, roadmap, f"expected roadmap section header {m9_marker!r}")
-        _, _, after_m9 = roadmap.partition(m9_marker)
-        self.assertIn(
-            m10_marker,
-            after_m9,
-            f"expected following roadmap section header {m10_marker!r} after {m9_marker!r}",
+        match = re.search(
+            r"^### `M9` Learning/RL\s*$\n(?P<section>.*?)(?=^### `M\d+(?:\.\d+)?`?\s+.+$)",
+            roadmap,
+            flags=re.MULTILINE | re.DOTALL,
         )
-        m9_section, _, _ = after_m9.partition(m10_marker)
+        self.assertIsNotNone(match, "expected to find the M9 roadmap section")
+        m9_section = match.group("section")
+
         self.assertIn("behavior optimization targets", m9_section)
         self.assertIn("measurable tuning loops", m9_section)
         self.assertIn("guardrails that prevent regressions from training-driven changes", m9_section)
