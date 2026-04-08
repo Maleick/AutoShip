@@ -1035,7 +1035,7 @@ mod tests {
         let overview = render_app(sample_app(), 150, 36);
 
         let mut navigation_app = sample_app();
-        navigation_app.active_screen = ActiveScreen::Navigation;
+        navigation_app.set_active_screen(ActiveScreen::Navigation);
         navigation_app.selected_client = 2;
         navigation_app.sync_from_selected_client();
         let navigation = render_app(navigation_app, 150, 36);
@@ -1051,7 +1051,7 @@ mod tests {
     #[test]
     fn navigation_render_surfaces_route_state_and_blockers() {
         let mut app = sample_app();
-        app.active_screen = ActiveScreen::Navigation;
+        app.set_active_screen(ActiveScreen::Navigation);
         app.selected_client = 2;
         app.sync_from_selected_client();
 
