@@ -269,7 +269,7 @@ where
 /// `cxstr_addr` must point to a valid `CXStr` field (a `usize` holding a `CStrRep` pointer).
 #[cfg(windows)]
 pub unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
-    read_cxstr_with_max_len(cxstr_addr, 256)
+    unsafe { read_cxstr_with_max_len(cxstr_addr, 256) }
 }
 
 /// Read a `CXStr` with a caller-specified maximum byte length.
