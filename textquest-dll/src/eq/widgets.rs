@@ -261,16 +261,21 @@ where
 
 // ─── CXStr Read/Write ───
 
-/// Read a `CXStr` value from a raw address.
+/// Read a `CXStr` value from a raw address (256-byte widget cap).
 ///
-/// `CXStr` is a single pointer to `CStrRep`. Returns `None` if the `CStrRep` pointer
-/// is null, the length is 0, or the length exceeds 256 (likely corrupt).
+/// Convenience wrapper over [`read_cxstr_with_max_len`] for widget text.
 ///
 /// # Safety
 /// `cxstr_addr` must point to a valid `CXStr` field (a `usize` holding a `CStrRep` pointer).
 #[cfg(windows)]
-#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
+    read_cxstr_with_max_len(cxstr_addr, 256)
+}
+
+/// Read a `CXStr` with a caller-specified maximum byte length.
+#[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
+pub unsafe fn read_cxstr_with_max_len(cxstr_addr: usize, max_len: usize) -> Option<String> {
     use textquest_common::offsets::eqmain as off;
 
     let rep_ptr = *(cxstr_addr as *const usize);
@@ -278,24 +283,33 @@ pub unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
         return None;
     }
 
-    // Validate CStrRep memory is still committed and readable before dereferencing.
-    // Covers all fields up through the start of the data buffer.
+    // Validate CStrRep header is committed and readable before dereferencing.
     if !crate::hooks::game_loop::is_readable(rep_ptr, off::CSTRREP_DATA + 1) {
         return None;
     }
 
     let length = *((rep_ptr + off::CSTRREP_LENGTH) as *const u32) as usize;
-    if length == 0 || length > 256 {
+    if length == 0 || length > max_len {
         return None;
     }
 
-    let data_ptr = (rep_ptr + off::CSTRREP_DATA) as *const u8;
-    let bytes = std::slice::from_raw_parts(data_ptr, length);
+    // Validate the full data range is readable before building the slice.
+    let data_addr = rep_ptr + off::CSTRREP_DATA;
+    if !crate::hooks::game_loop::is_readable(data_addr, length) {
+        return None;
+    }
+
+    let bytes = std::slice::from_raw_parts(data_addr as *const u8, length);
     String::from_utf8(bytes.to_vec()).ok()
 }
 
 #[cfg(not(windows))]
 pub unsafe fn read_cxstr(_cxstr_addr: usize) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub unsafe fn read_cxstr_with_max_len(_cxstr_addr: usize, _max_len: usize) -> Option<String> {
     None
 }
 

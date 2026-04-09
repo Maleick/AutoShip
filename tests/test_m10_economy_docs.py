@@ -53,12 +53,11 @@ class M10EconomyDocsTests(unittest.TestCase):
                 for snippet in snippets:
                     self.assertIn(snippet, text)
 
-    @unittest.skipUnless(
-        (REPO_ROOT / "feature-list.json").exists(),
-        "feature-list.json is local-only and not present in CI",
-    )
     def test_feature_list_tracks_m10_economy_scope(self) -> None:
-        payload = json.loads((REPO_ROOT / "feature-list.json").read_text(encoding="utf-8"))
+        feature_list = REPO_ROOT / "feature-list.json"
+        if not feature_list.exists():
+            self.skipTest("feature-list.json is local-only and not present in CI")
+        payload = json.loads(feature_list.read_text(encoding="utf-8"))
         feature = next(item for item in payload["features"] if item["id"] == "m10-economy-execution-scope")
         self.assertEqual(feature["status"], "in_progress")
         self.assertIn(

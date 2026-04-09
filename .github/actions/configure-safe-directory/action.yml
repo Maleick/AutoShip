@@ -1,0 +1,23 @@
+name: Configure Git safe directories
+description: >
+  Mark the current workspace as a trusted Git directory on self-hosted runners.
+  Prevents "dubious ownership" errors when the runner user differs from the
+  checkout user.
+
+runs:
+  using: composite
+  steps:
+    - name: Mark workspace as Git safe directory
+      shell: cmd
+      run: |
+        setlocal EnableDelayedExpansion
+        if "%GITHUB_WORKSPACE%"=="" (
+          echo [warn] GITHUB_WORKSPACE is not defined. Falling back to %CD%.
+          set "GITHUB_WORKSPACE=%CD%"
+        )
+        for %%D in ("!GITHUB_WORKSPACE!") do (
+          git config --global --add safe.directory "%%~D" || (
+            echo [fatal] Unable to add safe.directory for %%~D.
+            exit /b 1
+          )
+        )

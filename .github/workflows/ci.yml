@@ -36,40 +36,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12.10"
+      - name: Setup verified Python
+        uses: ./.github/actions/setup-verified-python
 
-      - name: Configure Python command
-        run: |
-          echo PYTHON_CMD=python>>"%GITHUB_ENV%"
-          python --version
+      - name: Setup Rust nightly
+        uses: ./.github/actions/setup-rust-nightly
 
-      - name: Provision nightly toolchain via rustup
-        env:
-          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
-        run: |
-          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
-          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
-          set "PATH=%CARGO_HOME%\bin;%PATH%"
-          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
-          where rustup.exe >nul 2>nul || (
-            echo [fatal] rustup.exe not found in PATH. Install rustup on this runner before running CI workflows.
-            exit /b 1
-          )
-          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
-          rustup --version
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
-          rustup default %NIGHTLY_TOOLCHAIN%
-          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
-          rustup run %NIGHTLY_TOOLCHAIN% rustc -V
-          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
-            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
-            exit /b 1
-          )
-          echo [info] Nightly compiler confirmed for %NIGHTLY_TOOLCHAIN%.
-
-      - uses: lukka/get-cmake@v4.3.1
+      - name: Ensure cmake on PATH
+        uses: ./.github/actions/ensure-cmake
       - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
       - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
       - run: cargo fmt --all --check
@@ -88,50 +62,13 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Configure Git safe directories
-        run: |
-          setlocal EnableDelayedExpansion
-          echo [info] Marking workflow directories as trusted for Git.
-          if "%GITHUB_WORKSPACE%"=="" (
-            echo [warn] GITHUB_WORKSPACE is not defined. Falling back to %CD%.
-            set "GITHUB_WORKSPACE=%CD%"
-          )
-          echo [info] Using GITHUB_WORKSPACE as "!GITHUB_WORKSPACE!"
-          for %%D in ("!GITHUB_WORKSPACE!") do (
-            git config --global --add safe.directory "%%~D" || (
-              echo [fatal] Unable to add safe.directory for %%~D.
-              exit /b 1
-            )
-          )
-          echo [info] Active safe.directory values:
-          git config --global --get-all safe.directory
+        uses: ./.github/actions/configure-safe-directory
 
       - name: Setup verified Python
         uses: ./.github/actions/setup-verified-python
 
-      - name: Provision nightly toolchain via rustup
-        env:
-          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
-        run: |
-          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
-          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
-          set "PATH=%CARGO_HOME%\bin;%PATH%"
-          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
-          where rustup.exe >nul 2>nul || (
-            echo [fatal] rustup.exe not found in PATH. Install rustup on this runner before running CI workflows.
-            exit /b 1
-          )
-          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
-          rustup --version
-          rustup show
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
-          rustup default %NIGHTLY_TOOLCHAIN%
-          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
-          rustup run %NIGHTLY_TOOLCHAIN% rustc -V
-          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
-            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
-            exit /b 1
-          )
-          echo [info] Nightly compiler confirmed for %NIGHTLY_TOOLCHAIN%.
+      - name: Setup Rust nightly
+        uses: ./.github/actions/setup-rust-nightly
 
       - name: Ensure cmake on PATH
         uses: ./.github/actions/ensure-cmake
@@ -255,23 +192,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Configure Git safe directories for runner account
-        run: |
-          setlocal EnableDelayedExpansion
-          echo [info] Marking workflow directories as trusted for Git.
-          if "%GITHUB_WORKSPACE%"=="" (
-            echo [warn] GITHUB_WORKSPACE is not defined. Falling back to %CD%.
-            set "GITHUB_WORKSPACE=%CD%"
-          )
-          echo [info] Using GITHUB_WORKSPACE as "!GITHUB_WORKSPACE!"
-          for %%D in ("!GITHUB_WORKSPACE!" "C:\actions-runner\_work\TextQuest\TextQuest" "C:\actions-runner\_work\TextQuest") do (
-            git config --global --add safe.directory "%%~D" || (
-              echo [fatal] Unable to add safe.directory for %%~D.
-              exit /b 1
-            )
-          )
-          echo [info] Active safe.directory values:
-          git config --global --get-all safe.directory
+      - name: Configure Git safe directories
+        uses: ./.github/actions/configure-safe-directory
 
       - name: Reclaim leaked browser processes on self-hosted runner
         shell: pwsh
@@ -289,43 +211,11 @@ jobs:
           $totalGiB = [math]::Round(($os.TotalVisibleMemorySize * 1KB) / 1GB, 2)
           Write-Host ("Available physical memory before build: {0} GiB / {1} GiB" -f $freeGiB, $totalGiB)
 
-      - name: Provision nightly toolchain via rustup
-        env:
-          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
-        run: |
-          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
-          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
-          set "PATH=%CARGO_HOME%\bin;%PATH%"
-          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
-          where rustup.exe >nul 2>nul || (
-            echo [fatal] rustup.exe not found in PATH. Install rustup on this runner before running CI workflows.
-            exit /b 1
-          )
-          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
-          echo [info] rustup version:
-          rustup --version
-          rustup show
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update --force
-          rustup default %NIGHTLY_TOOLCHAIN%
-          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
-          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
-            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
-            exit /b 1
-          )
+      - name: Setup Rust nightly
+        uses: ./.github/actions/setup-rust-nightly
 
       - name: Ensure cmake on PATH
         uses: ./.github/actions/ensure-cmake
-
-      - name: Nightly compiler sanity check
-        run: |
-          echo [info] Verifying required nightly compiler for release path.
-          rustc -V
-          rustc -V | findstr /i "nightly" >nul
-          if errorlevel 1 (
-            echo [fatal] Release workflow requires nightly toolchain but rustc is not reporting nightly.
-            exit /b 1
-          )
-          cargo --version
 
       - run: cargo build --release
         env:

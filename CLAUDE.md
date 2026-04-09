@@ -62,11 +62,23 @@ cargo test -p textquest test_name_here
 cargo test -p textquest --test integration test_name
 ```
 
-~2,500+ tests across 4 workspace crates. Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
+~3,100 tests across 4 workspace crates. Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
 
-**CI gate**: Required check is `PR gate (fmt + clippy + test + python)`. Runs on self-hosted Windows runner for same-repo PRs, GitHub-hosted Windows for forks. Dev preflight: `python3 scripts/dev-preflight.py`.
+**CI gate**: Required check is `PR gate (fmt + clippy + test + python)`. All jobs run on self-hosted runners — Windows builds on Frostreaver (2 runners), Linux jobs on DigitalOcean (2 runners). Branch protection requires conversation resolution. Dev preflight: `python3 scripts/dev-preflight.py`.
 
 **Dev preflight** runs the same fmt → clippy → test → Python test sequence as CI. Run it before pushing to catch failures locally.
+
+## CI Infrastructure
+
+All workflows run on self-hosted runners except the fork PR path in `ci.yml`, which uses `windows-latest` (GitHub-hosted) to avoid running untrusted fork code on self-hosted infrastructure.
+
+- **Windows** (Frostreaver, Tailscale): `dmft-ci-service-01`, `dmft-ci-service-02` — Rust builds, release, nightly, wiki, README metrics
+- **Linux** (DigitalOcean nyc1, Tailscale): `textquest-gha-linux-01`, `textquest-gha-linux-02` — merge gate, secrets scan, automation, Claude/Copilot agents
+- Runner labels: `[self-hosted, Windows/Linux, X64, textquest]`
+- Composite actions in `.github/actions/`: `setup-rust-nightly`, `setup-verified-python`, `ensure-cmake`, `configure-safe-directory`. Use these in workflows — never inline toolchain provisioning.
+- Nightly release has a 3am CT time gate via PowerShell timezone check
+- `readme-metrics.yml` requires both `contents: write` and `pull-requests: write`
+- Release workflow triggers on `v*` tags (e.g., `git tag v0.1.0 -m "..." && git push origin v0.1.0`)
 
 ## Autonomous Agent Pipeline
 
@@ -195,3 +207,4 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **MacroQuest/eqlib references are optional local checkouts**: keep them outside the repo if you use them for offset or struct-reference work. Routine `cargo build` / `cargo test` work does not require them. Derived offsets still live in `textquest-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
 - **Nightly MSVC toolchain**: Windows builds require nightly Rust because `retour` (function hooking) uses unstable features. macOS builds work on stable.
+- **Self-hosted runner workspaces persist**: Files from previous runs may exist at test import time but vanish after `actions/checkout`. Use `self.skipTest()` inside test bodies instead of `@unittest.skipUnless` for file-existence guards.

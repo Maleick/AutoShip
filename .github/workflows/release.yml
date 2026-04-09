@@ -21,48 +21,20 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v5
+
+      - name: Configure Git safe directories
+        uses: ./.github/actions/configure-safe-directory
+
       - name: Initialize reference submodules
         run: |
           git submodule sync --recursive
           git submodule update --init --recursive --depth 1
 
-      - name: Provision nightly toolchain via rustup
-        env:
-          NIGHTLY_TOOLCHAIN: nightly-x86_64-pc-windows-msvc
-        run: |
-          if not defined CARGO_HOME set "CARGO_HOME=%USERPROFILE%\.cargo"
-          if not defined RUSTUP_HOME set "RUSTUP_HOME=%USERPROFILE%\.rustup"
-          set "PATH=%CARGO_HOME%\bin;%PATH%"
-          echo [info] Ensuring Rust toolchain %NIGHTLY_TOOLCHAIN% is available on this runner.
-          where rustup.exe >nul 2>nul || (
-            echo [fatal] rustup.exe not found in PATH. Install rustup on this runner before running release workflows.
-            exit /b 1
-          )
-          echo %CARGO_HOME%\bin>>%GITHUB_PATH%
-          echo [info] rustup version:
-          rustup --version
-          rustup show
-          rustup toolchain install %NIGHTLY_TOOLCHAIN% --no-self-update
-          rustup default %NIGHTLY_TOOLCHAIN%
-          rustup component add rustfmt clippy --toolchain %NIGHTLY_TOOLCHAIN%
-          rustup run %NIGHTLY_TOOLCHAIN% rustc -V | findstr /i "nightly" >nul || (
-            echo [fatal] rustc for %NIGHTLY_TOOLCHAIN% is not reporting a nightly compiler.
-            exit /b 1
-          )
+      - name: Setup Rust nightly
+        uses: ./.github/actions/setup-rust-nightly
 
       - name: Ensure cmake on PATH
         uses: ./.github/actions/ensure-cmake
-
-      - name: Nightly compiler sanity check
-        run: |
-          echo [info] Verifying required nightly compiler for release path.
-          rustc -V
-          rustc -V | findstr /i "nightly" >nul
-          if errorlevel 1 (
-            echo [fatal] Release workflow requires nightly toolchain but rustc is not reporting nightly.
-            exit /b 1
-          )
-          cargo --version
 
       - name: Build release binaries
         run: cargo build --release

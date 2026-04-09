@@ -58,20 +58,8 @@ fn read_u32(addr: usize) -> Option<u32> {
 /// Offsets come from `textquest_common::offsets::eqmain`.
 #[cfg(windows)]
 fn read_cxstr(addr: usize) -> Option<String> {
-    use crate::hooks::game_loop::is_readable;
-
-    let rep_ptr = read_ptr(addr)?;
-    let len = read_u32(rep_ptr + offsets::eqmain::CSTRREP_LENGTH)? as usize;
-    if len == 0 || len > 4096 {
-        return None;
-    }
-    let data_addr = rep_ptr + offsets::eqmain::CSTRREP_DATA;
-    if !is_readable(data_addr, len) {
-        return None;
-    }
-    // SAFETY: is_readable confirmed `len` accessible bytes at `data_addr`.
-    let slice = unsafe { std::slice::from_raw_parts(data_addr as *const u8, len) };
-    Some(String::from_utf8_lossy(slice).into_owned())
+    // Chat lines can be much longer than widget text — use 4096-byte cap.
+    unsafe { crate::eq::widgets::read_cxstr_with_max_len(addr, 4096) }
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

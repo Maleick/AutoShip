@@ -632,9 +632,12 @@ fn validate_marker_store_path(path: &Path) -> anyhow::Result<()> {
             anyhow::bail!("Marker file path is not a regular file: {}", path.display());
         }
     }
-    // Walk every ancestor directory so that symlinks or reparse points anywhere
-    // in the path chain are detected, not just the immediate parent.
+    // Walk ancestor directories checking for symlinks/reparse points. Stop at
+    // filesystem root — no need to stat "/" or "C:\".
     for ancestor in path.ancestors().skip(1) {
+        if ancestor.parent().is_none() {
+            break;
+        }
         if let Ok(meta) = std::fs::symlink_metadata(ancestor) {
             if meta.file_type().is_symlink() {
                 anyhow::bail!("Marker directory is a symlink: {}", ancestor.display());

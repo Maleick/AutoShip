@@ -164,11 +164,11 @@ def check_reference_trees(
     macroquest_root: str | None = None,
 ) -> None:
     configured_roots: list[tuple[str, pathlib.Path, list[pathlib.Path]]] = []
-    if not eqlib_root:
+    if eqlib_root is None:
         default_eqlib_root = REPO_ROOT / "third_party" / "eqlib"
         if default_eqlib_root.exists():
             eqlib_root = str(default_eqlib_root)
-    if not macroquest_root:
+    if macroquest_root is None:
         for candidate in (
             REPO_ROOT / "third_party" / "macroquest",
             REPO_ROOT / "third_party" / "MacroQuest",
