@@ -6,6 +6,8 @@ This page summarizes the active milestone order, the evidence model, and the mai
 
 README is intentionally the usage surface for TextQuest. Treat this page and `docs/implementation-roadmap.md` as the places for roadmap status and validation guidance.
 
+GitHub tracking for this roadmap lives in issues, linked PRs, and milestones. GitHub Projects are historical/retiring and should not be treated as active defaults.
+
 ## Historical Base
 
 These milestones remain part of project history:
@@ -56,7 +58,7 @@ External research may add slices and validation tasks, but it may not reorder mi
 
 ## Evidence Model
 
-Every roadmap slice, validation task, or GitHub Project mirror item should carry one evidence state:
+Every roadmap slice, validation task, or GitHub tracking item should carry one evidence state:
 
 - `Provisional`
 - `Research-backed`
@@ -131,7 +133,7 @@ The current follow-on implementation slices are:
 
 ## Developer Guidance
 
-When writing docs, PRs, or GitHub Project mirror items:
+When writing docs, PRs, or GitHub tracking items:
 
 - keep roadmap claims anchored to `docs/implementation-roadmap.md`
 - separate current behavior from provisional findings

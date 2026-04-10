@@ -20,9 +20,10 @@ This directory stores project documentation and is split into distinct buckets.
   - Managed by `scripts/sync_wiki.py` and published by the `wiki-nightly` workflow.
   - Keep this directory flat (no nested markdown folders), matching the wiki sync contract.
 - `docs/implementation-roadmap.md`
-  - Canonical milestone order, evidence-state rules, and project-mirror guidance.
+  - Canonical milestone order, evidence-state rules, and GitHub tracking guidance.
 - `docs/research-*`, `docs/external-research/`, `docs/research-imports/`
-  - Evidence, references, investigation notes, and historical snapshots.
+  - TextQuest-owned runbooks, references, investigation notes, and historical summaries.
+  - Immutable Ghidra evidence stays canonical in the sibling `TextQuest-Ghidra` repo under `snapshots/` and `baseline-selection/`; keep only lightweight references here.
   - Examples: `docs/research-imports/`, `docs/external-research/`, and similarly named markdown files at the repo root.
 - `docs/knowledge/` (optional)
   - Internal notes and working memory that should remain repo-local and not part of the wiki export.

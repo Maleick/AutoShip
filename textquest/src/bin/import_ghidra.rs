@@ -1,8 +1,11 @@
-//! Import Ghidra JSON harvest into the GhidraDatabase (SQLite).
+//! Import a local Ghidra JSON cache into the runtime/debug GhidraDatabase (SQLite).
 //!
 //! Usage: import_ghidra [DB_PATH] [JSON_DIR]
-//!   DB_PATH  — SQLite database path (default: data/ghidra.db)
-//!   JSON_DIR — Directory containing Ghidra export JSON files (default: data/ghidra-export/)
+//!   DB_PATH  — SQLite cache path (default: data/ghidra.db)
+//!   JSON_DIR — Directory containing local Ghidra export cache files (default: data/ghidra-export/)
+//!
+//! Immutable manifests and snapshot evidence stay canonical in the sibling
+//! `Maleick/TextQuest-Ghidra` repo; this tool only hydrates local runtime/debug state.
 
 use std::path::{Path, PathBuf};
 
@@ -217,9 +220,9 @@ fn main() -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
 
-    println!("Opening database: {}", db_path.display());
+    println!("Opening local database cache: {}", db_path.display());
     let db = GhidraDatabase::open(&db_path)?;
-    println!("Importing from: {}", json_dir.display());
+    println!("Importing local export cache from: {}", json_dir.display());
     println!();
 
     let func_count = load_functions(&json_dir, &db)?;
@@ -245,6 +248,6 @@ fn main() -> Result<()> {
     println!("  strings:        {}", stats.strings);
     println!("  imports:        {}", stats.imports);
     println!();
-    println!("Done. Database saved to {}", db_path.display());
+    println!("Done. Local database cache saved to {}", db_path.display());
     Ok(())
 }

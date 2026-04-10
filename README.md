@@ -138,9 +138,11 @@ The detailed configuration guide lives in [`docs/wiki/Configuration.md`](docs/wi
 - Command reference: [`docs/wiki/Command-Reference.md`](docs/wiki/Command-Reference.md)
 - Troubleshooting: [`docs/wiki/Troubleshooting.md`](docs/wiki/Troubleshooting.md)
 
+Canonical Ghidra evidence now lives in the sibling `Maleick/TextQuest-Ghidra` repo under `snapshots/` and `baseline-selection/current.json`. `TextQuest` remains canonical for code, docs, runbooks, automation, and lightweight references; local `data/ghidra.db` and `data/ghidra-export/` are runtime/debug caches only.
+
 ## Roadmap
 
-README stays focused on building, running, and operating TextQuest. Milestone order, evidence rules, validation gaps, and project-mirroring rules live in [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md) and the summary page [`docs/wiki/Roadmap-and-Known-Gaps.md`](docs/wiki/Roadmap-and-Known-Gaps.md).
+README stays focused on building, running, and operating TextQuest. Milestone order, evidence rules, validation gaps, and GitHub tracking rules live in [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md) and the summary page [`docs/wiki/Roadmap-and-Known-Gaps.md`](docs/wiki/Roadmap-and-Known-Gaps.md).
 
 The current roadmap keeps economy work at `M10` and Soul Engine + LLM work at `M11`.
 

@@ -2,14 +2,14 @@
 
 Canonical roadmap for the packet-first reset adopted in April 2026.
 
-This document is the source of truth for roadmap order, milestone gates, evidence handling, external research promotion, and GitHub Project mirroring. Older design and review docs remain useful historical evidence, but they are not canonical roadmap sources once they conflict with this file.
+This document is the source of truth for roadmap order, milestone gates, evidence handling, external research promotion, and GitHub tracking. Older design and review docs remain useful historical evidence, but they are not canonical roadmap sources once they conflict with this file.
 
 ## Documentation Surfaces
 
 - `README.md` is the usage-first entry point for building, running, and operating TextQuest.
 - `docs/wiki/` is the long-lived operator and developer reference.
-- `docs/implementation-roadmap.md` is the milestone, evidence, and project-mirror source of truth.
-- GitHub Projects mirror these repo docs after the repo-side sources are updated.
+- `docs/implementation-roadmap.md` is the milestone, evidence, and tracking source of truth.
+- GitHub issues, linked PRs, and milestones follow these repo docs after the repo-side sources are updated.
 
 ## Milestone Status Summary
 
@@ -343,11 +343,11 @@ Initial slices:
 - `Orchestrator`
 - `Docs/Workflow`
 
-Use these domains in roadmap docs, GitHub Project fields, and external research promotion.
+Use these domains in roadmap docs, milestones, labels, and external research promotion.
 
 ## Evidence Model
 
-Every slice, validation task, and draft GitHub Project item should carry one evidence state:
+Every slice, validation task, and GitHub tracking item should carry one evidence state:
 
 - `Provisional`
 - `Research-backed`
@@ -405,35 +405,17 @@ Before an external finding becomes a roadmap slice candidate, it must include:
 3. MacroQuest Lua and broader scripting/runtime extension pass
 4. ongoing Daybreak detection digest updates
 
-## GitHub Project Mirror
+## GitHub Tracking
 
-GitHub Projects are a mirror, not a source of truth.
-
-Current mirror:
-
-- `TextQuest Roadmap`: `https://github.com/users/Maleick/projects/1`
-
-Use one roadmap project with these fields:
-
-- `Status`
-- `Milestone`
-- `Domain`
-- `Evidence State`
-- `Priority`
-- `Item Type`
-- `Checkpoint Batch`
-- `Source Doc`
-- `Target Window`
-- `Effort`
+GitHub issues, linked PRs, and milestones are the active tracking surfaces. They are not a source of truth ahead of the repo docs, and GitHub Projects should be treated as historical/retiring during the migration cleanup.
 
 Rules:
 
-- milestone epics begin as draft items
-- mature tasks, validations, and research items should be promoted from draft items into GitHub issues once they have a concrete scope and checkpoint batch
+- milestone epics stay milestone-scoped rather than duplicated as project-board defaults
+- mature tasks, validations, and research items should be promoted into GitHub issues once they have a concrete scope and checkpoint batch
+- linked PRs should carry implementation state instead of a second manual tracking surface
 - sync is checkpoint-based, after repo docs are updated
-- remove overlapping draft items after issue promotion so the active board has one execution item per slice
-- external research may add draft items and validation tasks, but it may not reorder milestones on its own
-- CLI bootstrap requires `gh auth refresh -s read:project -s project`
+- external research may add validation tasks and issue candidates, but it may not reorder milestones on its own
 
 ## Autoresearch Workflow
 
@@ -450,16 +432,16 @@ Nightly checkpoint cadence:
 
 1. update repo docs and research ledgers first
 2. run the roadmap verifier and wiki guard
-3. reconcile the active checkpoint batch in the `TextQuest Roadmap` GitHub Project
-4. promote mature current-window items into GitHub issues and remove overlapping drafts
-5. record project-sync results in the autoresearch artifacts before ending the run
+3. reconcile the active checkpoint batch against milestones, open issues, and linked PR state
+4. promote mature current-window items into GitHub issues and linked PR follow-ups
+5. record the tracking-sync results in the autoresearch artifacts before ending the run
 
-Project-sync logging requirements:
+Tracking-sync logging requirements:
 
 - capture the active checkpoint batch id used for the sync pass
-- list which GitHub Project items changed and which fields changed
+- list which milestones, issues, or linked PR relationships changed
 - list any GitHub issues created or promoted during the checkpoint
-- note any project-scope, auth, or maturity blockers that prevented promotion
+- note any tracking-scope, auth, or maturity blockers that prevented promotion
 - keep these records in local autoresearch runtime artifacts or automation memory, not in repo-tracked files
 
 Mechanical verifier:
@@ -470,8 +452,8 @@ Expected outputs:
 
 - updates to curated research ledgers
 - proposed checkpoint batch items
-- GitHub Project mirror updates for the active checkpoint batch
-- GitHub issue promotion for mature checkpoint items
+- GitHub issue and milestone updates for the active checkpoint batch
+- linked PR follow-ups for mature checkpoint items
 - evidence-state changes
 - no milestone reordering
 

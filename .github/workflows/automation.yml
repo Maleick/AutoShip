@@ -1,4 +1,4 @@
-name: Project Automation
+name: Issue and PR Automation
 
 on:
   issues:

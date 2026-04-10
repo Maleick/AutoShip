@@ -236,7 +236,6 @@ if ($InstallService) {
 Write-Host ""
 Write-Host "Done. Verify in GitHub under Settings → Actions → Runners that the runner is online." -ForegroundColor Green
 Write-Host "Self-hosted CI/wiki workflows use runner-local Python when available and otherwise fall back to a checksum-verified embeddable Python ZIP." -ForegroundColor Cyan
-Write-Host "If this machine will run wiki-nightly or GitHub Project tooling, also verify local GitHub CLI auth:" -ForegroundColor Cyan
+Write-Host "If this machine will run wiki-nightly or issue/PR automation, also verify local GitHub CLI auth:" -ForegroundColor Cyan
 Write-Host "  gh auth status" -ForegroundColor Yellow
-Write-Host "  gh auth refresh -s project -s read:project" -ForegroundColor Yellow
 Write-Host "The nightly wiki workflow uses runner-local gh auth for scripts/sync_wiki.py --push." -ForegroundColor Cyan

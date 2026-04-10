@@ -1,7 +1,9 @@
-//! SQLite-backed database for Ghidra binary analysis data.
+//! SQLite-backed local cache for Ghidra binary analysis data.
 //!
 //! Stores functions, globals, strings, imports, opcodes, and call graphs
-//! extracted from Ghidra analysis of EverQuest binaries (~20K functions).
+//! imported into TextQuest for runtime/debug exploration. Canonical immutable
+//! evidence, manifests, and snapshot history live in the sibling
+//! `Maleick/TextQuest-Ghidra` repository.
 
 use std::path::Path;
 
@@ -138,7 +140,7 @@ pub struct DbStats {
 // Database
 // ---------------------------------------------------------------------------
 
-/// SQLite-backed store for Ghidra binary analysis data.
+/// SQLite-backed local cache for imported Ghidra binary analysis data.
 pub struct GhidraDatabase {
     conn: Connection,
 }

@@ -6,6 +6,7 @@
 | --- | --- |
 | `config/frostreaver.toml` | Main TextQuest app config |
 | `config/accounts.toml` | Account and group-launch metadata |
+| `data/credentials.db` | Encrypted account password store used by `textquest autologin` |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
 | `config/classes/*.toml` | Per-class combat and ability config |
 | `config/toons/*.toml` | Per-toon combat action overrides for the injected DLL |
@@ -13,6 +14,8 @@
 | `config/named_mobs/*.toml` | Named spawn definitions by zone |
 | `config/maps/*.txt` | Brewall-style zone map data |
 | `config/offsets.json` | Checked-in offset data snapshot and schema reference |
+| `data/ghidra.db` | Local SQLite cache for runtime/debug Ghidra lookups |
+| `data/ghidra-export/` | Local JSON export cache used by import/debug tooling |
 
 ## Main App Config
 
@@ -40,6 +43,9 @@ Current sections include:
 - group
 
 Passwords are intentionally not stored here.
+
+The encrypted password store for those accounts lives separately at
+`data/credentials.db`.
 
 Example:
 
@@ -107,6 +113,12 @@ These files are optional. When no per-toon file exists, TextQuest keeps using th
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.
 - `config/offsets.json` is a maintained offset-data snapshot that matches the `textquest-common/src/offset_db.rs` schema. The compiled defaults still live in `textquest-common/src/offsets.rs`.
+
+## Local Ghidra Caches
+
+- `data/ghidra.db` and `data/ghidra-export/` are local runtime/debug caches only.
+- Canonical manifests, snapshot variants, baseline selection, and copied evidence live in the sibling `Maleick/TextQuest-Ghidra` repo under `snapshots/` and `baseline-selection/current.json`.
+- If a runbook needs durable evidence, link to the canonical `TextQuest-Ghidra` snapshot path rather than copying payload into this repo.
 
 ## Internals
 

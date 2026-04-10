@@ -441,7 +441,7 @@ pub struct App {
     pub explorer_state: super::state::ExplorerScreenState,
     /// EQ Internals offset browser state.
     pub eq_internals_state: super::state::EqInternalsState,
-    /// Ghidra database handle (loaded from data/ghidra.db if present).
+    /// Optional Ghidra runtime/debug cache handle, if loaded.
     pub ghidra_db: Option<textquest_common::ghidra_db::GhidraDatabase>,
 
     /// TUI refresh interval in milliseconds.

@@ -3,7 +3,7 @@
 ## Documentation Split
 
 - `README.md` is the quick usage and run/build entrypoint.
-- `docs/implementation-roadmap.md` is the canonical roadmap and project-mirror policy document.
+- `docs/implementation-roadmap.md` is the canonical roadmap and tracking policy document.
 - `docs/wiki/` is the long-lived operator and developer reference.
 - `AGENTS.md` defines the autonomous issue-worker contract.
 
@@ -68,10 +68,9 @@ Rules:
 - external research may add milestone slices, validation tasks, and evidence updates
 - external research may not reorder milestones on its own
 - use evidence states when promoting research into execution work
-- keep the GitHub Project mirror in sync only after repo docs are updated
-- keep milestone epics as draft items, but promote mature research, task, and validation items into GitHub issues
-- remove overlapping draft items after an issue promotion so the project has one execution item per slice
-- use the live roadmap mirror at `https://github.com/users/Maleick/projects/1`
+- keep GitHub issues, linked PRs, and milestones aligned only after repo docs are updated
+- keep GitHub Projects historical/retiring; do not treat them as active defaults
+- promote mature research, task, and validation items into GitHub issues and milestone slices
 
 Default roadmap verifier:
 
@@ -79,8 +78,8 @@ Default roadmap verifier:
 
 ## Maintainer Notes
 
-- The project mirror and autonomous queue rules live in `AGENTS.md` and `docs/implementation-roadmap.md`.
-- `scripts/reconcile-agent-queue.sh` and `scripts/sync_project.py` are maintainer and automation tools, not part of the normal build-run loop.
+- The milestone and autonomous queue rules live in `AGENTS.md` and `docs/implementation-roadmap.md`.
+- `scripts/reconcile-agent-queue.sh` and `scripts/sync_project.py` remain legacy maintainer tools while GitHub Projects retire; they are not part of the normal build-run loop.
 - Do not commit transient automation state such as `autoresearch-launch.json`, `autoresearch-state.json`, or `research-results.tsv`.
 
 ## Logging and Debugging

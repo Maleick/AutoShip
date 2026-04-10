@@ -28,9 +28,11 @@ This document tracks research, opcodes, and implementations for "active hacks"â€
 *   **Status:** Pending deep research into `NetworkSend` coordinate packets or local memory manipulation. Requires the same opt-in safety gate as Living Shield.
 
 ## Opcode Discovery (Autoresearch Target)
-We are actively researching the `data/ghidra-export/` directory (from the live server dump) to identify:
+We are actively researching the local `data/ghidra-export/` cache to identify:
 1.  Updated `NetworkSend` dispatch functions.
 2.  The `hton` (Host TO Network) packet scrambler logic.
 3.  Undocumented or exploitable opcodes that can be fed to Kara for further capability expansion.
+
+That cache is local runtime/debug tooling state only. Canonical immutable exports and manifests live in the sibling `Maleick/TextQuest-Ghidra` repo under `snapshots/`.
 
 *Note: The test server patch drops tomorrow; this research will be repeated to establish the delta for the following week.*

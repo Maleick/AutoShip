@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Promote mature checkpoint items to GitHub Project / issues and record sync results.
+"""Legacy GitHub Project mirror helper for older checkpoint automation.
+
+Active TextQuest tracking now lives in issues, linked PRs, and milestones.
+Keep this script as historical/transition tooling only; do not treat it as the
+default master workflow.
 
 Usage:
     python scripts/sync_project.py [options]
@@ -41,7 +45,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STATE_FILE  = REPO_ROOT / "autoresearch-state.json"
 DEFAULT_ROADMAP     = REPO_ROOT / "docs" / "implementation-roadmap.md"
 DEFAULT_OUT_FILE    = REPO_ROOT / "autoresearch-project-sync.json"
-# Canonical project URL declared in docs/implementation-roadmap.md §GitHub Project Mirror.
+# Legacy project URL retained only for historical transition tooling.
 # Override via --project-url when running against a fork or a different project.
 DEFAULT_PROJECT_URL = "https://github.com/users/Maleick/projects/1"
 

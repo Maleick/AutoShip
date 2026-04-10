@@ -119,7 +119,11 @@ pub fn draw_explorer_panel(frame: &mut Frame, area: Rect, app: &mut App) {
 
     frame.render_stateful_widget(table, chunks[0], &mut app.explorer_state.table_state);
 
-    let db_status = if has_db { "DB loaded" } else { "No DB" };
+    let db_status = if has_db {
+        "Local Ghidra DB loaded"
+    } else {
+        "No local Ghidra DB"
+    };
     let footer = Line::from(vec![
         Span::styled(format!(" {db_status} | "), Style::default().fg(text_muted)),
         Span::styled(

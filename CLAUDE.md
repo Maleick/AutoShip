@@ -146,7 +146,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 | `ipc.rs`                                     | Command/Response enums for all IPC channels                                                                                                     |
 | `nav.rs`, `combat.rs`, `login.rs`, `soul.rs` | Domain-specific shared types                                                                                                                    |
 | `protocol.rs`, `types.rs`                    | Wire protocol and common type definitions                                                                                                       |
-| `ghidra_db.rs`                               | SQLite DB for Ghidra binary analysis data (~20K functions, globals, call graphs)                                                                |
+| `ghidra_db.rs`                               | Schema/helpers for a local SQLite Ghidra query DB populated from imported analysis artifacts                                                     |
 | `packet.rs`                                  | EQ packet capture types — opcode filtering, direction-aware capture sessions                                                                    |
 | `routing.rs`                                 | Routing scope types for cross-client command dispatch (single toon, named group, all sessions)                                                  |
 | `scanner.rs`                                 | Byte-pattern signature scanner for resolving EQ function addresses (IDA-style patterns with wildcards)                                          |
