@@ -3,9 +3,11 @@
 ## Documentation Split
 
 - `README.md` is the quick usage and run/build entrypoint.
-- `docs/implementation-roadmap.md` is the canonical roadmap and tracking policy document.
-- `docs/wiki/` is the long-lived operator and developer reference.
-- `AGENTS.md` defines the autonomous issue-worker contract.
+- `docs/wiki/` is the canonical operator, developer, workflow, and runbook surface.
+- The GitHub wiki is a lightweight published landing page sourced from `docs/wiki/`, not a second source of truth.
+- `TextQuest-Ghidra` is canonical for immutable snapshots, manifests, baseline selection, curated Ghidra evidence, and Ghidra intake and analysis flow.
+- `TextQuest` is canonical for code, `docs/wiki/`, runbooks, automation, and lightweight references that point at canonical evidence.
+- `AGENTS.md` defines the autonomous issue-worker contract and master-safe migration rules.
 
 ## Daily Working Loop
 
@@ -50,9 +52,9 @@ When behavior or roadmap guidance changes:
 4. run `python scripts/sync_wiki.py --dry-run` before a manual publish
 5. include the wiki source changes in the same PR when possible
 
-## Roadmap and Research Workflow
+## Roadmap and Tracking Workflow
 
-The roadmap source of truth is `docs/implementation-roadmap.md`.
+Live is the primary product target going forward. Test is historical and reference-only.
 
 Supporting research surfaces live in:
 
@@ -68,9 +70,15 @@ Rules:
 - external research may add milestone slices, validation tasks, and evidence updates
 - external research may not reorder milestones on its own
 - use evidence states when promoting research into execution work
-- keep GitHub issues, linked PRs, and milestones aligned only after repo docs are updated
-- keep GitHub Projects historical/retiring; do not treat them as active defaults
-- promote mature research, task, and validation items into GitHub issues and milestone slices
+- if a gap is still real after an audit or migration pass, open or update a strict GitHub issue immediately
+- use GitHub issues as the default unit of work
+- use milestones as release and initiative grouping buckets
+- use PRs as the implementation and review unit
+- keep GitHub Projects retired and historical-only; do not use them as live queue state
+- use sub-issues only for true epics or release buckets
+- keep parent epic issues open as coordination shells until their child issues are complete
+- prefer multiple focused master-based PRs over one large migration PR
+- do not merge Test offsets, Test defaults, or Test-only workflow assumptions into `master`
 
 Default roadmap verifier:
 
@@ -78,8 +86,10 @@ Default roadmap verifier:
 
 ## Maintainer Notes
 
-- The milestone and autonomous queue rules live in `AGENTS.md` and `docs/implementation-roadmap.md`.
-- `scripts/reconcile-agent-queue.sh` and `scripts/sync_project.py` remain legacy maintainer tools while GitHub Projects retire; they are not part of the normal build-run loop.
+- Base every new branch on fresh `origin/master`.
+- The active queue policy lives in `AGENTS.md`; treat older project-mirror guidance as historical context only.
+- `scripts/reconcile-agent-queue.sh` and `scripts/sync_project.py` remain legacy transition tools while GitHub Projects retire; they are not part of the normal build-run loop.
+- Link to canonical `TextQuest-Ghidra` snapshot or manifest paths instead of copying immutable evidence payloads into this repo.
 - Do not commit transient automation state such as `autoresearch-launch.json`, `autoresearch-state.json`, or `research-results.tsv`.
 
 ## Logging and Debugging

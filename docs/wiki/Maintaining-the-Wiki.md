@@ -22,6 +22,8 @@ Rules:
 - keep page names aligned with the published wiki names
 - prefer current code and generated docs over older research notes
 - call out live-validation gaps explicitly
+- keep governance and runbook policy in `docs/wiki/`
+- link out to canonical `TextQuest-Ghidra` snapshots or manifests instead of duplicating immutable evidence payloads here
 
 ### 2. Validate locally
 
