@@ -52,6 +52,9 @@ mq2-definitions/
 mq2-eqlib/
 mq2-reference/
 
+# Local raw research harvests and cloned reference caches
+/research/
+
 # TUI runtime preferences (user-specific)
 config/tui-prefs.toml
 

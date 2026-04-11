@@ -61,6 +61,12 @@ Supporting research surfaces live in:
 - `docs/external-research/`
 - `docs/research-imports/`
 
+Raw local harvests, cloned reference repos, and scratch analysis caches do not belong in the tracked repo surface:
+
+- keep repo-root `research/` as ignored local scratch only
+- promote durable conclusions into `docs/wiki/` or `docs/external-research/` before relying on them in roadmap or operator workflow
+- link to canonical `TextQuest-Ghidra` evidence when the conclusion depends on immutable snapshots or manifests
+
 Current packet/zoning intake rule:
 
 - curate send-path, state, and validation conclusions into `docs/external-research/packet-zoning-send-path-and-state-ledger.md` before treating raw imports as roadmap-ready
