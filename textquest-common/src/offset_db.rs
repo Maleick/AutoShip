@@ -96,6 +96,15 @@ impl OffsetDatabase {
         Some((actual_base + offset) as usize)
     }
 
+    /// Merge scan results into this database.
+    ///
+    /// Overwrites matching keys in the `globals` and `functions` maps with
+    /// addresses resolved by the scan engine. Entries not present in the report
+    /// are left unchanged (preserving compiled constants or JSON overrides).
+    pub fn merge_scan_results(&mut self, report: &crate::scan_engine::ScanReport) {
+        crate::scan_engine::apply_to_offset_db(report, self);
+    }
+
     /// Create from the current compile-time constants in offsets.rs
     #[must_use]
     pub fn from_compiled_offsets() -> Self {
