@@ -2362,7 +2362,7 @@ impl App {
     /// Read spawn memory on Windows for hex dump display.
     #[cfg(windows)]
     fn read_spawn_hex_data(&self, spawn_id: u32) -> Vec<u8> {
-        use crate::process::memory::ProcessHandle;
+        use crate::process::memory::{ProcessHandle, is_probably_valid_process_ptr};
         use textquest_common::offsets;
 
         // Bound traversal to avoid hangs on corrupt or cyclic spawn lists.
@@ -2377,14 +2377,14 @@ impl App {
                 return Vec::new();
             };
             let mgr_addr = match proc.read_ptr(mgr_ptr_addr) {
-                Ok(a) if a != 0 => a,
+                Ok(a) if is_probably_valid_process_ptr(a) => a,
                 _ => return Vec::new(),
             };
 
             let list_addr = mgr_addr + offsets::spawn_manager::PLAYER_LIST;
             let mut current = proc.read_ptr(list_addr).unwrap_or(0);
             let mut scanned = 0usize;
-            while current != 0 && scanned < MAX_HEX_SPAWN_SCAN {
+            while is_probably_valid_process_ptr(current) && scanned < MAX_HEX_SPAWN_SCAN {
                 let sid = proc
                     .read::<u32>(current + offsets::player_base::SPAWN_ID)
                     .unwrap_or(0);
@@ -3177,6 +3177,11 @@ impl App {
     }
 
     fn load_zone_navmesh_overlay(&mut self, zone_short_name: &str) {
+        if zone_short_name.is_empty() || zone_short_name.eq_ignore_ascii_case("unknown") {
+            self.map_state.navmesh_overlay = None;
+            return;
+        }
+
         #[cfg(not(windows))]
         {
             tracing::debug!(

@@ -1,6 +1,12 @@
 use anyhow::{Context, Result, bail};
 use std::mem;
 
+/// Lowest plausible user-mode pointer worth dereferencing in a remote process.
+pub const MIN_VALID_PROCESS_PTR: usize = 0x0000_0000_0001_0000;
+
+/// Highest canonical user-mode pointer on x64 Windows.
+pub const MAX_VALID_PROCESS_PTR: usize = 0x0000_7FFF_FFFF_FFFF;
+
 /// Handle to an opened process for memory reading.
 /// Automatically closes the handle on drop (Windows only).
 pub struct ProcessHandle {
@@ -201,6 +207,12 @@ impl ProcessHandle {
     }
 }
 
+/// Fast pointer sanity check for remote process memory reads.
+#[must_use]
+pub fn is_probably_valid_process_ptr(address: usize) -> bool {
+    (MIN_VALID_PROCESS_PTR..=MAX_VALID_PROCESS_PTR).contains(&address)
+}
+
 #[cfg(windows)]
 impl Drop for ProcessHandle {
     fn drop(&mut self) {
@@ -327,6 +339,16 @@ mod tests {
             assert!(msg.contains("addr=0x1000"));
             assert!(msg.contains("offset=0x10"));
             assert!(msg.contains("pid=99"));
+        }
+
+        #[test]
+        fn pointer_sanity_accepts_only_canonical_user_mode_addresses() {
+            assert!(!is_probably_valid_process_ptr(0));
+            assert!(!is_probably_valid_process_ptr(0x0fff));
+            assert!(is_probably_valid_process_ptr(0x0001_0000));
+            assert!(is_probably_valid_process_ptr(0x0000_7fff_ffff_ffff));
+            assert!(!is_probably_valid_process_ptr(0x0000_8000_0000_0000));
+            assert!(!is_probably_valid_process_ptr(usize::MAX));
         }
     }
 }

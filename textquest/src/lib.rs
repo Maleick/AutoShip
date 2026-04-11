@@ -46,6 +46,8 @@ pub mod nav;
 pub mod orchestrator;
 /// Orchestrator event loop — async tick loop wiring ClientManager, LaunchCoordinator, and Orchestrator.
 pub mod orchestrator_loop;
+/// Shared runtime paths for logs and local state.
+pub mod paths;
 /// OS-level process interaction — open, read memory, find processes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod process;

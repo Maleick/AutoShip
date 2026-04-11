@@ -10,6 +10,7 @@ use crate::inject;
 use crate::ipc;
 use crate::nav;
 use crate::orchestrator;
+use crate::paths;
 use crate::process;
 use crate::soul;
 use crate::tui;
@@ -125,6 +126,22 @@ fn nav_signal_display(
         path_length: format_nav_signal_metric(signals.and_then(|signals| signals.path_length)),
         velocity: format_nav_signal_metric(signals.map(|signals| signals.velocity)),
     }
+}
+
+fn dump_guidance_message() -> String {
+    format!(
+        "Use `{}` for a one-shot snapshot in files matching {}",
+        paths::dump_command_label(),
+        paths::dump_log_path().display()
+    )
+}
+
+fn calibration_dump_guidance_message() -> String {
+    format!(
+        "For a local process snapshot, run `{}` and check files matching {}",
+        paths::dump_command_label(),
+        paths::dump_log_path().display()
+    )
 }
 
 fn resolve_built_dll_path() -> Result<PathBuf> {
@@ -296,19 +313,15 @@ pub fn run_inject_mode() -> Result<()> {
     println!("Results: {success} succeeded, {failed} failed");
     println!();
     println!("Log locations:");
-    println!("  Orchestrator: logs/textquest.log");
-    #[cfg(windows)]
-    {
-        let temp = std::env::temp_dir();
-        println!(
-            "  DLL (injected): {}\\textquest\\textquest-dll.log",
-            temp.display()
-        );
-    }
-    #[cfg(not(windows))]
-    {
-        println!("  DLL (injected): $TMPDIR/textquest/textquest-dll.log");
-    }
+    println!(
+        "  Orchestrator: files matching {}",
+        paths::orchestrator_log_path().display()
+    );
+    println!(
+        "  Dump mode:    files matching {}",
+        paths::dump_log_path().display()
+    );
+    println!("  DLL (injected): {}", paths::dll_log_path().display());
     println!();
     println!("Run scripts\\verify_injection.bat to check injection status.");
 
@@ -1267,7 +1280,11 @@ pub fn run_autologin_mode(
     println!("  Success: {success_count}");
     println!("  Failed:  {fail_count}");
     println!("\nThe DLL login FSM handles all UI steps autonomously.");
-    println!("Check DLL logs for progress: %TEMP%\\textquest\\textquest-dll.log");
+    println!(
+        "Check DLL logs for progress: {}",
+        paths::dll_log_path().display()
+    );
+    println!("{}", dump_guidance_message());
 
     Ok(())
 }
@@ -1306,7 +1323,11 @@ pub fn run_calibrate_mode() -> Result<()> {
         }
     }
 
-    println!("\nCalibration complete. Check DLL log at %TEMP%\\textquest\\textquest-dll.log");
+    println!(
+        "\nCalibration complete. Check DLL log at {}",
+        paths::dll_log_path().display()
+    );
+    println!("{}", calibration_dump_guidance_message());
     Ok(())
 }
 
@@ -1962,6 +1983,7 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
 /// Helps debug why the NEXT pointer reads as 0x0 after the first spawn.
 #[allow(unused_variables)]
 fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u64) {
+    use crate::process::memory::is_probably_valid_process_ptr;
     use textquest_common::offsets::{self, spawn_manager};
 
     info!("===================================================");
@@ -1989,6 +2011,11 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
 
     if mgr_addr == 0 {
         error!("SpawnManager is null -- not in a zone?");
+        return;
+    }
+
+    if !is_probably_valid_process_ptr(mgr_addr) {
+        error!("SpawnManager pointer is invalid: {mgr_addr:#x}");
         return;
     }
 
@@ -2250,7 +2277,10 @@ pub fn load_config() -> Result<config::AppConfig> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_pid_session, nav_signal_display, resolve_navmesh_zone};
+    use super::{
+        calibration_dump_guidance_message, dump_guidance_message, load_pid_session,
+        nav_signal_display, resolve_navmesh_zone,
+    };
     use textquest_common::nav::NavStateSignals;
 
     #[test]
@@ -2317,5 +2347,19 @@ mod tests {
         assert_eq!(display.path_exists, "n/a");
         assert_eq!(display.path_length, "n/a");
         assert_eq!(display.velocity, "n/a");
+    }
+
+    #[test]
+    fn dump_guidance_message_reports_resolved_path() {
+        let message = dump_guidance_message();
+        assert!(message.contains("textquest-dump.log.*"));
+        assert!(message.contains("`textquest"));
+    }
+
+    #[test]
+    fn calibration_guidance_message_reports_resolved_path() {
+        let message = calibration_dump_guidance_message();
+        assert!(message.contains("textquest-dump.log.*"));
+        assert!(message.contains("check "));
     }
 }

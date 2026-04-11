@@ -2,9 +2,9 @@ use super::structs::{
     BuffSlot, CastDurationSource, CastState, EqClass, GroupInfo, SpawnInfo, SpawnType, SpellSlot,
     StandState,
 };
-use crate::process::memory::ProcessHandle;
+use crate::process::memory::{ProcessHandle, is_probably_valid_process_ptr};
 use anyhow::{Context, Result};
-use std::mem::size_of;
+use std::{collections::HashSet, mem::size_of};
 use textquest_common::offsets::{
     self, actor_client, character_zone, client_spell_manager, display, eq_spell, group,
     launch_spell_data, player_base, player_zone, spawn_manager, spell_hash_map, zone_info,
@@ -12,6 +12,135 @@ use textquest_common::offsets::{
 
 fn sanitize_terminal_text(input: String) -> String {
     input.chars().filter(|ch| !ch.is_control()).collect()
+}
+
+const EMPTY_PROCESS_PTR_SENTINEL: usize = 0xFFFF;
+const SPAWN_LIST_HOP_MULTIPLIER: usize = 4;
+
+fn valid_process_ptr(addr: usize) -> Option<usize> {
+    (addr != EMPTY_PROCESS_PTR_SENTINEL && is_probably_valid_process_ptr(addr)).then_some(addr)
+}
+
+fn spawn_list_hop_limit(max_count: usize) -> usize {
+    max_count.saturating_mul(SPAWN_LIST_HOP_MULTIPLIER).max(1)
+}
+
+fn checked_process_ptr_offset(base: usize, offset: usize) -> Option<usize> {
+    base.checked_add(offset)
+}
+
+fn ensure_valid_process_ptr(addr: usize, label: &str) -> Result<usize> {
+    if let Some(addr) = valid_process_ptr(addr) {
+        Ok(addr)
+    } else {
+        anyhow::bail!("{label} is invalid ({addr:#x}) — client not ready?")
+    }
+}
+
+fn read_local_player_addr(proc: &ProcessHandle, eq_base: u64) -> Result<usize> {
+    let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)
+        .context("rebase underflow for pinstLocalPlayer")?;
+    let player_addr = proc
+        .read_ptr(player_ptr_addr)
+        .context("Failed to read pinstLocalPlayer pointer")?;
+
+    if player_addr == 0 {
+        anyhow::bail!("pinstLocalPlayer is null — not logged in?");
+    }
+
+    ensure_valid_process_ptr(player_addr, "pinstLocalPlayer")
+}
+
+fn first_spawn_from_local_player_links(proc: &ProcessHandle, eq_base: u64) -> Result<usize> {
+    const MAX_BACKTRACK_STEPS: usize = 4096;
+
+    let mut current = read_local_player_addr(proc, eq_base)?;
+    let mut visited = HashSet::new();
+
+    for _ in 0..MAX_BACKTRACK_STEPS {
+        if !visited.insert(current) {
+            break;
+        }
+
+        let prev = proc.read_ptr(current + player_base::PREV).unwrap_or(0);
+        let Some(prev) = valid_process_ptr(prev) else {
+            break;
+        };
+        current = prev;
+    }
+
+    Ok(current)
+}
+
+fn read_spawn_list_from_first(
+    proc: &ProcessHandle,
+    first_spawn: usize,
+    eq_base: u64,
+    display_timestamp: Option<u32>,
+    max_count: usize,
+) -> Result<Vec<SpawnInfo>> {
+    let mut current = ensure_valid_process_ptr(first_spawn, "first spawn pointer")?;
+    let mut spawns = Vec::new();
+    let mut visited = HashSet::new();
+    let mut hops = 0usize;
+    let max_hops = spawn_list_hop_limit(max_count);
+
+    while spawns.len() < max_count && visited.insert(current) && hops < max_hops {
+        hops += 1;
+        match read_spawn(proc, current, eq_base, display_timestamp) {
+            Ok(spawn) => {
+                tracing::trace!(addr = format!("{:#x}", current), name = %spawn.name, "Read spawn OK");
+                spawns.push(spawn);
+            }
+            Err(e) => {
+                tracing::warn!(addr = format!("{:#x}", current), error = %e, "Skipping spawn with unreadable critical fields");
+            }
+        }
+
+        let Some(next_addr) = checked_process_ptr_offset(current, player_base::NEXT) else {
+            tracing::warn!(
+                current_addr = format!("{:#x}", current),
+                next_offset = player_base::NEXT,
+                spawn_count = spawns.len(),
+                "Overflow calculating NEXT pointer address, stopping iteration"
+            );
+            break;
+        };
+        match proc.read_ptr(next_addr) {
+            Ok(next) => match valid_process_ptr(next) {
+                Some(next) => {
+                    tracing::trace!(
+                        current_addr = format!("{:#x}", current),
+                        next_ptr_addr = format!("{:#x}", next_addr),
+                        next_value = format!("{:#x}", next),
+                        "NEXT pointer"
+                    );
+                    current = next;
+                }
+                None => break,
+            },
+            Err(e) => {
+                tracing::warn!(
+                    addr = format!("{:#x}", next_addr),
+                    error = %e,
+                    spawn_count = spawns.len(),
+                    "Failed to read NEXT pointer, stopping iteration"
+                );
+                break;
+            }
+        }
+    }
+
+    if hops >= max_hops {
+        tracing::warn!(
+            max_hops,
+            max_count,
+            readable_spawns = spawns.len(),
+            "Stopping spawn traversal after reaching hop limit"
+        );
+    }
+
+    Ok(spawns)
 }
 
 /// Read a single spawn's data from the process at the given `PlayerClient` address.
@@ -25,6 +154,8 @@ pub fn read_spawn(
     eq_base: u64,
     display_timestamp: Option<u32>,
 ) -> Result<SpawnInfo> {
+    ensure_valid_process_ptr(addr, "spawn pointer")?;
+
     // Critical fields — hard fail if any are unreadable (corrupt memory → skip spawn)
     let name = proc
         .read_string(addr + player_base::NAME, 64)
@@ -138,18 +269,9 @@ pub fn read_spawn(
 /// Returns an error if the operation fails.
 pub fn read_local_player(proc: &ProcessHandle, eq_base: u64) -> Result<SpawnInfo> {
     let display_timestamp = read_display_timestamp(proc, eq_base);
-    let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)
-        .context("rebase underflow for pinstLocalPlayer")?;
-    let player_addr = proc
-        .read_ptr(player_ptr_addr)
-        .context("Failed to read pinstLocalPlayer pointer")?;
-
-    if player_addr == 0 {
-        anyhow::bail!("pinstLocalPlayer is null — not logged in?");
-    }
+    let player_addr = read_local_player_addr(proc, eq_base)?;
 
     tracing::debug!(
-        player_ptr_addr = format!("{:#x}", player_ptr_addr),
         player_addr = format!("{:#x}", player_addr),
         eq_base = format!("{:#x}", eq_base),
         "read_local_player pointer chain"
@@ -307,6 +429,14 @@ pub fn read_target(proc: &ProcessHandle, eq_base: u64) -> Result<Option<SpawnInf
         return Ok(None);
     }
 
+    let Some(target_addr) = valid_process_ptr(target_addr) else {
+        tracing::debug!(
+            target_addr = format!("{:#x}", target_addr),
+            "Ignoring invalid pinstTarget pointer"
+        );
+        return Ok(None);
+    };
+
     let spawn = read_spawn(proc, target_addr, eq_base, display_timestamp)
         .context("Failed to read target spawn data")?;
     Ok(Some(spawn))
@@ -326,59 +456,49 @@ pub fn read_all_spawns(
     let display_timestamp = read_display_timestamp(proc, eq_base);
     let mgr_ptr_addr = offsets::rebase(offsets::PINST_SPAWN_MANAGER, eq_base)
         .context("rebase underflow for pinstSpawnManager")?;
-    let mgr_addr = proc
+    let raw_mgr_addr = proc
         .read_ptr(mgr_ptr_addr)
         .context("Failed to read pinstSpawnManager pointer")?;
-
-    if mgr_addr == 0 {
-        anyhow::bail!("pinstSpawnManager is null — not in a zone?");
-    }
-
-    // Read first node from TList at offset spawn_manager::PLAYER_LIST
-    // TList has m_pFirstNode at offset 0x00 within the TList struct
-    let list_addr = mgr_addr + spawn_manager::PLAYER_LIST;
-    let mut current = proc
-        .read_ptr(list_addr)
-        .context("Failed to read first spawn from TList")?;
-
-    let mut spawns = Vec::new();
-
-    while current != 0 && spawns.len() < max_count {
-        match read_spawn(proc, current, eq_base, display_timestamp) {
-            Ok(spawn) => {
-                tracing::trace!(addr = format!("{:#x}", current), name = %spawn.name, "Read spawn OK");
-                spawns.push(spawn);
-            }
-            Err(e) => {
-                tracing::warn!(addr = format!("{:#x}", current), error = %e, "Skipping spawn with unreadable critical fields");
-            }
-        }
-
-        // Follow m_pNext at offset 0x08 (TListNode.m_pNext)
-        let next_addr = current + player_base::NEXT;
-        match proc.read_ptr(next_addr) {
-            Ok(next) => {
-                tracing::trace!(
-                    current_addr = format!("{:#x}", current),
-                    next_ptr_addr = format!("{:#x}", next_addr),
-                    next_value = format!("{:#x}", next),
-                    "NEXT pointer"
+    let first_spawn = 'get_first: {
+        if let Some(mgr_addr) = valid_process_ptr(raw_mgr_addr) {
+            let Some(list_addr) = checked_process_ptr_offset(mgr_addr, spawn_manager::PLAYER_LIST)
+            else {
+                tracing::debug!(
+                    mgr_addr = format!("{:#x}", mgr_addr),
+                    offset = format!("{:#x}", spawn_manager::PLAYER_LIST),
+                    "SpawnManager player list address overflowed, falling back to local-player links"
                 );
-                current = next;
+                break 'get_first first_spawn_from_local_player_links(proc, eq_base)?;
+            };
+            match proc.read_ptr(list_addr) {
+                Ok(first) => {
+                    if let Some(valid_first) = valid_process_ptr(first) {
+                        break 'get_first valid_first;
+                    }
+                    tracing::debug!(
+                        mgr_addr = format!("{:#x}", mgr_addr),
+                        first = format!("{:#x}", first),
+                        "SpawnManager list head unavailable, falling back to local-player links"
+                    );
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        mgr_addr = format!("{:#x}", mgr_addr),
+                        error = %e,
+                        "Failed to read SpawnManager list head, falling back to local-player links"
+                    );
+                }
             }
-            Err(e) => {
-                tracing::warn!(
-                    addr = format!("{:#x}", next_addr),
-                    error = %e,
-                    spawn_count = spawns.len(),
-                    "Failed to read NEXT pointer, stopping iteration"
-                );
-                break;
-            }
+        } else {
+            tracing::debug!(
+                mgr_addr = format!("{:#x}", raw_mgr_addr),
+                "SpawnManager pointer unavailable, falling back to local-player links"
+            );
         }
-    }
+        first_spawn_from_local_player_links(proc, eq_base)?
+    };
 
-    Ok(spawns)
+    read_spawn_list_from_first(proc, first_spawn, eq_base, display_timestamp, max_count)
 }
 
 fn read_display_timestamp(proc: &ProcessHandle, eq_base: u64) -> Option<u32> {
@@ -389,29 +509,32 @@ fn read_display_timestamp(proc: &ProcessHandle, eq_base: u64) -> Option<u32> {
 
 fn read_local_profile_addr(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
     let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
-    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
+    let pc_addr = proc
+        .read_ptr(pc_ptr_addr)
+        .ok()
+        .and_then(valid_process_ptr)?;
 
     use textquest_common::offsets::profile;
     let profile_mgr = pc_addr + profile::PROFILE_MANAGER;
     let profile_list_ptr = proc
         .read_ptr(profile_mgr + profile::PROFILE_LIST_PTR)
         .ok()
-        .filter(|&p| p != 0)?;
+        .and_then(valid_process_ptr)?;
     proc.read_ptr(profile_list_ptr + profile::PROFILE_FIRST)
         .ok()
-        .filter(|&p| p != 0)
+        .and_then(valid_process_ptr)
 }
 
 fn read_local_player_addr_from_pc(proc: &ProcessHandle, eq_base: u64) -> Option<usize> {
     let pc_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PC, eq_base)?;
-    let pc_addr = proc.read_ptr(pc_ptr_addr).ok().filter(|&a| a != 0)?;
+    let pc_addr = proc
+        .read_ptr(pc_ptr_addr)
+        .ok()
+        .and_then(valid_process_ptr)?;
     proc.read_ptr(pc_addr + character_zone::ME)
         .ok()
-        .filter(|&a| a != 0)
-        .or_else(|| {
-            let player_ptr_addr = offsets::rebase(offsets::PINST_LOCAL_PLAYER, eq_base)?;
-            proc.read_ptr(player_ptr_addr).ok().filter(|&a| a != 0)
-        })
+        .and_then(valid_process_ptr)
+        .or_else(|| read_local_player_addr(proc, eq_base).ok())
 }
 
 fn read_spell_gem_etas(proc: &ProcessHandle, player_addr: usize) -> [u32; 15] {
@@ -648,6 +771,7 @@ fn read_cxstr(proc: &ProcessHandle, cxstr_addr: usize, max_len: usize) -> Result
     if rep_ptr == 0 {
         return Ok(String::new());
     }
+    let rep_ptr = ensure_valid_process_ptr(rep_ptr, "CXStr.m_data")?;
     proc.read_string(rep_ptr + group::CXSTR_REP_UTF8, max_len)
         .context("Failed to read CStrRep.utf8 data")
 }
@@ -670,6 +794,9 @@ pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<Grou
     if pc_addr == 0 {
         return Ok(None);
     }
+    let Some(pc_addr) = valid_process_ptr(pc_addr) else {
+        return Ok(None);
+    };
 
     // Read CGroup* from PcClient
     let group_ptr = proc
@@ -678,6 +805,9 @@ pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<Grou
     if group_ptr == 0 {
         return Ok(None);
     }
+    let Some(group_ptr) = valid_process_ptr(group_ptr) else {
+        return Ok(None);
+    };
 
     // Read leader pointer and name
     let leader_ptr = proc.read_ptr(group_ptr + group::GROUP_LEADER).unwrap_or(0);
@@ -770,6 +900,7 @@ pub fn read_spawn_bytes(
     start_offset: usize,
     len: usize,
 ) -> Result<Vec<u8>> {
+    ensure_valid_process_ptr(spawn_addr, "spawn pointer")?;
     let addr = spawn_addr + start_offset;
     proc.read_bytes(addr, len)
         .with_context(|| format!("Failed to read {len} bytes at spawn+{start_offset:#x}"))
@@ -805,6 +936,26 @@ mod tests {
     fn sanitize_terminal_text_removes_ansi_control_bytes() {
         let raw = "Guard\u{1b}[31mHACK\u{1b}[0m\u{7}".to_string();
         assert_eq!(sanitize_terminal_text(raw), "Guard[31mHACK[0m");
+    }
+
+    #[test]
+    fn valid_process_ptr_rejects_common_sentinel_values() {
+        assert_eq!(valid_process_ptr(0), None);
+        assert_eq!(valid_process_ptr(0xFFFF), None);
+        assert_eq!(valid_process_ptr(usize::MAX), None);
+        assert!(valid_process_ptr(0x0000_1234_5678).is_some());
+    }
+
+    #[test]
+    fn spawn_list_hop_limit_scales_with_requested_count() {
+        assert_eq!(spawn_list_hop_limit(0), 1);
+        assert_eq!(spawn_list_hop_limit(1), 4);
+        assert_eq!(spawn_list_hop_limit(25), 100);
+    }
+
+    #[test]
+    fn checked_process_ptr_offset_returns_none_on_overflow() {
+        assert_eq!(checked_process_ptr_offset(usize::MAX, 1), None);
     }
 
     #[test]

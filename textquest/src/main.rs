@@ -1,7 +1,8 @@
-use textquest::cli;
+use textquest::{cli, paths};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use std::path::Path;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -250,28 +251,20 @@ enum CredentialAction {
 }
 
 fn main() -> Result<()> {
-    // Set up file logging — must be done before anything else.
-    let log_dir = std::env::current_dir().unwrap_or_default().join("logs");
-    std::fs::create_dir_all(&log_dir).ok();
-    let file_appender = rolling::RollingFileAppender::builder()
-        .rotation(rolling::Rotation::DAILY)
-        .filename_prefix("textquest.log")
-        .max_log_files(7) // Keep 1 week of logs
-        .build(&log_dir)
-        .unwrap_or_else(|_| rolling::daily(&log_dir, "textquest.log"));
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-
-    fmt()
-        .with_env_filter(filter)
-        .with_writer(non_blocking)
-        .with_ansi(false)
-        .init();
-
-    tracing::info!("TextQuest orchestrator starting");
-
     let args = Args::parse();
+    let (log_prefix, default_filter) = if args.dump {
+        ("textquest-dump.log", "debug")
+    } else {
+        ("textquest.log", "info")
+    };
+    let log_dir = paths::resolve_log_dir();
+    let _tracing_guard = init_tracing(&log_dir, log_prefix, default_filter);
+
+    tracing::info!(
+        log_prefix,
+        log_dir = %log_dir.display(),
+        "TextQuest orchestrator starting"
+    );
 
     match args.command {
         // Daemon lifecycle
@@ -409,6 +402,37 @@ fn main() -> Result<()> {
             }
         }
     }
+}
+
+fn init_tracing(
+    log_dir: &Path,
+    filename_prefix: &str,
+    default_filter: &str,
+) -> tracing_appender::non_blocking::WorkerGuard {
+    if let Err(err) = std::fs::create_dir_all(log_dir) {
+        eprintln!(
+            "warning: unable to create log directory '{}': {err}",
+            log_dir.display()
+        );
+    }
+    let file_appender = rolling::RollingFileAppender::builder()
+        .rotation(rolling::Rotation::DAILY)
+        .filename_prefix(filename_prefix)
+        .max_log_files(7)
+        .build(log_dir)
+        .unwrap_or_else(|_| rolling::daily(log_dir, filename_prefix));
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
+
+    fmt()
+        .with_env_filter(filter)
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .init();
+
+    guard
 }
 
 #[cfg(test)]

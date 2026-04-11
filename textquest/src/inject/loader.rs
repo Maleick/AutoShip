@@ -9,6 +9,88 @@ const INJECTION_TIMEOUT_MS: u32 = 10_000;
 #[cfg(windows)]
 const DLL_PATH_LEN_LIMIT: usize = 8192;
 
+#[cfg(windows)]
+fn dll_module_name(dll_path: &Path) -> Result<String> {
+    let Some(file_name) = dll_path.file_name().and_then(|name| name.to_str()) else {
+        return Err(anyhow::anyhow!(
+            "DLL path has no valid terminal filename: {}",
+            dll_path.display()
+        ));
+    };
+
+    if !file_name.contains('.') || !file_name.to_ascii_lowercase().ends_with(".dll") {
+        return Err(anyhow::anyhow!(
+            "DLL path has no valid terminal filename: {}",
+            dll_path.display()
+        ));
+    }
+
+    Ok(file_name.to_ascii_lowercase())
+}
+
+#[cfg(windows)]
+fn find_remote_module_base(pid: u32, dll_name: &str) -> Result<Option<isize>> {
+    use windows::Win32::Foundation::{CloseHandle, HMODULE};
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,
+        TH32CS_SNAPMODULE32,
+    };
+
+    let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }
+        .context("CreateToolhelp32Snapshot failed")?;
+
+    let dll_name_lower = dll_name.to_ascii_lowercase();
+    let mut module_base = HMODULE::default();
+    let mut entry = MODULEENTRY32W {
+        dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
+        ..Default::default()
+    };
+
+    let found = unsafe {
+        Module32FirstW(snap, &mut entry).context("Module32FirstW failed")?;
+        loop {
+            let name = entry
+                .szModule
+                .iter()
+                .take_while(|&&c| c != 0)
+                .map(|&c| char::from_u32(u32::from(c)).unwrap_or('?'))
+                .collect::<String>()
+                .to_ascii_lowercase();
+
+            if module_name_matches(&name, &dll_name_lower) {
+                module_base = HMODULE(entry.modBaseAddr as isize);
+                break true;
+            }
+            if Module32NextW(snap, &mut entry).is_err() {
+                break false;
+            }
+        }
+    };
+
+    unsafe {
+        let _ = CloseHandle(snap);
+    }
+
+    Ok((found && !module_base.is_invalid()).then_some(module_base.0))
+}
+
+fn module_name_matches(actual: &str, expected: &str) -> bool {
+    actual.eq_ignore_ascii_case(expected)
+}
+
+#[cfg(windows)]
+fn ensure_remote_dll_loaded(pid: u32, dll_path: &Path) -> Result<()> {
+    let module_name = dll_module_name(dll_path)?;
+    if find_remote_module_base(pid, &module_name)?.is_some() {
+        Ok(())
+    } else {
+        bail!(
+            "LoadLibraryW finished but '{}' was not present in process {pid}",
+            dll_path.display()
+        )
+    }
+}
+
 /// Inject a DLL into a target process by PID.
 /// Uses `CreateRemoteThread` + `LoadLibraryW` (classic injection technique).
 ///
@@ -19,21 +101,65 @@ const DLL_PATH_LEN_LIMIT: usize = 8192;
 pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
-    use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Foundation::WAIT_EVENT;
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Memory::{
         MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx,
     };
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
-        PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
+        CreateRemoteThread, GetExitCodeThread, OpenProcess, PROCESS_CREATE_THREAD,
+        PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+        WaitForSingleObject,
     };
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
     use windows::core::w;
 
     use anyhow::Context;
+
+    struct HandleGuard(HANDLE);
+
+    impl HandleGuard {
+        fn new(handle: HANDLE) -> Self {
+            Self(handle)
+        }
+
+        fn raw(&self) -> HANDLE {
+            self.0
+        }
+    }
+
+    impl Drop for HandleGuard {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = CloseHandle(self.0);
+            }
+        }
+    }
+
+    struct RemoteAllocGuard {
+        process: HANDLE,
+        addr: *mut core::ffi::c_void,
+    }
+
+    impl RemoteAllocGuard {
+        fn new(process: HANDLE, addr: *mut core::ffi::c_void) -> Self {
+            Self { process, addr }
+        }
+
+        fn ptr(&self) -> *mut core::ffi::c_void {
+            self.addr
+        }
+    }
+
+    impl Drop for RemoteAllocGuard {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = VirtualFreeEx(self.process, self.addr, 0, MEM_RELEASE);
+            }
+        }
+    }
 
     validate_dll_path(dll_path)?;
 
@@ -76,23 +202,19 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
         if remote_buf.is_null() {
             bail!("VirtualAllocEx failed");
         }
+        let remote_buf = RemoteAllocGuard::new(process, remote_buf);
 
         // Write DLL path to target process memory
-        let write_result = unsafe {
+        unsafe {
             WriteProcessMemory(
                 process,
-                remote_buf,
+                remote_buf.ptr(),
                 dll_path_wide.as_ptr() as *const _,
                 dll_path_bytes,
                 None,
             )
-        };
-        if let Err(err) = write_result {
-            unsafe {
-                let _ = VirtualFreeEx(process, remote_buf, 0, MEM_RELEASE);
-            }
-            return Err(err).context("WriteProcessMemory failed");
         }
+        .context("WriteProcessMemory failed")?;
 
         // Get address of LoadLibraryW in kernel32.dll
         let kernel32 = unsafe { GetModuleHandleW(w!("kernel32.dll")) }
@@ -117,32 +239,35 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
                 None, // default security
                 0,    // default stack size
                 Some(load_library_fn),
-                Some(remote_buf),
+                Some(remote_buf.ptr()),
                 0,    // run immediately
                 None, // don't need thread ID
             )
         }
         .context("CreateRemoteThread failed")?;
+        let thread = HandleGuard::new(thread);
 
         // Wait for the remote thread to complete
-        unsafe {
-            let wait_result = WaitForSingleObject(thread, INJECTION_TIMEOUT_MS);
+        let thread_exit_code = unsafe {
+            let wait_result = WaitForSingleObject(thread.raw(), INJECTION_TIMEOUT_MS);
             if wait_result != WAIT_OBJECT_0 {
-                CloseHandle(thread)?;
-                let _ = VirtualFreeEx(process, remote_buf, 0, MEM_RELEASE);
                 anyhow::bail!(
                     "DLL injection timed out — LoadLibrary did not complete within the timeout period"
                 );
             }
-            CloseHandle(thread)?;
-        }
+            let mut exit_code = 0u32;
+            GetExitCodeThread(thread.raw(), &mut exit_code)
+                .context("GetExitCodeThread failed after LoadLibraryW")?;
+            exit_code
+        };
+        ensure_remote_dll_loaded(pid, dll_path)?;
 
-        // Free the remote buffer
-        unsafe {
-            let _ = VirtualFreeEx(process, remote_buf, 0, MEM_RELEASE);
-        }
-
-        tracing::info!(pid, dll = %dll_path.display(), "DLL injected successfully");
+        tracing::info!(
+            pid,
+            dll = %dll_path.display(),
+            thread_exit_code,
+            "DLL injected successfully"
+        );
         Ok(())
     })();
 
@@ -197,10 +322,6 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     use anyhow::Context;
     use windows::Win32::Foundation::WAIT_EVENT;
     use windows::Win32::Foundation::{CloseHandle, HMODULE};
-    use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,
-        TH32CS_SNAPMODULE32,
-    };
     use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
     use windows::Win32::System::Threading::{
         CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
@@ -209,50 +330,9 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     use windows::core::w;
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
 
-    // Snapshot all modules loaded in the target process.
-    let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }
-        .context("CreateToolhelp32Snapshot failed")?;
-
-    let dll_name_lower = dll_name.to_ascii_lowercase();
-    let mut module_base = HMODULE::default();
-
-    let mut entry = MODULEENTRY32W {
-        dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
-        ..Default::default()
-    };
-
-    // Walk the module list looking for a name that contains dll_name (case-insensitive).
-    let found = unsafe {
-        if Module32FirstW(snap, &mut entry).is_ok() {
-            loop {
-                let name: String = entry
-                    .szModule
-                    .iter()
-                    .take_while(|&&c| c != 0)
-                    .map(|&c| char::from_u32(u32::from(c)).unwrap_or('?'))
-                    .collect::<String>()
-                    .to_ascii_lowercase();
-
-                if name.contains(&dll_name_lower) {
-                    module_base = HMODULE(entry.modBaseAddr as isize);
-                    break true;
-                }
-                if Module32NextW(snap, &mut entry).is_err() {
-                    break false;
-                }
-            }
-        } else {
-            false
-        }
-    };
-
-    unsafe {
-        let _ = CloseHandle(snap);
-    }
-
-    if !found || module_base.is_invalid() {
+    let Some(module_base) = find_remote_module_base(pid, dll_name)?.map(HMODULE) else {
         bail!("DLL '{dll_name}' not found in modules of process {pid}");
-    }
+    };
 
     // Open target process with thread-creation rights.
     let process = unsafe {
@@ -326,4 +406,50 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
         "DLL ejection not available on this platform (stub)"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    use super::dll_module_name;
+    use super::module_name_matches;
+    #[cfg(windows)]
+    use std::path::Path;
+
+    #[test]
+    fn module_name_matches_requires_exact_filename() {
+        assert!(module_name_matches(
+            "textquest_dll.dll",
+            "textquest_dll.dll"
+        ));
+        assert!(module_name_matches(
+            "TEXTQUEST_DLL.DLL",
+            "textquest_dll.dll"
+        ));
+        assert!(!module_name_matches(
+            "my_textquest_dll.dll.backup",
+            "textquest_dll.dll"
+        ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dll_module_name_extracts_lowercase_filename() {
+        let name = dll_module_name(Path::new(r"C:\temp\TextQuest_DLL.DLL")).expect("dll name");
+        assert_eq!(name, "textquest_dll.dll");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dll_module_name_requires_terminal_filename() {
+        let err = dll_module_name(Path::new(r"C:\temp\")).unwrap_err();
+        assert!(err.to_string().contains("terminal filename"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dll_module_name_requires_dll_filename() {
+        let err = dll_module_name(Path::new(r"C:\temp\textquest_dll")).unwrap_err();
+        assert!(err.to_string().contains("terminal filename"));
+    }
 }
