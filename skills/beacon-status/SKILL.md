@@ -18,6 +18,28 @@ cat .beacon/state.json 2>/dev/null
 
 **If file is missing**: Display "No active Beacon session. Run `/beacon start` to begin." and stop.
 
+Also read the quota file:
+
+```bash
+cat .beacon/quota.json 2>/dev/null || echo '{}'
+```
+
+`quota.json` has the structure:
+
+```json
+{
+  "codex-spark": {
+    "quota_pct": 40,
+    "dispatches": 7,
+    "reset_date": "2026-04-15"
+  },
+  "codex-gpt": { "quota_pct": 70, "dispatches": 3, "reset_date": "2026-04-15" },
+  "gemini": { "quota_pct": 30, "dispatches": 5, "reset_date": "2026-04-15" }
+}
+```
+
+Use this file — not `state.json .tools` — as the authoritative source for the QUOTA section. Claude's quota is always 100% (Max subscription).
+
 **If file is corrupted** (invalid JSON): Display error and suggest recovery:
 
 ```
@@ -35,6 +57,15 @@ tmux list-panes -t beacon -F '#{pane_id} #{pane_title} #{pane_dead} #{pane_start
 
 **If tmux session doesn't exist**: Note "tmux session 'beacon' not found" — agents may have died. Show state file data only.
 
+### Step 2.5: Fetch PR Counts
+
+```bash
+gh pr list --state open --json number --jq 'length'
+gh pr list --state merged --json number --jq 'length'
+```
+
+Store results as `pr_open` and `pr_merged` for use in the PROGRESS section.
+
 ### Step 3: Reconcile
 
 Cross-reference state file entries with tmux panes:
@@ -42,7 +73,20 @@ Cross-reference state file entries with tmux panes:
 - State says "running" but pane is dead → flag as "completed (unchecked)" or "crashed"
 - Pane exists but no state entry → flag as "orphaned pane"
 
-### Step 4: Render Output
+### Step 4: Calculate Uptime
+
+Read `started_at` from `state.json` (ISO 8601 string). Calculate elapsed time from `started_at` to now:
+
+```
+elapsed_seconds = now - started_at
+hours = floor(elapsed_seconds / 3600)
+minutes = floor((elapsed_seconds % 3600) / 60)
+uptime = "{h}h {m}m"
+```
+
+If `started_at` is missing, display `Uptime: unknown`.
+
+### Step 5: Render Output
 
 ## Output Format
 
@@ -60,9 +104,9 @@ AGENTS (3 active / 20 max)
 
 QUOTA
   Claude:      ████████████████████ available
-  Codex Spark: ████████░░░░░░░░░░░░ ~40%
-  Codex GPT:   ██████████████░░░░░░ ~70%
-  Gemini:      ██████░░░░░░░░░░░░░░ ~30%
+  Codex Spark: ████████░░░░░░░░░░░░ ~40%  (7 dispatches)
+  Codex GPT:   ██████████████░░░░░░ ~70%  (3 dispatches)
+  Gemini:      ██████░░░░░░░░░░░░░░ ~30%  (5 dispatches)
 
 PROGRESS
   Dispatched: 12  Completed: 8  Failed: 1  Blocked: 0
@@ -84,6 +128,8 @@ Color hints (for terminal output):
 - `10-50%`: show as "~N%" (warning zone)
 - `< 10%`: show as "LOW" (dispatch will skip this tool)
 - `0%`: show as "EXHAUSTED"
+
+Append `(N dispatches)` from `quota.json` after the percentage label for each third-party tool. Claude has no dispatch count shown (always available). If `quota.json` is missing or a tool has no entry, omit the dispatch count for that tool.
 
 ### When No Agents Are Running
 
