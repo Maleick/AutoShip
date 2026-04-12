@@ -568,11 +568,11 @@ pub const SCAN_ENTRIES: &[ScanEntry] = &[
         expected_preferred: Some(offsets::eqmain::JOIN_SERVER),
     },
     ScanEntry {
-        name: "eqmain_loginViewManager",
-        category: OffsetCategory::Function,
+        name: "eqmain_pinstLoginViewManager",
+        category: OffsetCategory::Global,
         module: ScanModule::EqMain,
         pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
+        resolve: ResolveMode::RipRelative { disp_offset: 3 },
         expected_preferred: Some(offsets::eqmain::LOGIN_VIEW_MANAGER),
     },
     ScanEntry {
