@@ -79,19 +79,12 @@ create_github_labels() {
     return 0
   fi
 
-  # Define labels with their colors
-  declare -A labels=(
-    ["beacon:in-progress"]="FFEB3B"  # yellow
-    ["beacon:blocked"]="F44336"      # red
-    ["beacon:paused"]="FF9800"       # orange
-    ["beacon:done"]="4CAF50"         # green
-  )
-
-  # Create each label if it doesn't exist
-  for label in "${!labels[@]}"; do
-    color="${labels[$label]}"
-    # Check if label exists
-    if ! gh label list --repo "$REPO_SLUG" --json name --query ".[].name" 2>/dev/null | grep -q "^$label$"; then
+  # Create each label if it doesn't exist (bash 3.2 compatible — no associative arrays)
+  local pairs="beacon:in-progress=FFEB3B beacon:blocked=F44336 beacon:paused=FF9800 beacon:done=4CAF50"
+  for pair in $pairs; do
+    label="${pair%%=*}"
+    color="${pair#*=}"
+    if ! gh label list --repo "$REPO_SLUG" --json name --jq ".[].name" 2>/dev/null | grep -q "^${label}$"; then
       echo "Creating label: $label (color: $color)"
       gh label create "$label" --repo "$REPO_SLUG" --color "$color" --description "Beacon orchestration label" 2>/dev/null || true
     fi
