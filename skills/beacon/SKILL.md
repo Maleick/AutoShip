@@ -343,9 +343,20 @@ After merge:
 
 Apply these labels to issues for recovery:
 
-- `beacon:in-progress` — agent is working on it
-- `beacon:blocked` — all agents failed, needs human review
-- `beacon:done` — completed and merged (auto-removed after cleanup)
+- `beacon:in-progress` — agent is working on it (yellow #FBF2B9)
+- `beacon:blocked` — all agents failed, needs human review (red #FF6B6B)
+- `beacon:paused` — orchestration halted, awaiting resume (orange #FFA500)
+- `beacon:done` — completed and merged (green #4CAF50)
+
+**Label Initialization** — On first run, ensure labels exist:
+
+```bash
+# Create beacon labels if they don't exist
+gh label create "beacon:in-progress" --color FBF2B9 --description "Agent working on this issue" 2>/dev/null || true
+gh label create "beacon:blocked" --color FF6B6B --description "All agents failed, needs human review" 2>/dev/null || true
+gh label create "beacon:paused" --color FFA500 --description "Orchestration halted, awaiting resume" 2>/dev/null || true
+gh label create "beacon:done" --color 4CAF50 --description "Completed and merged" 2>/dev/null || true
+```
 
 ## Tmux Layout
 
