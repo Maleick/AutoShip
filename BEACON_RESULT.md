@@ -1,24 +1,25 @@
-# Result: #25 — Add jq dependency check to beacon-init.sh
+# Result: #27 — Implement quota parsing for Codex and Gemini CLIs
 
 ## Status: DONE
 
 ## Changes Made
 
-- `hooks/beacon-init.sh`: Added jq dependency check after git repository detection. The check prints a clear warning message if jq is not found: "Warning: jq not found. Install with: brew install jq". The script continues to execute successfully (jq is needed later in other hook scripts, not during init).
+- `hooks/detect-tools.sh`: Rewrote to output `quota_pct` for every tool. Claude is hardcoded to 100. Codex is split into two separate entries (`codex-spark`, `codex-gpt`) each with `quota_pct: -1` (unknown). Gemini gets `quota_pct: -1` (unknown). Quota helpers (`quota_codex_spark`, `quota_codex_gpt`, `quota_gemini`) are isolated functions — easy to update if the CLIs ever expose a machine-readable quota command.
 
-- `CLAUDE.md`: Added a new "Prerequisites" section documenting that jq is required for state updates and completion tracking. Includes installation instructions for macOS via Homebrew.
+- `hooks/beacon-init.sh`: Added `SCRIPT_DIR` resolution and calls `detect-tools.sh` at init time. Transforms detect-tools output (uses `available: bool`) to state.json format (`status: "available"|"unavailable"`) via jq. Uses `jq -n` to write the full state.json (replaces heredoc) so tools data is embedded cleanly. On re-run (state.json already exists), refreshes only the `tools` section without touching other state (`issues`, `stats`, etc.) and updates `updated_at`.
 
 ## Tests
 
-- Test command: `none (markdown/bash plugin)`
-- Result: N/A
+- Test command: `bash hooks/detect-tools.sh` (smoke test)
+- Result: PASS — outputs valid JSON with `quota_pct` for all four tool keys
+- Test command: `bash hooks/beacon-init.sh` (init + refresh)
+- Result: PASS — creates state.json on first run, refreshes tools section on re-run
 - New tests added: no
 
 ## Notes
 
-The jq check is non-blocking — beacon-init.sh will still succeed even if jq is missing. This is appropriate because:
-1. The init script itself doesn't use jq (it writes the initial JSON directly)
-2. jq is only required by downstream hooks like update-state.sh and optionally by check-completion.sh
-3. An early warning at init time helps users catch the missing dependency before running beacon commands that depend on it
-
-The check uses `command -v jq >/dev/null 2>&1` which is a portable way to detect if jq is available in the PATH.
+- Neither `codex` (v0.120.0) nor `gemini` (v0.37.1) expose a quota or status command that outputs machine-readable quota data. Both default to `quota_pct: -1` (unknown).
+- `codex` has a `cloud` subcommand that could theoretically surface task/quota info, but it requires interactive stdin and has no structured quota output.
+- `gemini` has no quota-related subcommands in its help output.
+- The quota helper functions (`quota_codex_spark`, etc.) are intentionally separated — when the CLIs add quota commands, only those functions need updating.
+- jq is required (available at /opt/homebrew/bin/jq on macOS). If jq is absent, beacon-init.sh falls back to a hardcoded tools JSON with conservative defaults (claude: available/100, others: unavailable/-1).
