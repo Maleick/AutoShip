@@ -383,7 +383,7 @@ fn get_module_size(base_addr: u64) -> usize {
         let ok = unsafe {
             GetModuleInformation(
                 GetCurrentProcess(),
-                HMODULE(base_addr as *mut _),
+                HMODULE(base_addr as isize),
                 &mut info,
                 std::mem::size_of::<MODULEINFO>() as u32,
             )
