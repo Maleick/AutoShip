@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: cleanup-worktree.sh <issue-key>
 # Example: cleanup-worktree.sh issue-16
 
-ISSUE_KEY="$1"
+ISSUE_KEY="${1:-}"
 if [[ -z "$ISSUE_KEY" ]]; then
   echo "Usage: $0 <issue-key>" >&2
   echo "Example: $0 issue-16" >&2
