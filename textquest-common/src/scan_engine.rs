@@ -53,6 +53,16 @@ pub struct ScanReport {
 // Scanning
 // ---------------------------------------------------------------------------
 
+/// Check if a pattern string is a placeholder stub (all `CC` bytes).
+///
+/// Placeholder patterns like `"CC CC CC CC CC CC CC CC"` would match the first
+/// `int3` padding run in any module, producing identical bogus results for every
+/// entry. The scan engine skips these to avoid misleading log output.
+fn is_placeholder_pattern(pattern: &str) -> bool {
+    let tokens: Vec<&str> = pattern.split_whitespace().collect();
+    !tokens.is_empty() && tokens.iter().all(|t| t.eq_ignore_ascii_case("CC"))
+}
+
 /// Scan all entries matching `module` against a memory region.
 ///
 /// # Arguments
@@ -88,6 +98,14 @@ pub fn scan_module(
     };
 
     for entry in &relevant {
+        // Skip placeholder patterns (all-CC stubs). These would match the first
+        // 0xCC run in the module and produce identical, misleading results for
+        // every entry. Real patterns from Ghidra export will replace them.
+        if is_placeholder_pattern(entry.pattern) {
+            report.entries_failed.push(entry.name.to_string());
+            continue;
+        }
+
         let pattern = Pattern::from_ida(entry.pattern);
         let match_offset = crate::scanner::scan_region(data, &pattern);
 
@@ -226,9 +244,10 @@ pub fn detect_client_date(data: &[u8]) -> Option<String> {
         (b"Dec", "12"),
     ];
 
-    // Scan for patterns like "Mon DD YYYY" (11-12 bytes) or "Mon  D YYYY" (11 bytes).
+    // Scan for patterns like "Mon DD YYYY" (11 bytes) or "Mon  D YYYY" (11 bytes).
     // We look for month abbreviations followed by a space, day digits, space, 4-digit year.
-    for window_start in 0..data.len().saturating_sub(12) {
+    // Minimum date string is 11 bytes (e.g., "Jan  5 2026"), so iterate up to len-11.
+    for window_start in 0..data.len().saturating_sub(10) {
         for &(month_bytes, month_num) in MONTHS {
             if data[window_start..window_start + 3] != *month_bytes {
                 continue;
@@ -812,5 +831,57 @@ mod tests {
         let (date, matches) = check_version(&data);
         assert!(date.is_none());
         assert!(!matches);
+    }
+
+    #[test]
+    fn detect_client_date_at_end_of_buffer() {
+        // Date string placed at the very end of the buffer (edge case for off-by-one).
+        let date_str = b"Mar 10 2026";
+        let mut data = vec![0x00u8; date_str.len()];
+        data[..date_str.len()].copy_from_slice(date_str);
+        assert_eq!(detect_client_date(&data), Some("20260310".to_string()));
+    }
+
+    // ─── Placeholder detection tests ────────────────────────────────
+
+    #[test]
+    fn is_placeholder_detects_all_cc() {
+        assert!(is_placeholder_pattern("CC CC CC CC CC CC CC CC"));
+        assert!(is_placeholder_pattern("cc cc cc"));
+    }
+
+    #[test]
+    fn is_placeholder_rejects_real_patterns() {
+        assert!(!is_placeholder_pattern("48 89 5C 24 ?? 57 48 83 EC 30"));
+        assert!(!is_placeholder_pattern("48 8B 05 ?? ?? ?? ??"));
+        // A mix with one CC is not all-placeholder
+        assert!(!is_placeholder_pattern("CC 48 89 5C"));
+    }
+
+    #[test]
+    fn placeholder_entries_are_skipped_in_scan() {
+        // A buffer full of 0xCC bytes — placeholder patterns would match everywhere.
+        let data = vec![0xCCu8; 256];
+        let entries = [ScanEntry {
+            name: "placeholderFunc",
+            category: OffsetCategory::Function,
+            module: ScanModule::EqGame,
+            pattern: "CC CC CC CC CC CC CC CC",
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(0x0001_4000_0030),
+        }];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        // Placeholder should be skipped, not matched.
+        assert_eq!(report.entries_scanned, 1);
+        assert_eq!(report.entries_found, 0);
+        assert_eq!(report.entries_failed, vec!["placeholderFunc"]);
     }
 }
