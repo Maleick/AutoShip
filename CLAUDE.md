@@ -2,6 +2,13 @@
 
 Autonomous multi-agent orchestration plugin for Claude Code.
 
+## Prerequisites
+
+- **gh** — GitHub CLI (authenticated)
+- **jq** — JSON processor for state file manipulation
+- **tmux** — Terminal multiplexer for agent visibility
+- **git** — Version control
+
 ## Architecture
 
 - **Orchestrator**: Opus — makes all dispatch decisions, never reads/writes code

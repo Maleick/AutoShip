@@ -8,6 +8,12 @@ BEACON_DIR=".beacon"
 STATE_FILE="$BEACON_DIR/state.json"
 WORKSPACES_DIR="$BEACON_DIR/workspaces"
 
+# Check for jq dependency
+if ! command -v jq &> /dev/null; then
+  echo "Warning: jq not found. Install with: brew install jq (macOS) or apt install jq (Linux)"
+  echo "Some beacon features will not work without jq."
+fi
+
 # Detect repo
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "Error: not inside a git repository" >&2
