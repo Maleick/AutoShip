@@ -126,4 +126,8 @@ create_github_labels() {
 # Attempt to create labels (non-fatal if it fails)
 create_github_labels || true
 
+# Sweep stale worktrees on startup (non-fatal if it fails)
+echo "Scanning for stale worktrees..."
+bash "$SCRIPT_DIR/sweep-stale.sh" 2>/dev/null || true
+
 echo "Beacon workspace ready at $BEACON_DIR"
