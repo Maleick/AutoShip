@@ -49,6 +49,28 @@ fi
 
 ---
 
+## Step 0: Verify Tmux Layout
+
+The Beacon session uses a fixed two-column layout:
+
+- **Pane 0 (left, 30% width)**: Sonnet executor (main orchestrator) — created at startup, not managed here
+- **Pane 1+ (right, 70% width)**: Agent panes, tiled vertically
+
+On first agent spawn, initialize the layout if it hasn't been set:
+
+```bash
+# Check if layout already set (only 1 pane means orchestrator hasn't split yet)
+pane_count=$(tmux list-panes -t beacon | wc -l)
+if (( pane_count == 1 )); then
+  # Split main pane into left (orchestrator) and right (agents) regions
+  tmux split-window -t beacon:0.0 -h -p 70
+fi
+```
+
+This only runs once — subsequent agents spawn into the right column via `split-window -t beacon`.
+
+---
+
 ## Step 1: Create Worktree
 
 ```bash
@@ -177,6 +199,53 @@ bash hooks/quota-update.sh decrement codex-spark <complexity>   # simple | mediu
 - Monitor 1 tails `pane.log` for `COMPLETE`, `BLOCKED`, or `STUCK`
 - As backup: if `pane_dead=1` and `BEACON_RESULT.md` exists → treat as COMPLETE
 - If `pane_dead=1` and no `BEACON_RESULT.md` → crash, re-dispatch
+
+---
+
+## Pane Reuse After Agent Completion
+
+When an agent emits `COMPLETE`, `BLOCKED`, or `STUCK`, its pane should be killed to free grid space. Full cleanup (worktree removal, branch deletion, issue close) is handled by `hooks/cleanup-worktree.sh`. The tmux pane teardown is:
+
+```bash
+# After agent completes, kill its pane to free the grid
+tmux kill-pane -t $PANE_ID 2>/dev/null || true
+# Re-tile remaining panes
+tmux select-layout -t beacon tiled
+```
+
+This is called by `hooks/cleanup-worktree.sh` after state is updated — do not call it directly from the dispatch protocol.
+
+---
+
+## Tmux Status Line
+
+The status line updates **only on agent checkin** (COMPLETE/BLOCKED/STUCK detected in a `pane.log`), not on every poll event. Updating on every Monitor tick creates visual noise and unnecessary writes.
+
+```bash
+# Update tmux status line with current agent count — only on agent checkin
+ACTIVE=$(jq '[.issues | to_entries[] | select(.value.state == "running")] | length' .beacon/state.json)
+tmux set-option -t beacon status-right "Beacon: ${ACTIVE} active | $(date +%H:%M)"
+```
+
+Call this snippet from the Monitor 1 handler after processing a checkin event, not from the poll loop.
+
+---
+
+## 20+ Pane Handling
+
+`select-layout tiled` handles up to ~30 panes on a typical screen. Beyond 20 agent panes the tiles become too small to read. Switch the agent column to `even-vertical` at that threshold:
+
+```bash
+# For > 20 agent panes, switch to even-vertical within the agent column
+agent_count=$(tmux list-panes -t beacon | wc -l)
+if (( agent_count > 20 )); then
+  tmux select-layout -t beacon even-vertical
+else
+  tmux select-layout -t beacon tiled
+fi
+```
+
+This check runs after every `split-window` call in Step 3A.
 
 ---
 
