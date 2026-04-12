@@ -149,8 +149,11 @@ def update_offsets_rs(
         if tq_name is None:
             continue
 
-        # Skip version date strings (not hex addresses)
-        if mq_name.startswith("__"):
+        # Skip version date stamps (not hex addresses).
+        # Only exclude the specific date/version defines — NOT function names
+        # like __ExecuteCmd, __do_loot, __ProcessGameEvents which are real offsets.
+        if mq_name in ("__ClientDate", "__ExpectedVersionDate", "__ClientTime",
+                        "__ActualVersionDate", "__ActualVersionTime"):
             continue
 
         # Build regex to find the constant declaration
