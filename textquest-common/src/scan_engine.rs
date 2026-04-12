@@ -69,8 +69,11 @@ fn is_placeholder_pattern(pattern: &str) -> bool {
 ///
 /// # Arguments
 ///
-/// * `data` — byte slice of the module image (typically the full loaded image
-///   or at minimum the `.text` section).
+/// * `data` — byte slice of the **full** module image starting at `module_base`.
+///   Both `Direct` and `RipRelative` resolution assume byte offset 0 in `data`
+///   corresponds to `module_base` (i.e. the image's DOS header). Passing a
+///   sub-section (e.g. `.text` only) will produce incorrect preferred-base
+///   addresses.
 /// * `module_base` — runtime virtual address of the module (e.g. the actual
 ///   base of eqgame.exe as returned by `GetModuleHandle`).
 /// * `preferred_base` — the compile-time preferred base of the module
@@ -713,6 +716,38 @@ mod tests {
 
         apply_to_offset_db(&report, &mut db);
         assert_eq!(db, db_before);
+    }
+
+    #[test]
+    fn rip_relative_disp_read_out_of_bounds_records_failure() {
+        // The pattern matches near the end of the buffer, but there aren't enough
+        // bytes to read the 4-byte displacement field.
+        let mut data = vec![0x00u8; 16];
+        data[13] = 0x48;
+        data[14] = 0x8B;
+        data[15] = 0x05; // disp32 would need bytes [16..20], but buffer ends at 16
+
+        let entries = [ScanEntry {
+            name: "ripDispOob",
+            category: OffsetCategory::Global,
+            module: ScanModule::EqGame,
+            pattern: "48 8B 05",
+            resolve: ResolveMode::RipRelative { disp_offset: 3 },
+            expected_preferred: None,
+        }];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_scanned, 1);
+        assert_eq!(report.entries_found, 0);
+        assert!(report.results.is_empty());
+        assert_eq!(report.entries_failed, vec!["ripDispOob"]);
     }
 
     #[test]
