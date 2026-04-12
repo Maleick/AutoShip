@@ -110,7 +110,7 @@ def parse_header(text: str) -> dict[str, int]:
     """
     results: dict[str, int] = {}
     define_re = re.compile(
-        r"^\s*#define\s+(\w+?)_x\s+(0x[0-9A-Fa-f]+)\s*$", re.MULTILINE
+        r"^\s*#define\s+(\w+?)_x\s+(0x[0-9A-Fa-f]+)", re.MULTILINE
     )
     for m in define_re.finditer(text):
         name = m.group(1)
