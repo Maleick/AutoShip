@@ -338,11 +338,20 @@ fn scan_offsets(eq_base: u64) {
         found = report.entries_found,
         validated = report.entries_validated,
         failed = report.entries_failed.len(),
+        skipped_placeholders = report.entries_skipped.len(),
         moved = report.entries_moved.len(),
         "Auto Patch: scan complete"
     );
 
-    // Log individual failures.
+    // Log placeholder count once (debug level — expected until real patterns exist).
+    if !report.entries_skipped.is_empty() {
+        tracing::debug!(
+            count = report.entries_skipped.len(),
+            "Auto Patch: entries with placeholder patterns (awaiting Ghidra export)"
+        );
+    }
+
+    // Log individual real scan failures (not placeholders).
     for name in &report.entries_failed {
         tracing::warn!(name = %name, "Auto Patch: pattern not found (using compiled fallback)");
     }

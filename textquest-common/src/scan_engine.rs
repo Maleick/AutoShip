@@ -40,8 +40,10 @@ pub struct ScanReport {
     pub entries_found: usize,
     /// How many matched entries agreed with compiled constants.
     pub entries_validated: usize,
-    /// Names of entries that failed to match.
+    /// Names of entries that failed to match (real scan failures).
     pub entries_failed: Vec<String>,
+    /// Names of entries skipped because they use placeholder patterns.
+    pub entries_skipped: Vec<String>,
     /// Entries where the scan result differs from the compiled constant:
     /// `(name, expected_preferred, found_preferred)`.
     pub entries_moved: Vec<(String, u64, u64)>,
@@ -93,6 +95,7 @@ pub fn scan_module(
         entries_found: 0,
         entries_validated: 0,
         entries_failed: Vec::new(),
+        entries_skipped: Vec::new(),
         entries_moved: Vec::new(),
         results: Vec::new(),
     };
@@ -102,7 +105,7 @@ pub fn scan_module(
         // 0xCC run in the module and produce identical, misleading results for
         // every entry. Real patterns from Ghidra export will replace them.
         if is_placeholder_pattern(entry.pattern) {
-            report.entries_failed.push(entry.name.to_string());
+            report.entries_skipped.push(entry.name.to_string());
             continue;
         }
 
@@ -216,8 +219,8 @@ fn resolve_rip_relative(
 /// Expected EQ client date that our compiled offsets target.
 ///
 /// If the running client reports a different date, offsets are likely stale.
-/// Format: `"YYYYMMDD"` as an ASCII string embedded in eqgame.exe's `.rdata`.
-pub const EXPECTED_CLIENT_DATE: &str = "20260310";
+/// Delegates to the canonical constant in `offsets.rs`.
+pub const EXPECTED_CLIENT_DATE: &str = crate::offsets::CLIENT_DATE;
 
 /// Scan the module image for an EQ client date string.
 ///
@@ -624,6 +627,7 @@ mod tests {
             entries_found: 1,
             entries_validated: 0,
             entries_failed: vec![],
+            entries_skipped: vec![],
             entries_moved: vec![],
             results: vec![ScanResult {
                 name: "castSpell".to_string(),
@@ -649,6 +653,7 @@ mod tests {
             entries_found: 1,
             entries_validated: 0,
             entries_failed: vec![],
+            entries_skipped: vec![],
             entries_moved: vec![],
             results: vec![ScanResult {
                 name: "pinstLocalPlayer".to_string(),
@@ -675,6 +680,7 @@ mod tests {
             entries_found: 1,
             entries_validated: 1,
             entries_failed: vec![],
+            entries_skipped: vec![],
             entries_moved: vec![],
             results: vec![ScanResult {
                 name: "castSpell".to_string(),
@@ -700,6 +706,7 @@ mod tests {
             entries_found: 0,
             entries_validated: 0,
             entries_failed: vec![],
+            entries_skipped: vec![],
             entries_moved: vec![],
             results: vec![],
         };
@@ -879,9 +886,10 @@ mod tests {
             &entries,
         );
 
-        // Placeholder should be skipped, not matched.
+        // Placeholder should be tracked as skipped, not as a real scan failure.
         assert_eq!(report.entries_scanned, 1);
         assert_eq!(report.entries_found, 0);
-        assert_eq!(report.entries_failed, vec!["placeholderFunc"]);
+        assert!(report.entries_failed.is_empty());
+        assert_eq!(report.entries_skipped, vec!["placeholderFunc"]);
     }
 }

@@ -255,7 +255,7 @@ impl OffsetDatabase {
         );
 
         Self {
-            client_date: "20260310".to_string(),
+            client_date: crate::offsets::CLIENT_DATE.to_string(),
             eq_preferred_base: EQ_PREFERRED_BASE,
             globals,
             player_base: pb,
