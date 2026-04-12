@@ -10,7 +10,7 @@
 Error: not inside a git repository
 ```
 
-Run `/beacon start` from inside a git repository with a GitHub remote.
+Run `/beacon:start` from inside a git repository with a GitHub remote.
 
 ```
 Error: jq is required but not found
@@ -81,7 +81,7 @@ Context compaction kills Monitor processes. The orchestrator skill has a recover
 
 > After compaction, restart 3 Monitor processes (Step 6)
 
-If Sonnet doesn't auto-restart them, manually trigger `/beacon start` — it detects existing state and resumes without re-running UltraPlan.
+If Sonnet doesn't auto-restart them, manually trigger `/beacon:start` — it detects existing state and resumes without re-running UltraPlan.
 
 ### `monitor-prs.sh` emitting duplicate events
 
@@ -125,7 +125,7 @@ Issues with `beacon:in-progress` label and surviving worktrees will be re-dispat
 GitHub labels are the durable source of truth. Beacon can rebuild from them:
 
 1. Delete or rename the corrupted state: `mv .beacon/state.json .beacon/state.json.bak`
-2. Run `/beacon start` — it will re-initialize state and reconcile from GitHub labels
+2. Run `/beacon:start` — it will re-initialize state and reconcile from GitHub labels
 
 ### PR has merge conflicts
 

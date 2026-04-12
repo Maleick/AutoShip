@@ -20,7 +20,10 @@ Four-tier model: Bash watches → Haiku thinks → Sonnet orchestrates → Opus 
 
 ## Plugin Structure
 
-- `commands/beacon.md` — `/beacon start|status|stop|plan` entry point
+- `commands/beacon.md` — `/beacon:beacon` help command
+- `commands/start.md` — `/beacon:start` launch orchestration
+- `commands/stop.md` — `/beacon:stop` graceful shutdown
+- `commands/plan.md` — `/beacon:plan` dry-run issue analysis
 - `skills/beacon/` — Core orchestration protocol (v3: Sonnet executor + Opus advisor)
 - `skills/beacon-dispatch/` — Agent dispatch (third-party first, pipe-pane, status words)
 - `skills/beacon-verify/` — Post-completion pipeline (verify, simplify, PR, merge)
@@ -49,8 +52,8 @@ Four-tier model: Bash watches → Haiku thinks → Sonnet orchestrates → Opus 
 ### Testing locally
 
 1. Install: `/install-plugin /Users/maleick/Projects/Beacon`
-2. Run: `/beacon plan` to test issue analysis without dispatching
-3. Run: `/beacon start` for full orchestration
+2. Run: `/beacon:plan` to test issue analysis without dispatching
+3. Run: `/beacon:start` for full orchestration
 
 ### Key conventions
 
@@ -65,9 +68,9 @@ Four-tier model: Bash watches → Haiku thinks → Sonnet orchestrates → Opus 
 
 | Command          | Purpose                               |
 | ---------------- | ------------------------------------- |
-| `/beacon start`  | Launch orchestration for current repo |
-| `/beacon status` | Show running agents, quota, progress  |
-| `/beacon stop`   | Gracefully stop all agents            |
-| `/beacon plan`   | Analyze issues without dispatching    |
+| `/beacon:start`  | Launch orchestration for current repo |
+| `/beacon:status` | Show running agents, quota, progress  |
+| `/beacon:stop`   | Gracefully stop all agents            |
+| `/beacon:plan`   | Analyze issues without dispatching    |
 
 See BEACON_SPEC.md for the full specification.

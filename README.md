@@ -43,7 +43,7 @@ GitHub Issues → Monitor Scripts → Haiku Triage → Sonnet Executor → Opus 
 
 **Discord integration.** Webhook events trigger issue dispatch in real time. A command channel accepts operator commands (`work on`, `skip`, `pause`, `resume`) without leaving Discord.
 
-**Quota tracking.** A decay-based quota estimator updates `quota.json` after each dispatch and surfaces usage in `/beacon status` as ASCII progress bars.
+**Quota tracking.** A decay-based quota estimator updates `quota.json` after each dispatch and surfaces usage in `/beacon:status` as ASCII progress bars.
 
 ## Installation
 
@@ -67,10 +67,10 @@ Requires Claude Code with plugin support.
 
 | Command          | Purpose                                                     |
 | ---------------- | ----------------------------------------------------------- |
-| `/beacon start`  | Launch orchestration for the current repo                   |
-| `/beacon status` | Show running agents, quota bars, and progress               |
-| `/beacon stop`   | Gracefully stop all agents                                  |
-| `/beacon plan`   | Analyze issues and build execution plan without dispatching |
+| `/beacon:start`  | Launch orchestration for the current repo                   |
+| `/beacon:status` | Show running agents, quota bars, and progress               |
+| `/beacon:stop`   | Gracefully stop all agents                                  |
+| `/beacon:plan`   | Analyze issues and build execution plan without dispatching |
 
 ## Status Display
 

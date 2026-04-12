@@ -31,12 +31,73 @@ _read_quota() {
   fi
 }
 
-# Codex: no public quota API — use decay-estimated value from quota.json.
-quota_codex_spark() { _read_quota "codex-spark"; }
-quota_codex_gpt()   { _read_quota "codex-gpt";   }
+# Codex: try OpenAI usage API if OPENAI_API_KEY is set; fall back to decay estimate.
+# Returns integer 0-100. Sets CODEX_QUOTA_SOURCE="api" or "est".
+CODEX_QUOTA_SOURCE="est"
+quota_codex_openai_api() {
+  [[ -z "${OPENAI_API_KEY:-}" ]] && return 1
+  # Fetch today's usage in dollars; compare to typical monthly budget
+  local today
+  today=$(date -u +"%Y-%m-%d")
+  local response
+  response=$(curl -sf --max-time 5 \
+    "https://api.openai.com/v1/usage?date=${today}" \
+    -H "Authorization: Bearer $OPENAI_API_KEY" 2>/dev/null) || return 1
+  # Parse total_usage (in cents); assume ~$20 daily budget → 2000 cents
+  local used_cents
+  used_cents=$(echo "$response" | jq -r '[.data[].total_usage // 0] | add // 0' 2>/dev/null) || return 1
+  local budget_cents=2000  # ~$20/day budget assumption
+  local used_pct=$(( used_cents * 100 / budget_cents ))
+  [[ $used_pct -gt 100 ]] && used_pct=100
+  echo $(( 100 - used_pct ))
+  CODEX_QUOTA_SOURCE="api"
+  return 0
+}
 
-# Gemini: no quota API — use decay-estimated value from quota.json.
-quota_gemini() { _read_quota "gemini"; }
+quota_codex_spark() {
+  local v
+  if v=$(quota_codex_openai_api 2>/dev/null); then
+    echo "$v"
+  else
+    CODEX_QUOTA_SOURCE="est"
+    _read_quota "codex-spark"
+  fi
+}
+quota_codex_gpt() {
+  local v
+  if v=$(quota_codex_openai_api 2>/dev/null); then
+    echo "$v"
+  else
+    CODEX_QUOTA_SOURCE="est"
+    _read_quota "codex-gpt"
+  fi
+}
+
+# Gemini: try Google AI usage API if GEMINI_API_KEY or GOOGLE_API_KEY is set; fall back to decay.
+GEMINI_QUOTA_SOURCE="est"
+quota_gemini_api() {
+  local api_key="${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}"
+  [[ -z "$api_key" ]] && return 1
+  # Check quota via generativelanguage API — returns 429 when rate-limited
+  local status
+  status=$(curl -sf --max-time 5 -o /dev/null -w "%{http_code}" \
+    "https://generativelanguage.googleapis.com/v1beta/models?key=${api_key}" 2>/dev/null) || return 1
+  case "$status" in
+    200) echo "100"; GEMINI_QUOTA_SOURCE="api" ;;  # reachable → assume full
+    429) echo "0";   GEMINI_QUOTA_SOURCE="api" ;;  # rate limited → exhausted
+    *)   return 1 ;;
+  esac
+}
+
+quota_gemini() {
+  local v
+  if v=$(quota_gemini_api 2>/dev/null); then
+    echo "$v"
+  else
+    GEMINI_QUOTA_SOURCE="est"
+    _read_quota "gemini"
+  fi
+}
 
 # ---------------------------------------------------------------------------
 # Per-tool detection
@@ -61,13 +122,13 @@ detect_codex() {
     ver=$(printf '%s' "$ver" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n')
     spark_q=$(quota_codex_spark)
     gpt_q=$(quota_codex_gpt)
-    printf '"codex-spark": {"available": true, "version": "%s", "quota_pct": %s}, ' \
-      "$ver" "$spark_q"
-    printf '"codex-gpt": {"available": true, "version": "%s", "quota_pct": %s}' \
-      "$ver" "$gpt_q"
+    printf '"codex-spark": {"available": true, "version": "%s", "quota_pct": %s, "quota_source": "%s"}, ' \
+      "$ver" "$spark_q" "$CODEX_QUOTA_SOURCE"
+    printf '"codex-gpt": {"available": true, "version": "%s", "quota_pct": %s, "quota_source": "%s"}' \
+      "$ver" "$gpt_q" "$CODEX_QUOTA_SOURCE"
   else
-    printf '"codex-spark": {"available": false, "quota_pct": -1}, '
-    printf '"codex-gpt": {"available": false, "quota_pct": -1}'
+    printf '"codex-spark": {"available": false, "quota_pct": -1, "quota_source": "n/a"}, '
+    printf '"codex-gpt": {"available": false, "quota_pct": -1, "quota_source": "n/a"}'
   fi
 }
 
@@ -77,9 +138,10 @@ detect_gemini() {
     ver=$(gemini --version 2>/dev/null | head -1) || ver="unknown"
     ver=$(printf '%s' "$ver" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n')
     qpct=$(quota_gemini)
-    printf '"gemini": {"available": true, "version": "%s", "quota_pct": %s}' "$ver" "$qpct"
+    printf '"gemini": {"available": true, "version": "%s", "quota_pct": %s, "quota_source": "%s"}' \
+      "$ver" "$qpct" "$GEMINI_QUOTA_SOURCE"
   else
-    printf '"gemini": {"available": false, "quota_pct": -1}'
+    printf '"gemini": {"available": false, "quota_pct": -1, "quota_source": "n/a"}'
   fi
 }
 

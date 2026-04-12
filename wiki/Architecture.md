@@ -135,7 +135,7 @@ beacon/
     beacon/SKILL.md                 Sonnet executor + Opus advisor protocol
     beacon-dispatch/SKILL.md        Dispatch (third-party first, pipe-pane)
     beacon-verify/SKILL.md          Verify → simplify → PR pipeline
-    beacon-status/SKILL.md          /beacon status display
+    beacon-status/SKILL.md          /beacon:status display
     beacon-poll/SKILL.md            GitHub issue sync (safety net)
     beacon-discord-webhook/SKILL.md Parse GitHub webhook embeds from Discord
     beacon-discord-commands/SKILL.md Operator control via Discord
@@ -153,5 +153,8 @@ beacon/
     cleanup-worktree.sh             Post-merge cleanup
     sweep-stale.sh                  Orphaned worktree cleanup
   commands/
-    beacon.md                       /beacon start|status|stop|plan
+    beacon.md                       /beacon:beacon (help)
+    start.md                        /beacon:start
+    stop.md                         /beacon:stop
+    plan.md                         /beacon:plan
 ```

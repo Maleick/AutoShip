@@ -16,7 +16,7 @@ Display the current state of the Beacon orchestration session.
 cat .beacon/state.json 2>/dev/null
 ```
 
-**If file is missing**: Display "No active Beacon session. Run `/beacon start` to begin." and stop.
+**If file is missing**: Display "No active Beacon session. Run `/beacon:start` to begin." and stop.
 
 Also read the quota file:
 
@@ -53,7 +53,7 @@ where N comes from `state.json` → `stats.claude_dispatches` (or `0` if not set
 ```
 BEACON STATUS: ERROR
 State file corrupted. Recovery options:
-  1. Run `/beacon start` to rebuild state from GitHub labels
+  1. Run `/beacon:start` to rebuild state from GitHub labels
   2. Delete .beacon/state.json and restart
 ```
 
@@ -112,9 +112,9 @@ AGENTS (3 active / 20 max)
 
 QUOTA
   Claude:      Claude Max — 4 dispatches (session)
-  Codex Spark: ████████░░░░░░░░░░░░ ~40%  (7 dispatches)
-  Codex GPT:   ██████████████░░░░░░ ~70%  (3 dispatches)
-  Gemini:      ██████░░░░░░░░░░░░░░ ~30%  (5 dispatches)
+  Codex Spark: ████████░░░░░░░░░░░░ ~40%  (7 dispatches, est.)
+  Codex GPT:   ██████████████░░░░░░ ~70%  (3 dispatches, est.)
+  Gemini:      ██████░░░░░░░░░░░░░░ ~30%  (5 dispatches, est.)
 
 PROGRESS
   Dispatched: 12  Completed: 8  Failed: 1  Blocked: 0
@@ -137,7 +137,7 @@ Color hints (for terminal output):
 - `< 10%`: show as "LOW" (dispatch will skip this tool)
 - `0%`: show as "EXHAUSTED"
 
-Append `(N dispatches)` from `quota.json` after the percentage label for each third-party tool. Claude has no dispatch count shown (always available). If `quota.json` is missing or a tool has no entry, omit the dispatch count for that tool.
+Append `(N dispatches, est.)` from `quota.json` after the percentage label for each third-party tool. Use `est.` always for Codex and Gemini — neither CLI exposes a subscription quota API, so the value is a decay estimate. Claude has no dispatch count or "est." shown (Max subscription, always available). If `quota.json` is missing or a tool has no entry, omit the dispatch count for that tool.
 
 ### When No Agents Are Running
 

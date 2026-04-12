@@ -322,7 +322,10 @@ beacon/
 │   ├── plugin.json
 │   └── marketplace.json
 ├── commands/
-│   └── beacon.md               # /beacon start|status|stop|plan
+│   ├── beacon.md               # /beacon:beacon (help)
+│   ├── start.md                # /beacon:start
+│   ├── stop.md                 # /beacon:stop
+│   └── plan.md                 # /beacon:plan
 ├── skills/
 │   ├── beacon/SKILL.md          # Core orchestration protocol
 │   ├── beacon-dispatch/SKILL.md # Agent dispatch logic
