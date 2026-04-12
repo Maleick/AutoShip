@@ -1,29 +1,110 @@
-# Result: #15 — CronCreate polling: 10-minute GitHub issue sync
+# Beacon Result: Issue #16 — Worktree Cleanup After Merge
 
-## Status: DONE
+## Summary
 
-## Changes Made
+Implemented worktree cleanup and state reconciliation after PR merge. Created two new hook scripts and updated beacon-init.sh to automatically sweep stale worktrees on startup.
 
-- `skills/beacon-poll/SKILL.md`: New skill implementing the full 10-minute GitHub issue polling protocol. Covers all 7 steps: load known state, fetch live issues, diff for new/closed/changed, handle each category, update state, and log results.
-- `skills/beacon/SKILL.md` (Step 6): Updated CronCreate call to delegate to the new `beacon-poll` skill instead of embedding inline logic. Added bullet summary of what the skill covers and a note about re-establishing the cron after context compaction.
+## Work Completed
 
-## Tests
+### 1. Created `hooks/cleanup-worktree.sh`
 
-- Test command: none (skill files are markdown protocols, not executable code)
-- Result: N/A — verified by reading protocol against all 6 acceptance criteria
+A comprehensive cleanup script that:
 
-## Acceptance Criteria Verification
+- Takes an issue-key argument (e.g., `issue-16`)
+- Removes the git worktree at `.beacon/workspaces/<issue-key>`
+- Deletes the local beacon branch (`beacon/<issue-key>`)
+- Calls `update-state.sh set-merged <issue-key>` to update state.json
+- Removes all beacon labels from the GitHub issue (in-progress, blocked, paused, done)
+- Closes the issue on GitHub if it's still open
+- Provides graceful fallbacks when components are unavailable (e.g., gh CLI, state file)
 
-- [x] CronCreate fires every 10 minutes — `schedule: "*/10 * * * *"` in Step 6 of beacon/SKILL.md
-- [x] Fetch open issues and diff against known state — Steps 2 & 3 of beacon-poll/SKILL.md
-- [x] New issues: run UltraPlan to integrate into existing plan — Step 4 classifies complexity and appends to plan phases
-- [x] Closed issues: cancel running agents if applicable — Step 5 kills tmux panes and removes worktrees
-- [x] Changed issues: update local state — Step 6 handles label reconciliation and metadata sync
-- [x] Log poll results — Step 7 writes timestamped summary to `.beacon/poll.log` (bounded to 500 lines)
+Features:
 
-## Notes
+- bash 3.2 compatible (no associative arrays)
+- Robust error handling and non-fatal failures for GitHub operations
+- Derives repo slug from state.json or git remote as needed
+- Handles both existing and missing worktrees gracefully
 
-- The CronCreate prompt now references `skills/beacon-poll/SKILL.md` directly so the protocol can evolve independently of the orchestrator
-- Step 5 (closed issues) reports cancellations via stdout; Opus reads the poll output and can take additional action if needed
-- The `beacon:in-progress` label is removed from cancelled issues to keep GitHub labels as the durable source of truth
-- Context compaction note added to Step 6 and already present in the Recovery section (line 398) — both now mention re-establishing the cron after compaction
+### 2. Created `hooks/sweep-stale.sh`
+
+An automated cleanup scanner that:
+
+- Iterates over all worktrees in `.beacon/workspaces/`
+- Checks the state of each corresponding issue in state.json
+- Identifies stale worktrees (issues in terminal states: merged, blocked, approved)
+- Calls cleanup-worktree.sh for each stale worktree
+- Reports statistics on how many worktrees were cleaned
+
+Terminal states recognized:
+
+- `merged` — PR was merged, work is complete
+- `blocked` — Work is blocked and won't continue
+- `approved` — Work was completed and approved
+
+### 3. Updated `hooks/beacon-init.sh`
+
+Added a call to sweep-stale.sh during startup:
+
+- Runs after GitHub label creation
+- Non-fatal (wrapped in `|| true`)
+- Provides user feedback that scanning is occurring
+
+## Implementation Notes
+
+### Bash 3.2 Compatibility
+
+All scripts use POSIX-compatible bash without associative arrays or modern bash features:
+
+- String manipulation for loops instead of array operations
+- Simple grep/sed patterns for text processing
+- jq for JSON manipulation (already a dependency)
+
+### State Transitions
+
+The cleanup process follows the established state machine:
+
+- `set-merged` action sets state to "merged"
+- Also increments the `completed` counter in stats
+- Updates the timestamp in state.json
+
+### GitHub Integration
+
+- Uses `gh` CLI (optional, non-fatal if unavailable)
+- Attempts to remove multiple label variations
+- Gracefully handles missing issues or insufficient permissions
+
+## Testing
+
+Created shell scripts:
+
+- `cleanup-worktree.sh` — syntax verified ✓
+- `sweep-stale.sh` — syntax verified ✓
+- `beacon-init.sh` (updated) — syntax verified ✓
+
+All scripts validate input, check for required tools, and provide helpful error messages.
+
+## Acceptance Criteria Status
+
+- [x] After confirmed merge: `git worktree remove --force`
+- [x] Remove beacon labels from issue
+- [x] Close issue if not auto-closed by PR
+- [x] Update state file: move to merged, increment stats
+- [x] On startup: sweep stale worktrees for terminal-state issues
+- [x] Never ask before cleanup — just do it (hooks execute automatically)
+
+## Deployment
+
+To use:
+
+1. Commit changes to `beacon/issue-16` branch
+2. The cleanup-worktree.sh script can be called manually:
+   ```bash
+   ./hooks/cleanup-worktree.sh issue-16
+   ```
+3. The sweep-stale.sh script runs automatically on startup via beacon-init.sh
+
+## Files Modified/Created
+
+- ✅ Created: `hooks/cleanup-worktree.sh`
+- ✅ Created: `hooks/sweep-stale.sh`
+- ✅ Modified: `hooks/beacon-init.sh`
