@@ -336,7 +336,8 @@ pub mod eqmain {
     /// `LoginServerAPI::JoinServer` function address
     pub const JOIN_SERVER: u64 = 0x0001_8001_8050;
 
-    /// `LoginViewManager` function address
+    /// Pointer to `CLoginViewManager` instance
+    /// Source: eqmain.h `EQMain__pinstCLoginViewManager_x`
     pub const LOGIN_VIEW_MANAGER: u64 = 0x0001_8001_B0E0;
 
     // ─── Login pointer addresses (preferred base) ───
