@@ -116,6 +116,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 | `combat/`         | Assist target broadcasting, CC assignment, spell database                                                                                                   |
 | `camp/`           | Camp loop state machine — buffs, CC, class config, hunt mode, loot, positioning, progression, puller, recovery, vendor                                      |
 | `orchestrator.rs` | Wires camp loop state machine to IPC command delivery                                                                                                       |
+| `paths.rs`        | Runtime path resolution — writable log dir selection, dump/orchestrator log paths, dump command label |
 | `launcher/`       | Login automation — per-client login FSM, staggered launch, process spawner, post-login sequencer                                                            |
 | `credentials/`    | Encrypted credential store — Argon2id + AES-256-GCM, SQLite backend                                                                                         |
 | `soul/`           | Soul Engine — LLM-driven character personalities, persistent memory, idle behavior, social dynamics                                                         |
@@ -207,4 +208,5 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **MacroQuest/eqlib references are optional local checkouts**: keep them outside the repo if you use them for offset or struct-reference work. Routine `cargo build` / `cargo test` work does not require them. Derived offsets still live in `textquest-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
 - **Nightly MSVC toolchain**: Windows builds require nightly Rust because `retour` (function hooking) uses unstable features. macOS builds work on stable.
+- **Edit tool + OpenWolf hook**: The `.wolf/hooks/post-write.js` reads every edited source file to update `anatomy.md`, which updates the file's mtime. This trips Claude Code's "file modified since read" guard on subsequent edits in the same session. Workaround: use `Bash` + `python3` for multi-edit `.rs` file changes, or make all edits to a file in a single `Edit` call before the hook fires.
 - **Self-hosted runner workspaces persist**: Files from previous runs may exist at test import time but vanish after `actions/checkout`. Use `self.skipTest()` inside test bodies instead of `@unittest.skipUnless` for file-existence guards.

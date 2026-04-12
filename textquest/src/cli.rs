@@ -2031,7 +2031,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                     && let Ok(arr) = <[u8; 8]>::try_from(slice)
                 {
                     let val = u64::from_le_bytes(arr);
-                    let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                    let looks_like_ptr = is_probably_valid_process_ptr(val as usize);
                     info!(
                         "  SpawnManager+{:#04x}: {:#018x} {}",
                         off,
@@ -2100,7 +2100,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
                 if let Some(slice) = bytes.get(off..off + 8) {
                     let arr = <[u8; 8]>::try_from(slice).unwrap_or_default();
                     let val = u64::from_le_bytes(arr);
-                    let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                    let looks_like_ptr = is_probably_valid_process_ptr(val as usize);
                     info!(
                         "  +{:#04x} ({}): {:#018x} {}",
                         off,
@@ -2138,7 +2138,7 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     for offset in [0x00usize, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38] {
         match proc.read_ptr(first_node + offset) {
             Ok(val) => {
-                let looks_like_ptr = val > 0x10000 && val < 0x7FFF_FFFF_FFFF;
+                let looks_like_ptr = is_probably_valid_process_ptr(val);
                 if looks_like_ptr {
                     // Try reading a name to confirm it points to another PlayerClient
                     let name_check = proc

@@ -13,14 +13,14 @@ const DLL_PATH_LEN_LIMIT: usize = 8192;
 fn dll_module_name(dll_path: &Path) -> Result<String> {
     let Some(file_name) = dll_path.file_name().and_then(|name| name.to_str()) else {
         return Err(anyhow::anyhow!(
-            "DLL path has no valid terminal filename: {}",
+            "DLL path has no filename component: {}",
             dll_path.display()
         ));
     };
 
-    if !file_name.contains('.') || !file_name.to_ascii_lowercase().ends_with(".dll") {
+    if !file_name.to_ascii_lowercase().ends_with(".dll") {
         return Err(anyhow::anyhow!(
-            "DLL path has no valid terminal filename: {}",
+            "DLL filename must end with .dll: {}",
             dll_path.display()
         ));
     }
@@ -57,7 +57,7 @@ fn find_remote_module_base(pid: u32, dll_name: &str) -> Result<Option<isize>> {
                 .collect::<String>()
                 .to_ascii_lowercase();
 
-            if module_name_matches(&name, &dll_name_lower) {
+            if name.eq_ignore_ascii_case(&dll_name_lower) {
                 module_base = HMODULE(entry.modBaseAddr as isize);
                 break true;
             }
@@ -72,10 +72,6 @@ fn find_remote_module_base(pid: u32, dll_name: &str) -> Result<Option<isize>> {
     }
 
     Ok((found && !module_base.is_invalid()).then_some(module_base.0))
-}
-
-fn module_name_matches(actual: &str, expected: &str) -> bool {
-    actual.eq_ignore_ascii_case(expected)
 }
 
 #[cfg(windows)]
@@ -300,7 +296,12 @@ fn validate_dll_path(path: &Path) -> Result<()> {
         );
     }
 
-    let meta = std::fs::metadata(path).context("Failed to inspect DLL path")?;
+    // Preflight existence check. A narrow TOCTOU race window exists between this check and
+    // LoadLibraryW, but that risk is acceptable: the alternative — skipping this check — allows
+    // a false-positive success path where `ensure_remote_dll_loaded` matches a same-named module
+    // already in the target process, returning Ok without the intended payload ever loading.
+    let meta = std::fs::metadata(path)
+        .with_context(|| format!("DLL path is not accessible: {}", path.display()))?;
     if !meta.is_file() {
         anyhow::bail!("DLL path is not a regular file: {}", path.display());
     }
@@ -412,25 +413,8 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
 mod tests {
     #[cfg(windows)]
     use super::dll_module_name;
-    use super::module_name_matches;
     #[cfg(windows)]
     use std::path::Path;
-
-    #[test]
-    fn module_name_matches_requires_exact_filename() {
-        assert!(module_name_matches(
-            "textquest_dll.dll",
-            "textquest_dll.dll"
-        ));
-        assert!(module_name_matches(
-            "TEXTQUEST_DLL.DLL",
-            "textquest_dll.dll"
-        ));
-        assert!(!module_name_matches(
-            "my_textquest_dll.dll.backup",
-            "textquest_dll.dll"
-        ));
-    }
 
     #[cfg(windows)]
     #[test]
@@ -441,15 +425,29 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn dll_module_name_requires_terminal_filename() {
+    fn dll_module_name_requires_filename_component() {
         let err = dll_module_name(Path::new(r"C:\temp\")).unwrap_err();
-        assert!(err.to_string().contains("terminal filename"));
+        assert!(err.to_string().contains("no filename component"));
     }
 
     #[cfg(windows)]
     #[test]
-    fn dll_module_name_requires_dll_filename() {
+    fn dll_module_name_requires_dll_extension() {
         let err = dll_module_name(Path::new(r"C:\temp\textquest_dll")).unwrap_err();
-        assert!(err.to_string().contains("terminal filename"));
+        assert!(err.to_string().contains("must end with .dll"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn validate_dll_path_rejects_nonexistent_file() {
+        use super::validate_dll_path;
+        // A path with the right extension but no file on disk must be rejected,
+        // even if a same-named module could theoretically be present in a target process.
+        let err = validate_dll_path(Path::new(r"C:\nonexistent_dir\payload.dll")).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not accessible") || msg.contains("not a regular file"),
+            "unexpected error: {msg}"
+        );
     }
 }
