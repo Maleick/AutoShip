@@ -143,17 +143,27 @@ Display the plan and begin execution.
 
 ### Step 6: Start Orchestration Loop
 
-Use CronCreate to schedule the 10-minute polling safety net:
+Use CronCreate to schedule the 10-minute polling safety net. The poll skill handles all diffing, agent cancellation, and state updates:
 
 ```
 CronCreate({
   schedule: "*/10 * * * *",
-  prompt: "Beacon poll: run `gh issue list --state open --json number,title,labels,updatedAt --limit 200`. Diff against .beacon/state.json known issues. For new issues: classify complexity and integrate into the current UltraPlan. For issues closed externally: cancel any running agents (kill tmux pane, remove worktree). For issues with updated labels: reconcile state. Update .beacon/state.json with poll timestamp.",
+  prompt: "Run the beacon-poll skill: fetch open GitHub issues, diff against .beacon/state.json, integrate new issues into the plan, cancel agents for externally-closed issues, and update changed issue metadata. Use the protocol in skills/beacon-poll/SKILL.md.",
   description: "Beacon GitHub poll safety net"
 })
 ```
 
+The full polling protocol is defined in `skills/beacon-poll/SKILL.md`. It covers:
+
+- Fetching live issue state via `gh issue list`
+- Classifying and inserting new issues into the active plan
+- Killing tmux panes and removing worktrees for externally-closed issues
+- Reconciling label changes and metadata updates
+- Writing a timestamped summary to `.beacon/poll.log`
+
 This fires even if the Discord webhook is active — it catches anything the webhook misses (e.g., issues created via API, label changes, external closures).
+
+> **Note:** CronCreate jobs do not survive context compaction. After any compaction event, re-issue the CronCreate call above to restore the polling loop. See the Recovery section for details.
 
 ### Step 7: Start Discord Listener
 
