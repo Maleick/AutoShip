@@ -7,6 +7,7 @@ Three methods are available for remote command execution on frostreaver from mac
 | Method | Session | GUI Apps | Speed | Setup |
 |--------|---------|----------|-------|-------|
 | SSH | Session 0 | No | Fast | Already working |
+| SSH + interactive scheduled task | Session 1 | **Yes** | ~3-5s overhead | Proven 2026-04-09 |
 | WinRM (direct) | Session 0 | No | Fast | Configured |
 | WinRM + schtasks /IT | Session 1 | **Yes** | ~3-5s overhead | Configured |
 
@@ -33,12 +34,55 @@ Three methods are available for remote command execution on frostreaver from mac
 
 Using `schtasks /IT` (interactive-only flag) with `/RU` and `/RP` creates a task that runs in the interactive desktop session 1. This is the **proven method** for launching GUI-visible apps remotely.
 
+The same pattern also works over SSH by calling the PowerShell `ScheduledTasks`
+module directly. This matters because the current day-to-day control path from
+macOS is SSH, not WinRM.
+
 Pattern:
 1. Write a .bat file via WinRM (session 0)
 2. Create a scheduled task with `/IT` flag
 3. Run the task — it executes in session 1
 4. Optionally capture output via file redirect
 5. Clean up task and bat file
+
+## Proof: 2026-04-09 live checks on frostreaver
+
+Observed active desktop session:
+
+- `query user` reported `maleick` in `console` session `1`
+
+Direct SSH launch proof:
+
+- `Start-Process eqgame.exe patchme` launched `eqgame.exe` in `SessionId = 0`
+- That confirms direct SSH launch is still unsuitable for visible EQ automation
+
+Interactive task proof:
+
+- An SSH-created interactive scheduled task launched `notepad.exe` in `SessionId = 1`
+- An SSH-created interactive scheduled task launched `eqgame.exe patchme` in `SessionId = 1`
+
+Operational conclusion:
+
+- Do **not** launch EverQuest directly via raw SSH or raw WinRM if the test needs
+  the visible desktop session
+- Use an interactive scheduled task bridge to launch:
+  - `eqgame.exe patchme /login:<account>`
+  - or a desktop-session TextQuest entrypoint such as `textquest.exe autologin --spawn ...`
+
+## Recommended TextQuest path
+
+For fully autonomous remote testing, the best current shape is:
+
+1. Trigger a desktop-session task on `frostreaver`
+2. That task runs `textquest.exe autologin --spawn ...` locally
+3. TextQuest then handles:
+   - EQ spawn
+   - DLL injection
+   - `StartLogin`
+   - DLL-side UI automation
+
+Only the task trigger should happen over SSH/WinRM. The actual `autologin` run
+must execute in session 1.
 
 ### Important: Home directory
 
