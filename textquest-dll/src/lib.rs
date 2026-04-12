@@ -302,6 +302,28 @@ fn scan_offsets(eq_base: u64) {
     // and readable for the lifetime of this function call.
     let data = unsafe { std::slice::from_raw_parts(eq_base as *const u8, module_size) };
 
+    // ── Version detection ──────────────────────────────────────────
+    let (client_date, version_matches) = scan_engine::check_version(data);
+    match &client_date {
+        Some(date) if version_matches => {
+            tracing::info!(
+                date = %date,
+                "Auto Patch: EQ client matches expected version"
+            );
+        }
+        Some(date) => {
+            tracing::warn!(
+                detected = %date,
+                expected = %scan_engine::EXPECTED_CLIENT_DATE,
+                "Auto Patch: EQ client version MISMATCH — offsets may be stale!"
+            );
+        }
+        None => {
+            tracing::warn!("Auto Patch: could not detect EQ client version");
+        }
+    }
+
+    // ── Pattern scanning ───────────────────────────────────────────
     let report = scan_engine::scan_module(
         data,
         eq_base,

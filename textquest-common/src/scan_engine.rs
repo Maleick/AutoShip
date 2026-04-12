@@ -191,6 +191,125 @@ fn resolve_rip_relative(
     preferred_base.checked_add(offset_within_module)
 }
 
+// ---------------------------------------------------------------------------
+// EQ version detection
+// ---------------------------------------------------------------------------
+
+/// Expected EQ client date that our compiled offsets target.
+///
+/// If the running client reports a different date, offsets are likely stale.
+/// Format: `"YYYYMMDD"` as an ASCII string embedded in eqgame.exe's `.rdata`.
+pub const EXPECTED_CLIENT_DATE: &str = "20260310";
+
+/// Scan the module image for an EQ client date string.
+///
+/// EQ embeds `__ActualVersionDate` as an ASCII string in the form `"MonthName DD YYYY"`
+/// (e.g., `"Mar 10 2026"`). This function scans for date-like patterns and returns
+/// a normalized `YYYYMMDD` string if found.
+///
+/// Returns `None` if no date string is found.
+#[must_use]
+pub fn detect_client_date(data: &[u8]) -> Option<String> {
+    // EQ uses abbreviated month names in __ActualVersionDate.
+    const MONTHS: &[(&[u8], &str)] = &[
+        (b"Jan", "01"),
+        (b"Feb", "02"),
+        (b"Mar", "03"),
+        (b"Apr", "04"),
+        (b"May", "05"),
+        (b"Jun", "06"),
+        (b"Jul", "07"),
+        (b"Aug", "08"),
+        (b"Sep", "09"),
+        (b"Oct", "10"),
+        (b"Nov", "11"),
+        (b"Dec", "12"),
+    ];
+
+    // Scan for patterns like "Mon DD YYYY" (11-12 bytes) or "Mon  D YYYY" (11 bytes).
+    // We look for month abbreviations followed by a space, day digits, space, 4-digit year.
+    for window_start in 0..data.len().saturating_sub(12) {
+        for &(month_bytes, month_num) in MONTHS {
+            if data[window_start..window_start + 3] != *month_bytes {
+                continue;
+            }
+            // Must be followed by a space
+            if data[window_start + 3] != b' ' {
+                continue;
+            }
+            // Parse day (1 or 2 digits) and year (4 digits)
+            let rest = &data[window_start + 4..];
+            if rest.len() < 7 {
+                continue;
+            }
+
+            let (day_str, year_start) = if rest[0] == b' ' && rest[1].is_ascii_digit() {
+                // "Mon  D YYYY" format (single-digit day with leading space)
+                if rest[2] != b' ' {
+                    continue;
+                }
+                (
+                    std::str::from_utf8(&rest[1..2]).ok()?,
+                    3usize,
+                )
+            } else if rest[0].is_ascii_digit() && rest[1].is_ascii_digit() {
+                // "Mon DD YYYY" format
+                if rest[2] != b' ' {
+                    continue;
+                }
+                (
+                    std::str::from_utf8(&rest[0..2]).ok()?,
+                    3usize,
+                )
+            } else {
+                continue;
+            };
+
+            if rest.len() < year_start + 4 {
+                continue;
+            }
+            let year_bytes = &rest[year_start..year_start + 4];
+            if !year_bytes.iter().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            let year = std::str::from_utf8(year_bytes).ok()?;
+
+            // Validate year is reasonable (2020-2099)
+            let year_num: u32 = year.parse().ok()?;
+            if !(2020..2100).contains(&year_num) {
+                continue;
+            }
+
+            let day_num: u32 = day_str.parse().ok()?;
+            if !(1..=31).contains(&day_num) {
+                continue;
+            }
+
+            return Some(format!("{}{}{:02}", year, month_num, day_num));
+        }
+    }
+    None
+}
+
+/// Check whether the running EQ client matches our expected version.
+///
+/// Returns `(detected_date, matches_expected)`. If the date cannot be found,
+/// returns `(None, false)`.
+#[must_use]
+pub fn check_version(data: &[u8]) -> (Option<String>, bool) {
+    match detect_client_date(data) {
+        Some(date) => {
+            let matches = date == EXPECTED_CLIENT_DATE;
+            (Some(date), matches)
+        }
+        None => (None, false),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Database merging
+// ---------------------------------------------------------------------------
+
 /// Merge scan results into an `OffsetDatabase`, overwriting matching keys
 /// in the `globals` and `functions` maps.
 ///
@@ -642,5 +761,56 @@ mod tests {
         assert_eq!(report.entries_found, 0);
         assert!(report.results.is_empty());
         assert_eq!(report.entries_failed, vec!["ripTargetBeforeBase"]);
+    }
+
+    // ─── Version detection tests ────────────────────────────────────
+
+    #[test]
+    fn detect_client_date_standard_format() {
+        // "Mar 10 2026" embedded at offset 0x100 in a buffer
+        let mut data = vec![0x00u8; 512];
+        let date_str = b"Mar 10 2026";
+        data[0x100..0x100 + date_str.len()].copy_from_slice(date_str);
+        assert_eq!(detect_client_date(&data), Some("20260310".to_string()));
+    }
+
+    #[test]
+    fn detect_client_date_single_digit_day() {
+        let mut data = vec![0x00u8; 512];
+        let date_str = b"Jan  5 2026";
+        data[0x100..0x100 + date_str.len()].copy_from_slice(date_str);
+        assert_eq!(detect_client_date(&data), Some("20260105".to_string()));
+    }
+
+    #[test]
+    fn detect_client_date_not_found() {
+        let data = vec![0x00u8; 512];
+        assert_eq!(detect_client_date(&data), None);
+    }
+
+    #[test]
+    fn check_version_matches_expected() {
+        let mut data = vec![0x00u8; 512];
+        data[0x100..0x100 + 11].copy_from_slice(b"Mar 10 2026");
+        let (date, matches) = check_version(&data);
+        assert_eq!(date, Some("20260310".to_string()));
+        assert!(matches);
+    }
+
+    #[test]
+    fn check_version_detects_newer_client() {
+        let mut data = vec![0x00u8; 512];
+        data[0x100..0x100 + 11].copy_from_slice(b"Apr 14 2026");
+        let (date, matches) = check_version(&data);
+        assert_eq!(date, Some("20260414".to_string()));
+        assert!(!matches);
+    }
+
+    #[test]
+    fn check_version_no_date_found() {
+        let data = vec![0x00u8; 512];
+        let (date, matches) = check_version(&data);
+        assert!(date.is_none());
+        assert!(!matches);
     }
 }
