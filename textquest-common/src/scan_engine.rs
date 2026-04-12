@@ -273,19 +273,19 @@ pub fn detect_client_date(data: &[u8]) -> Option<String> {
                 if rest[2] != b' ' {
                     continue;
                 }
-                (
-                    std::str::from_utf8(&rest[1..2]).ok()?,
-                    3usize,
-                )
+                let Ok(s) = std::str::from_utf8(&rest[1..2]) else {
+                    continue;
+                };
+                (s, 3usize)
             } else if rest[0].is_ascii_digit() && rest[1].is_ascii_digit() {
                 // "Mon DD YYYY" format
                 if rest[2] != b' ' {
                     continue;
                 }
-                (
-                    std::str::from_utf8(&rest[0..2]).ok()?,
-                    3usize,
-                )
+                let Ok(s) = std::str::from_utf8(&rest[0..2]) else {
+                    continue;
+                };
+                (s, 3usize)
             } else {
                 continue;
             };
@@ -297,15 +297,21 @@ pub fn detect_client_date(data: &[u8]) -> Option<String> {
             if !year_bytes.iter().all(|b| b.is_ascii_digit()) {
                 continue;
             }
-            let year = std::str::from_utf8(year_bytes).ok()?;
+            let Ok(year) = std::str::from_utf8(year_bytes) else {
+                continue;
+            };
 
             // Validate year is reasonable (2020-2099)
-            let year_num: u32 = year.parse().ok()?;
+            let Ok(year_num) = year.parse::<u32>() else {
+                continue;
+            };
             if !(2020..2100).contains(&year_num) {
                 continue;
             }
 
-            let day_num: u32 = day_str.parse().ok()?;
+            let Ok(day_num) = day_str.parse::<u32>() else {
+                continue;
+            };
             if !(1..=31).contains(&day_num) {
                 continue;
             }

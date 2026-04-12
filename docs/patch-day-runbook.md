@@ -29,10 +29,8 @@ python3 scripts/import_mq_offsets.py --dry-run /tmp/eqgame.h
 # 4. Apply changes
 python3 scripts/import_mq_offsets.py --eqmain /tmp/eqmain.h /tmp/eqgame.h
 
-# 5. Update version stamps manually:
-#    - textquest-common/src/scan_engine.rs: EXPECTED_CLIENT_DATE
-#    - textquest-common/src/offset_db.rs: client_date in from_compiled_offsets()
-#    - textquest-common/src/offsets.rs: comment at top ("Client date: YYYYMMDD")
+# 5. Update version stamp manually:
+#    - textquest-common/src/offsets.rs: CLIENT_DATE
 
 # 6. Validate
 cargo test -p textquest-common
@@ -97,13 +95,15 @@ These change less frequently (only when EQ adds new struct fields):
 Struct offsets are NOT in MQ's `eqgame.h` — they're in the C++ headers throughout eqlib.
 The import script only handles address offsets, not struct fields.
 
-### Version stamps (manual)
+### Version stamp (manual)
 
 After updating addresses:
 
-1. `scan_engine.rs`: `EXPECTED_CLIENT_DATE = "YYYYMMDD"`
-2. `offset_db.rs`: `client_date: "YYYYMMDD".to_string()`
-3. `offsets.rs`: Comment at top: `// Client date: YYYYMMDD`
+1. `textquest-common/src/offsets.rs`: update `CLIENT_DATE` to `"YYYYMMDD"`
+
+`CLIENT_DATE` is the canonical client-date value used by both the scan engine
+(`EXPECTED_CLIENT_DATE`) and `OffsetDatabase` (`client_date`), so no separate
+edits are needed.
 
 ## Offset Name Mapping
 

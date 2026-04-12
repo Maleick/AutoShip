@@ -269,10 +269,9 @@ def main() -> int:
     if not args.dry_run:
         print(f"Written to {offsets_path}")
         print("\nNext steps:")
-        print("  1. Update EXPECTED_CLIENT_DATE in scan_engine.rs")
-        print("  2. Update client_date in offset_db.rs from_compiled_offsets()")
-        print("  3. cargo test -p textquest-common")
-        print("  4. cargo clippy --all-targets --all-features -- -D warnings")
+        print("  1. Update CLIENT_DATE in textquest-common/src/offsets.rs")
+        print("  2. cargo test -p textquest-common")
+        print("  3. cargo clippy --all-targets --all-features -- -D warnings")
 
     return 0
 
