@@ -8,6 +8,9 @@ BEACON_DIR=".beacon"
 STATE_FILE="$BEACON_DIR/state.json"
 WORKSPACES_DIR="$BEACON_DIR/workspaces"
 
+# Resolve the directory this script lives in so we can call sibling scripts.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Detect repo
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "Error: not inside a git repository" >&2
@@ -31,38 +34,62 @@ fi
 # Create directory structure
 mkdir -p "$WORKSPACES_DIR"
 
+# Detect tools and parse quotas.
+# detect-tools.sh outputs: {"claude": {"available": bool, "quota_pct": N}, ...}
+# Transform to state.json format:  {"claude": {"status": "available"|"unavailable", "quota_pct": N}, ...}
+TOOLS_RAW=$(bash "$SCRIPT_DIR/detect-tools.sh" 2>/dev/null) || TOOLS_RAW='{}'
+TOOLS_JSON=$(printf '%s' "$TOOLS_RAW" | jq '
+  to_entries
+  | map({
+      key: .key,
+      value: {
+        status: (if .value.available then "available" else "unavailable" end),
+        quota_pct: .value.quota_pct
+      }
+    })
+  | from_entries
+' 2>/dev/null) || TOOLS_JSON='{
+    "claude":     {"status": "available",   "quota_pct": 100},
+    "codex-spark":{"status": "unavailable", "quota_pct": -1},
+    "codex-gpt":  {"status": "unavailable", "quota_pct": -1},
+    "gemini":     {"status": "unavailable", "quota_pct": -1}
+  }'
+
 # Initialize state.json only if it doesn't exist
 if [[ ! -f "$STATE_FILE" ]]; then
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  cat > "$STATE_FILE" <<EOF
-{
-  "version": 1,
-  "repo": "${REPO_SLUG}",
-  "started_at": "${NOW}",
-  "updated_at": "${NOW}",
-  "plan": {
-    "phases": [],
-    "current_phase": 0,
-    "checkpoint_pending": false
-  },
-  "issues": {},
-  "tools": {
-    "claude": { "status": "available", "quota_pct": 100 },
-    "codex-spark": { "status": "available", "quota_pct": 100 },
-    "codex-gpt": { "status": "available", "quota_pct": 100 },
-    "gemini": { "status": "available", "quota_pct": 100 }
-  },
-  "stats": {
-    "dispatched": 0,
-    "completed": 0,
-    "failed": 0,
-    "blocked": 0
-  }
-}
-EOF
+  # Use jq to produce well-formed JSON, embedding the detected tools.
+  jq -n \
+    --arg repo "$REPO_SLUG" \
+    --arg now "$NOW" \
+    --argjson tools "$TOOLS_JSON" \
+    '{
+      version: 1,
+      repo: $repo,
+      started_at: $now,
+      updated_at: $now,
+      plan: {
+        phases: [],
+        current_phase: 0,
+        checkpoint_pending: false
+      },
+      issues: {},
+      tools: $tools,
+      stats: {
+        dispatched: 0,
+        completed: 0,
+        failed: 0,
+        blocked: 0
+      }
+    }' > "$STATE_FILE"
   echo "Initialized $STATE_FILE"
 else
-  echo "$STATE_FILE already exists, skipping"
+  # Refresh tools section with current quota data without touching other state.
+  NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  UPDATED=$(jq --argjson tools "$TOOLS_JSON" --arg now "$NOW" \
+    '.tools = $tools | .updated_at = $now' "$STATE_FILE") && \
+    printf '%s\n' "$UPDATED" > "$STATE_FILE"
+  echo "Refreshed tools quota in $STATE_FILE"
 fi
 
 # Create config.json for operator overrides (if not present)
