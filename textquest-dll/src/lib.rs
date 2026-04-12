@@ -353,7 +353,7 @@ fn scan_offsets(eq_base: u64) {
 
     // Log individual real scan failures (not placeholders).
     for name in &report.entries_failed {
-        tracing::warn!(name = %name, "Auto Patch: pattern not found (using compiled fallback)");
+        tracing::warn!(name = %name, "Auto Patch: scan entry failed — pattern not found or resolution failed");
     }
 
     // Log moved offsets.

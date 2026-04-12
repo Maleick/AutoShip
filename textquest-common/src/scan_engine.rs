@@ -40,7 +40,11 @@ pub struct ScanReport {
     pub entries_found: usize,
     /// How many matched entries agreed with compiled constants.
     pub entries_validated: usize,
-    /// Names of entries that failed to match (real scan failures).
+    /// Names of entries that did not yield a usable resolved address.
+    ///
+    /// Includes both entries whose pattern was not found and entries whose
+    /// pattern matched but address resolution failed (e.g. RIP displacement
+    /// out of bounds or resolved target outside the module image).
     pub entries_failed: Vec<String>,
     /// Names of entries skipped because they use placeholder patterns.
     pub entries_skipped: Vec<String>,

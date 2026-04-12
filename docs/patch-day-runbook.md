@@ -78,7 +78,8 @@ For patches that reorganize code (rare):
 |----------|-------|--------|
 | Global pointers (`PINST_*`) | 17 | `eqgame.h` / `eqmain.h` |
 | Function addresses | 40 | `eqgame.h` / `eqmain.h` |
-| Anti-cheat functions | 8 | Manual Ghidra RE only |
+| Anti-cheat/network functions | 6 | Manual Ghidra RE only |
+| Anti-cheat globals (msg counters) | 2 | Manual Ghidra RE only |
 
 ### Struct field offsets (in `offsets.rs` modules)
 
