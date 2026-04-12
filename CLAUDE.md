@@ -2,12 +2,16 @@
 
 Autonomous multi-agent orchestration plugin for Claude Code.
 
-## Architecture
+## Architecture (v3 — Advisor + Monitor)
 
-- **Orchestrator**: Opus — makes all dispatch decisions, never reads/writes code
-- **Workers**: Sonnet/Haiku (Claude), Codex Spark/GPT, Gemini Flash/Pro
-- **Reviewer**: Sonnet agent — verifies all work against acceptance criteria
-- **Monitor**: Sonnet agent — watches CI, PR comments, merge status
+Four-tier model: Bash watches → Haiku thinks → Sonnet orchestrates → Opus advises
+
+- **Executor**: Sonnet — event-driven orchestration, dispatch, verification pipeline
+- **Advisor**: Opus — spawned at strategic decision points (UltraPlan, phase checkpoints, escalations)
+- **Workers**: Third-party first (Codex/Gemini/Grok) for simple/medium; Claude Haiku/Sonnet as fallback
+- **Triage**: Haiku — interprets Monitor events, categorizes PR comments, queues actions
+- **Reviewer**: Sonnet — verifies work against acceptance criteria
+- **Monitors**: 3 bash scripts (agent 5s, PR 30s, issues 60s) via Monitor tool
 
 ## Prerequisites
 
@@ -17,16 +21,22 @@ Autonomous multi-agent orchestration plugin for Claude Code.
 ## Plugin Structure
 
 - `commands/beacon.md` — `/beacon start|status|stop|plan` entry point
-- `skills/beacon/` — Core orchestration protocol
-- `skills/beacon-dispatch/` — Agent dispatch (worktrees, tmux, prompts)
+- `skills/beacon/` — Core orchestration protocol (v3: Sonnet executor + Opus advisor)
+- `skills/beacon-dispatch/` — Agent dispatch (third-party first, pipe-pane, status words)
 - `skills/beacon-verify/` — Post-completion pipeline (verify, simplify, PR, merge)
 - `skills/beacon-status/` — Status display with quota bars
+- `skills/beacon-poll/` — GitHub issue sync safety net
 - `agents/reviewer.md` — Sonnet verification reviewer
 - `agents/monitor.md` — CI/PR monitor agent
+- `agents/haiku-triage.md` — Haiku event interpreter (Monitor → event queue)
 - `hooks/beacon-init.sh` — Initialize `.beacon/` directory and state file
-- `hooks/detect-tools.sh` — Detect available AI CLI tools (Claude/Codex/Gemini)
-- `hooks/check-completion.sh` — Poll tmux for completed agent panes
+- `hooks/detect-tools.sh` — Detect available AI CLI tools + quota
 - `hooks/update-state.sh` — Update `.beacon/state.json` issue states and stats
+- `hooks/monitor-agents.sh` — Agent completion watcher (5s, via Monitor tool)
+- `hooks/monitor-prs.sh` — PR CI/merge status watcher (30s, via Monitor tool)
+- `hooks/monitor-issues.sh` — GitHub issue new/closed watcher (60s, via Monitor tool)
+- `hooks/cleanup-worktree.sh` — Remove worktree, branch, close issue
+- `hooks/sweep-stale.sh` — Clean up orphaned worktrees on startup
 
 ## Development
 
@@ -46,7 +56,9 @@ Autonomous multi-agent orchestration plugin for Claude Code.
 
 - Skills are markdown protocols, not code — they instruct Claude how to behave
 - All state persists in `.beacon/state.json` (local) and GitHub labels (durable)
-- Opus orchestrates only — never reads or writes code directly
+- Event queue in `.beacon/event-queue.json` — Haiku writes, Sonnet reads
+- Sonnet orchestrates; Opus is called only at strategic decision points
+- Every agent emits `COMPLETE`, `BLOCKED`, or `STUCK` as its final line
 - Every agent writes `BEACON_RESULT.md` — never trust conversation output
 
 ## Commands

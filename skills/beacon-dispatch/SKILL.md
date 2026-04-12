@@ -1,196 +1,345 @@
 ---
 name: beacon-dispatch
-description: Agent dispatch protocol — worktree creation, prompt generation, tmux pane management, and quota-aware routing
+description: Agent dispatch protocol — worktree creation, prompt generation, tmux pane management, and quota-aware routing (third-party first)
 tools: ["Bash", "Agent", "Write", "Read", "TeamCreate"]
 ---
 
-# Beacon Dispatch Protocol
+# Beacon Dispatch Protocol — v3
 
-## Dispatching a Claude Agent (Sonnet/Haiku)
+Third-party tools (Codex/Gemini/Grok) are dispatched first for simple and medium issues to maximize external quota usage. Claude agents are reserved for complex work and fallback.
 
-1. Create the worktree:
+---
 
-   ```bash
-   git worktree add .beacon/workspaces/<issue-key> -b beacon/<issue-key> main
-   ```
+## Dispatch Priority Matrix
 
-2. Write the prompt context to the worktree. Use this exact prompt template:
+| Complexity | Primary                         | Fallback              | Last Resort              |
+| ---------- | ------------------------------- | --------------------- | ------------------------ |
+| Simple     | Codex/Gemini/Grok (quota > 10%) | Claude Haiku          | Claude Haiku (rate-lim)  |
+| Medium     | Codex/Gemini/Grok (quota > 10%) | Claude Sonnet         | Claude Sonnet (rate-lim) |
+| Complex    | Claude Sonnet + autoresearch    | Claude Sonnet (retry) | Opus advisor: re-slice   |
 
-   ````markdown
-   You are a Beacon worker agent. Your job is to implement the following GitHub issue.
-
-   ## Issue: #<number> — <title>
-
-   <full issue body>
-
-   ## Acceptance Criteria
-
-   <parsed from issue body, or generated from issue description>
-
-   ## Instructions
-
-   - You are working in worktree: `.beacon/workspaces/<issue-key>`
-   - Your branch is: `beacon/<issue-key>`
-   - Base branch is: `main`
-   - Run tests after making changes: `<test-command>`
-   - Use `/autoresearch:fix` for iterative development (fix → verify → keep/discard → repeat)
-   - When finished, write `BEACON_RESULT.md` in the worktree root with your summary (see template below)
-   - Do NOT merge, push to main, or close the issue
-   - Do NOT modify files outside the scope of this issue
-   - Commit your work to the `beacon/<issue-key>` branch
-
-   ## BEACON_RESULT.md Template
-
-   Write this file when you are done:
-
-   ```markdown
-   # Result: #<number> — <title>
-
-   ## Status: DONE | PARTIAL | STUCK
-
-   ## Changes Made
-
-   - <file>: <what changed and why>
-
-   ## Tests
-
-   - Test command: `<command>`
-   - Result: PASS | FAIL
-   - New tests added: yes/no
-
-   ## Notes
-
-   <anything the reviewer should know>
-   ```
-   ````
-
-3. Use TeamCreate to spawn the teammate in the worktree directory:
-
-   ```
-   TeamCreate({
-     name: "beacon-<issue-key>",
-     teammateMode: "auto"
-   })
-   ```
-
-   Then spawn the agent with the `team_name` parameter:
-
-   ```
-   Agent({
-     prompt: "<the prompt from step 2>",
-     team_name: "beacon-<issue-key>",
-     subagent_type: "general-purpose",
-     mode: "auto"
-   })
-   ```
-
-4. Update `.beacon/state.json` with the dispatch record.
-
-## Dispatching a Codex/Gemini Agent
-
-1. Create the worktree (same as above).
-
-2. Write `BEACON_PROMPT.md` to the worktree with this template:
-
-   ```markdown
-   Implement the following GitHub issue in this repository.
-
-   ## Issue: #<number> — <title>
-
-   <full issue body>
-
-   ## Acceptance Criteria
-
-   <parsed from issue body, or generated from issue description>
-
-   ## Instructions
-
-   - Run tests after changes: `<test-command>`
-   - Write a file called BEACON_RESULT.md in the repo root when done, containing:
-     - Status: DONE, PARTIAL, or STUCK
-     - List of files changed and why
-     - Test results (command run, pass/fail)
-     - Any notes for the reviewer
-   - Do NOT push, merge, or close the issue
-   - Commit your changes to the current branch
-   ```
-
-3. Spawn tmux pane:
-
-   ```bash
-   tmux split-window -t beacon -c .beacon/workspaces/<issue-key>
-   tmux select-layout -t beacon tiled
-   tmux select-pane -t {last} -T "<TOOL>: <issue-key>"
-   ```
-
-4. Send the command:
-
-   ```bash
-   # For Codex
-   tmux send-keys -t {last} "codex -p \"$(cat BEACON_PROMPT.md)\" --auto-edit" Enter
-
-   # For Gemini
-   tmux send-keys -t {last} "gemini -p \"$(cat BEACON_PROMPT.md)\"" Enter
-   ```
-
-5. Update state file.
-
-## Worktree Failure Handling
-
-If `git worktree add` fails:
-
-1. **Branch already exists**: The issue was previously attempted. Remove stale worktree first:
-
-   ```bash
-   git worktree remove .beacon/workspaces/<issue-key> --force 2>/dev/null
-   git branch -D beacon/<issue-key> 2>/dev/null
-   git worktree add .beacon/workspaces/<issue-key> -b beacon/<issue-key> main
-   ```
-
-2. **Disk space**: Log error, mark issue as `blocked` in state, skip to next issue.
-
-3. **Lock file conflict**: Another process holds the worktree lock.
-   ```bash
-   # Check for stale lock
-   rm -f .git/worktrees/<issue-key>/locked 2>/dev/null
-   # Retry once
-   git worktree add .beacon/workspaces/<issue-key> -b beacon/<issue-key> main
-   ```
-
-If worktree creation fails after retry, skip this issue and continue with the next.
-
-## Quota Check
-
-Before dispatching to any non-Claude tool, check the full fallback chain:
+Check quota before dispatch:
 
 ```bash
-# Check Codex quota (two separate pools)
-codex status 2>&1  # Parse "Spark: X% remaining" and "GPT: X% remaining"
+# Read current quota from state
+jq '.tools' .beacon/state.json
 
-# Check Gemini quota
-gemini status 2>&1  # Parse remaining quota percentage
+# Refresh if > 30 minutes old
+bash hooks/detect-tools.sh | jq '.'
 ```
 
-**Fallback chain by complexity:**
+Skip any tool with `quota_pct < 10` or `status == "unavailable"`.
 
-| Complexity | Try 1                        | Try 2 (if Try 1 < 10%) | Try 3 (if Try 2 < 10%)   | Last resort                       |
-| ---------- | ---------------------------- | ---------------------- | ------------------------ | --------------------------------- |
-| Simple     | Claude Haiku                 | Gemini                 | Codex Spark              | Claude Haiku (accept rate limit)  |
-| Medium     | Claude Sonnet                | Codex GPT              | Gemini                   | Claude Sonnet (accept rate limit) |
-| Complex    | Claude Sonnet + autoresearch | Codex GPT              | Re-slice into sub-issues | Claude Sonnet (accept rate limit) |
+---
 
-Claude is always the last resort — Max subscription has generous limits. If even Claude is rate-limited, pause dispatch and wait for quota recovery.
-
-Update `.beacon/state.json` tool quota after each check.
-
-## Completion Detection
-
-For tmux-based agents (Codex/Gemini):
+## Step 1: Create Worktree
 
 ```bash
-# Check if pane process has exited
-tmux list-panes -t beacon -F '#{pane_id} #{pane_dead} #{pane_title}'
-# pane_dead = 1 means agent CLI exited
+ISSUE_KEY="issue-<number>"
+git worktree add .beacon/workspaces/$ISSUE_KEY -b beacon/$ISSUE_KEY main
 ```
 
-For Claude agents: TeamCreate protocol handles completion signaling natively.
+**If branch already exists (previous attempt):**
+
+```bash
+git worktree remove .beacon/workspaces/$ISSUE_KEY --force 2>/dev/null
+git branch -D beacon/$ISSUE_KEY 2>/dev/null
+git worktree add .beacon/workspaces/$ISSUE_KEY -b beacon/$ISSUE_KEY main
+```
+
+**If disk/lock failure:** Mark issue blocked, skip to next.
+
+---
+
+## Step 2: Set Up Pane Log (for real-time completion detection)
+
+Before spawning any tmux-based agent, create the pane log file:
+
+```bash
+mkdir -p .beacon/workspaces/$ISSUE_KEY
+touch .beacon/workspaces/$ISSUE_KEY/pane.log
+```
+
+After spawning the pane, attach pipe-pane:
+
+```bash
+tmux pipe-pane -t $PANE_ID "cat >> .beacon/workspaces/$ISSUE_KEY/pane.log"
+```
+
+Monitor 1 watches these log files for `COMPLETE`, `BLOCKED`, or `STUCK` on their own line.
+
+---
+
+## Step 3A: Dispatch Third-Party Agent (Codex/Gemini)
+
+Write the prompt file:
+
+```bash
+cat > .beacon/workspaces/$ISSUE_KEY/BEACON_PROMPT.md << 'EOF'
+Implement the following GitHub issue in this repository.
+
+## Issue: #<number> — <title>
+
+<full issue body>
+
+## Acceptance Criteria
+
+<parsed from issue body, or generated from description>
+
+## Instructions
+
+- Run tests after changes: `<test-command>`
+- Work only in the scope of this issue
+- Commit your changes to the current branch
+- Do NOT push, merge, or close the issue
+
+## When Finished
+
+Write BEACON_RESULT.md in the repo root:
+
+```
+
+# Result: #<number> — <title>
+
+## Status: DONE | PARTIAL | STUCK
+
+## Changes Made
+
+- <file>: <what changed and why>
+
+## Tests
+
+- Command: `<test-command>`
+- Result: PASS | FAIL
+- New tests added: yes/no
+
+## Notes
+
+<anything the reviewer should know>
+```
+
+When done, print exactly one of these words on its own line as your final output:
+COMPLETE
+BLOCKED
+STUCK
+EOF
+
+````
+
+Spawn tmux pane:
+
+```bash
+PANE_ID=$(tmux split-window -t beacon -c .beacon/workspaces/$ISSUE_KEY -P -F '#{pane_id}')
+tmux select-layout -t beacon tiled
+tmux select-pane -t $PANE_ID -T "<TOOL>: $ISSUE_KEY"
+tmux pipe-pane -t $PANE_ID "cat >> .beacon/workspaces/$ISSUE_KEY/pane.log"
+````
+
+Send command:
+
+```bash
+# Codex
+tmux send-keys -t $PANE_ID "codex -p \"$(cat BEACON_PROMPT.md)\" --auto-edit && echo COMPLETE || echo STUCK" Enter
+
+# Gemini
+tmux send-keys -t $PANE_ID "gemini -p \"$(cat BEACON_PROMPT.md)\" && echo COMPLETE || echo STUCK" Enter
+```
+
+Update state:
+
+```bash
+bash hooks/update-state.sh set-running <issue-id> agent=codex-spark pane_id=$PANE_ID
+```
+
+**Completion detection for third-party agents:**
+
+- Monitor 1 tails `pane.log` for `COMPLETE`, `BLOCKED`, or `STUCK`
+- As backup: if `pane_dead=1` and `BEACON_RESULT.md` exists → treat as COMPLETE
+- If `pane_dead=1` and no `BEACON_RESULT.md` → crash, re-dispatch
+
+---
+
+## Step 3B: Dispatch Claude Haiku Agent (Simple)
+
+Use TeamCreate for visibility:
+
+```
+TeamCreate({
+  name: "beacon-<issue-key>",
+  teammateMode: "auto"
+})
+```
+
+Agent prompt template:
+
+````markdown
+You are a Beacon worker agent. Implement the following GitHub issue.
+
+## Issue: #<number> — <title>
+
+<full issue body>
+
+## Acceptance Criteria
+
+<parsed from issue body, or generated from description>
+
+## Working Context
+
+- Worktree: `.beacon/workspaces/<issue-key>`
+- Branch: `beacon/<issue-key>`
+- Base: `main`
+- Test command: `<test-command>`
+
+## Instructions
+
+- Stay within the scope of this issue — do not modify unrelated files
+- Run tests after making changes
+- Commit your work to `beacon/<issue-key>`
+- Do NOT push, merge, or close the issue
+- When finished, write `BEACON_RESULT.md` (template below)
+
+## BEACON_RESULT.md Template
+
+```markdown
+# Result: #<number> — <title>
+
+## Status: DONE | PARTIAL | STUCK
+
+## Changes Made
+
+- <file>: <what changed and why>
+
+## Tests
+
+- Command: `<test-command>`
+- Result: PASS | FAIL
+- New tests added: yes/no
+
+## Notes
+
+<anything the reviewer should know>
+```
+
+When you are completely finished, print exactly one of these words on its own line as your final output:
+COMPLETE
+BLOCKED
+STUCK
+````
+
+Dispatch:
+
+```
+Agent({
+  model: "haiku",
+  prompt: "<the prompt above>",
+  team_name: "beacon-<issue-key>",
+  mode: "auto"
+})
+```
+
+Update state:
+
+```bash
+bash hooks/update-state.sh set-running <issue-id> agent=claude-haiku
+```
+
+---
+
+## Step 3C: Dispatch Claude Sonnet Agent (Medium/Complex)
+
+Same structure as Haiku, but with autoresearch and more context:
+
+````markdown
+You are a Beacon worker agent. Implement the following GitHub issue.
+
+## Issue: #<number> — <title>
+
+<full issue body>
+
+## Acceptance Criteria
+
+<parsed from issue body, or generated from description>
+
+## Working Context
+
+- Worktree: `.beacon/workspaces/<issue-key>`
+- Branch: `beacon/<issue-key>`
+- Base: `main`
+- Test command: `<test-command>`
+- Complexity: <medium | complex>
+
+## Instructions
+
+- Use `/autoresearch:fix` for iterative development: fix → verify → keep/discard → repeat
+- Read related code before making changes — understand the context
+- Run tests after making changes
+- Commit your work to `beacon/<issue-key>`
+- Do NOT push, merge, or close the issue
+- When finished, write `BEACON_RESULT.md` (template below)
+
+## BEACON_RESULT.md Template
+
+```markdown
+# Result: #<number> — <title>
+
+## Status: DONE | PARTIAL | STUCK
+
+## Changes Made
+
+- <file>: <what changed and why>
+
+## Tests
+
+- Command: `<test-command>`
+- Result: PASS | FAIL
+- New tests added: yes/no
+
+## Notes
+
+<anything the reviewer should know>
+```
+
+When completely finished, print exactly one of these words on its own line:
+COMPLETE
+BLOCKED
+STUCK
+````
+
+Dispatch:
+
+```
+Agent({
+  model: "sonnet",
+  prompt: "<the prompt above>",
+  team_name: "beacon-<issue-key>",
+  mode: "auto"
+})
+```
+
+Update state:
+
+```bash
+bash hooks/update-state.sh set-running <issue-id> agent=claude-sonnet
+```
+
+---
+
+## Haiku Failure Escalation
+
+If Haiku fails verification:
+
+- **Attempt 1 fail**: Re-dispatch Haiku with failure context appended:
+  ```
+  ## Previous Attempt Failed
+  Reviewer verdict: FAIL
+  Issues found: <SPECIFIC_ISSUES from reviewer output>
+  Please address these specifically.
+  ```
+- **Attempt 2 fail**: Automatically escalate to Sonnet — no Opus consultation needed
+- **Attempt 3+ fail (Sonnet)**: Spawn Opus advisor
+
+Update attempt count in state:
+
+```bash
+bash hooks/update-state.sh set-running <issue-id> attempt=<N>
+```
