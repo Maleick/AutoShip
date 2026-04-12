@@ -65,8 +65,13 @@ pub struct ScanReport {
 /// `int3` padding run in any module, producing identical bogus results for every
 /// entry. The scan engine skips these to avoid misleading log output.
 fn is_placeholder_pattern(pattern: &str) -> bool {
-    let tokens: Vec<&str> = pattern.split_whitespace().collect();
-    !tokens.is_empty() && tokens.iter().all(|t| t.eq_ignore_ascii_case("CC"))
+    let mut tokens = pattern.split_whitespace();
+    match tokens.next() {
+        Some(first) => {
+            first.eq_ignore_ascii_case("CC") && tokens.all(|t| t.eq_ignore_ascii_case("CC"))
+        }
+        None => false,
+    }
 }
 
 /// Scan all entries matching `module` against a memory region.
@@ -425,16 +430,16 @@ mod tests {
 
     #[test]
     fn rip_relative_resolve_computes_target() {
-        // Simulate: `mov rax, [rip+0x12345678]` at offset 0x10 in the module.
+        // Simulate: `mov rax, [rip+0x50]` at offset 0x10 in the module.
         //
         // Instruction encoding: 48 8B 05 <disp32>
-        // disp32 = 0x12345678 (little-endian: 78 56 34 12)
+        // disp32 = 0x00000050 (little-endian: 50 00 00 00)
         //
         // next_ip     = module_base + 0x10 + 3 + 4 = module_base + 0x17
-        // target_addr = next_ip + 0x12345678
+        // target_addr = next_ip + 0x50
         // preferred   = preferred_base + (target_addr - module_base)
-        //             = preferred_base + 0x17 + 0x12345678
-        //             = preferred_base + 0x1234568F
+        //             = preferred_base + 0x17 + 0x50
+        //             = preferred_base + 0x67
 
         let mut data = vec![0x00u8; 256];
         data[0x10] = 0x48;

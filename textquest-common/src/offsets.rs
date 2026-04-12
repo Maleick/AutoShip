@@ -11,9 +11,9 @@ pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 
 /// EQ client build date these offsets target, in `YYYYMMDD` format.
 ///
-/// Single source of truth — referenced by `scan_engine::EXPECTED_CLIENT_DATE`
-/// and `OffsetDatabase::from_compiled_offsets()`. Update this (and only this)
-/// when importing new offsets on patch day.
+/// Single source of truth for runtime version checks — referenced by
+/// `scan_engine::EXPECTED_CLIENT_DATE` and `OffsetDatabase::from_compiled_offsets()`.
+/// Update this value when importing new offsets on patch day.
 pub const CLIENT_DATE: &str = "20260310";
 
 /// Pointer to local player (`PlayerClient`*)
