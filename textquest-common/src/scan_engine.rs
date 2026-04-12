@@ -148,12 +148,12 @@ pub fn scan_module(
         // Validate against compiled constant.
         let validated = entry.expected_preferred == Some(resolved);
 
-        if let Some(expected) = entry.expected_preferred
-            && !validated
-        {
-            report
-                .entries_moved
-                .push((entry.name.to_string(), expected, resolved));
+        if let Some(expected) = entry.expected_preferred {
+            if !validated {
+                report
+                    .entries_moved
+                    .push((entry.name.to_string(), expected, resolved));
+            }
         }
 
         if validated {
