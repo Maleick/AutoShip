@@ -244,26 +244,27 @@ pub const EXPECTED_CLIENT_DATE: &str = crate::offsets::CLIENT_DATE;
 #[must_use]
 pub fn detect_client_date(data: &[u8]) -> Option<String> {
     // EQ uses abbreviated month names in __ActualVersionDate.
-    const MONTHS: &[(&[u8], &str)] = &[
-        (b"Jan", "01"),
-        (b"Feb", "02"),
-        (b"Mar", "03"),
-        (b"Apr", "04"),
-        (b"May", "05"),
-        (b"Jun", "06"),
-        (b"Jul", "07"),
-        (b"Aug", "08"),
-        (b"Sep", "09"),
-        (b"Oct", "10"),
-        (b"Nov", "11"),
-        (b"Dec", "12"),
+    // max_day is the maximum valid day for that month (Feb uses 29 to allow leap years).
+    const MONTHS: &[(&[u8], &str, u32)] = &[
+        (b"Jan", "01", 31),
+        (b"Feb", "02", 29),
+        (b"Mar", "03", 31),
+        (b"Apr", "04", 30),
+        (b"May", "05", 31),
+        (b"Jun", "06", 30),
+        (b"Jul", "07", 31),
+        (b"Aug", "08", 31),
+        (b"Sep", "09", 30),
+        (b"Oct", "10", 31),
+        (b"Nov", "11", 30),
+        (b"Dec", "12", 31),
     ];
 
     // Scan for patterns like "Mon DD YYYY" (11 bytes) or "Mon  D YYYY" (11 bytes).
     // We look for month abbreviations followed by a space, day digits, space, 4-digit year.
     // Minimum date string is 11 bytes (e.g., "Jan  5 2026"), so iterate up to len-11.
     for window_start in 0..data.len().saturating_sub(10) {
-        for &(month_bytes, month_num) in MONTHS {
+        for &(month_bytes, month_num, max_day) in MONTHS {
             if data[window_start..window_start + 3] != *month_bytes {
                 continue;
             }
@@ -321,7 +322,7 @@ pub fn detect_client_date(data: &[u8]) -> Option<String> {
             let Ok(day_num) = day_str.parse::<u32>() else {
                 continue;
             };
-            if !(1..=31).contains(&day_num) {
+            if !(1..=max_day).contains(&day_num) {
                 continue;
             }
 
@@ -861,6 +862,22 @@ mod tests {
     #[test]
     fn detect_client_date_not_found() {
         let data = vec![0x00u8; 512];
+        assert_eq!(detect_client_date(&data), None);
+    }
+
+    #[test]
+    fn detect_client_date_rejects_impossible_dates() {
+        // Apr 31 doesn't exist — should not match.
+        let mut data = vec![0x00u8; 512];
+        data[0x100..0x100 + 11].copy_from_slice(b"Apr 31 2026");
+        assert_eq!(detect_client_date(&data), None);
+
+        // Feb 30 doesn't exist — should not match.
+        data[0x100..0x100 + 11].copy_from_slice(b"Feb 30 2026");
+        assert_eq!(detect_client_date(&data), None);
+
+        // Jun 31 doesn't exist — should not match.
+        data[0x100..0x100 + 11].copy_from_slice(b"Jun 31 2026");
         assert_eq!(detect_client_date(&data), None);
     }
 
