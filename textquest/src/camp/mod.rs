@@ -30,6 +30,10 @@ pub mod progression;
 pub mod puller;
 /// Recovery phase — med, heal, rebuff between pulls.
 pub mod recovery;
+/// AA spend automation — prioritized alternate advancement point spending.
+pub mod aa_spend;
+/// Quest tracking and task automation — objective progress, auto-completion, reward claiming.
+pub mod quest_tracker;
 /// Skill leveling and training automation — tracks skill levels, mastery, and tradeskill sessions.
 pub mod skill_tracker;
 /// Camp loop state machine — idle, pulling, fighting, looting, recovering.
