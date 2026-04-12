@@ -186,6 +186,13 @@ Append one JSON object to .beacon/event-queue.json:
 { 'type': '<verify|stuck|blocked|new_issue|closed_issue|pr_pass|pr_fail|pr_conflict|pr_merged>', 'issue': '<key or number>', 'priority': <1-3>, 'data': {} }
 
 Priority: 1=urgent (stuck/blocked), 2=normal (verify, PR events), 3=low (new issues)
+
+## REQUIRED: Atomic Queue Write
+ALL writes to .beacon/event-queue.json MUST use flock to prevent race conditions:
+  EVENT='{...your entry...}'
+  flock .beacon/event-queue.lock jq --argjson evt \"\$EVENT\" '. + [\$evt]' .beacon/event-queue.json > .beacon/event-queue.tmp && mv .beacon/event-queue.tmp .beacon/event-queue.json
+Never write with bare > redirection. Always: flock → jq → tmp → mv.
+
 Write the file, then output: QUEUED: <type> <issue>",
   description: "Triage Monitor event to queue"
 })
@@ -193,15 +200,19 @@ Write the file, then output: QUEUED: <type> <issue>",
 
 ### Sonnet Pulls from Queue
 
-After each pipeline step completes, pull the next event:
+After each pipeline step completes, drain one event atomically (read → remove → process). Use flock so a concurrent Haiku write cannot interleave:
 
 ```bash
-# Read highest-priority event from queue
-jq 'sort_by(.priority) | .[0]' .beacon/event-queue.json
-
-# Remove it from queue after reading
-jq 'sort_by(.priority) | .[1:]' .beacon/event-queue.json > /tmp/eq.json && mv /tmp/eq.json .beacon/event-queue.json
+# Atomically pop the highest-priority event from the queue
+flock .beacon/event-queue.lock bash -c '
+  EVENT=$(jq "sort_by(.priority) | .[0]" .beacon/event-queue.json)
+  jq "sort_by(.priority) | .[1:]" .beacon/event-queue.json > .beacon/event-queue.tmp \
+    && mv .beacon/event-queue.tmp .beacon/event-queue.json
+  echo "$EVENT"
+'
 ```
+
+Process the printed event. Do NOT read the queue and then write it in two separate steps — always pop inside the flock block so no event is double-processed or lost.
 
 ### Event Reactions
 
@@ -376,6 +387,8 @@ bash hooks/update-state.sh set-blocked <issue-id>
 
 Haiku writes, Sonnet reads. Initialize as `[]` if missing.
 
+**Locking protocol (mandatory):** All reads-then-writes must be wrapped with `flock .beacon/event-queue.lock`. See the atomic write snippet in the Haiku Triage section above. Bare `>` redirection into the queue file is forbidden — it truncates the file during concurrent writes.
+
 ### GitHub Labels (Durable State)
 
 - `beacon:in-progress` — agent running
@@ -394,7 +407,26 @@ Haiku writes, Sonnet reads. Initialize as `[]` if missing.
 3. For alive panes: agent still running — do nothing
 4. For dead panes: check for `BEACON_RESULT.md` → if present, queue `verify`; if absent, queue re-dispatch
 5. Reconcile GitHub labels (source of truth for durable state)
-6. Re-initialize event queue: `echo '[]' > .beacon/event-queue.json`
+6. Reconcile event queue — **do NOT wipe it blindly**:
+   ```bash
+   # Check if queue is valid JSON
+   if jq empty .beacon/event-queue.json 2>/dev/null; then
+     # Queue is intact — keep existing events
+     QUEUE_VALID=true
+   else
+     # Corrupted — wipe and rebuild
+     echo '[]' > .beacon/event-queue.json
+     QUEUE_VALID=false
+   fi
+   ```
+   Then, for each issue in `running` state where `BEACON_RESULT.md` exists but no `verify` event is already queued, add a verify event using the atomic flock pattern:
+   ```bash
+   # For each such issue:
+   EVENT='{"type":"verify","issue":"<issue-key>","priority":2,"data":{"recovered":true}}'
+   flock .beacon/event-queue.lock \
+     jq --argjson evt "$EVENT" '. + [$evt]' .beacon/event-queue.json \
+     > .beacon/event-queue.tmp && mv .beacon/event-queue.tmp .beacon/event-queue.json
+   ```
 7. Restart 3 Monitor processes (Step 6)
 8. Resume from current phase — do NOT re-run UltraPlan
 
@@ -403,10 +435,11 @@ Haiku writes, Sonnet reads. Initialize as `[]` if missing.
 If you sense your context has been compacted (you cannot recall recent events, agents, or dispatch decisions), **immediately stop and recover before processing any events**:
 
 1. Run `cat .beacon/state.json` to reload full current state
-2. Run `cat .beacon/event-queue.json` to see all pending events
+2. Run `cat .beacon/event-queue.json` to see all pending events — **do NOT wipe the queue**; in-flight events must be preserved. Only wipe if `jq empty .beacon/event-queue.json` fails (corrupted JSON).
 3. Run `tmux list-panes -t beacon -F '#{pane_id} #{pane_title} #{pane_dead}'` to identify alive agents
-4. Restart the 3 Monitor processes (Step 6 of Startup Sequence) — they may have lost their watchers
-5. Resume from current state — **do not restart agents that are still running**, **do not re-run UltraPlan**
+4. For dead panes: check for `BEACON_RESULT.md`; if present and no `verify` event already queued, add one using the atomic flock write pattern (see Session Restart step 6 above).
+5. Restart the 3 Monitor processes (Step 6 of Startup Sequence) — they may have lost their watchers
+6. Resume from current state — **do not restart agents that are still running**, **do not re-run UltraPlan**
 
 Signs of compaction: you cannot name the current phase, you don't recall which agents are running, or you see Monitor events referring to issues you have no memory of dispatching.
 

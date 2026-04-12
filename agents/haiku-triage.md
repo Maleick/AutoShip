@@ -30,17 +30,25 @@ Read `.beacon/event-queue.json` (initialize as `[]` if missing), append your ent
 
 ### Event Type Mapping
 
-| Monitor event                    | Queue type     | Priority |
-| -------------------------------- | -------------- | -------- |
-| `[AGENT_STATUS] status=COMPLETE` | `verify`       | 2        |
-| `[AGENT_STATUS] status=BLOCKED`  | `blocked`      | 1        |
-| `[AGENT_STATUS] status=STUCK`    | `stuck`        | 1        |
-| `[PR_CI_PASS]`                   | `pr_pass`      | 2        |
-| `[PR_CI_FAIL]`                   | `pr_fail`      | 1        |
-| `[PR_CONFLICT]`                  | `pr_conflict`  | 1        |
-| `[PR_MERGED]`                    | `pr_merged`    | 2        |
-| `[ISSUE_NEW]`                    | `new_issue`    | 3        |
-| `[ISSUE_CLOSED]`                 | `closed_issue` | 2        |
+| Monitor event                    | Queue type      | Priority |
+| -------------------------------- | --------------- | -------- |
+| `[AGENT_STATUS] status=COMPLETE` | `verify`        | 2        |
+| `[AGENT_STATUS] status=BLOCKED`  | `blocked`       | 1        |
+| `[AGENT_STATUS] status=STUCK`    | `stuck`         | 1        |
+| `[AGENT_DONE_FALLBACK]`          | `verify`        | 2        |
+| `[AGENT_CRASH]`                  | `agent_crashed` | 1        |
+| `[PR_CI_PASS]`                   | `pr_pass`       | 2        |
+| `[PR_CI_FAIL]`                   | `pr_fail`       | 1        |
+| `[PR_CONFLICT]`                  | `pr_conflict`   | 1        |
+| `[PR_MERGED]`                    | `pr_merged`     | 2        |
+| `[ISSUE_NEW]`                    | `new_issue`     | 3        |
+| `[ISSUE_CLOSED]`                 | `closed_issue`  | 2        |
+
+**`[AGENT_DONE_FALLBACK]`** — pane exited without emitting a status word (COMPLETE/BLOCKED/STUCK). Attempt verification anyway; the reviewer will determine if the work is usable.
+
+**`[AGENT_CRASH]`** — urgent. The agent process died unexpectedly. Sonnet must check for stuck worktrees and decide whether to re-dispatch or block.
+
+> **Routing invariant:** All events from monitor bash scripts (`monitor-agents.sh`, `monitor-prs.sh`, `monitor-issues.sh`) route through Haiku triage before reaching the event queue. Bash scripts MUST NOT write directly to `.beacon/event-queue.json` — they emit structured lines to stdout only, and Haiku translates them into queue entries.
 
 ### Queue Entry Format
 

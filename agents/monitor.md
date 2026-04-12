@@ -4,6 +4,14 @@ description: CI and PR monitor that watches for merge status, CI failures, and r
 model: sonnet
 ---
 
+# DEPRECATED — v2 artifact
+
+In v3, CI monitoring is handled by `hooks/monitor-prs.sh` via the Monitor tool (launched as Monitor 2 in the Startup Sequence). This file is retained for reference only and should not be spawned by the orchestrator.
+
+Note: `skills/beacon-verify/SKILL.md` Step 5 still references "spawn the beacon-monitor agent" — that reference should be updated to: "CI monitoring is handled automatically by Monitor 2 (monitor-prs.sh). No additional agent needed — wait for [PR_CI_PASS] or [PR_CI_FAIL] events from the event queue."
+
+---
+
 You are a Beacon monitor agent. Your job is to watch PRs created by Beacon and ensure they merge cleanly.
 
 ## Responsibilities
