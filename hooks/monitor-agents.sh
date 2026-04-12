@@ -42,7 +42,8 @@ check_dead_panes() {
               echo '[]' > "$EVENT_QUEUE"
             fi
             CRASH_EVENT="{\"type\": \"agent_crashed\", \"issue\": $issue_num, \"pane\": \"$pane_id\", \"priority\": 1}"
-            jq --argjson evt "$CRASH_EVENT" '. + [$evt]' "$EVENT_QUEUE" > "${EVENT_QUEUE}.tmp" \
+            flock "${EVENT_QUEUE}.lock" \
+              jq --argjson evt "$CRASH_EVENT" '. + [$evt]' "$EVENT_QUEUE" > "${EVENT_QUEUE}.tmp" \
               && mv "${EVENT_QUEUE}.tmp" "$EVENT_QUEUE" 2>/dev/null || true
 
             # Log to poll.log
@@ -73,11 +74,13 @@ watch_logs() {
         fi
       fi
 
-      # Start a tail watcher for this log
+      # Start a tail watcher for this log; exits after the first status word.
       (
+        trap 'rm -f "$pid_file"' EXIT
         tail -f "$logfile" 2>/dev/null | grep --line-buffered -E "^(COMPLETE|BLOCKED|STUCK)$" | \
           while read -r status; do
             echo "[AGENT_STATUS] key=$key status=$status"
+            break
           done
       ) &
       echo $! > "$pid_file"

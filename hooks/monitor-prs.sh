@@ -9,6 +9,10 @@ BEACON_DIR=".beacon"
 STATE_FILE="$BEACON_DIR/state.json"
 SEEN_FILE="$BEACON_DIR/.pr-monitor-seen.json"
 
+# Temporary file for atomic seen-state updates — cleaned up on exit
+_SEEN_TMP=$(mktemp)
+trap 'rm -f "$_SEEN_TMP"' EXIT
+
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "Error: not inside a git repository" >&2
   exit 1
@@ -43,15 +47,15 @@ emit_if_changed() {
   seen=$(jq -r --arg k "$key" '.[$k] // empty' "$SEEN_FILE")
   if [[ -z "$seen" ]]; then
     echo "$event number=$pr_number"
-    jq --arg k "$key" --arg now "$(date -u +%s)" '.[$k] = $now' "$SEEN_FILE" > /tmp/beacon-seen.json && \
-      mv /tmp/beacon-seen.json "$SEEN_FILE"
+    jq --arg k "$key" --arg now "$(date -u +%s)" '.[$k] = $now' "$SEEN_FILE" > "$_SEEN_TMP" && \
+      mv "$_SEEN_TMP" "$SEEN_FILE"
   fi
 }
 
 reset_pr_seen() {
   local pr_number="$1"
   jq --arg n "$pr_number" 'del(.[$n + ":PR_CI_PASS"]) | del(.[$n + ":PR_CI_FAIL"])' \
-    "$SEEN_FILE" > /tmp/beacon-seen.json && mv /tmp/beacon-seen.json "$SEEN_FILE"
+    "$SEEN_FILE" > "$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
 }
 
 while true; do
@@ -59,18 +63,26 @@ while true; do
   gh pr list --label beacon --state open \
     --json number,mergeable,statusCheckRollup \
     --repo "$REPO_SLUG" 2>/dev/null | \
-    jq -r '.[] | "\(.number) \(.mergeable) \(.statusCheckRollup // [] | map(.conclusion) | join(","))"' | \
-    while read -r num mergeable checks; do
-      # CI status
-      if echo "$checks" | grep -qE "SUCCESS|TIMED_OUT|ACTION_REQUIRED"; then
-        if echo "$checks" | grep -qE "^(SUCCESS,|,SUCCESS,|,SUCCESS$|^SUCCESS$)"; then
+    jq -c '.[] | {number: .number, mergeable: .mergeable, checks: (.statusCheckRollup // [])}' | \
+    while IFS= read -r pr_json; do
+      num=$(jq -r '.number' <<< "$pr_json")
+      mergeable=$(jq -r '.mergeable' <<< "$pr_json")
+      checks_json=$(jq -c '.checks' <<< "$pr_json")
+
+      # CI pass: ALL checks must have conclusion == "SUCCESS" (and there must be at least one)
+      check_count=$(jq 'length' <<< "$checks_json")
+      if [[ "$check_count" -gt 0 ]]; then
+        all_pass=$(jq 'all(.conclusion == "SUCCESS")' <<< "$checks_json")
+        any_fail=$(jq 'any(.conclusion == ("FAILURE", "ERROR"))' <<< "$checks_json")
+        if [[ "$all_pass" == "true" ]]; then
           emit_if_changed "$num" "[PR_CI_PASS]"
         fi
+        if [[ "$any_fail" == "true" ]]; then
+          reset_pr_seen "$num"
+          emit_if_changed "$num" "[PR_CI_FAIL]"
+        fi
       fi
-      if echo "$checks" | grep -qE "FAILURE|ERROR"; then
-        reset_pr_seen "$num"
-        emit_if_changed "$num" "[PR_CI_FAIL]"
-      fi
+
       # Merge conflicts
       if [[ "$mergeable" == "CONFLICTING" ]]; then
         emit_if_changed "$num" "[PR_CONFLICT]"

@@ -148,7 +148,7 @@ if [[ -z "$CURRENT" ]]; then
 fi
 
 # Update state and timestamp
-TMP=$(mktemp)
+TMP=$(make_tmp)
 jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" \
   '.issues[$id].state = $state | .updated_at = $now' \
   "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"

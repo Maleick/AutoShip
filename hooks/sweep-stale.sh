@@ -38,9 +38,15 @@ fi
 
 # Terminal states that indicate a worktree can be cleaned up
 # merged: PR was merged, work is done
-# blocked: work was blocked and won't continue
-# approved: work was completed and approved
-TERMINAL_STATES="merged blocked approved"
+TERMINAL_STATES="merged"
+
+# Active pipeline states that must never be swept automatically
+# running: agent is executing
+# claimed: issue has been claimed and is about to start
+# verifying: reviewer is checking the work
+# approved: work passed review, waiting for merge
+# blocked: partial work/logs exist; operator must resolve manually
+PROTECTED_STATES="running claimed verifying approved blocked"
 
 # --- Error Recovery #3: Stale worktree detection ---
 # Also remove worktrees for issues that have no active tmux pane AND are not
@@ -86,8 +92,17 @@ for worktree_dir in "$WORKSPACES_DIR"/*/; do
     continue
   fi
 
-  # Also sweep orphaned worktrees: directory exists but issue is NOT running and pane is dead
-  if [[ "$ISSUE_STATE" != "running" ]]; then
+  # Also sweep orphaned worktrees: directory exists but issue is NOT in an active pipeline
+  # state and its pane is dead. Protected states are never swept automatically.
+  IS_PROTECTED=0
+  for pstate in $PROTECTED_STATES; do
+    if [[ "$ISSUE_STATE" == "$pstate" ]]; then
+      IS_PROTECTED=1
+      break
+    fi
+  done
+
+  if [[ $IS_PROTECTED -eq 0 ]]; then
     PANE_ID=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].pane_id // empty' "$STATE_FILE" 2>/dev/null) || PANE_ID=""
     if ! is_pane_active "$PANE_ID"; then
       echo "Orphaned worktree detected: $ISSUE_KEY (state=$ISSUE_STATE, no active pane)"

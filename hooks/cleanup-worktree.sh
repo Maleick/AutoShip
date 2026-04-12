@@ -67,10 +67,10 @@ fi
 
 # Remove beacon labels from the GitHub issue
 if [[ -n "$REPO_SLUG" ]] && command -v gh >/dev/null 2>&1; then
-  echo "Removing beacon labels from issue $ISSUE_NUM"
-  
-  # Remove each beacon label
-  for label in "beacon:in-progress" "beacon:blocked" "beacon:paused" "beacon:done"; do
+  echo "Removing transitional beacon labels from issue $ISSUE_NUM"
+
+  # Remove only transitional labels — beacon:done is kept as permanent audit trail
+  for label in "beacon:in-progress" "beacon:blocked" "beacon:paused"; do
     gh issue edit "$ISSUE_NUM" --remove-label "$label" --repo "$REPO_SLUG" 2>/dev/null || true
   done
   
