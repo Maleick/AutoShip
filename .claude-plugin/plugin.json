@@ -1,18 +1,8 @@
 {
   "name": "beacon",
-  "version": "0.1.0",
-  "description": "Autonomous multi-agent orchestration plugin for Claude Code. Routes GitHub issues to the best available AI CLI tool, verifies results, and auto-merges approved work.",
+  "description": "Autonomous multi-agent orchestration for Claude Code. Routes GitHub issues to AI agents, verifies results, and merges PRs.",
   "author": {
     "name": "Maleick",
-    "email": "maleick@users.noreply.github.com"
-  },
-  "keywords": [
-    "orchestration",
-    "multi-agent",
-    "github",
-    "automation",
-    "codex",
-    "gemini"
-  ],
-  "license": "MIT"
+    "url": "https://github.com/Maleick"
+  }
 }

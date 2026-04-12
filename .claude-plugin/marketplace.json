@@ -1,11 +1,17 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "beacon",
+  "description": "Autonomous multi-agent orchestration plugin for Claude Code. Routes GitHub issues to AI agents, verifies results, and merges PRs.",
+  "owner": {
+    "name": "Maleick",
+    "url": "https://github.com/Maleick"
+  },
   "plugins": [
     {
       "name": "beacon",
-      "source": ".",
-      "description": "Autonomous multi-agent orchestration — routes GitHub issues to Claude, Codex, and Gemini agents",
-      "keywords": ["orchestration", "multi-agent", "github", "automation"]
+      "description": "Autonomous multi-agent orchestrator. Routes GitHub issues to AI agents (Codex/Gemini/Claude), verifies results, and opens PRs.",
+      "source": "./",
+      "category": "productivity"
     }
   ]
 }
