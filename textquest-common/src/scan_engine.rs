@@ -100,11 +100,16 @@ pub fn scan_module(
         let resolved = match entry.resolve {
             ResolveMode::Direct => {
                 // The match offset is the function RVA.
-                preferred_base + offset as u64
+                Some(preferred_base + offset as u64)
             }
             ResolveMode::RipRelative { disp_offset } => {
                 resolve_rip_relative(data, offset, disp_offset, module_base, preferred_base)
             }
+        };
+
+        let Some(resolved) = resolved else {
+            report.entries_failed.push(entry.name.to_string());
+            continue;
         };
 
         // Validate against compiled constant.
@@ -148,34 +153,54 @@ pub fn scan_module(
 /// target_addr      = next_ip + sign_extend(disp32)
 /// preferred_addr   = preferred_base + (target_addr - module_base)
 /// ```
+///
+/// Returns `None` if the displacement cannot be read, the computed target
+/// overflows, or the target falls outside the module image.
 fn resolve_rip_relative(
     data: &[u8],
     match_off: usize,
     disp_offset: usize,
     module_base: u64,
     preferred_base: u64,
-) -> u64 {
+) -> Option<u64> {
     let disp_pos = match_off + disp_offset;
     if disp_pos + 4 > data.len() {
-        // Can't read displacement — return 0 to signal failure.
-        return 0;
+        return None;
     }
 
     let disp_bytes: [u8; 4] = data[disp_pos..disp_pos + 4].try_into().unwrap();
     let displacement = i32::from_le_bytes(disp_bytes) as i64;
 
     // next_ip is the address of the byte after the displacement field.
-    let next_ip = module_base as i64 + match_off as i64 + disp_offset as i64 + 4;
-    let target = (next_ip + displacement) as u64;
+    let next_ip = module_base as i128 + match_off as i128 + disp_offset as i128 + 4;
+    let target = next_ip + displacement as i128;
+
+    // Validate: target must fit in u64 and lie within the module image.
+    if target < 0 || target > u64::MAX as i128 {
+        return None;
+    }
+    let target = target as u64;
+
+    let module_end = module_base.checked_add(data.len() as u64)?;
+    if target < module_base || target >= module_end {
+        return None;
+    }
 
     // Convert from runtime address to preferred-base address.
-    preferred_base + (target - module_base)
+    let offset_within_module = target.checked_sub(module_base)?;
+    preferred_base.checked_add(offset_within_module)
 }
 
 /// Merge scan results into an `OffsetDatabase`, overwriting matching keys
 /// in the `globals` and `functions` maps.
+///
+/// Only results with a non-zero resolved address are applied — zero indicates
+/// a resolution failure and should not overwrite compiled/JSON offsets.
 pub fn apply_to_offset_db(report: &ScanReport, db: &mut OffsetDatabase) {
     for result in &report.results {
+        if result.resolved_preferred == 0 {
+            continue;
+        }
         match result.category {
             OffsetCategory::Function => {
                 db.functions
@@ -543,5 +568,79 @@ mod tests {
 
         apply_to_offset_db(&report, &mut db);
         assert_eq!(db, db_before);
+    }
+
+    #[test]
+    fn rip_relative_target_outside_module_records_failure() {
+        // Displacement resolves beyond the 256-byte module buffer.
+        let mut data = vec![0x00u8; 256];
+        data[0x80] = 0x48;
+        data[0x81] = 0x8B;
+        data[0x82] = 0x05;
+        // disp32 = 0x100 → next_ip (module_base+0x87) + 0x100 = module_base+0x187
+        // which is beyond the 256-byte module.
+        data[0x83] = 0x00;
+        data[0x84] = 0x01;
+        data[0x85] = 0x00;
+        data[0x86] = 0x00;
+
+        let entries = [ScanEntry {
+            name: "ripTargetOob",
+            category: OffsetCategory::Global,
+            module: ScanModule::EqGame,
+            pattern: "48 8B 05 ?? ?? ?? ??",
+            resolve: ResolveMode::RipRelative { disp_offset: 3 },
+            expected_preferred: None,
+        }];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_scanned, 1);
+        assert_eq!(report.entries_found, 0);
+        assert!(report.results.is_empty());
+        assert_eq!(report.entries_failed, vec!["ripTargetOob"]);
+    }
+
+    #[test]
+    fn rip_relative_target_before_module_records_failure() {
+        // Negative displacement large enough to resolve before module_base.
+        let mut data = vec![0x00u8; 256];
+        data[0x10] = 0x48;
+        data[0x11] = 0x8B;
+        data[0x12] = 0x05;
+        // disp32 = -0x1000 (0xFFFFF000) → next_ip (module_base+0x17) - 0x1000
+        // = module_base - 0xFE9, which is before module_base.
+        data[0x13] = 0x00;
+        data[0x14] = 0xF0;
+        data[0x15] = 0xFF;
+        data[0x16] = 0xFF;
+
+        let entries = [ScanEntry {
+            name: "ripTargetBeforeBase",
+            category: OffsetCategory::Global,
+            module: ScanModule::EqGame,
+            pattern: "48 8B 05 ?? ?? ?? ??",
+            resolve: ResolveMode::RipRelative { disp_offset: 3 },
+            expected_preferred: None,
+        }];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_scanned, 1);
+        assert_eq!(report.entries_found, 0);
+        assert!(report.results.is_empty());
+        assert_eq!(report.entries_failed, vec!["ripTargetBeforeBase"]);
     }
 }

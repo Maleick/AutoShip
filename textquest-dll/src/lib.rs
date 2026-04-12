@@ -132,7 +132,7 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     // 2.1. Auto-detect offsets via pattern scanning (opt-in shadow mode).
     // Set TEXTQUEST_SCAN_OFFSETS=1 to enable. Results are logged and validated
     // against compiled constants but NOT used for control flow yet. See #746.
-    if std::env::var_os("TEXTQUEST_SCAN_OFFSETS").is_some() {
+    if std::env::var("TEXTQUEST_SCAN_OFFSETS").as_deref() == Ok("1") {
         scan_offsets(eq_base);
     }
 
@@ -367,7 +367,7 @@ fn get_module_size(base_addr: u64) -> usize {
     #[cfg(not(windows))]
     {
         let _ = base_addr;
-        // Stub for macOS — return a reasonable size for testing.
+        // Stub for non-Windows builds — return 0 so module scanning is disabled.
         0
     }
 }

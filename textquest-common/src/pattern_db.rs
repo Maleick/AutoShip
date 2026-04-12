@@ -216,12 +216,15 @@ mod tests {
     }
 
     #[test]
-    fn all_expected_preferred_above_preferred_base() {
+    fn eqgame_expected_preferred_above_preferred_base() {
         for entry in SCAN_ENTRIES {
+            if entry.module != ScanModule::EqGame {
+                continue;
+            }
             if let Some(expected) = entry.expected_preferred {
                 assert!(
                     expected >= crate::offsets::EQ_PREFERRED_BASE,
-                    "{}: expected_preferred {:#x} is below EQ_PREFERRED_BASE",
+                    "{}: EqGame expected_preferred {:#x} is below EQ_PREFERRED_BASE",
                     entry.name,
                     expected
                 );
