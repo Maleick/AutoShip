@@ -288,6 +288,16 @@ fn run_loop(
             tick_soul_engine(app);
             last_soul_tick = Instant::now();
         }
+
+        // Consume the pending_memory_poll flag set by :addr command.
+        // When ReadMemory IPC is available, this is where the live poll is triggered.
+        if app.hex_state.pending_memory_poll {
+            app.hex_state.pending_memory_poll = false;
+            tracing::debug!(
+                address = app.hex_state.hex_address,
+                "pending_memory_poll consumed — ReadMemory poll would fire here"
+            );
+        }
     }
 
     Ok(())

@@ -2562,6 +2562,19 @@ impl App {
             return;
         }
 
+        // :addr <Tab> → cycle known EQ offset hex addresses from EQ internals
+        if let Some(rest) = prefix.strip_prefix("addr ") {
+            let offset_candidates: Vec<String> = self
+                .eq_internals_state
+                .all_entries
+                .iter()
+                .filter(|e| e.value > 0)
+                .map(|e| format!("0x{:X}", e.value))
+                .collect();
+            self.complete_with_candidates("addr ", rest, &offset_candidates);
+            return;
+        }
+
         // Common slash commands shared by :all and :G1-G6 completions
         let slash_cmds: Vec<String> = ["/sit", "/stand", "/camp", "/follow", "/assist", "/disband"]
             .iter()
@@ -4541,6 +4554,33 @@ impl App {
                 self.toggle_privacy();
                 let state = if self.privacy_mode { "ON" } else { "OFF" };
                 self.set_feedback(ToastLevel::Success, format!("Privacy mode: {state}"), true);
+            }
+            "addr" => {
+                if rest.is_empty() {
+                    self.usage_feedback("addr", "Usage: addr <hex_address>  (e.g. addr 0x00A3B210)");
+                } else {
+                    let hex_str = rest.trim().trim_start_matches("0x").trim_start_matches("0X");
+                    match usize::from_str_radix(hex_str, 16) {
+                        Ok(addr) => {
+                            self.hex_state.hex_address = addr;
+                            self.hex_state.hex_label = format!("Manual: 0x{addr:X}");
+                            self.hex_state.pending_memory_poll = true;
+                            self.set_feedback(
+                                ToastLevel::Info,
+                                format!("Debug address set to 0x{addr:X}"),
+                                false,
+                            );
+                            self.set_active_screen(ActiveScreen::Debug);
+                        }
+                        Err(_) => {
+                            self.set_feedback(
+                                ToastLevel::Error,
+                                format!("Invalid hex address: '{rest}' — expected e.g. 0x00A3B210"),
+                                true,
+                            );
+                        }
+                    }
+                }
             }
             _ => {
                 // Try to parse first token as PID
@@ -7522,5 +7562,67 @@ mod tests {
         // Go back to overview — preserved
         app.set_active_screen(ActiveScreen::Overview);
         assert_eq!(app.current_layout(), LayoutPreset::Alternate);
+    }
+
+    // ── :addr command ─────────────────────────────────────────────────────
+
+    #[test]
+    fn addr_command_sets_hex_address_and_pending_poll() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr 0x00A3B210");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.hex_state.hex_address, 0x00A3B210);
+        assert!(app.hex_state.pending_memory_poll);
+        assert!(app.status_message.contains("A3B210"));
+    }
+
+    #[test]
+    fn addr_command_without_0x_prefix_sets_hex_address() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr 00A3B210");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.hex_state.hex_address, 0x00A3B210);
+        assert!(app.hex_state.pending_memory_poll);
+    }
+
+    #[test]
+    fn addr_command_invalid_hex_shows_error() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr notahex");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.hex_state.hex_address, 0);
+        assert!(!app.hex_state.pending_memory_poll);
+        assert!(
+            app.status_message.contains("Invalid")
+                || app.status_message.contains("invalid")
+                || app.toast.is_some()
+        );
+    }
+
+    #[test]
+    fn addr_command_no_args_shows_usage() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr");
+        app.execute_command(&mut orchestrator);
+        assert!(!app.status_message.is_empty());
+    }
+
+    #[test]
+    fn addr_command_navigates_to_debug_screen() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr 0x140000000");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.active_screen, ActiveScreen::Debug);
+    }
+
+    #[test]
+    fn hex_dump_state_pending_memory_poll_starts_false() {
+        let state = crate::tui::state::HexDumpState::new();
+        assert!(!state.pending_memory_poll);
     }
 }

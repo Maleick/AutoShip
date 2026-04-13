@@ -138,6 +138,8 @@ pub struct HexDumpState {
     pub show_annotations: bool,
     /// Known field annotations for the current hex data context.
     pub annotations: Vec<FieldAnnotation>,
+    /// When set, triggers an immediate ReadMemory poll in the run loop.
+    pub pending_memory_poll: bool,
 }
 
 impl HexDumpState {
@@ -150,6 +152,7 @@ impl HexDumpState {
             hex_label: String::from("No address selected"),
             show_annotations: false,
             annotations: Vec::new(),
+            pending_memory_poll: false,
         }
     }
 
