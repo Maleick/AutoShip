@@ -27,6 +27,8 @@ pub mod offset_db;
 pub mod bindings;
 /// EQ memory addresses and struct field offsets (preferred-base, rebased at runtime).
 pub mod offsets;
+/// Function signature patterns for module-aware offset discovery.
+pub mod pattern_db;
 /// Packet capture types — opcode filtering, capture sessions, and disk persistence.
 pub mod packet;
 /// Named-pattern registry wrapping the scanner for batch offset resolution.

@@ -363,6 +363,21 @@ pub mod eqmain {
     /// Source: eqmain.h `EQMain__pinstCLoginViewManager_x`
     pub const LOGIN_VIEW_MANAGER: u64 = 0x0001_8001_B0E0;
 
+    /// CharacterSelectWnd::EnterWorld helper (login-phase wrapper)
+    pub const CHAR_SELECT_ENTER_WORLD: u64 = 0x0001_8001_0200;
+
+    /// ServerSelectWnd::OnServerSelected (login server selection handler)
+    pub const SERVER_SELECT: u64 = 0x0001_8001_0210;
+
+    /// SplashScreen::Handle — close/hide splash overlay
+    pub const HANDLE_SPLASH: u64 = 0x0001_8001_0220;
+
+    /// CharacterListWnd::SelectCharacter login-phase helper
+    pub const CHAR_SELECT_SELECT_CHARACTER: u64 = 0x0001_8001_0230;
+
+    /// CharacterSelectWnd::CharacterList::set_focus helper
+    pub const CHAR_SELECT_SET_FOCUS: u64 = 0x0001_8001_0240;
+
     // ─── Login pointer addresses (preferred base) ───
 
     /// Pointer to `LoginClient` instance (`LoginClient`*)
@@ -1327,6 +1342,11 @@ mod tests {
             eqmain::LOGIN_VIEW_MANAGER,
             eqmain::PINST_LOGIN_CLIENT,
             eqmain::PINST_LOGIN_CONTROLLER,
+            eqmain::EQMAIN_CHAR_SELECT_ENTER_WORLD,
+            eqmain::EQMAIN_SERVER_SELECT,
+            eqmain::EQMAIN_HANDLE_SPLASH,
+            eqmain::EQMAIN_CHAR_SELECT_SELECT_CHARACTER,
+            eqmain::EQMAIN_CHAR_SELECT_SET_FOCUS,
         ];
         for addr in &addrs {
             assert!(
@@ -1472,6 +1492,53 @@ mod tests {
         // SELECT_CHARACTER and CHAR_LIST_SELECT_CHAR should be the same
         assert_eq!(SELECT_CHARACTER, CHAR_LIST_SELECT_CHAR);
         assert_eq!(ENTER_WORLD, CHAR_LIST_ENTER_WORLD);
+    }
+
+    #[test]
+    fn eqgraphics_and_eqmain_offsets_are_unique() {
+        let new_offsets = [
+            EQGRAPHICS_REALRENDER_WORLD,
+            EQGRAPHICS_DEVICE_RESET,
+            EQGRAPHICS_INIT_RENDER,
+            EQGRAPHICS_RENDER_FRAME,
+            EQGRAPHICS_DX_PRESENT,
+            eqmain::EQMAIN_CHAR_SELECT_ENTER_WORLD,
+            eqmain::EQMAIN_SERVER_SELECT,
+            eqmain::EQMAIN_HANDLE_SPLASH,
+            eqmain::EQMAIN_CHAR_SELECT_SELECT_CHARACTER,
+            eqmain::EQMAIN_CHAR_SELECT_SET_FOCUS,
+        ];
+
+        let existing_offsets = [
+            CAST_SPELL,
+            DO_COMBAT_ABILITY,
+            USE_SKILL,
+            CAN_USE_ITEM,
+            DO_ATTACK,
+            EXECUTE_CMD,
+            INTERPRET_CMD,
+            RIGHT_CLICKED_ON_PLAYER,
+            REAL_RENDER_WORLD,
+            CLICKED_PLAYER,
+            ISSUE_PET_COMMAND,
+            CHAR_LIST_ENTER_WORLD,
+            CHAR_LIST_SELECT_CHAR,
+            eqmain::SIDL_MANAGER,
+            eqmain::LOGIN_SERVER_API,
+            eqmain::JOIN_SERVER,
+        ];
+
+        let mut seen = std::collections::HashSet::new();
+        for addr in new_offsets.iter().chain(existing_offsets.iter()).copied() {
+            if addr == 0 {
+                continue;
+            }
+            assert!(
+                seen.insert(addr),
+                "duplicate offset detected for 0x{:X}",
+                addr
+            );
+        }
     }
 
     #[test]
