@@ -57,6 +57,11 @@ class TestParseEvent(unittest.TestCase):
     def test_returns_none_for_bad_json(self):
         self.assertIsNone(parse_event("{not valid json}"))
 
+    def test_returns_none_for_non_numeric_pid(self):
+        self.assertIsNone(
+            parse_event('{"EventType":"Foo","ProcessName":"eqgame.exe","PID":"not-a-number"}')
+        )
+
     def test_defaults_missing_fields(self):
         ev = parse_event('{"EventType":"Foo"}')
         self.assertIsNotNone(ev)
@@ -64,6 +69,11 @@ class TestParseEvent(unittest.TestCase):
         self.assertEqual(ev.process_name, "")
         self.assertEqual(ev.pid, 0)
         self.assertEqual(ev.caller, "")
+
+    def test_normalizes_null_process_name(self):
+        ev = parse_event('{"EventType":"Foo","ProcessName":null,"PID":123}')
+        self.assertIsNotNone(ev)
+        self.assertEqual(ev.process_name, "")
 
     def test_stores_raw(self):
         line = _make_line()

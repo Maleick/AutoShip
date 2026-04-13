@@ -78,12 +78,25 @@ def parse_event(line: str) -> Optional[EtwEvent]:
     except json.JSONDecodeError:
         return None
 
+    if not isinstance(data, dict):
+        return None
+
+    raw_pid = data.get("PID", 0)
+    if isinstance(raw_pid, bool):
+        return None
+    if isinstance(raw_pid, int):
+        pid = raw_pid
+    elif isinstance(raw_pid, str) and raw_pid.isdigit():
+        pid = int(raw_pid)
+    else:
+        return None
+
     return EtwEvent(
-        event_type=data.get("EventType", "Unknown"),
-        process_name=data.get("ProcessName", ""),
-        pid=int(data.get("PID", 0)),
-        timestamp=data.get("Timestamp", ""),
-        caller=data.get("Caller", ""),
+        event_type=str(data.get("EventType") or "Unknown"),
+        process_name=str(data.get("ProcessName") or ""),
+        pid=pid,
+        timestamp=str(data.get("Timestamp") or ""),
+        caller=str(data.get("Caller") or ""),
         raw=data,
     )
 
