@@ -18,6 +18,7 @@ pub mod movement;
 pub mod slot_manager;
 pub mod packet_hook;
 pub mod render;
+pub mod rotation;
 pub mod targeting;
 
 use std::sync::{Mutex, OnceLock};

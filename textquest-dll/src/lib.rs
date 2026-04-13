@@ -38,6 +38,8 @@ mod stealth;
 mod syscall;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(windows)]
+use std::sync::OnceLock;
 
 /// Base address of eqgame.exe in memory. Set during initialization.
 /// All EQ offsets are added to this value to compute runtime addresses.
@@ -52,6 +54,10 @@ pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 /// the init thread exits immediately.
 #[cfg(windows)]
 static ALREADY_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+static HOOK_ROTATION_MANAGER: OnceLock<std::sync::Mutex<hooks::rotation::HookRotationManager>> =
+    OnceLock::new();
 
 #[cfg(windows)]
 mod dll_main {
@@ -606,6 +612,7 @@ fn shutdown() {
 fn graceful_shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
     stealth::disable();
+    stop_hook_rotation();
     hooks::remove_all();
     ipc::stop();
     tracing::info!("TextQuest DLL graceful shutdown complete");

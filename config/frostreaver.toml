@@ -276,3 +276,7 @@ role = "dps_port"
 name = "TBD"
 class = "BRD"
 role = "songs"
+
+# Hook rotation (anti-detection: periodically unhooks/rehooks to evade memory scanners)
+hook_rotation_enabled = false
+hook_rotation_interval_ms = 30000

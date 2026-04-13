@@ -192,6 +192,14 @@ pub struct AppConfig {
     #[serde(default)]
     pub spawn_watch: SpawnWatchConfig,
 
+    /// Enable periodic hook unhook/rehook rotation to evade point-in-time scans.
+    #[serde(default)]
+    pub hook_rotation_enabled: bool,
+
+    /// Interval (ms) between hook rotation cycles.
+    #[serde(default = "default_hook_rotation_interval_ms")]
+    pub hook_rotation_interval_ms: u64,
+
     /// Optional decentralized UDP multicast peer discovery.
     #[serde(default)]
     pub discovery: PeerDiscoveryConfig,
@@ -469,6 +477,8 @@ impl AppConfig {
             discord: DiscordConfig::default(),
             orchestrator: OrchestratorConfig::default(),
             spawn_watch: SpawnWatchConfig::default(),
+            hook_rotation_enabled: false,
+            hook_rotation_interval_ms: default_hook_rotation_interval_ms(),
             discovery: PeerDiscoveryConfig::default(),
         }
     }
@@ -600,6 +610,19 @@ character = "Foo"
         assert_eq!(cfg.max_spawns, 2048);
         assert!(cfg.group.is_empty());
         assert!(!cfg.discovery.multicast_enabled);
+        assert!(!cfg.hook_rotation_enabled);
+        assert_eq!(cfg.hook_rotation_interval_ms, 30_000);
+    }
+
+    #[test]
+    fn app_config_hook_rotation_fields_parse() {
+        let toml_str = r#"
+            hook_rotation_enabled = true
+            hook_rotation_interval_ms = 7500
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert!(cfg.hook_rotation_enabled);
+        assert_eq!(cfg.hook_rotation_interval_ms, 7500);
     }
 
     #[test]
