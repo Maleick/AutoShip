@@ -474,17 +474,11 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     hooks::game_loop::install(install_addr)?;
 
     // Install render strobe hook -- background clients skip 3D rendering.
-    if let Some(render_addr) =
-        textquest_common::offsets::rebase(textquest_common::offsets::REAL_RENDER_WORLD, eq_base)
-    {
-        if let Err(e) = hooks::render::install(render_addr) {
-            tracing::warn!(
-                "Render hook failed (continuing without render strobe): {}",
-                e
-            );
-        }
-    } else {
-        tracing::warn!("Could not rebase REAL_RENDER_WORLD -- render strobe disabled");
+    if let Err(e) = hooks::render::install(eq_base) {
+        tracing::warn!(
+            "Render hook failed (continuing without render strobe): {}",
+            e
+        );
     }
 
     // Install chat message hook — intercepts dsp_chat to capture all in-game text.

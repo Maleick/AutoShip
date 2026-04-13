@@ -60,6 +60,9 @@ pub fn mode() -> RenderMode {
 #[cfg(windows)]
 mod inner {
     use retour::static_detour;
+    use textquest_common::eq_fn;
+
+    eq_fn!(real_render_world(this: *mut core::ffi::c_void) -> () = textquest_common::offsets::REAL_RENDER_WORLD);
 
     // CDisplay::RealRender_World signature.
     // MQ2: void CDisplay::RealRender_World()
@@ -85,19 +88,20 @@ mod inner {
     }
 
     /// Install the render hook.
-    pub fn install(render_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
-        // SAFETY: render_addr was rebased from REAL_RENDER_WORLD offset against
+    pub fn install(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
+        let target_addr = real_render_world.addr(eq_base);
+        // SAFETY: target_addr was resolved from REAL_RENDER_WORLD offset against
         // the live eqgame.exe base address. The transmute converts it to a function
         // pointer matching CDisplay::RealRender_World's calling convention.
         // retour overwrites the function prologue with a trampoline. If the offset
         // is wrong, EQ will crash on the next render call.
         unsafe {
-            let target: RenderFn = std::mem::transmute(render_addr);
+            let target: RenderFn = std::mem::transmute(target_addr);
             RenderHook.initialize(target, render_detour)?;
             RenderHook.enable()?;
         }
         tracing::info!(
-            addr = format!("{:#x}", render_addr),
+            addr = format!("{:#x}", target_addr),
             "Render strobe hook installed"
         );
         Ok(())
@@ -119,7 +123,7 @@ mod inner {
 #[cfg(not(windows))]
 mod inner {
     /// Stub -- hooks are only functional on Windows.
-    pub fn install(_render_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn install(_eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Render strobe hook not available on this platform (stub)");
         Ok(())
     }

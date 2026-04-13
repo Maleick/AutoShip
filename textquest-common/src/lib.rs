@@ -4,6 +4,9 @@
 //! and common structures used by both the external orchestrator (`textquest`) and the
 //! injected DLL (`textquest-dll`).
 
+#[doc(hidden)]
+pub use paste;
+
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
@@ -18,6 +21,8 @@ pub mod login;
 pub mod nav;
 /// Hot-updatable offset database backed by JSON.
 pub mod offset_db;
+/// Typed, runtime-rebased function bindings.
+pub mod bindings;
 /// EQ memory addresses and struct field offsets (preferred-base, rebased at runtime).
 pub mod offsets;
 /// Packet capture types — opcode filtering, capture sessions, and disk persistence.
