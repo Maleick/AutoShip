@@ -1,0 +1,10 @@
+P -580.0, 0.0, 0.0, 255, 0, 0, 3, to_Greater_Faydark
+P 0.0, 0.0, 0.0, 255, 100, 0, 2, Ambassador_DVinn_(Throne)
+P 0.0, -550.0, -50.0, 255, 0, 0, 2, Throne_Room_Lower
+P -250.0, -250.0, 0.0, 255, 100, 0, 2, Orc_Barracks
+P 250.0, 250.0, 0.0, 255, 100, 0, 2, Orc_Barracks
+P 0.0, 600.0, 0.0, 128, 128, 128, 2, Bridge_Area
+P 400.0, -600.0, 0.0, 128, 128, 128, 2, Guard_Post
+P 0.0, -550.0, -50.0, 240, 127, 0, 2, Ambassador_DVinn_(Raid)
+P -300.0, 600.0, 0.0, 127, 64, 0, 2, Crushbone_Guard_(Hunter)
+P 0.0, 0.0, -50.0, 127, 64, 0, 2, Emperor_Crush_(Hunter)

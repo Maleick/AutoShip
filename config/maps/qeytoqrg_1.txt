@@ -1,0 +1,9 @@
+P -2580.0, 0.0, 0.0, 255, 0, 0, 3, to_West_Karana
+P 2580.0, 0.0, 0.0, 255, 0, 0, 3, to_West_Commonlands
+P -1000.0, -400.0, 0.0, 255, 0, 0, 3, to_Blackburrow
+P 0.0, -780.0, 0.0, 255, 0, 0, 3, to_Qeynos_Aqueducts
+P 0.0, 780.0, 0.0, 255, 0, 0, 3, to_South_Qeynos
+P 1000.0, 400.0, 0.0, 0, 128, 0, 2, Guard_Tower
+P 0.0, 0.0, 0.0, 0, 128, 0, 2, Road_Crossroads
+P 500.0, -200.0, 0.0, 128, 128, 128, 2, Merchant_(Weapons)
+P -500.0, 200.0, 0.0, 128, 128, 128, 2, Merchant_(Food)

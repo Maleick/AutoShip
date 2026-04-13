@@ -1,0 +1,11 @@
+P -3980.0, 0.0, 0.0, 255, 0, 0, 3, to_West_Commonlands
+P 3980.0, 0.0, 0.0, 255, 0, 0, 3, to_Lake_Rathe
+P 0.0, 1980.0, 0.0, 255, 0, 0, 3, to_Highpass_Hold_(path)
+P 0.0, -1980.0, 0.0, 255, 0, 0, 3, to_West_Karana_(path)
+P -400.0, -400.0, 0.0, 0, 128, 0, 2, Druid_Ring
+P 1300.0, 800.0, 0.0, 0, 128, 0, 2, Guard_Post
+P 0.0, 0.0, 0.0, 0, 128, 0, 2, Forest_Road
+P -2000.0, -1000.0, 0.0, 100, 50, 50, 2, Undead_Area_(Night)
+P 2000.0, 1000.0, 0.0, 100, 50, 50, 2, Undead_Area_(Night)
+P -400.0, -400.0, 0.0, 240, 127, 0, 2, Kirak_Vil_(Rare)
+P 2000.0, -1200.0, 0.0, 127, 64, 0, 2, Bloodthirsty_Ghoul_(Hunter)
