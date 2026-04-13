@@ -4,18 +4,27 @@ on:
   pull_request:
     types: [closed]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run cleanup in dry-run mode (no deletions)'
+        required: false
+        default: 'false'
 
 permissions:
   contents: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   delete-merged-branches:
     name: Delete merged feature branches
     if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, Linux, X64, textquest]
+    outputs:
+      deleted_count: ${{ steps.cleanup.outputs.deleted_count }}
+      skipped_count: ${{ steps.cleanup.outputs.skipped_count }}
     steps:
       - name: Delete merged branch
+        id: cleanup
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
@@ -23,17 +32,18 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const ref = context.payload.pull_request.head.ref;
+            const prNumber = context.payload.pull_request.number;
 
             // Skip protected branches and default branch
             const skipBranches = ['master', 'main', 'develop', 'development'];
             if (skipBranches.includes(ref)) {
-              core.info(`Skipping protected branch: ${ref}`);
+              core.info(`⊘ Skipped protected branch: ${ref}`);
               return;
             }
 
             // Skip non-feature branches (releases, hotfixes, etc.)
             if (!ref.startsWith('claude/') && !ref.startsWith('codex/') && !ref.startsWith('feature/')) {
-              core.info(`Skipping non-feature branch: ${ref}`);
+              core.info(`⊘ Skipped non-feature branch: ${ref}`);
               return;
             }
 
@@ -44,17 +54,32 @@ jobs:
                 ref: `heads/${ref}`
               });
               core.info(`✓ Deleted branch: ${ref}`);
+
+              // Add comment to PR
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: `🧹 Branch cleanup: Deleted \`${ref}\` after merge.`
+              });
             } catch (error) {
-              core.warning(`Failed to delete ${ref}: ${error.message}`);
+              if (error.status === 404) {
+                core.info(`⊘ Branch already deleted: ${ref}`);
+              } else {
+                core.error(`✗ Failed to delete ${ref}: ${error.message}`);
+                throw error;
+              }
             }
 
       - name: Cleanup all stale merged branches
+        id: stale-cleanup
         if: github.event_name == 'workflow_dispatch'
         uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const dryRun = "${{ github.event.inputs.dry_run }}" === 'true';
 
             // Get all branches
             const branches = await github.paginate(github.rest.repos.listBranches, {
@@ -66,6 +91,8 @@ jobs:
             const skipBranches = ['master', 'main', 'develop', 'development'];
             let deleted = 0;
             let skipped = 0;
+            let failed = 0;
+            const deleteLog = [];
 
             for (const branch of branches) {
               const name = branch.name;
@@ -88,19 +115,41 @@ jobs:
                   head: name
                 });
 
-                // If status is identical (merged), delete it
+                // If status is identical or no commits ahead (merged), delete it
                 if (compare.data.status === 'identical' || compare.data.ahead_by === 0) {
-                  await github.rest.git.deleteRef({
-                    owner,
-                    repo,
-                    ref: `heads/${name}`
-                  });
-                  deleted++;
-                  core.info(`✓ Deleted merged branch: ${name}`);
+                  if (dryRun) {
+                    core.info(`[DRY-RUN] Would delete merged branch: ${name}`);
+                    deleteLog.push(`${name} (merged)`);
+                  } else {
+                    try {
+                      await github.rest.git.deleteRef({
+                        owner,
+                        repo,
+                        ref: `heads/${name}`
+                      });
+                      deleted++;
+                      core.info(`✓ Deleted merged branch: ${name}`);
+                      deleteLog.push(`${name} (deleted)`);
+                    } catch (deleteError) {
+                      if (deleteError.status === 404) {
+                        core.debug(`Branch already deleted: ${name}`);
+                      } else {
+                        core.warning(`Failed to delete ${name}: ${deleteError.message}`);
+                        failed++;
+                        deleteLog.push(`${name} (failed: ${deleteError.message})`);
+                      }
+                    }
+                  }
+                } else {
+                  skipped++;
                 }
-              } catch (error) {
-                core.debug(`Could not check ${name}: ${error.message}`);
+              } catch (compareError) {
+                core.debug(`Could not check ${name}: ${compareError.message}`);
+                failed++;
               }
             }
 
-            core.notice(`Cleanup complete: ${deleted} deleted, ${skipped} skipped, ${branches.length - deleted - skipped} kept active`);
+            const summary = `Cleanup ${dryRun ? '(DRY-RUN)' : ''}: ${deleted} deleted, ${skipped} skipped, ${failed} failed`;
+            core.notice(summary);
+            core.setOutput('deleted_count', deleted.toString());
+            core.setOutput('skipped_count', skipped.toString());
