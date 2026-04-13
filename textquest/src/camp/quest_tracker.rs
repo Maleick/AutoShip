@@ -76,8 +76,6 @@ impl QuestTracker {
         if let Some(existing_quest) = self.quests.iter_mut().find(|q| q.id == quest.id) {
             *existing_quest = quest;
         } else {
-    pub fn add_quest(&mut self, quest: Quest) {
-        if quest.id != 0xFFFF && !self.quests.iter().any(|q| q.id == quest.id) {
             self.quests.push(quest);
         }
     }
