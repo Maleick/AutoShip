@@ -1,6 +1,6 @@
 # TextQuest Branch Cleanup Strategy
 
-**Status**: Automated + Manual cleanup enabled  
+**Status**: Repo setting + weekly cleanup enabled
 **Last updated**: 2026-04-12
 
 ---
@@ -10,7 +10,7 @@
 Branch cleanup is critical for repository hygiene. TextQuest uses a multi-layered approach:
 
 1. **Automatic cleanup on PR merge** (GitHub settings)
-2. **Scheduled stale branch cleanup** (daily, via GitHub Actions)
+2. **Scheduled stale branch cleanup** (weekly, via GitHub Actions)
 3. **Manual commands** for developer use
 4. **Protected branches** (master, main, develop, staging, production) are never auto-deleted
 
@@ -34,9 +34,10 @@ Branch cleanup is critical for repository hygiene. TextQuest uses a multi-layere
 **File**: `.github/workflows/branch-cleanup.yml`
 
 **Triggers**:
-- On PR close (merged) — immediately delete source branch
-- Daily schedule (2 AM UTC) — clean stale branches (>30 days old)
+- Weekly schedule (Sunday 3:00 AM UTC) — clean stale branches (>30 days old)
 - Manual dispatch — on-demand cleanup
+
+PR merge deletion is handled by the repository setting above, not by this workflow.
 
 **Protected branches** (never deleted):
 - `master`

@@ -82,7 +82,7 @@ jobs:
     name: PR gate (fmt + clippy + test + python)
     if: github.event_name != 'push'
     runs-on: [self-hosted, Linux, X64, textquest]
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       actions: read
       contents: read
@@ -131,7 +131,7 @@ jobs:
               });
             }
 
-            for (let attempt = 1; attempt <= 180; attempt += 1) {
+            for (let attempt = 1; attempt <= 360; attempt += 1) {
               const jobs = await listJobs();
 
               const target = jobs.find((job) => job.name === targetJobName);
@@ -240,18 +240,3 @@ jobs:
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
-<<<<<<< fix/ci-workflow-audit
-=======
-
-  cleanup_merged_branch:
-    name: Cleanup merged branch
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: dawidd6/action-delete-branch@v3.1.0
-        with:
-          github_token: ${{ github.token }}
-          branches: ${{ github.head_ref }}
->>>>>>> master

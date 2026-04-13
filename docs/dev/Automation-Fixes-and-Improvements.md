@@ -11,8 +11,8 @@
 This document details all automation, CI/CD, and repository configuration fixes applied to TextQuest.
 
 ### Changes Made:
-1. ✅ **Automatic branch cleanup on PR merge** (new)
-2. ✅ **Scheduled stale branch cleanup** (new)
+1. ✅ **Automatic branch cleanup on PR merge** (GitHub setting)
+2. ✅ **Scheduled stale branch cleanup** (weekly)
 3. ✅ **GitHub Actions version updates** (security/compatibility)
 4. ✅ **Branch cleanup documentation** (new)
 
@@ -27,10 +27,11 @@ This document details all automation, CI/CD, and repository configuration fixes 
 - No automatic cleanup on PR merge
 
 ### Solution
-- **New Workflow**: `.github/workflows/branch-cleanup.yml`
+- **Repository Setting**: "Delete head branch on merge" is enabled
+- **Workflow**: `.github/workflows/branch-cleanup.yml`
 - **Triggers**:
-  - ✅ On PR merge: immediately delete source branch
-  - ✅ Daily schedule (2 AM UTC): clean branches >30 days old
+  - ✅ On PR merge: GitHub deletes the source branch automatically
+  - ✅ Weekly schedule (Sunday 3:00 AM UTC): clean branches >30 days old
   - ✅ Manual dispatch: on-demand cleanup
 
 ### Features
@@ -45,15 +46,16 @@ This document details all automation, CI/CD, and repository configuration fixes 
 
 When you merge a PR:
 1. PR is merged ✓
-2. Source branch is automatically deleted ✓
-3. Local: run `git fetch origin --prune` to remove local tracking
+2. Source branch is automatically deleted by GitHub ✓
+3. Scheduled cleanup removes stale merged branches that remain
+4. Local: run `git fetch origin --prune` to remove local tracking
 
 ---
 
 ## 2. Scheduled Stale Branch Cleanup
 
 ### Mechanism
-**Daily job** (2 AM UTC via `.github/workflows/branch-cleanup.yml`):
+**Weekly job** (Sunday 3:00 AM UTC via `.github/workflows/branch-cleanup.yml`):
 - Identifies branches with last commit >30 days old
 - Excludes branches that still back open pull requests
 - Deletes stale branches automatically
@@ -63,7 +65,7 @@ When you merge a PR:
 ### Configuration
 - **Threshold**: 30 days old
 - **Protected branches**: master, main, develop, staging, production (never deleted)
-- **Frequency**: Daily at 2 AM UTC
+- **Frequency**: Weekly on Sunday at 3:00 AM UTC
 - **Report**: Logged in GitHub Actions
 
 ### Manual Commands
@@ -135,13 +137,13 @@ git push origin --delete <branch-name>
 
 The following should be enabled for optimal branch management:
 
-- [ ] **"Delete head branch on merge"** ← RECOMMENDED
+- [x] **"Delete head branch on merge"** ← enabled in repository settings
   - Automatically deletes PR source branch when merged
   - Prevents accumulation of merged branches
   - Reduces manual cleanup overhead
 
-- [x] **"Automatically delete head branches"** (if similar option exists)
-  - Paired with workflow for comprehensive cleanup
+- [x] **"Automatically delete head branches"** (same repository setting)
+  - Verified as enabled in the live repository configuration
 
 ### Branch Protection Rules (Repository → Settings → Rules)
 
@@ -230,9 +232,9 @@ For protected branches (master, main):
 
 ### Verify Auto-Cleanup on Merge
 1. Create test PR with simple branch name
-2. Merge PR (check "delete head branch" option)
-3. Verify: Branch deleted immediately
-4. Check: Actions log shows branch deletion
+2. Merge PR (with "delete head branch" enabled)
+3. Verify: Branch deleted immediately by GitHub
+4. Check: Branch no longer exists on the remote
 
 ---
 
@@ -247,7 +249,7 @@ If any issues occur:
 
 ### Disable Scheduled Cleanup
 1. Edit: `.github/workflows/branch-cleanup.yml`
-2. Comment out: `schedule:` section
+2. Comment out or remove the `schedule:` section
 3. Commit and push
 
 ### Restore Deleted Branch

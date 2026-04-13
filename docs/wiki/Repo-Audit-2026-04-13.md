@@ -12,7 +12,7 @@ This audit summarizes a local-repo consistency pass against roadmap docs, RedGui
 
 ### Findings
 
-1. The roadmap page says active milestone execution resumes at **M5–M11**, with explicit live-validation gaps still open. This indicates ongoing/incomplete validation work in core areas.  
+1. The roadmap page says active milestone execution resumes at **M5–M11**, with explicit live-validation gaps still open. This indicates ongoing/incomplete validation work in core areas.
 2. The MQ2 comparison page states "M1–M5 complete" in its generated header language. That claim is stronger than the roadmap's current "needs live proof" framing and can be read as inconsistent status signaling.
 3. RedGuides research content is useful and detailed, but should be treated as external research/reference evidence rather than milestone completion proof.
 
@@ -84,4 +84,3 @@ This audit summarizes a local-repo consistency pass against roadmap docs, RedGui
 - [ ] Run GitHub closed-PR comment/thread sweep from network-enabled environment; capture artifact in `docs/wiki/`.
 - [ ] Add unit tests for untested Rust/UI/scripting surfaces listed above.
 - [ ] Reconcile milestone-completion wording between roadmap and MQ2 comparison docs.
-
