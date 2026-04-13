@@ -1,0 +1,18 @@
+title: TextQuest
+description: EverQuest multibox controller for TLP servers — TUI dashboard, camp automation, and group management for large box crews.
+baseurl: ""
+url: "https://textquest.teamoperator.red"
+
+theme: minima
+
+minima:
+  skin: dark
+
+header_pages:
+  - index.md
+
+show_excerpts: true
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
