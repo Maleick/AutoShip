@@ -26,6 +26,38 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKTREE_PATH=".beacon/workspaces/$ISSUE_KEY"
 BEACON_BRANCH="beacon/$ISSUE_KEY"
 
+# Extract issue number early (needed for archive)
+ISSUE_NUM_EARLY="${ISSUE_KEY#issue-}"
+
+# Archive BEACON_RESULT.md before removing worktree
+RESULT_FILE="$WORKTREE_PATH/BEACON_RESULT.md"
+if [[ -f "$RESULT_FILE" ]]; then
+  mkdir -p .beacon/results
+  # Fetch issue title for the slug (best-effort)
+  ISSUE_TITLE=""
+  if command -v gh >/dev/null 2>&1; then
+    # Try to get repo slug from state or remote for the title fetch
+    _STATE=".beacon/state.json"
+    _REPO=""
+    if [[ -f "$_STATE" ]]; then
+      _REPO=$(jq -r '.repo // empty' "$_STATE" 2>/dev/null) || true
+    fi
+    if [[ -z "$_REPO" ]]; then
+      _REMOTE=$(git remote get-url origin 2>/dev/null) || true
+      if [[ -n "$_REMOTE" ]]; then
+        _REPO=$(echo "$_REMOTE" | sed -E 's#^.+[:/]([^/]+/[^/]+)(\.git)?$#\1#' | sed 's/\.git$//')
+      fi
+    fi
+    if [[ -n "$_REPO" ]]; then
+      ISSUE_TITLE=$(gh issue view "$ISSUE_NUM_EARLY" --repo "$_REPO" --json title --jq '.title' 2>/dev/null) || ISSUE_TITLE=""
+    fi
+  fi
+  SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/-*$//' | cut -c1-40)
+  ARCHIVE_NAME="${ISSUE_NUM_EARLY}${SLUG:+-${SLUG}}.md"
+  cp "$RESULT_FILE" ".beacon/results/${ARCHIVE_NAME}"
+  echo "Archived BEACON_RESULT.md to .beacon/results/${ARCHIVE_NAME}"
+fi
+
 # Check if worktree exists
 if [[ ! -d "$WORKTREE_PATH" ]]; then
   echo "Warning: worktree at $WORKTREE_PATH does not exist, skipping removal"
