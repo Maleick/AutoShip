@@ -17,6 +17,7 @@ permissions:
 jobs:
   super-linter:
     name: Super-Linter
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 30
     steps:
