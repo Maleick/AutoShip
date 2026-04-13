@@ -200,6 +200,12 @@ fi
 
 # --- Token Ledger: create + append new session entry ---
 init_token_ledger() {
+  # The token ledger uses jq for both read and write paths, so skip it entirely
+  # when jq is unavailable rather than logging a misleading success.
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+
   local ledger="$AUTOSHIP_DIR/token-ledger.json"
   local lock="${ledger%.json}.lock"
   local now
