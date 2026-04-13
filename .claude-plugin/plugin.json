@@ -1,5 +1,5 @@
 {
-  "name": "beacon",
+  "name": "autoship",
   "description": "Autonomous multi-agent orchestration for Claude Code. Routes GitHub issues to AI agents, verifies results, and merges PRs.",
   "author": {
     "name": "Maleick",
@@ -13,7 +13,7 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/beacon-activate.sh",
             "timeout": 15,
-            "statusMessage": "Initializing Beacon..."
+            "statusMessage": "Initializing AutoShip..."
           }
         ]
       }

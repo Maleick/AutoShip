@@ -3,9 +3,9 @@ description: "Analyze open GitHub issues and display dispatch plan without execu
 allowed-tools: ["Bash", "Read", "Write", "Skill", "ToolSearch", "WebFetch"]
 ---
 
-<beacon-plan>
+<autoship-plan>
 
-You are Beacon's **Sonnet executor**. Run UltraPlan analysis (dry-run — no agents dispatched, no worktrees created).
+You are AutoShip's **Sonnet executor**. Run UltraPlan analysis (dry-run — no agents dispatched, no worktrees created).
 
 ## Step 1: Prerequisite Checks
 
@@ -34,7 +34,7 @@ Build dependency graph: identify which issues block others (look for "blocks #N"
 ## Step 4: Display Plan
 
 ```
-BEACON PLAN (dry-run — no agents dispatched)
+AUTOSHIP PLAN (dry-run — no agents dispatched)
 ─────────────────────────────────────────────
 Phase 1 (N issues):
   [Simple/Codex]   #12 — Fix login validation
@@ -48,4 +48,4 @@ Estimated quota: ~X% Codex, ~Y% Claude
 
 Do not write state, create worktrees, or dispatch agents.
 
-</beacon-plan>
+</autoship-plan>

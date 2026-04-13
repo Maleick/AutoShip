@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "beacon",
+  "name": "autoship",
   "description": "Autonomous multi-agent orchestration plugin for Claude Code. Routes GitHub issues to AI agents, verifies results, and merges PRs.",
   "owner": {
     "name": "Maleick",
@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "beacon",
+      "name": "autoship",
       "description": "Autonomous multi-agent orchestrator. Routes GitHub issues to AI agents (Codex/Gemini/Claude), verifies results, and opens PRs.",
       "source": "./",
       "category": "productivity"

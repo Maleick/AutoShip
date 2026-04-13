@@ -143,7 +143,7 @@ Verified by Sonnet reviewer. Tests: passing."
 
 gh pr create \
   --title "<issue-key>: <issue-title>" \
-  --body "## Summary\n<from BEACON_RESULT.md>\n\n## Verification\n- Tests: passing\n- Reviewer: PASS\n- Simplified: yes/no\n\nCloses #<number>\n\nDispatched by [Beacon](https://github.com/Maleick/beacon)" \
+  --body "## Summary\n<from BEACON_RESULT.md>\n\n## Verification\n- Tests: passing\n- Reviewer: PASS\n- Simplified: yes/no\n\nCloses #<number>\n\nDispatched by [AutoShip](https://github.com/Maleick/AutoShip)" \
   --label beacon
 ```
 

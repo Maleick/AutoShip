@@ -19,8 +19,8 @@ fi
 
 # Inject a brief system note — this stdout becomes invisible system context
 cat <<EOF
-Beacon ${VERSION} is installed. Autonomous multi-agent orchestration is available.
-Commands: /beacon:start (launch), /beacon:plan (dry-run), /beacon:stop (shutdown), /beacon:status (dashboard).
-Beacon routes GitHub issues to AI agents (Codex/Gemini/Claude), verifies results, and opens PRs automatically.
-Run /beacon:start to begin.
+AutoShip ${VERSION} is installed. Autonomous multi-agent orchestration is available.
+Commands: /autoship:start (launch), /beacon:plan (dry-run), /beacon:stop (shutdown), /beacon:status (dashboard).
+AutoShip routes GitHub issues to AI agents (Codex/Gemini/Claude), verifies results, and opens PRs automatically.
+Run /autoship:start to begin.
 EOF

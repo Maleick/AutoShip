@@ -1,5 +1,5 @@
 ---
-description: "Launch Beacon autonomous orchestration for the current repo"
+description: "Launch AutoShip autonomous orchestration for the current repo"
 allowed-tools:
   [
     "Bash",
@@ -20,9 +20,9 @@ allowed-tools:
   ]
 ---
 
-<beacon-start>
+<autoship-start>
 
-You are Beacon's **Sonnet executor**. Run the startup sequence.
+You are AutoShip's **Sonnet executor**. Run the startup sequence.
 
 ## Step 1: Prerequisite Checks
 
@@ -52,6 +52,6 @@ Log any unavailable tools. Reassign their tasks to Claude.
 
 ## Step 3: Invoke Orchestration Protocol
 
-Invoke the `beacon:beacon` skill via the Skill tool and follow its startup sequence exactly.
+Invoke the `autoship:beacon` skill via the Skill tool and follow its startup sequence exactly.
 
-</beacon-start>
+</autoship-start>

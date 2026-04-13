@@ -2,17 +2,17 @@
   <img src="https://em-content.zobj.net/source/apple/391/satellite_1f6f0-fe0f.png" width="120" />
 </p>
 
-<h1 align="center">Beacon</h1>
+<h1 align="center">AutoShip</h1>
 
 <p align="center">
   <strong>ship GitHub issues on autopilot</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Maleick/Beacon/stargazers"><img src="https://img.shields.io/github/stars/Maleick/Beacon?style=flat&color=blue" alt="Stars"></a>
-  <a href="https://github.com/Maleick/Beacon/commits/main"><img src="https://img.shields.io/github/last-commit/Maleick/Beacon?style=flat" alt="Last Commit"></a>
-  <a href="https://github.com/Maleick/Beacon/releases"><img src="https://img.shields.io/github/v/release/Maleick/Beacon?style=flat" alt="Version"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Maleick/Beacon?style=flat" alt="License"></a>
+  <a href="https://github.com/Maleick/AutoShip/stargazers"><img src="https://img.shields.io/github/stars/Maleick/AutoShip?style=flat&color=blue" alt="Stars"></a>
+  <a href="https://github.com/Maleick/AutoShip/commits/main"><img src="https://img.shields.io/github/last-commit/Maleick/AutoShip?style=flat" alt="Last Commit"></a>
+  <a href="https://github.com/Maleick/AutoShip/releases"><img src="https://img.shields.io/github/v/release/Maleick/AutoShip?style=flat" alt="Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Maleick/AutoShip?style=flat" alt="License"></a>
 </p>
 
 <p align="center">
@@ -33,7 +33,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that auto
 <tr>
 <td width="50%">
 
-### 📋 Without Beacon
+### 📋 Without AutoShip
 
 1. Open GitHub issues backlog
 2. Pick an issue manually
@@ -51,13 +51,13 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that auto
 </td>
 <td width="50%">
 
-### 🛰️ With Beacon
+### 🛰️ With AutoShip
 
 ```
-/beacon:start
+/autoship:start
 ```
 
-Beacon picks issues, dispatches agents, verifies results, opens PRs, waits for CI, merges, closes issues — and loops back for the next one.
+AutoShip picks issues, dispatches agents, verifies results, opens PRs, waits for CI, merges, closes issues — and loops back for the next one.
 
 You get a dashboard.
 
@@ -88,10 +88,10 @@ You get a dashboard.
 ## Install
 
 ```bash
-claude plugin marketplace add Maleick/Beacon && claude plugin install beacon@beacon
+claude plugin marketplace add Maleick/AutoShip && claude plugin install autoship@autoship
 ```
 
-Done. Start a new session and run `/beacon:start`.
+Done. Start a new session and run `/autoship:start`.
 
 ### Requirements
 
@@ -108,49 +108,84 @@ Done. Start a new session and run `/beacon:start`.
 | `gh copilot`    | GitHub Copilot worker agents (via `gh` CLI extension) |
 | Claude fallback | Built-in — always available                           |
 
-Beacon detects available tools at startup and assigns work accordingly.
+AutoShip detects available tools at startup and assigns work accordingly.
 
 ## Commands
 
 | Command          | What it does                                                      |
 | ---------------- | ----------------------------------------------------------------- |
-| `/beacon:start`  | Launch orchestration — picks issues, dispatches agents, loops     |
-| `/beacon:plan`   | Dry run — analyze issues and show dispatch plan without executing |
-| `/beacon:stop`   | Gracefully stop all agents and monitors                           |
-| `/beacon:status` | Live dashboard — agents, quota, issue progress                    |
+| `/autoship:start`  | Launch orchestration — picks issues, dispatches agents, loops     |
+| `/autoship:plan`   | Dry run — analyze issues and show dispatch plan without executing |
+| `/autoship:stop`   | Gracefully stop all agents and monitors                           |
+| `/autoship:status` | Live dashboard — agents, quota, issue progress                    |
 
 ## How It Works
 
-```
-GitHub Issues
-     │
-     ▼
-/beacon:start
-     │
-     ├─ Classify — task-type classifier labels each issue (research/docs/simple_code/
-     │             medium_code/complex/mechanical/ci_fix)
-     │
-     ├─ Dispatch — creates git worktree, writes focused prompt
-     │   ├─ Routing from BEACON.md front matter (hot-reloadable)
-     │   ├─ Simple/medium  → Codex (app-server JSON-RPC, no tmux)
-     │   ├─ Simple/medium  → Gemini or Copilot (quota-aware fallback)
-     │   └─ Complex → Claude Sonnet + Opus advisor
-     │
-     ├─ Monitors (bash, run every 5–60s)
-     │   ├─ monitor-agents.sh  — watches pane.log for COMPLETE/BLOCKED/STUCK
-     │   ├─ monitor-prs.sh     — watches CI status and merge readiness
-     │   └─ monitor-issues.sh  — polls GitHub for new/closed issues
-     │
-     ├─ Verification — Sonnet reviews BEACON_RESULT.md against acceptance criteria
-     │
-     └─ PR pipeline — opens PR, waits for CI, merges, closes issue, loops
+```mermaid
+flowchart TD
+    A([GitHub Issues]) --> B[/autoship:start]
+    B --> C[Classify Issues\ntask-type classifier]
+
+    C -->|research / docs| D[Gemini · Haiku]
+    C -->|simple_code / mechanical| E[Codex · Gemini · Copilot]
+    C -->|medium_code| F[Codex-GPT · Sonnet]
+    C -->|complex| G[Sonnet + Opus advisor]
+
+    D & E & F & G --> H[Create Worktree\nWrite Prompt]
+    H --> I[Agent Works]
+
+    I --> J{Status Word}
+    J -->|COMPLETE| K[Reviewer verifies\nBEACON_RESULT.md]
+    J -->|BLOCKED\nSTUCK| L[Re-dispatch\nor Escalate]
+
+    K -->|PASS| M[Open PR]
+    K -->|FAIL| L
+    L --> H
+
+    M --> N[Wait for CI]
+    N --> O[Merge + Close Issue]
+    O --> B
 ```
 
-Every agent emits `COMPLETE`, `BLOCKED`, or `STUCK` as its final line and writes `BEACON_RESULT.md`. Beacon never trusts conversation output — only the result file.
+Every agent emits `COMPLETE`, `BLOCKED`, or `STUCK` as its final line and writes `BEACON_RESULT.md`. AutoShip never trusts conversation output — only the result file.
 
 ## Architecture
 
 Four-tier model: **Bash watches → Haiku thinks → Sonnet orchestrates → Opus advises**
+
+```mermaid
+flowchart LR
+    subgraph Monitors["🔭 Monitors (bash)"]
+        M1["monitor-agents.sh\nevery 5s"]
+        M2["monitor-prs.sh\nevery 30s"]
+        M3["monitor-issues.sh\nevery 60s"]
+    end
+
+    subgraph Triage["🧠 Triage"]
+        H["Claude Haiku\nEvent Interpreter"]
+    end
+
+    subgraph Executor["⚙️ Executor"]
+        S["Claude Sonnet\nOrchestrator"]
+    end
+
+    subgraph Advisor["🎯 Advisor"]
+        O["Claude Opus\nStrategic Decisions"]
+    end
+
+    subgraph Workers["🤖 Workers"]
+        W1[Codex]
+        W2[Gemini]
+        W3[Copilot]
+        W4[Claude Haiku\nor Sonnet]
+    end
+
+    Monitors -->|events| H
+    H -->|"event-queue.json"| S
+    S <-->|escalations| O
+    S -->|dispatch| Workers
+    Workers -->|"BEACON_RESULT.md"| S
+```
 
 | Tier     | Role                                                  | Model                   |
 | -------- | ----------------------------------------------------- | ----------------------- |
@@ -195,17 +230,17 @@ agents/
   haiku-triage.md     ← event triage agent
   reviewer.md         ← verification reviewer
 commands/
-  start.md            ← /beacon:start
-  stop.md             ← /beacon:stop
-  plan.md             ← /beacon:plan
-  status.md           ← /beacon:status
-  beacon.md           ← /beacon:beacon (help)
+  start.md            ← /autoship:start
+  stop.md             ← /autoship:stop
+  plan.md             ← /autoship:plan
+  status.md           ← /autoship:status
+  autoship.md          ← /autoship:autoship (help)
 BEACON.md             ← routing matrix + quota config (YAML front matter, hot-reload)
 ```
 
 ## Star This Repo
 
-If Beacon saves you hours of manual issue routing — leave a star. ⭐
+If AutoShip saves you hours of manual issue routing — leave a star. ⭐
 
 ## License
 

@@ -1,11 +1,11 @@
 ---
-description: "Gracefully stop all Beacon agents and save state"
+description: "Gracefully stop all AutoShip agents and save state"
 allowed-tools: ["Bash", "Read", "Write", "Skill", "ToolSearch"]
 ---
 
-<beacon-stop>
+<autoship-stop>
 
-You are Beacon's **Sonnet executor**. Run the stop protocol.
+You are AutoShip's **Sonnet executor**. Run the stop protocol.
 
 ## Phase 0: Kill Monitors + Drain Event Queue
 
@@ -45,6 +45,6 @@ tmux list-panes -t beacon -F '#{pane_id} #{pane_title} #{pane_dead}' 2>/dev/null
 # tmux kill-pane -t <pane_id> for any survivors
 ```
 
-Report: `Beacon stopped. Completed: N, Paused: N, Killed: N`
+Report: `AutoShip stopped. Completed: N, Paused: N, Killed: N`
 
-</beacon-stop>
+</autoship-stop>
