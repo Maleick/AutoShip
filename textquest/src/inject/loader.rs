@@ -426,7 +426,9 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn dll_module_name_requires_filename_component() {
-        let err = dll_module_name(Path::new(r"C:\temp\")).unwrap_err();
+        // C:\ is a root-only path; file_name() returns None on Windows.
+        // C:\temp\ would return Some("temp") and fall through to the extension check.
+        let err = dll_module_name(Path::new(r"C:\")).unwrap_err();
         assert!(err.to_string().contains("no filename component"));
     }
 
