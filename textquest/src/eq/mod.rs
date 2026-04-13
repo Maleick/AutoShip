@@ -16,5 +16,7 @@ pub mod named_tracker;
 pub mod spawn;
 /// Spawn alert feed — pattern-matched spawn notifications and named alerts.
 pub mod spawn_alert;
+/// Advanced spawn filtering, sorting, and named-mob tracking.
+pub mod spawn_filter;
 /// EQ data structures — `SpawnInfo`, `GroupInfo`, class/type enums.
 pub mod structs;
