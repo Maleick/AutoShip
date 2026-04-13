@@ -143,6 +143,8 @@ pub struct ZoneTransitionFsm {
     pub client_id: ClientId,
     /// Current FSM state.
     state: ZoneTransitionState,
+    /// Recovery attempts across the active transition lifecycle.
+    recovery_attempts: u32,
 }
 
 impl ZoneTransitionFsm {
@@ -151,6 +153,7 @@ impl ZoneTransitionFsm {
         Self {
             client_id,
             state: ZoneTransitionState::Idle,
+            recovery_attempts: 0,
         }
     }
 
@@ -161,6 +164,7 @@ impl ZoneTransitionFsm {
             kind = ?kind,
             "Starting zone transition"
         );
+        self.recovery_attempts = 0;
         self.state = ZoneTransitionState::Walking {
             kind,
             started_at: Instant::now(),
@@ -249,12 +253,20 @@ impl ZoneTransitionFsm {
                 zone_name: target_zone,
                 zone_line_pos: safe_pos.clone(),
             };
-            self.state = ZoneTransitionState::Recovering {
-                kind: recovery_kind,
-                attempts: 1,
-                safe_pos,
+            let (recovery_kind, safe_pos, attempts) = self.begin_recovery(recovery_kind, safe_pos);
+            if let Some(k) = recovery_kind {
+                self.state = ZoneTransitionState::Recovering {
+                    kind: k,
+                    attempts,
+                    safe_pos,
+                };
+                return TickResult::InProgress;
+            }
+            self.state = ZoneTransitionState::Idle;
+            self.recovery_attempts = 0;
+            return TickResult::Failed {
+                reason: "Landing position failed validation and recovery exhausted".to_string(),
             };
-            return TickResult::InProgress;
         }
 
         tracing::info!(
@@ -264,6 +276,7 @@ impl ZoneTransitionFsm {
             "Zone loaded with valid coordinates — transition complete"
         );
         self.state = ZoneTransitionState::Idle;
+        self.recovery_attempts = 0;
         TickResult::Complete
     }
 
@@ -284,18 +297,20 @@ impl ZoneTransitionFsm {
                     );
                     let safe_pos = recovery_pos_for(kind);
                     let recovery_kind = kind.clone();
-                    let (recovery_kind, safe_pos) = self.begin_recovery(recovery_kind, safe_pos);
+                    let (recovery_kind, safe_pos, attempts) =
+                        self.begin_recovery(recovery_kind, safe_pos);
                     match recovery_kind {
                         Some(k) => {
                             self.state = ZoneTransitionState::Recovering {
                                 kind: k,
-                                attempts: 1,
+                                attempts,
                                 safe_pos,
                             };
                             TickResult::InProgress
                         }
                         None => {
                             self.state = ZoneTransitionState::Idle;
+                            self.recovery_attempts = 0;
                             TickResult::Failed {
                                 reason: "Timed out during walk phase and recovery exhausted"
                                     .to_string(),
@@ -322,18 +337,20 @@ impl ZoneTransitionFsm {
                         zone_name: target_zone.clone(),
                         zone_line_pos: safe_pos.clone(),
                     };
-                    let (recovery_kind, safe_pos) = self.begin_recovery(recovery_kind, safe_pos);
+                    let (recovery_kind, safe_pos, attempts) =
+                        self.begin_recovery(recovery_kind, safe_pos);
                     match recovery_kind {
                         Some(k) => {
                             self.state = ZoneTransitionState::Recovering {
                                 kind: k,
-                                attempts: 1,
+                                attempts,
                                 safe_pos,
                             };
                             TickResult::InProgress
                         }
                         None => {
                             self.state = ZoneTransitionState::Idle;
+                            self.recovery_attempts = 0;
                             TickResult::Failed {
                                 reason: "Timed out during zoning phase and recovery exhausted"
                                     .to_string(),
@@ -353,6 +370,7 @@ impl ZoneTransitionFsm {
                         "Recovery attempts exhausted — giving up"
                     );
                     self.state = ZoneTransitionState::Idle;
+                    self.recovery_attempts = 0;
                     return TickResult::Failed {
                         reason: format!("Exhausted {MAX_RECOVERY_ATTEMPTS} recovery attempts"),
                     };
@@ -367,20 +385,16 @@ impl ZoneTransitionFsm {
     /// Returns `(Some(kind), safe_pos)` if another attempt should be made,
     /// or `(None, _)` if attempts are exhausted.
     fn begin_recovery(
-        &self,
+        &mut self,
         kind: TransitionKind,
         safe_pos: Waypoint,
-    ) -> (Option<TransitionKind>, Waypoint) {
-        // Check current attempts if already in recovery
-        let current_attempts = match &self.state {
-            ZoneTransitionState::Recovering { attempts, .. } => *attempts,
-            _ => 0,
-        };
+    ) -> (Option<TransitionKind>, Waypoint, u32) {
+        self.recovery_attempts += 1;
 
-        if current_attempts + 1 >= MAX_RECOVERY_ATTEMPTS {
-            (None, safe_pos)
+        if self.recovery_attempts >= MAX_RECOVERY_ATTEMPTS {
+            (None, safe_pos, self.recovery_attempts)
         } else {
-            (Some(kind), safe_pos)
+            (Some(kind), safe_pos, self.recovery_attempts)
         }
     }
 
@@ -388,6 +402,7 @@ impl ZoneTransitionFsm {
     pub fn cancel(&mut self) {
         tracing::info!(client_id = self.client_id, "Zone transition cancelled");
         self.state = ZoneTransitionState::Idle;
+        self.recovery_attempts = 0;
     }
 }
 
@@ -696,6 +711,47 @@ mod tests {
         let result = fsm.on_arrived();
         assert_eq!(result, TickResult::InProgress);
         assert!(matches!(fsm.state(), ZoneTransitionState::Walking { .. }));
+    }
+
+    #[test]
+    fn repeated_timeouts_increment_recovery_attempts_until_exhausted() {
+        use std::time::{Duration, Instant};
+
+        let mut fsm = ZoneTransitionFsm::new(12);
+        fsm.start(zone_kind("qeynos", 10.0, 20.0, 0.0));
+
+        // 1st timeout -> recovery attempt 1
+        fsm.state = ZoneTransitionState::Walking {
+            kind: zone_kind("qeynos", 10.0, 20.0, 0.0),
+            started_at: Instant::now() - Duration::from_secs(31),
+        };
+        assert_eq!(fsm.tick(), TickResult::InProgress);
+        assert!(matches!(
+            fsm.state(),
+            ZoneTransitionState::Recovering { attempts: 1, .. }
+        ));
+
+        // Recovery walk complete -> back to walking, then timeout again
+        assert_eq!(fsm.on_arrived(), TickResult::InProgress);
+        fsm.state = ZoneTransitionState::Walking {
+            kind: zone_kind("qeynos", 10.0, 20.0, 0.0),
+            started_at: Instant::now() - Duration::from_secs(31),
+        };
+        assert_eq!(fsm.tick(), TickResult::InProgress);
+        assert!(matches!(
+            fsm.state(),
+            ZoneTransitionState::Recovering { attempts: 2, .. }
+        ));
+
+        // Third timeout should exhaust recovery and fail cleanly
+        assert_eq!(fsm.on_arrived(), TickResult::InProgress);
+        fsm.state = ZoneTransitionState::Walking {
+            kind: zone_kind("qeynos", 10.0, 20.0, 0.0),
+            started_at: Instant::now() - Duration::from_secs(31),
+        };
+        let result = fsm.tick();
+        assert!(matches!(result, TickResult::Failed { .. }));
+        assert!(fsm.is_idle());
     }
 
     // ─── TransitionKind variants have correct data ────────────────────────
