@@ -354,6 +354,9 @@ impl SoulCoordinator {
             self.check_alerts_for(client_id);
         }
 
+        // Periodic memory summarization check (runs every tick, internally rate-limited to 1h)
+        self.check_and_generate_summaries();
+
         // Process any queued LLM requests
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

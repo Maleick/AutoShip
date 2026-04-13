@@ -707,6 +707,103 @@ impl MemoryStore {
         Ok(())
     }
 
+    /// Generate a compact text summary of memories in a unix-timestamp time window.
+    ///
+    /// Queries all non-decayed memories for `character_id` with `created_at`
+    /// between `period_start` and `period_end` (inclusive, unix seconds).
+    /// Formats each event as "[zone] event_type: description" (one line per event).
+    /// Appends the most common mood in the window at the end as "Mood trend: X".
+    /// The returned string is capped at 500 bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn generate_summary(
+        &self,
+        character_id: ClientId,
+        period_start: i64,
+        period_end: i64,
+    ) -> Result<String> {
+        // Query memories in the time window by converting unix timestamp parameters
+        // to SQLite datetimes, so the created_at index remains usable.
+        let mut stmt = self.conn.prepare(
+            "SELECT event_type, event_json, zone, mood_at_time
+             FROM memories
+             WHERE character_id = ?1
+               AND decayed = 0
+               AND created_at >= datetime(?2, 'unixepoch')
+               AND created_at <= datetime(?3, 'unixepoch')
+             ORDER BY created_at ASC",
+        )?;
+
+        struct MemSummaryRow {
+            event_type: String,
+            event_json: String,
+            zone: Option<String>,
+            mood: String,
+        }
+
+        let rows = stmt
+            .query_map(params![character_id, period_start, period_end], |row| {
+                Ok(MemSummaryRow {
+                    event_type: row.get(0)?,
+                    event_json: row.get(1)?,
+                    zone: row.get(2)?,
+                    mood: row.get(3)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to query memories for summary")?;
+
+        if rows.is_empty() {
+            return Ok(String::new());
+        }
+
+        // Count moods to find the trend (most common).
+        let mut mood_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for row in &rows {
+            *mood_counts.entry(row.mood.clone()).or_insert(0) += 1;
+        }
+        let mood_trend = mood_counts
+            .into_iter()
+            .max_by(|(mood_a, count_a), (mood_b, count_b)| {
+                count_a.cmp(count_b).then_with(|| mood_a.cmp(mood_b))
+            })
+            .map(|(mood, _)| mood)
+            .unwrap_or_else(|| "Neutral".to_string());
+
+        // Build compact lines.
+        let mut lines: Vec<String> = Vec::with_capacity(rows.len() + 1);
+        for row in &rows {
+            let zone_prefix = row
+                .zone
+                .as_deref()
+                .map(|z| format!("[{z}] "))
+                .unwrap_or_default();
+
+            // Extract a short human-readable description from the event JSON.
+            let description = describe_event(&row.event_type, &row.event_json);
+            lines.push(format!("{zone_prefix}{}: {description}", row.event_type));
+        }
+
+        // Append mood trend line.
+        lines.push(format!("Mood trend: {mood_trend}"));
+
+        // Join and cap at 500 chars.
+        let full = lines.join("\n");
+        if full.len() <= 500 {
+            Ok(full)
+        } else {
+            // Truncate at a UTF-8 boundary.
+            let mut end = 500;
+            while !full.is_char_boundary(end) {
+                end -= 1;
+            }
+            Ok(full[..end].to_string())
+        }
+    }
+
     /// Export all memories and conversations for a character as JSON.
     /// Used for per-character portability and LLM context building.
     ///
@@ -1067,6 +1164,31 @@ fn event_zone(event: &SoulEvent) -> Option<String> {
         | SoulEvent::ZoneEnter { zone }
         | SoulEvent::GroupWipe { zone } => Some(zone.clone()),
         _ => None,
+    }
+}
+
+/// Extract a short human-readable description from stored event JSON.
+/// Falls back to the raw event type label if parsing fails.
+fn describe_event(event_type: &str, event_json: &str) -> String {
+    let Ok(event) = serde_json::from_str::<SoulEvent>(event_json) else {
+        return event_type.to_string();
+    };
+    match event {
+        SoulEvent::Death { killer, .. } => killer
+            .map(|k| format!("killed by {k}"))
+            .unwrap_or_else(|| "died".to_string()),
+        SoulEvent::Kill { target, .. } => format!("killed {target}"),
+        SoulEvent::Loot { item, .. } => format!("looted {item}"),
+        SoulEvent::PlayerChat { player_name, .. } => format!("chat with {player_name}"),
+        SoulEvent::BotChat { character_name } => format!("chat with {character_name}"),
+        SoulEvent::Witnessed { description } => description,
+        SoulEvent::MoodShift { from, to, .. } => format!("mood: {from:?} -> {to:?}"),
+        SoulEvent::ZoneEnter { zone } => format!("entered {zone}"),
+        SoulEvent::LevelUp { new_level } => format!("reached level {new_level}"),
+        SoulEvent::GroupWipe { .. } => "group wipe".to_string(),
+        SoulEvent::RelationshipChange { character, delta } => {
+            format!("relationship with {character}: {delta:+.1}")
+        }
     }
 }
 
