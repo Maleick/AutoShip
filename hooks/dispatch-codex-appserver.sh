@@ -79,7 +79,8 @@ send_rpc "$START_MSG"
 
 # turn/start with prompt content
 PROMPT_TEXT=$(cat "$PROMPT_FILE")
-PROMPT_JSON=$(jq -n --arg text "$PROMPT_TEXT" '{"jsonrpc":"2.0","method":"turn/start","params":{"threadId":$THREAD_ID,"input":[{"type":"text","text":$text}]},"id":3}' --arg threadId "$THREAD_ID")
+PROMPT_JSON=$(jq -n --arg text "$PROMPT_TEXT" --arg threadId "$THREAD_ID" \
+  '{"jsonrpc":"2.0","method":"turn/start","params":{"threadId":$threadId,"input":[{"type":"text","text":$text}]},"id":3}')
 send_rpc "$PROMPT_JSON"
 
 # Read responses
