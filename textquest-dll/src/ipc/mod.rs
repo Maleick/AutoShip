@@ -143,6 +143,11 @@ const MAX_PENDING_CHAT: usize = 2048;
 /// outpace orchestrator polling.
 const MAX_PENDING_RESPONSES: usize = 4096;
 
+/// Maximum number of IPC responses retained in `PENDING_RESPONSES` before
+/// oldest entries are dropped. Prevents unbounded growth when the orchestrator
+/// falls behind polling.
+const MAX_PENDING_RESPONSES: usize = 2048;
+
 /// Enqueue a response to be sent to the orchestrator.
 /// Called from the game loop thread (e.g., login FSM phase updates).
 pub fn send_response(response: Response) {
