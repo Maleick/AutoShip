@@ -355,6 +355,29 @@ def main() -> int:
             macroquest_root=args.macroquest_root,
         )
 
+    # Validate map files if config/maps/ exists
+    map_dir = REPO_ROOT / "config" / "maps"
+    if map_dir.exists():
+        validate_maps_script = REPO_ROOT / "scripts" / "validate-maps.py"
+        if validate_maps_script.exists():
+            completed = run_command(sys.executable, str(validate_maps_script))
+            if completed.returncode == 0:
+                detail = first_line(completed.stdout or completed.stderr)
+                record(results, "PASS", "Map validation", detail)
+            else:
+                detail = first_line(completed.stderr or completed.stdout)
+                record(
+                    results,
+                    "FAIL",
+                    "Map validation",
+                    detail,
+                    "Fix map format errors reported by scripts/validate-maps.py.",
+                )
+        else:
+            record(results, "WARN", "Map validation", "scripts/validate-maps.py not found; skipping.")
+    else:
+        record(results, "PASS", "Map validation", "No config/maps/ directory; skipping.")
+
     return print_results(results, require_reference_trees=args.require_reference_trees)
 
 
