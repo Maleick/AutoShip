@@ -1,5 +1,7 @@
 //! Soul Engine — LLM-driven character personalities, persistent memory, social dynamics.
 
+/// Soul audit logging — append-only JSONL log of key state changes.
+pub mod audit;
 /// Soul Engine configuration — API keys, model settings, personality tuning.
 pub mod config;
 /// Soul coordinator — orchestrates personality, memory, idle, and social systems.

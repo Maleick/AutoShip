@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
+use serde_json;
 use textquest_common::ipc::Command;
 use textquest_common::soul::{MoodState, PersonalityTraits, SoulAction, SoulEvent, SpeechStyle};
 use textquest_common::types::{ClientId, GameState};
 
+use super::audit::{AuditActionType, SoulAuditLogger};
 use super::config::{CharacterSoulConfig, EdginessLevel, SoulConfig};
 use super::idle::{IdleScheduler, IdleTransition};
 use super::llm::fallback::TraitDrivenResponder;
@@ -39,6 +41,8 @@ pub struct SoulCoordinator {
     config: SoulConfig,
     /// Tick counter for timing.
     tick_count: u64,
+    /// Optional audit logger — `None` when no log path was provided.
+    audit: Option<SoulAuditLogger>,
 }
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
@@ -63,7 +67,16 @@ impl SoulCoordinator {
             llm_queue,
             config,
             tick_count: 0,
+            audit: None,
         })
+    }
+
+    /// Attach a `SoulAuditLogger` to this coordinator.
+    ///
+    /// Once set, key state changes (mood, memory, LLM requests, events) are
+    /// written as JSONL lines to the logger's file.
+    pub fn set_audit_logger(&mut self, logger: SoulAuditLogger) {
+        self.audit = Some(logger);
     }
 
     /// Register a character with the coordinator.
@@ -257,8 +270,38 @@ impl SoulCoordinator {
             .personality
             .process_event(soul.mood, &event, &soul.traits);
 
+        // Audit: mood change triggered by player chat
+        if let Some(audit) = &self.audit
+            && mood_before != soul.mood
+        {
+            let _ = audit.log(
+                client_id,
+                AuditActionType::MoodChange,
+                format!(
+                    "{} mood: {:?} -> {:?} (player chat from {})",
+                    soul.name, mood_before, soul.mood, player_name
+                ),
+                Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
+                Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
+            );
+        }
+
         // Record memory with the mood as it was before the event changed it
         let _ = self.memory.record(client_id, &event, mood_before, 2.0);
+
+        // Audit: memory record
+        if let Some(audit) = &self.audit {
+            let _ = audit.log(
+                client_id,
+                AuditActionType::MemoryRecord,
+                format!(
+                    "{} recorded player chat memory from {}",
+                    soul.name, player_name
+                ),
+                None,
+                None,
+            );
+        }
 
         // Queue an LLM response (high priority for real players)
         let request = LlmRequest {
@@ -282,6 +325,20 @@ impl SoulCoordinator {
             backstory: soul.backstory.clone(),
         };
 
+        // Audit: LLM request enqueued
+        if let Some(audit) = &self.audit {
+            let _ = audit.log(
+                client_id,
+                AuditActionType::LlmRequest,
+                format!(
+                    "{} LLM request enqueued for player chat from {}",
+                    soul.name, player_name
+                ),
+                None,
+                Some(serde_json::json!({"priority": "High", "channel": channel})),
+            );
+        }
+
         self.llm_queue.enqueue(request);
     }
 
@@ -299,6 +356,33 @@ impl SoulCoordinator {
             .personality
             .process_event(soul.mood, &event, &soul.traits);
 
+        // Audit: event processed
+        if let Some(audit) = &self.audit {
+            let _ = audit.log(
+                client_id,
+                AuditActionType::EventProcessed,
+                format!("{} processed game event: {:?}", soul.name, event),
+                Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
+                Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
+            );
+        }
+
+        // Audit: mood change if it actually changed
+        if let Some(audit) = &self.audit
+            && mood_before != soul.mood
+        {
+            let _ = audit.log(
+                client_id,
+                AuditActionType::MoodChange,
+                format!(
+                    "{} mood: {:?} -> {:?} (game event)",
+                    soul.name, mood_before, soul.mood
+                ),
+                Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
+                Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
+            );
+        }
+
         // Determine importance based on event type
         let importance = match &event {
             SoulEvent::Death { .. } | SoulEvent::GroupWipe { .. } => 5.0,
@@ -314,6 +398,20 @@ impl SoulCoordinator {
         let _ = self
             .memory
             .record(client_id, &event, mood_before, importance);
+
+        // Audit: memory record
+        if let Some(audit) = &self.audit {
+            let _ = audit.log(
+                client_id,
+                AuditActionType::MemoryRecord,
+                format!(
+                    "{} recorded game event memory (importance {importance})",
+                    soul.name
+                ),
+                None,
+                None,
+            );
+        }
     }
 
     /// Get the current mood for a character.
