@@ -608,6 +608,15 @@ pub enum Command {
     /// HWBP hook) and returns them as a `ChatBatch` response. Calling this
     /// command does **not** affect the `PollPackets` packet-event buffer.
     PollChat,
+    // Memory debug
+    /// Read raw bytes from the EQ process address space (Debug hex dump).
+    /// Size is capped at 4096 bytes. Returns `Response::MemoryData`.
+    ReadMemory {
+        /// Absolute virtual address to read from.
+        address: usize,
+        /// Number of bytes to read (capped at 4096).
+        size: usize,
+    },
     /// Query slot metadata and visible item info for open container windows.
     QueryContainerSlots {
         /// Filters applied before returning slot snapshots.
@@ -937,6 +946,13 @@ pub enum Response {
     PacketBatch {
         /// Accumulated packet events since last poll.
         events: Vec<PacketEventInfo>,
+    },
+    /// Raw bytes read from the EQ process address space, in response to `Command::ReadMemory`.
+    MemoryData {
+        /// The address that was read.
+        address: usize,
+        /// The bytes that were read. May be shorter than requested if the read was partial.
+        bytes: Vec<u8>,
     },
     /// Slot metadata and item info for currently open container windows.
     ContainerSlots {
