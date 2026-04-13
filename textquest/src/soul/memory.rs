@@ -992,15 +992,6 @@ impl MemoryStore {
         let mut out =
             String::from("id,character_id,action_type,action_json,reason,operator_id,created_at\n");
         for e in &entries {
-            // Minimal CSV escaping: wrap fields containing commas or quotes in
-            // double-quotes and double any internal quotes.
-            let csv_field = |s: &str| -> String {
-                if s.contains(',') || s.contains('"') || s.contains('\n') {
-                    format!("\"{}\"", s.replace('"', "\"\""))
-                } else {
-                    s.to_owned()
-                }
-            };
             let reason = e.reason.as_deref().unwrap_or("");
             let operator = e.operator_id.as_deref().unwrap_or("");
             out.push_str(&format!(
@@ -1058,6 +1049,24 @@ pub struct AuditDaySummary {
     pub date: String,
     /// Number of audit entries on that day.
     pub count: i64,
+}
+
+fn csv_field(s: &str) -> String {
+    let formula_safe = if matches!(s.chars().next(), Some('=' | '+' | '-' | '@')) {
+        format!("'{s}")
+    } else {
+        s.to_owned()
+    };
+
+    if formula_safe.contains(',')
+        || formula_safe.contains('"')
+        || formula_safe.contains('\n')
+        || formula_safe.contains('\r')
+    {
+        format!("\"{}\"", formula_safe.replace('"', "\"\""))
+    } else {
+        formula_safe
+    }
 }
 
 /// A row from the memories table.
@@ -2002,6 +2011,17 @@ mod tests {
     fn memory_recency_invalid_timestamp_scores_zero() {
         let recency = memory_recency("not-a-date");
         assert_eq!(recency, 0.0);
+    }
+
+    #[test]
+    fn csv_field_neutralizes_formula_cells() {
+        assert_eq!(csv_field("=1+1"), "'=1+1");
+        assert_eq!(csv_field("+SUM(A1:A2)"), "'+SUM(A1:A2)");
+        assert_eq!(csv_field("-cmd"), "'-cmd");
+        assert_eq!(csv_field("@evil"), "'@evil");
+        assert_eq!(csv_field(" =1+1"), "' =1+1");
+        assert_eq!(csv_field("\t=1+1"), "'\t=1+1");
+        assert_eq!(csv_field("=1,2"), "\"'=1,2\"");
     }
 
     #[test]

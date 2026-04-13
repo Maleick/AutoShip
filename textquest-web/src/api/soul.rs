@@ -275,10 +275,16 @@ pub async fn export_all_audit_csv(State(state): State<Arc<AppState>>) -> impl In
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
 fn csv_field(s: &str) -> String {
-    if s.contains(',') || s.contains('"') || s.contains('\n') {
-        format!("\"{}\"", s.replace('"', "\"\""))
+    let formula_safe = if matches!(s.chars().next(), Some('=' | '+' | '-' | '@')) {
+        format!("'{s}")
     } else {
         s.to_owned()
+    };
+
+    if formula_safe.contains(',') || formula_safe.contains('"') || formula_safe.contains('\n') {
+        format!("\"{}\"", formula_safe.replace('"', "\"\""))
+    } else {
+        formula_safe
     }
 }
 
@@ -320,6 +326,27 @@ mod tests {
     #[test]
     fn csv_field_passthrough_plain() {
         assert_eq!(csv_field("say"), "say");
+    }
+
+    #[test]
+    fn csv_field_neutralizes_formula_cells() {
+        assert_eq!(csv_field("=1+1"), "'=1+1");
+        assert_eq!(csv_field("+SUM(A1:A2)"), "'+SUM(A1:A2)");
+        assert_eq!(csv_field("-cmd"), "'-cmd");
+        assert_eq!(csv_field("@evil"), "'@evil");
+
+        assert_eq!(csv_field(" =1+1"), "' =1+1");
+        assert_eq!(csv_field("\t=1+1"), "'\t=1+1");
+        assert_eq!(csv_field(" +SUM(A1:A2)"), "' +SUM(A1:A2)");
+        assert_eq!(csv_field("\t+SUM(A1:A2)"), "'\t+SUM(A1:A2)");
+        assert_eq!(csv_field(" -cmd"), "' -cmd");
+        assert_eq!(csv_field("\t-cmd"), "'\t-cmd");
+        assert_eq!(csv_field(" @evil"), "' @evil");
+        assert_eq!(csv_field("\t@evil"), "'\t@evil");
+
+        assert_eq!(csv_field("=1,2"), "\"'=1,2\"");
+        assert_eq!(csv_field("=say \"hi\""), "\"'=say \"\"hi\"\"\"");
+        assert_eq!(csv_field("=1\n2"), "\"'=1\n2\"");
     }
 
     #[test]
