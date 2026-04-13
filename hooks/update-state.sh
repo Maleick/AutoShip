@@ -92,7 +92,7 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Cleanup temp files on exit
 TMP_FILES=()
-cleanup() { for f in "${TMP_FILES[@]}"; do rm -f "$f"; done; }
+cleanup() { for f in "${TMP_FILES[@]+"${TMP_FILES[@]}"}"; do rm -f "$f"; done; }
 trap cleanup EXIT
 
 make_tmp() { local t; t=$(mktemp); TMP_FILES+=("$t"); echo "$t"; }
