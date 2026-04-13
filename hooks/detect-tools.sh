@@ -82,7 +82,7 @@ quota_gemini_api() {
   [[ -z "$api_key" ]] && return 1
   # Check quota via generativelanguage API — returns 429 when rate-limited
   local status
-  status=$(curl -sf --max-time 5 -o /dev/null -w "%{http_code}" --config - 2>/dev/null <<EOF
+  status=$(curl -sS --max-time 5 -o /dev/null -w "%{http_code}" --config - 2>/dev/null <<EOF
 url = "https://generativelanguage.googleapis.com/v1beta/models"
 header = "x-goog-api-key: ${api_key}"
 EOF
