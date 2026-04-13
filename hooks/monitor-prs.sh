@@ -102,6 +102,20 @@ while true; do
       age=$((now_epoch - merged_epoch))
       if [[ $age -lt 60 ]]; then
         emit_if_changed "$num" "[PR_MERGED]"
+
+        # Transition state to merged and write completed_at for the linked issue.
+        # Look up which issue this PR belongs to by matching pr_number in state.json.
+        if [[ -f "$STATE_FILE" ]] && command -v jq >/dev/null 2>&1; then
+          ISSUE_ID=$(jq -r --argjson pr "$num" \
+            '.issues | to_entries[] | select(.value.pr_number == $pr) | .key' \
+            "$STATE_FILE" 2>/dev/null | head -1)
+          if [[ -n "$ISSUE_ID" ]]; then
+            COMPLETED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            bash "$REPO_ROOT/hooks/update-state.sh" set-merged "$ISSUE_ID" \
+              completed_at="$COMPLETED_AT" 2>/dev/null || true
+            echo "[BEACON] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
+          fi
+        fi
       fi
     done
 

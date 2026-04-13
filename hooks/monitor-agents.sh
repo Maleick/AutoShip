@@ -5,6 +5,7 @@
 
 BEACON_DIR=".beacon"
 WORKSPACE_DIR="$BEACON_DIR/workspaces"
+STATE_FILE="$BEACON_DIR/state.json"
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "Error: not inside a git repository" >&2
@@ -55,6 +56,22 @@ check_dead_panes() {
     done
 }
 
+# Return true (0) if the issue with the given key has worktree_free=true in state.json.
+# These issues are dispatched without a worktree (e.g. claude-haiku/claude-sonnet subagents)
+# and their completion is detected by monitor-prs.sh when the PR merges — not by watching
+# a pane.log that doesn't exist.
+is_worktree_free() {
+  local key="$1"
+  local issue_num="${key#issue-}"
+  if [[ -f "$STATE_FILE" ]] && command -v jq >/dev/null 2>&1; then
+    local flag
+    flag=$(jq -r --arg k "$issue_num" '.issues[$k].worktree_free // false' "$STATE_FILE" 2>/dev/null)
+    [[ "$flag" == "true" ]]
+  else
+    return 1
+  fi
+}
+
 # Watch all existing pane.log files. Also periodically scan for new ones.
 watch_logs() {
   local pids=()
@@ -65,6 +82,11 @@ watch_logs() {
       [[ -f "$logfile" ]] || continue
       key=$(basename "$(dirname "$logfile")")
       pid_file="$WORKSPACE_DIR/$key/.watcher.pid"
+
+      # Skip worktree_free issues — their completion is handled by monitor-prs.sh
+      if is_worktree_free "$key"; then
+        continue
+      fi
 
       # Skip if already watching this log
       if [[ -f "$pid_file" ]]; then

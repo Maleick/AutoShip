@@ -272,6 +272,19 @@ for pair in "$@"; do
       '.issues[$id][$key] = $val' \
       "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
   fi
+
+  # When agent is set to a Claude model (non-worktree dispatch), mark worktree_free=true
+  # so monitor-agents.sh skips the issue and defers to monitor-prs.sh for completion.
+  if [[ "$KEY" == "agent" ]]; then
+    case "$VALUE" in
+      claude-haiku|claude-sonnet|claude-haiku-*|claude-sonnet-*)
+        TMP=$(make_tmp)
+        jq --arg id "$ISSUE_ID" \
+          '.issues[$id].worktree_free = true' \
+          "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+        ;;
+    esac
+  fi
 done
 
 echo "Updated issue $ISSUE_ID: state=$NEW_STATE"
