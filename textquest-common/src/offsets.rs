@@ -1456,11 +1456,11 @@ mod tests {
             eqmain::LOGIN_VIEW_MANAGER,
             eqmain::PINST_LOGIN_CLIENT,
             eqmain::PINST_LOGIN_CONTROLLER,
-            eqmain::EQMAIN_CHAR_SELECT_ENTER_WORLD,
-            eqmain::EQMAIN_SERVER_SELECT,
-            eqmain::EQMAIN_HANDLE_SPLASH,
-            eqmain::EQMAIN_CHAR_SELECT_SELECT_CHARACTER,
-            eqmain::EQMAIN_CHAR_SELECT_SET_FOCUS,
+            eqmain::CHAR_SELECT_ENTER_WORLD,
+            eqmain::SERVER_SELECT,
+            eqmain::HANDLE_SPLASH,
+            eqmain::CHAR_SELECT_SELECT_CHARACTER,
+            eqmain::CHAR_SELECT_SET_FOCUS,
         ];
         for addr in &addrs {
             assert!(
@@ -1609,18 +1609,13 @@ mod tests {
     }
 
     #[test]
-    fn eqgraphics_and_eqmain_offsets_are_unique() {
+    fn eqmain_offsets_are_unique_against_existing_offsets() {
         let new_offsets = [
-            EQGRAPHICS_REALRENDER_WORLD,
-            EQGRAPHICS_DEVICE_RESET,
-            EQGRAPHICS_INIT_RENDER,
-            EQGRAPHICS_RENDER_FRAME,
-            EQGRAPHICS_DX_PRESENT,
-            eqmain::EQMAIN_CHAR_SELECT_ENTER_WORLD,
-            eqmain::EQMAIN_SERVER_SELECT,
-            eqmain::EQMAIN_HANDLE_SPLASH,
-            eqmain::EQMAIN_CHAR_SELECT_SELECT_CHARACTER,
-            eqmain::EQMAIN_CHAR_SELECT_SET_FOCUS,
+            eqmain::CHAR_SELECT_ENTER_WORLD,
+            eqmain::SERVER_SELECT,
+            eqmain::HANDLE_SPLASH,
+            eqmain::CHAR_SELECT_SELECT_CHARACTER,
+            eqmain::CHAR_SELECT_SET_FOCUS,
         ];
 
         let existing_offsets = [

@@ -79,7 +79,6 @@ pub fn resolve_function_address(preferred_addr: u64, eq_base: u64, function_key:
         (None, None) => {
             tracing::error!(
                 function = function_key,
-                preferred = format!("{:#x}", preferred_addr),
                 "eq_fn could not resolve function address from preferred offset or fallback DB"
             );
             panic!("eq_fn unresolved address for {function_key}");
@@ -235,5 +234,75 @@ mod tests {
         assert!(!super::BINDING_LOG_ENABLED.load(std::sync::atomic::Ordering::Acquire));
         super::set_binding_debug_enabled(true);
         assert!(super::BINDING_LOG_ENABLED.load(std::sync::atomic::Ordering::Acquire));
+    }
+
+    // ─── to_camel_case edge cases ────────────────────────────────────────
+
+    #[test]
+    fn to_camel_case_empty_string() {
+        assert_eq!(super::to_camel_case(""), "");
+    }
+
+    #[test]
+    fn to_camel_case_no_underscores() {
+        assert_eq!(super::to_camel_case("already"), "already");
+    }
+
+    #[test]
+    fn to_camel_case_single_word() {
+        assert_eq!(super::to_camel_case("word"), "word");
+    }
+
+    #[test]
+    fn to_camel_case_leading_underscore() {
+        // Leading underscore means next char uppercased
+        assert_eq!(super::to_camel_case("_private"), "Private");
+    }
+
+    #[test]
+    fn to_camel_case_trailing_underscore() {
+        // Trailing underscore is stripped
+        assert_eq!(super::to_camel_case("trailing_"), "trailing");
+    }
+
+    #[test]
+    fn to_camel_case_consecutive_underscores() {
+        // Multiple consecutive underscores — only one transition
+        assert_eq!(super::to_camel_case("double__under"), "doubleUnder");
+    }
+
+    #[test]
+    fn to_camel_case_all_underscores() {
+        assert_eq!(super::to_camel_case("___"), "");
+    }
+
+    #[test]
+    fn to_camel_case_single_char_segments() {
+        assert_eq!(super::to_camel_case("a_b_c"), "aBC");
+    }
+
+    // ─── EqFn struct ─────────────────────────────────────────────────────
+
+    #[test]
+    fn eq_fn_new_stores_fields() {
+        let binding = super::EqFn::new(0xDEAD, "test_key");
+        assert_eq!(binding.preferred_addr, 0xDEAD);
+        assert_eq!(binding.function_key, "test_key");
+    }
+
+    // ─── install/clear fallback database ─────────────────────────────────
+
+    #[test]
+    fn install_and_clear_fallback_database() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        super::install_fallback_database(db);
+        // Verify it's installed by checking the lock is populated
+        assert!(super::FALLBACK_DB.get().is_some());
+
+        super::clear_fallback_database();
+        // Verify the inner option is None after clearing
+        let lock = super::FALLBACK_DB.get().unwrap();
+        let guard = lock.read().unwrap();
+        assert!(guard.is_none());
     }
 }

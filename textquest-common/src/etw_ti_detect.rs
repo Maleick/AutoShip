@@ -363,4 +363,161 @@ mod tests {
         assert_eq!(EtwTiEventId::from_id(5), Some(EtwTiEventId::ReadVmRemote));
         assert_eq!(EtwTiEventId::from_id(99), None);
     }
+
+    // ─── EtwTiEventId additional coverage ────────────────────────────────
+
+    #[test]
+    fn etw_ti_event_id_all_variants() {
+        assert_eq!(
+            EtwTiEventId::from_id(10),
+            Some(EtwTiEventId::SetThreadContext)
+        );
+        assert_eq!(EtwTiEventId::from_id(12), Some(EtwTiEventId::MapViewRemote));
+        assert_eq!(
+            EtwTiEventId::from_id(14),
+            Some(EtwTiEventId::QueueUserApcRemote)
+        );
+    }
+
+    #[test]
+    fn etw_ti_event_id_zero_returns_none() {
+        assert_eq!(EtwTiEventId::from_id(0), None);
+    }
+
+    #[test]
+    fn etw_ti_event_id_boundary_values() {
+        // Values adjacent to valid IDs
+        assert_eq!(EtwTiEventId::from_id(3), None);
+        assert_eq!(EtwTiEventId::from_id(4), None);
+        assert_eq!(EtwTiEventId::from_id(6), None);
+        assert_eq!(EtwTiEventId::from_id(11), None);
+        assert_eq!(EtwTiEventId::from_id(13), None);
+        assert_eq!(EtwTiEventId::from_id(15), None);
+    }
+
+    // ─── from_jsonl edge cases ───────────────────────────────────────────
+
+    #[test]
+    fn from_jsonl_empty_string() {
+        assert!(EtwTiEvent::from_jsonl("").is_none());
+    }
+
+    #[test]
+    fn from_jsonl_invalid_json() {
+        assert!(EtwTiEvent::from_jsonl("not json").is_none());
+    }
+
+    #[test]
+    fn from_jsonl_missing_event_id() {
+        let line = r#"{"Provider":"foo","Keyword":"bar"}"#;
+        assert!(EtwTiEvent::from_jsonl(line).is_none());
+    }
+
+    #[test]
+    fn from_jsonl_minimal_event() {
+        let line = r#"{"EventId":1}"#;
+        let event = EtwTiEvent::from_jsonl(line).expect("should parse minimal event");
+        assert_eq!(event.event_id, 1);
+        assert_eq!(event.provider, "");
+        assert_eq!(event.keyword, "");
+        assert!(event.calling_process_id.is_none());
+        assert!(event.target_process_id.is_none());
+    }
+
+    #[test]
+    fn from_jsonl_extra_fields_captured() {
+        let line = r#"{"EventId":1,"CustomField":"hello","NumericExtra":42}"#;
+        let event = EtwTiEvent::from_jsonl(line).expect("should parse");
+        assert_eq!(event.extra.get("CustomField").unwrap(), "hello");
+        assert_eq!(event.extra.get("NumericExtra").unwrap(), 42);
+    }
+
+    #[test]
+    fn from_jsonl_whitespace_trimming() {
+        let line = r#"  {"EventId":2}  "#;
+        let event = EtwTiEvent::from_jsonl(line).expect("should parse trimmed");
+        assert_eq!(event.event_id, 2);
+    }
+
+    // ─── parse_jsonl edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn parse_jsonl_empty_input() {
+        let events = parse_jsonl("");
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn parse_jsonl_all_blank_lines() {
+        let events = parse_jsonl("\n\n\n");
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn parse_jsonl_skips_invalid_lines() {
+        let input = r#"{"EventId":1}
+not valid json
+{"EventId":2}
+also invalid
+{"EventId":5}"#;
+        let events = parse_jsonl(input);
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].event_id, 1);
+        assert_eq!(events[1].event_id, 2);
+        assert_eq!(events[2].event_id, 5);
+    }
+
+    // ─── detect_loadlibrary_injection edge cases ─────────────────────────
+
+    #[test]
+    fn detect_injection_alloc_write_no_imageload() {
+        // Alloc + Write without ImageLoad should still detect
+        let jsonl = r#"{"EventId":1,"Provider":"Microsoft-Windows-Threat-Intelligence","Keyword":"ALLOCVM_REMOTE","Timestamp":"2026-01-01T00:00:00Z","CallingProcessId":100,"TargetProcessId":200,"BaseAddress":"0xABC0"}
+{"EventId":2,"Provider":"Microsoft-Windows-Threat-Intelligence","Keyword":"WRITEVM_REMOTE","Timestamp":"2026-01-01T00:00:01Z","CallingProcessId":100,"TargetProcessId":200,"BaseAddress":"0xABC0","ByteCount":256}"#;
+        let events = parse_jsonl(jsonl);
+        let detections = detect_loadlibrary_injection(&events);
+        assert_eq!(detections.len(), 1);
+        assert_eq!(detections[0].injector_pid, 100);
+        assert_eq!(detections[0].target_pid, 200);
+        assert!(detections[0].image_name.is_none());
+    }
+
+    #[test]
+    fn detect_injection_mismatched_addresses() {
+        // Alloc at address A, Write at address B — should NOT detect
+        let jsonl = r#"{"EventId":1,"Provider":"Microsoft-Windows-Threat-Intelligence","Keyword":"ALLOCVM_REMOTE","Timestamp":"2026-01-01T00:00:00Z","CallingProcessId":100,"TargetProcessId":200,"BaseAddress":"0x1000"}
+{"EventId":2,"Provider":"Microsoft-Windows-Threat-Intelligence","Keyword":"WRITEVM_REMOTE","Timestamp":"2026-01-01T00:00:01Z","CallingProcessId":100,"TargetProcessId":200,"BaseAddress":"0x2000","ByteCount":64}"#;
+        let events = parse_jsonl(jsonl);
+        let detections = detect_loadlibrary_injection(&events);
+        assert!(
+            detections.is_empty(),
+            "mismatched base addresses should not trigger detection"
+        );
+    }
+
+    #[test]
+    fn detect_injection_write_without_alloc() {
+        // Write event without preceding Alloc — should NOT detect
+        let jsonl = r#"{"EventId":2,"Provider":"Microsoft-Windows-Threat-Intelligence","Keyword":"WRITEVM_REMOTE","Timestamp":"2026-01-01T00:00:00Z","CallingProcessId":100,"TargetProcessId":200,"BaseAddress":"0x1000","ByteCount":64}"#;
+        let events = parse_jsonl(jsonl);
+        let detections = detect_loadlibrary_injection(&events);
+        assert!(detections.is_empty(), "write-only should not trigger");
+    }
+
+    #[test]
+    fn detect_injection_empty_events() {
+        let detections = detect_loadlibrary_injection(&[]);
+        assert!(detections.is_empty());
+    }
+
+    #[test]
+    fn detect_injection_events_without_pids() {
+        let jsonl = r#"{"EventId":1,"Provider":"Microsoft-Windows-Threat-Intelligence","Keyword":"ALLOCVM_REMOTE","Timestamp":"2026-01-01T00:00:00Z","BaseAddress":"0x1000"}"#;
+        let events = parse_jsonl(jsonl);
+        let detections = detect_loadlibrary_injection(&events);
+        assert!(
+            detections.is_empty(),
+            "events without PIDs should be skipped"
+        );
+    }
 }

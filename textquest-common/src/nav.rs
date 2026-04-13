@@ -78,6 +78,25 @@ pub enum HeadingMode {
 /// still converging within a few ticks for most angles.
 pub const LOOSE_MAX_TURN_PER_TICK: f32 = 16.0;
 
+/// Arrival threshold in game units (close enough to "be there").
+pub const ARRIVAL_DISTANCE: f32 = 15.0;
+
+/// Calculate heading from current position to target (EQ heading: 0-512, 0=north, increases CW).
+///
+/// Matches MQ2's formula from MQCommands.cpp `/face`:
+///   `atan2(target.x - player.x, target.y - player.y) * 256 / PI`
+/// which is equivalent to `atan2(dx, dy) * 256 / PI` mapped to 0..512.
+#[must_use]
+pub fn calc_heading(from: &Waypoint, to: &Waypoint) -> f32 {
+    let dx = to.x - from.x;
+    let dy = to.y - from.y;
+    let rad = dx.atan2(dy);
+    // 256/PI converts radians to EQ heading units (512 = full circle)
+    let heading = rad * 256.0 / std::f32::consts::PI;
+    // Normalize to 0..512
+    (heading + 512.0) % 512.0
+}
+
 /// A single point in 3D space with optional metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Waypoint {
@@ -2218,5 +2237,160 @@ mod tests {
         let json = serde_json::to_string(&reason).expect("serialize");
         let restored: PauseReason = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(reason, restored);
+    }
+
+    // ─── calc_heading tests ──────────────────────────────────────────────
+
+    #[test]
+    fn calc_heading_north() {
+        // Target is directly "north" (+Y from origin)
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(0.0, 100.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            heading.abs() < 0.1 || (heading - 512.0).abs() < 0.1,
+            "north heading should be ~0, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_east() {
+        // Target is directly "east" (+X from origin)
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(100.0, 0.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            (heading - 128.0).abs() < 0.1,
+            "east heading should be ~128, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_south() {
+        // Target is directly "south" (-Y from origin)
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(0.0, -100.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            (heading - 256.0).abs() < 0.1,
+            "south heading should be ~256, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_west() {
+        // Target is directly "west" (-X from origin)
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(-100.0, 0.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            (heading - 384.0).abs() < 0.1,
+            "west heading should be ~384, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_northeast() {
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(100.0, 100.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            (heading - 64.0).abs() < 0.1,
+            "NE heading should be ~64, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_southeast() {
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(100.0, -100.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            (heading - 192.0).abs() < 0.1,
+            "SE heading should be ~192, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_southwest() {
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(-100.0, -100.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            (heading - 320.0).abs() < 0.1,
+            "SW heading should be ~320, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_northwest() {
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to = Waypoint::new(-100.0, 100.0, 0.0);
+        let heading = calc_heading(&from, &to);
+        assert!(
+            (heading - 448.0).abs() < 0.1,
+            "NW heading should be ~448, got {heading}"
+        );
+    }
+
+    #[test]
+    fn calc_heading_result_always_in_range() {
+        // Test many angles to ensure result is always in [0, 512)
+        let from = Waypoint::new(100.0, 200.0, 0.0);
+        for angle_deg in (0..360).step_by(5) {
+            let rad = (angle_deg as f32).to_radians();
+            let to = Waypoint::new(from.x + rad.cos() * 50.0, from.y + rad.sin() * 50.0, 0.0);
+            let heading = calc_heading(&from, &to);
+            assert!(
+                (0.0..512.0).contains(&heading),
+                "heading {heading} out of range for angle {angle_deg}°"
+            );
+        }
+    }
+
+    #[test]
+    fn calc_heading_same_position() {
+        // Edge case: from == to. atan2(0,0) is 0 on most platforms.
+        let pos = Waypoint::new(10.0, 20.0, 30.0);
+        let heading = calc_heading(&pos, &pos);
+        assert!(
+            heading.is_finite(),
+            "heading should be finite for zero-distance"
+        );
+    }
+
+    #[test]
+    fn calc_heading_ignores_z() {
+        // Z difference should not affect heading
+        let from = Waypoint::new(0.0, 0.0, 0.0);
+        let to_flat = Waypoint::new(100.0, 0.0, 0.0);
+        let to_elevated = Waypoint::new(100.0, 0.0, 500.0);
+        let h1 = calc_heading(&from, &to_flat);
+        let h2 = calc_heading(&from, &to_elevated);
+        assert!(
+            (h1 - h2).abs() < f32::EPSILON,
+            "Z should not affect heading"
+        );
+    }
+
+    #[test]
+    fn calc_heading_symmetry() {
+        // Heading from A→B and B→A should differ by ~256 (opposite directions)
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(100.0, 50.0, 0.0);
+        let h_ab = calc_heading(&a, &b);
+        let h_ba = calc_heading(&b, &a);
+        let diff = (h_ab - h_ba).abs();
+        assert!(
+            (diff - 256.0).abs() < 0.1,
+            "opposite headings should differ by ~256, got diff={diff}"
+        );
+    }
+
+    // ─── ARRIVAL_DISTANCE const ──────────────────────────────────────────
+
+    #[test]
+    fn arrival_distance_is_positive() {
+        const _: () = assert!(ARRIVAL_DISTANCE > 0.0);
     }
 }

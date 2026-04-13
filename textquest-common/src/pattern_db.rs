@@ -24,7 +24,7 @@
 
 use std::collections::HashMap;
 
-use serde::{de::Error as _, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Error as _};
 
 use crate::scanner::{self, Pattern};
 

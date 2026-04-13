@@ -190,4 +190,93 @@ mod tests {
             bincode::serde::encode_to_vec(&announcement, bincode::config::standard()).unwrap();
         assert!(PeerAnnouncement::decode(&payload).is_err());
     }
+
+    // ─── Additional validation edge cases ────────────────────────────────
+
+    #[test]
+    fn announcement_rejects_oversized_node_name() {
+        let mut announcement = sample_announcement();
+        announcement.node_name = "x".repeat(MAX_DISCOVERY_NODE_NAME_LEN + 1);
+        assert!(announcement.validate().is_err());
+    }
+
+    #[test]
+    fn announcement_accepts_max_node_name_length() {
+        let mut announcement = sample_announcement();
+        announcement.node_name = "x".repeat(MAX_DISCOVERY_NODE_NAME_LEN);
+        assert!(announcement.validate().is_ok());
+    }
+
+    #[test]
+    fn announcement_rejects_blank_character_name() {
+        let mut announcement = sample_announcement();
+        announcement.sessions[0].character_name = Some("   ".to_string());
+        assert!(announcement.validate().is_err());
+    }
+
+    #[test]
+    fn announcement_rejects_oversized_character_name() {
+        let mut announcement = sample_announcement();
+        announcement.sessions[0].character_name = Some("z".repeat(MAX_DISCOVERY_STRING_LEN + 1));
+        assert!(announcement.validate().is_err());
+    }
+
+    #[test]
+    fn announcement_rejects_blank_zone_short_name() {
+        let mut announcement = sample_announcement();
+        announcement.sessions[0].zone_short_name = Some("  ".to_string());
+        assert!(announcement.validate().is_err());
+    }
+
+    #[test]
+    fn announcement_rejects_oversized_zone_short_name() {
+        let mut announcement = sample_announcement();
+        announcement.sessions[0].zone_short_name = Some("a".repeat(MAX_DISCOVERY_STRING_LEN + 1));
+        assert!(announcement.validate().is_err());
+    }
+
+    #[test]
+    fn announcement_accepts_none_optional_fields() {
+        let mut announcement = sample_announcement();
+        announcement.sessions[0].character_name = None;
+        announcement.sessions[0].zone_short_name = None;
+        announcement.sessions[0].client_id = None;
+        assert!(announcement.validate().is_ok());
+    }
+
+    #[test]
+    fn announcement_empty_sessions_is_valid() {
+        let mut announcement = sample_announcement();
+        announcement.sessions.clear();
+        assert!(announcement.validate().is_ok());
+        let encoded = announcement.encode().unwrap();
+        let decoded = PeerAnnouncement::decode(&encoded).unwrap();
+        assert!(decoded.sessions.is_empty());
+    }
+
+    #[test]
+    fn announcement_max_sessions_boundary() {
+        let mut announcement = sample_announcement();
+        announcement.sessions = (0..MAX_DISCOVERY_SESSIONS)
+            .map(|pid| PeerSessionAnnouncement {
+                client_id: None,
+                pid: pid as u32,
+                character_name: None,
+                zone_short_name: None,
+                active: false,
+            })
+            .collect();
+        // Exactly at the limit should be valid
+        assert!(announcement.validate().is_ok());
+    }
+
+    #[test]
+    fn decode_empty_payload_fails() {
+        assert!(PeerAnnouncement::decode(&[]).is_err());
+    }
+
+    #[test]
+    fn decode_garbage_payload_fails() {
+        assert!(PeerAnnouncement::decode(&[0xFF, 0xFE, 0xFD]).is_err());
+    }
 }

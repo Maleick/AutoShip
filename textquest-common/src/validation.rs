@@ -133,12 +133,78 @@ fn check_fields(
 }
 
 #[cfg(test)]
-#[test]
-fn validate_struct_sizes_smoke_test() {
-    let violations = validate_struct_sizes();
-    assert!(
-        violations.is_empty(),
-        "struct validation violations:\n{}",
-        violations.join("\n")
-    );
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_struct_sizes_smoke_test() {
+        let violations = validate_struct_sizes();
+        assert!(
+            violations.is_empty(),
+            "struct validation violations:\n{}",
+            violations.join("\n")
+        );
+    }
+
+    #[test]
+    fn check_fields_within_bounds_produces_no_violations() {
+        let mut violations = Vec::new();
+        check_fields(
+            "TestStruct",
+            100,
+            [("field_a", 0, 4), ("field_b", 96, 4)],
+            &mut violations,
+        );
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn check_fields_exceeding_size_produces_violation() {
+        let mut violations = Vec::new();
+        check_fields(
+            "TestStruct",
+            10,
+            [("overflow_field", 8, 4)],
+            &mut violations,
+        );
+        assert_eq!(violations.len(), 1);
+        assert!(violations[0].contains("overflow_field"));
+        assert!(violations[0].contains("TestStruct"));
+    }
+
+    #[test]
+    fn check_fields_at_exact_boundary_is_ok() {
+        let mut violations = Vec::new();
+        // offset=6, size=4, struct_size=10 → 6+4=10 == struct_size, OK
+        check_fields("Exact", 10, [("boundary", 6, 4)], &mut violations);
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn check_fields_one_byte_over_is_violation() {
+        let mut violations = Vec::new();
+        // offset=7, size=4, struct_size=10 → 7+4=11 > 10
+        check_fields("Over", 10, [("one_over", 7, 4)], &mut violations);
+        assert_eq!(violations.len(), 1);
+    }
+
+    #[test]
+    fn check_fields_multiple_violations_reported() {
+        let mut violations = Vec::new();
+        check_fields(
+            "Multi",
+            4,
+            [("a", 3, 4), ("b", 0, 2), ("c", 5, 1)],
+            &mut violations,
+        );
+        // a: 3+4=7>4, b: 0+2=2<=4 ok, c: 5+1=6>4
+        assert_eq!(violations.len(), 2);
+    }
+
+    #[test]
+    fn check_fields_zero_size_struct_always_violates() {
+        let mut violations = Vec::new();
+        check_fields("Zero", 0, [("any", 0, 1)], &mut violations);
+        assert_eq!(violations.len(), 1);
+    }
 }

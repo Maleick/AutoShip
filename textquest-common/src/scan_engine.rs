@@ -146,16 +146,15 @@ pub fn scan_module(
         };
 
         // Validate against compiled constant.
-        let validated = entry.expected_preferred == Some(resolved);
-
-        if let Some(expected) = entry.expected_preferred {
-            if !validated {
-                report
-                    .entries_moved
-                    .push((entry.name.to_string(), expected, resolved));
-            }
+        if let Some(expected) = entry.expected_preferred
+            && expected != resolved
+        {
+            report
+                .entries_moved
+                .push((entry.name.to_string(), expected, resolved));
         }
 
+        let validated = entry.expected_preferred == Some(resolved);
         if validated {
             report.entries_validated += 1;
         }
@@ -386,14 +385,14 @@ mod tests {
     /// Helper: build a scan entry with a specific pattern.
     fn entry(name: &'static str, pattern: &'static str, resolve: ResolveMode) -> ScanEntry {
         ScanEntry {
-            name,
+            name: name.to_string(),
             category: if matches!(resolve, ResolveMode::Direct) {
                 OffsetCategory::Function
             } else {
                 OffsetCategory::Global
             },
             module: ScanModule::EqGame,
-            pattern,
+            pattern: pattern.to_string(),
             resolve,
             expected_preferred: None,
         }
@@ -453,10 +452,10 @@ mod tests {
         data[0x16] = 0x00;
 
         let entries = [ScanEntry {
-            name: "testGlobal",
+            name: "testGlobal".to_string(),
             category: OffsetCategory::Global,
             module: ScanModule::EqGame,
-            pattern: "48 8B 05 ?? ?? ?? ??",
+            pattern: "48 8B 05 ?? ?? ?? ??".to_string(),
             resolve: ResolveMode::RipRelative { disp_offset: 3 },
             expected_preferred: None,
         }];
@@ -495,10 +494,10 @@ mod tests {
         data[0x86] = 0xFF;
 
         let entries = [ScanEntry {
-            name: "testNeg",
+            name: "testNeg".to_string(),
             category: OffsetCategory::Global,
             module: ScanModule::EqGame,
-            pattern: "48 8B 05 ?? ?? ?? ??",
+            pattern: "48 8B 05 ?? ?? ?? ??".to_string(),
             resolve: ResolveMode::RipRelative { disp_offset: 3 },
             expected_preferred: None,
         }];
@@ -548,10 +547,10 @@ mod tests {
         data[1] = 0xCD;
 
         let entries = [ScanEntry {
-            name: "eqmainOnly",
+            name: "eqmainOnly".to_string(),
             category: OffsetCategory::Function,
             module: ScanModule::EqMain,
-            pattern: "AB CD",
+            pattern: "AB CD".to_string(),
             resolve: ResolveMode::Direct,
             expected_preferred: None,
         }];
@@ -579,10 +578,10 @@ mod tests {
         let expected = preferred_base + 0x30;
 
         let entries = [ScanEntry {
-            name: "validated",
+            name: "validated".to_string(),
             category: OffsetCategory::Function,
             module: ScanModule::EqGame,
-            pattern: "55 48",
+            pattern: "55 48".to_string(),
             resolve: ResolveMode::Direct,
             expected_preferred: Some(expected),
         }];
@@ -611,10 +610,10 @@ mod tests {
         let expected = preferred_base + 0x40;
 
         let entries = [ScanEntry {
-            name: "moved",
+            name: "moved".to_string(),
             category: OffsetCategory::Function,
             module: ScanModule::EqGame,
-            pattern: "55 48",
+            pattern: "55 48".to_string(),
             resolve: ResolveMode::Direct,
             expected_preferred: Some(expected),
         }];
@@ -744,10 +743,10 @@ mod tests {
         data[15] = 0x05; // disp32 would need bytes [16..20], but buffer ends at 16
 
         let entries = [ScanEntry {
-            name: "ripDispOob",
+            name: "ripDispOob".to_string(),
             category: OffsetCategory::Global,
             module: ScanModule::EqGame,
-            pattern: "48 8B 05",
+            pattern: "48 8B 05".to_string(),
             resolve: ResolveMode::RipRelative { disp_offset: 3 },
             expected_preferred: None,
         }];
@@ -781,10 +780,10 @@ mod tests {
         data[0x86] = 0x00;
 
         let entries = [ScanEntry {
-            name: "ripTargetOob",
+            name: "ripTargetOob".to_string(),
             category: OffsetCategory::Global,
             module: ScanModule::EqGame,
-            pattern: "48 8B 05 ?? ?? ?? ??",
+            pattern: "48 8B 05 ?? ?? ?? ??".to_string(),
             resolve: ResolveMode::RipRelative { disp_offset: 3 },
             expected_preferred: None,
         }];
@@ -818,10 +817,10 @@ mod tests {
         data[0x16] = 0xFF;
 
         let entries = [ScanEntry {
-            name: "ripTargetBeforeBase",
+            name: "ripTargetBeforeBase".to_string(),
             category: OffsetCategory::Global,
             module: ScanModule::EqGame,
-            pattern: "48 8B 05 ?? ?? ?? ??",
+            pattern: "48 8B 05 ?? ?? ?? ??".to_string(),
             resolve: ResolveMode::RipRelative { disp_offset: 3 },
             expected_preferred: None,
         }];
@@ -937,10 +936,10 @@ mod tests {
         // A buffer full of 0xCC bytes — placeholder patterns would match everywhere.
         let data = vec![0xCCu8; 256];
         let entries = [ScanEntry {
-            name: "placeholderFunc",
+            name: "placeholderFunc".to_string(),
             category: OffsetCategory::Function,
             module: ScanModule::EqGame,
-            pattern: "CC CC CC CC CC CC CC CC",
+            pattern: "CC CC CC CC CC CC CC CC".to_string(),
             resolve: ResolveMode::Direct,
             expected_preferred: Some(0x0001_4000_0030),
         }];
@@ -958,5 +957,116 @@ mod tests {
         assert_eq!(report.entries_found, 0);
         assert!(report.entries_failed.is_empty());
         assert_eq!(report.entries_skipped, vec!["placeholderFunc"]);
+    }
+
+    // ─── Additional is_placeholder_pattern edge cases ────────────────────
+
+    #[test]
+    fn is_placeholder_empty_string() {
+        assert!(!is_placeholder_pattern(""));
+    }
+
+    #[test]
+    fn is_placeholder_single_cc() {
+        assert!(is_placeholder_pattern("CC"));
+    }
+
+    #[test]
+    fn is_placeholder_mixed_case_cc() {
+        assert!(is_placeholder_pattern("Cc cC CC"));
+    }
+
+    #[test]
+    fn is_placeholder_non_cc_single_byte() {
+        assert!(!is_placeholder_pattern("48"));
+    }
+
+    #[test]
+    fn is_placeholder_cc_followed_by_non_cc() {
+        assert!(!is_placeholder_pattern("CC CC 48"));
+    }
+
+    #[test]
+    fn is_placeholder_whitespace_only() {
+        // split_whitespace on all-whitespace yields None on first next()
+        assert!(!is_placeholder_pattern("   "));
+    }
+
+    // ─── scan_module additional coverage ─────────────────────────────────
+
+    #[test]
+    fn scan_module_empty_data() {
+        let entries = [entry("ghost", "48 89", ResolveMode::Direct)];
+        let report = scan_module(&[], 0x1000, 0x1000, ScanModule::EqGame, &entries);
+        assert_eq!(report.entries_scanned, 1);
+        assert_eq!(report.entries_found, 0);
+        assert_eq!(report.entries_failed, vec!["ghost"]);
+    }
+
+    #[test]
+    fn scan_module_empty_entries() {
+        let data = vec![0x48u8; 16];
+        let report = scan_module(&data, 0x1000, 0x1000, ScanModule::EqGame, &[]);
+        assert_eq!(report.entries_scanned, 0);
+        assert_eq!(report.entries_found, 0);
+        assert!(report.results.is_empty());
+    }
+
+    #[test]
+    fn scan_module_multiple_entries_mixed_results() {
+        let mut data = vec![0x00u8; 256];
+        // Place "48 89" at offset 0x10
+        data[0x10] = 0x48;
+        data[0x11] = 0x89;
+
+        let entries = [
+            entry("found", "48 89", ResolveMode::Direct),
+            entry("missing", "FF D0", ResolveMode::Direct),
+        ];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_scanned, 2);
+        assert_eq!(report.entries_found, 1);
+        assert_eq!(report.results.len(), 1);
+        assert_eq!(report.results[0].name, "found");
+        assert_eq!(report.entries_failed, vec!["missing"]);
+    }
+
+    #[test]
+    fn scan_result_resolved_preferred_correct() {
+        let mut data = vec![0x00u8; 256];
+        data[0x50] = 0xAB;
+        data[0x51] = 0xCD;
+
+        let entries = [entry("precise", "AB CD", ResolveMode::Direct)];
+        let module_base = 0x7FF6_0000_0000u64;
+        let preferred_base = 0x0001_4000_0000u64;
+
+        let report = scan_module(
+            &data,
+            module_base,
+            preferred_base,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_found, 1);
+        // resolved_preferred = preferred_base + match_offset
+        assert_eq!(report.results[0].resolved_preferred, preferred_base + 0x50);
+        assert_eq!(report.results[0].matched_at_offset, 0x50);
+    }
+
+    #[test]
+    fn scan_report_has_correct_module() {
+        let data = vec![0x00u8; 16];
+        let report = scan_module(&data, 0x1000, 0x1000, ScanModule::EqMain, &[]);
+        assert_eq!(report.module, ScanModule::EqMain);
     }
 }
