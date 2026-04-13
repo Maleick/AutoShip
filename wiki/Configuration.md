@@ -57,6 +57,8 @@ The primary runtime state file. Created by `hooks/init.sh`. Never edit directly 
 }
 ```
 
+`stats` is the canonical counters block for automation. The merge and cleanup pipeline should update these totals, and any scheduled metrics job can derive higher-level reporting fields such as merged PR count, open PR backlog, time-to-merge, or total token spend from `.autoship/token-ledger.json` plus GitHub PR metadata. Keep this object machine-readable so the README/wiki snapshot can be regenerated without scraping chat logs.
+
 ### Issue States
 
 | State       | Meaning                                 |

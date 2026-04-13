@@ -113,7 +113,10 @@ COMPLETE signal received
   → CI pass + simple: auto-merge
   → CI pass + complex: Sonnet review → merge
   → Merged: hooks/cleanup-worktree.sh
+  → Metrics snapshot refresh (state + ledger + PR metadata)
 ```
+
+Metrics should be derived from the machine-readable state files, not from chat logs. The merge/cleanup boundary is where AutoShip should update lifecycle counters, and any scheduled report should render the current backlog, merge latency, and token spend from `.autoship/state.json`, `.autoship/token-ledger.json`, and GitHub PR metadata.
 
 ---
 
@@ -123,11 +126,12 @@ COMPLETE signal received
 | ------------------ | -------------------------- | ----------------- |
 | Orchestration plan | `.autoship/state.json`       | Yes (disk)        |
 | Event queue        | `.autoship/event-queue.json` | Yes (disk)        |
+| Metrics snapshot   | README/wiki or CI artifact  | Yes, if regenerated |
 | Agent labels       | GitHub labels on issues    | Yes (GitHub)      |
 | Pane state         | tmux (in-memory)           | No                |
 | Monitor processes  | tmux / Monitor tool        | No — restart them |
 
-On session restart: read state.json, reconcile GitHub labels, re-initialize event queue, restart 3 Monitor processes.
+On session restart: read state.json, reconcile GitHub labels, re-initialize event queue, restart 3 Monitor processes. Metrics automation should treat `.autoship/state.json` as the lifecycle source of truth and `.autoship/token-ledger.json` as the spend source of truth; higher-level reporting fields can be rendered into the snapshot layer without changing the conversation flow.
 
 ---
 

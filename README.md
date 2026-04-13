@@ -134,7 +134,7 @@ AutoShip detects available tools at startup and routes work accordingly.
 | `/autoship:start`  | Launch orchestration — classify issues, dispatch agents, loop until done |
 | `/autoship:plan`   | Dry run — analyze issues and show dispatch plan without executing        |
 | `/autoship:stop`   | Gracefully stop all agents, save state, add `autoship:paused` labels     |
-| `/autoship:status` | Live dashboard — active agents, quota bars, per-model token spend        |
+| `/autoship:status` | Live dashboard — active agents, quota bars, PR backlog, token spend      |
 
 ## How It Works
 
@@ -180,6 +180,8 @@ flowchart TD
 ```
 
 Every agent writes `AUTOSHIP_RESULT.md` and emits `COMPLETE`, `BLOCKED`, or `STUCK` as its final line. AutoShip never trusts conversation output — only the result file.
+
+Metrics can be refreshed from the same lifecycle boundary: merge, cleanup, and session close. A scheduled job can read `.autoship/state.json`, `.autoship/token-ledger.json`, and GitHub PR metadata, then regenerate the metrics snapshot in the README or wiki without hand-editing numbers.
 
 ## Dispatch Matrix
 
@@ -343,6 +345,17 @@ Real dispatch results from AutoShip running on its own codebase:
 | **Average**         | —                | **~9 min**        | **issue open → PR merged**        |
 
 > AutoShip shipped all 9 v1.4.0 self-improvement issues — open to merged PR — in a single session. Zero manual PRs. Zero manual merges.
+
+### Automated Metrics Snapshot
+
+| Metric | Source | Refresh | Notes |
+| ------ | ------ | ------- | ----- |
+| Open PRs | `gh pr list --state open` | nightly | Backlog size |
+| Merged PRs | GitHub merge events | on merge | Completed work by session |
+| Time to merge | PR created/merged timestamps | nightly | Median and p90 are useful |
+| Token spend | `.autoship/token-ledger.json` | on session close | Per issue and per session |
+
+A cron, GitHub Action, or local scheduled run can regenerate this table and commit it back into the README/wiki as the live metrics snapshot.
 
 ## Star This Repo
 
