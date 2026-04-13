@@ -43,6 +43,8 @@ pub mod routing;
 pub mod scan_engine;
 /// Byte-pattern signature scanner for offset resolution across EQ patches.
 pub mod scanner;
+/// Struct size/range validation helpers.
+pub mod validation;
 /// Soul Engine shared types (LLM personalities, memory, social dynamics).
 pub mod soul;
 /// Common type aliases and utility structures.

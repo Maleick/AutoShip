@@ -135,6 +135,16 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     init_tracing();
     tracing::info!("TextQuest DLL initializing (pid={})", std::process::id());
 
+    #[cfg(debug_assertions)]
+    {
+        let violations = textquest_common::validation::validate_struct_sizes();
+        if violations.is_empty() {
+            tracing::info!("Struct size validation passed");
+        } else {
+            tracing::warn!("Struct size validation failures:\n{}", violations.join("\n"));
+        }
+    }
+
     // 2. Resolve EQ base address.
     let eq_base = resolve_eq_base();
     EQ_BASE.store(eq_base, Ordering::Release);
