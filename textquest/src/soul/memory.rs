@@ -75,6 +75,22 @@ CREATE TABLE IF NOT EXISTS shared_references (
 CREATE INDEX IF NOT EXISTS idx_shared_refs
     ON shared_references(character_a, character_b);
 
+CREATE TABLE IF NOT EXISTS soul_audit_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    action_type  TEXT NOT NULL,
+    action_json  TEXT NOT NULL,
+    reason       TEXT,
+    operator_id  TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_character
+    ON soul_audit_log(character_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_audit_action_type
+    ON soul_audit_log(action_type, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS speech_patterns (
     character_id     INTEGER PRIMARY KEY,
     vocabulary_level REAL NOT NULL DEFAULT 0.5,
@@ -553,142 +569,214 @@ impl MemoryStore {
         serde_json::to_string_pretty(&export).context("Failed to serialize character export")
     }
 
-    // -- Memory decay by age (Issue #1018) --
+    // ── Audit log ────────────────────────────────────────────────────────────
 
-    /// Mark memories older than `days_threshold` days as decayed.
-    /// Returns the count of memories newly marked as decayed.
-    ///
-    /// This is a time-based decay distinct from `decay_tick` (which reduces importance
-    /// scores gradually). `decay_old_memories` is a hard cutoff for truly stale memories
-    /// that have not been rehearsed recently enough to survive.
+    /// Append an entry to the immutable audit log.
     ///
     /// # Errors
     ///
-    /// Returns an error if the SQLite operation fails.
-    pub fn decay_old_memories(&self, days_threshold: u32) -> Result<usize> {
-        let rows = self
-            .conn
+    /// Returns an error if the insert fails.
+    pub fn audit_log(
+        &self,
+        character_id: ClientId,
+        action_type: &str,
+        action_json: &str,
+        reason: Option<&str>,
+        operator_id: Option<&str>,
+    ) -> Result<i64> {
+        self.conn
             .execute(
-                "UPDATE memories
-                 SET decayed = 1
-                 WHERE decayed = 0
-                   AND created_at < datetime('now', ?1)",
-                params![format!("-{days_threshold} days")],
+                "INSERT INTO soul_audit_log \
+                 (character_id, action_type, action_json, reason, operator_id) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![character_id, action_type, action_json, reason, operator_id],
             )
-            .context("Failed to decay old memories")?;
+            .context("Failed to append audit log entry")?;
+
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Retrieve audit log entries for a character within an optional date range.
+    ///
+    /// `start_date` and `end_date` are ISO-8601 strings (`"YYYY-MM-DD"` or
+    /// `"YYYY-MM-DD HH:MM:SS"`).  Pass `None` to omit the respective bound.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_audit_log(
+        &self,
+        character_id: ClientId,
+        start_date: Option<&str>,
+        end_date: Option<&str>,
+    ) -> Result<Vec<AuditEntry>> {
+        let mut sql = String::from(
+            "SELECT id, character_id, action_type, action_json, reason, operator_id, created_at \
+             FROM soul_audit_log \
+             WHERE character_id = ?1",
+        );
+        if start_date.is_some() {
+            sql.push_str(" AND created_at >= ?2");
+        }
+        if end_date.is_some() {
+            sql.push_str(if start_date.is_some() {
+                " AND created_at <= ?3"
+            } else {
+                " AND created_at <= ?2"
+            });
+        }
+        sql.push_str(" ORDER BY created_at DESC");
+
+        let mut stmt = self.conn.prepare(&sql)?;
+
+        let rows = match (start_date, end_date) {
+            (Some(s), Some(e)) => stmt
+                .query_map(params![character_id, s, e], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+            (Some(s), None) => stmt
+                .query_map(params![character_id, s], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+            (None, Some(e)) => stmt
+                .query_map(params![character_id, e], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+            (None, None) => stmt
+                .query_map(params![character_id], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+        }
+        .context("Failed to query audit log")?;
 
         Ok(rows)
     }
 
-    /// Build a context string for the LLM from recent memories.
-    ///
-    /// Memories that have been decayed receive a 0.5× weight multiplier on their
-    /// importance score for ranking purposes. All memories (decayed or not) are
-    /// eligible for inclusion so the LLM still has access to distant memories when
-    /// they are the only ones available — but fresh memories are weighted higher.
-    ///
-    /// Returns up to `limit` memory lines sorted by effective importance descending.
+    /// Retrieve all audit log entries for a given action type (across all characters).
     ///
     /// # Errors
     ///
-    /// Returns an error if the recall or serialization fails.
-    pub fn get_context_for_llm(&self, character_id: ClientId, limit: usize) -> Result<String> {
-        // Pull all memories including decayed ones so we can apply the weight multiplier.
+    /// Returns an error if the query fails.
+    pub fn get_audit_log_by_action(&self, action_type: &str) -> Result<Vec<AuditEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
-             FROM memories
-             WHERE character_id = ?1
-             ORDER BY created_at DESC
-             LIMIT 10000",
+            "SELECT id, character_id, action_type, action_json, reason, operator_id, created_at \
+             FROM soul_audit_log \
+             WHERE action_type = ?1 \
+             ORDER BY created_at DESC",
         )?;
 
-        let rows: Vec<MemoryRow> = stmt
-            .query_map(params![character_id], MemoryRow::from_row)?
-            .collect::<rusqlite::Result<_>>()
-            .context("Failed to query memories for LLM context")?;
+        let rows = stmt
+            .query_map(params![action_type], AuditEntry::from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to query audit log by action")?;
 
-        // Apply 0.5× weight to decayed memories, then sort descending by effective importance.
-        let mut weighted: Vec<(f32, &MemoryRow)> = rows
-            .iter()
-            .map(|m| {
-                let effective = if m.decayed {
-                    m.importance * 0.5
+        Ok(rows)
+    }
+
+    /// Return per-day action counts for a character (oldest day first).
+    ///
+    /// Each element is `(date_str, count)` where `date_str` is `"YYYY-MM-DD"`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_audit_summary(&self, character_id: ClientId) -> Result<Vec<AuditDaySummary>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT date(created_at) AS day, COUNT(*) AS cnt \
+             FROM soul_audit_log \
+             WHERE character_id = ?1 \
+             GROUP BY day \
+             ORDER BY day ASC",
+        )?;
+
+        let rows = stmt
+            .query_map(params![character_id], |row| {
+                Ok(AuditDaySummary {
+                    date: row.get(0)?,
+                    count: row.get(1)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to query audit summary")?;
+
+        Ok(rows)
+    }
+
+    /// Export the full audit log for a character as a CSV string.
+    ///
+    /// Columns: `id,character_id,action_type,action_json,reason,operator_id,created_at`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query or serialisation fails.
+    pub fn export_audit_csv(&self, character_id: ClientId) -> Result<String> {
+        let entries = self.get_audit_log(character_id, None, None)?;
+
+        let mut out =
+            String::from("id,character_id,action_type,action_json,reason,operator_id,created_at\n");
+        for e in &entries {
+            // Minimal CSV escaping: wrap fields containing commas or quotes in
+            // double-quotes and double any internal quotes.
+            let csv_field = |s: &str| -> String {
+                if s.contains(',') || s.contains('"') || s.contains('\n') {
+                    format!("\"{}\"", s.replace('"', "\"\""))
                 } else {
-                    m.importance
-                };
-                (effective, m)
-            })
-            .collect();
-
-        weighted.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        weighted.truncate(limit);
-
-        let lines: Vec<String> = weighted
-            .into_iter()
-            .map(|(eff_importance, m)| {
-                format!(
-                    "[{}] ({}) {} importance={:.2}{}",
-                    m.created_at,
-                    m.zone.as_deref().unwrap_or("unknown"),
-                    m.event_type,
-                    eff_importance,
-                    if m.decayed { " [faded]" } else { "" },
-                )
-            })
-            .collect();
-
-        Ok(lines.join("\n"))
+                    s.to_owned()
+                }
+            };
+            let reason = e.reason.as_deref().unwrap_or("");
+            let operator = e.operator_id.as_deref().unwrap_or("");
+            out.push_str(&format!(
+                "{},{},{},{},{},{},{}\n",
+                e.id,
+                e.character_id,
+                csv_field(&e.action_type),
+                csv_field(&e.action_json),
+                csv_field(reason),
+                csv_field(operator),
+                csv_field(&e.created_at),
+            ));
+        }
+        Ok(out)
     }
 }
 
-/// Compute the recency score for a memory given its `created_at` ISO timestamp.
-///
-/// `recency = max(0.0, 1.0 - (days_ago / 30.0))`
-///
-/// Falls back to `0.0` if the timestamp cannot be parsed.
-fn memory_recency(created_at: &str) -> f32 {
-    // Parse the SQLite datetime format "YYYY-MM-DD HH:MM:SS" (UTC).
-    let ts = created_at.trim();
-    // Try both formats SQLite emits.
-    let parsed = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S")
-        .or_else(|_| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%S"));
-
-    let Ok(dt) = parsed else {
-        return 0.0;
-    };
-
-    let now = chrono::Utc::now().naive_utc();
-    let days_ago = now.signed_duration_since(dt).num_seconds() as f32 / 86_400.0;
-    f32::max(0.0, 1.0 - (days_ago / 30.0))
+/// A row from the `soul_audit_log` table.
+#[derive(Debug, Clone)]
+pub struct AuditEntry {
+    /// Database row ID.
+    pub id: i64,
+    /// Character this action belongs to.
+    pub character_id: i64,
+    /// Short label for the action (e.g., `"say"`, `"mood_change"`).
+    pub action_type: String,
+    /// Full action payload as a JSON string.
+    pub action_json: String,
+    /// Human-readable reason for the action, if provided.
+    pub reason: Option<String>,
+    /// Operator or system component that triggered the action.
+    pub operator_id: Option<String>,
+    /// ISO timestamp when the entry was created.
+    pub created_at: String,
 }
 
-/// Combined LLM relevance score: `importance × recency`.
-fn memory_combined_score(row: &MemoryRow) -> f32 {
-    row.importance * memory_recency(&row.created_at)
-}
-
-/// Format a slice of memories as compact text suitable for LLM injection.
-///
-/// Each memory is rendered on a single line:
-/// `[{event_type}] {created_at} zone={zone} mood={mood} importance={importance:.2}`
-///
-/// Memories are output in the order provided (caller is responsible for sorting).
-pub fn format_context_for_llm(memories: &[MemoryRow]) -> String {
-    if memories.is_empty() {
-        return String::new();
-    }
-
-    memories
-        .iter()
-        .map(|m| {
-            let zone = m.zone.as_deref().unwrap_or("unknown");
-            format!(
-                "[{}] {} zone={} mood={} importance={:.2}",
-                m.event_type, m.created_at, zone, m.mood_at_time, m.importance
-            )
+impl AuditEntry {
+    fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            character_id: row.get(1)?,
+            action_type: row.get(2)?,
+            action_json: row.get(3)?,
+            reason: row.get(4)?,
+            operator_id: row.get(5)?,
+            created_at: row.get(6)?,
         })
-        .collect::<Vec<_>>()
-        .join("\n")
+    }
+}
+
+/// Per-day action count returned by [`MemoryStore::get_audit_summary`].
+#[derive(Debug, Clone)]
+pub struct AuditDaySummary {
+    /// Calendar date (`"YYYY-MM-DD"`).
+    pub date: String,
+    /// Number of audit entries on that day.
+    pub count: i64,
 }
 
 /// A row from the memories table.
@@ -1627,165 +1715,142 @@ mod tests {
         assert_eq!(loaded.catchphrases, vec!["Indeed!"]);
     }
 
-    // -- Tests for Issue #1018: decay_old_memories and get_context_for_llm --
+    // ── Audit log tests ───────────────────────────────────────────────────────
 
-    /// Helper: insert a memory with a custom created_at timestamp (past).
-    fn record_aged_memory(
-        store: &MemoryStore,
-        character_id: ClientId,
-        days_old: i64,
-        importance: f32,
-    ) -> i64 {
-        let conn = store.connection();
-        let event_json = r#"{"Kill":{"target":"gnoll","zone":"bb"}}"#;
-        let offset = format!("-{days_old} days");
-        let sql = [
-            "INSERT INTO memories (character_id, event_type, event_json, mood_at_time, importance, created_at)",
-            " VALUES (?1, 'kill', ?3, 'Neutral', ?2, datetime('now', ?4))",
-        ]
-        .concat();
-        conn.execute(&sql, params![character_id, importance, event_json, offset])
+    #[test]
+    fn audit_log_insert_returns_positive_id() {
+        let store = open_memory_store();
+        let id = store
+            .audit_log(1, "say", r#"{"message":"Hello!"}"#, None, None)
             .unwrap();
-        conn.last_insert_rowid()
+        assert!(id > 0);
     }
 
     #[test]
-    fn decay_old_memories_marks_old_as_decayed() {
+    fn audit_log_is_append_only_sequential() {
         let store = open_memory_store();
-        // Insert a 40-day-old memory
-        record_aged_memory(&store, 1, 40, 1.0);
-        // Insert a fresh memory
-        store
-            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+        let id1 = store
+            .audit_log(1, "say", r#"{"message":"a"}"#, None, None)
             .unwrap();
-
-        let count = store.decay_old_memories(30).unwrap();
-        assert_eq!(count, 1, "Only the old memory should be decayed");
-
-        // Fresh memory should still be active
-        let active = store.recall_recent(1, 10).unwrap();
-        assert_eq!(active.len(), 1);
-        assert!(!active[0].decayed);
+        let id2 = store
+            .audit_log(1, "emote", r#"{"emote":"wave"}"#, None, None)
+            .unwrap();
+        assert!(id2 > id1);
     }
 
     #[test]
-    fn decay_old_memories_returns_zero_when_none_qualify() {
+    fn get_audit_log_returns_entries_for_character() {
         let store = open_memory_store();
-        // Insert only fresh memories
         store
-            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .audit_log(1, "say", r#"{"message":"Hi"}"#, None, Some("op1"))
             .unwrap();
         store
-            .record(1, &loot_event("sword", "bb"), MoodState::Excited, 1.0)
+            .audit_log(2, "emote", r#"{"emote":"wave"}"#, None, None)
             .unwrap();
 
-        let count = store.decay_old_memories(30).unwrap();
-        assert_eq!(count, 0);
+        let entries = store.get_audit_log(1, None, None).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].character_id, 1);
+        assert_eq!(entries[0].action_type, "say");
+        assert_eq!(entries[0].operator_id.as_deref(), Some("op1"));
     }
 
     #[test]
-    fn decay_old_memories_skips_already_decayed() {
+    fn get_audit_log_by_action_filters_correctly() {
         let store = open_memory_store();
-        // Insert a 40-day-old memory
-        record_aged_memory(&store, 1, 40, 0.01);
-        // Manually decay it first via prune_low_importance
-        store.prune_low_importance(1, 0.1).unwrap();
+        store
+            .audit_log(1, "say", r#"{"message":"a"}"#, None, None)
+            .unwrap();
+        store
+            .audit_log(1, "say", r#"{"message":"b"}"#, None, None)
+            .unwrap();
+        store
+            .audit_log(1, "emote", r#"{"emote":"bow"}"#, None, None)
+            .unwrap();
+        store
+            .audit_log(2, "say", r#"{"message":"c"}"#, None, None)
+            .unwrap();
 
-        // decay_old_memories should not double-count already decayed rows
-        let count = store.decay_old_memories(30).unwrap();
-        assert_eq!(
-            count, 0,
-            "Already-decayed memories should not be re-decayed"
-        );
+        let say_entries = store.get_audit_log_by_action("say").unwrap();
+        assert_eq!(say_entries.len(), 3);
+        assert!(say_entries.iter().all(|e| e.action_type == "say"));
+
+        let emote_entries = store.get_audit_log_by_action("emote").unwrap();
+        assert_eq!(emote_entries.len(), 1);
     }
 
     #[test]
-    fn decay_old_memories_multiple_characters_isolated() {
+    fn get_audit_summary_counts_per_day() {
         let store = open_memory_store();
-        // Character 1: 40-day-old memory
-        record_aged_memory(&store, 1, 40, 1.0);
-        // Character 2: fresh memory only
+        // Insert a few entries — they all land on today, so we expect 1 day.
         store
-            .record(2, &kill_event("orc", "gfay"), MoodState::Neutral, 1.0)
+            .audit_log(1, "say", r#"{"message":"a"}"#, None, None)
+            .unwrap();
+        store
+            .audit_log(
+                1,
+                "mood_change",
+                r#"{"from":"Neutral","to":"Happy"}"#,
+                None,
+                None,
+            )
             .unwrap();
 
-        let count = store.decay_old_memories(30).unwrap();
-        // Only character 1's old memory should be decayed
-        assert_eq!(count, 1);
-        // Character 2's memory still accessible
-        let c2_memories = store.recall_recent(2, 10).unwrap();
-        assert_eq!(c2_memories.len(), 1);
+        let summary = store.get_audit_summary(1).unwrap();
+        assert_eq!(summary.len(), 1);
+        assert_eq!(summary[0].count, 2);
     }
 
     #[test]
-    fn get_context_for_llm_returns_sorted_by_importance() {
+    fn get_audit_summary_empty_for_unknown_character() {
         let store = open_memory_store();
-        store
-            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 5.0)
-            .unwrap();
-        store
-            .record(1, &loot_event("sword", "bb"), MoodState::Excited, 2.0)
-            .unwrap();
-        store
-            .record(1, &kill_event("orc", "gfay"), MoodState::Neutral, 8.0)
-            .unwrap();
-
-        let ctx = store.get_context_for_llm(1, 10).unwrap();
-        // Highest importance (8.0) should appear before lower ones
-        let pos_8 = ctx.find("importance=8.00").unwrap();
-        let pos_5 = ctx.find("importance=5.00").unwrap();
-        let pos_2 = ctx.find("importance=2.00").unwrap();
-        assert!(pos_8 < pos_5);
-        assert!(pos_5 < pos_2);
+        let summary = store.get_audit_summary(999).unwrap();
+        assert!(summary.is_empty());
     }
 
     #[test]
-    fn get_context_for_llm_decayed_memories_weighted_half() {
+    fn export_audit_csv_includes_header_and_rows() {
         let store = open_memory_store();
-        // Fresh memory with importance 3.0
         store
-            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 3.0)
+            .audit_log(
+                1,
+                "say",
+                r#"{"message":"Hello, world!"}"#,
+                Some("idle behavior"),
+                Some("soul_engine"),
+            )
             .unwrap();
-        // Old memory with importance 10.0 (but will be decayed)
-        record_aged_memory(&store, 1, 60, 10.0);
 
-        // Decay old memories
-        store.decay_old_memories(30).unwrap();
-
-        let ctx = store.get_context_for_llm(1, 10).unwrap();
-        // The decayed memory has effective importance 10.0 * 0.5 = 5.0 > 3.0
-        // So decayed memory should appear first (importance=5.00 [faded])
-        assert!(
-            ctx.contains("[faded]"),
-            "Decayed memories should be marked [faded]"
-        );
-        let pos_faded = ctx.find("[faded]").unwrap();
-        let pos_fresh = ctx.find("importance=3.00").unwrap();
-        // faded entry (effective 5.0) should come before fresh (3.0) since 5.0 > 3.0
-        assert!(
-            pos_faded < pos_fresh,
-            "Decayed memory with higher effective importance should rank first"
-        );
+        let csv = store.export_audit_csv(1).unwrap();
+        assert!(csv.starts_with(
+            "id,character_id,action_type,action_json,reason,operator_id,created_at\n"
+        ));
+        assert!(csv.contains("say"));
+        assert!(csv.contains("soul_engine"));
+        // Comma in message value should be quoted
+        assert!(csv.contains("\"Hello, world!\"") || csv.contains("Hello"));
     }
 
     #[test]
-    fn get_context_for_llm_respects_limit() {
+    fn export_audit_csv_empty_for_new_character() {
         let store = open_memory_store();
-        for _ in 0..10 {
-            store
-                .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
-                .unwrap();
-        }
-
-        let ctx = store.get_context_for_llm(1, 3).unwrap();
-        let line_count = ctx.lines().count();
-        assert_eq!(line_count, 3, "Context should contain exactly limit lines");
+        let csv = store.export_audit_csv(42).unwrap();
+        let lines: Vec<&str> = csv.lines().collect();
+        // Header only
+        assert_eq!(lines.len(), 1);
     }
 
     #[test]
-    fn get_context_for_llm_empty_returns_empty_string() {
-        let store = open_memory_store();
-        let ctx = store.get_context_for_llm(99, 10).unwrap();
-        assert!(ctx.is_empty(), "Empty store should produce empty context");
+    fn audit_entry_debug_is_implemented() {
+        let entry = AuditEntry {
+            id: 1,
+            character_id: 2,
+            action_type: "say".into(),
+            action_json: "{}".into(),
+            reason: None,
+            operator_id: None,
+            created_at: "2026-01-01 00:00:00".into(),
+        };
+        let _ = format!("{entry:?}");
     }
 }

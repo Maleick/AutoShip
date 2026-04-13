@@ -37,12 +37,8 @@ pub struct AppState {
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
-    /// In-memory economy cycle state.
-    pub economy_state: Arc<api::economy::EconomyState>,
-    /// Optional static API token for protecting all `/api` endpoints.
-    /// Set via `TEXTQUEST_API_TOKEN` environment variable.
-    /// When `None`, API endpoints are unauthenticated (localhost-only deployment).
-    pub api_token: Option<String>,
+    /// In-memory soul audit log.
+    pub soul_audit: Arc<api::soul::SoulAuditState>,
 }
 
 fn credentials_db_path() -> PathBuf {
@@ -87,9 +83,20 @@ fn build_state() -> Arc<AppState> {
         credential_store,
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         loot_state: api::loot::LootState::new_demo(),
-        economy_state: api::economy::EconomyState::new_demo(),
-        api_token,
+        soul_audit: api::soul::SoulAuditState::new_demo(),
     })
+}
+
+/// Build the soul audit sub-router.
+fn build_soul_router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/audit", get(api::soul::get_all_audit))
+        .route("/audit/export.csv", get(api::soul::export_all_audit_csv))
+        .route("/audit/{character_id}", get(api::soul::get_character_audit))
+        .route(
+            "/audit/{character_id}/export.csv",
+            get(api::soul::export_character_audit_csv),
+        )
 }
 
 /// Build the loot sub-router.  Loot handlers extract `State<Arc<AppState>>`
@@ -157,6 +164,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
             put(api::character_config_unavailable),
         )
         .nest("/loot", build_loot_router())
+        .nest("/soul", build_soul_router())
         .fallback(api::api_not_found)
 }
 
@@ -241,8 +249,7 @@ mod tests {
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             loot_state: api::loot::LootState::new_demo(),
-            economy_state: api::economy::EconomyState::new_demo(),
-            api_token: None, // No auth in tests — auth middleware is a no-op when None
+            soul_audit: api::soul::SoulAuditState::new_demo(),
         })
     }
 
