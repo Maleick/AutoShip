@@ -21,6 +21,17 @@ PANE_LOG="${WORKSPACE}/pane.log"
 
 STALL_SECS=$(( ${STALL_TIMEOUT_MS:-300000} / 1000 ))
 
+mark_exhausted() {
+  local tool="codex-spark"
+  local quota_file="${REPO_ROOT}/.autoship/quota.json"
+  mkdir -p "$(dirname "$quota_file")"
+  if [[ ! -f "$quota_file" ]]; then
+    echo "{}" > "$quota_file"
+  fi
+  local tmp="${quota_file}.tmp.$$"
+  jq --arg t "$tool" '.[$t].exhausted = true' "$quota_file" > "$tmp" && mv "$tmp" "$quota_file"
+}
+
 if ! command -v codex >/dev/null 2>&1; then
   echo "STUCK" >> "$PANE_LOG"
   exit 1
@@ -51,6 +62,15 @@ trap cleanup EXIT
 codex app-server < "$FIFO_IN" > "$FIFO_OUT" 2>/dev/null &
 APP_SERVER_PID=$!
 
+# Quick check if it crashed immediately
+sleep 1
+if ! kill -0 "$APP_SERVER_PID" 2>/dev/null; then
+  echo "ERROR: codex app-server failed to start" >&2
+  mark_exhausted
+  echo "STUCK" >> "$PANE_LOG"
+  exit 1
+fi
+
 # Open write end of stdin fifo (keeps fifo open so app-server doesn't get EOF)
 exec 3>"$FIFO_IN"
 
@@ -71,6 +91,21 @@ send_rpc() {
 
 # Initialize
 send_rpc '{"jsonrpc":"2.0","method":"initialize","params":{"clientInfo":{"name":"autoship","version":"1.0.0"}},"id":1}'
+
+# Wait for initialization response (timeout 5s)
+if ! IFS= read -r -t 5 line <"$FIFO_OUT"; then
+  echo "ERROR: codex app-server initialization timed out" >&2
+  mark_exhausted
+  echo "STUCK" >> "$PANE_LOG"
+  exit 1
+fi
+
+if ! echo "$line" | jq -e '.result' >/dev/null 2>&1; then
+  echo "ERROR: codex app-server initialization failed: $line" >&2
+  mark_exhausted
+  echo "STUCK" >> "$PANE_LOG"
+  exit 1
+fi
 
 # thread/start
 START_MSG=$(jq -n --arg tid "$THREAD_ID" \
