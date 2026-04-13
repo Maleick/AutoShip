@@ -227,6 +227,29 @@ pub struct ContextMenuInfo {
     pub items: Vec<ContextMenuItem>,
 }
 
+/// Commands for controlling a managed EQ session from the orchestrator.
+///
+/// These commands are processed by `SessionControl::apply_command` and control
+/// per-session state transitions, group membership, and routing scope.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SessionControlCommand {
+    /// Pause this session — suspend command dispatch until `Resume` is received.
+    Pause,
+    /// Resume a paused session — return to active command dispatch.
+    Resume,
+    /// Assign this session to a group (1-based group ID).
+    ///
+    /// A `group_id` of `0` removes the session from any group and resets its
+    /// routing scope to `AllSession`.
+    SetGroup {
+        /// Target group ID (1-based; 0 = ungrouped / AllSession).
+        group_id: u8,
+    },
+    /// Set this session's routing scope to `AllSession` so it receives every
+    /// broadcast command rather than only group-scoped ones.
+    BroadcastAll,
+}
+
 /// Commands sent from the manager to an injected DLL
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {

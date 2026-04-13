@@ -1,5 +1,8 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
+/// Session and group control model for the orchestrator.
+pub mod session_control;
+
 use crate::camp::cc::CcType;
 use crate::camp::config::CampConfig;
 use crate::camp::hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D};
