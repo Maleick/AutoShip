@@ -515,6 +515,14 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
             e
         );
     }
+    if let Err(e) = hooks::install_all() {
+        tracing::warn!("Detour hook manager install_all() failed: {}", e);
+    }
+    #[cfg(windows)]
+    {
+        // Trampoline hardening is defensive-only and must never block initialization.
+        stealth::trampoline::TrampolineHardener::new().protect_registered();
+    }
 
     Ok(())
 }
