@@ -1,0 +1,106 @@
+name: Branch Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  delete-merged-branches:
+    name: Delete merged feature branches
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Linux, X64, textquest]
+    steps:
+      - name: Delete merged branch
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const ref = context.payload.pull_request.head.ref;
+
+            // Skip protected branches and default branch
+            const skipBranches = ['master', 'main', 'develop', 'development'];
+            if (skipBranches.includes(ref)) {
+              core.info(`Skipping protected branch: ${ref}`);
+              return;
+            }
+
+            // Skip non-feature branches (releases, hotfixes, etc.)
+            if (!ref.startsWith('claude/') && !ref.startsWith('codex/') && !ref.startsWith('feature/')) {
+              core.info(`Skipping non-feature branch: ${ref}`);
+              return;
+            }
+
+            try {
+              await github.rest.git.deleteRef({
+                owner,
+                repo,
+                ref: `heads/${ref}`
+              });
+              core.info(`✓ Deleted branch: ${ref}`);
+            } catch (error) {
+              core.warning(`Failed to delete ${ref}: ${error.message}`);
+            }
+
+      - name: Cleanup all stale merged branches
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Get all branches
+            const branches = await github.paginate(github.rest.repos.listBranches, {
+              owner,
+              repo,
+              per_page: 100
+            });
+
+            const skipBranches = ['master', 'main', 'develop', 'development'];
+            let deleted = 0;
+            let skipped = 0;
+
+            for (const branch of branches) {
+              const name = branch.name;
+
+              // Skip protected and non-feature branches
+              if (skipBranches.includes(name) ||
+                  (!name.startsWith('claude/') &&
+                   !name.startsWith('codex/') &&
+                   !name.startsWith('feature/'))) {
+                skipped++;
+                continue;
+              }
+
+              // Check if branch is merged into master
+              try {
+                const compare = await github.rest.repos.compareCommits({
+                  owner,
+                  repo,
+                  base: 'master',
+                  head: name
+                });
+
+                // If status is identical (merged), delete it
+                if (compare.data.status === 'identical' || compare.data.ahead_by === 0) {
+                  await github.rest.git.deleteRef({
+                    owner,
+                    repo,
+                    ref: `heads/${name}`
+                  });
+                  deleted++;
+                  core.info(`✓ Deleted merged branch: ${name}`);
+                }
+              } catch (error) {
+                core.debug(`Could not check ${name}: ${error.message}`);
+              }
+            }
+
+            core.notice(`Cleanup complete: ${deleted} deleted, ${skipped} skipped, ${branches.length - deleted - skipped} kept active`);
