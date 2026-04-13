@@ -7,8 +7,6 @@ on:
     types: [labeled, synchronize, closed]
   pull_request_target:
     types: [labeled, reopened, synchronize, ready_for_review]
-  check_suite:
-    types: [completed]
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -139,8 +137,7 @@ jobs:
   auto-merge:
     name: Enable auto-merge
     if: >
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
-      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
     timeout-minutes: 5
