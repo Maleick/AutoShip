@@ -96,6 +96,15 @@ impl OffsetDatabase {
         Some((actual_base + offset) as usize)
     }
 
+    /// Merge scan results into this database.
+    ///
+    /// Overwrites matching keys in the `globals` and `functions` maps with
+    /// addresses resolved by the scan engine. Entries not present in the report
+    /// are left unchanged (preserving compiled constants or JSON overrides).
+    pub fn merge_scan_results(&mut self, report: &crate::scan_engine::ScanReport) {
+        crate::scan_engine::apply_to_offset_db(report, self);
+    }
+
     /// Create from the current compile-time constants in offsets.rs
     #[must_use]
     pub fn from_compiled_offsets() -> Self {
@@ -103,16 +112,19 @@ impl OffsetDatabase {
             CAN_USE_ITEM, CAST_SPELL, CCHAT_MGR_CREATE_CHAT_WINDOW, CCHAT_MGR_FREE_CHAT_WINDOW,
             CCHAT_MGR_GET_RGBA, CCHAT_MGR_INIT_CONTEXT_MENU, CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
             CHANGE_HEIGHT, CHAR_LIST_ENTER_WORLD, CHAR_LIST_SELECT_CHAR, CLICKED_PLAYER,
-            CONTEXT_MENU_MGR_HANDLE_MENU, DO_ATTACK, DO_COMBAT_ABILITY, DO_LOOT, EQ_PREFERRED_BASE,
-            EXECUTE_CMD, FILE_INTEGRITY_DISPATCHER, FIX_HEADING, FREE_TARGET_CAST_SPELL,
-            GET_BEARING, GET_CON_LEVEL, GET_PC_CLIENT, INBOUND_MSG_COUNTER, INTERPRET_CMD,
-            INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM, INV_SLOT_MGR_SELECT_SLOT,
-            ISSUE_PET_COMMAND, NET_SEND, OUTBOUND_MSG_COUNTER, PINST_CDISPLAY, PINST_CEVERQUEST,
-            PINST_CONTEXT_MENU_MANAGER, PINST_CONTROLLED_PLAYER, PINST_LOCAL_PC,
-            PINST_LOCAL_PLAYER, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
-            PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, SERVER_MEMCHECK_HANDLER,
-            SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL, WORLD_AUTHENTICATE,
-            ZONE_GUIDE_MANAGER, context_menu_mgr, player_base, player_zone, spawn_manager,
+            CONTEXT_MENU_MGR_HANDLE_MENU, DO_ATTACK, DO_COMBAT_ABILITY, DO_LOOT, DSP_CHAT,
+            EQ_PREFERRED_BASE, EXECUTE_CMD, FILE_INTEGRITY_DISPATCHER, FIX_HEADING,
+            FREE_TARGET_CAST_SPELL, GET_BEARING, GET_CON_LEVEL, GET_PC_CLIENT, INBOUND_MSG_COUNTER,
+            INTERPRET_CMD, INV_SLOT_GET_ITEM_BASE, INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM,
+            INV_SLOT_MGR_SELECT_SLOT, ISSUE_PET_COMMAND, MEMCHECK4_PROCESS_ENUM, NET_SEND,
+            OUTBOUND_MSG_COUNTER, PINST_ACTIVE_CORPSE, PINST_CCHAT_WINDOW_MANAGER, PINST_CDISPLAY,
+            PINST_CEVERQUEST, PINST_CINV_SLOT_MGR, PINST_CONTEXT_MENU_MANAGER,
+            PINST_CONTROLLED_PLAYER, PINST_CXWND_MANAGER, PINST_LOCAL_PC, PINST_LOCAL_PLAYER,
+            PINST_SGRAPHICSENGINE, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
+            PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, RIGHT_CLICKED_ON_PLAYER,
+            SERVER_MEMCHECK_HANDLER, SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL,
+            WORLD_AUTHENTICATE, ZONE_GUIDE_MANAGER, context_menu_mgr, player_base, player_zone,
+            spawn_manager, zone_info,
         };
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
@@ -124,9 +136,20 @@ impl OffsetDatabase {
         globals.insert("pinstCDisplay".to_string(), PINST_CDISPLAY);
         globals.insert("pinstCEverQuest".to_string(), PINST_CEVERQUEST);
         globals.insert(
+            "pinstCChatWindowManager".to_string(),
+            PINST_CCHAT_WINDOW_MANAGER,
+        );
+        globals.insert("pinstCInvSlotMgr".to_string(), PINST_CINV_SLOT_MGR);
+        globals.insert("pinstCXWndManager".to_string(), PINST_CXWND_MANAGER);
+        globals.insert("pinstActiveCorpse".to_string(), PINST_ACTIVE_CORPSE);
+        globals.insert("pinstSGraphicsEngine".to_string(), PINST_SGRAPHICSENGINE);
+        globals.insert(
             "pinstCContextMenuManager".to_string(),
             PINST_CONTEXT_MENU_MANAGER,
         );
+        globals.insert("instEQZoneInfo".to_string(), zone_info::INST_EQ_ZONE_INFO);
+        globals.insert("outboundMsgCounter".to_string(), OUTBOUND_MSG_COUNTER);
+        globals.insert("inboundMsgCounter".to_string(), INBOUND_MSG_COUNTER);
 
         let mut pb = HashMap::new();
         pb.insert("next".to_string(), player_base::NEXT);
@@ -179,12 +202,14 @@ impl OffsetDatabase {
         funcs.insert("doAttack".into(), DO_ATTACK);
         funcs.insert("executeCmd".into(), EXECUTE_CMD);
         funcs.insert("interpretCmd".into(), INTERPRET_CMD);
+        funcs.insert("rightClickedOnPlayer".into(), RIGHT_CLICKED_ON_PLAYER);
         funcs.insert("clickedPlayer".into(), CLICKED_PLAYER);
         funcs.insert("issuePetCommand".into(), ISSUE_PET_COMMAND);
         funcs.insert("getConLevel".into(), GET_CON_LEVEL);
         funcs.insert("getPcClient".into(), GET_PC_CLIENT);
         funcs.insert("doLoot".into(), DO_LOOT);
         funcs.insert("processGameEvents".into(), PROCESS_GAME_EVENTS);
+        funcs.insert("dspChat".into(), DSP_CHAT);
         funcs.insert("realRenderWorld".into(), REAL_RENDER_WORLD);
         funcs.insert("fixHeading".into(), FIX_HEADING);
         funcs.insert("getBearing".into(), GET_BEARING);
@@ -210,24 +235,24 @@ impl OffsetDatabase {
         funcs.insert("invSlotMgrFindSlot".into(), INV_SLOT_MGR_FIND_SLOT);
         funcs.insert("invSlotMgrMoveItem".into(), INV_SLOT_MGR_MOVE_ITEM);
         funcs.insert("invSlotMgrSelectSlot".into(), INV_SLOT_MGR_SELECT_SLOT);
+        funcs.insert("invSlotGetItemBase".into(), INV_SLOT_GET_ITEM_BASE);
         funcs.insert(
             "spellBookWndMemorizeSet".into(),
             SPELL_BOOK_WND_MEMORIZE_SET,
         );
         funcs.insert("netSend".into(), NET_SEND);
-        funcs.insert("outboundMsgCounter".into(), OUTBOUND_MSG_COUNTER);
-        funcs.insert("inboundMsgCounter".into(), INBOUND_MSG_COUNTER);
         funcs.insert("fileIntegrityDispatcher".into(), FILE_INTEGRITY_DISPATCHER);
         funcs.insert("serverMemcheckHandler".into(), SERVER_MEMCHECK_HANDLER);
         funcs.insert("worldAuthenticate".into(), WORLD_AUTHENTICATE);
         funcs.insert("systemFingerprint".into(), SYSTEM_FINGERPRINT);
+        funcs.insert("memcheck4ProcessEnum".into(), MEMCHECK4_PROCESS_ENUM);
         funcs.insert(
             "contextMenuMgrHandleMenu".into(),
             CONTEXT_MENU_MGR_HANDLE_MENU,
         );
 
         Self {
-            client_date: "20260310".to_string(),
+            client_date: crate::offsets::CLIENT_DATE.to_string(),
             eq_preferred_base: EQ_PREFERRED_BASE,
             globals,
             player_base: pb,
@@ -400,7 +425,15 @@ mod tests {
             "pinstSpellManager",
             "pinstCDisplay",
             "pinstCEverQuest",
+            "pinstCChatWindowManager",
+            "pinstCInvSlotMgr",
+            "pinstCXWndManager",
+            "pinstActiveCorpse",
+            "pinstSGraphicsEngine",
             "pinstCContextMenuManager",
+            "instEQZoneInfo",
+            "outboundMsgCounter",
+            "inboundMsgCounter",
         ];
         for key in &expected_globals {
             assert!(db.get_global(key).is_some(), "missing global: {}", key);
@@ -472,12 +505,14 @@ mod tests {
             "doAttack",
             "executeCmd",
             "interpretCmd",
+            "rightClickedOnPlayer",
             "clickedPlayer",
             "issuePetCommand",
             "getConLevel",
             "getPcClient",
             "doLoot",
             "processGameEvents",
+            "dspChat",
             "realRenderWorld",
             "fixHeading",
             "getBearing",
@@ -494,14 +529,14 @@ mod tests {
             "invSlotMgrFindSlot",
             "invSlotMgrMoveItem",
             "invSlotMgrSelectSlot",
+            "invSlotGetItemBase",
             "spellBookWndMemorizeSet",
             "netSend",
-            "outboundMsgCounter",
-            "inboundMsgCounter",
             "fileIntegrityDispatcher",
             "serverMemcheckHandler",
             "worldAuthenticate",
             "systemFingerprint",
+            "memcheck4ProcessEnum",
             "contextMenuMgrHandleMenu",
         ];
         for key in &expected_functions {

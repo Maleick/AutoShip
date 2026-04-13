@@ -22,12 +22,16 @@ pub mod offset_db;
 pub mod offsets;
 /// Packet capture types — opcode filtering, capture sessions, and disk persistence.
 pub mod packet;
+/// Pattern database for runtime offset auto-detection (Auto Patch #746).
+pub mod pattern_db;
 /// UDP multicast peer-discovery announcement types.
 pub mod peer_discovery;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
 pub mod routing;
+/// Scan engine for runtime offset auto-detection (Auto Patch #746).
+pub mod scan_engine;
 /// Byte-pattern signature scanner for offset resolution across EQ patches.
 pub mod scanner;
 /// Soul Engine shared types (LLM personalities, memory, social dynamics).

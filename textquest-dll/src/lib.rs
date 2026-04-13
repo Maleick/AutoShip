@@ -129,6 +129,13 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     EQ_BASE.store(eq_base, Ordering::Release);
     tracing::info!(base = format!("{:#x}", eq_base), "EQ base address resolved");
 
+    // 2.1. Auto-detect offsets via pattern scanning (opt-in shadow mode).
+    // Set TEXTQUEST_SCAN_OFFSETS=1 to enable. Results are logged and validated
+    // against compiled constants but NOT used for control flow yet. See #746.
+    if std::env::var("TEXTQUEST_SCAN_OFFSETS").as_deref() == Ok("1") {
+        scan_offsets(eq_base);
+    }
+
     // 2.5. Initialize indirect syscall layer (RecycledGate).
     // Must happen early — other stealth modules (HWBP hooks, sleep obfuscation)
     // will use these syscalls for NtSetContextThread, NtProtectVirtualMemory, etc.
@@ -267,6 +274,132 @@ fn resolve_eq_base() -> u64 {
     {
         // Preferred base address for eqgame.exe — used for macOS stub builds.
         0x140000000
+    }
+}
+
+/// Run pattern scanning to auto-detect EQ offsets (shadow mode).
+///
+/// Scans eqgame.exe memory for known byte patterns and logs results. Does NOT
+/// update the active offset table — results are compared against compiled
+/// constants for validation only. See #746 (Auto Patch).
+#[allow(dead_code)] // Only called when TEXTQUEST_SCAN_OFFSETS is set
+fn scan_offsets(eq_base: u64) {
+    use textquest_common::pattern_db::{SCAN_ENTRIES, ScanModule};
+    use textquest_common::scan_engine;
+
+    tracing::info!("Auto Patch: starting offset scan (shadow mode)");
+
+    // Get module size to bound the scan region.
+    let module_size = get_module_size(eq_base);
+    if module_size == 0 {
+        tracing::warn!("Auto Patch: could not determine eqgame.exe module size — skipping scan");
+        return;
+    }
+
+    // SAFETY: eq_base is the base address of eqgame.exe obtained via
+    // GetModuleHandle, and module_size is from GetModuleInformation.
+    // The DLL is loaded inside eqgame.exe's process, so this memory is valid
+    // and readable for the lifetime of this function call.
+    let data = unsafe { std::slice::from_raw_parts(eq_base as *const u8, module_size) };
+
+    // ── Version detection ──────────────────────────────────────────
+    let (client_date, version_matches) = scan_engine::check_version(data);
+    match &client_date {
+        Some(date) if version_matches => {
+            tracing::info!(
+                date = %date,
+                "Auto Patch: EQ client matches expected version"
+            );
+        }
+        Some(date) => {
+            tracing::warn!(
+                detected = %date,
+                expected = %scan_engine::EXPECTED_CLIENT_DATE,
+                "Auto Patch: EQ client version MISMATCH — offsets may be stale!"
+            );
+        }
+        None => {
+            tracing::warn!("Auto Patch: could not detect EQ client version");
+        }
+    }
+
+    // ── Pattern scanning ───────────────────────────────────────────
+    let report = scan_engine::scan_module(
+        data,
+        eq_base,
+        textquest_common::offsets::EQ_PREFERRED_BASE,
+        ScanModule::EqGame,
+        SCAN_ENTRIES,
+    );
+
+    // Log summary.
+    tracing::info!(
+        scanned = report.entries_scanned,
+        found = report.entries_found,
+        validated = report.entries_validated,
+        failed = report.entries_failed.len(),
+        skipped_placeholders = report.entries_skipped.len(),
+        moved = report.entries_moved.len(),
+        "Auto Patch: scan complete"
+    );
+
+    // Log placeholder count once (debug level — expected until real patterns exist).
+    if !report.entries_skipped.is_empty() {
+        tracing::debug!(
+            count = report.entries_skipped.len(),
+            "Auto Patch: entries with placeholder patterns (awaiting Ghidra export)"
+        );
+    }
+
+    // Log individual real scan failures (not placeholders).
+    for name in &report.entries_failed {
+        tracing::warn!(name = %name, "Auto Patch: scan entry failed — pattern not found or resolution failed");
+    }
+
+    // Log moved offsets.
+    for (name, expected, found) in &report.entries_moved {
+        tracing::warn!(
+            name = %name,
+            expected = format!("{:#x}", expected),
+            found = format!("{:#x}", found),
+            "Auto Patch: offset moved since last build"
+        );
+    }
+}
+
+/// Get the size of the module loaded at `base_addr`.
+#[allow(dead_code)]
+fn get_module_size(base_addr: u64) -> usize {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HMODULE;
+        use windows::Win32::System::ProcessStatus::{GetModuleInformation, MODULEINFO};
+        use windows::Win32::System::Threading::GetCurrentProcess;
+
+        let mut info = MODULEINFO::default();
+        // SAFETY: GetCurrentProcess returns a pseudo-handle that is always valid.
+        // The HMODULE is obtained from GetModuleHandle and is valid. We pass a
+        // correctly-sized MODULEINFO buffer.
+        let ok = unsafe {
+            GetModuleInformation(
+                GetCurrentProcess(),
+                HMODULE(base_addr as isize),
+                &mut info,
+                std::mem::size_of::<MODULEINFO>() as u32,
+            )
+        };
+        if ok.is_ok() {
+            info.SizeOfImage as usize
+        } else {
+            0
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = base_addr;
+        // Stub for non-Windows builds — return 0 so module scanning is disabled.
+        0
     }
 }
 

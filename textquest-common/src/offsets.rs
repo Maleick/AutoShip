@@ -9,6 +9,13 @@
 /// Preferred base address of eqgame.exe (64-bit)
 pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 
+/// EQ client build date these offsets target, in `YYYYMMDD` format.
+///
+/// Single source of truth for runtime version checks — referenced by
+/// `scan_engine::EXPECTED_CLIENT_DATE` and `OffsetDatabase::from_compiled_offsets()`.
+/// Update this value when importing new offsets on patch day.
+pub const CLIENT_DATE: &str = "20260310";
+
 /// Pointer to local player (`PlayerClient`*)
 pub const PINST_LOCAL_PLAYER: u64 = 0x0001_40E8_E380;
 
@@ -329,7 +336,8 @@ pub mod eqmain {
     /// `LoginServerAPI::JoinServer` function address
     pub const JOIN_SERVER: u64 = 0x0001_8001_8050;
 
-    /// `LoginViewManager` function address
+    /// Pointer to `CLoginViewManager` instance
+    /// Source: eqmain.h `EQMain__pinstCLoginViewManager_x`
     pub const LOGIN_VIEW_MANAGER: u64 = 0x0001_8001_B0E0;
 
     // ─── Login pointer addresses (preferred base) ───
