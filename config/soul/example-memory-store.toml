@@ -1,0 +1,24 @@
+# Soul Engine — Memory Store Configuration
+# Controls how soul memories are stored, weighted, and pruned
+
+[soul.memory]
+# How long memories survive before automatic decay (days)
+# Lower = shorter memory (more forgetful characters)
+# Higher = better long-term recall but larger database
+memory_decay_days = 30
+
+# Maximum memories to keep per character
+# Pruning removes lowest-importance memories first
+max_memories_per_character = 500
+
+# Importance scoring weights (sum does not need to equal 1.0)
+# Recency weight: recent memories score higher
+recency_weight = 0.6
+# Emotion weight: memories tagged with strong emotion score higher  
+emotion_weight = 0.3
+# Access weight: frequently recalled memories score higher
+access_weight = 0.1
+
+# Summary generation: auto-summarize memories older than N days
+summary_threshold_days = 7
+summary_max_length = 500         # Characters per summary

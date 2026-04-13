@@ -1,0 +1,20 @@
+# Soul Engine — Rate Limit Configuration Examples
+# Controls how frequently the Soul Engine sends LLM requests
+
+# Silent Farm Mode (minimal LLM usage — grinding focus)
+[soul.llm.rate_limits]
+max_requests_per_character = 2   # 2 LLM requests per character per minute
+max_global_requests = 10         # 10 total LLM requests per minute across all chars
+request_cooldown_secs = 30       # Wait 30s between requests per character
+
+# Active RP Mode (high engagement)
+# [soul.llm.rate_limits]
+# max_requests_per_character = 8
+# max_global_requests = 40
+# request_cooldown_secs = 8
+
+# Conservative Mode (low quota, API cost control)
+# [soul.llm.rate_limits]
+# max_requests_per_character = 1
+# max_global_requests = 5
+# request_cooldown_secs = 60
