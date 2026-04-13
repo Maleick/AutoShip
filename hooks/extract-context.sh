@@ -9,20 +9,35 @@ CONTEXT_FILE="$AUTOSHIP_DIR/project-context.md"
 CONFIG_FILE="$AUTOSHIP_DIR/config.json"
 TEMP_FILE=$(mktemp)
 trap 'rm -f "$TEMP_FILE"' EXIT
+REPO_ROOT=$(pwd -P)
+
+is_safe_repo_file() {
+  local file_path="$1"
+  local resolved_path
+
+  [[ -f "$file_path" ]] || return 1
+  [[ ! -L "$file_path" ]] || return 1
+
+  resolved_path=$(readlink -f -- "$file_path" 2>/dev/null) || return 1
+  [[ -n "$resolved_path" ]] || return 1
+  [[ "$resolved_path" == "$REPO_ROOT/"* ]] || return 1
+  [[ -f "$resolved_path" ]] || return 1
+  [[ ! -L "$resolved_path" ]] || return 1
+}
 
 {
   echo "## Project Context"
   echo ""
 
   # 1. Read from .autoship/config.json
-  if [[ -f "$CONFIG_FILE" ]]; then
+  if is_safe_repo_file "$CONFIG_FILE"; then
     echo "### Project Configuration"
     jq -r 'to_entries | map("- **\(.key)**: \(.value)") | .[]' "$CONFIG_FILE" 2>/dev/null || true
     echo ""
   fi
 
   # 2. Extract from CLAUDE.md
-  if [[ -f "CLAUDE.md" ]]; then
+  if is_safe_repo_file "CLAUDE.md"; then
     echo "### Project Conventions (from CLAUDE.md)"
     # Extract sections whose heading topic is Patterns, Conventions, or Gotchas.
     awk '
@@ -49,7 +64,7 @@ trap 'rm -f "$TEMP_FILE"' EXIT
   fi
 
   # 3. Read AGENTS.md if present
-  if [[ -f "AGENTS.md" ]]; then
+  if is_safe_repo_file "AGENTS.md"; then
     echo "### Agent Constraints (from AGENTS.md)"
     cat "AGENTS.md"
     echo ""
