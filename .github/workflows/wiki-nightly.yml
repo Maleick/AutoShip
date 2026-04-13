@@ -47,4 +47,5 @@ jobs:
         run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
 
       - name: Publish wiki
+        if: github.event_name == 'workflow_run' || inputs.publish == true
         run: "%PYTHON_CMD% scripts/sync_wiki.py --push"

@@ -202,38 +202,40 @@ jobs:
             }
 
   sync-wiki:
-    name: Sync wiki after merge
+    name: Trigger wiki publish after merge
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
     timeout-minutes: 5
     runs-on: [self-hosted, Windows, X64, textquest]
     permissions:
-      contents: write
-    defaults:
-      run:
-        shell: cmd
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
       - name: Check for docs changes
         id: docs-check
+        shell: bash
         run: |
-          @echo off
-          setlocal EnableDelayedExpansion
-          set "DOCS_CHANGED=false"
-          for /f "usebackq delims=" %%F in (`git diff --name-only HEAD~1`) do (
-            set "FILE=%%F"
-            if /I "!FILE:~0,5!"=="docs/" set "DOCS_CHANGED=true"
-          )
-          echo [info] DOCS_CHANGED=!DOCS_CHANGED!
-          echo docs_changed=!DOCS_CHANGED!>>"%GITHUB_OUTPUT%"
-          exit /b 0
-      - name: Setup verified Python
-        if: steps.docs-check.outputs.docs_changed == 'true'
-        uses: ./.github/actions/setup-verified-python
-      - name: Sync wiki after merge
+          DOCS_CHANGED=false
+          while IFS= read -r FILE; do
+            if [[ "$FILE" == docs/* ]]; then
+              DOCS_CHANGED=true
+              break
+            fi
+          done < <(git diff --name-only HEAD~1)
+          echo "[info] DOCS_CHANGED=$DOCS_CHANGED"
+          echo "docs_changed=$DOCS_CHANGED" >> "$GITHUB_OUTPUT"
+      - name: Dispatch wiki-nightly publish
         if: steps.docs-check.outputs.docs_changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          "%PYTHON_CMD%" scripts/sync_wiki.py --push
+          curl -fS -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\":\"master\",\"inputs\":{\"publish\":\"true\",\"source_sha\":\"${{ github.event.pull_request.merge_commit_sha }}\"}}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/wiki-nightly.yml/dispatches"
