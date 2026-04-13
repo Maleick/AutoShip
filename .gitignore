@@ -35,3 +35,4 @@ BEACON_PROMPT.md
 *.key
 credentials.json
 service-account*.json
+CLAUDE.md
