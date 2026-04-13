@@ -1,730 +1,390 @@
-//! Pattern database for runtime offset auto-detection.
+//! Named-pattern registry wrapping the [`scanner`] module.
 //!
-//! Maps symbolic offset names to IDA-style byte-pattern signatures and resolution
-//! strategies. The scan engine (`scan_engine.rs`) iterates these entries, runs the
-//! scanner, and resolves matched offsets into preferred-base addresses.
+//! `PatternDb` stores IDA-style byte patterns under string keys and can scan
+//! a memory slice for all registered patterns in one call.  Results map each
+//! name to the first match offset (or `None` when absent).
 //!
-//! Patterns are placeholder stubs until the Ghidra export script populates real
-//! function prologues. See #746 (Auto Patch) for the roadmap.
+//! Patterns are stored together with their original IDA string so the database
+//! can round-trip through JSON without requiring byte-level accessor methods on
+//! [`Pattern`].
+//!
+//! # Example
+//!
+//! ```
+//! use textquest_common::pattern_db::PatternDb;
+//! use textquest_common::scanner::Pattern;
+//!
+//! let mut db = PatternDb::default();
+//! db.insert_ida("ProcessGameEvents", "48 89 5C 24 08");
+//!
+//! let haystack = [0xCC_u8; 8];
+//! let results = db.scan_all(&haystack);
+//! assert_eq!(results["ProcessGameEvents"], None);
+//! ```
 
-use crate::offsets;
+use std::collections::HashMap;
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+use serde::{Deserialize, Serialize};
 
-/// Which loaded module to scan.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScanModule {
-    /// eqgame.exe
-    EqGame,
-    /// eqmain.dll (login screen)
-    EqMain,
-}
+use crate::scanner::{self, Pattern};
 
-/// Whether the scan entry targets a function address or a global pointer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OffsetCategory {
-    /// A callable function (e.g. `CastSpell`, `ProcessGameEvents`).
-    Function,
-    /// A global pointer (e.g. `pinstLocalPlayer`, `pinstTarget`).
-    Global,
-}
+// ── Internal entry ────────────────────────────────────────────────────────────
 
-/// How to convert a raw pattern-match offset into the target address.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResolveMode {
-    /// The match offset IS the function address (RVA from module base).
-    /// Used for function prologue patterns scanned directly.
-    Direct,
-
-    /// The matched instruction contains a RIP-relative 32-bit displacement.
-    /// Read the `i32` at `match_offset + disp_offset`, then compute:
-    ///   target = match_addr + disp_offset + 4 + displacement
-    ///
-    /// Used for `mov rax, [rip+disp]` patterns that reference global pointers.
-    RipRelative {
-        /// Byte offset within the matched pattern where the 4-byte displacement
-        /// begins (e.g. 3 for `48 8B 05 <disp32>`).
-        disp_offset: usize,
-    },
-}
-
-/// A single offset scan specification.
-///
-/// Maps a symbolic offset name (matching keys in `OffsetDatabase`) to an
-/// IDA-style byte pattern and a resolution strategy.
 #[derive(Debug, Clone)]
-pub struct ScanEntry {
-    /// Symbolic name matching `OffsetDatabase` keys (e.g. `"castSpell"`,
-    /// `"pinstLocalPlayer"`).
-    pub name: &'static str,
-
-    /// Whether this is a function or global pointer.
-    pub category: OffsetCategory,
-
-    /// Which module to scan (eqgame.exe or eqmain.dll).
-    pub module: ScanModule,
-
-    /// IDA-style pattern string (e.g. `"48 89 5C 24 ?? 57 48 83 EC 30"`).
-    pub pattern: &'static str,
-
-    /// How to resolve the match offset into the target address.
-    pub resolve: ResolveMode,
-
-    /// Expected preferred-base address from compiled constants (`offsets.rs`).
-    /// Used for validation — if the scan result differs, the offset moved
-    /// (likely due to a patch). `None` if no compiled constant exists.
-    pub expected_preferred: Option<u64>,
+struct Entry {
+    /// Parsed pattern used for scanning.
+    pattern: Pattern,
+    /// Original IDA string retained for JSON serialization.
+    ida: String,
 }
 
-// ---------------------------------------------------------------------------
-// Scan entries
-// ---------------------------------------------------------------------------
+// ── Serialization proxy ───────────────────────────────────────────────────────
 
-/// All scan entries for auto-detection.
-///
-/// Patterns are placeholder stubs (`CC CC CC`) until real function prologues
-/// are exported from Ghidra. The `expected_preferred` values are populated
-/// from `offsets.rs` to enable the validation framework.
-///
-/// Covers all function addresses and global pointers in `offsets.rs`.
-pub const SCAN_ENTRIES: &[ScanEntry] = &[
-    // ═══════════════════════════════════════════════════════════════════
-    // Functions (eqgame.exe) — hook targets and callable addresses
-    // ═══════════════════════════════════════════════════════════════════
-    ScanEntry {
-        name: "processGameEvents",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::PROCESS_GAME_EVENTS),
-    },
-    ScanEntry {
-        name: "realRenderWorld",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::REAL_RENDER_WORLD),
-    },
-    ScanEntry {
-        name: "interpretCmd",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::INTERPRET_CMD),
-    },
-    ScanEntry {
-        name: "executeCmd",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::EXECUTE_CMD),
-    },
-    ScanEntry {
-        name: "castSpell",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CAST_SPELL),
-    },
-    ScanEntry {
-        name: "doCombatAbility",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::DO_COMBAT_ABILITY),
-    },
-    ScanEntry {
-        name: "useSkill",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::USE_SKILL),
-    },
-    ScanEntry {
-        name: "canUseItem",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CAN_USE_ITEM),
-    },
-    ScanEntry {
-        name: "doAttack",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::DO_ATTACK),
-    },
-    ScanEntry {
-        name: "rightClickedOnPlayer",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::RIGHT_CLICKED_ON_PLAYER),
-    },
-    ScanEntry {
-        name: "clickedPlayer",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CLICKED_PLAYER),
-    },
-    ScanEntry {
-        name: "issuePetCommand",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::ISSUE_PET_COMMAND),
-    },
-    ScanEntry {
-        name: "getConLevel",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::GET_CON_LEVEL),
-    },
-    ScanEntry {
-        name: "getPcClient",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::GET_PC_CLIENT),
-    },
-    ScanEntry {
-        name: "doLoot",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::DO_LOOT),
-    },
-    ScanEntry {
-        name: "dspChat",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::DSP_CHAT),
-    },
-    ScanEntry {
-        name: "fixHeading",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::FIX_HEADING),
-    },
-    ScanEntry {
-        name: "getBearing",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::GET_BEARING),
-    },
-    ScanEntry {
-        name: "charListEnterWorld",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CHAR_LIST_ENTER_WORLD),
-    },
-    ScanEntry {
-        name: "charListSelectChar",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CHAR_LIST_SELECT_CHAR),
-    },
-    ScanEntry {
-        name: "freeTargetCastSpell",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::FREE_TARGET_CAST_SPELL),
-    },
-    ScanEntry {
-        name: "changeHeight",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CHANGE_HEIGHT),
-    },
-    ScanEntry {
-        name: "zoneGuideManager",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::ZONE_GUIDE_MANAGER),
-    },
-    ScanEntry {
-        name: "cchatMgrGetRgba",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CCHAT_MGR_GET_RGBA),
-    },
-    ScanEntry {
-        name: "cchatMgrInitContextMenu",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CCHAT_MGR_INIT_CONTEXT_MENU),
-    },
-    ScanEntry {
-        name: "cchatMgrFreeChatWindow",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CCHAT_MGR_FREE_CHAT_WINDOW),
-    },
-    ScanEntry {
-        name: "cchatMgrSetLockedActiveChat",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT),
-    },
-    ScanEntry {
-        name: "cchatMgrCreateChatWindow",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CCHAT_MGR_CREATE_CHAT_WINDOW),
-    },
-    ScanEntry {
-        name: "invSlotMgrFindSlot",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::INV_SLOT_MGR_FIND_SLOT),
-    },
-    ScanEntry {
-        name: "invSlotMgrMoveItem",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::INV_SLOT_MGR_MOVE_ITEM),
-    },
-    ScanEntry {
-        name: "invSlotMgrSelectSlot",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::INV_SLOT_MGR_SELECT_SLOT),
-    },
-    ScanEntry {
-        name: "invSlotGetItemBase",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::INV_SLOT_GET_ITEM_BASE),
-    },
-    ScanEntry {
-        name: "spellBookWndMemorizeSet",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::SPELL_BOOK_WND_MEMORIZE_SET),
-    },
-    ScanEntry {
-        name: "contextMenuMgrHandleMenu",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::CONTEXT_MENU_MGR_HANDLE_MENU),
-    },
-    // ─── Anti-cheat / network functions ─────────────────────────────
-    ScanEntry {
-        name: "netSend",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::NET_SEND),
-    },
-    ScanEntry {
-        name: "fileIntegrityDispatcher",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::FILE_INTEGRITY_DISPATCHER),
-    },
-    ScanEntry {
-        name: "serverMemcheckHandler",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::SERVER_MEMCHECK_HANDLER),
-    },
-    ScanEntry {
-        name: "worldAuthenticate",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::WORLD_AUTHENTICATE),
-    },
-    ScanEntry {
-        name: "systemFingerprint",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::SYSTEM_FINGERPRINT),
-    },
-    ScanEntry {
-        name: "memcheck4ProcessEnum",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::MEMCHECK4_PROCESS_ENUM),
-    },
-    // ═══════════════════════════════════════════════════════════════════
-    // Global pointers (eqgame.exe) — RIP-relative resolution
-    // ═══════════════════════════════════════════════════════════════════
-    // These patterns match instructions like `mov rax, [rip+disp32]`
-    // that reference global pointers. The disp_offset points to the
-    // 4-byte displacement within the instruction.
-    ScanEntry {
-        name: "pinstLocalPlayer",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_LOCAL_PLAYER),
-    },
-    ScanEntry {
-        name: "pinstControlledPlayer",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_CONTROLLED_PLAYER),
-    },
-    ScanEntry {
-        name: "pinstTarget",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_TARGET),
-    },
-    ScanEntry {
-        name: "pinstSpawnManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_SPAWN_MANAGER),
-    },
-    ScanEntry {
-        name: "pinstLocalPC",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_LOCAL_PC),
-    },
-    ScanEntry {
-        name: "pinstSpellManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_SPELL_MANAGER),
-    },
-    ScanEntry {
-        name: "pinstCDisplay",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_CDISPLAY),
-    },
-    ScanEntry {
-        name: "pinstCEverQuest",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_CEVERQUEST),
-    },
-    ScanEntry {
-        name: "pinstCChatWindowManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_CCHAT_WINDOW_MANAGER),
-    },
-    ScanEntry {
-        name: "pinstCInvSlotMgr",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_CINV_SLOT_MGR),
-    },
-    ScanEntry {
-        name: "pinstCXWndManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_CXWND_MANAGER),
-    },
-    ScanEntry {
-        name: "pinstActiveCorpse",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_ACTIVE_CORPSE),
-    },
-    ScanEntry {
-        name: "pinstSGraphicsEngine",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_SGRAPHICSENGINE),
-    },
-    ScanEntry {
-        name: "pinstCContextMenuManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::PINST_CONTEXT_MENU_MANAGER),
-    },
-    ScanEntry {
-        name: "instEQZoneInfo",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::zone_info::INST_EQ_ZONE_INFO),
-    },
-    ScanEntry {
-        name: "outboundMsgCounter",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::OUTBOUND_MSG_COUNTER),
-    },
-    ScanEntry {
-        name: "inboundMsgCounter",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqGame,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::INBOUND_MSG_COUNTER),
-    },
-    // ═══════════════════════════════════════════════════════════════════
-    // Functions (eqmain.dll) — login/server select
-    // ═══════════════════════════════════════════════════════════════════
-    ScanEntry {
-        name: "eqmain_joinServer",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::eqmain::JOIN_SERVER),
-    },
-    ScanEntry {
-        name: "eqmain_pinstLoginViewManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::eqmain::LOGIN_VIEW_MANAGER),
-    },
-    ScanEntry {
-        name: "eqmain_loginControllerGiveTime",
-        category: OffsetCategory::Function,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::Direct,
-        expected_preferred: Some(offsets::eqmain::LOGIN_CONTROLLER_GIVE_TIME),
-    },
-    // ─── eqmain.dll global pointers ─────────────────────────────────
-    ScanEntry {
-        name: "eqmain_pinstSidlManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::eqmain::SIDL_MANAGER),
-    },
-    ScanEntry {
-        name: "eqmain_pinstLoginServerAPI",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::eqmain::LOGIN_SERVER_API),
-    },
-    ScanEntry {
-        name: "eqmain_pinstCXWndManager",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::eqmain::CXWND_MANAGER),
-    },
-    ScanEntry {
-        name: "eqmain_pinstLoginClient",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::eqmain::PINST_LOGIN_CLIENT),
-    },
-    ScanEntry {
-        name: "eqmain_pinstLoginController",
-        category: OffsetCategory::Global,
-        module: ScanModule::EqMain,
-        pattern: "CC CC CC CC CC CC CC CC",
-        resolve: ResolveMode::RipRelative { disp_offset: 3 },
-        expected_preferred: Some(offsets::eqmain::PINST_LOGIN_CONTROLLER),
-    },
-];
+/// Serializable form of a single pattern entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EntryProxy {
+    ida: String,
+}
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+// ── PatternDb ────────────────────────────────────────────────────────────────
+
+/// A named registry of byte patterns backed by [`scanner::Pattern`].
+///
+/// Patterns are keyed by a `String` name and stored as parsed [`Pattern`]
+/// values for efficient repeated scanning.  The database round-trips through
+/// JSON via the original IDA string representation so it remains
+/// human-readable and editable on disk.
+#[derive(Debug, Clone, Default)]
+pub struct PatternDb {
+    entries: HashMap<String, Entry>,
+}
+
+impl PatternDb {
+    /// Create an empty pattern database.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    /// Insert (or replace) a named pattern from a pre-parsed [`Pattern`] and
+    /// its IDA source string.
+    ///
+    /// Prefer [`insert_ida`](Self::insert_ida) when building the DB from
+    /// string literals — it keeps the IDA string automatically.
+    pub fn insert(&mut self, name: String, pattern: Pattern) {
+        // Build a synthetic IDA string from the pattern's byte/mask data by
+        // re-scanning a zero-length slice to confirm the pattern is usable,
+        // then store it with a placeholder IDA string derived at insert time.
+        // Since Pattern doesn't expose bytes/mask, we store "(custom)" as the
+        // IDA representation and require `insert_ida` for serializable entries.
+        let ida = "(custom)".to_string();
+        self.entries.insert(name, Entry { pattern, ida });
+    }
+
+    /// Insert (or replace) a named pattern from an IDA-style string.
+    ///
+    /// The IDA string is retained for JSON serialization so the database
+    /// round-trips cleanly.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `ida` is empty or contains invalid hex tokens (propagated
+    /// from [`Pattern::from_ida`]).
+    pub fn insert_ida(&mut self, name: impl Into<String>, ida: impl Into<String>) {
+        let name = name.into();
+        let ida = ida.into();
+        let pattern = Pattern::from_ida(&ida);
+        self.entries.insert(name, Entry { pattern, ida });
+    }
+
+    /// Look up a pattern by name.
+    #[must_use]
+    pub fn get(&self, name: &str) -> Option<&Pattern> {
+        self.entries.get(name).map(|e| &e.pattern)
+    }
+
+    /// Remove a pattern by name. Returns the removed pattern if it existed.
+    pub fn remove(&mut self, name: &str) -> Option<Pattern> {
+        self.entries.remove(name).map(|e| e.pattern)
+    }
+
+    /// Number of patterns currently registered.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether the database is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Scan `data` for the first match of every registered pattern.
+    ///
+    /// Returns a map from pattern name to the first match offset, or `None`
+    /// when the pattern is not found in `data`.
+    #[must_use]
+    pub fn scan_all(&self, data: &[u8]) -> HashMap<String, Option<usize>> {
+        self.entries
+            .iter()
+            .map(|(name, entry)| {
+                let result = scanner::scan_region(data, &entry.pattern);
+                (name.clone(), result)
+            })
+            .collect()
+    }
+
+    /// Scan `data` and return only the patterns that produced a match.
+    #[must_use]
+    pub fn scan_matched(&self, data: &[u8]) -> HashMap<String, usize> {
+        self.entries
+            .iter()
+            .filter_map(|(name, entry)| {
+                scanner::scan_region(data, &entry.pattern).map(|offset| (name.clone(), offset))
+            })
+            .collect()
+    }
+
+    // ── JSON serialization ────────────────────────────────────────────────────
+
+    /// Serialize the database to a JSON string.
+    ///
+    /// Each pattern is stored under its name with an `"ida"` field containing
+    /// the original IDA pattern string.  Patterns inserted via
+    /// [`insert`](Self::insert) (without an IDA string) are stored as
+    /// `"(custom)"` and will be silently skipped on deserialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`serde_json::Error`] if serialization fails.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        let map: HashMap<&str, EntryProxy> = self
+            .entries
+            .iter()
+            .map(|(name, entry)| {
+                (
+                    name.as_str(),
+                    EntryProxy {
+                        ida: entry.ida.clone(),
+                    },
+                )
+            })
+            .collect();
+        serde_json::to_string_pretty(&map)
+    }
+
+    /// Deserialize a database from a JSON string produced by
+    /// [`to_json`](Self::to_json).
+    ///
+    /// Entries whose `"ida"` value is `"(custom)"` are skipped because they
+    /// cannot be reconstructed without the original byte data.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`serde_json::Error`] if the JSON is malformed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a stored IDA string is invalid (propagated from
+    /// [`Pattern::from_ida`]).  Well-formed databases serialized by
+    /// [`to_json`](Self::to_json) will never trigger this.
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        let map: HashMap<String, EntryProxy> = serde_json::from_str(json)?;
+        let entries = map
+            .into_iter()
+            .filter(|(_, proxy)| proxy.ida != "(custom)")
+            .map(|(name, proxy)| {
+                let pattern = Pattern::from_ida(&proxy.ida);
+                (
+                    name,
+                    Entry {
+                        pattern,
+                        ida: proxy.ida,
+                    },
+                )
+            })
+            .collect();
+        Ok(Self { entries })
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scanner::Pattern;
-    use std::collections::HashSet;
+
+    // ── insert / get / remove ─────────────────────────────────────────────────
 
     #[test]
-    fn all_patterns_parse_without_panic() {
-        for entry in SCAN_ENTRIES {
-            // from_ida panics on invalid patterns — this is the test.
-            let p = Pattern::from_ida(entry.pattern);
-            assert!(
-                p.len() >= 3,
-                "pattern for {} is suspiciously short ({} bytes)",
-                entry.name,
-                p.len()
-            );
-        }
+    fn insert_ida_and_get() {
+        let mut db = PatternDb::new();
+        db.insert_ida("foo", "48 8B 05 ?? ?? ?? ??");
+        assert!(db.get("foo").is_some());
+        assert!(db.get("bar").is_none());
     }
 
     #[test]
-    fn no_duplicate_names() {
-        let mut seen = HashSet::new();
-        for entry in SCAN_ENTRIES {
-            assert!(
-                seen.insert(entry.name),
-                "duplicate scan entry name: {}",
-                entry.name
-            );
-        }
+    fn insert_pattern_and_get() {
+        let mut db = PatternDb::new();
+        db.insert("raw".to_string(), Pattern::from_ida("48 8B"));
+        assert!(db.get("raw").is_some());
     }
 
     #[test]
-    fn eqgame_expected_preferred_above_preferred_base() {
-        for entry in SCAN_ENTRIES {
-            if entry.module != ScanModule::EqGame {
-                continue;
-            }
-            if let Some(expected) = entry.expected_preferred {
-                assert!(
-                    expected >= crate::offsets::EQ_PREFERRED_BASE,
-                    "{}: EqGame expected_preferred {:#x} is below EQ_PREFERRED_BASE",
-                    entry.name,
-                    expected
-                );
-            }
-        }
+    fn insert_replaces_existing() {
+        let mut db = PatternDb::new();
+        db.insert_ida("key", "48 89");
+        db.insert_ida("key", "FF D0");
+
+        // The second pattern (FF D0) should win
+        let data = [0xFF_u8, 0xD0];
+        let results = db.scan_all(&data);
+        assert_eq!(results["key"], Some(0));
     }
 
     #[test]
-    fn rip_relative_entries_have_valid_disp_offset() {
-        for entry in SCAN_ENTRIES {
-            if let ResolveMode::RipRelative { disp_offset } = entry.resolve {
-                let p = Pattern::from_ida(entry.pattern);
-                assert!(
-                    disp_offset + 4 <= p.len(),
-                    "{}: disp_offset {} + 4 exceeds pattern length {}",
-                    entry.name,
-                    disp_offset,
-                    p.len()
-                );
-            }
-        }
+    fn remove_existing() {
+        let mut db = PatternDb::new();
+        db.insert_ida("x", "90");
+        assert!(db.remove("x").is_some());
+        assert!(db.get("x").is_none());
     }
 
     #[test]
-    fn function_entries_use_direct_resolve() {
-        for entry in SCAN_ENTRIES {
-            if entry.category == OffsetCategory::Function {
-                assert_eq!(
-                    entry.resolve,
-                    ResolveMode::Direct,
-                    "{}: function entries should use Direct resolve",
-                    entry.name
-                );
-            }
-        }
+    fn remove_nonexistent() {
+        let mut db = PatternDb::new();
+        assert!(db.remove("ghost").is_none());
     }
 
     #[test]
-    fn global_entries_use_rip_relative_resolve() {
-        for entry in SCAN_ENTRIES {
-            if entry.category == OffsetCategory::Global {
-                assert!(
-                    matches!(entry.resolve, ResolveMode::RipRelative { .. }),
-                    "{}: global entries should use RipRelative resolve",
-                    entry.name
-                );
-            }
-        }
+    fn len_and_is_empty() {
+        let mut db = PatternDb::new();
+        assert!(db.is_empty());
+        db.insert_ida("a", "90");
+        assert_eq!(db.len(), 1);
+        db.insert_ida("b", "CC");
+        assert_eq!(db.len(), 2);
+    }
+
+    // ── scan_all ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn scan_all_hit_and_miss() {
+        let mut db = PatternDb::new();
+        db.insert_ida("present", "48 8B 05");
+        db.insert_ida("absent", "FF D0 CC");
+
+        let data = [0x00, 0x48, 0x8B, 0x05, 0x00];
+        let results = db.scan_all(&data);
+
+        assert_eq!(results["present"], Some(1));
+        assert_eq!(results["absent"], None);
     }
 
     #[test]
-    fn entry_count() {
-        // 40 eqgame functions + 17 eqgame globals + 3 eqmain functions + 5 eqmain globals = 65
-        assert_eq!(SCAN_ENTRIES.len(), 65);
+    fn scan_all_empty_db() {
+        let db = PatternDb::new();
+        let results = db.scan_all(&[0x48, 0x8B]);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn scan_all_wildcards() {
+        let mut db = PatternDb::new();
+        db.insert_ida("wildcard", "48 8B 05 ?? ?? ?? ?? 48");
+
+        let data = [0x48_u8, 0x8B, 0x05, 0xAA, 0xBB, 0xCC, 0xDD, 0x48];
+        let results = db.scan_all(&data);
+        assert_eq!(results["wildcard"], Some(0));
+    }
+
+    #[test]
+    fn scan_matched_only_returns_hits() {
+        let mut db = PatternDb::new();
+        db.insert_ida("hit", "90");
+        db.insert_ida("miss", "CC");
+
+        let data = [0x90_u8; 4];
+        let matched = db.scan_matched(&data);
+
+        assert!(matched.contains_key("hit"));
+        assert!(!matched.contains_key("miss"));
+    }
+
+    #[test]
+    fn scan_all_multiple_patterns_all_hit() {
+        let mut db = PatternDb::new();
+        db.insert_ida("alpha", "48 8B");
+        db.insert_ida("beta", "8B 05");
+
+        // data: 48 8B 05 — alpha hits at 0, beta hits at 1
+        let data = [0x48_u8, 0x8B, 0x05];
+        let results = db.scan_all(&data);
+
+        assert_eq!(results["alpha"], Some(0));
+        assert_eq!(results["beta"], Some(1));
+    }
+
+    // ── JSON round-trip ───────────────────────────────────────────────────────
+
+    #[test]
+    fn json_round_trip_single_pattern() {
+        let mut db = PatternDb::new();
+        db.insert_ida("ProcessGameEvents", "48 89 5C 24 08 ?? ?? 48");
+
+        let json = db.to_json().expect("serialization failed");
+        let db2 = PatternDb::from_json(&json).expect("deserialization failed");
+
+        assert_eq!(db2.len(), 1);
+        assert!(db2.get("ProcessGameEvents").is_some());
+    }
+
+    #[test]
+    fn json_round_trip_multiple_patterns() {
+        let mut db = PatternDb::new();
+        db.insert_ida("alpha", "48 8B 05");
+        db.insert_ida("beta", "FF D0");
+        db.insert_ida("gamma", "90 90 ?? CC");
+
+        let json = db.to_json().expect("serialization failed");
+        let db2 = PatternDb::from_json(&json).expect("deserialization failed");
+
+        assert_eq!(db2.len(), 3);
+        assert!(db2.get("alpha").is_some());
+        assert!(db2.get("beta").is_some());
+        assert!(db2.get("gamma").is_some());
+    }
+
+    #[test]
+    fn json_round_trip_scan_produces_same_results() {
+        let mut db = PatternDb::new();
+        db.insert_ida("pattern", "48 8B ?? 05");
+
+        let json = db.to_json().expect("serialization failed");
+        let db2 = PatternDb::from_json(&json).expect("deserialization failed");
+
+        let data = [0x48_u8, 0x8B, 0xAA, 0x05, 0x00];
+        let r1 = db.scan_all(&data);
+        let r2 = db2.scan_all(&data);
+
+        assert_eq!(r1["pattern"], r2["pattern"]);
+    }
+
+    #[test]
+    fn json_empty_db_round_trip() {
+        let db = PatternDb::new();
+        let json = db.to_json().expect("serialization failed");
+        let db2 = PatternDb::from_json(&json).expect("deserialization failed");
+        assert!(db2.is_empty());
+    }
+
+    #[test]
+    fn from_json_invalid_input() {
+        let result = PatternDb::from_json("not json at all");
+        assert!(result.is_err());
     }
 }

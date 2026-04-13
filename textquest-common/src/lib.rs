@@ -22,7 +22,7 @@ pub mod offset_db;
 pub mod offsets;
 /// Packet capture types — opcode filtering, capture sessions, and disk persistence.
 pub mod packet;
-/// Pattern database for runtime offset auto-detection (Auto Patch #746).
+/// Named-pattern registry wrapping the scanner for batch offset resolution.
 pub mod pattern_db;
 /// UDP multicast peer-discovery announcement types.
 pub mod peer_discovery;
