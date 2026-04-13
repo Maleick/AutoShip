@@ -51,21 +51,28 @@ class ReadmeMetricsTests(unittest.TestCase):
         self.assertEqual(count, 2)
         self.assertFalse(exact)
 
-    def test_test_count_exits_when_cargo_fails(self) -> None:
+    def test_test_count_falls_back_to_source_scan_when_cargo_fails(self) -> None:
+        # script falls back to source scan on non-zero cargo exit (no SystemExit)
         completed = subprocess.CompletedProcess(
-            args=["cargo", "test", "--workspace"],
+            args=["cargo", "test", "--workspace", "--", "--list"],
             returncode=7,
             stdout="running 1 tests\n",
             stderr="boom\n",
         )
 
-        stderr = io.StringIO()
-        with mock.patch.object(self.module.subprocess, "run", return_value=completed):
-            with mock.patch.object(self.module.sys, "stderr", stderr):
-                with self.assertRaises(SystemExit) as ctx:
-                    self.module.test_count()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            stub = tmpdir / "stub.rs"
+            stub.write_text("#[test]\nfn t() {}\n", encoding="utf-8")
 
-        self.assertEqual(ctx.exception.code, 1)
+            stderr = io.StringIO()
+            with mock.patch.object(self.module.subprocess, "run", return_value=completed):
+                with mock.patch.object(self.module, "tracked_rust_files", return_value=[stub]):
+                    with mock.patch.object(self.module.sys, "stderr", stderr):
+                        count, exact = self.module.test_count()
+
+        self.assertFalse(exact)
+        self.assertGreaterEqual(count, 0)
         self.assertIn("cargo test failed", stderr.getvalue())
 
     def test_replace_line_raises_when_prefix_is_missing(self) -> None:

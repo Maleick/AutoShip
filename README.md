@@ -223,6 +223,8 @@ Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(wi
 | M10 — Economy       | 🔲 Planned | Krono farming, vendor cycle, loot distribution        |
 | M11 — Soul Engine   | 🔲 Planned | LLM personalities, persistent memory, social dynamics |
 
+README stays focused on building, running, and operating TextQuest. The current roadmap keeps economy work at `M10` and Soul Engine + LLM work at `M11`. Soul Engine + LLM behavior is tracked under `M11` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, and economy work.
+
 Full milestone spec + evidence rules: [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md)
 
 ## Documentation
