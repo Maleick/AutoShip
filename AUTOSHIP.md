@@ -11,8 +11,9 @@ quota_thresholds:
   low: 10
   exhausted: 0
 stall_timeout_ms: 300000
-max_concurrent_agents: 6
+max_concurrent_agents: 20
 ---
+
 # AutoShip Configuration
 
 Routing matrix and quota thresholds for the AutoShip orchestration system.

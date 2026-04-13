@@ -24,8 +24,8 @@ AutoShip is a Claude Code plugin that provides autonomous multi-agent orchestrat
 | --- | ------------------ | ------------------------------------------------------ | ----------------------------------------------------------- |
 | 1   | Work discovery     | Hybrid: Discord webhooks + 10-min gh poll              | Real-time reaction via existing infra + safety net          |
 | 2   | Agent dispatch     | TeamCreate for Claude, tmux CLI for Codex/Gemini       | Native protocol where available, direct CLI otherwise       |
-| 3   | Result capture     | AUTOSHIP_RESULT.md per worktree + git diff               | Agent never reports via conversation — structured file only |
-| 4   | State management   | .autoship/state.json + GitHub labels                     | Fast local access + durable recovery from GitHub            |
+| 3   | Result capture     | AUTOSHIP_RESULT.md per worktree + git diff             | Agent never reports via conversation — structured file only |
+| 4   | State management   | .autoship/state.json + GitHub labels                   | Fast local access + durable recovery from GitHub            |
 | 5   | Verification       | Dedicated Sonnet reviewer agent                        | Keeps Opus free for orchestration                           |
 | 6   | Concurrency        | Dynamic, soft cap 20, hard cap 50                      | Opus decides based on workload and available quota          |
 | 7   | Post-completion    | verify → simplify → verify → PR → monitor CI → cleanup | Full quality pipeline                                       |
@@ -36,7 +36,7 @@ AutoShip is a Claude Code plugin that provides autonomous multi-agent orchestrat
 | 12  | Opus role          | Never reads/writes code                                | Orchestration decisions only                                |
 | 13  | Plugin format      | Multi-skill Claude Code plugin                         | Auto-update via marketplace                                 |
 | 14  | Tmux layout        | Grid (tiled) not stacked                               | Visual clarity at 20 panes                                  |
-| 15  | PR review comments | Sonnet agent addresses automated reviewer feedback     | Copilot etc. leave comments, AutoShip handles them            |
+| 15  | PR review comments | Sonnet agent addresses automated reviewer feedback     | Copilot etc. leave comments, AutoShip handles them          |
 
 ### v3 Decisions (locked — supersede v2 where different)
 
@@ -49,7 +49,7 @@ AutoShip is a Claude Code plugin that provides autonomous multi-agent orchestrat
 | 5   | Haiku scope              | Simple tasks (2-3 files) + event triage + nit fixing             |
 | 6   | Haiku failure escalation | 1 retry with context, then promote to Sonnet                     |
 | 7   | Agent completion signal  | COMPLETE/BLOCKED/STUCK status words via pipe-pane log            |
-| 8   | Third-party completion   | pane_dead + AUTOSHIP_RESULT.md existence (exit codes unreliable)   |
+| 8   | Third-party completion   | pane_dead + AUTOSHIP_RESULT.md existence (exit codes unreliable) |
 | 9   | Event queue pattern      | Haiku produces → Sonnet consumes after each pipeline step        |
 | 10  | PR comment triage        | Haiku (nits) → Sonnet (bugs) → Opus (design)                     |
 | 11  | CI autofix               | Tiered: Haiku (lint/format) → Sonnet (logic) → Opus (2+ fails)   |
@@ -60,11 +60,11 @@ AutoShip is a Claude Code plugin that provides autonomous multi-agent orchestrat
 
 ### Supported Tools
 
-| Tool   | Binary   | Models                                       | Subscription | Quota Tracking            |
-| ------ | -------- | -------------------------------------------- | ------------ | ------------------------- |
-| Claude | `claude` | Opus (orchestrator), Sonnet, Haiku (workers) | Max          | Per-model, generous       |
-| Codex  | `codex`  | Spark, GPT                                   | $20/mo       | Separate quotas per model |
-| Gemini | `gemini` | Flash/Pro                                    | $20/mo       | Single quota pool         |
+| Tool   | Binary   | Models                                  | Subscription | Quota Tracking            |
+| ------ | -------- | --------------------------------------- | ------------ | ------------------------- |
+| Claude | `claude` | Opus (advisor), Sonnet, Haiku (workers) | Max          | Per-model, generous       |
+| Codex  | `codex`  | Spark, GPT                              | $20/mo       | Separate quotas per model |
+| Gemini | `gemini` | Flash/Pro                               | $20/mo       | Single quota pool         |
 
 ### Tool Selection Matrix
 
