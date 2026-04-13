@@ -152,6 +152,28 @@ Emits: `[ISSUE_NEW]`, `[ISSUE_CLOSED]`
 
 ### Step 7: Dispatch Phase 1
 
+Before dispatching each issue, classify its task type:
+
+```bash
+# For each issue-N in Phase 1:
+TASK_TYPE=$(bash hooks/classify-issue.sh <issue-number>)
+# task_type is now stored in .beacon/state.json for issue-N
+# and printed to stdout for use in dispatch decisions
+```
+
+Task types and their model/tool preferences:
+| task_type    | Preferred tool         |
+|--------------|------------------------|
+| research     | Opus advisor call first, then worker |
+| docs         | Simple worker (Haiku or Codex)       |
+| simple_code  | Third-party first (Codex/Gemini)     |
+| medium_code  | Third-party first (Codex/Gemini)     |
+| complex      | Opus advisor call first, then Sonnet worker |
+| mechanical   | Third-party first (Codex/Gemini)     |
+| ci_fix       | Third-party first (Codex/Gemini)     |
+
+Pass `task_type` to `beacon-dispatch` via the issue record in state.json. The dispatch skill reads `.issues[issue-N].task_type` to select model and tool.
+
 For each issue in Phase 1, invoke `beacon-dispatch` skill. Third-party tools take priority for simple and medium issues.
 
 ### Step 8: Enter Reactive Mode
