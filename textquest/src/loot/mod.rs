@@ -9,6 +9,7 @@
 
 pub mod distributor;
 mod store;
+pub mod wishlist;
 
 pub use distributor::{
     AssignFn, AssignmentTarget, DistributionJob, DistributionPhase, ExecuteFn, ExecuteResult,
@@ -17,4 +18,8 @@ pub use distributor::{
 pub use store::{
     DropRateRow, ImportItem, ItemRow, ItemSearchFilter, LootHistoryRow, LootStore, LootTableRow,
     WishlistRow,
+};
+pub use wishlist::{
+    ReserveRule, RuleConditions, WishlistAction, WishlistManager, WishlistRule, resolve_action,
+    resolve_action_with_stats,
 };
