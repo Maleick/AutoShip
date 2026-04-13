@@ -68,18 +68,20 @@ EOF
       .last_advisor_reset = $d
     ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
   fi
-  # Upgrade existing file with missing fields
-  local TMP; TMP=$(mktemp)
-  jq '
-    to_entries | map(
-      if .value | type == "object" then
-        .value.tool_stuck_count |= (. // 0) |
-        .value.exhausted |= (. // false)
-      else . end
-    ) | from_entries |
-    if .advisor_calls_today == null then .advisor_calls_today = 0 else . end |
-    if .last_advisor_reset == null then .last_advisor_reset = "" else . end
-  ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
+  # Upgrade existing file with missing fields (skip if already up to date)
+  if ! jq -e 'has("advisor_calls_today")' "$QUOTA_FILE" >/dev/null 2>&1; then
+    local TMP; TMP=$(mktemp)
+    jq '
+      to_entries | map(
+        if .value | type == "object" then
+          .value.tool_stuck_count |= (. // 0) |
+          .value.exhausted |= (. // false)
+        else . end
+      ) | from_entries |
+      if .advisor_calls_today == null then .advisor_calls_today = 0 else . end |
+      if .last_advisor_reset == null then .last_advisor_reset = "" else . end
+    ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
+  fi
 }
 
 # ---------------------------------------------------------------------------

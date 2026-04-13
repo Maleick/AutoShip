@@ -121,17 +121,10 @@ detect_codex() {
     ver=$(codex --version 2>/dev/null | head -1) || ver="unknown"
     ver=$(printf '%s' "$ver" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n')
 
-    # Probe app-server availability (experimental)
+    # Probe app-server availability — both codex variants use the same binary
     if ! codex app-server help >/dev/null 2>&1; then
-      # Mark exhausted in quota.json if app-server is non-functional
-      if [[ -n "${QUOTA_FILE:-}" ]]; then
-        mkdir -p "$(dirname "$QUOTA_FILE")"
-        if [[ ! -s "$QUOTA_FILE" ]]; then
-          echo "{}" > "$QUOTA_FILE"
-        fi
-        local tmp="${QUOTA_FILE}.tmp.$$"
-        jq '."codex-spark".exhausted = true' "$QUOTA_FILE" > "$tmp" && mv "$tmp" "$QUOTA_FILE" 2>/dev/null || true
-      fi
+      bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-spark" || true
+      bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-gpt"   || true
     fi
 
     spark_q=$(quota_codex_spark)

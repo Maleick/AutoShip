@@ -21,17 +21,6 @@ PANE_LOG="${WORKSPACE}/pane.log"
 
 STALL_SECS=$(( ${STALL_TIMEOUT_MS:-300000} / 1000 ))
 
-mark_exhausted() {
-  local tool="codex-spark"
-  local quota_file="${REPO_ROOT}/.autoship/quota.json"
-  mkdir -p "$(dirname "$quota_file")"
-  if [[ ! -f "$quota_file" ]]; then
-    echo "{}" > "$quota_file"
-  fi
-  local tmp="${quota_file}.tmp.$$"
-  jq --arg t "$tool" '.[$t].exhausted = true' "$quota_file" > "$tmp" && mv "$tmp" "$quota_file"
-}
-
 # Fast-fail health check
 HEALTH_CHECK_FAILED=0
 if command -v timeout >/dev/null 2>&1; then
@@ -89,7 +78,7 @@ APP_SERVER_PID=$!
 sleep 1
 if ! kill -0 "$APP_SERVER_PID" 2>/dev/null; then
   echo "ERROR: codex app-server failed to start" >&2
-  mark_exhausted
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-spark" || true
   echo "STUCK" >> "$PANE_LOG"
   exit 1
 fi
@@ -118,14 +107,14 @@ send_rpc '{"jsonrpc":"2.0","method":"initialize","params":{"clientInfo":{"name":
 # Wait for initialization response (timeout 5s)
 if ! IFS= read -r -t 5 line <"$FIFO_OUT"; then
   echo "ERROR: codex app-server initialization timed out" >&2
-  mark_exhausted
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-spark" || true
   echo "STUCK" >> "$PANE_LOG"
   exit 1
 fi
 
 if ! echo "$line" | jq -e '.result' >/dev/null 2>&1; then
   echo "ERROR: codex app-server initialization failed: $line" >&2
-  mark_exhausted
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-spark" || true
   echo "STUCK" >> "$PANE_LOG"
   exit 1
 fi

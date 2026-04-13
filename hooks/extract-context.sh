@@ -8,6 +8,7 @@ AUTOSHIP_DIR=".autoship"
 CONTEXT_FILE="$AUTOSHIP_DIR/project-context.md"
 CONFIG_FILE="$AUTOSHIP_DIR/config.json"
 TEMP_FILE=$(mktemp)
+trap 'rm -f "$TEMP_FILE"' EXIT
 
 {
   echo "## Project Context"
@@ -26,17 +27,15 @@ TEMP_FILE=$(mktemp)
     # Look for headers matching Patterns, Conventions, Gotchas (case-insensitive)
     # Extract up to 40 lines after each match, deduplicate sections.
     awk '
-      BEGIN { IGNORECASE = 1; printing = 0; count = 0; }
-      /^#+.*(Patterns|Conventions|Gotchas)/ {
+      BEGIN { printing = 0; count = 0; }
+      tolower($0) ~ /^#+[[:space:]]*.*(patterns|conventions|gotchas)/ {
         printing = 1;
         count = 0;
         print $0;
         next;
       }
       /^#+/ {
-        if (printing) {
-          printing = 0;
-        }
+        if (printing) printing = 0;
       }
       printing {
         if (count < 40) {

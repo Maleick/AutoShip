@@ -556,7 +556,11 @@ PYEOF
       $defaults
       | if ($parsed.routing | length) > 0 then .routing = $parsed.routing else . end
       | if ($profile == "rust_windows") then
-          .routing |= map_values(["claude-haiku", "claude-sonnet"])
+          .routing |= with_entries(
+            if .key == "rust_unsafe" then .
+            else .value = ["claude-haiku", "claude-sonnet"]
+            end
+          )
         else . end
       | if ($parsed.quota_thresholds | length) > 0 then .quota_thresholds = $parsed.quota_thresholds else . end
       | if $parsed.stall_timeout_ms != null then .stall_timeout_ms = $parsed.stall_timeout_ms else . end
