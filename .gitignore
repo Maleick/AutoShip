@@ -42,7 +42,7 @@ BEACON_PROMPT.md
 autoresearch-security/
 pane.log
 
-# OpenWolf agent runtime state
+# Agent and OpenWolf runtime state
 .wolf/
 
 # Local Claude session config (personal, not shared)
@@ -86,4 +86,3 @@ config/accounts.csv
 
 # Local runtime state and operator-managed caches. Canonical immutable Ghidra evidence lives in TextQuest-Ghidra.
 data/
-autoresearch-security/
