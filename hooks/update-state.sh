@@ -101,7 +101,7 @@ append_ledger_record() {
   fi
 
   # Read fields from state.json
-  local issue_number complexity agent pr_number attempt task_type started_at duration_ms
+  local issue_number complexity agent pr_number attempt task_type started_at duration_ms tokens_used
   issue_number=$(echo "$issue_id" | grep -o '[0-9]*' | head -1)
   complexity=$(jq -r --arg k "$issue_id" '.issues[$k].complexity // "medium"' "$STATE_FILE" 2>/dev/null) || complexity="medium"
   agent=$(jq -r --arg k "$issue_id" '.issues[$k].agent // ""' "$STATE_FILE" 2>/dev/null) || agent=""
@@ -109,6 +109,7 @@ append_ledger_record() {
   attempt=$(jq -r --arg k "$issue_id" '.issues[$k].attempt // 1' "$STATE_FILE" 2>/dev/null) || attempt=1
   task_type=$(jq -r --arg k "$issue_id" '.issues[$k].task_type // "medium_code"' "$STATE_FILE" 2>/dev/null) || task_type="medium_code"
   started_at=$(jq -r --arg k "$issue_id" '.issues[$k].started_at // ""' "$STATE_FILE" 2>/dev/null) || started_at=""
+  tokens_used=$(jq -r --arg k "$issue_id" '.issues[$k].tokens_used // 0' "$STATE_FILE" 2>/dev/null) || tokens_used=0
 
   # Compute duration_ms from started_at to now
   duration_ms=0
@@ -123,9 +124,10 @@ append_ledger_record() {
     fi
   fi
 
-  # Coerce pr_number and attempt to integers
+  # Coerce pr_number, attempt, and tokens_used to integers
   pr_number=$(( ${pr_number:-0} )) || pr_number=0
   attempt=$(( ${attempt:-1} )) || attempt=1
+  tokens_used=$(( ${tokens_used:-0} )) || tokens_used=0
 
   # Build the record JSON
   local record
@@ -134,7 +136,7 @@ append_ledger_record() {
     --arg type "$task_type" \
     --arg complexity "$complexity" \
     --arg agent "$agent" \
-    --argjson tokens 0 \
+    --argjson tokens "$tokens_used" \
     --argjson dur "$duration_ms" \
     --arg verdict "$verdict" \
     --argjson pr "$pr_number" \

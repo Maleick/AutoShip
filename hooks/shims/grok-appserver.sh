@@ -6,6 +6,9 @@ exit 1
 
 # grok-appserver.sh — Thin Symphony shim for the Grok CLI.
 #
+# DEPRECATED: Grok CLI has no OAuth support and is being phased out.
+# tokens_used is always reported as -1 (sentinel: unparseable/unavailable).
+#
 # Usage:
 #   echo '{"type":"turn/start","prompt":"..."}' | grok-appserver.sh
 #   grok-appserver.sh /path/to/prompt-file.json
@@ -82,11 +85,12 @@ EXIT_CODE=0
 grok --prompt-file "$TMPFILE" || EXIT_CODE=$?
 
 # ---------------------------------------------------------------------------
-# Emit synthetic Symphony JSON-RPC completion events
+# Emit synthetic Symphony JSON-RPC completion events.
+# Token count is always -1 (sentinel) — Grok CLI does not expose token usage.
 # ---------------------------------------------------------------------------
 if [[ $EXIT_CODE -eq 0 ]]; then
   printf '{"type":"turn/completed","threadId":"%s","status":"success"}\n' "$THREAD_ID"
-  printf '{"type":"thread/tokenUsage/updated","threadId":"%s","totalTokens":0}\n' "$THREAD_ID"
+  printf '{"type":"thread/tokenUsage/updated","threadId":"%s","totalTokens":-1}\n' "$THREAD_ID"
   echo "COMPLETE"
 else
   printf '{"type":"turn/error","threadId":"%s","status":"error","exitCode":%d}\n' \
