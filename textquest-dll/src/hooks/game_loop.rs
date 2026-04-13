@@ -1704,6 +1704,7 @@ fn read_and_publish_state(tick: u64) {
             combat_status: crate::combat::status(),
             zone_short_name: zone_short,
             zone_long_name: zone_long,
+            actual_version: crate::eq_actual_version(),
         });
     } else if let Some(ref mut state) = *cached {
         state.local_player = local_player;

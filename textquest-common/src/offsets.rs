@@ -16,6 +16,14 @@ pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 /// Update this value when importing new offsets on patch day.
 pub const CLIENT_DATE: &str = "20260310";
 
+/// Address in EQ memory holding the current runtime date/version string.
+///
+/// MQ uses a global string pointer for `__ActualVersionDate` in `eqgame.exe`.
+pub const ACTUAL_VERSION_DATE: u64 = 0x140B38830;
+
+/// Expected string to validate compatibility with the current EQ patch.
+pub const EXPECTED_VERSION_DATE: &str = "Mar 10 2026";
+
 /// Pointer to local player (`PlayerClient`*)
 pub const PINST_LOCAL_PLAYER: u64 = 0x0001_40E8_E380;
 

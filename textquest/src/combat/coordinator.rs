@@ -415,6 +415,7 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: String::new(),
             zone_long_name: String::new(),
+            actual_version: None,
         }
     }
 

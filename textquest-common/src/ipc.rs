@@ -616,6 +616,11 @@ pub enum Command {
     // System
     /// Heartbeat ping — expects a Pong response.
     Ping,
+    /// Enable/disable timing normalization for GetTickCount / QPC hooks.
+    SetTimingCorrection {
+        /// Whether timing correction should be active.
+        enabled: bool,
+    },
     /// Eject the DLL from the game process.
     Eject,
     /// Enable or disable the game loop hook.

@@ -68,6 +68,7 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "eastcommons".into(),
             zone_long_name: "East Commons".into(),
+            actual_version: None,
         }
     }
 

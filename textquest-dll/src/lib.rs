@@ -51,6 +51,8 @@ pub static EQ_BASE: AtomicU64 = AtomicU64::new(0);
 /// When populated, resolved offsets use this map before falling back to
 /// compile-time rebase logic.
 pub static OFFSET_DB: OnceLock<HashMap<String, u64>> = OnceLock::new();
+/// Cached EQ build-date string detected at startup, if available.
+static EQ_ACTUAL_VERSION: OnceLock<Option<String>> = OnceLock::new();
 
 /// Global flag indicating the DLL is shutting down.
 /// Checked by long-running loops (IPC listener, nav ticks) to exit gracefully.
@@ -162,6 +164,25 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     let eq_base = resolve_eq_base();
     EQ_BASE.store(eq_base, Ordering::Release);
     tracing::info!(base = format!("{:#x}", eq_base), "EQ base address resolved");
+
+    // Version check — read __ActualVersionDate pointer and validate against expected patch.
+    let actual_version = eq::check_eq_version(eq_base);
+    match &actual_version {
+        Some(version) if eq::version_matches_expected(version) => {
+            tracing::info!(version = %version, "EQ version check matched expected patch date");
+        }
+        Some(version) => {
+            tracing::warn!(
+                version = %version,
+                expected = textquest_common::offsets::EXPECTED_VERSION_DATE,
+                "EQ version mismatch detected"
+            );
+        }
+        None => {
+            tracing::warn!("EQ version check unavailable; proceeding without version validation");
+        }
+    }
+    let _ = EQ_ACTUAL_VERSION.set(actual_version);
 
     // 2.1. Auto-detect offsets via pattern scanning (opt-in shadow mode).
     // Set TEXTQUEST_SCAN_OFFSETS=1 to enable. Results are logged and validated
@@ -551,6 +572,10 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
     }
 
     Ok(())
+}
+
+pub(crate) fn eq_actual_version() -> Option<String> {
+    EQ_ACTUAL_VERSION.get().and_then(|value| value.clone())
 }
 
 fn is_scan_active() -> bool {

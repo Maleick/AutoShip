@@ -618,8 +618,21 @@ character = "Foo"
         assert_eq!(cfg.max_spawns, 2048);
         assert!(cfg.group.is_empty());
         assert!(!cfg.discovery.multicast_enabled);
+        assert!(!cfg.timing_correction);
         assert!(!cfg.hook_rotation_enabled);
         assert_eq!(cfg.hook_rotation_interval_ms, 30_000);
+    }
+
+    #[test]
+    fn app_config_timing_correction_can_be_deserialized() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+timing_correction = true
+"#,
+        )
+        .unwrap();
+
+        assert!(cfg.timing_correction);
     }
 
     #[test]

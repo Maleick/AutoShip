@@ -61,6 +61,7 @@ pub fn remove_all() {
     hwbp::remove_all();
     fingerprint::remove();
     chat::remove();
+    timing::remove();
     set_game_state::remove();
     timing::remove();
     tracing::info!("All hooks removed");
