@@ -48,6 +48,58 @@ pub const PINST_CCHAT_WINDOW_MANAGER: u64 = 0x0001_40F2_2B20;
 /// Source: eqgame.h `pinstCInvSlotMgr_x`
 pub const PINST_CINV_SLOT_MGR: u64 = 0x0001_40DD_D5F0;
 
+/// PINST_CHAR_DATA — character profile/data pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_CHAR_DATA: u64 = 0x0;
+
+/// PINST_PC_DATA — PC data pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_PC_DATA: u64 = 0x0;
+
+/// PINST_GROUP — group direct access pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_GROUP: u64 = 0x0;
+
+/// PINST_RAID — raid direct access pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_RAID: u64 = 0x0;
+
+/// PINST_ALT_ADV_MANAGER — AA tracking pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ALT_ADV_MANAGER: u64 = 0x0;
+
+/// PINST_MERC_MANAGER — mercenary control pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_MERC_MANAGER: u64 = 0x0;
+
+/// PINST_ACTIVE_BANKER — active banker pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ACTIVE_BANKER: u64 = 0x0;
+
+/// PINST_ACTIVE_MERCHANT — active merchant pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ACTIVE_MERCHANT: u64 = 0x0;
+
+/// PINST_ACTIVE_TRADE — active trade window pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ACTIVE_TRADE: u64 = 0x0;
+
+/// PINST_TASK_MANAGER — task/quest tracking pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_TASK_MANAGER: u64 = 0x0;
+
+/// PINST_FELLOWSHIP — fellowship management pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_FELLOWSHIP: u64 = 0x0;
+
+/// PINST_ADVANCED_LOOT_WND — advanced loot window pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ADVANCED_LOOT_WND: u64 = 0x0;
+
+/// PINST_REAL_ESTATE_ITEMS — housing/guild hall pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_REAL_ESTATE_ITEMS: u64 = 0x0;
+
 // ─── Active Hacks Offsets (Pending verification for 20260310) ───
 // These are offsets from the eqgame.exe base address, currently reflecting January 2025.
 pub const OFFSET_PACKET_SCRAMBLER: usize = 0x00dc_6340;
@@ -786,21 +838,6 @@ pub mod buff_slots {
     /// EQ tick duration in seconds.
     pub const SECONDS_PER_TICK: f32 = 6.0;
 
-    // ── Convenience aliases for external buff reads ──
-
-    /// Maximum buff slots to iterate (alias for `MAX_TOTAL_BUFFS`).
-    pub const MAX_BUFF_SLOTS: usize = MAX_TOTAL_BUFFS;
-
-    /// Offset from PcProfile to the buff array data (`BaseProfile::Buffs`).
-    /// This is `profile::BUFFS_ARRAY` — callers must first dereference the
-    /// profile pointer chain to reach the PcProfile base.
-    pub const BUFF_ARRAY_OFFSET: usize = super::profile::BUFFS_ARRAY;
-
-    /// Size of each buff entry (alias for `EQ_AFFECT_SIZE`).
-    pub const BUFF_ENTRY_SIZE: usize = EQ_AFFECT_SIZE;
-
-    /// Remaining duration in ticks (alias for `DURATION`).
-    pub const DURATION_TICKS: usize = DURATION;
 }
 
 /// Pointer chain from `PINST_LOCAL_PC` → profile → buff array.
@@ -824,12 +861,10 @@ pub mod profile {
     pub const MEMORIZED_SPELLS: usize = 0x14b0;
     /// Number of spellbook slots between `SpellBook` and `MemorizedSpells`.
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
-    /// Alias for `SPELL_BOOK_SLOT_COUNT` — total slots in `BaseProfile::SpellBook`.
-    pub const SPELL_BOOK_SLOTS: usize = 1280;
     /// Visible spell-gem slots used by the live client UI.
     pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
-    /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells` (alias for `MEMORIZED_SPELL_GEM_COUNT`).
-    pub const MEMORIZED_SPELL_GEMS: usize = 15;
+    /// Alias for `MEMORIZED_SPELL_GEM_COUNT` — used by external callers in `textquest-dll`.
+    pub const MEMORIZED_SPELL_GEMS: usize = MEMORIZED_SPELL_GEM_COUNT;
 
     /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
     pub const ARRAY_DATA_PTR: usize = 0x08;
