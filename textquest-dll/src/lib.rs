@@ -360,96 +360,6 @@ fn resolve_eq_base() -> u64 {
     }
 }
 
-/// Run pattern scanning to auto-detect EQ offsets (shadow mode).
-///
-/// Scans eqgame.exe memory for known byte patterns and logs results. Does NOT
-/// update the active offset table — results are compared against compiled
-/// constants for validation only. See #746 (Auto Patch).
-#[allow(dead_code)] // Only called when TEXTQUEST_SCAN_OFFSETS is set
-fn scan_offsets(eq_base: u64) {
-    use textquest_common::pattern_db::{SCAN_ENTRIES, ScanModule};
-    use textquest_common::scan_engine;
-
-    tracing::info!("Auto Patch: starting offset scan (shadow mode)");
-
-    // Get module size to bound the scan region.
-    let module_size = get_module_size(eq_base);
-    if module_size == 0 {
-        tracing::warn!("Auto Patch: could not determine eqgame.exe module size — skipping scan");
-        return;
-    }
-
-    // SAFETY: eq_base is the base address of eqgame.exe obtained via
-    // GetModuleHandle, and module_size is from GetModuleInformation.
-    // The DLL is loaded inside eqgame.exe's process, so this memory is valid
-    // and readable for the lifetime of this function call.
-    let data = unsafe { std::slice::from_raw_parts(eq_base as *const u8, module_size) };
-
-    // ── Version detection ──────────────────────────────────────────
-    let (client_date, version_matches) = scan_engine::check_version(data);
-    match &client_date {
-        Some(date) if version_matches => {
-            tracing::info!(
-                date = %date,
-                "Auto Patch: EQ client matches expected version"
-            );
-        }
-        Some(date) => {
-            tracing::warn!(
-                detected = %date,
-                expected = %scan_engine::EXPECTED_CLIENT_DATE,
-                "Auto Patch: EQ client version MISMATCH — offsets may be stale!"
-            );
-        }
-        None => {
-            tracing::warn!("Auto Patch: could not detect EQ client version");
-        }
-    }
-
-    // ── Pattern scanning ───────────────────────────────────────────
-    let report = scan_engine::scan_module(
-        data,
-        eq_base,
-        textquest_common::offsets::EQ_PREFERRED_BASE,
-        ScanModule::EqGame,
-        SCAN_ENTRIES,
-    );
-
-    // Log summary.
-    tracing::info!(
-        scanned = report.entries_scanned,
-        found = report.entries_found,
-        validated = report.entries_validated,
-        failed = report.entries_failed.len(),
-        skipped_placeholders = report.entries_skipped.len(),
-        moved = report.entries_moved.len(),
-        "Auto Patch: scan complete"
-    );
-
-    // Log placeholder count once (debug level — expected until real patterns exist).
-    if !report.entries_skipped.is_empty() {
-        tracing::debug!(
-            count = report.entries_skipped.len(),
-            "Auto Patch: entries with placeholder patterns (awaiting Ghidra export)"
-        );
-    }
-
-    // Log individual real scan failures (not placeholders).
-    for name in &report.entries_failed {
-        tracing::warn!(name = %name, "Auto Patch: scan entry failed — pattern not found or resolution failed");
-    }
-
-    // Log moved offsets.
-    for (name, expected, found) in &report.entries_moved {
-        tracing::warn!(
-            name = %name,
-            expected = format!("{:#x}", expected),
-            found = format!("{:#x}", found),
-            "Auto Patch: offset moved since last build"
-        );
-    }
-}
-
 /// Get the size of the module loaded at `base_addr`.
 #[allow(dead_code)]
 fn get_module_size(base_addr: u64) -> usize {
@@ -489,10 +399,6 @@ fn get_module_size(base_addr: u64) -> usize {
 /// Install all function hooks using the resolved EQ base address.
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
-    if let Err(e) = hooks::detours::install_all(eq_base) {
-        tracing::warn!("Inline detour install failed (continuing): {}", e);
-    }
-
     // Primary: use the offset constant derived from PROCESS_GAME_EVENTS.
     let main_loop_offset = eq::MAIN_LOOP_OFFSET;
     if main_loop_offset == 0 {
@@ -567,7 +473,7 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
             e
         );
     }
-    if let Err(e) = hooks::install_all() {
+    if let Err(e) = hooks::detours::install_all(eq_base) {
         tracing::warn!("Detour hook manager install_all() failed: {}", e);
     }
     #[cfg(windows)]
@@ -741,7 +647,6 @@ fn shutdown() {
 fn graceful_shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
     stealth::disable();
-    stop_hook_rotation();
     hooks::remove_all();
     ipc::stop();
     tracing::info!("TextQuest DLL graceful shutdown complete");

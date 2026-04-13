@@ -716,11 +716,6 @@ pub enum Command {
     /// The DLL drains its pending spawn-event buffer and returns one
     /// `SpawnEventBatch` response.
     PollSpawnEvents,
-    /// Enable/disable timing normalization for GetTickCount / QPC hooks.
-    SetTimingCorrection {
-        /// Whether timing correction should be active.
-        enabled: bool,
-    },
 }
 
 impl std::fmt::Debug for Command {

@@ -226,6 +226,10 @@ impl SoulCoordinator {
         while let Some(&front) = self.global_request_counts.front() {
             if now.duration_since(front) >= window {
                 self.global_request_counts.pop_front();
+            } else {
+                break;
+            }
+        }
         if self.global_request_counts.len() >= self.config.max_global_requests as usize {
             return false;
         }

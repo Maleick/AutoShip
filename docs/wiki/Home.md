@@ -32,6 +32,7 @@ The canonical source for this documentation lives in `docs/wiki/` inside the mai
 - [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References)
 - [Development Workflow](Development-Workflow)
 - [Roadmap and Known Gaps](Roadmap-and-Known-Gaps)
+- [Codebase Audit — 2026-04-13](Codebase-Audit-2026-04-13)
 - [Maintaining the Wiki](Maintaining-the-Wiki)
 
 ## Current Snapshot
@@ -75,6 +76,7 @@ Repository rules that matter for documentation:
 - The canonical active roadmap now resumes at `M5` Anti-Cheat and keeps economy execution work at `M10` plus Soul/LLM work at `M11`.
 - The current code keeps the queue and provider abstraction for Soul behavior, but routine provider-backed chat is not the claimed default operating mode.
 - Some live-client behavior still needs regular Windows validation after EQ patches, especially login selectors, offsets, and nav/combat edge cases.
+- Latest compile/gap audit snapshot: [Codebase Audit — 2026-04-13](Codebase-Audit-2026-04-13).
 - Old research docs may still say "Frostreaver"; treat the current product name as TextQuest and prefer code plus current top-level docs if anything conflicts.
 
 ## Documentation Policy

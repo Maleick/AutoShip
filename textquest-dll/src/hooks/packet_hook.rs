@@ -82,9 +82,6 @@
 
 use textquest_common::types::ClientId;
 
-const WSASEND_SLOT: HwbpSlot = HwbpSlot::Dr2;
-const WSARECV_SLOT: HwbpSlot = HwbpSlot::Dr3;
-
 // ---------------------------------------------------------------------------
 // Packet buffer — stores the ClientId for the active DLL instance.
 // Set once during install() and read from callbacks (which must not allocate).

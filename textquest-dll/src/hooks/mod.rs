@@ -7,6 +7,7 @@ pub const HOOK_CATALOG: &str = "docs/research/hook-detection-surface.md";
 
 pub mod casting;
 pub mod chat;
+pub mod detours;
 pub mod dx11_null;
 pub mod eqmain_hook;
 pub mod fingerprint;
