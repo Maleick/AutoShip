@@ -202,7 +202,7 @@ impl MemoryStore {
         is_player: bool,
         channel: &str,
         message: &str,
-        sentiment: Option<f32>,
+        sentiment: f32,
     ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO conversations (character_id, speaker, is_player, channel, message, sentiment)
@@ -840,10 +840,10 @@ mod tests {
     fn record_and_recall_conversations() {
         let store = open_memory_store();
         store
-            .record_conversation(1, "Dave", true, "say", "Hey there!", Some(0.8))
+            .record_conversation(1, "Dave", true, "say", "Hey there!", 0.8)
             .unwrap();
         store
-            .record_conversation(1, "TestBot", false, "group", "On my way.", None)
+            .record_conversation(1, "TestBot", false, "group", "On my way.", 0.0)
             .unwrap();
 
         let convos = store.recall_conversations(1, 10).unwrap();
@@ -968,7 +968,7 @@ mod tests {
             .record(1, &loot_event("sword", "bb"), MoodState::Happy, 3.0)
             .unwrap();
         store
-            .record_conversation(1, "Dave", true, "say", "Hello!", Some(0.8))
+            .record_conversation(1, "Dave", true, "say", "Hello!", 0.8)
             .unwrap();
 
         let json = store.export_character_json(1).unwrap();
@@ -1052,10 +1052,10 @@ mod tests {
     fn recall_conversations_filters_by_character() {
         let store = open_memory_store();
         store
-            .record_conversation(1, "Alice", true, "say", "Hi", Some(0.5))
+            .record_conversation(1, "Alice", true, "say", "Hi", 0.5)
             .unwrap();
         store
-            .record_conversation(2, "Bob", true, "tell", "Hey", Some(0.6))
+            .record_conversation(2, "Bob", true, "tell", "Hey", 0.6)
             .unwrap();
 
         let c1 = store.recall_conversations(1, 10).unwrap();
@@ -1071,7 +1071,7 @@ mod tests {
         let store = open_memory_store();
         for i in 0..10 {
             store
-                .record_conversation(1, &format!("Player{}", i), true, "say", "msg", Some(0.5))
+                .record_conversation(1, &format!("Player{}", i), true, "say", "msg", 0.5)
                 .unwrap();
         }
         let convos = store.recall_conversations(1, 3).unwrap();
@@ -1083,7 +1083,7 @@ mod tests {
         let store = open_memory_store();
         for i in 0..5 {
             store
-                .record_conversation(1, "Alice", true, "say", &format!("msg-{i}"), Some(0.5))
+                .record_conversation(1, "Alice", true, "say", &format!("msg-{i}"), 0.5)
                 .unwrap();
         }
 
@@ -1222,7 +1222,7 @@ mod tests {
     fn conversation_row_clone_and_debug() {
         let store = open_memory_store();
         store
-            .record_conversation(1, "Dave", true, "say", "Hello", Some(0.9))
+            .record_conversation(1, "Dave", true, "say", "Hello", 0.9)
             .unwrap();
         let convos = store.recall_conversations(1, 1).unwrap();
         let c = convos[0].clone();

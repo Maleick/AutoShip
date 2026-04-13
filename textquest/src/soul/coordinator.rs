@@ -231,10 +231,16 @@ impl SoulCoordinator {
         }
         let message = truncate_utf8(message, MAX_PLAYER_CHAT_MESSAGE_BYTES);
 
-        // Record the conversation
-        let _ =
-            self.memory
-                .record_conversation(client_id, player_name, true, channel, message, None);
+        // Score sentiment and record the conversation
+        let sentiment = score_sentiment(message);
+        let _ = self.memory.record_conversation(
+            client_id,
+            player_name,
+            true,
+            channel,
+            message,
+            sentiment,
+        );
         let _ = self
             .memory
             .prune_conversations(client_id, MAX_CONVERSATIONS_PER_CHARACTER);
@@ -245,7 +251,7 @@ impl SoulCoordinator {
         // Process mood change from player interaction
         let event = SoulEvent::PlayerChat {
             player_name: player_name.to_string(),
-            sentiment: 0.0, // Neutral default; LLM-based sentiment analysis deferred to M6
+            sentiment, // scored above via score_sentiment()
         };
         soul.mood = soul
             .personality
@@ -349,6 +355,77 @@ fn is_in_combat(state: &GameState) -> bool {
 /// Extract zone name from game state (placeholder until zone tracking is added).
 fn zone_from_state(_state: &GameState) -> &'static str {
     "unknown"
+}
+
+/// Compute a simple keyword-based sentiment score in [-1.0, 1.0].
+/// Positive words push toward +1.0, negative words toward -1.0.
+/// This is a lightweight heuristic for Phase 1 — LLM-based analysis deferred to M11.
+pub fn score_sentiment(text: &str) -> f32 {
+    const POSITIVE: &[&str] = &[
+        "thank",
+        "thanks",
+        "great",
+        "awesome",
+        "nice",
+        "good",
+        "love",
+        "amazing",
+        "excellent",
+        "wonderful",
+        "please",
+        "help",
+        "happy",
+        "yes",
+        "sure",
+        "glad",
+        "perfect",
+        "fantastic",
+        "appreciate",
+    ];
+    const NEGATIVE: &[&str] = &[
+        "hate",
+        "terrible",
+        "awful",
+        "bad",
+        "worst",
+        "stupid",
+        "idiot",
+        "dumb",
+        "useless",
+        "fail",
+        "wrong",
+        "no",
+        "never",
+        "annoying",
+        "pathetic",
+        "disgusting",
+        "angry",
+        "leave",
+        "stop",
+    ];
+
+    let lower = text.to_lowercase();
+    let mut score: f32 = 0.0;
+    let mut hits: u32 = 0;
+
+    for word in POSITIVE {
+        if lower.contains(word) {
+            score += 1.0;
+            hits += 1;
+        }
+    }
+    for word in NEGATIVE {
+        if lower.contains(word) {
+            score -= 1.0;
+            hits += 1;
+        }
+    }
+
+    if hits == 0 {
+        return 0.0;
+    }
+    // Normalize to [-1, 1]
+    (score / hits as f32).clamp(-1.0, 1.0)
 }
 
 #[cfg(test)]
@@ -581,5 +658,99 @@ mod tests {
         let cmds = coord.tick(&states);
         // Should not panic, just skip
         assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn score_sentiment_positive_words() {
+        let score = score_sentiment("Thank you so much, that was great and amazing!");
+        assert!(score > 0.3, "Expected positive sentiment, got {score}");
+    }
+
+    #[test]
+    fn score_sentiment_negative_words() {
+        let score = score_sentiment("This is terrible and awful, I hate it!");
+        assert!(score < -0.3, "Expected negative sentiment, got {score}");
+    }
+
+    #[test]
+    fn score_sentiment_neutral_returns_zero() {
+        let score = score_sentiment("I walked to the store today");
+        assert!(
+            score.abs() < 0.01,
+            "Expected neutral (0.0) sentiment, got {score}"
+        );
+    }
+
+    #[test]
+    fn score_sentiment_clamps_to_range() {
+        let score = score_sentiment(
+            "thank thanks great awesome nice good love amazing excellent wonderful please help happy yes sure glad perfect fantastic appreciate",
+        );
+        assert!(score <= 1.0 && score >= -1.0, "score out of range: {score}");
+    }
+
+    #[test]
+    fn on_player_message_records_sentiment_in_memory() {
+        let mut coord = make_coordinator(true);
+        coord.config.player_chat_enabled = true;
+        coord.register_character(1, &make_char_config("Test"));
+        coord.on_player_message(1, "Dave", "Thank you so much, great work!", "say");
+        // Should record a positive sentiment conversation
+        let convos = coord.memory_store().recall_conversations(1, 5).unwrap();
+        assert!(!convos.is_empty());
+        // Sentiment should be positive (>0.0) for a positive message
+        if let Some(sent) = convos[0].sentiment {
+            assert!(sent > 0.0, "Expected positive sentiment stored, got {sent}");
+        }
+    }
+
+    #[test]
+    fn positive_sentiment_nudges_mood_toward_happy() {
+        let mut coord = make_coordinator(true);
+        coord.config.player_chat_enabled = true;
+        coord.register_character(1, &make_char_config("Test"));
+        // Send a strongly positive message — should nudge mood toward Happy
+        coord.on_player_message(
+            1,
+            "Dave",
+            "Thank you so much, you are great and wonderful!",
+            "say",
+        );
+        let mood = coord.mood(1).unwrap();
+        assert!(
+            matches!(
+                mood,
+                MoodState::Happy | MoodState::Excited | MoodState::Neutral
+            ),
+            "Expected mood nudged positive, got {mood:?}"
+        );
+    }
+
+    #[test]
+    fn negative_sentiment_nudges_mood_toward_anxious_or_angry() {
+        let mut coord = make_coordinator(true);
+        coord.config.player_chat_enabled = true;
+        // Register with high neuroticism to reliably get Anxious
+        let char_config = CharacterSoulConfig {
+            name: "Test".to_string(),
+            traits: PersonalityTraits {
+                neuroticism: 0.9,
+                ..PersonalityTraits::default()
+            },
+            speech: SpeechStyle::default(),
+            edginess: None,
+            backstory: String::new(),
+            quirks: Vec::new(),
+        };
+        coord.register_character(1, &char_config);
+        coord.on_player_message(1, "Dave", "I hate this, it is terrible and awful!", "say");
+        let mood = coord.mood(1).unwrap();
+        assert!(
+            matches!(
+                mood,
+                MoodState::Anxious | MoodState::Angry | MoodState::Melancholy
+            ),
+            "Expected mood nudged negative, got {mood:?}"
+        );
     }
 }

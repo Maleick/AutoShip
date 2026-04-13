@@ -76,9 +76,10 @@ impl PersonalityEngine {
                     current_mood
                 }
             }
-            // Player chat → mood based on sentiment
+            // Player chat → mood nudged by sentiment score.
+            // Positive (>0.3) nudges toward Happy; negative (<-0.3) nudges toward Anxious/Angry.
             SoulEvent::PlayerChat { sentiment, .. } => {
-                if *sentiment > 0.5 {
+                if *sentiment > 0.3 {
                     if traits.extraversion > 0.6 {
                         MoodState::Excited
                     } else {
