@@ -168,7 +168,7 @@ if [[ -z "$CURRENT" ]]; then
 fi
 
 # Special handling for retries in set-running: preserve original started_at as first_started_at
-if [["$NEW_STATE" == "running" ]]; then
+if [[ "$NEW_STATE" == "running" ]]; then
   # Parse attempt from key=value args (default to 1 if not provided)
   ATTEMPT=1
   for pair in "$@"; do
