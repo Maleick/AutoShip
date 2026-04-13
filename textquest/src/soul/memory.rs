@@ -402,6 +402,47 @@ impl MemoryStore {
         &self.conn
     }
 
+    /// Return the top `max_memories` memories ranked by combined importance × recency score.
+    ///
+    /// Recency is computed as `max(0.0, 1.0 - (days_ago / 30.0))` so memories
+    /// created today score 1.0 and memories older than 30 days score 0.0.
+    /// Combined score is `importance * recency`.
+    ///
+    /// No DB writes are performed — this is a pure read + ordering operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_llm_context(
+        &self,
+        character_id: ClientId,
+        max_memories: usize,
+    ) -> Result<Vec<MemoryRow>> {
+        // Pull all non-decayed memories for the character.
+        let mut stmt = self.conn.prepare(
+            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
+             FROM memories
+             WHERE character_id = ?1 AND decayed = 0",
+        )?;
+
+        let mut rows: Vec<MemoryRow> = stmt
+            .query_map(params![character_id], MemoryRow::from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to read memories for LLM context")?;
+
+        // Score each memory and sort descending.
+        rows.sort_by(|a, b| {
+            let score_a = memory_combined_score(a);
+            let score_b = memory_combined_score(b);
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        rows.truncate(max_memories);
+        Ok(rows)
+    }
+
     // -- Decay & pruning (Task 8) --
 
     /// Apply exponential decay to all non-decayed memories for a character.
@@ -600,6 +641,56 @@ impl MemoryStore {
     }
 }
 
+/// Compute the recency score for a memory given its `created_at` ISO timestamp.
+///
+/// `recency = max(0.0, 1.0 - (days_ago / 30.0))`
+///
+/// Falls back to `0.0` if the timestamp cannot be parsed.
+fn memory_recency(created_at: &str) -> f32 {
+    // Parse the SQLite datetime format "YYYY-MM-DD HH:MM:SS" (UTC).
+    let ts = created_at.trim();
+    // Try both formats SQLite emits.
+    let parsed = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%S"));
+
+    let Ok(dt) = parsed else {
+        return 0.0;
+    };
+
+    let now = chrono::Utc::now().naive_utc();
+    let days_ago = now.signed_duration_since(dt).num_seconds() as f32 / 86_400.0;
+    f32::max(0.0, 1.0 - (days_ago / 30.0))
+}
+
+/// Combined LLM relevance score: `importance × recency`.
+fn memory_combined_score(row: &MemoryRow) -> f32 {
+    row.importance * memory_recency(&row.created_at)
+}
+
+/// Format a slice of memories as compact text suitable for LLM injection.
+///
+/// Each memory is rendered on a single line:
+/// `[{event_type}] {created_at} zone={zone} mood={mood} importance={importance:.2}`
+///
+/// Memories are output in the order provided (caller is responsible for sorting).
+pub fn format_context_for_llm(memories: &[MemoryRow]) -> String {
+    if memories.is_empty() {
+        return String::new();
+    }
+
+    memories
+        .iter()
+        .map(|m| {
+            let zone = m.zone.as_deref().unwrap_or("unknown");
+            format!(
+                "[{}] {} zone={} mood={} importance={:.2}",
+                m.event_type, m.created_at, zone, m.mood_at_time, m.importance
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// A row from the memories table.
 #[derive(Debug, Clone)]
 pub struct MemoryRow {
@@ -710,6 +801,8 @@ fn event_zone(event: &SoulEvent) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use chrono;
     use rusqlite::Connection;
     use textquest_common::soul::{MoodState, SoulEvent};
 
@@ -1348,6 +1441,169 @@ mod tests {
         assert_eq!(m.event_type, "kill");
         assert!(!m.decayed);
         let _ = format!("{:?}", m);
+    }
+
+    // --- LLM context tests ---
+
+    #[test]
+    fn get_llm_context_returns_top_n_by_score() {
+        let store = open_memory_store();
+        // Insert memories with differing importance — all recent so recency ~1.0
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        store
+            .record(1, &kill_event("orc", "cb"), MoodState::Angry, 5.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "bb"), MoodState::Happy, 3.0)
+            .unwrap();
+
+        let top2 = store.get_llm_context(1, 2).unwrap();
+        assert_eq!(top2.len(), 2);
+        // Highest importance should come first
+        assert!(
+            top2[0].importance >= top2[1].importance,
+            "Expected memories ordered by score desc: got {} then {}",
+            top2[0].importance,
+            top2[1].importance
+        );
+    }
+
+    #[test]
+    fn get_llm_context_respects_max_memories() {
+        let store = open_memory_store();
+        for i in 0..8 {
+            store
+                .record(
+                    1,
+                    &kill_event(&format!("mob_{i}"), "zone"),
+                    MoodState::Neutral,
+                    i as f32 + 1.0,
+                )
+                .unwrap();
+        }
+        let context = store.get_llm_context(1, 3).unwrap();
+        assert_eq!(context.len(), 3);
+    }
+
+    #[test]
+    fn get_llm_context_filters_by_character() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 2.0)
+            .unwrap();
+        store
+            .record(2, &kill_event("orc", "cb"), MoodState::Angry, 9.0)
+            .unwrap();
+
+        let ctx1 = store.get_llm_context(1, 10).unwrap();
+        let ctx2 = store.get_llm_context(2, 10).unwrap();
+        assert_eq!(ctx1.len(), 1);
+        assert_eq!(ctx2.len(), 1);
+        assert_eq!(ctx1[0].event_type, "kill");
+        assert_eq!(ctx2[0].event_type, "kill");
+    }
+
+    #[test]
+    fn get_llm_context_excludes_decayed_memories() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 0.01)
+            .unwrap();
+        store
+            .record(1, &kill_event("orc", "cb"), MoodState::Angry, 5.0)
+            .unwrap();
+
+        store.prune_low_importance(1, 0.1).unwrap();
+
+        let context = store.get_llm_context(1, 10).unwrap();
+        assert_eq!(context.len(), 1, "Decayed memory should be excluded");
+        assert_eq!(context[0].event_type, "kill");
+    }
+
+    #[test]
+    fn get_llm_context_empty_when_no_memories() {
+        let store = open_memory_store();
+        let context = store.get_llm_context(99, 10).unwrap();
+        assert!(context.is_empty());
+    }
+
+    #[test]
+    fn format_context_for_llm_empty_slice() {
+        let text = format_context_for_llm(&[]);
+        assert!(text.is_empty());
+    }
+
+    #[test]
+    fn format_context_for_llm_includes_expected_fields() {
+        let store = open_memory_store();
+        store
+            .record(
+                1,
+                &kill_event("gnoll", "blackburrow"),
+                MoodState::Excited,
+                2.5,
+            )
+            .unwrap();
+
+        let memories = store.get_llm_context(1, 10).unwrap();
+        let text = format_context_for_llm(&memories);
+
+        assert!(text.contains("[kill]"), "Should contain event type");
+        assert!(text.contains("blackburrow"), "Should contain zone");
+        assert!(text.contains("Excited"), "Should contain mood");
+        assert!(text.contains("2.50"), "Should contain formatted importance");
+    }
+
+    #[test]
+    fn format_context_for_llm_multi_memory_separated_by_newline() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "bb"), MoodState::Happy, 2.0)
+            .unwrap();
+
+        let memories = store.get_llm_context(1, 10).unwrap();
+        let text = format_context_for_llm(&memories);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "Two memories should produce two lines");
+    }
+
+    #[test]
+    fn memory_recency_recent_scores_near_one() {
+        // A memory created just now should score close to 1.0
+        let now_str = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        let recency = memory_recency(&now_str);
+        assert!(
+            recency > 0.99,
+            "Expected recency near 1.0 for a fresh memory, got {recency}"
+        );
+    }
+
+    #[test]
+    fn memory_recency_old_memory_scores_zero() {
+        // A memory 60 days ago should score 0.0
+        let old = (chrono::Utc::now() - chrono::TimeDelta::days(60))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        let recency = memory_recency(&old);
+        assert!(
+            recency == 0.0,
+            "Expected recency 0.0 for a 60-day-old memory, got {recency}"
+        );
+    }
+
+    #[test]
+    fn memory_recency_invalid_timestamp_scores_zero() {
+        let recency = memory_recency("not-a-date");
+        assert_eq!(recency, 0.0);
     }
 
     #[test]
